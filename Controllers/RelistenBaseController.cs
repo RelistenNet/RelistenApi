@@ -40,41 +40,6 @@ namespace Relisten.Api
 
             return art;
         }
-         protected async Task<IEnumerable<Recording>> FindCompleteRecordingsWithIdOrDisplayDate(string idOrDisplayDate, Artist forArtist) {
-            int id;
-            string query = "";
-            object p = new {};
 
-            if(int.TryParse(idOrDisplayDate, out id)) {
-                query = @"
-                select s.*, v.*
-                from shows s
-                    left join venues v on v.id = s.venueid 
-                where
-                    id = @id
-                ";
-                p = new {id = id};
-            }
-            else {
-                query = @"
-                select s.*, v.*
-                from shows s
-                    left join venues v on v.id = s.venueid 
-                where
-                    display_date = @displayDate
-                and artistid = @artistId
-                ";
-                p = new {
-                    displayDate = idOrDisplayDate,
-                    artistId = forArtist.id
-                };
-            }
-
-            return await db.QueryAsync<Recording, Venue, Recording>(query, (recording, ven) => {
-                recording.venue = ven;
-                recording.recordingReviews = JsonConvert.DeserializeObject<IList<RecordingReview>>(recording.reviews);
-                return recording;
-            }, p);
-        }
     }
 }
