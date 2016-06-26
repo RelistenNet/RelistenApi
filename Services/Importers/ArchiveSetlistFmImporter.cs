@@ -87,10 +87,12 @@ namespace Relisten.Import
             return ImportStats.None;
         }
     }
+
     public class ArchiveOrgImporter
     {
 
     }
+    
     public class SetlistFmImporter : ImporterBase, ISetlistImporter, IVenuesImporter
     {
         private Artist artist { get; set; }
@@ -109,10 +111,12 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             foreach(var setlist in root.setlists.setlist) {
-
+                
             }
 
-            return new Tuple<bool, ImportStats>(root.setlists.total); 
+            var hasMorePages = root.setlists.page < Math.Ceiling(1.0 * root.setlists.total / root.setlists.itemsPerPage);
+
+            return new Tuple<bool, ImportStats>(hasMorePages, stats); 
         }
 
         public async Task<ImportStats> updateSetlistShows(Artist artist)

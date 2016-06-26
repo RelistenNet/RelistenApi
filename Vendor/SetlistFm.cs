@@ -97,11 +97,11 @@ namespace Relisten.Vendor.SetlistFm
     public class Setlists
     {
         [JsonProperty("itemsPerPage")]
-        public string itemsPerPage { get; set; }
+        public int itemsPerPage { get; set; }
         [JsonProperty("page")]
-        public string page { get; set; }
+        public int page { get; set; }
         [JsonProperty("total")]
-        public string total { get; set; }
+        public int total { get; set; }
         public IList<Setlist> setlist { get; set; }
     }
 
