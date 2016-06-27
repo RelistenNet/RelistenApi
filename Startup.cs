@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Relisten.Data;
+using Relisten.Import;
 
 namespace Relisten
 {
@@ -30,8 +32,18 @@ namespace Relisten
             // Add framework services.
             services.AddMvc();
 
+            services.AddLogging();
+
+            DbService.SetConnectionURL(Configuration["POSTGRES_URL_INT"]);
+
             services.AddSingleton<RedisService>(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
-            services.AddSingleton<DbService>(new DbService(Configuration["POSTGRES_URL_INT"]));
+            services.AddScoped<DbService, DbService>();
+
+            services.AddScoped<SetlistShowService, SetlistShowService>();
+            services.AddScoped<VenueService, VenueService>();
+            services.AddScoped<TourService, TourService>();
+            services.AddScoped<SetlistSongService, SetlistSongService>();
+            services.AddScoped<SetlistFmImporter, SetlistFmImporter>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

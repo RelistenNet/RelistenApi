@@ -7,6 +7,8 @@ using Relisten.Api.Models;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using System;
+using System.Linq;
 
 namespace Relisten.Api
 {
@@ -31,11 +33,34 @@ namespace Relisten.Api
             int id;
             Artist art = null;
 
+            Func<Artist, Features, Artist> joiner = (Artist artist, Features features) => {
+                artist.features = features;
+                return artist;
+            };
+
+            var baseSql = @"
+                SELECT
+                    a.*, f.*
+                FROM
+                    artists a
+
+                    LEFT JOIN features f on f.artist_id = a.id 
+                WHERE
+            ";
+
             if(int.TryParse(idOrSlug, out id)) {
-                art = await db.QuerySingleAsync<Artist>("select * from artists where id = @id", new {id = id});
+                art = (await db.QueryAsync<Artist, Features, Artist>(
+                    baseSql + " a.id = @id",
+                    joiner,
+                    new {id = id})
+                ).FirstOrDefault();
             }
             else {
-                art = await db.QuerySingleAsync<Artist>("select * from artists where slug = @slug", new {slug = idOrSlug});
+                art = (await db.QueryAsync<Artist, Features, Artist>(
+                    baseSql + " a.slug = @slug",
+                    joiner,
+                    new {slug = idOrSlug})
+                ).FirstOrDefault();
             }
 
             return art;

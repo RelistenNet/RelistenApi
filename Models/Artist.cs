@@ -24,6 +24,7 @@ namespace Relisten.Api.Models
         public string musicbrainz_id { get; set; }
         public string name { get; set; }
         public int featured { get; set; }
+        public string slug { get; set; }
 
         public Features features { get; set; }
     }
@@ -77,6 +78,9 @@ namespace Relisten.Api.Models
 
         public int artist_id { get; set; }
         public Artist artist { get; set; }
+
+        public int? tour_id { get; set; }
+        public Tour tour { get; set; }
 
         public int venue_id { get; set; }
         public Venue venue { get; set; }
@@ -225,9 +229,11 @@ namespace Relisten.Api.Models
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
-        public DateTime start_date { get; set; }
-        public DateTime end_date { get; set; }
+        public DateTime? start_date { get; set; }
+        public DateTime? end_date { get; set; }
         public string name { get; set; }
+        public string slug { get; set; }
+        public string upstream_identifier { get; set; }
     }
 
     public class Venue : IModel
@@ -237,8 +243,10 @@ namespace Relisten.Api.Models
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
 
-        public double latitude { get; set; }
-        public double longitude { get; set; }
+        public int? artist_id { get; set; }
+
+        public double? latitude { get; set; }
+        public double? longitude { get; set; }
         public string name { get; set; }
         public string location { get; set; }
         public string upstream_identifier { get; set; }
