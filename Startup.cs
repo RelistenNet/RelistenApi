@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
 
@@ -30,7 +31,12 @@ namespace Relisten
         public void ConfigureServices(IServiceCollection services)
         {
             // Add framework services.
-            services.AddMvc();
+            services.
+                AddMvc().
+                AddJsonOptions(jsonOptions => {
+                    jsonOptions.SerializerSettings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
+                    jsonOptions.SerializerSettings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
+                });
 
             services.AddLogging();
 
@@ -44,6 +50,7 @@ namespace Relisten
             services.AddScoped<TourService, TourService>();
             services.AddScoped<SetlistSongService, SetlistSongService>();
             services.AddScoped<SetlistFmImporter, SetlistFmImporter>();
+            services.AddScoped<SourceService, SourceService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

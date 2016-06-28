@@ -9,11 +9,11 @@ namespace Relisten.Data
 {
     public abstract class RelistenDataServiceBase
     {
-        protected IDbConnection db { get; set; }
+        protected DbService db { get; set; }
 
         protected RelistenDataServiceBase(DbService db)
         {
-            this.db = db.connection;
+            this.db = db;
         }
     }
 
@@ -23,7 +23,7 @@ namespace Relisten.Data
 
         public async Task<SetlistShow> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
-            return await db.QueryFirstOrDefaultAsync<SetlistShow>(@"
+            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<SetlistShow>(@"
                 SELECT
                     *
                 FROM
@@ -31,14 +31,68 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND upstream_identifier = @upstreamId
-            ", new { artistId = artist.id, upstreamId });
+            ", new { artistId = artist.id, upstreamId }));
+        }
+
+        public async Task<IEnumerable<SetlistShow>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)
+        {
+            if (withVenuesToursAndEras)
+            {
+                return await db.WithConnection(con => con.QueryAsync<SetlistShow, Tour, Venue, Era, SetlistShow>(@"
+                    SELECT
+                        s.*, t.*, v.*, e.*
+                    FROM
+                        setlist_shows s
+                        LEFT JOIN tours t ON s.tour_id = t.id
+                        LEFT JOIN venues v ON s.venue_id = v.id
+                        LEFT JOIN eras e ON s.era_id = e.id
+                    WHERE
+                        s.artist_id = @id
+                    ", (setlistShow, tour, venue, era) =>
+                {
+                    setlistShow.venue = venue;
+
+                    if (artist.features.tours)
+                    {
+                        setlistShow.tour = tour;
+                    }
+
+                    if (artist.features.eras)
+                    {
+                        setlistShow.era = era;
+                    }
+
+                    return setlistShow;
+                }, artist));
+            }
+
+            return await db.WithConnection(con => con.QueryAsync<SetlistShow>(@"
+                SELECT
+                    *
+                FROM
+                    setlist_shows
+                WHERE
+                    artist_id = @id
+            ", artist));
+        }
+
+        public async Task<IEnumerable<SimpleSetlistShow>> AllSimpleForArtist(Artist artist)
+        {
+            return await db.WithConnection(con => con.QueryAsync<SimpleSetlistShow>(@"
+                SELECT
+                    id, created_at, updated_at, date
+                FROM
+                    setlist_shows
+                WHERE
+                    artist_id = @id
+            ", artist));
         }
 
         public async Task<SetlistShow> Save(SetlistShow show)
         {
             if (show.id != 0)
             {
-                return await db.QuerySingleAsync<SetlistShow>(@"
+                return await db.WithConnection(con => con.QuerySingleAsync<SetlistShow>(@"
                     UPDATE
                         setlist_shows
                     SET
@@ -51,11 +105,11 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", show);
+                ", show));
             }
             else
             {
-                return await db.QuerySingleAsync<SetlistShow>(@"
+                return await db.WithConnection(con => con.QuerySingleAsync<SetlistShow>(@"
                     INSERT INTO
                         setlist_shows
 
@@ -77,24 +131,24 @@ namespace Relisten.Data
                             @updated_at
                         )
                     RETURNING *
-                ", show);
+                ", show));
             }
         }
 
         public async Task<int> RemoveSongPlays(SetlistShow show)
         {
-            return await db.ExecuteAsync(@"
+            return await db.WithConnection(con => con.ExecuteAsync(@"
                 DELETE
                 FROM
                     setlist_songs_plays
                 WHERE
                     played_setlist_show_id = @showId
-            ", new { showId = show.id });
+            ", new { showId = show.id }));
         }
 
         public async Task<int> AddSongPlays(SetlistShow show, IEnumerable<SetlistSong> songs)
         {
-            return await db.ExecuteAsync(@"
+            return await db.WithConnection(con => con.ExecuteAsync(@"
                 INSERT
                 INTO
                     setlist_songs_plays
@@ -108,224 +162,7 @@ namespace Relisten.Data
                         @songId,
                         @showId
                     )
-            ", songs.Select(song => new { showId = show.id, songId = song.id }));
-        }
-    }
-    public class SetlistSongService : RelistenDataServiceBase
-    {
-        public SetlistSongService(DbService db) : base(db) { }
-
-        public async Task<IEnumerable<SetlistSong>> ForUpstreamIdentifiers(Artist artist, IEnumerable<string> upstreamIds)
-        {
-            return await db.QueryAsync<SetlistSong>(@"
-                SELECT
-                    *
-                FROM
-                    setlist_songs
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = ANY(@upstreamIds)
-            ", new { artistId = artist.id, upstreamIds });
-        }
-
-        public async Task<SetlistSong> Save(SetlistSong song)
-        {
-            if (song.id != 0)
-            {
-                return await db.QuerySingleAsync<SetlistSong>(@"
-                    UPDATE
-                        setlist_songs
-                    SET
-                        artist_id = @artist_id,
-                        name = @name,
-                        slug = @slug,
-                        upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
-                    WHERE
-                        id = @id
-                    RETURNING *
-                ", song);
-            }
-            else
-            {
-                return await db.QuerySingleAsync<SetlistSong>(@"
-                    INSERT INTO
-                        setlist_songs
-
-                        (
-                            artist_id,
-                            name,
-                            slug,
-                            upstream_identifier,
-                            updated_at
-                        )
-                    VALUES
-                        (
-                            @artist_id,
-                            @name,
-                            @slug,
-                            @upstream_identifier,
-                            @updated_at
-                        )
-                    RETURNING *
-                ", song);
-            }
-        }
-    }
-
-    public class VenueService : RelistenDataServiceBase
-    {
-        public VenueService(DbService db) : base(db) { }
-
-        public async Task<Venue> ForGlobalUpstreamIdentifier(string upstreamId)
-        {
-            return await ForUpstreamIdentifier(null, upstreamId);
-        }
-
-        public async Task<Venue> ForUpstreamIdentifier(Artist artist, string upstreamId)
-        {
-            if (artist != null)
-            {
-                return await db.QueryFirstOrDefaultAsync<Venue>(@"
-                    SELECT
-                        *
-                    FROM
-                        venues
-                    WHERE
-                        artist_id = @artistId
-                        AND upstream_identifier = @upstreamId
-                ", new { artistId = artist.id, upstreamId });
-            }
-            else
-            {
-                return await db.QueryFirstOrDefaultAsync<Venue>(@"
-                    SELECT
-                        *
-                    FROM
-                        venues
-                    WHERE
-                        upstream_identifier = @upstreamId
-                ", new { upstreamId });
-            }
-        }
-
-        public async Task<Venue> Save(Venue venue)
-        {
-            if (venue.id != 0)
-            {
-                return await db.QuerySingleAsync<Venue>(@"
-                    UPDATE
-                        venues
-                    SET
-                        artist_id = @artist_id,
-                        latitude = @latitude,
-                        longitude = @longitude,
-                        name = @name,
-                        location = @location,
-                        upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
-                    WHERE
-                        id = @id
-                    RETURNING *
-                ", venue);
-            }
-            else
-            {
-                return await db.QuerySingleAsync<Venue>(@"
-                    INSERT INTO
-                        venues
-
-                        (
-                            artist_id,
-                            latitude,
-                            longitude,
-                            name,
-                            location,
-                            upstream_identifier,
-                            updated_at
-                        )
-                    VALUES
-                        (
-                            @artist_id,
-                            @latitude,
-                            @longitude,
-                            @name,
-                            @location,
-                            @upstream_identifier,
-                            @updated_at
-                        )
-                    RETURNING *
-                ", venue);
-            }
-        }
-
-    }
-
-    public class TourService : RelistenDataServiceBase
-    {
-        public TourService(DbService db) : base(db) { }
-
-        public async Task<Tour> ForUpstreamIdentifier(Artist artist, string upstreamId)
-        {
-            return await db.QueryFirstOrDefaultAsync<Tour>(@"
-                SELECT
-                    *
-                FROM
-                    tours
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstreamId
-            ", new { artistId = artist.id, upstreamId });
-        }
-
-        public async Task<Tour> Save(Tour tour)
-        {
-            if (tour.id != 0)
-            {
-                return await db.QuerySingleAsync<Tour>(@"
-                    UPDATE
-                        tours
-                    SET
-                        artist_id = @artist_id,
-                        start_date = @start_date,
-                        end_date = @end_date,
-                        name = @name,
-                        slug = @slug,
-                        upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
-                    WHERE
-                        id = @id
-                    RETURNING *
-                ", tour);
-            }
-            else
-            {
-                return await db.QuerySingleAsync<Tour>(@"
-                    INSERT INTO
-                        tours
-
-                        (
-                            artist_id,
-                            start_date,
-                            end_date,
-                            name,
-                            slug,
-                            upstream_identifier,
-                            updated_at
-                        )
-                    VALUES
-                        (
-                            @artist_id,
-                            @start_date,
-                            @end_date,
-                            @name,
-                            @slug,
-                            @upstream_identifier,
-                            @updated_at
-                        )
-                    RETURNING *
-                ", tour);
-            }
+            ", songs.Select(song => new { showId = show.id, songId = song.id })));
         }
     }
 }

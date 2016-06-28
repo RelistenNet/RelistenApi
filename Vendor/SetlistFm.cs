@@ -60,6 +60,12 @@ namespace Relisten.Vendor.SetlistFm
         public string name { get; set; }
         public City city { get; set; }
         public string url { get; set; }
+
+        public string _iguanaUpstreamId {
+            get {
+                return "setlistfm:" + id;
+            }
+        }
     }
 
     public class Song

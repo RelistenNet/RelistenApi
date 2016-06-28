@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
@@ -19,6 +20,7 @@ namespace Relisten.Api.Models
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
 
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
         public string data_source { get; set; }
         public string musicbrainz_id { get; set; }
@@ -82,12 +84,27 @@ namespace Relisten.Api.Models
         public int? tour_id { get; set; }
         public Tour tour { get; set; }
 
+        public int? era_id { get; set; }
+        public Era era { get; set; }
+
         public int venue_id { get; set; }
         public Venue venue { get; set; }
 
         /// <summary>ONLY DATE</summary>
         public DateTime date { get; set; }
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
+    }
+
+    public class SimpleSetlistShow : IModel
+    {
+        public int id { get; set; }
+
+        public DateTime created_at { get; set; }
+        public DateTime updated_at { get; set; }
+
+        /// <summary>ONLY DATE</summary>
+        public DateTime date { get; set; }
     }
 
     public class SetlistSong : IModel
@@ -102,9 +119,16 @@ namespace Relisten.Api.Models
 
         public string name { get; set; }
         public string slug { get; set; }
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
 
-        public IEnumerable<SetlistShow> shows_played_at { get; set; }
+        public int? shows_played_at { get; set; }
+    }
+
+    public class SetlistShowSongJoin
+    {
+        public int played_setlist_song_id { get; set; }
+        public int played_setlist_show_id { get; set; }
     }
 
     public class Show : IModel
@@ -147,6 +171,9 @@ namespace Relisten.Api.Models
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
 
+        public int artist_id { get; set; }
+        public Artist artist { get; set; }
+
         public int show_id { get; set; }
         public Show show { get; set; }
 
@@ -154,9 +181,12 @@ namespace Relisten.Api.Models
         public bool is_remaster { get; set; }
         public bool has_jamcharts { get; set; }
 
-        public float avg_rating { get; set; }
+        public double avg_rating { get; set; }
         public int num_reviews { get; set; }
+        public double avg_rating_weighted { get; set; }
+        public double duration { get; set; }
 
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
         public string description { get; set; }
         public string taper_notes { get; set; }
@@ -190,6 +220,8 @@ namespace Relisten.Api.Models
     public class SourceReview : IModel
     {
         public int id { get; set; }
+
+        public int source_id { get; set; }
 
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
@@ -233,7 +265,10 @@ namespace Relisten.Api.Models
         public DateTime? end_date { get; set; }
         public string name { get; set; }
         public string slug { get; set; }
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
+
+        public int? shows_on_tour { get; set; }
     }
 
     public class Venue : IModel
@@ -249,7 +284,10 @@ namespace Relisten.Api.Models
         public double? longitude { get; set; }
         public string name { get; set; }
         public string location { get; set; }
+        [JsonIgnore]
         public string upstream_identifier { get; set; }
+
+        public int? shows_at_venue { get; set; }
     }
 
     public class Year : IModel

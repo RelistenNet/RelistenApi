@@ -18,7 +18,7 @@ namespace Relisten.Controllers
         [HttpGet]
         public async Task<IActionResult> Get()
         {
-            return JsonSuccess(await db.QueryAsync<Artist>("select * from artists"));
+            return JsonSuccess(await db.WithConnection(conn => conn.QueryAsync<Artist>("select * from artists")));
         }
 
         // GET api/values/5

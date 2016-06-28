@@ -12,28 +12,34 @@ using System.Linq;
 
 namespace Relisten.Api
 {
-    public class RelistenBaseController : Controller {
-        protected RedisService redis {get;set;}
-        protected IDbConnection db {get;set;}
+    public class RelistenBaseController : Controller
+    {
+        protected RedisService redis { get; set; }
+        protected DbService db { get; set; }
 
-        public RelistenBaseController(RedisService redis, DbService db) {
+        public RelistenBaseController(RedisService redis, DbService db)
+        {
             this.redis = redis;
-            this.db = db.connection;
+            this.db = db;
         }
 
-        protected IActionResult JsonSuccess(object anything) {
+        protected IActionResult JsonSuccess(object anything)
+        {
             return Json(ResponseEnvelope.Success(anything));
         }
 
-        protected IActionResult JsonNotFound(object anything = null) {
+        protected IActionResult JsonNotFound(object anything = null)
+        {
             return NotFound(ResponseEnvelope.Error(ApiErrorCode.NotFound, anything));
         }
 
-        protected async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug) {
+        protected async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
+        {
             int id;
             Artist art = null;
 
-            Func<Artist, Features, Artist> joiner = (Artist artist, Features features) => {
+            Func<Artist, Features, Artist> joiner = (Artist artist, Features features) =>
+            {
                 artist.features = features;
                 return artist;
             };
@@ -48,19 +54,31 @@ namespace Relisten.Api
                 WHERE
             ";
 
-            if(int.TryParse(idOrSlug, out id)) {
-                art = (await db.QueryAsync<Artist, Features, Artist>(
-                    baseSql + " a.id = @id",
-                    joiner,
-                    new {id = id})
-                ).FirstOrDefault();
+            if (int.TryParse(idOrSlug, out id))
+            {
+                art = await db.WithConnection(async con =>
+                {
+                    var artists = await con.QueryAsync<Artist, Features, Artist>(
+                        baseSql + " a.id = @id",
+                        joiner,
+                        new { id = id }
+                    );
+
+                    return artists.FirstOrDefault();
+                });
             }
-            else {
-                art = (await db.QueryAsync<Artist, Features, Artist>(
-                    baseSql + " a.slug = @slug",
-                    joiner,
-                    new {slug = idOrSlug})
-                ).FirstOrDefault();
+            else
+            {
+                art = await db.WithConnection(async con =>
+                {
+                    var artists = await con.QueryAsync<Artist, Features, Artist>(
+                        baseSql + " a.slug = @slug",
+                        joiner,
+                        new { slug = idOrSlug }
+                    );
+
+                    return artists.FirstOrDefault();
+                });
             }
 
             return art;
