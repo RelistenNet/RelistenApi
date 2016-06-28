@@ -136,6 +136,7 @@ namespace Relisten.Import
                 dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta));
             }
 
+            var trackNum = 0;
             var dbTracks = detailsRoot.files.
                 Where(file => {
                     if(file.format != "VBR MP3")
@@ -150,7 +151,12 @@ namespace Relisten.Import
 
                     return true;
                 }).
-                Select(file => CreateSourceTrackForFile(artist, dbSource, meta, file))
+                OrderBy(file => file.name).
+                Select(file => {
+                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum);
+                    trackNum = r.track_position;
+                    return r;
+                })
                 ;
 
             // associate sources with shows/create if necessary
