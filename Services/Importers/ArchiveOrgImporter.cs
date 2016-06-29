@@ -21,6 +21,9 @@ namespace Relisten.Import
         public const string DataSourceName = "archive.org";
 
         protected SourceService _sourceService { get; set; }
+        protected SourceSetService _sourceSetService { get; set; }
+        protected SourceReviewService _sourceReviewService { get; set; }
+        protected SourceTrackService _sourceTrackService { get; set; }
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
         protected ILogger<SetlistFmImporter> _log { get; set; }
@@ -30,6 +33,9 @@ namespace Relisten.Import
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
+            SourceSetService sourceSetService,
+            SourceReviewService sourceReviewService,
+            SourceTrackService sourceTrackService,
             ILogger<SetlistFmImporter> log
         ) : base(db)
         {
@@ -37,6 +43,9 @@ namespace Relisten.Import
             this._venueService = venueService;
             this._tourService = tourService;
             this._log = log;
+            _sourceReviewService = sourceReviewService;
+            _sourceTrackService = sourceTrackService;
+            _sourceSetService = sourceSetService;
         }
 
         public override ImportableData ImportableDataForArtist(Artist artist)
@@ -90,11 +99,37 @@ namespace Relisten.Import
                 }
             }
 
+            // update avg_rating, num_reviews, avg_rating_weighted, duration on sources
+            /*await db.WithConnection(con => con.ExecuteAsync(@"
+                WITH review_info AS (
+                    SELECT
+                        s.id as id,
+                        AVG(rating) as avg,
+                        COUNT(*) as num_reviews
+                    FROM
+                        sources s
+                        JOIN source_reviews r ON r.source_id = s.id
+                    GROUP BY
+                        s.id 
+                ), avg_weighted AS (
+                    SELECT
+                        AVG(SELECT avg FROM review_info WHERE id = s.id) as avgAll,
+                        AVG(SELECT rating FROM source_reviews 
+
+                )
+
+                UPDATE
+                    sources
+                
+            ", new { artistId = artist.id }));*/
+
+            // update MAX(avg_rating) as avg_rating_weighted, MAX(duration) as avg_duration
+
+            // update shows
+            await RebuildShows();
 
             // update years
-            // update shows
-            // update avg_rating, num_reviews, avg_rating_weighted, duration on sources
-            // update MAX(avg_rating) as avg_rating_weighted, MAX(duration) as avg_duration
+            await RebuildYears();
 
             return stats;
         }
@@ -113,7 +148,17 @@ namespace Relisten.Import
 
             var meta = detailsRoot.metadata;
 
-            var dbReviews = detailsRoot.reviews.Select(rev =>
+            var mp3Files = detailsRoot.files.Where(file => file.format == "VBR MP3");
+
+            if(mp3Files.Count() == 0) {
+                _log.LogDebug("No VBR MP3 files found for {0}", searchDoc.identifier);
+
+                return stats;
+            }
+
+            var dbReviews = detailsRoot.reviews == null
+                ? new List<SourceReview>()
+                : detailsRoot.reviews.Select(rev =>
             {
                 return new SourceReview()
                 {
@@ -121,64 +166,115 @@ namespace Relisten.Import
                     title = rev.reviewtitle,
                     review = rev.reviewbody,
                     author = rev.reviewer,
-                    updated_at = rev.createdate
+                    updated_at = rev.reviewdate
                 };
             }).ToList();
 
             if (isUpdate)
             {
-                var src = CreateSourceForMetadata(artist, meta);
+                var src = CreateSourceForMetadata(artist, meta, searchDoc);
                 src.id = dbSource.id;
                 dbSource = await _sourceService.Save(src);
+
+                stats.Updated++;
+                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
             else
             {
-                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta));
+                Venue dbVenue = null;
+                if (artist.features.per_source_venues)
+                {
+                    var venueUpstreamId = meta.venue;
+                    dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
+
+                    if(dbVenue == null)
+                    {
+                        dbVenue = await _venueService.Save(new Venue() {
+                            artist_id = artist.id,
+                            name = meta.venue,
+                            location = meta.coverage,
+                            upstream_identifier = venueUpstreamId,
+                            slug = Slugify(meta.venue),
+                            updated_at = searchDoc._iguana_updated_at
+                        });
+                    }
+                }
+
+                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta, searchDoc, dbVenue));                
+                stats.Created++;
+                
+                var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
+                stats.Created++;
+
+                var trackNum = 0;
+                var dbTracks = mp3Files.
+                    Where(file =>
+                    {
+                        return !(
+                            (file.title == null && file.original == null)
+                            || file.length == null
+                            || file.name == null
+                        );
+                    }).
+                    OrderBy(file => file.name).
+                    Select(file =>
+                    {
+                        var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet);
+                        trackNum = r.track_position;
+                        return r;
+                    })
+                    ;
+
+                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
+                stats.Created += (await _sourceTrackService.InsertAll(dbTracks)).Count();
             }
-
-            var trackNum = 0;
-            var dbTracks = detailsRoot.files.
-                Where(file => {
-                    if(file.format != "VBR MP3")
-                    {
-                        return false;
-                    }
-
-                    if((file.title == null && file.original == null) || file.length == null || file.name == null)
-                    {
-                        return false;
-                    }
-
-                    return true;
-                }).
-                OrderBy(file => file.name).
-                Select(file => {
-                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum);
-                    trackNum = r.track_position;
-                    return r;
-                })
-                ;
-
-            // associate sources with shows/create if necessary
 
             return stats;
         }
 
-        private Source CreateSourceForMetadata(
-            Artist artist,
-            Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta
+        private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source, IEnumerable<SourceReview> reviews)
+        {
+            await _sourceReviewService.RemoveAllForSource(source);
+
+            foreach (var review in reviews)
+            {
+                review.source_id = source.id;
+            }
+
+            return await _sourceReviewService.InsertAll(reviews);
+        }
+
+        private SourceSet CreateSetForSource(
+            Source source
         )
         {
-            var sbd = meta.identifier.ContainsInsensitive("sbd")
-                || meta.title.ContainsInsensitive("sbd")
-                || meta.source.ContainsInsensitive("sbd")
-                || meta.lineage.ContainsInsensitive("sbd")
+            return new SourceSet()
+            {
+                source_id = source.id,
+                index = 0,
+                is_encore = false,
+                name = "Set",
+                updated_at = source.updated_at
+            };
+        }
+
+        private Source CreateSourceForMetadata(
+            Artist artist,
+            Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta,
+            Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
+            Venue dbVenue = null
+        )
+        {
+            var sbd = meta.identifier.EmptyIfNull().ContainsInsensitive("sbd")
+                || meta.title.EmptyIfNull().ContainsInsensitive("sbd")
+                || meta.source.EmptyIfNull().ContainsInsensitive("sbd")
+                || meta.lineage.EmptyIfNull().ContainsInsensitive("sbd")
                 ;
 
-            var remaster = meta.identifier.ContainsInsensitive("remast")
-                || meta.title.ContainsInsensitive("remast")
-                || meta.source.ContainsInsensitive("remast")
-                || meta.lineage.ContainsInsensitive("remast")
+            var remaster = meta.identifier.EmptyIfNull().ContainsInsensitive("remast")
+                || meta.title.EmptyIfNull().ContainsInsensitive("remast")
+                || meta.source.EmptyIfNull().ContainsInsensitive("remast")
+                || meta.lineage.EmptyIfNull().ContainsInsensitive("remast")
                 ;
 
             return new Source()
@@ -190,12 +286,15 @@ namespace Relisten.Import
                 avg_rating = 0, // dbReviews.Average(rev => 1.0 * rev.rating),
                 num_reviews = 0, // dbReviews.Count,
                 upstream_identifier = meta.identifier,
-                description = meta.description,
-                taper_notes = meta.notes,
-                source = meta.source,
-                taper = meta.taper,
-                transferrer = meta.transferer,
-                lineage = meta.lineage
+                description = meta.description.EmptyIfNull(),
+                taper_notes = meta.notes.EmptyIfNull(),
+                source = meta.source.EmptyIfNull(),
+                taper = meta.taper.EmptyIfNull(),
+                transferrer = meta.transferer.EmptyIfNull(),
+                lineage = meta.lineage.EmptyIfNull(),
+                updated_at = searchDoc._iguana_updated_at,
+                venue_id = dbVenue?.id,
+                display_date = meta.date
             };
         }
 
@@ -204,12 +303,13 @@ namespace Relisten.Import
             Source dbSource,
             Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta,
             Relisten.Vendor.ArchiveOrg.Metadata.File file,
-            int previousTrackNumber
+            int previousTrackNumber,
+            SourceSet set = null
         )
         {
             int trackNum = previousTrackNumber + 1;
 
-            var title = String.IsNullOrEmpty(file.title) ? file.title : file.original;
+            var title = !String.IsNullOrEmpty(file.title) ? file.title : file.original;
 
             return new SourceTrack()
             {
@@ -217,16 +317,15 @@ namespace Relisten.Import
                 track_position = trackNum,
                 artist_id = artist.id,
                 source_id = dbSource.id,
-                source_set_id = 0,
+                source_set_id = set == null ? -1 : set.id,
                 duration = (int)Math.Round(TimeSpan.ParseExact(file.length, new[] {
-                            "mm:ss",
-                            "m:ss",
-                            "hh:mm:ss",
-                            "h:mm:ss",
+                            @"m\:s",
+                            @"h\:m\:s"
                         }, null).TotalSeconds),
                 slug = Slugify(title),
                 mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
-                md5 = file.md5
+                md5 = file.md5,
+                updated_at = dbSource.updated_at
             };
         }
 

@@ -65,53 +65,28 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
     public class File
     {
         public string name { get; set; }
-        public string source { get; set; }
         public string format { get; set; }
-        public string mtime { get; set; }
         public string size { get; set; }
         public string md5 { get; set; }
-        public string crc32 { get; set; }
-        public string sha1 { get; set; }
         public string length { get; set; }
         public string title { get; set; }
-        public string creator { get; set; }
-        public string album { get; set; }
         public string track { get; set; }
-        public string height { get; set; }
-        public string width { get; set; }
-        public string artist { get; set; }
-        [JsonProperty("external-identifier")]
-        public string external_identifier { get; set; }
-        public string rotation { get; set; }
         public string original { get; set; }
-        public string bitrate { get; set; }
-        public string btih { get; set; }
     }
 
     public class Metadata
     {
         public string identifier { get; set; }
-        public string uploader { get; set; }
-        public string addeddate { get; set; }
         public string date { get; set; }
-        public string curation { get; set; }
         public string title { get; set; }
-        public string creator { get; set; }
-        public string mediatype { get; set; }
-        public List<string> collection { get; set; }
-        public string type { get; set; }
         public string description { get; set; }
-        public string year { get; set; }
-        public string subject { get; set; }
         public string venue { get; set; }
         public string coverage { get; set; }
         public string source { get; set; }
         public string lineage { get; set; }
         public string taper { get; set; }
         public string transferer { get; set; }
-        public string md5s { get; set; }
         public string notes { get; set; }
-        public string publicdate { get; set; }
     }
 
     public class Review
@@ -119,7 +94,7 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
         public string reviewbody { get; set; }
         public string reviewtitle { get; set; }
         public string reviewer { get; set; }
-        public string reviewdate { get; set; }
+        public DateTime reviewdate { get; set; }
         public DateTime createdate { get; set; }
         public int stars { get; set; }
     }

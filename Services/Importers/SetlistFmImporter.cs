@@ -125,7 +125,8 @@ namespace Relisten.Import
                     latitude = setlist.venue.city.coords?.latitude,
                     longitude = setlist.venue.city.coords?.longitude,
                     location = $"{setlist.venue.city.name}, {setlist.venue.city.state}",
-                    upstream_identifier = setlist.venue._iguanaUpstreamId
+                    upstream_identifier = setlist.venue._iguanaUpstreamId,
+                    slug = Slugify(setlist.venue.name)
                 });
 
                 existingVenues[dbVenue.upstream_identifier] = dbVenue;

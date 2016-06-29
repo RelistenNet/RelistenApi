@@ -156,7 +156,7 @@ namespace Relisten.Api.Models
         /// <summary>ONLY DATE</summary>
         public DateTime date { get; set; }
 
-        public float avg_rating_weighted { get; set; }
+        public float avg_rating { get; set; }
         public float avg_duration { get; set; }
 
         public string display_date { get; set; }
@@ -174,8 +174,13 @@ namespace Relisten.Api.Models
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
-        public int show_id { get; set; }
+        public int? show_id { get; set; }
         public Show show { get; set; }
+
+        public int? venue_id { get; set; }
+        public Venue venue { get; set; }
+
+        public string display_date { get; set; }
 
         public bool is_soundboard { get; set; }
         public bool is_remaster { get; set; }
@@ -286,6 +291,7 @@ namespace Relisten.Api.Models
         public string location { get; set; }
         [JsonIgnore]
         public string upstream_identifier { get; set; }
+        public string slug { get; set; }
 
         public int? shows_at_venue { get; set; }
     }

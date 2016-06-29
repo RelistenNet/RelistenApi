@@ -56,28 +56,34 @@ namespace Relisten.Data
             }*/
             return await db.WithConnection(async con =>
             {
-                var inserted = await con.ExecuteAsync(@"
-                    INSERT INTO
-                        setlist_songs
+                var inserted = new List<SetlistSong>();
 
-                        (
-                            artist_id,
-                            name,
-                            slug,
-                            upstream_identifier,
-                            updated_at
-                        )
-                    VALUES
-                        (
-                            @artist_id,
-                            @name,
-                            @slug,
-                            @upstream_identifier,
-                            @updated_at
-                        )
-                ", songs);
+                foreach (var song in songs)
+                {
+                    inserted.Add(await con.QuerySingleAsync<SetlistSong>(@"
+                        INSERT INTO
+                            setlist_songs
 
-                return await ForUpstreamIdentifiers(artist, songs.Select(song => song.upstream_identifier));
+                            (
+                                artist_id,
+                                name,
+                                slug,
+                                upstream_identifier,
+                                updated_at
+                            )
+                        VALUES
+                            (
+                                @artist_id,
+                                @name,
+                                @slug,
+                                @upstream_identifier,
+                                @updated_at
+                            )
+                        RETURNING *
+                    ", song));
+                }
+
+                return inserted;
             });
         }
     }

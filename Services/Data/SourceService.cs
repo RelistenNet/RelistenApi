@@ -58,7 +58,8 @@ namespace Relisten.Data
                         taper = @taper,
                         transferrer = @transferrer,
                         lineage = @lineage,
-                        updated_at = @updated_at
+                        updated_at = @updated_at,
+                        display_date = @display_date
                     WHERE
                         id = @id
                     RETURNING *
@@ -85,7 +86,8 @@ namespace Relisten.Data
                             taper,
                             transferrer,
                             lineage,
-                            updated_at
+                            updated_at,
+                            display_date
                         )
                     VALUES
                         (
@@ -103,7 +105,8 @@ namespace Relisten.Data
                             @taper,
                             @transferrer,
                             @lineage,
-                            @updated_at
+                            @updated_at,
+                            @display_date
                         )
                     RETURNING *
                 ", source));

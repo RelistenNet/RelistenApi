@@ -50,7 +50,11 @@ namespace Relisten
             services.AddScoped<TourService, TourService>();
             services.AddScoped<SetlistSongService, SetlistSongService>();
             services.AddScoped<SetlistFmImporter, SetlistFmImporter>();
+            services.AddScoped<ArchiveOrgImporter, ArchiveOrgImporter>();
             services.AddScoped<SourceService, SourceService>();
+            services.AddScoped<SourceReviewService, SourceReviewService>();
+            services.AddScoped<SourceSetService, SourceSetService>();
+            services.AddScoped<SourceTrackService, SourceTrackService>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

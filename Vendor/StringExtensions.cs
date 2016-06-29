@@ -14,5 +14,10 @@ namespace Relisten.Vendor
         {
             return source.Contains(toCheck, StringComparison.OrdinalIgnoreCase);
         }
+
+        public static string EmptyIfNull(this string source)
+        {
+            return source == null ? "" : source;
+        }
     }
 }

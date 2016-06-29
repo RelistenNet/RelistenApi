@@ -23,13 +23,28 @@ namespace Relisten.Data
             ", new { source_ids }));
         }
 
-        public async Task<IEnumerable<SourceReview>> InsertAll(Artist artist, IEnumerable<SourceReview> songs)
+        public async Task<int> RemoveAllForSource(Source source)
+        {
+            return await db.WithConnection(con => con.ExecuteAsync(@"
+                DELETE
+                FROM
+                    source_reviews r
+                WHERE
+                    source_id = @id
+            ", source));
+        }
+
+        public async Task<IEnumerable<SourceReview>> InsertAll(IEnumerable<SourceReview> reviews)
         {
             return await db.WithConnection(async con =>
             {
-                var inserted = await con.ExecuteAsync(@"
+                var inserted = new List<SourceReview>();
+
+                foreach (var review in reviews)
+                {
+                    inserted.Add(await con.QuerySingleAsync<SourceReview>(@"
                     INSERT INTO
-                        setlist_songs
+                        source_reviews
 
                         (
                             source_id,
@@ -48,9 +63,11 @@ namespace Relisten.Data
                             @author,
                             @updated_at
                         )
-                ", songs);
+                        RETURNING *
+                    ", review));
+                }
 
-                return await AllForSources(songs.Select(song => song.source_id).Distinct());
+                return inserted;
             });
         }
     }
