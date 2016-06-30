@@ -1,8 +1,23 @@
+-- Update durations
+WITH durs AS (
+	SELECT
+		t.source_id,
+		SUM(t.duration) as duration
+	FROM
+		source_tracks t
+		JOIN sources s ON t.source_id = s.id
+	WHERE
+		s.artist_id = 2
+	GROUP BY
+		t.source_id
+)
 UPDATE
 	sources
 SET
-	show_id = NULL
-	;
+	duration = (SELECT duration FROM durs d WHERE d.source_id = sources.id)
+	WHERE
+		artist_id = 2
+;
 
 -- Drop all the shows to rebuild them
 DELETE
@@ -12,11 +27,17 @@ WHERE
 	artist_id =2
 ;
 
+UPDATE
+	sources
+SET
+	show_id = NULL
+;
+
 -- Generate shows table without years or rating information
 INSERT INTO
 	shows
 	
-	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id)
+	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration)
 	
 	SELECT
 		setlist_show.artist_id,
@@ -25,7 +46,8 @@ INSERT INTO
 		MAX(source.updated_at) as updated_at,
 		setlist_show.tour_id,
 		setlist_show.era_id,
-		setlist_show.venue_id
+		setlist_show.venue_id,
+		MAX(source.duration) as avg_duration
 	FROM
 		sources source
 		JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date
@@ -38,6 +60,25 @@ INSERT INTO
 		setlist_show.date
 ;
 
+-- Associate sources with show
+WITH show_assoc AS (
+	SELECT
+		src.id as source_id,
+		sh.id as show_id
+	FROM
+		sources src
+		JOIN shows sh ON src.display_date = sh.display_date
+	WHERE
+		src.artist_id = 2
+)
+UPDATE
+	sources
+SET
+	show_id = (SELECT show_id FROM show_assoc a WHERE a.source_id = sources.id)
+WHERE
+	artist_id = 2
+;
+
 -- Update sources with calculated rating/review information
 WITH review_info AS (
     SELECT
@@ -47,6 +88,8 @@ WITH review_info AS (
     FROM
         sources s
         LEFT JOIN source_reviews r ON r.source_id = s.id
+	WHERE
+		s.artist_id = 2
     GROUP BY
         s.id
     ORDER BY
@@ -70,6 +113,8 @@ WITH review_info AS (
     FROM
         sources s
         LEFT JOIN source_reviews r ON r.source_id = s.id
+	WHERE
+		s.artist_id = 2
     GROUP BY
         s.id
     ORDER BY
@@ -82,6 +127,8 @@ WITH review_info AS (
         sources s
 		JOIN review_info i ON i.id = s.id
 		JOIN review_info i_show ON i_show.id IN (SELECT id FROM sources WHERE show_id = s.show_id)
+	WHERE
+		s.artist_id = 2
     GROUP BY
         s.id, i.num_reviews, i.avg
     ORDER BY
@@ -95,21 +142,6 @@ SET
 WHERE
 	artist_id = 2
     ;
-
--- Associate sources with show
-WITH show_assoc AS (
-	SELECT
-		src.id as source_id,
-		sh.id as show_id
-	FROM
-		sources src
-		JOIN shows sh ON src.display_date = sh.display_date
-)
-UPDATE
-	sources
-SET
-	show_id = (SELECT show_id FROM show_assoc a WHERE a.source_id = sources.id)
-;
 
 SELECT
 	setlist_show.artist_id, setlist_show.date, AVG(source.rating) as avg_rating
