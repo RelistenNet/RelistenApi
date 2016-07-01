@@ -162,6 +162,7 @@ namespace Relisten.Api.Models
         public string display_date { get; set; }
 
         public IEnumerable<Source> sources { get; set; }
+        public int? sources_count { get; set; }
     }
 
     public class Source : IModel
@@ -294,6 +295,7 @@ namespace Relisten.Api.Models
         public string slug { get; set; }
 
         public int? shows_at_venue { get; set; }
+        public List<Show> shows { get; set; }
     }
 
     public class Year : IModel
@@ -304,7 +306,7 @@ namespace Relisten.Api.Models
         public DateTime updated_at { get; set; }
 
         public int show_count { get; set; }
-        public int recording_count { get; set; }
+        public int source_count { get; set; }
         public int duration { get; set; }
         public float avg_duration { get; set; }
         public float avg_rating { get; set; }
@@ -313,5 +315,7 @@ namespace Relisten.Api.Models
 
         public int artist_id { get; set; }
         public Artist artist { get; set; }
+
+        public List<Show> shows { get; set; }
     }
 }

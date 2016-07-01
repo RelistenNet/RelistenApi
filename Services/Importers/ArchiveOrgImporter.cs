@@ -12,6 +12,7 @@ using Relisten.Data;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using System.Globalization;
 
 namespace Relisten.Import
 {
@@ -88,48 +89,26 @@ namespace Relisten.Import
 
             foreach (var doc in root.response.docs)
             {
+                _log.LogDebug("Checking https://archive.org/metadata/{0}", doc.identifier);
                 var dbShow = existingSources.GetValue(doc.identifier);
                 if (dbShow == null
                 || doc._iguana_updated_at > dbShow.updated_at)
                 {
                     var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
                     var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                    var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(detailsJson);
+                    var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
+                        detailsJson,
+                        new Vendor.ArchiveOrg.TolerantStringConverter()
+                    );
                     stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot);
                 }
             }
 
-            // update avg_rating, num_reviews, avg_rating_weighted, duration on sources
-            /*await db.WithConnection(con => con.ExecuteAsync(@"
-                WITH review_info AS (
-                    SELECT
-                        s.id as id,
-                        AVG(rating) as avg,
-                        COUNT(*) as num_reviews
-                    FROM
-                        sources s
-                        JOIN source_reviews r ON r.source_id = s.id
-                    GROUP BY
-                        s.id 
-                ), avg_weighted AS (
-                    SELECT
-                        AVG(SELECT avg FROM review_info WHERE id = s.id) as avgAll,
-                        AVG(SELECT rating FROM source_reviews 
-
-                )
-
-                UPDATE
-                    sources
-                
-            ", new { artistId = artist.id }));*/
-
-            // update MAX(avg_rating) as avg_rating_weighted, MAX(duration) as avg_duration
-
             // update shows
-            await RebuildShows();
+            await RebuildShows(artist);
 
             // update years
-            await RebuildYears();
+            await RebuildYears(artist);
 
             return stats;
         }
@@ -318,10 +297,11 @@ namespace Relisten.Import
                 artist_id = artist.id,
                 source_id = dbSource.id,
                 source_set_id = set == null ? -1 : set.id,
-                duration = (int)Math.Round(TimeSpan.ParseExact(file.length, new[] {
-                            @"m\:s",
-                            @"h\:m\:s"
-                        }, null).TotalSeconds),
+                duration = file.length.
+                    Split(':').
+                    Reverse().
+                    Select((v, k) => (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).
+                    Sum(),
                 slug = Slugify(title),
                 mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
                 md5 = file.md5,

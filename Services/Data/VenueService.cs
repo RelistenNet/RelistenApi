@@ -7,6 +7,39 @@ using System.Linq;
 
 namespace Relisten.Data
 {
+    public class Identifier
+    {
+        public Identifier(string idAndOrSlug)
+        {
+            int id = -1;
+
+            var parts = idAndOrSlug.Split('_');
+
+            if (parts.Length == 1)
+            {
+                this.Id = null;
+                this.Slug = idAndOrSlug;
+            }
+            else
+            {
+                if (int.TryParse(parts[0], out id))
+                {
+                    this.Id = id;
+                    this.Slug = parts[1];
+                }
+                else
+                {
+                    // ¯\_(ツ)_/¯
+                    this.Id = null;
+                    this.Slug = idAndOrSlug;
+                }
+            }
+        }
+
+        public int? Id { get; set; }
+        public string Slug { get; set; }
+    }
+
     public class VenueService : RelistenDataServiceBase
     {
         public VenueService(DbService db) : base(db) { }
@@ -23,12 +56,18 @@ namespace Relisten.Data
                     v.*, COUNT(s.id) as shows_at_venue
                 FROM
                     venues v
-                    JOIN setlist_shows s ON s.venue_id = v.id
+                    LEFT JOIN shows s ON s.venue_id = v.id
                 WHERE
-                    s.artist_id = 1
-                    OR v.artist_id = 1
+                    s.artist_id = @id
+                    OR v.artist_id = @id
+                    OR v.artist_id IS NULL
                 GROUP BY
-                	v.id
+                	s.artist_id, v.id
+                HAVING
+                	s.artist_id = @id
+                    AND COUNT(s.id) > 0
+                ORDER BY
+                	v.name ASC
             ", artist));
         }
 
@@ -59,6 +98,21 @@ namespace Relisten.Data
             }
         }
 
+        public async Task<Venue> ForId(int id)
+        {
+            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
+                SELECT
+                    v.*, COUNT(s.id) as shows_at_venue
+                FROM
+                    venues v
+                    JOIN shows s ON s.venue_id = v.id
+                WHERE
+                    v.id = @id
+                GROUP BY
+                	v.id
+            ", new { id = id }));
+        }
+
         public async Task<Venue> Save(Venue venue)
         {
             if (venue.id != 0)
@@ -73,7 +127,8 @@ namespace Relisten.Data
                         name = @name,
                         location = @location,
                         upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
+                        updated_at = @updated_at,
+                        slug = @slug
                     WHERE
                         id = @id
                     RETURNING *
@@ -92,7 +147,8 @@ namespace Relisten.Data
                             name,
                             location,
                             upstream_identifier,
-                            updated_at
+                            updated_at,
+                            slug
                         )
                     VALUES
                         (
@@ -102,7 +158,8 @@ namespace Relisten.Data
                             @name,
                             @location,
                             @upstream_identifier,
-                            @updated_at
+                            @updated_at,
+                            @slug
                         )
                     RETURNING *
                 ", venue));

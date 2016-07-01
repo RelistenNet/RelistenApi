@@ -59,7 +59,8 @@ namespace Relisten.Data
                         transferrer = @transferrer,
                         lineage = @lineage,
                         updated_at = @updated_at,
-                        display_date = @display_date
+                        display_date = @display_date,
+                        venue_id = @venue_id
                     WHERE
                         id = @id
                     RETURNING *
@@ -87,7 +88,8 @@ namespace Relisten.Data
                             transferrer,
                             lineage,
                             updated_at,
-                            display_date
+                            display_date,
+                            venue_id
                         )
                     VALUES
                         (
@@ -106,7 +108,8 @@ namespace Relisten.Data
                             @transferrer,
                             @lineage,
                             @updated_at,
-                            @display_date
+                            @display_date,
+                            @venue_id
                         )
                     RETURNING *
                 ", source));

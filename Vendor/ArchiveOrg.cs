@@ -3,9 +3,30 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Relisten.Vendor.ArchiveOrg
 {
+    class TolerantStringConverter : Newtonsoft.Json.Converters.CustomCreationConverter<string>
+    {
+        public override string Create(Type objectType)
+        {
+            return "";
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            // Load JObject from stream 
+            if (reader.TokenType == JsonToken.StartArray)
+            {
+                var l = new List<string>();
+                serializer.Populate(reader, l);
+                return l.FirstOrDefault();
+            }
+
+            return reader.Value;
+        }
+    }
     public class SearchParams
     {
         public string q { get; set; }

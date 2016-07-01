@@ -227,25 +227,27 @@ namespace Relisten.Import
             {
                 var songs = setlist.sets.set.
                     SelectMany(set => set.song).
-                    Select(song => song.name).
+                    Select(song => new { Name = song.name, Slug = Slugify(song.name) }).
+                    GroupBy(song => song.Slug).
+                    Select(grp => grp.First()).
                     ToList();
 
                 var dbSongs = existingSetlistSongs.
-                    Where(kvp => songs.Contains(kvp.Key)).
+                    Where(kvp => songs.Select(song => song.Slug).Contains(kvp.Key)).
                     Select(kvp => kvp.Value).
                     ToList();
 
                 if (songs.Count != dbSongs.Count)
                 {
                     var newSongs = songs.
-                        Where(songName => dbSongs.Find(dbSong => dbSong.upstream_identifier == songName) == null).
-                        Select(songName => new SetlistSong()
+                        Where(song => dbSongs.Find(dbSong => dbSong.slug == song.Slug) == null).
+                        Select(song => new SetlistSong()
                         {
                             artist_id = artist.id,
-                            name = songName,
-                            slug = Slugify(songName),
+                            name = song.Name,
+                            slug = song.Slug,
                             updated_at = now,
-                            upstream_identifier = songName
+                            upstream_identifier = song.Slug
                         }).
                         ToList();
 

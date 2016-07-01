@@ -93,12 +93,14 @@ namespace Relisten.Vendor.SetlistFm
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
             // Load JObject from stream 
-            if(reader.TokenType == JsonToken.StartArray) {
+            if (reader.TokenType == JsonToken.StartArray)
+            {
                 var l = new List<T>();
                 serializer.Populate(reader, l);
                 return l;
             }
-            else if(reader.TokenType == JsonToken.String) {
+            else if (reader.TokenType == JsonToken.String)
+            {
                 return new List<T>();
             }
 

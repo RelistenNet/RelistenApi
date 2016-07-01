@@ -13,18 +13,15 @@ namespace Relisten.Controllers
     [Route("api/2/import/")]
     public class ImportController : RelistenBaseController
     {
-        protected SetlistFmImporter _setlistFmImporter { get; set; }
-        protected ArchiveOrgImporter _archiveOrgImporter { get; set; }
+        protected Importer _importer { get; set; }
 
         public ImportController(
             RedisService redis,
             DbService db,
-            SetlistFmImporter setlistFmImporter,
-            ArchiveOrgImporter archiveOrgImporter
+            Importer importer
         ) : base(redis, db)
         {
-            _setlistFmImporter = setlistFmImporter;
-            _archiveOrgImporter = archiveOrgImporter;
+            _importer = importer;
         }
 
         [HttpGet("{idOrSlug}")]
@@ -33,7 +30,7 @@ namespace Relisten.Controllers
             Artist art = await FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                return JsonSuccess(await _archiveOrgImporter.ImportDataForArtist(art));
+                return JsonSuccess(await _importer.Import(art));
             }
 
             return JsonNotFound();
