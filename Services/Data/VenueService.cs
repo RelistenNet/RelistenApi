@@ -70,6 +70,24 @@ namespace Relisten.Data
                 	v.name ASC
             ", artist));
         }
+        public async Task<IEnumerable<Venue>> AllValidForArtist(Artist artist)
+        {
+            return await db.WithConnection(con => con.QueryAsync<Venue>(@"
+                SELECT
+                    v.*, COUNT(s.id) as shows_at_venue
+                FROM
+                    venues v
+                    LEFT JOIN shows s ON s.venue_id = v.id
+                WHERE
+                    s.artist_id = @id
+                    OR v.artist_id = @id
+                    OR v.artist_id IS NULL
+                GROUP BY
+                	v.id
+                ORDER BY
+                	v.name ASC
+            ", artist));
+        }
 
         public async Task<Venue> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {

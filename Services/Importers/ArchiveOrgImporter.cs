@@ -85,6 +85,7 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var json = await res.Content.ReadAsStringAsync();
+            json = json.Replace("\"0000-01-01T00:00:00Z\",", "");
             var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(json);
 
             foreach (var doc in root.response.docs)
