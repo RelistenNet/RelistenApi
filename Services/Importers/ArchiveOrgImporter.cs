@@ -167,7 +167,13 @@ namespace Relisten.Import
                 Venue dbVenue = null;
                 if (artist.features.per_source_venues)
                 {
-                    var venueName = meta.venue.Length > 0 ? meta.venue : meta.coverage;
+                    var venueName = String.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
+
+                    if(String.IsNullOrEmpty(venueName))
+                    {
+                        venueName = "Unknown Venue";
+                    }
+
                     var venueUpstreamId = venueName;
                     dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
 
@@ -176,7 +182,7 @@ namespace Relisten.Import
                         dbVenue = await _venueService.Save(new Venue() {
                             artist_id = artist.id,
                             name = venueName,
-                            location = meta.coverage,
+                            location = String.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
                             upstream_identifier = venueUpstreamId,
                             slug = Slugify(venueName),
                             updated_at = searchDoc._iguana_updated_at
