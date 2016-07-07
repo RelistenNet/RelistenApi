@@ -123,6 +123,18 @@ namespace Relisten.Api.Models
         public string upstream_identifier { get; set; }
 
         public int? shows_played_at { get; set; }
+
+        public string sortName
+        {
+            get
+            {
+                if (name.StartsWith("The ", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    return name.Substring(4) + ", The";
+                }
+                return name;
+            }
+        }
     }
 
     public class SetlistShowSongJoin
@@ -296,6 +308,18 @@ namespace Relisten.Api.Models
 
         public int? shows_at_venue { get; set; }
         public List<Show> shows { get; set; }
+
+        public string sortName
+        {
+            get
+            {
+                if (name.StartsWith("The ", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    return name.Substring(4) + ", The";
+                }
+                return name;
+            }
+        }
     }
 
     public class Year : IModel

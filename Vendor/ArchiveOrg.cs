@@ -27,6 +27,52 @@ namespace Relisten.Vendor.ArchiveOrg
             return reader.Value;
         }
     }
+    class TolerantArchiveDateTimeConverter : Newtonsoft.Json.Converters.CustomCreationConverter<DateTime>
+    {
+        public override DateTime Create(Type objectType)
+        {
+            return new DateTime();
+        }
+
+        private int BoundedInt(string s, int start, int len, int min, int max)
+        {
+            int i;
+
+            if (int.TryParse(s.Substring(start, len), out i))
+            {
+                return Math.Min(max, Math.Max(min, i));
+            }
+
+            return min;
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            // Load JObject from stream 
+            if (reader.TokenType == JsonToken.String)
+            {
+                var s = reader.Value.ToString();
+                if (s.Length == 20)
+                {
+                    return new DateTime(
+                        BoundedInt(s, 0, 4, 1, 9999),
+                        BoundedInt(s, 5, 2, 1, 12),
+                        BoundedInt(s, 8, 2, 1, 30),
+                        BoundedInt(s, 11, 2, 0, 23),
+                        BoundedInt(s, 14, 2, 0, 59),
+                        BoundedInt(s, 17, 2, 0, 59),
+                        DateTimeKind.Utc
+                    );
+                }
+                else {
+                    return DateTime.Parse(s, null);
+                }
+            }
+
+            return reader.Value;
+        }
+    }
+
     public class SearchParams
     {
         public string q { get; set; }

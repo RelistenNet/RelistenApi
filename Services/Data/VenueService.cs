@@ -53,37 +53,21 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<Venue>(@"
                 SELECT
-                    v.*, COUNT(s.id) as shows_at_venue
+                    v.*,
+                    CASE
+                    	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                    		COUNT(s.id)
+                    	ELSE
+                    		COUNT(DISTINCT src.show_id)
+                    END as shows_at_venue
                 FROM
                     venues v
                     LEFT JOIN shows s ON s.venue_id = v.id
+                    LEFT JOIN sources src ON src.venue_id = v.id
                 WHERE
-                    s.artist_id = @id
-                    OR v.artist_id = @id
-                    OR v.artist_id IS NULL
+                    v.artist_id = @id
                 GROUP BY
                 	s.artist_id, v.id
-                HAVING
-                	s.artist_id = @id
-                    AND COUNT(s.id) > 0
-                ORDER BY
-                	v.name ASC
-            ", artist));
-        }
-        public async Task<IEnumerable<Venue>> AllValidForArtist(Artist artist)
-        {
-            return await db.WithConnection(con => con.QueryAsync<Venue>(@"
-                SELECT
-                    v.*, COUNT(s.id) as shows_at_venue
-                FROM
-                    venues v
-                    LEFT JOIN shows s ON s.venue_id = v.id
-                WHERE
-                    s.artist_id = @id
-                    OR v.artist_id = @id
-                    OR v.artist_id IS NULL
-                GROUP BY
-                	v.id
                 ORDER BY
                 	v.name ASC
             ", artist));

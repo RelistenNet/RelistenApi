@@ -85,16 +85,19 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var json = await res.Content.ReadAsStringAsync();
-            json = json.Replace("\"0000-01-01T00:00:00Z\",", "");
-            var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(json);
+            var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(
+                json,
+                new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter() 
+            );
 
             foreach (var doc in root.response.docs)
             {
-                _log.LogDebug("Checking https://archive.org/metadata/{0}", doc.identifier);
+//                _log.LogDebug("Checking {0}", doc.identifier);
                 var dbShow = existingSources.GetValue(doc.identifier);
                 if (dbShow == null
                 || doc._iguana_updated_at > dbShow.updated_at)
                 {
+                    _log.LogDebug("Pulling https://archive.org/metadata/{0}", doc.identifier);
                     var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
                     var detailsJson = await detailRes.Content.ReadAsStringAsync();
                     var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
@@ -164,17 +167,18 @@ namespace Relisten.Import
                 Venue dbVenue = null;
                 if (artist.features.per_source_venues)
                 {
-                    var venueUpstreamId = meta.venue;
+                    var venueName = meta.venue.Length > 0 ? meta.venue : meta.coverage;
+                    var venueUpstreamId = venueName;
                     dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
 
                     if(dbVenue == null)
                     {
                         dbVenue = await _venueService.Save(new Venue() {
                             artist_id = artist.id,
-                            name = meta.venue,
+                            name = venueName,
                             location = meta.coverage,
                             upstream_identifier = venueUpstreamId,
-                            slug = Slugify(meta.venue),
+                            slug = Slugify(venueName),
                             updated_at = searchDoc._iguana_updated_at
                         });
                     }

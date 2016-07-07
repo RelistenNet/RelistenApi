@@ -190,11 +190,14 @@ WITH durs AS (
 		t.source_id
 )
 UPDATE
-	sources
+	sources s
 SET
-	duration = (SELECT duration FROM durs d WHERE d.source_id = sources.id)
-	WHERE
-		artist_id = @id
+	duration = d.duration
+FROM
+	durs d
+WHERE
+	s.id = d.source_id
+	AND s.artist_id =  @id
 ;
 
 -- Drop all the shows to rebuild them
@@ -231,19 +234,19 @@ INSERT INTO
 		END) as date,
 		MIN(source.display_date) as display_date,
 		MAX(source.updated_at) as updated_at,
-		setlist_show.tour_id,
-		setlist_show.era_id,
-		COALESCE(setlist_show.venue_id, MAX(source.venue_id)) as venue_id,
+		MAX(setlist_show.tour_id) as tour_id,
+		MAX(setlist_show.era_id) as era_id,
+		COALESCE(MAX(setlist_show.venue_id), MAX(source.venue_id)) as venue_id,
 		MAX(source.duration) as avg_duration
 	FROM
 		sources source
-		LEFT JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date
+		LEFT JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date AND setlist_show.artist_id = @id
 	WHERE
 		(setlist_show.artist_id = @id OR setlist_show.artist_id IS NULL)
 		AND source.artist_id = @id
 		AND source.show_id IS NULL
 	GROUP BY
-		source.display_date, source.artist_id, setlist_show.date, setlist_show.tour_id, setlist_show.era_id, setlist_show.venue_id
+		date, source.display_date, source.artist_id
 	ORDER BY
 		setlist_show.date
 ;
@@ -260,11 +263,14 @@ WITH show_assoc AS (
 		src.artist_id = @id
 )
 UPDATE
-	sources
+	sources s
 SET
-	show_id = (SELECT show_id FROM show_assoc a WHERE a.source_id = sources.id)
+	show_id = a.show_id
+FROM
+	show_assoc a
 WHERE
-	artist_id = @id
+	a.source_id = s.id
+	AND s.artist_id = @id
 ;
 
 -- Update sources with calculated rating/review information
@@ -284,12 +290,15 @@ WITH review_info AS (
     	s.id 
 )
 UPDATE
-	sources
+	sources s
 SET
-	avg_rating = (SELECT avg FROM review_info i where i.id = sources.id),
-	num_reviews = (SELECT num_reviews FROM review_info i where i.id = sources.id)
+	avg_rating = i.avg,
+	num_reviews = i.num_reviews
+FROM
+	review_info i
 WHERE
-	artist_id = @id
+	s.id = i.id
+	AND s.artist_id = @id
 ;
 
 -- Calculate weighted averages for sources once we have average data and update sources
@@ -321,6 +330,7 @@ WITH review_info AS (
 ), weighted_info AS (
     SELECT
         s.id as id,
+        i_show.show_id,
         i.num_reviews,
         i.avg,
         i_show.num_reviews,
@@ -328,22 +338,25 @@ WITH review_info AS (
         (i_show.num_reviews * i_show.avg) + (i.num_reviews * i.avg) / (i_show.num_reviews + i.num_reviews + 1) as avg_rating_weighted
     FROM
         sources s
-		JOIN review_info i ON i.id = s.id
-		JOIN show_info i_show ON i_show.show_id = s.show_id
+		LEFT JOIN review_info i ON i.id = s.id
+		LEFT JOIN show_info i_show ON i_show.show_id = s.show_id
 	WHERE
 		s.artist_id = @id
     GROUP BY
-        s.id, i.num_reviews, i.avg, i_show.num_reviews, i_show.avg
+        s.id, i_show.show_id, i.num_reviews, i.avg, i_show.num_reviews, i_show.avg
     ORDER BY
     	s.id 
 )
 
 UPDATE
-	sources
+	sources s
 SET
-	avg_rating_weighted = (SELECT avg_rating_weighted FROM weighted_info i where i.id = sources.id)
+	avg_rating_weighted = i.avg_rating_weighted
+FROM
+	weighted_info i
 WHERE
-	artist_id = @id
+	i.id = s.id
+	AND s.artist_id = @id
     ;
 
 -- Update shows with rating based on weighted averages
@@ -360,15 +373,28 @@ WITH rating_ranks AS (
 		JOIN shows sh ON s.show_id = sh.id
 	WHERE
 		s.artist_id = @id
+), max_rating AS (
+	SELECT
+		show_id,
+		AVG(avg_rating) as avg_rating,
+		MAX(updated_at) as updated_at
+	FROM
+		rating_ranks
+	WHERE
+		rank = @id
+	GROUP BY
+		show_id
 )
 
 UPDATE
-	shows
+	shows s
 SET
-	avg_rating = (SELECT avg_rating FROM rating_ranks r WHERE r.show_id = shows.id AND rank = 1 LIMIT 1),
-	updated_at = (SELECT MAX(updated_at) FROM rating_ranks r WHERE r.show_id = shows.id)
+	avg_rating = r.avg_rating,
+	updated_at = r.updated_at
+FROM max_rating r
 WHERE
-	artist_id = @id
+	r.show_id = s.id
+	AND s.artist_id = @id
     ;
             ", artist));
             return ImportStats.None;

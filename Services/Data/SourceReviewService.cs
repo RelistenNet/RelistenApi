@@ -59,7 +59,7 @@ namespace Relisten.Data
                             @source_id,
                             @rating,
                             @title,
-                            @review,
+                            COALESCE(@review, ''),
                             @author,
                             @updated_at
                         )

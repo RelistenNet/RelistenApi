@@ -63,6 +63,9 @@ namespace Relisten.Import
             {
                 result = await ProcessSetlistPage(artist, await this.http.GetAsync(SetlistUrlForArtist(artist, page)));
 
+                // max 10 per second
+                await Task.Delay(100);
+
                 page++;
 
                 stats += result.Item2;
@@ -91,7 +94,7 @@ namespace Relisten.Import
 
         async Task PreloadData(Artist artist)
         {
-            existingVenues = (await _venueService.AllValidForArtist(artist)).
+            existingVenues = (await _venueService.AllForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -120,7 +123,7 @@ namespace Relisten.Import
                 dbVenue = await _venueService.Save(new Venue()
                 {
                     updated_at = now,
-                    artist_id = null,
+                    artist_id = artist.id,
                     name = setlist.venue.name,
                     latitude = setlist.venue.city.coords?.latitude,
                     longitude = setlist.venue.city.coords?.longitude,
@@ -270,12 +273,21 @@ namespace Relisten.Import
         async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(Artist artist, HttpResponseMessage res)
         {
             var body = await res.Content.ReadAsStringAsync();
-            var root = JsonConvert.DeserializeObject<Relisten.Vendor.SetlistFm.SetlistsRootObject>(
-                body,
-                new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Song>(),
-                new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Set>(),
-                new Vendor.SetlistFm.TolerantSetsConverter()
-            );
+            Relisten.Vendor.SetlistFm.SetlistsRootObject root = null;
+            try
+            {
+                root = JsonConvert.DeserializeObject<Relisten.Vendor.SetlistFm.SetlistsRootObject>(
+                    body,
+                    new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Song>(),
+                    new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Set>(),
+                    new Vendor.SetlistFm.TolerantSetsConverter()
+                );
+            }
+            catch (JsonReaderException e)
+            {
+                _log.LogError("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
+                throw e;
+            }
 
             var stats = new ImportStats();
 
