@@ -53,18 +53,12 @@ namespace Relisten.Controllers
                     return JsonNotFound();
                 }
 
-                var venue = await _venueService.ForId(id.Id.Value);
+                var venue = await _venueService.ForIdWithShows(id.Id.Value);
 
                 if (venue == null)
                 {
                     return JsonNotFound();
                 }
-
-                venue.shows = new List<Show>();
-                venue.shows.AddRange(await _showService.ShowsForCriteria(
-                    "s.venue_id = @venue_id",
-                    new { venue_id = venue.id }
-                ));
 
                 return JsonSuccess(venue);
             }

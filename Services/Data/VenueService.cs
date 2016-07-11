@@ -13,12 +13,20 @@ namespace Relisten.Data
         {
             int id = -1;
 
-            var parts = idAndOrSlug.Split('_');
+            var parts = idAndOrSlug.Split(new[] { '-' }, 2);
 
             if (parts.Length == 1)
             {
-                this.Id = null;
-                this.Slug = idAndOrSlug;
+                if (int.TryParse(parts[0], out id))
+                {
+                    this.Id = id;
+                    this.Slug = null;
+                }
+                else
+                {
+                    this.Id = null;
+                    this.Slug = idAndOrSlug;
+                }
             }
             else
             {
@@ -42,7 +50,12 @@ namespace Relisten.Data
 
     public class VenueService : RelistenDataServiceBase
     {
-        public VenueService(DbService db) : base(db) { }
+        private ShowService _showService { get; set; }
+
+        public VenueService(DbService db, ShowService showService) : base(db)
+        {
+            _showService = showService;
+        }
 
         public async Task<Venue> ForGlobalUpstreamIdentifier(string upstreamId)
         {
@@ -100,9 +113,9 @@ namespace Relisten.Data
             }
         }
 
-        public async Task<Venue> ForId(int id)
+        public async Task<T> ForId<T>(int id) where T : Venue
         {
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
+            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
                 SELECT
                     v.*, COUNT(s.id) as shows_at_venue
                 FROM
@@ -113,6 +126,28 @@ namespace Relisten.Data
                 GROUP BY
                 	v.id
             ", new { id = id }));
+        }
+        public async Task<Venue> ForId(int id)
+        {
+            return await ForId<Venue>(id);
+        }
+
+        public async Task<VenueWithShows> ForIdWithShows(int id)
+        {
+            var venue = await ForId<VenueWithShows>(id);
+
+            if (venue == null)
+            {
+                return null;
+            }
+
+            venue.shows = new List<Show>();
+            venue.shows.AddRange(await _showService.ShowsForCriteria(
+                "s.venue_id = @venue_id",
+                new { venue_id = venue.id }
+            ));
+
+            return venue;
         }
 
         public async Task<Venue> Save(Venue venue)

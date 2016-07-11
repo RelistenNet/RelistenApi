@@ -5,22 +5,16 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public interface IModel
-    {
-        int id { get; set; }
-
-        DateTime created_at { get; set; }
-        DateTime updated_at { get; set; }
-    }
-
-    public class Artist : IModel
+    public abstract class BaseRelistenModel
     {
         public int id { get; set; }
 
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
+    }
 
-        [JsonIgnore]
+    public class Artist : BaseRelistenModel
+    {
         public string upstream_identifier { get; set; }
         public string data_source { get; set; }
         public string musicbrainz_id { get; set; }
@@ -57,13 +51,8 @@ namespace Relisten.Api.Models
         public bool track_names { get; set; }
     }
 
-    public class Era : IModel
+    public class Era : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -71,13 +60,8 @@ namespace Relisten.Api.Models
         public string name { get; set; }
     }
 
-    public class SetlistShow : IModel
+    public class SetlistShow : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -96,24 +80,14 @@ namespace Relisten.Api.Models
         public string upstream_identifier { get; set; }
     }
 
-    public class SimpleSetlistShow : IModel
+    public class SimpleSetlistShow : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         /// <summary>ONLY DATE</summary>
         public DateTime date { get; set; }
     }
 
-    public class SetlistSong : IModel
+    public class SetlistSong : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -143,13 +117,8 @@ namespace Relisten.Api.Models
         public int played_setlist_show_id { get; set; }
     }
 
-    public class Show : IModel
+    public class Show : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -173,17 +142,16 @@ namespace Relisten.Api.Models
 
         public string display_date { get; set; }
 
-        public IEnumerable<Source> sources { get; set; }
         public int? sources_count { get; set; }
     }
 
-    public class Source : IModel
+    public class ShowWithSources : Show
     {
-        public int id { get; set; }
+        public IEnumerable<Source> sources { get; set; }
+    }
 
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
+    public class Source : BaseRelistenModel
+    {
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -204,7 +172,6 @@ namespace Relisten.Api.Models
         public double avg_rating_weighted { get; set; }
         public double duration { get; set; }
 
-        [JsonIgnore]
         public string upstream_identifier { get; set; }
         public string description { get; set; }
         public string taper_notes { get; set; }
@@ -213,17 +180,15 @@ namespace Relisten.Api.Models
         public string transferrer { get; set; }
         public string lineage { get; set; }
 
+    }
+
+    public class SourceFull : Source {
         public IEnumerable<SourceReview> reviews { get; set; }
         public IEnumerable<SourceSet> sets { get; set; }
     }
 
-    public class SourceSet : IModel
+    public class SourceSet : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int source_id { get; set; }
         public Source source { get; set; }
 
@@ -235,14 +200,9 @@ namespace Relisten.Api.Models
         public IEnumerable<SourceTrack> tracks { get; set; }
     }
 
-    public class SourceReview : IModel
+    public class SourceReview : BaseRelistenModel
     {
-        public int id { get; set; }
-
         public int source_id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
 
         public int rating { get; set; }
         public string title { get; set; }
@@ -250,13 +210,8 @@ namespace Relisten.Api.Models
         public string author { get; set; }
     }
 
-    public class SourceTrack : IModel
+    public class SourceTrack : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public int source_id { get; set; }
         public int source_set_id { get; set; }
@@ -269,13 +224,8 @@ namespace Relisten.Api.Models
         public string md5 { get; set; }
     }
 
-    public class Tour : IModel
+    public class Tour : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int artist_id { get; set; }
         public Artist artist { get; set; }
 
@@ -289,13 +239,8 @@ namespace Relisten.Api.Models
         public int? shows_on_tour { get; set; }
     }
 
-    public class Venue : IModel
+    public class Venue : BaseRelistenModel
     {
-        public int id { get; set; }
-
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
         public int? artist_id { get; set; }
 
         public double? latitude { get; set; }
@@ -307,7 +252,6 @@ namespace Relisten.Api.Models
         public string slug { get; set; }
 
         public int? shows_at_venue { get; set; }
-        public List<Show> shows { get; set; }
 
         public string sortName
         {
@@ -322,13 +266,13 @@ namespace Relisten.Api.Models
         }
     }
 
-    public class Year : IModel
+    public class VenueWithShows : Venue
     {
-        public int id { get; set; }
+        public List<Show> shows { get; set; }
+    }
 
-        public DateTime created_at { get; set; }
-        public DateTime updated_at { get; set; }
-
+    public class Year : BaseRelistenModel
+    {
         public int show_count { get; set; }
         public int source_count { get; set; }
         public int duration { get; set; }
