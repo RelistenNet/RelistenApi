@@ -9,7 +9,12 @@ namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
-        public TourService(DbService db) : base(db) { }
+        private ShowService _showService { get; set; }
+
+        public TourService(DbService db, ShowService showService) : base(db)
+        {
+            _showService = showService;
+        }
 
         public async Task<Tour> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
@@ -33,6 +38,43 @@ namespace Relisten.Data
                     tours
                 WHERE
                     artist_id = @id
+            ", artist));
+        }
+
+        public async Task<TourWithShows> ForIdWithShows(int id)
+        {
+            var tour = await db.WithConnection(con => con.QuerySingleAsync<TourWithShows>(@"
+                SELECT
+                    *
+                FROM
+                    tours
+                WHERE
+                    id = @id
+            ", id));
+
+            if (tour == null)
+            {
+                return null;
+            }
+
+            tour.shows = await _showService.ShowsForCriteria("tour_id = @tourId", new { tourId = id });
+
+            return tour;
+        }
+
+        public async Task<IEnumerable<TourWithShowCount>> AllForArtistWithShowCount(Artist artist)
+        {
+            return await db.WithConnection(con => con.QueryAsync<TourWithShowCount>(@"
+                    SELECT
+                        t.*, COUNT(s.id) as shows_on_tour
+                    FROM
+                        tours t
+                        LEFT JOIN setlist_shows s ON s.tour_id = t.id
+                    WHERE
+                        t.artist_id = @id
+                    GROUP BY
+                    	t.id
+                    ORDER BY t.start_date
             ", artist));
         }
 

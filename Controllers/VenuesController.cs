@@ -32,38 +32,17 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/venues")]
         public async Task<IActionResult> tours(string artistIdOrSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                return JsonSuccess(await _venueService.AllForArtist(art));
-            }
-
-            return JsonNotFound();
+            return await ApiRequest(artistIdOrSlug, (art) => {
+                return _venueService.AllForArtist(art);
+            });
         }
 
         [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                var id = new Identifier(idAndSlug);
-                if (!id.Id.HasValue)
-                {
-                    return JsonNotFound();
-                }
-
-                var venue = await _venueService.ForIdWithShows(id.Id.Value);
-
-                if (venue == null)
-                {
-                    return JsonNotFound();
-                }
-
-                return JsonSuccess(venue);
-            }
-
-            return JsonNotFound();
+            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) => {
+                return _venueService.ForIdWithShows(id.Id.Value);
+            });
         }
     }
 }

@@ -12,7 +12,10 @@ namespace Relisten.Controllers
     [Route("api/2/artists")]
     public class ShowsController : RelistenBaseController
     {
-        public ShowsController(RedisService redis, DbService db) : base(redis, db) { }
+        public ShowsController(
+            RedisService redis,
+            DbService db
+        ) : base(redis, db) { }
 
     }
 }

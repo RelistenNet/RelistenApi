@@ -29,25 +29,17 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/tours")]
         public async Task<IActionResult> tours(string artistIdOrSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                var tours = await db.WithConnection(con => con.QueryAsync<Tour>(@"
-                    SELECT
-                        t.*, COUNT(s.id) as shows_on_tour
-                    FROM
-                        tours t
-                        LEFT JOIN setlist_shows s ON s.tour_id = t.id
-                    WHERE
-                        t.artist_id = @artistId
-                    GROUP BY
-                    	t.id
-                    ORDER BY t.start_date
-                ", new { artistId = art.id }));
-                return JsonSuccess(tours);
-            }
+            return await ApiRequest(artistIdOrSlug, (art) => {
+                return _tourService.AllForArtistWithShowCount(art);
+            });
+        }
 
-            return JsonNotFound();
+        [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
+        public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
+        {
+            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) => {
+                return _tourService.ForIdWithShows(id.Id.Value);
+            });
         }
     }
 }

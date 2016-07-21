@@ -96,8 +96,6 @@ namespace Relisten.Api.Models
         [JsonIgnore]
         public string upstream_identifier { get; set; }
 
-        public int? shows_played_at { get; set; }
-
         public string sortName
         {
             get
@@ -109,6 +107,11 @@ namespace Relisten.Api.Models
                 return name;
             }
         }
+    }
+
+    public class SetlistSongWithPlayCount : SetlistSong
+    {
+        public int shows_played_at { get; set; }
     }
 
     public class SetlistShowSongJoin
@@ -182,7 +185,8 @@ namespace Relisten.Api.Models
 
     }
 
-    public class SourceFull : Source {
+    public class SourceFull : Source
+    {
         public IEnumerable<SourceReview> reviews { get; set; }
         public IEnumerable<SourceSet> sets { get; set; }
     }
@@ -235,8 +239,16 @@ namespace Relisten.Api.Models
         public string slug { get; set; }
         [JsonIgnore]
         public string upstream_identifier { get; set; }
+    }
 
-        public int? shows_on_tour { get; set; }
+    public class TourWithShowCount : Tour
+    {
+        public int shows_on_tour { get; set; }
+    }
+
+    public class TourWithShows : Tour
+    {
+        public IEnumerable<Show> shows { get; set; }
     }
 
     public class Venue : BaseRelistenModel
@@ -283,7 +295,10 @@ namespace Relisten.Api.Models
 
         public int artist_id { get; set; }
         public Artist artist { get; set; }
+    }
 
+    public class YearWithShows : Year
+    {
         public List<Show> shows { get; set; }
     }
 }

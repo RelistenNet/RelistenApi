@@ -32,25 +32,9 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/songs")]
         public async Task<IActionResult> Songs(string artistIdOrSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                var songs = await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
-                    SELECT
-                        s.*, COUNT(p.played_setlist_show_id) as shows_played_at
-                    FROM
-                        setlist_songs s
-                        LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
-                    WHERE
-                        s.artist_id = @artistId
-                    GROUP BY
-                    	s.id
-                    ORDER BY name
-                ", new { artistId = art.id }));
-                return JsonSuccess(songs);
-            }
-
-            return JsonNotFound();
+            return await ApiRequest(artistIdOrSlug, (art) => {
+                return _setlistSongService.AllForArtistWithPlayCount(art);
+            });
         }
     }
 }

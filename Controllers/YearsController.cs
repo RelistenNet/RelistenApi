@@ -14,71 +14,32 @@ namespace Relisten.Controllers
     public class YearsController : RelistenBaseController
     {
         protected ShowService _showService;
+        protected YearService _yearService;
 
         public YearsController(
             RedisService redis,
             DbService db,
-            ShowService showService
+            ShowService showService,
+            YearService yearService
         ) : base(redis, db) {
             _showService = showService;
+            _yearService = yearService;
         }
 
         [HttpGet("{artistIdOrSlug}/years")]
         public async Task<IActionResult> years(string artistIdOrSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                var tours = await db.WithConnection(con => con.QueryAsync<Year>(@"
-                    SELECT
-                        *
-                    FROM
-                        years
-                    WHERE
-                        artist_id = @artistId
-                    ORDER BY
-                        year ASC
-                ", new { artistId = art.id }));
-                return JsonSuccess(tours);
-            }
-
-            return JsonNotFound();
+            return await ApiRequest(artistIdOrSlug, (art) => {
+                return _yearService.AllForArtist(art);
+            });
         }
 
         [HttpGet("{artistIdOrSlug}/years/{idAndOrYear}")]
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndOrYear)
         {
-            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
-            if (art != null)
-            {
-                var id = new Identifier(idAndOrYear);
-                var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<Year>(@"
-                    SELECT
-                        *
-                    FROM
-                        years y
-                    WHERE
-                        y.artist_id = @artistId
-                        AND " + (id.Id.HasValue ? "y.id = @year_id" : "y.year = @year") + @"
-                    ORDER BY
-                        y.year ASC
-                ", new { artistId = art.id, year_id = id.Id, year = id.Slug }));
-
-                if(year == null)
-                {
-                    return JsonNotFound();
-                }
-
-                year.shows = new List<Show>();
-                year.shows.AddRange(await _showService.ShowsForCriteria(
-                    "s.year_id = @year_id",
-                    new { year_id = year.id }
-                ));
-
-                return JsonSuccess(year);
-            }
-
-            return JsonNotFound();
+            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndOrYear, (art, id) => {
+                return _yearService.ForIdentifierWithShows(art, id);
+            }, true);
         }
     }
 }

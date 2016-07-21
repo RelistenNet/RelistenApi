@@ -36,6 +36,22 @@ namespace Relisten.Data
             ", artist));
         }
 
+        public async Task<IEnumerable<SetlistSongWithPlayCount>> AllForArtistWithPlayCount(Artist artist)
+        {
+            return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
+                SELECT
+                    s.*, COUNT(p.played_setlist_show_id) as shows_played_at
+                FROM
+                    setlist_songs s
+                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
+                WHERE
+                    s.artist_id = @id
+                GROUP BY
+                    s.id
+                ORDER BY name
+            ", artist));
+        }
+
         public async Task<IEnumerable<SetlistSong>> InsertAll(Artist artist, IEnumerable<SetlistSong> songs)
         {
             /*if (song.id != 0)

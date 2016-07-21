@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using System;
 using System.Linq;
+using Relisten.Data;
 
 namespace Relisten.Api
 {
@@ -84,5 +85,54 @@ namespace Relisten.Api
             return art;
         }
 
+        protected async Task<IActionResult> ApiRequestWithIdentifier<T>(
+            string artistIdOrSlug,
+            string idAndSlug,
+            Func<Artist, Identifier, Task<T>> cb,
+            bool allowIdWithoutValue = false
+        )
+        {
+            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
+            if (art != null)
+            {
+                var id = new Identifier(idAndSlug);
+                if (!id.Id.HasValue && !allowIdWithoutValue)
+                {
+                    return JsonNotFound();
+                }
+
+                var data = await cb(art, id);
+
+                if (data == null)
+                {
+                    return JsonNotFound();
+                }
+
+                return JsonSuccess(data);
+            }
+
+            return JsonNotFound();
+        }
+
+        protected async Task<IActionResult> ApiRequest<T>(
+            string artistIdOrSlug,
+            Func<Artist, Task<T>> cb
+        )
+        {
+            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
+            if (art != null)
+            {
+                var data = await cb(art);
+
+                if (data == null)
+                {
+                    return JsonNotFound();
+                }
+
+                return JsonSuccess(data);
+            }
+
+            return JsonNotFound();
+        }
     }
 }
