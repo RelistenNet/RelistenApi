@@ -27,7 +27,7 @@ namespace Relisten.Import
         protected SourceTrackService _sourceTrackService { get; set; }
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
-        protected ILogger<SetlistFmImporter> _log { get; set; }
+        protected ILogger<ArchiveOrgImporter> _log { get; set; }
 
         public ArchiveOrgImporter(
             DbService db,
@@ -37,7 +37,7 @@ namespace Relisten.Import
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
             SourceTrackService sourceTrackService,
-            ILogger<SetlistFmImporter> log
+            ILogger<ArchiveOrgImporter> log
         ) : base(db)
         {
             this._sourceService = sourceService;
