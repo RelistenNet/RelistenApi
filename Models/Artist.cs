@@ -264,6 +264,7 @@ namespace Relisten.Api.Models
         public string slug { get; set; }
 
         public int? shows_at_venue { get; set; }
+        public string past_names { get; set; }
 
         public string sortName
         {

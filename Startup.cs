@@ -57,6 +57,7 @@ namespace Relisten
             services.AddScoped<SourceSetService, SourceSetService>();
             services.AddScoped<SourceTrackService, SourceTrackService>();
             services.AddScoped<YearService, YearService>();
+            services.AddScoped<EraService, EraService>();
             services.AddScoped<Importer, Importer>();
         }
 

@@ -165,6 +165,7 @@ namespace Relisten.Data
                         location = @location,
                         upstream_identifier = @upstream_identifier,
                         updated_at = @updated_at,
+                        past_names = @past_names,
                         slug = @slug
                     WHERE
                         id = @id
@@ -185,6 +186,7 @@ namespace Relisten.Data
                             location,
                             upstream_identifier,
                             updated_at,
+                            past_names,
                             slug
                         )
                     VALUES
@@ -196,6 +198,7 @@ namespace Relisten.Data
                             @location,
                             @upstream_identifier,
                             @updated_at,
+                            @past_names,
                             @slug
                         )
                     RETURNING *
