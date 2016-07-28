@@ -87,12 +87,12 @@ namespace Relisten.Import
             var json = await res.Content.ReadAsStringAsync();
             var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(
                 json,
-                new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter() 
+                new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter()
             );
 
             foreach (var doc in root.response.docs)
             {
-//                _log.LogDebug("Checking {0}", doc.identifier);
+                //                _log.LogDebug("Checking {0}", doc.identifier);
                 var dbShow = existingSources.GetValue(doc.identifier);
                 if (dbShow == null
                 || doc._iguana_updated_at > dbShow.updated_at)
@@ -133,7 +133,8 @@ namespace Relisten.Import
 
             var mp3Files = detailsRoot.files.Where(file => file.format == "VBR MP3");
 
-            if(mp3Files.Count() == 0) {
+            if (mp3Files.Count() == 0)
+            {
                 _log.LogDebug("No VBR MP3 files found for {0}", searchDoc.identifier);
 
                 return stats;
@@ -161,6 +162,7 @@ namespace Relisten.Import
 
                 stats.Updated++;
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
+                stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
             }
             else
             {
@@ -169,7 +171,7 @@ namespace Relisten.Import
                 {
                     var venueName = String.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
 
-                    if(String.IsNullOrEmpty(venueName))
+                    if (String.IsNullOrEmpty(venueName))
                     {
                         venueName = "Unknown Venue";
                     }
@@ -177,9 +179,10 @@ namespace Relisten.Import
                     var venueUpstreamId = venueName;
                     dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
 
-                    if(dbVenue == null)
+                    if (dbVenue == null)
                     {
-                        dbVenue = await _venueService.Save(new Venue() {
+                        dbVenue = await _venueService.Save(new Venue()
+                        {
                             artist_id = artist.id,
                             name = venueName,
                             location = String.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
@@ -190,34 +193,35 @@ namespace Relisten.Import
                     }
                 }
 
-                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta, searchDoc, dbVenue));                
+                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta, searchDoc, dbVenue));
                 stats.Created++;
-                
-                var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
-                stats.Created++;
-
-                var trackNum = 0;
-                var dbTracks = mp3Files.
-                    Where(file =>
-                    {
-                        return !(
-                            (file.title == null && file.original == null)
-                            || file.length == null
-                            || file.name == null
-                        );
-                    }).
-                    OrderBy(file => file.name).
-                    Select(file =>
-                    {
-                        var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet);
-                        trackNum = r.track_position;
-                        return r;
-                    })
-                    ;
 
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
-                stats.Created += (await _sourceTrackService.InsertAll(dbTracks)).Count();
             }
+
+            var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
+            stats.Created++;
+
+            var trackNum = 0;
+            var dbTracks = mp3Files.
+                Where(file =>
+                {
+                    return !(
+                        (file.title == null && file.original == null)
+                        || file.length == null
+                        || file.name == null
+                    );
+                }).
+                OrderBy(file => file.name).
+                Select(file =>
+                {
+                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet);
+                    trackNum = r.track_position;
+                    return r;
+                })
+                ;
+
+            stats.Created += (await _sourceTrackService.InsertAll(dbTracks)).Count();
 
             return stats;
         }

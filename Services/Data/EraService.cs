@@ -69,7 +69,7 @@ namespace Relisten.Data
                         (
                             artist_id,
                             name,
-                            order,
+                            ""order"",
                             updated_at
                         )
                     VALUES

@@ -1,6 +1,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Text;
 using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
@@ -11,6 +13,24 @@ namespace Relisten.Api.Models
 
         public DateTime created_at { get; set; }
         public DateTime updated_at { get; set; }
+
+        private PropertyInfo[] _PropertyInfos = null;
+
+        public override string ToString()
+        {
+            if (_PropertyInfos == null)
+                _PropertyInfos = this.GetType().GetProperties();
+
+            var sb = new StringBuilder();
+
+            foreach (var info in _PropertyInfos)
+            {
+                var value = info.GetValue(this, null) ?? "(null)";
+                sb.AppendLine(info.Name + ": " + value.ToString());
+            }
+
+            return sb.ToString();
+        }
     }
 
     public class Artist : BaseRelistenModel
@@ -201,7 +221,7 @@ namespace Relisten.Api.Models
 
         public string name { get; set; }
 
-        public IEnumerable<SourceTrack> tracks { get; set; }
+        public IList<SourceTrack> tracks { get; set; }
     }
 
     public class SourceReview : BaseRelistenModel

@@ -58,12 +58,14 @@ namespace Relisten.Import
 
         public Importer(
             ArchiveOrgImporter _archiveOrg,
-            SetlistFmImporter _setlistFm
+            SetlistFmImporter _setlistFm,
+			PhishinImporter _phishin
         )
         {
 			importers = new List<ImporterBase>(new ImporterBase[] {
 				_setlistFm,
-				_archiveOrg
+				_archiveOrg,
+				_phishin
 			});
         }
 
@@ -109,7 +111,8 @@ namespace Relisten.Import
 
             return Regex.Replace(slug, @"\s+", " ").
                 Trim().
-                Replace(" ", "-");
+                Replace(" ", "-").
+				Trim('-');
         }
 
         public async Task<ImportStats> RebuildYears(Artist artist)

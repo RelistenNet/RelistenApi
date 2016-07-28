@@ -50,6 +50,7 @@ namespace Relisten
             services.AddScoped<TourService, TourService>();
             services.AddScoped<SetlistSongService, SetlistSongService>();
             services.AddScoped<SetlistFmImporter, SetlistFmImporter>();
+            services.AddScoped<PhishinImporter, PhishinImporter>();
             services.AddScoped<ShowService, ShowService>();
             services.AddScoped<ArchiveOrgImporter, ArchiveOrgImporter>();
             services.AddScoped<SourceService, SourceService>();

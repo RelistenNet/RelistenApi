@@ -76,11 +76,14 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
+            stats += await ProcessEras(artist);
             stats += await ProcessTours(artist);
             stats += await ProcessSongs(artist);
             stats += await ProcessVenues(artist);
             stats += await ProcessShows(artist);
-            stats += await ProcessEras(artist);
+
+            await RebuildShows(artist);
+            await RebuildYears(artist);
 
             return stats;
             //return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)));
@@ -118,14 +121,16 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-        private string PhishinApiUrl(string api)
+        private string PhishinApiUrl(string api, string sort_attr = null)
         {
-            return $"http://phish.in/api/v1/{api}.json?per_page=99999";
+            return $"http://phish.in/api/v1/{api}.json?per_page=99999" + (sort_attr != null ? "&sort_attr="+sort_attr : "");
         }
 
-        private async Task<T> PhishinApiRequest<T>(string apiRoute)
+        private async Task<T> PhishinApiRequest<T>(string apiRoute, string sort_attr = null)
         {
-            var resp = await http.GetAsync(apiRoute);
+            var url = PhishinApiUrl(apiRoute, sort_attr);
+            Console.WriteLine($"Requesting {url}");
+            var resp = await http.GetAsync(url);
             return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync()).data;
         }
 
@@ -220,22 +225,25 @@ namespace Relisten.Import
                 // skip aliases for now
                 if (dbSong == null && song.alias_for.HasValue == false)
                 {
-                    dbSong = new SetlistSong()
+                    songsToSave.Add(new SetlistSong()
                     {
                         updated_at = song.updated_at,
                         artist_id = artist.id,
                         name = song.title,
                         slug = Slugify(song.title),
                         upstream_identifier = song.id.ToString()
-                    };
-
-                    existingSetlistSongs[dbSong.upstream_identifier] = dbSong;
-
-                    stats.Created++;
+                    });
                 }
             }
 
             var newSongs = await _setlistSongService.InsertAll(artist, songsToSave);
+
+            foreach (var s in newSongs)
+            {
+                existingSetlistSongs[s.upstream_identifier] = s;
+            }
+
+            stats.Created += newSongs.Count();
 
             return stats;
         }
@@ -287,45 +295,168 @@ namespace Relisten.Import
             return stats;
         }
 
+        private int SetIndexForIdentifier(string ident)
+        {
+            if (ident == "S") { return 0; }
+            else if (ident == "1") { return 1; }
+            else if (ident == "2") { return 2; }
+            else if (ident == "3") { return 3; }
+            else if (ident == "4") { return 4; }
+            else if (ident == "E") { return 5; }
+            else if (ident == "E2") { return 6; }
+            else if (ident == "E3") { return 7; }
+            else { return 8; }
+        }
+
+        private async Task ProcessSetlistShow(ImportStats stats, PhishinShow show, Artist artist, Source dbSource, IDictionary<string, SourceSet> sets)
+        {
+            var dbShow = existingSetlistShows.GetValue(show.date);
+
+            var addSongs = false;
+
+            if (dbShow == null)
+            {
+                dbShow = await _setlistShowService.Save(new SetlistShow()
+                {
+                    artist_id = artist.id,
+                    upstream_identifier = show.date,
+                    date = DateTime.Parse(show.date),
+                    venue_id = existingVenues[show.venue.id.ToString()].id,
+                    tour_id = existingTours[show.tour_id.ToString()].id,
+                    era_id = yearToEraMapping.GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]).id,
+                    updated_at = dbSource.updated_at
+                });
+
+                stats.Created++;
+
+                addSongs = true;
+            }
+            else if (show.updated_at > dbShow.updated_at)
+            {
+                dbShow.date = DateTime.Parse(show.date);
+                dbShow.venue_id = existingVenues[show.venue.id.ToString()].id;
+                dbShow.tour_id = existingTours[show.tour_id.ToString()].id;
+                dbShow.era_id = yearToEraMapping[show.date.Substring(0, 4)].id;
+                dbShow.updated_at = dbSource.updated_at;
+
+                dbShow = await _setlistShowService.Save(dbShow);
+
+                stats.Updated++;
+                stats.Removed += await _setlistShowService.RemoveSongPlays(dbShow);
+
+                addSongs = true;
+            }
+
+            if (addSongs)
+            {
+                var dbSongs = show.tracks.
+                    SelectMany(phishinTrack => phishinTrack.song_ids.Select(song_id => existingSetlistSongs.GetValue(song_id.ToString()))).
+                    Where(t => t != null).
+                    GroupBy(t => t.upstream_identifier).
+                    Select(g => g.First()).
+                    ToList()
+                    ;
+
+                stats.Created += await _setlistShowService.AddSongPlays(dbShow, dbSongs);
+            }
+        }
+
+        private async Task<Source> ProcessShow(ImportStats stats, Artist artist, Source dbSource)
+        {
+            var fullShow = await PhishinApiRequest<PhishinShow>("shows/" + dbSource.upstream_identifier);
+
+            dbSource.has_jamcharts = fullShow.tags.Contains("Jamcharts");
+            dbSource = await _sourceService.Save(dbSource);
+
+            var sets = new Dictionary<string, SourceSet>();
+
+            foreach (var track in fullShow.tracks)
+            {
+                var set = sets.GetValue(track.set);
+
+                if (set == null)
+                {
+                    set = await _sourceSetService.Insert(new SourceSet()
+                    {
+                        source_id = dbSource.id,
+                        index = SetIndexForIdentifier(track.set),
+                        name = track.set_name,
+                        is_encore = track.set[0] == 'E',
+                        updated_at = dbSource.updated_at
+                    });
+
+                    // this needs to be set after loading from the db
+                    set.tracks = new List<SourceTrack>();
+
+                    stats.Created++;
+
+                    sets[track.set] = set;
+                }
+
+                set.tracks.Add(new SourceTrack()
+                {
+                    artist_id = artist.id,
+                    source_id = dbSource.id,
+                    source_set_id = set.id,
+                    title = track.title,
+                    duration = track.duration,
+                    track_position = track.position,
+                    slug = Slugify(track.title),
+                    mp3_url = track.mp3,
+                    updated_at = dbSource.updated_at
+                });
+            }
+
+            stats.Created += (await _sourceTrackService.InsertAll(sets.SelectMany(kvp => kvp.Value.tracks))).Count();
+
+            await ProcessSetlistShow(stats, fullShow, artist, dbSource, sets);
+
+            return dbSource;
+        }
+
         public async Task<ImportStats> ProcessShows(Artist artist)
         {
             var stats = new ImportStats();
 
-            foreach (var show in await PhishinApiRequest<IEnumerable<PhishinSmallShow>>("shows"))
+            foreach (var show in await PhishinApiRequest<IEnumerable<PhishinSmallShow>>("shows", "date"))
             {
                 var dbSource = existingSources.GetValue(show.id.ToString());
 
                 if (dbSource == null)
                 {
-                    dbSource = await _venueService.Save(new Venue()
+                    dbSource = await ProcessShow(stats, artist, new Source()
                     {
                         updated_at = show.updated_at,
                         artist_id = artist.id,
-                        name = show.name,
-                        location = show.location,
-                        slug = Slugify(show.name),
-                        latitude = show.latitude,
-                        longitude = show.longitude,
-                        past_names = show.past_names,
-                        upstream_identifier = show.id.ToString()
+                        venue_id = existingVenues[show.venue_id.ToString()].id,
+                        display_date = show.date,
+                        upstream_identifier = show.id.ToString(),
+                        is_soundboard = show.sbd,
+                        is_remaster = show.remastered,
+                        description = "",
+                        taper_notes = show.taper_notes
                     });
 
-                    existingVenues[dbSource.upstream_identifier] = dbSource;
+                    existingSources[dbSource.upstream_identifier] = dbSource;
 
                     stats.Created++;
                 }
-                else
+                else if (show.updated_at > dbSource.updated_at)
                 {
-                    dbSource.name = show.name;
-                    dbSource.location = show.location;
-                    dbSource.longitude = show.longitude;
-                    dbSource.latitude = show.latitude;
-                    dbSource.past_names = show.past_names;
                     dbSource.updated_at = show.updated_at;
+                    dbSource.venue_id = existingVenues[show.venue_id.ToString()].id;
+                    dbSource.display_date = show.date;
+                    dbSource.upstream_identifier = show.id.ToString();
+                    dbSource.is_soundboard = show.sbd;
+                    dbSource.is_remaster = show.remastered;
+                    dbSource.description = "";
+                    dbSource.taper_notes = show.taper_notes;
 
-                    dbSource = await _venueService.Save(dbSource);
+                    stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
 
-                    existingVenues[dbSource.upstream_identifier] = dbSource;
+                    dbSource = await ProcessShow(stats, artist, dbSource);
+
+                    existingSources[dbSource.upstream_identifier] = dbSource;
 
                     stats.Updated++;
                 }

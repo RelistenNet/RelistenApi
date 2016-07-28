@@ -36,6 +36,29 @@ namespace Relisten.Data
             ", artist));
         }
 
+        public async Task<int> DropAllSetsAndTracksForSource(Source source)
+        {
+            return await db.WithConnection(async con => {
+                var cnt = await con.ExecuteAsync(@"
+                    DELETE
+                    FROM
+                        source_sets
+                    WHERE
+                        source_id = @id
+                ", source);
+
+                cnt += await con.ExecuteAsync(@"
+                    DELETE
+                    FROM
+                        source_tracks
+                    WHERE
+                        source_id = @id
+                ", source);
+
+                return cnt;
+            });
+        } 
+
         public async Task<Source> Save(Source source)
         {
             if (source.id != 0)

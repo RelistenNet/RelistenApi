@@ -60,8 +60,8 @@ namespace Relisten.Vendor.Phishin
         public int id { get; set; }
         public string name { get; set; }
         public string past_names { get; set; }
-        public double latitude { get; set; }
-        public double longitude { get; set; }
+        public double? latitude { get; set; }
+        public double? longitude { get; set; }
         public int shows_count { get; set; }
         public string location { get; set; }
         public string slug { get; set; }
@@ -112,6 +112,7 @@ namespace Relisten.Vendor.Phishin
         public int show_id { get; set; }
         public string show_date { get; set; }
         public string set { get; set; }
+        public string set_name { get; set; }
         public int position { get; set; }
         public int likes_count { get; set; }
         public string slug { get; set; }

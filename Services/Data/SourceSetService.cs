@@ -23,6 +23,14 @@ namespace Relisten.Data
             ", new { source_ids }));
         }
 
+        public async Task<SourceSet> Insert(SourceSet set)
+        {
+            var l = new List<SourceSet>();
+            l.Add(set);
+
+            return (await InsertAll(l)).FirstOrDefault(); 
+        }
+
         public async Task<IEnumerable<SourceSet>> InsertAll(IEnumerable<SourceSet> sets)
         {
             return await db.WithConnection(async con =>
