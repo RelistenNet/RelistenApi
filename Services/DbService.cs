@@ -18,7 +18,7 @@ namespace Relisten
             Console.WriteLine("DB Connection String: " + connStr);
 
             NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true, true);
-            NpgsqlLogManager.IsParameterLoggingEnabled = true;
+            // NpgsqlLogManager.IsParameterLoggingEnabled = true;
         }
 
         public DbService()

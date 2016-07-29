@@ -69,6 +69,8 @@ namespace Relisten.Api.Models
         public bool setlist_data_incomplete { get; set; }
         public bool artist_id { get; set; }
         public bool track_names { get; set; }
+        public bool venue_past_names { get; set; }
+        public bool reviews_have_ratings { get; set; }
     }
 
     public class Era : BaseRelistenModel
@@ -192,6 +194,7 @@ namespace Relisten.Api.Models
 
         public double avg_rating { get; set; }
         public int num_reviews { get; set; }
+        public int? num_ratings { get; set; }
         public double avg_rating_weighted { get; set; }
         public double duration { get; set; }
 
@@ -228,7 +231,7 @@ namespace Relisten.Api.Models
     {
         public int source_id { get; set; }
 
-        public int rating { get; set; }
+        public int? rating { get; set; }
         public string title { get; set; }
         public string review { get; set; }
         public string author { get; set; }

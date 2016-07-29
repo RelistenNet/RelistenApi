@@ -39,7 +39,7 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @id
                 ORDER BY
-                    order ASC
+                    ""order"" ASC
             ", artist));
         }
 

@@ -104,6 +104,10 @@ namespace Relisten.Import
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
+            existingEras = (await _eraService.AllForArtist(artist)).
+                GroupBy(era => era.name).
+                ToDictionary(grp => grp.Key, grp => grp.First());
+
             existingVenues = (await _venueService.AllForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
@@ -123,13 +127,13 @@ namespace Relisten.Import
 
         private string PhishinApiUrl(string api, string sort_attr = null)
         {
-            return $"http://phish.in/api/v1/{api}.json?per_page=99999" + (sort_attr != null ? "&sort_attr="+sort_attr : "");
+            return $"http://phish.in/api/v1/{api}.json?per_page=99999" + (sort_attr != null ? "&sort_attr=" + sort_attr : "");
         }
 
         private async Task<T> PhishinApiRequest<T>(string apiRoute, string sort_attr = null)
         {
             var url = PhishinApiUrl(apiRoute, sort_attr);
-            Console.WriteLine($"Requesting {url}");
+            _log.LogInformation($"Requesting {url}");
             var resp = await http.GetAsync(url);
             return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync()).data;
         }
@@ -144,7 +148,7 @@ namespace Relisten.Import
 
                 if (dbTour == null)
                 {
-                    dbTour = await _tourService.Save(new Tour()
+                    dbTour = await _tourService.Save(new Tour
                     {
                         updated_at = tour.updated_at,
                         artist_id = artist.id,
@@ -159,7 +163,7 @@ namespace Relisten.Import
 
                     stats.Created++;
                 }
-                else
+                else if(tour.updated_at > dbTour.updated_at)
                 {
                     dbTour.start_date = DateTime.Parse(tour.starts_on);
                     dbTour.end_date = DateTime.Parse(tour.ends_on);
@@ -275,7 +279,7 @@ namespace Relisten.Import
 
                     stats.Created++;
                 }
-                else
+                else if(venue.updated_at > dbVenue.updated_at)
                 {
                     dbVenue.name = venue.name;
                     dbVenue.location = venue.location;
@@ -336,7 +340,7 @@ namespace Relisten.Import
                 dbShow.date = DateTime.Parse(show.date);
                 dbShow.venue_id = existingVenues[show.venue.id.ToString()].id;
                 dbShow.tour_id = existingTours[show.tour_id.ToString()].id;
-                dbShow.era_id = yearToEraMapping[show.date.Substring(0, 4)].id;
+                dbShow.era_id = yearToEraMapping.GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]).id;
                 dbShow.updated_at = dbSource.updated_at;
 
                 dbShow = await _setlistShowService.Save(dbShow);

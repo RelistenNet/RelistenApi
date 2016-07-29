@@ -59,13 +59,15 @@ namespace Relisten.Import
         public Importer(
             ArchiveOrgImporter _archiveOrg,
             SetlistFmImporter _setlistFm,
-			PhishinImporter _phishin
+			PhishinImporter _phishin,
+			PhishNetImporter _phishnet
         )
         {
 			importers = new List<ImporterBase>(new ImporterBase[] {
 				_setlistFm,
 				_archiveOrg,
-				_phishin
+				//_phishin,
+				_phishnet
 			});
         }
 
@@ -172,13 +174,14 @@ FROM
 WHERE
 	y.year = to_char(s.date, 'YYYY')
     AND s.artist_id = @id
+	AND y.artist_id = @id
 ;
             ", artist));
             return ImportStats.None;
         }
         public async Task<ImportStats> RebuildShows(Artist artist)
         {
-            await db.WithConnection(con => con.ExecuteAsync(@"
+			var sql = @"
 -- Update durations
 WITH durs AS (
 	SELECT
@@ -275,92 +278,147 @@ WHERE
 	a.source_id = s.id
 	AND s.artist_id = @id
 ;
+			";
 
--- Update sources with calculated rating/review information
-WITH review_info AS (
-    SELECT
-        s.id as id,
-        COALESCE(AVG(rating), 0) as avg,
-        COUNT(r.rating) as num_reviews
-    FROM
-        sources s
-        LEFT JOIN source_reviews r ON r.source_id = s.id
-	WHERE
-		s.artist_id = @id
-    GROUP BY
-        s.id
-    ORDER BY
-    	s.id 
-)
-UPDATE
-	sources s
-SET
-	avg_rating = i.avg,
-	num_reviews = i.num_reviews
-FROM
-	review_info i
-WHERE
-	s.id = i.id
-	AND s.artist_id = @id
-;
-
--- Calculate weighted averages for sources once we have average data and update sources
-WITH review_info AS (
-    SELECT
-        s.id as id,
-        COALESCE(AVG(r.rating), 0) as avg,
-        COUNT(r.rating) as num_reviews
-    FROM
-        sources s
-        LEFT JOIN source_reviews r ON r.source_id = s.id
-	WHERE
-		s.artist_id = @id
-    GROUP BY
-        s.id
-    ORDER BY
-    	s.id 
-), show_info AS (
-	SELECT
-		s.show_id,
-		SUM(s.num_reviews) as num_reviews,
-		AVG(s.avg_rating) as avg
-	FROM
+			if (artist.features.reviews_have_ratings)
+			{
+				sql += @"
+	-- Update sources with calculated rating/review information
+	WITH review_info AS (
+	    SELECT
+	        s.id as id,
+	        COALESCE(AVG(rating), 0) as avg,
+	        COUNT(r.rating) as num_reviews
+	    FROM
+	        sources s
+	        LEFT JOIN source_reviews r ON r.source_id = s.id
+		WHERE
+			s.artist_id = @id
+	    GROUP BY
+	        s.id
+	    ORDER BY
+	    	s.id 
+	)
+	UPDATE
 		sources s
+	SET
+		avg_rating = i.avg,
+		num_reviews = i.num_reviews
+	FROM
+		review_info i
 	WHERE
-		s.artist_id = @id
-	GROUP BY
-		s.show_id
-), weighted_info AS (
-    SELECT
-        s.id as id,
-        i_show.show_id,
-        i.num_reviews,
-        i.avg,
-        i_show.num_reviews,
-        i_show.avg,
-        (i_show.num_reviews * i_show.avg) + (i.num_reviews * i.avg) / (i_show.num_reviews + i.num_reviews + 1) as avg_rating_weighted
-    FROM
-        sources s
-		LEFT JOIN review_info i ON i.id = s.id
-		LEFT JOIN show_info i_show ON i_show.show_id = s.show_id
-	WHERE
-		s.artist_id = @id
-    GROUP BY
-        s.id, i_show.show_id, i.num_reviews, i.avg, i_show.num_reviews, i_show.avg
-    ORDER BY
-    	s.id 
-)
+		s.id = i.id
+		AND s.artist_id = @id
+		;
 
-UPDATE
-	sources s
-SET
-	avg_rating_weighted = i.avg_rating_weighted
-FROM
-	weighted_info i
-WHERE
-	i.id = s.id
-	AND s.artist_id = @id
-    ;
+	-- Calculate weighted averages for sources once we have average data and update sources
+	WITH review_info AS (
+	    SELECT
+	        s.id as id,
+	        COALESCE(AVG(r.rating), 0) as avg,
+	        COUNT(r.rating) as num_reviews
+	    FROM
+	        sources s
+	        LEFT JOIN source_reviews r ON r.source_id = s.id
+		WHERE
+			s.artist_id = @id
+	    GROUP BY
+	        s.id
+	    ORDER BY
+	    	s.id 
+	), show_info AS (
+		SELECT
+			s.show_id,
+			SUM(s.num_reviews) as num_reviews,
+			AVG(s.avg_rating) as avg
+		FROM
+			sources s
+		WHERE
+			s.artist_id = @id
+		GROUP BY
+			s.show_id
+	), weighted_info AS (
+	    SELECT
+	        s.id as id,
+	        i_show.show_id,
+	        i.num_reviews,
+	        i.avg,
+	        i_show.num_reviews,
+	        i_show.avg,
+	        (i_show.num_reviews * i_show.avg) + (i.num_reviews * i.avg) / (i_show.num_reviews + i.num_reviews + 1) as avg_rating_weighted
+	    FROM
+	        sources s
+			LEFT JOIN review_info i ON i.id = s.id
+			LEFT JOIN show_info i_show ON i_show.show_id = s.show_id
+		WHERE
+			s.artist_id = @id
+	    GROUP BY
+	        s.id, i_show.show_id, i.num_reviews, i.avg, i_show.num_reviews, i_show.avg
+	    ORDER BY
+	    	s.id
+	)
+
+	UPDATE
+		sources s
+	SET
+		avg_rating_weighted = i.avg_rating_weighted
+	FROM
+		weighted_info i
+	WHERE
+		i.id = s.id
+		AND s.artist_id = @id
+	    ;
+				";
+			}
+			else {
+				sql += @"
+	-- used for things like Phish where ratings aren't attached to textual reviews
+	-- Calculate weighted averages for sources once we have average data and update sources
+	WITH show_info AS (
+		SELECT
+			s.show_id,
+			SUM(s.num_ratings) as num_reviews,
+			AVG(s.avg_rating) as avg
+		FROM
+			sources s
+		WHERE
+			s.artist_id = @id
+		GROUP BY
+			s.show_id
+	), weighted_info AS (
+	    SELECT
+	        s.id as id,
+	        i_show.show_id,
+	        s.num_ratings,
+	        s.avg_rating,
+	        i_show.num_reviews,
+	        i_show.avg,
+	        (i_show.num_reviews * i_show.avg) + (s.num_ratings * s.avg_rating) / (i_show.num_reviews + s.num_ratings + 1) as avg_rating_weighted
+	    FROM
+	        sources s
+			LEFT JOIN show_info i_show ON i_show.show_id = s.show_id
+		WHERE
+			s.artist_id = @id
+	    GROUP BY
+	        s.id, i_show.show_id, s.num_ratings, s.avg_rating, i_show.num_reviews, i_show.avg
+	    ORDER BY
+	    	s.id
+	)
+
+	UPDATE
+		sources s
+	SET
+		avg_rating_weighted = i.avg_rating_weighted
+	FROM
+		weighted_info i
+	WHERE
+		i.id = s.id
+		AND s.artist_id = @id
+	    ;
+				";
+			}
+
+			sql += @"
 
 -- Update shows with rating based on weighted averages
 WITH rating_ranks AS (
@@ -384,7 +442,7 @@ WITH rating_ranks AS (
 	FROM
 		rating_ranks
 	WHERE
-		rank = @id
+		rank = 1
 	GROUP BY
 		show_id
 )
@@ -399,7 +457,9 @@ WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
     ;
-            ", artist));
+            ";
+
+            await db.WithConnection(con => con.ExecuteAsync(sql, artist));
             return ImportStats.None;
         }
     }

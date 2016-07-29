@@ -83,7 +83,8 @@ namespace Relisten.Data
                         lineage = @lineage,
                         updated_at = @updated_at,
                         display_date = @display_date,
-                        venue_id = @venue_id
+                        venue_id = @venue_id,
+                        num_ratings = @num_ratings
                     WHERE
                         id = @id
                     RETURNING *
@@ -112,7 +113,8 @@ namespace Relisten.Data
                             lineage,
                             updated_at,
                             display_date,
-                            venue_id
+                            venue_id,
+                            num_ratings
                         )
                     VALUES
                         (
@@ -132,7 +134,8 @@ namespace Relisten.Data
                             @lineage,
                             @updated_at,
                             @display_date,
-                            @venue_id
+                            @venue_id,
+                            @num_ratings
                         )
                     RETURNING *
                 ", source));
