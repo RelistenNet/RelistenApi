@@ -10,7 +10,7 @@ fi
 
 USER_AGENT="Mozilla/5.0 (iPhone; CPU iPhone OS 10_0 like Mac OS X) AppleWebKit/602.1.32 (KHTML, like Gecko) Version/10.0 Mobile/14A5261v Safari/602.1"
 
-# curl -o search_result_pages/jg_gd_001.html "http://jerrygarcia.com/shows/?bid%5B3588%5D=on&kw&sd&ed&reg&stat&cty&ec&octy&srt=DO"
+curl -o search_result_pages/jg_gd_001.html "http://jerrygarcia.com/shows/?bid%5B3588%5D=on&kw&sd&ed&reg&stat&cty&ec&octy&srt=DO"
 
 for i in {2..111}
 do
