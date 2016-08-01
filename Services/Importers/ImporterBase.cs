@@ -60,14 +60,16 @@ namespace Relisten.Import
             ArchiveOrgImporter _archiveOrg,
             SetlistFmImporter _setlistFm,
 			PhishinImporter _phishin,
-			PhishNetImporter _phishnet
+			PhishNetImporter _phishnet,
+			JerryGarciaComImporter _jerry
         )
         {
 			importers = new List<ImporterBase>(new ImporterBase[] {
 				_setlistFm,
-				_archiveOrg,
-				//_phishin,
-				_phishnet
+				//_archiveOrg,
+				_jerry,
+				_phishin,
+				// _phishnet
 			});
         }
 

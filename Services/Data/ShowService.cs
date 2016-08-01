@@ -31,6 +31,8 @@ namespace Relisten.Data
                         ) cnt ON cnt.show_id = s.id
                     WHERE
                         " + where + @"
+                    ORDER BY
+                        display_date ASC
                 ", (show, venue, tour, era) => {
                     show.venue = venue;
                     show.tour = tour;
