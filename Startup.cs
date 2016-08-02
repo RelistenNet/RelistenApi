@@ -62,6 +62,7 @@ namespace Relisten
             services.AddScoped<EraService, EraService>();
             services.AddScoped<Importer, Importer>();
             services.AddScoped<JerryGarciaComImporter, JerryGarciaComImporter>();
+            services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

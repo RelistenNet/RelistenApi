@@ -41,7 +41,7 @@ namespace Relisten.Data
             ", artist));
         }
 
-        public async Task<TourWithShows> ForIdWithShows(int id)
+        public async Task<TourWithShows> ForIdWithShows(Artist artist, int id)
         {
             var tour = await db.WithConnection(con => con.QuerySingleAsync<TourWithShows>(@"
                 SELECT
@@ -57,7 +57,10 @@ namespace Relisten.Data
                 return null;
             }
 
-            tour.shows = await _showService.ShowsForCriteria("tour_id = @tourId", new { tourId = id });
+            tour.shows = await _showService.ShowsForCriteria(artist,
+                "s.artist_id = artistId AND s.tour_id = @tourId",
+                new { artistId = artist.id, tourId = id }
+            );
 
             return tour;
         }

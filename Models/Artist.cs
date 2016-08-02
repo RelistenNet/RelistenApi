@@ -71,6 +71,7 @@ namespace Relisten.Api.Models
         public bool track_names { get; set; }
         public bool venue_past_names { get; set; }
         public bool reviews_have_ratings { get; set; }
+        public bool track_durations { get; set; }
     }
 
     public class Era : BaseRelistenModel
@@ -210,14 +211,13 @@ namespace Relisten.Api.Models
 
     public class SourceFull : Source
     {
-        public IEnumerable<SourceReview> reviews { get; set; }
-        public IEnumerable<SourceSet> sets { get; set; }
+        public IList<SourceReview> reviews { get; set; }
+        public IList<SourceSet> sets { get; set; }
     }
 
     public class SourceSet : BaseRelistenModel
     {
         public int source_id { get; set; }
-        public Source source { get; set; }
 
         public int index { get; set; }
         public bool is_encore { get; set; }
@@ -239,12 +239,11 @@ namespace Relisten.Api.Models
 
     public class SourceTrack : BaseRelistenModel
     {
-        public int artist_id { get; set; }
         public int source_id { get; set; }
         public int source_set_id { get; set; }
 
         public int track_position { get; set; }
-        public int duration { get; set; }
+        public int? duration { get; set; }
         public string title { get; set; }
         public string slug { get; set; }
         public string mp3_url { get; set; }

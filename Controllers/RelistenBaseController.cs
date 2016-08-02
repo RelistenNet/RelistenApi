@@ -89,13 +89,21 @@ namespace Relisten.Api
             string artistIdOrSlug,
             string idAndSlug,
             Func<Artist, Identifier, Task<T>> cb,
-            bool allowIdWithoutValue = false
+            bool allowIdWithoutValue = false,
+            bool isSlugOnly = false
         )
         {
             Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
             if (art != null)
             {
                 var id = new Identifier(idAndSlug);
+
+                if(isSlugOnly) {
+                    id = new Identifier {
+                        Slug = idAndSlug   
+                    };
+                }
+
                 if (!id.Id.HasValue && !allowIdWithoutValue)
                 {
                     return JsonNotFound();

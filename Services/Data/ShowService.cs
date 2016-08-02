@@ -9,11 +9,19 @@ namespace Relisten.Data
 {
     public class ShowService : RelistenDataServiceBase
     {
-        public ShowService(DbService db) : base(db) { }
+        private SourceService _sourceService { get; set; }
 
-        public async Task<IEnumerable<Show>> ShowsForCriteria(string where, object parms)
+        public ShowService(
+            DbService db,
+            SourceService sourceService
+        ) : base(db)
         {
-            return await db.WithConnection(con => con.QueryAsync<Show, Venue, Tour, Era, Show>(@"
+            _sourceService = sourceService;
+        }
+
+        public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(Artist artist, string where, object parms) where T : Show
+        {
+            return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
                     SELECT
                         s.*, cnt.sources_count, v.*, t.*, e.*
                     FROM
@@ -33,12 +41,45 @@ namespace Relisten.Data
                         " + where + @"
                     ORDER BY
                         display_date ASC
-                ", (show, venue, tour, era) => {
-                    show.venue = venue;
-                    show.tour = tour;
-                    show.era = era;
-                    return show;
-                }, parms));
+                ", (Show, venue, tour, era) =>
+            {
+                Show.venue = venue;
+
+                if (artist.features.tours)
+                {
+                    Show.tour = tour;
+                }
+
+                if (artist.features.eras)
+                {
+                    Show.era = era;
+                }
+
+                return Show;
+            }, parms));
+        }
+
+        public async Task<IEnumerable<Show>> ShowsForCriteria(Artist artist, string where, object parms)
+        {
+            return await ShowsForCriteriaGeneric<Show>(artist, where, parms);
+        }
+
+        public async Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
+        {
+            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist,
+                "s.artist_id = @artistId AND s.display_date = @showDate",
+                new { artistId = artist.id, showDate = displayDate }
+            );
+            var show = shows.FirstOrDefault();
+
+            if (show == null)
+            {
+                return null;
+            }
+
+            show.sources = await _sourceService.FullSourcesForShow(artist, show);
+
+            return show;
         }
 
         public async Task<IEnumerable<Show>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)

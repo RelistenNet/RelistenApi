@@ -50,9 +50,9 @@ namespace Relisten.Data
             }
 
             year.shows = new List<Show>();
-            year.shows.AddRange(await _showService.ShowsForCriteria(
-                "s.year_id = @year_id",
-                new { year_id = year.id }
+            year.shows.AddRange(await _showService.ShowsForCriteria(artist,
+                "s.artist_id = @artist_id AND s.year_id = @year_id",
+                new { artist_id = artist.id, year_id = year.id }
             ));
 
             return year;

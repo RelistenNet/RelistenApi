@@ -399,8 +399,6 @@ namespace Relisten.Import
 
                 set.tracks.Add(new SourceTrack()
                 {
-                    artist_id = artist.id,
-                    source_id = dbSource.id,
                     source_set_id = set.id,
                     title = track.title,
                     duration = track.duration,

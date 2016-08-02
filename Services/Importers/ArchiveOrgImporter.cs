@@ -309,8 +309,6 @@ namespace Relisten.Import
             {
                 title = title,
                 track_position = trackNum,
-                artist_id = artist.id,
-                source_id = dbSource.id,
                 source_set_id = set == null ? -1 : set.id,
                 duration = file.length.
                     Split(':').

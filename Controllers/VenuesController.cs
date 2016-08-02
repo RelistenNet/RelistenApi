@@ -41,7 +41,7 @@ namespace Relisten.Controllers
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) => {
-                return _venueService.ForIdWithShows(id.Id.Value);
+                return _venueService.ForIdWithShows(art, id.Id.Value);
             });
         }
     }

@@ -9,6 +9,12 @@ namespace Relisten.Data
 {
     public class Identifier
     {
+        public Identifier()
+        {
+            Id = null;
+            Slug = null;
+        }
+        
         public Identifier(string idAndOrSlug)
         {
             int id = -1;
@@ -132,7 +138,7 @@ namespace Relisten.Data
             return await ForId<Venue>(id);
         }
 
-        public async Task<VenueWithShows> ForIdWithShows(int id)
+        public async Task<VenueWithShows> ForIdWithShows(Artist artist, int id)
         {
             var venue = await ForId<VenueWithShows>(id);
 
@@ -142,9 +148,9 @@ namespace Relisten.Data
             }
 
             venue.shows = new List<Show>();
-            venue.shows.AddRange(await _showService.ShowsForCriteria(
-                "s.venue_id = @venue_id",
-                new { venue_id = venue.id }
+            venue.shows.AddRange(await _showService.ShowsForCriteria(artist,
+                "s.artist_id = @artist_id AND s.venue_id = @venue_id",
+                new { artist_id = artist.id, venue_id = venue.id }
             ));
 
             return venue;
