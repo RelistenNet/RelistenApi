@@ -7,10 +7,12 @@ using Relisten.Api;
 using Dapper;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Controllers
 {
-    [Route("api/2/artists")]
+    [Route("api/v2/artists")]
+    [Produces("application/json")]
     public class YearsController : RelistenBaseController
     {
         protected ShowService _showService;
@@ -30,6 +32,8 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years")]
+        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Year>>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug)
         {
             return await ApiRequest(artistIdOrSlug, (art) => {
@@ -38,6 +42,8 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years/{year}")]
+        [ProducesResponseType(typeof(ResponseEnvelope<YearWithShows>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, year, (art, id) => {
@@ -46,11 +52,11 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years/{year}/{showDate}")]
+        [ProducesResponseType(typeof(ResponseEnvelope<ShowWithSources>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year, string showDate)
         {
-            return await ApiRequest(artistIdOrSlug, async (art) => {
-                return await _showService.ShowWithSourcesForArtistOnDate(art, showDate);
-            });
+            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
         }
     }
 }

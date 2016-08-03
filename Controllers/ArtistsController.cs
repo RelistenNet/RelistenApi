@@ -6,39 +6,78 @@ using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
 using Dapper;
 using Relisten.Api.Models;
+using Relisten.Data;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Controllers
 {
-    [Route("api/2/artists")]
+    [Route("api/v2")]
+    [Produces("application/json")]
     public class ArtistsController : RelistenBaseController
     {
-        public ArtistsController(RedisService redis, DbService db) : base(redis, db) {}
+        public ShowService _showService { get; set; }
+
+        public ArtistsController(
+            RedisService redis,
+            DbService db,
+            ShowService showService
+        ) : base(redis, db)
+        {
+            _showService = showService;
+        }
 
         // GET api/values
-        [HttpGet]
+        [HttpGet("artists")]
+        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Artist>>), 200)]
         public async Task<IActionResult> Get()
         {
-            return JsonSuccess(await db.WithConnection(conn => conn.QueryAsync<Artist>("select * from artists")));
+            return JsonSuccess(await db.WithConnection(conn => conn.QueryAsync<ArtistWithCounts, Features, ArtistWithCounts>(@"
+                WITH show_counts AS (
+                    SELECT
+                        artist_id,
+                        COUNT(*) as show_count
+                    FROM
+                        shows
+                    GROUP BY
+                        artist_id
+                ), source_counts AS (
+                    SELECT
+                        artist_id,
+                        COUNT(*) as source_count
+                    FROM
+                        sources
+                    GROUP BY
+                        artist_id	
+                )
+
+                SELECT
+                    a.*, f.*, show_count, source_count
+                FROM
+                    artists a
+                    LEFT JOIN features f on f.artist_id = a.id
+                    LEFT JOIN show_counts sh ON sh.artist_id = a.id
+                    LEFT JOIN source_counts src ON src.artist_id = a.id
+                ", (artist, features) =>
+            {
+                artist.features = features;
+                return artist;
+            }))
+            );
         }
 
         // GET api/values/5
-        [HttpGet("{idOrSlug}")]
-        public async Task<IActionResult> Get(string idOrSlug)
+        [HttpGet("artists/{artistIdOrSlug}")]
+        [ProducesResponseType(typeof(ResponseEnvelope<Artist>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> Get(string artistIdOrSlug)
         {
-            Artist art = await FindArtistWithIdOrSlug(idOrSlug);
-            if(art != null) {
+            Artist art = await FindArtistWithIdOrSlug(artistIdOrSlug);
+            if (art != null)
+            {
                 return JsonSuccess(art);
             }
 
-            return JsonNotFound();
-        }
-
-        private void update() {
-            var updateDates = @"
-            update shows s set updatedat = COALESCE((select MAX(updatedat) from tracks t WHERE t.showid = s.id), s.createdat);
-            update years y set updatedat = COALESCE((select MAX(updatedat) from shows s WHERE s.year = y.year), y.createdat);
-            update artists a set updatedat = COALESCE((select MAX(updatedat) from years y WHERE y.artistid = a.id), a.createdat);
-            ";
+            return JsonNotFound(false);
         }
     }
 }

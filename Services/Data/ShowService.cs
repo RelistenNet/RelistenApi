@@ -19,7 +19,12 @@ namespace Relisten.Data
             _sourceService = sourceService;
         }
 
-        public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(Artist artist, string where, object parms) where T : Show
+        public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(
+            Artist artist,
+            string where,
+            object parms,
+            string order = "display_date ASC"
+        ) where T : Show
         {
             return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
                     SELECT
@@ -29,6 +34,62 @@ namespace Relisten.Data
                         LEFT JOIN venues v ON s.venue_id = v.id
                         LEFT JOIN tours t ON s.tour_id = t.id
                         LEFT JOIN eras e ON s.era_id = e.id
+                        INNER JOIN (
+                        	SELECT
+                        		src.show_id, COUNT(*) as sources_count, MAX(src.avg_rating_weighted) as max_avg_rating_weighted
+                        	FROM
+                        		sources src
+                        	GROUP BY
+                        		src.show_id
+                        ) cnt ON cnt.show_id = s.id
+                    WHERE
+                        " + where + @"
+                    ORDER BY
+                        " + order + @"
+                ", (Show, venue, tour, era) =>
+            {
+                Show.venue = venue;
+
+                if (artist == null || artist.features.tours)
+                {
+                    Show.tour = tour;
+                }
+
+                if (artist == null || artist.features.eras)
+                {
+                    Show.era = era;
+                }
+
+                return Show;
+            }, parms));
+        }
+
+        public async Task<IEnumerable<Show>> ShowsForCriteria(
+            Artist artist,
+            string where,
+            object parms,
+            string order = "display_date ASC")
+        {
+            return await ShowsForCriteriaGeneric<Show>(artist, where, parms, order);
+        }
+
+        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object parms)
+        {
+            return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, Venue, Tour, Era, Artist, Features, ShowWithArtist>(@"
+                    SELECT
+                        s.*, cnt.sources_count, v.*, t.*, e.*, a.*
+                    FROM
+                        shows s
+                        LEFT JOIN venues v ON s.venue_id = v.id
+                        LEFT JOIN tours t ON s.tour_id = t.id
+                        LEFT JOIN eras e ON s.era_id = e.id
+                        LEFT JOIN (
+                        	SELECT
+                        		arts.id as aid, arts.*, f.*
+                        	FROM
+                        		artists arts
+                        		INNER JOIN features f ON f.artist_id = arts.id
+                        ) a ON s.artist_id = a.aid
                         INNER JOIN (
                         	SELECT
                         		src.show_id, COUNT(*) as sources_count
@@ -41,27 +102,24 @@ namespace Relisten.Data
                         " + where + @"
                     ORDER BY
                         display_date ASC
-                ", (Show, venue, tour, era) =>
+                ", (Show, venue, tour, era, art, features) =>
             {
+                art.features = features;
+                Show.artist = art;
                 Show.venue = venue;
 
-                if (artist.features.tours)
+                if (art.features.tours)
                 {
                     Show.tour = tour;
                 }
 
-                if (artist.features.eras)
+                if (art.features.eras)
                 {
                     Show.era = era;
                 }
 
                 return Show;
             }, parms));
-        }
-
-        public async Task<IEnumerable<Show>> ShowsForCriteria(Artist artist, string where, object parms)
-        {
-            return await ShowsForCriteriaGeneric<Show>(artist, where, parms);
         }
 
         public async Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)

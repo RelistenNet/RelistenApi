@@ -7,30 +7,31 @@ using Relisten.Api;
 using Dapper;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Controllers
 {
-    [Route("api/2/artists")]
+    [Route("api/v2/artists")]
+    [Produces("application/json")]
     public class ErasController : RelistenBaseController
     {
-        protected ShowService _showService;
-        protected YearService _yearService;
+        protected EraService _eraService;
 
         public ErasController(
             RedisService redis,
             DbService db,
-            ShowService showService,
-            YearService yearService
+            EraService eraService
         ) : base(redis, db) {
-            _showService = showService;
-            _yearService = yearService;
+            _eraService = eraService;
         }
 
         [HttpGet("{artistIdOrSlug}/eras")]
-        public async Task<IActionResult> years(string artistIdOrSlug)
+        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Era>>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> eras(string artistIdOrSlug)
         {
             return await ApiRequest(artistIdOrSlug, (art) => {
-                return _yearService.AllForArtist(art);
+                return _eraService.AllForArtist(art);
             });
         }
 

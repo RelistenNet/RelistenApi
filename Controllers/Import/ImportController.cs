@@ -10,7 +10,8 @@ using Relisten.Import;
 
 namespace Relisten.Controllers
 {
-    [Route("api/2/import/")]
+    [Route("api/v2/import/")]
+    [ApiExplorerSettings(IgnoreApi=true)]
     public class ImportController : RelistenBaseController
     {
         protected Importer _importer { get; set; }
@@ -33,7 +34,7 @@ namespace Relisten.Controllers
                 return JsonSuccess(await _importer.Import(art));
             }
 
-            return JsonNotFound();
+            return JsonNotFound(false);
         }
 
         // private void update()

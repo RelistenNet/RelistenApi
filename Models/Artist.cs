@@ -1,6 +1,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
@@ -9,9 +10,13 @@ namespace Relisten.Api.Models
 {
     public abstract class BaseRelistenModel
     {
+        [Required]
         public int id { get; set; }
 
+        [Required]
         public DateTime created_at { get; set; }
+
+        [Required]
         public DateTime updated_at { get; set; }
 
         private PropertyInfo[] _PropertyInfos = null;
@@ -35,293 +40,112 @@ namespace Relisten.Api.Models
 
     public class Artist : BaseRelistenModel
     {
+        [Required]
         public string upstream_identifier { get; set; }
+
+        [Required]
         public string data_source { get; set; }
+
+        [Required]
         public string musicbrainz_id { get; set; }
+
+        [Required]
         public string name { get; set; }
+
+        [Required]
         public int featured { get; set; }
+
+        [Required]
         public string slug { get; set; }
 
+
+        [Required]
         public Features features { get; set; }
+    }
+
+    public class ArtistWithCounts : Artist
+    {
+        [Required]
+        public int show_count { get; set; }
+
+        [Required]
+        public int source_count { get; set; }
     }
 
     public class Features
     {
+
+        [Required]
         public int id { get; set; }
 
+
+        [Required]
         public bool descriptions { get; set; }
+
+        [Required]
         public bool eras { get; set; }
+
+        [Required]
         public bool multiple_sources { get; set; }
+
+        [Required]
         public bool reviews { get; set; }
+
+        [Required]
         public bool ratings { get; set; }
+
+        [Required]
         public bool tours { get; set; }
+
+        [Required]
         public bool taper_notes { get; set; }
+
+        [Required]
         public bool source_information { get; set; }
+
+        [Required]
         public bool sets { get; set; }
+
+        [Required]
         public bool per_show_venues { get; set; }
+
+        [Required]
         public bool per_source_venues { get; set; }
+
+        [Required]
         public bool venue_coords { get; set; }
+
+        [Required]
         public bool songs { get; set; }
+
+        [Required]
         public bool years { get; set; }
+
+        [Required]
         public bool track_md5s { get; set; }
+
+        [Required]
         public bool review_titles { get; set; }
+
+        [Required]
         public bool jam_charts { get; set; }
+
+        [Required]
         public bool setlist_data_incomplete { get; set; }
+
+        [Required]
         public bool artist_id { get; set; }
+
+        [Required]
         public bool track_names { get; set; }
+
+        [Required]
         public bool venue_past_names { get; set; }
+
+        [Required]
         public bool reviews_have_ratings { get; set; }
+
+        [Required]
         public bool track_durations { get; set; }
-    }
-
-    public class Era : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public int order { get; set; }
-        public string name { get; set; }
-    }
-
-    public class SetlistShow : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public int? tour_id { get; set; }
-        public Tour tour { get; set; }
-
-        public int? era_id { get; set; }
-        public Era era { get; set; }
-
-        public int venue_id { get; set; }
-        public Venue venue { get; set; }
-
-        /// <summary>ONLY DATE</summary>
-        public DateTime date { get; set; }
-        [JsonIgnore]
-        public string upstream_identifier { get; set; }
-    }
-
-    public class SimpleSetlistShow : BaseRelistenModel
-    {
-        /// <summary>ONLY DATE</summary>
-        public DateTime date { get; set; }
-    }
-
-    public class SetlistSong : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public string name { get; set; }
-        public string slug { get; set; }
-        [JsonIgnore]
-        public string upstream_identifier { get; set; }
-
-        public string sortName
-        {
-            get
-            {
-                if (name.StartsWith("The ", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    return name.Substring(4) + ", The";
-                }
-                return name;
-            }
-        }
-    }
-
-    public class SetlistSongWithPlayCount : SetlistSong
-    {
-        public int shows_played_at { get; set; }
-    }
-
-    public class SetlistShowSongJoin
-    {
-        public int played_setlist_song_id { get; set; }
-        public int played_setlist_show_id { get; set; }
-    }
-
-    public class Show : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public int? venue_id { get; set; }
-        public Venue venue { get; set; }
-
-        public int? tour_id { get; set; }
-        public Tour tour { get; set; }
-
-        public int? year_id { get; set; }
-        public Year year { get; set; }
-
-        public int? era_id { get; set; }
-        public Era era { get; set; }
-
-        /// <summary>ONLY DATE</summary>
-        public DateTime date { get; set; }
-
-        public float avg_rating { get; set; }
-        public float avg_duration { get; set; }
-
-        public string display_date { get; set; }
-
-        public int? sources_count { get; set; }
-    }
-
-    public class ShowWithSources : Show
-    {
-        public IEnumerable<Source> sources { get; set; }
-    }
-
-    public class Source : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public int? show_id { get; set; }
-        public Show show { get; set; }
-
-        public int? venue_id { get; set; }
-        public Venue venue { get; set; }
-
-        public string display_date { get; set; }
-
-        public bool is_soundboard { get; set; }
-        public bool is_remaster { get; set; }
-        public bool has_jamcharts { get; set; }
-
-        public double avg_rating { get; set; }
-        public int num_reviews { get; set; }
-        public int? num_ratings { get; set; }
-        public double avg_rating_weighted { get; set; }
-        public double duration { get; set; }
-
-        public string upstream_identifier { get; set; }
-        public string description { get; set; }
-        public string taper_notes { get; set; }
-        public string source { get; set; }
-        public string taper { get; set; }
-        public string transferrer { get; set; }
-        public string lineage { get; set; }
-
-    }
-
-    public class SourceFull : Source
-    {
-        public IList<SourceReview> reviews { get; set; }
-        public IList<SourceSet> sets { get; set; }
-    }
-
-    public class SourceSet : BaseRelistenModel
-    {
-        public int source_id { get; set; }
-
-        public int index { get; set; }
-        public bool is_encore { get; set; }
-
-        public string name { get; set; }
-
-        public IList<SourceTrack> tracks { get; set; }
-    }
-
-    public class SourceReview : BaseRelistenModel
-    {
-        public int source_id { get; set; }
-
-        public int? rating { get; set; }
-        public string title { get; set; }
-        public string review { get; set; }
-        public string author { get; set; }
-    }
-
-    public class SourceTrack : BaseRelistenModel
-    {
-        public int source_id { get; set; }
-        public int source_set_id { get; set; }
-
-        public int track_position { get; set; }
-        public int? duration { get; set; }
-        public string title { get; set; }
-        public string slug { get; set; }
-        public string mp3_url { get; set; }
-        public string md5 { get; set; }
-    }
-
-    public class Tour : BaseRelistenModel
-    {
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-
-        public DateTime? start_date { get; set; }
-        public DateTime? end_date { get; set; }
-        public string name { get; set; }
-        public string slug { get; set; }
-        [JsonIgnore]
-        public string upstream_identifier { get; set; }
-    }
-
-    public class TourWithShowCount : Tour
-    {
-        public int shows_on_tour { get; set; }
-    }
-
-    public class TourWithShows : Tour
-    {
-        public IEnumerable<Show> shows { get; set; }
-    }
-
-    public class Venue : BaseRelistenModel
-    {
-        public int? artist_id { get; set; }
-
-        public double? latitude { get; set; }
-        public double? longitude { get; set; }
-        public string name { get; set; }
-        public string location { get; set; }
-        [JsonIgnore]
-        public string upstream_identifier { get; set; }
-        public string slug { get; set; }
-
-        public int? shows_at_venue { get; set; }
-        public string past_names { get; set; }
-
-        public string sortName
-        {
-            get
-            {
-                if (name.StartsWith("The ", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    return name.Substring(4) + ", The";
-                }
-                return name;
-            }
-        }
-    }
-
-    public class VenueWithShows : Venue
-    {
-        public List<Show> shows { get; set; }
-    }
-
-    public class Year : BaseRelistenModel
-    {
-        public int show_count { get; set; }
-        public int source_count { get; set; }
-        public int duration { get; set; }
-        public float avg_duration { get; set; }
-        public float avg_rating { get; set; }
-
-        public string year { get; set; }
-
-        public int artist_id { get; set; }
-        public Artist artist { get; set; }
-    }
-
-    public class YearWithShows : Year
-    {
-        public List<Show> shows { get; set; }
     }
 }

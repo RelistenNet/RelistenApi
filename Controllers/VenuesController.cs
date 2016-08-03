@@ -9,10 +9,12 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor;
 using System.Linq.Expressions;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Controllers
 {
-    [Route("api/2/artists")]
+    [Route("api/v2/artists")]
+    [Produces("application/json")]
     public class VenuesController : RelistenBaseController
     {
         private VenueService _venueService { get; set; }
@@ -30,6 +32,8 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/venues")]
+        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<VenueWithShowCount>>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> tours(string artistIdOrSlug)
         {
             return await ApiRequest(artistIdOrSlug, (art) => {
@@ -38,6 +42,8 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
+        [ProducesResponseType(typeof(ResponseEnvelope<VenueWithShows>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) => {

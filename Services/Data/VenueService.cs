@@ -133,9 +133,9 @@ namespace Relisten.Data
                 	v.id
             ", new { id = id }));
         }
-        public async Task<Venue> ForId(int id)
+        public async Task<VenueWithShowCount> ForId(int id)
         {
-            return await ForId<Venue>(id);
+            return await ForId<VenueWithShowCount>(id);
         }
 
         public async Task<VenueWithShows> ForIdWithShows(Artist artist, int id)

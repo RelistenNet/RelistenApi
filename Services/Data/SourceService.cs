@@ -8,7 +8,7 @@ using System;
 
 namespace Relisten.Data
 {
-    public class EnittyOneToManyMapper<TP, TC, TPk>
+    public class EntityOneToManyMapper<TP, TC, TPk>
     {
         private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
 
@@ -63,7 +63,7 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
         {
-            var ReviewMapper = new EnittyOneToManyMapper<SourceFull, SourceReview, int>()
+            var ReviewMapper = new EntityOneToManyMapper<SourceFull, SourceReview, int>()
             {
                 AddChildAction = (source, review) =>
                 {
@@ -78,7 +78,7 @@ namespace Relisten.Data
                 ParentKey = (source) => source.id
             };
 
-            var TrackMapper = new EnittyOneToManyMapper<SourceSet, SourceTrack, int>()
+            var TrackMapper = new EntityOneToManyMapper<SourceSet, SourceTrack, int>()
             {
                 AddChildAction = (set, track) =>
                 {
@@ -92,7 +92,7 @@ namespace Relisten.Data
                 },
                 ParentKey = (set) => set.id
             };
-            
+
             var t_srcsWithReviews = db.WithConnection(con => con.QueryAsync<SourceFull, SourceReview, SourceFull>(@"
                 SELECT
                     s.*, r.*

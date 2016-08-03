@@ -24,14 +24,14 @@ namespace Relisten.Api
             this.db = db;
         }
 
-        protected IActionResult JsonSuccess(object anything)
+        protected IActionResult JsonSuccess<T>(T anything)
         {
-            return Json(ResponseEnvelope.Success(anything));
+            return Json(ResponseEnvelope<T>.Success(anything));
         }
 
-        protected IActionResult JsonNotFound(object anything = null)
+        protected IActionResult JsonNotFound<T>(T anything = default(T))
         {
-            return NotFound(ResponseEnvelope.Error(ApiErrorCode.NotFound, anything));
+            return NotFound(ResponseEnvelope<T>.Error(ApiErrorCode.NotFound, anything));
         }
 
         protected async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
@@ -106,20 +106,20 @@ namespace Relisten.Api
 
                 if (!id.Id.HasValue && !allowIdWithoutValue)
                 {
-                    return JsonNotFound();
+                    return JsonNotFound(false);
                 }
 
                 var data = await cb(art, id);
 
                 if (data == null)
                 {
-                    return JsonNotFound();
+                    return JsonNotFound(false);
                 }
 
                 return JsonSuccess(data);
             }
 
-            return JsonNotFound();
+            return JsonNotFound(false);
         }
 
         protected async Task<IActionResult> ApiRequest<T>(
@@ -134,13 +134,13 @@ namespace Relisten.Api
 
                 if (data == null)
                 {
-                    return JsonNotFound();
+                    return JsonNotFound(false);
                 }
 
                 return JsonSuccess(data);
             }
 
-            return JsonNotFound();
+            return JsonNotFound(false);
         }
     }
 }

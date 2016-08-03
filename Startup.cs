@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
+using Swashbuckle.Swagger.Model;
 
 namespace Relisten
 {
@@ -33,12 +34,24 @@ namespace Relisten
             // Add framework services.
             services.
                 AddMvc().
-                AddJsonOptions(jsonOptions => {
+                AddJsonOptions(jsonOptions =>
+                {
                     jsonOptions.SerializerSettings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
                     jsonOptions.SerializerSettings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
                 });
 
             services.AddLogging();
+
+            services.AddSwaggerGen(c =>
+            {
+                c.SingleApiVersion(new Info
+                {
+                    Version = "v2",
+                    Title = "Relisten API",
+                    Description = "Music",
+                    TermsOfService = "TODO"
+                });
+            });
 
             DbService.SetConnectionURL(Configuration["POSTGRES_URL_INT"]);
 
@@ -77,6 +90,13 @@ namespace Relisten
             loggerFactory.AddDebug();
 
             app.UseMvc();
+
+            app.UseSwagger((httpRequest, swaggerDoc) =>
+            {
+                swaggerDoc.Host = httpRequest.Host.Value;
+            });
+
+            app.UseSwaggerUi();
         }
     }
 }

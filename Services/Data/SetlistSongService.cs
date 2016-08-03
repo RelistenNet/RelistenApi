@@ -36,14 +36,54 @@ namespace Relisten.Data
             ", artist));
         }
 
+        public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
+        {
+            SetlistSongWithShows bigSong = null;
+            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, Venue, Tour, Era, SetlistSongWithShows>(@"
+                SELECT
+                    s.*, shows.*, v.*, t.*
+                FROM
+                    setlist_songs s
+                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
+                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
+                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @artistId
+                    LEFT JOIN venues v ON shows.venue_id = v.id
+                    LEFT JOIN tours t ON shows.tour_id = t.id
+                    LEFT JOIN eras e ON shows.era_id = e.id
+                WHERE
+                    s.artist_id = @artistId
+                    AND s.id = @songId
+                ORDER BY shows.date
+                ",
+                (song, show, venue, tour, era) => {
+                    if(bigSong == null) {
+                        bigSong = song;
+                        bigSong.shows = new List<Show>();
+                    }
+
+                    show.venue = venue;
+                    show.tour = tour;
+                    show.era = era;
+
+                    bigSong.shows.Add(show);
+
+                    return song;
+                },
+                new { artistId = artist.id, songId = id }));
+
+            return bigSong;
+        }
+
         public async Task<IEnumerable<SetlistSongWithPlayCount>> AllForArtistWithPlayCount(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
                 SELECT
-                    s.*, COUNT(p.played_setlist_show_id) as shows_played_at
+                    s.*, COUNT(shows.id) as shows_played_at
                 FROM
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
+                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
+                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @id
                 WHERE
                     s.artist_id = @id
                 GROUP BY
