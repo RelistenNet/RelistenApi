@@ -1,4 +1,4 @@
-FROM microsoft/dotnet:1.0-sdk-msbuild
+FROM microsoft/dotnet:1.1-sdk-msbuild
 
 WORKDIR /dotnetapp
 COPY RelistenApi/RelistenApi.csproj .
