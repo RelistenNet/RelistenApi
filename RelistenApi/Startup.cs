@@ -110,7 +110,7 @@ namespace Relisten
 				swaggerDoc.Host = httpRequest.Host.Value;
 			});
 
-			app.UseSwaggerUi();
+			app.UseSwaggerUi("swagger/ui", "/swagger/v2/swagger.json");
 		}
 	}
 }
