@@ -20,7 +20,8 @@ RUN apt-get update \
 
 # Install .NET Core SDK
 ENV DOTNET_SDK_VERSION 1.0.0-rc4-004600
-ENV DOTNET_SDK_DOWNLOAD_URL https://dotnetcli.blob.core.windows.net/dotnet/Sdk/$DOTNET_SDK_VERSION/dotnet-dev-debian-x64.$DOTNET_SDK_VERSION.tar.gz
+# ENV DOTNET_SDK_DOWNLOAD_URL https://dotnetcli.blob.core.windows.net/dotnet/Sdk/$DOTNET_SDK_VERSION/dotnet-dev-debian-x64.$DOTNET_SDK_VERSION.tar.gz
+ENV DOTNET_SDK_DOWNLOAD_URL http://static.alecgorge.com/dotnet/dotnet-dev-debian-x64.1.0.0-rc4-004600.tar.gz
 
 RUN curl -SL $DOTNET_SDK_DOWNLOAD_URL --output dotnet.tar.gz \
     && mkdir -p /usr/share/dotnet \
