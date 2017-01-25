@@ -11,374 +11,30 @@ SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET client_min_messages = warning;
-SET row_security = off;
+-- SET row_security = off;
 
 --
--- Name: hangfire; Type: SCHEMA; Schema: -; Owner: alecgorge
---
-
-CREATE SCHEMA hangfire;
-
-
-ALTER SCHEMA hangfire OWNER TO alecgorge;
-
---
--- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
+-- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
 --
 
 CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 
 
 --
--- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
+-- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: -
 --
 
 COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 
 
-SET search_path = hangfire, pg_catalog;
+SET search_path = public, pg_catalog;
 
 SET default_tablespace = '';
 
 SET default_with_oids = false;
 
 --
--- Name: counter; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE counter (
-    id integer NOT NULL,
-    key character varying(100) NOT NULL,
-    value smallint NOT NULL,
-    expireat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE counter OWNER TO alecgorge;
-
---
--- Name: counter_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE counter_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE counter_id_seq OWNER TO alecgorge;
-
---
--- Name: counter_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE counter_id_seq OWNED BY counter.id;
-
-
---
--- Name: hash; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE hash (
-    id integer NOT NULL,
-    key character varying(100) NOT NULL,
-    field character varying(100) NOT NULL,
-    value text,
-    expireat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE hash OWNER TO alecgorge;
-
---
--- Name: hash_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE hash_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE hash_id_seq OWNER TO alecgorge;
-
---
--- Name: hash_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE hash_id_seq OWNED BY hash.id;
-
-
---
--- Name: job; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE job (
-    id integer NOT NULL,
-    stateid integer,
-    statename character varying(20),
-    invocationdata text NOT NULL,
-    arguments text NOT NULL,
-    createdat timestamp without time zone NOT NULL,
-    expireat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE job OWNER TO alecgorge;
-
---
--- Name: job_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE job_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE job_id_seq OWNER TO alecgorge;
-
---
--- Name: job_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE job_id_seq OWNED BY job.id;
-
-
---
--- Name: jobparameter; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE jobparameter (
-    id integer NOT NULL,
-    jobid integer NOT NULL,
-    name character varying(40) NOT NULL,
-    value text,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE jobparameter OWNER TO alecgorge;
-
---
--- Name: jobparameter_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE jobparameter_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE jobparameter_id_seq OWNER TO alecgorge;
-
---
--- Name: jobparameter_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE jobparameter_id_seq OWNED BY jobparameter.id;
-
-
---
--- Name: jobqueue; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE jobqueue (
-    id integer NOT NULL,
-    jobid integer NOT NULL,
-    queue character varying(20) NOT NULL,
-    fetchedat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE jobqueue OWNER TO alecgorge;
-
---
--- Name: jobqueue_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE jobqueue_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE jobqueue_id_seq OWNER TO alecgorge;
-
---
--- Name: jobqueue_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE jobqueue_id_seq OWNED BY jobqueue.id;
-
-
---
--- Name: list; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE list (
-    id integer NOT NULL,
-    key character varying(100) NOT NULL,
-    value text,
-    expireat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE list OWNER TO alecgorge;
-
---
--- Name: list_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE list_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE list_id_seq OWNER TO alecgorge;
-
---
--- Name: list_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE list_id_seq OWNED BY list.id;
-
-
---
--- Name: lock; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE lock (
-    resource character varying(100) NOT NULL,
-    updatecount integer DEFAULT 0 NOT NULL,
-    acquired timestamp without time zone
-);
-
-
-ALTER TABLE lock OWNER TO alecgorge;
-
---
--- Name: schema; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE schema (
-    version integer NOT NULL
-);
-
-
-ALTER TABLE schema OWNER TO alecgorge;
-
---
--- Name: server; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE server (
-    id character varying(100) NOT NULL,
-    data text,
-    lastheartbeat timestamp without time zone NOT NULL,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE server OWNER TO alecgorge;
-
---
--- Name: set; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE set (
-    id integer NOT NULL,
-    key character varying(100) NOT NULL,
-    score double precision NOT NULL,
-    value text NOT NULL,
-    expireat timestamp without time zone,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE set OWNER TO alecgorge;
-
---
--- Name: set_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE set_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE set_id_seq OWNER TO alecgorge;
-
---
--- Name: set_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE set_id_seq OWNED BY set.id;
-
-
---
--- Name: state; Type: TABLE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE TABLE state (
-    id integer NOT NULL,
-    jobid integer NOT NULL,
-    name character varying(20) NOT NULL,
-    reason character varying(100),
-    createdat timestamp without time zone NOT NULL,
-    data text,
-    updatecount integer DEFAULT 0 NOT NULL
-);
-
-
-ALTER TABLE state OWNER TO alecgorge;
-
---
--- Name: state_id_seq; Type: SEQUENCE; Schema: hangfire; Owner: alecgorge
---
-
-CREATE SEQUENCE state_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER TABLE state_id_seq OWNER TO alecgorge;
-
---
--- Name: state_id_seq; Type: SEQUENCE OWNED BY; Schema: hangfire; Owner: alecgorge
---
-
-ALTER SEQUENCE state_id_seq OWNED BY state.id;
-
-
-SET search_path = public, pg_catalog;
-
---
--- Name: artists; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: artists; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE artists (
@@ -394,10 +50,8 @@ CREATE TABLE artists (
 );
 
 
-ALTER TABLE artists OWNER TO alecgorge;
-
 --
--- Name: artists_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: artists_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE artists_id_seq
@@ -408,17 +62,15 @@ CREATE SEQUENCE artists_id_seq
     CACHE 1;
 
 
-ALTER TABLE artists_id_seq OWNER TO alecgorge;
-
 --
--- Name: artists_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: artists_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE artists_id_seq OWNED BY artists.id;
 
 
 --
--- Name: eras; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: eras; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE eras (
@@ -431,10 +83,8 @@ CREATE TABLE eras (
 );
 
 
-ALTER TABLE eras OWNER TO alecgorge;
-
 --
--- Name: eras_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: eras_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE eras_id_seq
@@ -445,17 +95,15 @@ CREATE SEQUENCE eras_id_seq
     CACHE 1;
 
 
-ALTER TABLE eras_id_seq OWNER TO alecgorge;
-
 --
--- Name: eras_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: eras_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE eras_id_seq OWNED BY eras.id;
 
 
 --
--- Name: features; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: features; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE features (
@@ -486,10 +134,8 @@ CREATE TABLE features (
 );
 
 
-ALTER TABLE features OWNER TO alecgorge;
-
 --
--- Name: featuresets_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: featuresets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE featuresets_id_seq
@@ -500,17 +146,15 @@ CREATE SEQUENCE featuresets_id_seq
     CACHE 1;
 
 
-ALTER TABLE featuresets_id_seq OWNER TO alecgorge;
-
 --
--- Name: featuresets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: featuresets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE featuresets_id_seq OWNED BY features.id;
 
 
 --
--- Name: setlist_shows; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: setlist_shows; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE setlist_shows (
@@ -526,10 +170,8 @@ CREATE TABLE setlist_shows (
 );
 
 
-ALTER TABLE setlist_shows OWNER TO alecgorge;
-
 --
--- Name: setlist_show_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: setlist_show_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE setlist_show_id_seq
@@ -540,17 +182,15 @@ CREATE SEQUENCE setlist_show_id_seq
     CACHE 1;
 
 
-ALTER TABLE setlist_show_id_seq OWNER TO alecgorge;
-
 --
--- Name: setlist_show_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: setlist_show_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE setlist_show_id_seq OWNED BY setlist_shows.id;
 
 
 --
--- Name: setlist_songs; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: setlist_songs; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE setlist_songs (
@@ -564,10 +204,8 @@ CREATE TABLE setlist_songs (
 );
 
 
-ALTER TABLE setlist_songs OWNER TO alecgorge;
-
 --
--- Name: setlist_song_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: setlist_song_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE setlist_song_id_seq
@@ -578,17 +216,15 @@ CREATE SEQUENCE setlist_song_id_seq
     CACHE 1;
 
 
-ALTER TABLE setlist_song_id_seq OWNER TO alecgorge;
-
 --
--- Name: setlist_song_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: setlist_song_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE setlist_song_id_seq OWNED BY setlist_songs.id;
 
 
 --
--- Name: setlist_songs_plays; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: setlist_songs_plays; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE setlist_songs_plays (
@@ -597,10 +233,8 @@ CREATE TABLE setlist_songs_plays (
 );
 
 
-ALTER TABLE setlist_songs_plays OWNER TO alecgorge;
-
 --
--- Name: shows; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: shows; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE shows (
@@ -619,10 +253,8 @@ CREATE TABLE shows (
 );
 
 
-ALTER TABLE shows OWNER TO alecgorge;
-
 --
--- Name: shows_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: shows_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE shows_id_seq
@@ -633,17 +265,15 @@ CREATE SEQUENCE shows_id_seq
     CACHE 1;
 
 
-ALTER TABLE shows_id_seq OWNER TO alecgorge;
-
 --
--- Name: shows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: shows_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE shows_id_seq OWNED BY shows.id;
 
 
 --
--- Name: source_reviews; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: source_reviews; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE source_reviews (
@@ -658,17 +288,15 @@ CREATE TABLE source_reviews (
 );
 
 
-ALTER TABLE source_reviews OWNER TO alecgorge;
-
 --
--- Name: COLUMN source_reviews.rating; Type: COMMENT; Schema: public; Owner: alecgorge
+-- Name: COLUMN source_reviews.rating; Type: COMMENT; Schema: public; Owner: -
 --
 
 COMMENT ON COLUMN source_reviews.rating IS 'Scale of 1 to 10';
 
 
 --
--- Name: source_review_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: source_review_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE source_review_id_seq
@@ -679,17 +307,15 @@ CREATE SEQUENCE source_review_id_seq
     CACHE 1;
 
 
-ALTER TABLE source_review_id_seq OWNER TO alecgorge;
-
 --
--- Name: source_review_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: source_review_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE source_review_id_seq OWNED BY source_reviews.id;
 
 
 --
--- Name: source_sets; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: source_sets; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE source_sets (
@@ -703,10 +329,8 @@ CREATE TABLE source_sets (
 );
 
 
-ALTER TABLE source_sets OWNER TO alecgorge;
-
 --
--- Name: source_sets_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: source_sets_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE source_sets_id_seq
@@ -717,17 +341,15 @@ CREATE SEQUENCE source_sets_id_seq
     CACHE 1;
 
 
-ALTER TABLE source_sets_id_seq OWNER TO alecgorge;
-
 --
--- Name: source_sets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: source_sets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE source_sets_id_seq OWNED BY source_sets.id;
 
 
 --
--- Name: source_tracks_plays; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: source_tracks_plays; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE source_tracks_plays (
@@ -738,10 +360,8 @@ CREATE TABLE source_tracks_plays (
 );
 
 
-ALTER TABLE source_tracks_plays OWNER TO alecgorge;
-
 --
--- Name: source_track_play_history_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: source_track_play_history_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE source_track_play_history_id_seq
@@ -752,17 +372,15 @@ CREATE SEQUENCE source_track_play_history_id_seq
     CACHE 1;
 
 
-ALTER TABLE source_track_play_history_id_seq OWNER TO alecgorge;
-
 --
--- Name: source_track_play_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: source_track_play_history_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE source_track_play_history_id_seq OWNED BY source_tracks_plays.id;
 
 
 --
--- Name: source_tracks; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: source_tracks; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE source_tracks (
@@ -780,17 +398,15 @@ CREATE TABLE source_tracks (
 );
 
 
-ALTER TABLE source_tracks OWNER TO alecgorge;
-
 --
--- Name: COLUMN source_tracks.duration; Type: COMMENT; Schema: public; Owner: alecgorge
+-- Name: COLUMN source_tracks.duration; Type: COMMENT; Schema: public; Owner: -
 --
 
 COMMENT ON COLUMN source_tracks.duration IS 'Duration in seconds';
 
 
 --
--- Name: source_tracks_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: source_tracks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE source_tracks_id_seq
@@ -801,17 +417,15 @@ CREATE SEQUENCE source_tracks_id_seq
     CACHE 1;
 
 
-ALTER TABLE source_tracks_id_seq OWNER TO alecgorge;
-
 --
--- Name: source_tracks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: source_tracks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE source_tracks_id_seq OWNED BY source_tracks.id;
 
 
 --
--- Name: sources; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: sources; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE sources (
@@ -840,10 +454,8 @@ CREATE TABLE sources (
 );
 
 
-ALTER TABLE sources OWNER TO alecgorge;
-
 --
--- Name: sources_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: sources_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE sources_id_seq
@@ -854,17 +466,15 @@ CREATE SEQUENCE sources_id_seq
     CACHE 1;
 
 
-ALTER TABLE sources_id_seq OWNER TO alecgorge;
-
 --
--- Name: sources_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: sources_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE sources_id_seq OWNED BY sources.id;
 
 
 --
--- Name: tours; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: tours; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE tours (
@@ -880,10 +490,8 @@ CREATE TABLE tours (
 );
 
 
-ALTER TABLE tours OWNER TO alecgorge;
-
 --
--- Name: tours_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: tours_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE tours_id_seq
@@ -894,17 +502,15 @@ CREATE SEQUENCE tours_id_seq
     CACHE 1;
 
 
-ALTER TABLE tours_id_seq OWNER TO alecgorge;
-
 --
--- Name: tours_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: tours_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE tours_id_seq OWNED BY tours.id;
 
 
 --
--- Name: venues; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: venues; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE venues (
@@ -922,10 +528,8 @@ CREATE TABLE venues (
 );
 
 
-ALTER TABLE venues OWNER TO alecgorge;
-
 --
--- Name: venues_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: venues_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE venues_id_seq
@@ -936,17 +540,15 @@ CREATE SEQUENCE venues_id_seq
     CACHE 1;
 
 
-ALTER TABLE venues_id_seq OWNER TO alecgorge;
-
 --
--- Name: venues_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: venues_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE venues_id_seq OWNED BY venues.id;
 
 
 --
--- Name: years; Type: TABLE; Schema: public; Owner: alecgorge
+-- Name: years; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE years (
@@ -963,10 +565,8 @@ CREATE TABLE years (
 );
 
 
-ALTER TABLE years OWNER TO alecgorge;
-
 --
--- Name: years_id_seq; Type: SEQUENCE; Schema: public; Owner: alecgorge
+-- Name: years_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE years_id_seq
@@ -977,283 +577,113 @@ CREATE SEQUENCE years_id_seq
     CACHE 1;
 
 
-ALTER TABLE years_id_seq OWNER TO alecgorge;
-
 --
--- Name: years_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: alecgorge
+-- Name: years_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE years_id_seq OWNED BY years.id;
 
 
-SET search_path = hangfire, pg_catalog;
-
 --
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY counter ALTER COLUMN id SET DEFAULT nextval('counter_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY hash ALTER COLUMN id SET DEFAULT nextval('hash_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY job ALTER COLUMN id SET DEFAULT nextval('job_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY jobparameter ALTER COLUMN id SET DEFAULT nextval('jobparameter_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY jobqueue ALTER COLUMN id SET DEFAULT nextval('jobqueue_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY list ALTER COLUMN id SET DEFAULT nextval('list_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY set ALTER COLUMN id SET DEFAULT nextval('set_id_seq'::regclass);
-
-
---
--- Name: id; Type: DEFAULT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY state ALTER COLUMN id SET DEFAULT nextval('state_id_seq'::regclass);
-
-
-SET search_path = public, pg_catalog;
-
---
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists ALTER COLUMN id SET DEFAULT nextval('artists_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras ALTER COLUMN id SET DEFAULT nextval('eras_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features ALTER COLUMN id SET DEFAULT nextval('featuresets_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows ALTER COLUMN id SET DEFAULT nextval('setlist_show_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs ALTER COLUMN id SET DEFAULT nextval('setlist_song_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows ALTER COLUMN id SET DEFAULT nextval('shows_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews ALTER COLUMN id SET DEFAULT nextval('source_review_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets ALTER COLUMN id SET DEFAULT nextval('source_sets_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks ALTER COLUMN id SET DEFAULT nextval('source_tracks_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays ALTER COLUMN id SET DEFAULT nextval('source_track_play_history_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources ALTER COLUMN id SET DEFAULT nextval('sources_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours ALTER COLUMN id SET DEFAULT nextval('tours_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues ALTER COLUMN id SET DEFAULT nextval('venues_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: alecgorge
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years ALTER COLUMN id SET DEFAULT nextval('years_id_seq'::regclass);
 
 
-SET search_path = hangfire, pg_catalog;
-
 --
--- Name: counter_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY counter
-    ADD CONSTRAINT counter_pkey PRIMARY KEY (id);
-
-
---
--- Name: hash_key_field_key; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY hash
-    ADD CONSTRAINT hash_key_field_key UNIQUE (key, field);
-
-
---
--- Name: hash_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY hash
-    ADD CONSTRAINT hash_pkey PRIMARY KEY (id);
-
-
---
--- Name: job_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY job
-    ADD CONSTRAINT job_pkey PRIMARY KEY (id);
-
-
---
--- Name: jobparameter_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY jobparameter
-    ADD CONSTRAINT jobparameter_pkey PRIMARY KEY (id);
-
-
---
--- Name: jobqueue_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY jobqueue
-    ADD CONSTRAINT jobqueue_pkey PRIMARY KEY (id);
-
-
---
--- Name: list_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY list
-    ADD CONSTRAINT list_pkey PRIMARY KEY (id);
-
-
---
--- Name: lock_resource_key; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY lock
-    ADD CONSTRAINT lock_resource_key UNIQUE (resource);
-
-
---
--- Name: schema_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY schema
-    ADD CONSTRAINT schema_pkey PRIMARY KEY (version);
-
-
---
--- Name: server_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY server
-    ADD CONSTRAINT server_pkey PRIMARY KEY (id);
-
-
---
--- Name: set_key_value_key; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY set
-    ADD CONSTRAINT set_key_value_key UNIQUE (key, value);
-
-
---
--- Name: set_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY set
-    ADD CONSTRAINT set_pkey PRIMARY KEY (id);
-
-
---
--- Name: state_pkey; Type: CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY state
-    ADD CONSTRAINT state_pkey PRIMARY KEY (id);
-
-
-SET search_path = public, pg_catalog;
-
---
--- Name: artists_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: artists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists
@@ -1261,7 +691,7 @@ ALTER TABLE ONLY artists
 
 
 --
--- Name: eras_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: eras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras
@@ -1269,7 +699,7 @@ ALTER TABLE ONLY eras
 
 
 --
--- Name: featuresets_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: featuresets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features
@@ -1277,7 +707,7 @@ ALTER TABLE ONLY features
 
 
 --
--- Name: setlist_show_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_show_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1285,7 +715,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_show_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_show_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1293,7 +723,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_song_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_song_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs
@@ -1301,7 +731,7 @@ ALTER TABLE ONLY setlist_songs
 
 
 --
--- Name: shows_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1309,7 +739,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: source_review_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews
@@ -1317,7 +747,7 @@ ALTER TABLE ONLY source_reviews
 
 
 --
--- Name: source_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets
@@ -1325,7 +755,7 @@ ALTER TABLE ONLY source_sets
 
 
 --
--- Name: source_track_play_history_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_track_play_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays
@@ -1333,7 +763,7 @@ ALTER TABLE ONLY source_tracks_plays
 
 
 --
--- Name: source_tracks_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_tracks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -1341,7 +771,7 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: sources_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1349,7 +779,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: sources_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1357,7 +787,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: tours_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: tours_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours
@@ -1365,7 +795,7 @@ ALTER TABLE ONLY tours
 
 
 --
--- Name: venues_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: venues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues
@@ -1373,137 +803,64 @@ ALTER TABLE ONLY venues
 
 
 --
--- Name: years_pkey; Type: CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: years_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years
     ADD CONSTRAINT years_pkey PRIMARY KEY (id);
 
 
-SET search_path = hangfire, pg_catalog;
-
 --
--- Name: ix_hangfire_counter_expireat; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_counter_expireat ON counter USING btree (expireat);
-
-
---
--- Name: ix_hangfire_counter_key; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_counter_key ON counter USING btree (key);
-
-
---
--- Name: ix_hangfire_job_statename; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_job_statename ON job USING btree (statename);
-
-
---
--- Name: ix_hangfire_jobparameter_jobidandname; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_jobparameter_jobidandname ON jobparameter USING btree (jobid, name);
-
-
---
--- Name: ix_hangfire_jobqueue_jobidandqueue; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_jobqueue_jobidandqueue ON jobqueue USING btree (jobid, queue);
-
-
---
--- Name: ix_hangfire_jobqueue_queueandfetchedat; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_jobqueue_queueandfetchedat ON jobqueue USING btree (queue, fetchedat);
-
-
---
--- Name: ix_hangfire_state_jobid; Type: INDEX; Schema: hangfire; Owner: alecgorge
---
-
-CREATE INDEX ix_hangfire_state_jobid ON state USING btree (jobid);
-
-
-SET search_path = public, pg_catalog;
-
---
--- Name: setlist_songs_artist_id_slug; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: setlist_songs_artist_id_slug; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX setlist_songs_artist_id_slug ON setlist_songs USING btree (artist_id, slug);
 
 
 --
--- Name: shows_artist_id_display_date_key; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: shows_artist_id_display_date_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX shows_artist_id_display_date_key ON shows USING btree (artist_id, display_date);
 
 
 --
--- Name: tour_artist_id_tour_slug; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: tour_artist_id_tour_slug; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX tour_artist_id_tour_slug ON tours USING btree (artist_id, slug);
 
 
 --
--- Name: venues_artist; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: venues_artist; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX venues_artist ON venues USING btree (artist_id);
 
 
 --
--- Name: venues_upstream_identifier_key; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: venues_upstream_identifier_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX venues_upstream_identifier_key ON venues USING btree (artist_id, upstream_identifier) WHERE (artist_id IS NOT NULL);
 
 
 --
--- Name: venues_upstream_identifier_null_artist_key; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: venues_upstream_identifier_null_artist_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX venues_upstream_identifier_null_artist_key ON venues USING btree (upstream_identifier) WHERE (artist_id IS NULL);
 
 
 --
--- Name: years_year; Type: INDEX; Schema: public; Owner: alecgorge
+-- Name: years_year; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX years_year ON years USING btree (artist_id, year);
 
 
-SET search_path = hangfire, pg_catalog;
-
 --
--- Name: jobparameter_jobid_fkey; Type: FK CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY jobparameter
-    ADD CONSTRAINT jobparameter_jobid_fkey FOREIGN KEY (jobid) REFERENCES job(id) ON UPDATE CASCADE ON DELETE CASCADE;
-
-
---
--- Name: state_jobid_fkey; Type: FK CONSTRAINT; Schema: hangfire; Owner: alecgorge
---
-
-ALTER TABLE ONLY state
-    ADD CONSTRAINT state_jobid_fkey FOREIGN KEY (jobid) REFERENCES job(id) ON UPDATE CASCADE ON DELETE CASCADE;
-
-
-SET search_path = public, pg_catalog;
-
---
--- Name: eras_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: eras_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras
@@ -1511,7 +868,7 @@ ALTER TABLE ONLY eras
 
 
 --
--- Name: featuresets_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: featuresets_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features
@@ -1519,7 +876,7 @@ ALTER TABLE ONLY features
 
 
 --
--- Name: setlist_show_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_show_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1527,7 +884,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_show_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_show_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1535,7 +892,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1543,7 +900,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -1551,7 +908,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_song_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_song_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs
@@ -1559,7 +916,7 @@ ALTER TABLE ONLY setlist_songs
 
 
 --
--- Name: setlist_song_plays_played_setlist_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_song_plays_played_setlist_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs_plays
@@ -1567,7 +924,7 @@ ALTER TABLE ONLY setlist_songs_plays
 
 
 --
--- Name: setlist_song_plays_played_setlist_song_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: setlist_song_plays_played_setlist_song_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs_plays
@@ -1575,7 +932,7 @@ ALTER TABLE ONLY setlist_songs_plays
 
 
 --
--- Name: shows_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1583,7 +940,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1591,7 +948,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1599,7 +956,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1607,7 +964,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_year_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: shows_year_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1615,7 +972,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: source_review_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_review_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews
@@ -1623,7 +980,7 @@ ALTER TABLE ONLY source_reviews
 
 
 --
--- Name: source_sets_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_sets_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets
@@ -1631,7 +988,7 @@ ALTER TABLE ONLY source_sets
 
 
 --
--- Name: source_tracks_plays_source_track_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_tracks_plays_source_track_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays
@@ -1639,7 +996,7 @@ ALTER TABLE ONLY source_tracks_plays
 
 
 --
--- Name: source_tracks_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_tracks_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -1647,7 +1004,7 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: source_tracks_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: source_tracks_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -1655,7 +1012,7 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1663,7 +1020,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: sources_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1671,7 +1028,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: sources_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1679,7 +1036,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: tours_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: tours_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours
@@ -1687,7 +1044,7 @@ ALTER TABLE ONLY tours
 
 
 --
--- Name: venues_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: venues_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues
@@ -1695,21 +1052,11 @@ ALTER TABLE ONLY venues
 
 
 --
--- Name: years_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: alecgorge
+-- Name: years_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years
     ADD CONSTRAINT years_artist_id_fkey FOREIGN KEY (artist_id) REFERENCES artists(id) ON UPDATE CASCADE ON DELETE CASCADE;
-
-
---
--- Name: public; Type: ACL; Schema: -; Owner: alecgorge
---
-
-REVOKE ALL ON SCHEMA public FROM PUBLIC;
-REVOKE ALL ON SCHEMA public FROM alecgorge;
-GRANT ALL ON SCHEMA public TO alecgorge;
-GRANT ALL ON SCHEMA public TO PUBLIC;
 
 
 --
