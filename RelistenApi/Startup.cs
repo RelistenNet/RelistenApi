@@ -53,7 +53,7 @@ namespace Relisten
 				});
 			});
 
-			var db = Configuration["POSTGRES_URL_INT"];
+			var db = Configuration["POSTGRESQL_URL_INT"];
 			Console.WriteLine("Attmepting to connect to {0}", db);
 			DbService.SetConnectionURL(db);
 

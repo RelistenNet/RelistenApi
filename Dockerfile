@@ -40,9 +40,12 @@ RUN mkdir warmup \
 
 WORKDIR /dotnetapp
 
-COPY RelistenApi/ .
+COPY RelistenApi/RelistenApi.csproj .
 
 RUN dotnet restore
+
+COPY RelistenApi/ .
+
 RUN dotnet publish /p:OutDir=out;Configuration=Release
 
 EXPOSE 3823/tcp
