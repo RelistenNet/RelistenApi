@@ -10,7 +10,7 @@ using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Auth;
-using Swashbuckle.Swagger.Model;
+using Swashbuckle.AspNetCore.Swagger;
 
 namespace Relisten
 {
@@ -45,8 +45,7 @@ namespace Relisten
 
 			services.AddSwaggerGen(c =>
 			{
-				c.SingleApiVersion(new Info
-				{
+				c.SwaggerDoc("v2", new Info {
 					Version = "v2",
 					Title = "Relisten API",
 					Description = "Music",
@@ -105,12 +104,11 @@ namespace Relisten
 				Authorization = new[] { new HangfireBasicAuthFilter(Configuration["ADMIN:USERNAME"], Configuration["ADMIN:PASSWORD"]) }
 			});
 
-			app.UseSwagger((httpRequest, swaggerDoc) =>
-			{
-				swaggerDoc.Host = httpRequest.Host.Value;
-			});
+			app.UseSwagger();
 
-			app.UseSwaggerUi("swagger/ui", "/swagger/v2/swagger.json");
+			app.UseSwaggerUi(ctx => {
+				ctx.SwaggerEndpoint("swagger/ui", "/swagger/v2/swagger.json");
+			});
 		}
 	}
 }
