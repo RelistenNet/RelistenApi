@@ -17,7 +17,7 @@ namespace Relisten.Vendor
 
         public static string EmptyIfNull(this string source)
         {
-            return source == null ? "" : source;
+            return source ?? "";
         }
     }
 }

@@ -12,6 +12,9 @@ using Relisten.Data;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using Hangfire.Server;
+using Hangfire.Console;
+using Hangfire.Console.Progress;
 
 namespace Relisten.Import
 {
@@ -51,7 +54,7 @@ namespace Relisten.Import
              | ImportableData.Venues;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
         {
             int page = 1;
             Tuple<bool, ImportStats> result = null;
@@ -59,9 +62,11 @@ namespace Relisten.Import
 
             await PreloadData(artist);
 
+			var prog = ctx.WriteProgressBar();
+
             do
             {
-                result = await ProcessSetlistPage(artist, await this.http.GetAsync(SetlistUrlForArtist(artist, page)));
+                result = await ProcessSetlistPage(artist, await this.http.GetAsync(SetlistUrlForArtist(artist, page)), ctx, prog);
 
                 // max 10 per second
                 await Task.Delay(100);
@@ -270,7 +275,7 @@ namespace Relisten.Import
             return stats;
         }
 
-        async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(Artist artist, HttpResponseMessage res)
+		async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(Artist artist, HttpResponseMessage res, PerformContext ctx, IProgressBar prog)
         {
             var body = await res.Content.ReadAsStringAsync();
             Relisten.Vendor.SetlistFm.SetlistsRootObject root = null;
@@ -285,12 +290,13 @@ namespace Relisten.Import
             }
             catch (JsonReaderException e)
             {
-                _log.LogError("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
+				ctx.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
                 throw e;
             }
 
             var stats = new ImportStats();
 
+			var count = 1;
             foreach (var setlist in root.setlists.setlist)
             {
                 if (setlist.sets.set.Count > 0)
@@ -298,24 +304,28 @@ namespace Relisten.Import
                     Stopwatch s = new Stopwatch();
                     s.Start();
 
-                    _log.LogDebug("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
+					ctx.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
 
                     try
                     {
                         var thisStats = await ProcessSetlist(artist, setlist);
 
                         s.Stop();
-                        _log.LogDebug("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
+						ctx.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
 
                         stats += thisStats;
                     }
                     catch (Exception e)
                     {
                         s.Stop();
-                        _log.LogDebug("...failed in {0}! Stats: {1}", s.Elapsed, e.Message);
+						ctx.WriteLine("...failed in {0}! Stats: {1}", s.Elapsed, e.Message);
 
                         throw e;
                     }
+
+					prog.SetValue(((100.0 * (root.setlists.page - 1) * root.setlists.itemsPerPage) + count * 1.0) / root.setlists.total);
+
+					count++;
                 }
             }
 

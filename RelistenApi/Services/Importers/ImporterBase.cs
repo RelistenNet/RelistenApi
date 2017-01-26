@@ -12,6 +12,8 @@ using Relisten.Data;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
+using Hangfire.Server;
+using Hangfire.Console;
 
 namespace Relisten.Import
 {
@@ -66,26 +68,29 @@ namespace Relisten.Import
         )
         {
 			importers = new List<ImporterBase>(new ImporterBase[] {
-				//_setlistFm,
-				//_archiveOrg,
-				// _panic,
-				// _jerry,
+				_setlistFm,
+				_archiveOrg,
+				_panic,
+				//_jerry,
 				_phishin,
 				_phishnet
 			});
         }
 
-        public async Task<ImportStats> Import(Artist artist)
+		public async Task<ImportStats> Import(Artist artist, PerformContext ctx)
         {
 			var stats = new ImportStats();
 
-			foreach (var item in importers)
+			var validImporters = importers.Where(i => i.ImportableDataForArtist(artist) != ImportableData.Nothing).ToList();
+
+			ctx.WriteLine($"Found {validImporters.Count} valid importers.");
+			var prog = ctx.WriteProgressBar();
+
+			await validImporters.AsyncForEachWithProgress(prog, async item =>
 			{
-				if(item.ImportableDataForArtist(artist) != ImportableData.Nothing)
-				{
-					stats += await item.ImportDataForArtist(artist);
-				}
-			}
+				ctx.WriteLine($"Importing with {item.GetType()}");
+				stats += await item.ImportDataForArtist(artist, ctx);
+			});
 
 			return stats;
         }
@@ -103,7 +108,7 @@ namespace Relisten.Import
         }
 
         public abstract ImportableData ImportableDataForArtist(Artist artist);
-        public abstract Task<ImportStats> ImportDataForArtist(Artist artist);
+        public abstract Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx);
 
         public void Dispose()
         {
@@ -466,10 +471,5 @@ WHERE
             await db.WithConnection(con => con.ExecuteAsync(sql, artist));
             return ImportStats.None;
         }
-    }
-
-    public class ArchiveOrgSetlistFmImporter
-    {
-
     }
 }

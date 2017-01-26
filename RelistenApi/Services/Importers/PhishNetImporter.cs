@@ -7,6 +7,8 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Hangfire.Server;
+using Hangfire.Console;
 
 namespace Relisten.Import
 {
@@ -40,14 +42,24 @@ namespace Relisten.Import
              ;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
         {
             var stats = new ImportStats();
 
-            foreach (var dbSource in await _sourceService.AllForArtist(artist))
-            {
-                stats += await ProcessSource(artist, dbSource);
-            }
+			var shows = (await _sourceService.AllForArtist(artist)).ToList();
+
+			var prog = ctx.WriteProgressBar();
+
+			ctx.WriteLine($"Processing {shows.Count} shows");
+
+			await shows.OrderBy(s => s.display_date)
+			           .ToList()
+			           .AsyncForEachWithProgress(prog, async dbSource =>
+			{
+				stats += await ProcessSource(artist, dbSource, ctx);
+			});
+
+			ctx.WriteLine("Rebuilding...");
 
             await RebuildShows(artist);
             await RebuildYears(artist);
@@ -133,10 +145,10 @@ namespace Relisten.Import
         private static Regex PhishNetRatingScraper = new Regex(@"Overall: (?<AverageRating>[\d.]+)\/5 \((?<VotesCast>\d+) ratings\)");
         private static Regex PhishNetReviewCountScraper = new Regex(@"class='tpc-comment review'");
 
-        private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource)
+		private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetUrlForSource(dbSource);
-            _log.LogInformation($"Requesting {url}");
+            ctx.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 
@@ -150,10 +162,10 @@ namespace Relisten.Import
             };
         }
 
-        private async Task<PhishNetApiSetlist> GetPhishNetApiSetlist(Source dbSource)
+        private async Task<PhishNetApiSetlist> GetPhishNetApiSetlist(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetApiSetlistUrlForSource(dbSource);
-            _log.LogInformation($"Requesting {url}");
+            ctx.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 
@@ -169,10 +181,10 @@ namespace Relisten.Import
                 FirstOrDefault();
         }
 
-        private async Task<IEnumerable<PhishNetApiReview>> GetPhishNetApiReviews(Source dbSource)
+        private async Task<IEnumerable<PhishNetApiReview>> GetPhishNetApiReviews(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetApiReviewsUrlForSource(dbSource);
-            _log.LogInformation($"Requesting {url}");
+            ctx.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 
@@ -185,11 +197,11 @@ namespace Relisten.Import
             return JsonConvert.DeserializeObject<IEnumerable<PhishNetApiReview>>(page);
         }
 
-        private async Task<ImportStats> ProcessSource(Artist artist, Source dbSource)
+        private async Task<ImportStats> ProcessSource(Artist artist, Source dbSource, PerformContext ctx)
         {
             var stats = new ImportStats();
 
-            var ratings = await ScrapePhishNetForSource(dbSource);
+            var ratings = await ScrapePhishNetForSource(dbSource, ctx);
             var dirty = false;
 
             if (dbSource.num_ratings != ratings.RatingVotesCast)
@@ -202,8 +214,8 @@ namespace Relisten.Import
 
             if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
             {
-                var reviewsTask = GetPhishNetApiReviews(dbSource);
-                var setlistTask = GetPhishNetApiSetlist(dbSource);
+                var reviewsTask = GetPhishNetApiReviews(dbSource, ctx);
+                var setlistTask = GetPhishNetApiSetlist(dbSource, ctx);
 
                 await Task.WhenAll(reviewsTask, setlistTask);
 

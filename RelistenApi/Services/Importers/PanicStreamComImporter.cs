@@ -16,6 +16,8 @@ using System.IO;
 using HtmlAgilityPack;
 using System.Globalization;
 using System.Net;
+using Hangfire.Server;
+using Hangfire.Console;
 
 namespace Relisten.Import
 {
@@ -70,10 +72,10 @@ namespace Relisten.Import
         private static Regex Mp3FileFinder = new Regex(@" href=""(.*\.(?:mp3|m4a|MP3|M4A))""");
         private static Regex TxtFileFinder = new Regex(@" href=""(.*\.txt)""");
 
-        private async Task<string> FetchUrl(string url)
+		private async Task<string> FetchUrl(string url, PerformContext ctx)
         {
             url = url.Replace("&amp;", "&");
-            _log.LogDebug("Fetching URL: " + url);
+			ctx.WriteLine("Fetching URL: " + url);
             var page = await http.GetAsync(url);
 
             if (page.StatusCode != HttpStatusCode.OK)
@@ -92,19 +94,25 @@ namespace Relisten.Import
         {
             return "http://www.panicstream.com/streams/wsp/" + panicDate + "/";
         }
-        private static string PanicShowFileUrl(string panicDate, string fileName)
+		private static string PanicShowFileUrl(string panicDate, string fileName)
         {
             return PanicShowUrl(panicDate) + fileName;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
         {
             var stats = new ImportStats();
 
             await PreloadData(artist);
 
-            var contents = await FetchUrl(PanicIndexUrl());
+            var contents = await FetchUrl(PanicIndexUrl(), ctx);
 
+			var matches = ShowDirMatcher.Matches(contents);
+
+			ctx.WriteLine($"Check {matches.Count} subdirectories");
+			var prog = ctx.WriteProgressBar();
+
+			var counter = 1;
             foreach (Match match in ShowDirMatcher.Matches(contents))
             {
                 var panicDate = match.Groups[1].Value;
@@ -113,7 +121,11 @@ namespace Relisten.Import
                 // 27-Jul-2016 19:14
                 var panicUpdatedAt = DateTime.ParseExact(match.Groups[3].Value.Trim(), "dd-MMM-yyyy HH:mm", CultureInfo.InvariantCulture);
 
-                await ProcessShow(stats, artist, panicDate, panicRecLetter, panicUpdatedAt);
+                await ProcessShow(stats, artist, panicDate, panicRecLetter, panicUpdatedAt, ctx);
+
+				prog.SetValue(100.0 * counter / matches.Count);
+
+				counter++;
             }
 
             await RebuildShows(artist);
@@ -131,7 +143,7 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-        private async Task ProcessShow(ImportStats stats, Artist artist, string panicDate, string panicRecLetter, DateTime panicUpdatedAt)
+		private async Task ProcessShow(ImportStats stats, Artist artist, string panicDate, string panicRecLetter, DateTime panicUpdatedAt, PerformContext ctx)
         {
             var upstreamId = panicDate + panicRecLetter;
             var dbSource = existingSources.GetValue(upstreamId);
@@ -141,7 +153,7 @@ namespace Relisten.Import
                 return;
             }
 
-            var showDir = await FetchUrl(PanicShowUrl(upstreamId));
+            var showDir = await FetchUrl(PanicShowUrl(upstreamId), ctx);
 
             if(showDir.Contains("-   \n<hr></pre>") || upstreamId == "1995_06_02" || upstreamId == "2010_04_30")
             {
@@ -162,7 +174,7 @@ namespace Relisten.Import
                 throw new Exception("No mp3's or m4a's for " + upstreamId);
             }
 
-            var desc = txt != null ? await FetchUrl(PanicShowFileUrl(upstreamId, txt)) : "";
+            var desc = txt != null ? await FetchUrl(PanicShowFileUrl(upstreamId, txt), ctx) : "";
 
             dbSource = await _sourceService.Save(new Source
             {

@@ -1,6 +1,8 @@
 ﻿using System;
 using Hangfire;
+using Hangfire.Console;
 using Hangfire.PostgreSql;
+using Hangfire.RecurringJobExtensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -10,6 +12,7 @@ using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Auth;
+using StackExchange.Redis;
 using Swashbuckle.AspNetCore.Swagger;
 
 namespace Relisten
@@ -48,20 +51,26 @@ namespace Relisten
 				c.SwaggerDoc("v2", new Info {
 					Version = "v2",
 					Title = "Relisten API",
-					Description = "Music",
-					TermsOfService = "TODO"
+					Contact = new Contact {
+						Name = "Alec Gorge",
+						Url = "https://twitter.com/alecgorge"
+					},
+					License = new License {
+						Name = "MIT",
+						Url = "https://opensource.org/licenses/MIT"
+					}
 				});
 			});
 
-			var db = Configuration["POSTGRESQL_URL_INT"];
-			Console.WriteLine("Attmepting to connect to {0}", db);
-			DbService.SetConnectionURL(db);
-
 			// use the static property because it is formatted correctly for NpgSQL
-			services.AddHangfire(hangfire => hangfire.UsePostgreSqlStorage(DbService.ConnStr));
+			services.AddHangfire(hangfire => {
+				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"]));
+				hangfire.UseConsole();
+				hangfire.UseRecurringJob(typeof(ScheduledService));
+			});
 
 			services.AddSingleton<RedisService>(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
-			services.AddScoped<DbService, DbService>();
+			services.AddSingleton<DbService>(new DbService(Configuration["POSTGRESQL_URL_INT"]));
 
 			services.AddScoped<SetlistShowService, SetlistShowService>();
 			services.AddScoped<VenueService, VenueService>();
@@ -104,10 +113,13 @@ namespace Relisten
 				Authorization = new[] { new HangfireBasicAuthFilter(Configuration["ADMIN:USERNAME"], Configuration["ADMIN:PASSWORD"]) }
 			});
 
-			app.UseSwagger();
+			app.UseSwagger(c => {
+				c.RouteTemplate = "api-docs/{documentName}/swagger.json";
+			});
 
 			app.UseSwaggerUi(ctx => {
-				ctx.SwaggerEndpoint("swagger/ui", "/swagger/v2/swagger.json");
+				ctx.RoutePrefix = "api-docs";
+				ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
 			});
 		}
 	}

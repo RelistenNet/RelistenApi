@@ -27,6 +27,7 @@ namespace Relisten.Controllers
             _importer = importer;
         }
 
+		/*
         [HttpGet("{idOrSlug}")]
         public async Task<IActionResult> Get(string idOrSlug)
         {
@@ -38,6 +39,7 @@ namespace Relisten.Controllers
 
             return JsonNotFound(false);
         }
+        */
 
         // private void update()
         // {

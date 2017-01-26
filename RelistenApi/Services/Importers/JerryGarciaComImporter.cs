@@ -14,6 +14,8 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.IO;
 using HtmlAgilityPack;
+using Hangfire.Server;
+using Hangfire.Console;
 
 namespace Relisten.Import
 {
@@ -63,39 +65,44 @@ namespace Relisten.Import
             public string Identifier { get; set; }
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist)
-        {
-            var stats = new ImportStats();
+		public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+		{
+			var stats = new ImportStats();
 
-            await PreloadData(artist);
+			await PreloadData(artist);
 
-            var files = Directory.EnumerateFiles(ShowFilesDirectory)
-                .Where(f => f.EndsWith(".html"))
-                .Select(f =>
-                {
-                    var fileName = Path.GetFileName(f);
-                    return new FileMetaObject
-                    {
-                        DisplayDate = fileName.Substring(0, 10),
-                        Date = DateTime.Parse(fileName.Substring(0, 10)),
-                        FilePath = f,
-                        Identifier = fileName.Remove(fileName.LastIndexOf(".html"))
-                    };
-                })
-                ;
+			var files = Directory.EnumerateFiles(ShowFilesDirectory)
+				.Where(f => f.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+				.Select(f =>
+				{
+					var fileName = Path.GetFileName(f);
+					return new FileMetaObject
+					{
+						DisplayDate = fileName.Substring(0, 10),
+						Date = DateTime.Parse(fileName.Substring(0, 10)),
+						FilePath = f,
+						Identifier = fileName.Remove(fileName.LastIndexOf(".html", StringComparison.OrdinalIgnoreCase))
+					};
+				})
+								 .ToList()
+				;
 
-            foreach (var f in files)
-            {
-                await ProcessPage(stats, artist, f, File.ReadAllText(f.FilePath));
-            }
+			ctx.WriteLine($"Checking {files.Count} html files");
+			var prog = ctx.WriteProgressBar();
 
-            if (artist.features.tours)
-            {
-                await UpdateTourStartEndDates(artist);
-            }
 
-            return stats;
-        }
+			await files.AsyncForEachWithProgress(prog, async f => 
+			{
+				await ProcessPage(stats, artist, f, File.ReadAllText(f.FilePath), ctx);
+			});
+
+			if (artist.features.tours)
+			{
+				await UpdateTourStartEndDates(artist);
+			}
+
+			return stats;
+		}
 
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
@@ -124,7 +131,7 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-        private async Task ProcessPage(ImportStats stats, Artist artist, FileMetaObject meta, string pageContents)
+		private async Task ProcessPage(ImportStats stats, Artist artist, FileMetaObject meta, string pageContents, PerformContext ctx)
         {
             var dbShow = existingSetlistShows.GetValue(meta.Identifier);
 

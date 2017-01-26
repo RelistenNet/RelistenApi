@@ -13,6 +13,8 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Globalization;
+using Hangfire.Server;
+using Hangfire.Console;
 
 namespace Relisten.Import
 {
@@ -27,7 +29,6 @@ namespace Relisten.Import
         protected SourceTrackService _sourceTrackService { get; set; }
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
-        protected ILogger<ArchiveOrgImporter> _log { get; set; }
 
         public ArchiveOrgImporter(
             DbService db,
@@ -36,15 +37,14 @@ namespace Relisten.Import
             SourceService sourceService,
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
-            SourceTrackService sourceTrackService,
-            ILogger<ArchiveOrgImporter> log
+            SourceTrackService sourceTrackService
         ) : base(db)
         {
             this._sourceService = sourceService;
             this._venueService = venueService;
             this._tourService = tourService;
-            this._log = log;
-            _sourceReviewService = sourceReviewService;
+            
+			_sourceReviewService = sourceReviewService;
             _sourceTrackService = sourceTrackService;
             _sourceSetService = sourceSetService;
         }
@@ -63,10 +63,10 @@ namespace Relisten.Import
             return r;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
         {
             await PreloadData(artist);
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)));
+            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)), ctx);
         }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
@@ -80,7 +80,7 @@ namespace Relisten.Import
             return $"http://archive.org/metadata/{identifier}";
         }
 
-        private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res)
+		private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -90,23 +90,28 @@ namespace Relisten.Import
                 new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter()
             );
 
-            foreach (var doc in root.response.docs)
-            {
-                //                _log.LogDebug("Checking {0}", doc.identifier);
-                var dbShow = existingSources.GetValue(doc.identifier);
-                if (dbShow == null
-                || doc._iguana_updated_at > dbShow.updated_at)
-                {
-                    _log.LogDebug("Pulling https://archive.org/metadata/{0}", doc.identifier);
-                    var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
-                    var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                    var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
-                        detailsJson,
-                        new Vendor.ArchiveOrg.TolerantStringConverter()
-                    );
-                    stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot);
-                }
-            }
+			ctx.WriteLine($"Checking {root.response.docs.Count} archive.org results");
+
+			var prog = ctx.WriteProgressBar();
+
+			await root.response.docs.AsyncForEachWithProgress(prog, async doc =>
+			{
+				var dbShow = existingSources.GetValue(doc.identifier);
+				if (dbShow == null
+				|| doc._iguana_updated_at > dbShow.updated_at)
+				{
+					ctx.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
+
+					var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
+					var detailsJson = await detailRes.Content.ReadAsStringAsync();
+					var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
+						detailsJson,
+						new Vendor.ArchiveOrg.TolerantStringConverter()
+					);
+
+					stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, ctx);
+				}
+			});
 
             // update shows
             await RebuildShows(artist);
@@ -121,7 +126,8 @@ namespace Relisten.Import
             Artist artist,
             Source dbSource,
             Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
-            Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot
+            Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
+			PerformContext ctx
         )
         {
             var stats = new ImportStats();
@@ -135,7 +141,7 @@ namespace Relisten.Import
 
             if (mp3Files.Count() == 0)
             {
-                _log.LogDebug("No VBR MP3 files found for {0}", searchDoc.identifier);
+				ctx.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
 
                 return stats;
             }

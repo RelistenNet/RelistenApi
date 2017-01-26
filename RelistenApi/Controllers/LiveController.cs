@@ -26,10 +26,10 @@ namespace Relisten.Controllers
         }
 
 
-        [HttpPostAttribute("live/play")]
+        [HttpPost("live/play")]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> PlayedTrack(int track_id)
+		public async Task<IActionResult> PlayedTrack([FromQuery] int track_id)
         {
             var track = await _sourceTrackService.ForId(track_id);
 

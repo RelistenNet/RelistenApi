@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Logging;
 
@@ -8,21 +9,19 @@ namespace Relisten
 {
     public class DbService
     {
-		public static string ConnStr { get; set; }
-        public static void SetConnectionURL(string url)
+		public string ConnStr { get; set; }
+
+        public DbService(string url)
         {
-            var uri = new Uri(url);
-            var parts = uri.UserInfo.Split(':');
-            ConnStr = $"Host={uri.Host};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
+			Console.WriteLine("Attempting to connect to {0}", url);
 
-            Console.WriteLine("DB Connection String: " + ConnStr);
+			var uri = new Uri(url);
+			var parts = uri.UserInfo.Split(':');
+			ConnStr = $"Host={uri.Host};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
 
-            NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true, true);
-            // NpgsqlLogManager.IsParameterLoggingEnabled = true;
-        }
+			Console.WriteLine("DB Connection String: " + ConnStr);
 
-        public DbService()
-        {
+			NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Info, true, true);
         }
 
         public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData)
