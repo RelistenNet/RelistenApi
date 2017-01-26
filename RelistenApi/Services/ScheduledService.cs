@@ -62,7 +62,7 @@ namespace Relisten
 			ctx.WriteLine($"--> Imported {artist.name}! " + artistStats);
 		}
 	
-		[RecurringJob("0 */3 * * *")]
+		[RecurringJob("0 */5 * * *")]
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshWSP(PerformContext ctx)
 		{
