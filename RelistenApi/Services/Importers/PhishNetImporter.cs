@@ -46,18 +46,16 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-			var shows = (await _sourceService.AllForArtist(artist)).ToList();
+			var shows = (await _sourceService.AllForArtist(artist)).OrderBy(s => s.display_date).ToList();
 
 			var prog = ctx.WriteProgressBar();
 
 			ctx.WriteLine($"Processing {shows.Count} shows");
 
-			await shows.OrderBy(s => s.display_date)
-			           .ToList()
-			           .AsyncForEachWithProgress(prog, async dbSource =>
+			await shows.ForEachAsync(async dbSource =>
 			{
 				stats += await ProcessSource(artist, dbSource, ctx);
-			});
+			}, prog, 10);
 
 			ctx.WriteLine("Rebuilding...");
 

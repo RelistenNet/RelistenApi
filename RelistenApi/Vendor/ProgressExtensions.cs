@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Hangfire.Console.Progress;
 
@@ -34,5 +36,27 @@ namespace Relisten
 
 			return list;
 		}
-}
+
+		// http://stackoverflow.com/a/27325206/132509
+		public static async Task ForEachAsync<TSource>(this IList<TSource> source, Func<TSource, Task> selector, IProgressBar bar, int maxDegreesOfParallelism)
+		{
+			var activeTasks = new HashSet<Task>();
+			var count = 1;
+			foreach (var item in source)
+			{
+				activeTasks.Add(selector(item));
+				if (activeTasks.Count >= maxDegreesOfParallelism)
+				{
+					var completed = await Task.WhenAny(activeTasks);
+
+					count++;
+					bar.SetValue(100.0 * count / source.Count);
+
+					activeTasks.Remove(completed);
+				}
+			}
+
+			await Task.WhenAll(activeTasks);
+		}
+	}
 }
