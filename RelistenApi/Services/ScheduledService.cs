@@ -25,7 +25,7 @@ namespace Relisten
 		}
 
 		// run every day at 3AM
-		[RecurringJob("0 3 * * *")]
+		[RecurringJob("0 3 * * *", Enabled = false)]
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshAllArtists(PerformContext context)
 		{
@@ -51,7 +51,7 @@ namespace Relisten
 			context.WriteLine("--> Imported all artists! " + stats);
 		}
 
-		[RecurringJob("0 6,9,12,15,18 * * *")]
+		[RecurringJob("0 6,9,12,15,18 * * *", Enabled = false)]
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshPhish(PerformContext ctx)
 		{
@@ -62,7 +62,7 @@ namespace Relisten
 			ctx.WriteLine($"--> Imported {artist.name}! " + artistStats);
 		}
 	
-		[RecurringJob("0 */5 * * *")]
+		[RecurringJob("0 */5 * * *", Enabled = false)]
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshWSP(PerformContext ctx)
 		{
