@@ -14,6 +14,8 @@ namespace Relisten
 			{
 				await action(item);
 				bar.SetValue(100.0 * count / list.Count);
+
+				count++;
 			}
 
 			return list;
@@ -26,6 +28,8 @@ namespace Relisten
 			{
 				action(item);
 				bar.SetValue(100.0 * count / list.Count);
+
+				count++;
 			}
 
 			return list;
