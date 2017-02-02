@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using Hangfire.Server;
 using Hangfire.Console;
+using System.Threading;
 
 namespace Relisten.Import
 {
@@ -104,7 +105,7 @@ namespace Relisten.Import
         public ImporterBase(DbService db)
         {
             this.db = db;
-            this.http = new HttpClient();
+			this.http = new HttpClient();
         }
 
         public abstract ImportableData ImportableDataForArtist(Artist artist);

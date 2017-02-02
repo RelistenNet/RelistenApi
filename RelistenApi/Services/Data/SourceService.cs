@@ -8,33 +8,33 @@ using System;
 
 namespace Relisten.Data
 {
-    public class EntityOneToManyMapper<TP, TC, TPk>
-    {
-        private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
+	public class EntityOneToManyMapper<TP, TC, TPk>
+	{
+		private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
 
-        public Action<TP, TC> AddChildAction { get; set; }
+		public Action<TP, TC> AddChildAction { get; set; }
 
-        public Func<TP, TPk> ParentKey { get; set; }
+		public Func<TP, TPk> ParentKey { get; set; }
 
 
-        public virtual TP Map(TP parent, TC child)
-        {
-            TP entity;
-            var found = true;
-            var primaryKey = ParentKey(parent);
+		public virtual TP Map(TP parent, TC child)
+		{
+			TP entity;
+			var found = true;
+			var primaryKey = ParentKey(parent);
 
-            if (!_lookup.TryGetValue(primaryKey, out entity))
-            {
-                _lookup.Add(primaryKey, parent);
-                entity = parent;
-                found = false;
-            }
+			if (!_lookup.TryGetValue(primaryKey, out entity))
+			{
+				_lookup.Add(primaryKey, parent);
+				entity = parent;
+				found = false;
+			}
 
-            AddChildAction(entity, child);
+			AddChildAction(entity, child);
 
-            return !found ? entity : default(TP);
-        }
-    }
+			return !found ? entity : default(TP);
+		}
+	}
 
     public class SourceService : RelistenDataServiceBase
     {

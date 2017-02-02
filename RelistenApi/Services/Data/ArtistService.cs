@@ -59,7 +59,7 @@ namespace Relisten.Data
 
 		public async Task<IEnumerable<Artist>> All()
 		{
-			return await db.WithConnection(con => con.QueryAsync(@"
+			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
                     a.*, f.*
                 FROM
@@ -67,7 +67,7 @@ namespace Relisten.Data
                     LEFT JOIN features f on f.artist_id = a.id
 				ORDER BY
 					a.featured, a.name
-            ", joiner));
+            ", joiner)));
 		}
 
 		public async Task<Artist> FindArtistById(int id)
@@ -82,7 +82,62 @@ namespace Relisten.Data
 					a.id = @id
             ", joiner, new { id }));
 
-			return a.SingleOrDefault();
+			return await FillInUpstreamSources(a.SingleOrDefault());
+		}
+
+		async Task<T> FillInUpstreamSources<T>(T art) where T : Artist
+		{
+			if (art == null)
+			{
+				return null;
+			}
+
+			art.upstream_sources = await db.WithConnection(con => con.QueryAsync<ArtistUpstreamSource>(@"
+				SELECT
+					aus.*
+				FROM
+					artists_upstream_sources aus
+				WHERE
+					aus.artist_id = @artistId
+			", new { artistId = art.id }));
+
+			return art;
+		}
+
+		async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T> art) where T : Artist
+		{
+			if (art == null)
+			{
+				return null;
+			}
+
+			var srcs = await db.WithConnection(con => con.QueryAsync<ArtistUpstreamSource>(@"
+				SELECT
+					aus.*
+				FROM
+					artists_upstream_sources aus
+				WHERE
+					aus.artist_id IN @artistIds
+			", new { artistIds = art.Select(a => a.id) }));
+
+			var gsrcs = srcs
+				.GroupBy(src => src.artist_id)
+				.ToDictionary(g => g.Key, g => g)
+				;
+
+			foreach(var a in art)
+			{
+				IEnumerable<ArtistUpstreamSource> s;
+
+				if(!gsrcs.TryGetValue(a.id, out s))
+				{
+					s = new List<ArtistUpstreamSource>();
+				}
+
+				a.upstream_sources = s;
+			}
+
+			return art;
 		}
 
 		public async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
@@ -92,11 +147,12 @@ namespace Relisten.Data
 
 			var baseSql = @"
                 SELECT
-                    a.*, f.*
+                    a.*, f.*, au.*
                 FROM
                     artists a
 
-                    LEFT JOIN features f on f.artist_id = a.id 
+                    LEFT JOIN features f on f.artist_id = a.id
+					LEFT JOIN artists_upstream_sources au ON au.artist_id = a.id
                 WHERE
             ";
 
@@ -110,7 +166,7 @@ namespace Relisten.Data
 						new { id = id }
 					);
 
-					return artists.FirstOrDefault();
+					return await FillInUpstreamSources(artists.FirstOrDefault());
 				});
 			}
 			else
@@ -123,7 +179,7 @@ namespace Relisten.Data
 						new { slug = idOrSlug }
 					);
 
-					return artists.FirstOrDefault();
+					return await FillInUpstreamSources(artists.FirstOrDefault());
 				});
 			}
 
