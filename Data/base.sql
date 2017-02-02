@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.5.3
+-- Dumped from database version 9.4.10
 -- Dumped by pg_dump version 9.5.3
 
 SET statement_timeout = 0;
@@ -11,7 +11,7 @@ SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET client_min_messages = warning;
--- SET row_security = off;
+SET row_security = off;
 
 --
 -- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
@@ -70,13 +70,24 @@ ALTER SEQUENCE artists_id_seq OWNED BY artists.id;
 
 
 --
+-- Name: artists_upstream_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE artists_upstream_sources (
+    upstream_source_id integer NOT NULL,
+    artist_id integer NOT NULL,
+    upstream_identifier text
+);
+
+
+--
 -- Name: eras; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE eras (
     id integer NOT NULL,
     artist_id integer NOT NULL,
-    "order" smallint DEFAULT '0'::smallint,
+    "order" smallint DEFAULT 0::smallint,
     name text,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
@@ -244,8 +255,8 @@ CREATE TABLE shows (
     year_id integer,
     era_id integer,
     date date NOT NULL,
-    avg_rating real DEFAULT '0'::real,
-    avg_duration real DEFAULT '0'::real,
+    avg_rating real DEFAULT 0::real,
+    avg_duration real DEFAULT 0::real,
     display_date text NOT NULL,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
@@ -433,7 +444,7 @@ CREATE TABLE sources (
     show_id integer,
     is_soundboard boolean NOT NULL,
     is_remaster boolean NOT NULL,
-    avg_rating real DEFAULT '0'::real NOT NULL,
+    avg_rating real DEFAULT 0::real NOT NULL,
     num_reviews integer DEFAULT 0 NOT NULL,
     upstream_identifier text NOT NULL,
     has_jamcharts boolean NOT NULL,
@@ -446,8 +457,8 @@ CREATE TABLE sources (
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     artist_id integer NOT NULL,
-    avg_rating_weighted real DEFAULT '0'::real,
-    duration real DEFAULT '0'::real,
+    avg_rating_weighted real DEFAULT 0::real,
+    duration real DEFAULT 0::real,
     venue_id integer,
     display_date text NOT NULL,
     num_ratings integer
@@ -510,6 +521,38 @@ ALTER SEQUENCE tours_id_seq OWNED BY tours.id;
 
 
 --
+-- Name: upstream_sources; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE upstream_sources (
+    id integer NOT NULL,
+    name text NOT NULL,
+    url text,
+    description text,
+    credit_line text
+);
+
+
+--
+-- Name: upstream_sources_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE upstream_sources_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: upstream_sources_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE upstream_sources_id_seq OWNED BY upstream_sources.id;
+
+
+--
 -- Name: venues; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -556,8 +599,8 @@ CREATE TABLE years (
     show_count integer DEFAULT 0,
     source_count integer DEFAULT 0,
     duration integer DEFAULT 0,
-    avg_duration real DEFAULT '0'::real,
-    avg_rating real DEFAULT '0'::real,
+    avg_duration real DEFAULT 0::real,
+    avg_rating real DEFAULT 0::real,
     artist_id integer NOT NULL,
     year text,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
@@ -666,6 +709,13 @@ ALTER TABLE ONLY sources ALTER COLUMN id SET DEFAULT nextval('sources_id_seq'::r
 --
 
 ALTER TABLE ONLY tours ALTER COLUMN id SET DEFAULT nextval('tours_id_seq'::regclass);
+
+
+--
+-- Name: id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY upstream_sources ALTER COLUMN id SET DEFAULT nextval('upstream_sources_id_seq'::regclass);
 
 
 --
@@ -795,6 +845,14 @@ ALTER TABLE ONLY tours
 
 
 --
+-- Name: upstream_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY upstream_sources
+    ADD CONSTRAINT upstream_sources_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: venues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -808,6 +866,13 @@ ALTER TABLE ONLY venues
 
 ALTER TABLE ONLY years
     ADD CONSTRAINT years_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: artists_upstream_sources_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX artists_upstream_sources_key ON artists_upstream_sources USING btree (upstream_source_id, artist_id);
 
 
 --
@@ -857,6 +922,22 @@ CREATE UNIQUE INDEX venues_upstream_identifier_null_artist_key ON venues USING b
 --
 
 CREATE UNIQUE INDEX years_year ON years USING btree (artist_id, year);
+
+
+--
+-- Name: artists_upstream_sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY artists_upstream_sources
+    ADD CONSTRAINT artists_upstream_sources_artist_id_fkey FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE CASCADE;
+
+
+--
+-- Name: artists_upstream_sources_upstream_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY artists_upstream_sources
+    ADD CONSTRAINT artists_upstream_sources_upstream_source_id_fkey FOREIGN KEY (upstream_source_id) REFERENCES upstream_sources(id) ON DELETE RESTRICT;
 
 
 --
