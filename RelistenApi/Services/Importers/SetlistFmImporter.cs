@@ -44,17 +44,17 @@ namespace Relisten.Import
             this._log = log;
         }
 
+		public override string ImporterName => "setlist.fm";
+
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
-
             return ImportableData.Eras
              | ImportableData.SetlistShowsAndSongs
              | ImportableData.Tours
              | ImportableData.Venues;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             int page = 1;
             Tuple<bool, ImportStats> result = null;
@@ -62,7 +62,7 @@ namespace Relisten.Import
 
             await PreloadData(artist);
 
-			var prog = ctx.WriteProgressBar();
+			var prog = ctx?.WriteProgressBar();
 
             do
             {
@@ -80,6 +80,12 @@ namespace Relisten.Import
             {
                 await UpdateTourStartEndDates(artist);
             }
+
+			// update shows
+			await RebuildShows(artist);
+
+			// update years
+			await RebuildYears(artist);
 
             return stats;
         }
@@ -290,7 +296,7 @@ namespace Relisten.Import
             }
             catch (JsonReaderException e)
             {
-				ctx.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
+				ctx?.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
                 throw e;
             }
 
@@ -304,21 +310,21 @@ namespace Relisten.Import
                     Stopwatch s = new Stopwatch();
                     s.Start();
 
-					ctx.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
+					ctx?.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
 
                     try
                     {
                         var thisStats = await ProcessSetlist(artist, setlist);
 
                         s.Stop();
-						ctx.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
+						ctx?.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
 
                         stats += thisStats;
                     }
                     catch (Exception e)
                     {
                         s.Stop();
-						ctx.WriteLine("...failed in {0}! Stats: {1}", s.Elapsed, e.Message);
+						ctx?.WriteLine("...failed in {0}! Stats: {1}", s.Elapsed, e.Message);
 
                         throw e;
                     }

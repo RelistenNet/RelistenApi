@@ -57,7 +57,7 @@ namespace Relisten.Import
 
     public class ImporterService
     {
-        private IList<ImporterBase> importers { get; set; }
+		IDictionary<string, ImporterBase> importers { get; set; }
 
         public ImporterService(
             ArchiveOrgImporter _archiveOrg,
@@ -65,32 +65,51 @@ namespace Relisten.Import
 			PhishinImporter _phishin,
 			PhishNetImporter _phishnet,
 			JerryGarciaComImporter _jerry,
-			PanicStreamComImporter _panic
+			PanicStreamComImporter _panic,
+			PhantasyTourImporter _phantasy
         )
         {
-			importers = new List<ImporterBase>(new ImporterBase[] {
+			var imps = new ImporterBase[] {
 				_setlistFm,
 				_archiveOrg,
 				_panic,
 				//_jerry,
 				_phishin,
-				_phishnet
-			});
+				_phishnet,
+				_phantasy
+			};
+
+			importers = new Dictionary<string, ImporterBase>();
+
+			foreach (var i in imps)
+			{
+				importers[i.ImporterName] = i;
+			}
         }
+
+		public IEnumerable<ImporterBase> ImportersForArtist(Artist art)
+		{
+			return art.upstream_sources.Select(s => importers[s.upstream_source.name]);
+		}
+
+		public ImporterBase ImporterForUpstreamSource(UpstreamSource source)
+		{
+			return importers[source.name];
+		}
 
 		public async Task<ImportStats> Import(Artist artist, PerformContext ctx)
         {
 			var stats = new ImportStats();
 
-			var validImporters = importers.Where(i => i.ImportableDataForArtist(artist) != ImportableData.Nothing).ToList();
+			var srcs = artist.upstream_sources.ToList();
 
-			ctx.WriteLine($"Found {validImporters.Count} valid importers.");
-			var prog = ctx.WriteProgressBar();
+			ctx?.WriteLine($"Found {srcs.Count} valid importers.");
+			var prog = ctx?.WriteProgressBar();
 
-			await validImporters.AsyncForEachWithProgress(prog, async item =>
+			await srcs.AsyncForEachWithProgress(prog, async item =>
 			{
-				ctx.WriteLine($"Importing with {item.GetType()}");
-				stats += await item.ImportDataForArtist(artist, ctx);
+				ctx?.WriteLine($"Importing with {item.GetType()}");
+				stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
 			});
 
 			return stats;
@@ -105,11 +124,13 @@ namespace Relisten.Import
         public ImporterBase(DbService db)
         {
             this.db = db;
-			this.http = new HttpClient();
+			http = new HttpClient();
         }
 
         public abstract ImportableData ImportableDataForArtist(Artist artist);
-        public abstract Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx);
+		public abstract Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx);
+
+		public abstract string ImporterName { get; }
 
         public void Dispose()
         {

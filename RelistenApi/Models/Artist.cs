@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Relisten.Import;
 
 namespace Relisten.Api.Models
 {
@@ -40,12 +41,6 @@ namespace Relisten.Api.Models
 
 	public class Artist : BaseRelistenModel
 	{
-		[Required]
-		public string upstream_identifier { get; set; }
-
-		[Required]
-		public string data_source { get; set; }
-
 		[Required]
 		public string musicbrainz_id { get; set; }
 
@@ -167,6 +162,9 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public string credit_line { get; set; }
+
+		[JsonIgnore]
+		public ImporterBase importer { get; set; }
 	}
 
 	public class ArtistUpstreamSource {
@@ -177,6 +175,9 @@ namespace Relisten.Api.Models
 		public int artist_id { get; set; }
 
 		[Required]
-		public int upstream_identifier { get; set; }
+		public string upstream_identifier { get; set; }
+
+		[JsonIgnore]
+		public UpstreamSource upstream_source { get; set; }
 	}
 }

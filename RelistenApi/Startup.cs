@@ -85,6 +85,7 @@ namespace Relisten
 			services.AddScoped<SourceSetService, SourceSetService>();
 			services.AddScoped<SourceTrackService, SourceTrackService>();
 			services.AddScoped<PhishNetImporter, PhishNetImporter>();
+			services.AddScoped<PhantasyTourImporter, PhantasyTourImporter>();
 			services.AddScoped<YearService, YearService>();
 			services.AddScoped<EraService, EraService>();
 			services.AddScoped<ImporterService, ImporterService>();

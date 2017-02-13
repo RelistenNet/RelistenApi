@@ -60,10 +60,10 @@ namespace Relisten.Import
             _eraService = eraService;
         }
 
+		public override string ImporterName => "phish.in";
+
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
-
             return ImportableData.Sources
              | ImportableData.Venues
              | ImportableData.Tours
@@ -72,28 +72,28 @@ namespace Relisten.Import
              ;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             await PreloadData(artist);
 
             var stats = new ImportStats();
 
-			ctx.WriteLine("Processing Eras");
+			ctx?.WriteLine("Processing Eras");
             stats += await ProcessEras(artist, ctx);
 
-			ctx.WriteLine("Processing Tours");
+			ctx?.WriteLine("Processing Tours");
             stats += await ProcessTours(artist, ctx);
 
-			ctx.WriteLine("Processing Songs");
+			ctx?.WriteLine("Processing Songs");
             stats += await ProcessSongs(artist, ctx);
    
-			ctx.WriteLine("Processing Venues");
+			ctx?.WriteLine("Processing Venues");
    		    stats += await ProcessVenues(artist, ctx);
 
-			ctx.WriteLine("Processing Shows");
+			ctx?.WriteLine("Processing Shows");
 			stats += await ProcessShows(artist, ctx);
 
-			ctx.WriteLine("Rebuilding");
+			ctx?.WriteLine("Rebuilding");
             await RebuildShows(artist);
             await RebuildYears(artist);
 
@@ -145,7 +145,7 @@ namespace Relisten.Import
 		private async Task<T> PhishinApiRequest<T>(string apiRoute, PerformContext ctx, string sort_attr = null)
         {
             var url = PhishinApiUrl(apiRoute, sort_attr);
-			ctx.WriteLine($"Requesting {url}");
+			ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync()).data;
         }
@@ -435,7 +435,7 @@ namespace Relisten.Import
 
 			var shows = (await PhishinApiRequest<IEnumerable<PhishinSmallShow>>("shows", ctx, "date")).ToList();
 
-			var prog = ctx.WriteProgressBar();
+			var prog = ctx?.WriteProgressBar();
 
 			await shows.AsyncForEachWithProgress(prog, async show =>
 			{

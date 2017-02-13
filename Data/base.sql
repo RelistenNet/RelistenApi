@@ -11,7 +11,6 @@ SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET client_min_messages = warning;
-SET row_security = off;
 
 --
 -- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
@@ -39,8 +38,6 @@ SET default_with_oids = false;
 
 CREATE TABLE artists (
     id integer NOT NULL,
-    upstream_identifier text NOT NULL,
-    data_source text NOT NULL,
     musicbrainz_id text,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
@@ -87,7 +84,7 @@ CREATE TABLE artists_upstream_sources (
 CREATE TABLE eras (
     id integer NOT NULL,
     artist_id integer NOT NULL,
-    "order" smallint DEFAULT 0::smallint,
+    "order" smallint DEFAULT (0)::smallint,
     name text,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
@@ -255,8 +252,8 @@ CREATE TABLE shows (
     year_id integer,
     era_id integer,
     date date NOT NULL,
-    avg_rating real DEFAULT 0::real,
-    avg_duration real DEFAULT 0::real,
+    avg_rating real DEFAULT (0)::real,
+    avg_duration real DEFAULT (0)::real,
     display_date text NOT NULL,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
@@ -444,7 +441,7 @@ CREATE TABLE sources (
     show_id integer,
     is_soundboard boolean NOT NULL,
     is_remaster boolean NOT NULL,
-    avg_rating real DEFAULT 0::real NOT NULL,
+    avg_rating real DEFAULT (0)::real NOT NULL,
     num_reviews integer DEFAULT 0 NOT NULL,
     upstream_identifier text NOT NULL,
     has_jamcharts boolean NOT NULL,
@@ -457,8 +454,8 @@ CREATE TABLE sources (
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     artist_id integer NOT NULL,
-    avg_rating_weighted real DEFAULT 0::real,
-    duration real DEFAULT 0::real,
+    avg_rating_weighted real DEFAULT (0)::real,
+    duration real DEFAULT (0)::real,
     venue_id integer,
     display_date text NOT NULL,
     num_ratings integer
@@ -599,8 +596,8 @@ CREATE TABLE years (
     show_count integer DEFAULT 0,
     source_count integer DEFAULT 0,
     duration integer DEFAULT 0,
-    avg_duration real DEFAULT 0::real,
-    avg_rating real DEFAULT 0::real,
+    avg_duration real DEFAULT (0)::real,
+    avg_rating real DEFAULT (0)::real,
     artist_id integer NOT NULL,
     year text,
     created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,

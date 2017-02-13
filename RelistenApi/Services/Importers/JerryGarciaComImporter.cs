@@ -45,10 +45,10 @@ namespace Relisten.Import
             this._log = log;
         }
 
-        public override ImportableData ImportableDataForArtist(Artist artist)
-        {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
+		public override string ImporterName => "jerrygarcia.com";
 
+		public override ImportableData ImportableDataForArtist(Artist artist)
+        {
             return ImportableData.Eras
              | ImportableData.SetlistShowsAndSongs
              | ImportableData.Tours
@@ -65,7 +65,7 @@ namespace Relisten.Import
             public string Identifier { get; set; }
         }
 
-		public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+		public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
 		{
 			var stats = new ImportStats();
 
@@ -87,8 +87,8 @@ namespace Relisten.Import
 								 .ToList()
 				;
 
-			ctx.WriteLine($"Checking {files.Count} html files");
-			var prog = ctx.WriteProgressBar();
+			ctx?.WriteLine($"Checking {files.Count} html files");
+			var prog = ctx?.WriteProgressBar();
 
 
 			await files.AsyncForEachWithProgress(prog, async f => 

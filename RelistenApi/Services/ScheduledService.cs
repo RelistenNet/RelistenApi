@@ -51,26 +51,26 @@ namespace Relisten
 			context.WriteLine("--> Imported all artists! " + stats);
 		}
 
-		[RecurringJob("0 6,9,12,15,18 * * *", Enabled = true)]
-		[AutomaticRetry(Attempts = 0)]
+		//[RecurringJob("0 6,9,12,15,18 * * *", Enabled = true)]
+		//[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshPhish(PerformContext ctx)
 		{
 			var artist = await _artistService.FindArtistWithIdOrSlug("phish");
 
 			var artistStats = await _importerService.Import(artist, ctx);
 
-			ctx.WriteLine($"--> Imported {artist.name}! " + artistStats);
+			ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 		}
 	
-		[RecurringJob("0 */5 * * *", Enabled = true)]
-		[AutomaticRetry(Attempts = 0)]
+		//[RecurringJob("0 */5 * * *", Enabled = true)]
+		//[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshWSP(PerformContext ctx)
 		{
 			var artist = await _artistService.FindArtistWithIdOrSlug("wsp");
 
 			var artistStats = await _importerService.Import(artist, ctx);
 
-			ctx.WriteLine($"--> Imported {artist.name}! " + artistStats);
+			ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 		}
-}
+	}
 }

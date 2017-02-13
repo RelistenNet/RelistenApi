@@ -27,19 +27,17 @@ namespace Relisten.Controllers
             _importer = importer;
         }
 
-		/*
         [HttpGet("{idOrSlug}")]
         public async Task<IActionResult> Get(string idOrSlug)
         {
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                return JsonSuccess(await _importer.Import(art));
+				return JsonSuccess(await _importer.Import(art, null));
             }
 
             return JsonNotFound(false);
         }
-        */
 
         // private void update()
         // {

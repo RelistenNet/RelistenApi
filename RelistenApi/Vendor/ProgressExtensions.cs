@@ -15,7 +15,7 @@ namespace Relisten
 			foreach (var item in list)
 			{
 				await action(item);
-				bar.SetValue(100.0 * count / list.Count);
+				bar?.SetValue(100.0 * count / list.Count);
 
 				count++;
 			}
@@ -29,7 +29,7 @@ namespace Relisten
 			foreach (var item in list)
 			{
 				action(item);
-				bar.SetValue(100.0 * count / list.Count);
+				bar?.SetValue(100.0 * count / list.Count);
 
 				count++;
 			}
@@ -50,7 +50,7 @@ namespace Relisten
 					var completed = await Task.WhenAny(activeTasks);
 
 					count++;
-					bar.SetValue(100.0 * count / source.Count);
+					bar?.SetValue(100.0 * count / source.Count);
 
 					activeTasks.Remove(completed);
 				}

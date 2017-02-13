@@ -53,10 +53,10 @@ namespace Relisten.Import
             _sourceSetService = sourceSetService;
         }
 
+		public override string ImporterName => "panicstream.com";
+
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
-
             var r = ImportableData.Sources;
 
             if (artist.features.per_source_venues)
@@ -75,7 +75,7 @@ namespace Relisten.Import
 		private async Task<string> FetchUrl(string url, PerformContext ctx)
         {
             url = url.Replace("&amp;", "&");
-			ctx.WriteLine("Fetching URL: " + url);
+			ctx?.WriteLine("Fetching URL: " + url);
             var page = await http.GetAsync(url);
 
             if (page.StatusCode != HttpStatusCode.OK)
@@ -99,7 +99,7 @@ namespace Relisten.Import
             return PanicShowUrl(panicDate) + fileName;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -109,8 +109,8 @@ namespace Relisten.Import
 
 			var matches = ShowDirMatcher.Matches(contents);
 
-			ctx.WriteLine($"Check {matches.Count} subdirectories");
-			var prog = ctx.WriteProgressBar();
+			ctx?.WriteLine($"Check {matches.Count} subdirectories");
+			var prog = ctx?.WriteProgressBar();
 
 			var counter = 1;
             foreach (Match match in ShowDirMatcher.Matches(contents))

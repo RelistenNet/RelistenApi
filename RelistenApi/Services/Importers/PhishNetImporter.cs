@@ -32,32 +32,32 @@ namespace Relisten.Import
             _sourceReviewService = sourceReviewService;
         }
 
+		public override string ImporterName => "phish.net";
+
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
-
             return ImportableData.SourceRatings
                 | ImportableData.SourceReviews
                 | ImportableData.Sources
              ;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             var stats = new ImportStats();
 
 			var shows = (await _sourceService.AllForArtist(artist)).OrderBy(s => s.display_date).ToList();
 
-			var prog = ctx.WriteProgressBar();
+			var prog = ctx?.WriteProgressBar();
 
-			ctx.WriteLine($"Processing {shows.Count} shows");
+			ctx?.WriteLine($"Processing {shows.Count} shows");
 
 			await shows.ForEachAsync(async dbSource =>
 			{
 				stats += await ProcessSource(artist, dbSource, ctx);
 			}, prog, 10);
 
-			ctx.WriteLine("Rebuilding...");
+			ctx?.WriteLine("Rebuilding...");
 
             await RebuildShows(artist);
             await RebuildYears(artist);
@@ -146,7 +146,7 @@ namespace Relisten.Import
 		private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetUrlForSource(dbSource);
-            ctx.WriteLine($"Requesting {url}");
+            ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 
@@ -163,7 +163,7 @@ namespace Relisten.Import
         private async Task<PhishNetApiSetlist> GetPhishNetApiSetlist(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetApiSetlistUrlForSource(dbSource);
-            ctx.WriteLine($"Requesting {url}");
+            ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 
@@ -182,7 +182,7 @@ namespace Relisten.Import
         private async Task<IEnumerable<PhishNetApiReview>> GetPhishNetApiReviews(Source dbSource, PerformContext ctx)
         {
             var url = PhishNetApiReviewsUrlForSource(dbSource);
-            ctx.WriteLine($"Requesting {url}");
+            ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
             var page = await resp.Content.ReadAsStringAsync();
 

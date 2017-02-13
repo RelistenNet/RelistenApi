@@ -49,10 +49,10 @@ namespace Relisten.Import
             _sourceSetService = sourceSetService;
         }
 
+		public override string ImporterName => "archive.org";
+
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            if (!artist.data_source.Contains(DataSourceName)) return ImportableData.Nothing;
-
             var r = ImportableData.Sources | ImportableData.SourceReviews | ImportableData.SourceRatings;
 
             if (artist.features.per_source_venues)
@@ -63,17 +63,17 @@ namespace Relisten.Import
             return r;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, PerformContext ctx)
+		public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             await PreloadData(artist);
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)), ctx);
+            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), ctx);
         }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
 
-        private static string SearchUrlForArtist(Artist artist)
+		private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
-            return $"http://archive.org/advancedsearch.php?q=collection%3A{artist.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=oai_updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
+			return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=oai_updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
         }
         private static string DetailsUrlForIdentifier(string identifier)
         {
@@ -90,9 +90,9 @@ namespace Relisten.Import
                 new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter()
             );
 
-			ctx.WriteLine($"Checking {root.response.docs.Count} archive.org results");
+			ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
 
-			var prog = ctx.WriteProgressBar();
+			var prog = ctx?.WriteProgressBar();
 
 			await root.response.docs.AsyncForEachWithProgress(prog, async doc =>
 			{
@@ -100,7 +100,7 @@ namespace Relisten.Import
 				if (dbShow == null
 				|| doc._iguana_updated_at > dbShow.updated_at)
 				{
-					ctx.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
+					ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
 					var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
 					var detailsJson = await detailRes.Content.ReadAsStringAsync();
@@ -141,7 +141,7 @@ namespace Relisten.Import
 
             if (mp3Files.Count() == 0)
             {
-				ctx.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
+				ctx?.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
 
                 return stats;
             }

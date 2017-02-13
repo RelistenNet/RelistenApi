@@ -5,13 +5,17 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using Relisten.Import;
 
 namespace Relisten.Data
 {
 	public class ArtistService : RelistenDataServiceBase
 	{
-		public ArtistService(DbService db) : base(db)
+		public ImporterService _importService { get; set; }
+
+		public ArtistService(DbService db, ImporterService importService) : base(db)
 		{
+			_importService = importService;
 		}
 
 		private static Func<Artist, Features, Artist> joiner = (Artist artist, Features features) =>
@@ -22,7 +26,7 @@ namespace Relisten.Data
 
 		public async Task<IEnumerable<ArtistWithCounts>> AllWithCounts()
 		{
-			return await db.WithConnection(con => con.QueryAsync(@"
+			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
                 WITH show_counts AS (
                     SELECT
                         artist_id,
@@ -54,7 +58,7 @@ namespace Relisten.Data
 			{
 				artist.features = features;
 				return artist;
-			}));
+			})));
 		}
 
 		public async Task<IEnumerable<Artist>> All()
@@ -111,18 +115,28 @@ namespace Relisten.Data
 				return null;
 			}
 
-			var srcs = await db.WithConnection(con => con.QueryAsync<ArtistUpstreamSource>(@"
+			var srcs = await db.WithConnection(con => con.QueryAsync(@"
 				SELECT
-					aus.*
+					aus.*, s.*
 				FROM
 					artists_upstream_sources aus
+					JOIN upstream_sources s ON s.id = aus.upstream_source_id
 				WHERE
-					aus.artist_id IN @artistIds
-			", new { artistIds = art.Select(a => a.id) }));
+					aus.artist_id = ANY(@artistIds)
+			", (ArtistUpstreamSource aus, UpstreamSource src) =>
+			{
+				aus.upstream_source = src;
+				return aus;
+			}, new { artistIds = art.Select(a => a.id).ToList() }));
 
 			var gsrcs = srcs
+				.Select(s =>
+				{
+					s.upstream_source.importer = _importService.ImporterForUpstreamSource(s.upstream_source);
+					return s;
+				})
 				.GroupBy(src => src.artist_id)
-				.ToDictionary(g => g.Key, g => g)
+				.ToDictionary(g => g.Key, g => g.Select(s => s))
 				;
 
 			foreach(var a in art)
