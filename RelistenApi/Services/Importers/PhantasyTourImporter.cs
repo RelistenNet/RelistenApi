@@ -175,7 +175,7 @@ namespace Relisten.Import
 		{
 			var policy = Policy
 						  .Handle<JsonReaderException>()
-						  .WaitAndRetry(5, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt) / 2.0));
+						  .WaitAndRetryAsync(5, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt) / 2.0));
 
 			await policy.ExecuteAsync(() => _ImportSingle(artist, stats, ctx, showId));
 		}
