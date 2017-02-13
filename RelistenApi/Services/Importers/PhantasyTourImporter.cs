@@ -11,6 +11,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor;
 using Relisten.Vendor.PhantasyTour;
+using Polly;
 
 namespace Relisten.Import
 {
@@ -121,6 +122,9 @@ namespace Relisten.Import
 			while (await ImportPage(artist, stats, ctx, await http.GetAsync(UrlForArtist(src, page))))
 			{
 				page++;
+
+				await Task.Delay(100);
+
 				ctx?.WriteLine($"Requesting page #{page}");
 			}
 
@@ -169,10 +173,23 @@ namespace Relisten.Import
 
 		async Task ImportSingle(Artist artist, ImportStats stats, PerformContext ctx, int showId)
 		{
+			var policy = Policy
+						  .Handle<JsonReaderException>()
+						  .WaitAndRetry(5, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt) / 2.0));
+
+			await policy.ExecuteAsync(() => _ImportSingle(artist, stats, ctx, showId));
+		}
+
+		async Task _ImportSingle(Artist artist, ImportStats stats, PerformContext ctx, int showId)
+		{
 			ctx?.WriteLine($"Requesting page for show id {showId}");
 
 			var res = await http.GetAsync(UrlForShow(showId));
+
 			var body = await res.Content.ReadAsStringAsync();
+
+			ctx?.WriteLine($"Result: [{res.StatusCode}]: {body.Length}");
+
 			var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body).data;
 
 			var now = DateTime.UtcNow;
