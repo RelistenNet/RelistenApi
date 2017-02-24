@@ -8,6 +8,7 @@ using Dapper;
 using Relisten.Api.Models;
 using Relisten.Import;
 using Relisten.Data;
+using Hangfire;
 
 namespace Relisten.Controllers
 {
@@ -16,15 +17,18 @@ namespace Relisten.Controllers
     public class ImportController : RelistenBaseController
     {
         protected ImporterService _importer { get; set; }
+		protected ScheduledService _scheduledService { get; set; }
 
-        public ImportController(
+		public ImportController(
             RedisService redis,
             DbService db,
 			ArtistService artistService,
-            ImporterService importer
+            ImporterService importer,
+			ScheduledService scheduledService
 		) : base(redis, db, artistService)
         {
-            _importer = importer;
+			_scheduledService = scheduledService;
+			_importer = importer;
         }
 
         [HttpGet("{idOrSlug}")]
@@ -33,7 +37,9 @@ namespace Relisten.Controllers
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-				return JsonSuccess(await _importer.Import(art, null));
+				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, null));
+				
+				return JsonSuccess($"Queued as job {jobId}!");
             }
 
             return JsonNotFound(false);

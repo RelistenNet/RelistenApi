@@ -69,8 +69,9 @@ namespace Relisten
 				hangfire.UseRecurringJob(typeof(ScheduledService));
 			});
 
-			services.AddSingleton<RedisService>(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
-			services.AddSingleton<DbService>(new DbService(Configuration["POSTGRESQL_URL_INT"]));
+			services.AddSingleton(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
+			services.AddSingleton(new DbService(Configuration["POSTGRESQL_URL_INT"]));
+			services.AddSingleton(Configuration);
 
 			services.AddScoped<SetlistShowService, SetlistShowService>();
 			services.AddScoped<VenueService, VenueService>();
@@ -108,7 +109,19 @@ namespace Relisten
 
 			app.UseMvc();
 
-			app.UseHangfireServer();
+			app.UseHangfireServer(new BackgroundJobServerOptions
+			{
+				Queues = new[] { "artist_import" },
+				ServerName = "relistenapi:artist_import",
+				WorkerCount = 3
+			});
+
+			app.UseHangfireServer(new BackgroundJobServerOptions
+			{
+				Queues = new[] { "default" },
+				ServerName = "relistenapi:default"
+			});
+
 			app.UseHangfireDashboard("/admin/hangfire", new DashboardOptions
 			{
 				Authorization = new[] { new HangfireBasicAuthFilter(Configuration["ADMIN:USERNAME"], Configuration["ADMIN:PASSWORD"]) }

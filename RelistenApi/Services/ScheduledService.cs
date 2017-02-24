@@ -7,6 +7,8 @@ using Relisten.Data;
 using Relisten.Import;
 using Hangfire.Console;
 using System.Linq;
+using Microsoft.Extensions.Configuration;
+using System.ComponentModel;
 
 namespace Relisten
 {
@@ -14,20 +16,49 @@ namespace Relisten
 	{
 		ImporterService _importerService { get; set; }
 		ArtistService _artistService { get; set; }
+		IConfigurationRoot _config { get; set; }
 
 		public ScheduledService(
 			ImporterService importerService,
-			ArtistService artistService
+			ArtistService artistService,
+			IConfigurationRoot config
 		)
 		{
 			_importerService = importerService;
 			_artistService = artistService;
+			_config = config;
 		}
 
 		// run every day at 3AM
 		[RecurringJob("0 3 * * *", Enabled = true)]
 		[AutomaticRetry(Attempts = 0)]
+		[Queue("artist_import")]
+		[DisplayName("Refresh All Artists")]
 		public async Task RefreshAllArtists(PerformContext context)
+		{
+			if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
+			{
+				context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+//				return;
+			}
+
+			var artists = (await _artistService.All()).ToList();
+
+			context.WriteLine($"--> Updating all {artists.Count} artists");
+
+			foreach (var artist in artists)
+			{
+				context.WriteLine($"--> Queueing {artist.name} ({artist.slug})");
+				BackgroundJob.Enqueue(() => RefreshArtist(artist.slug, null));
+			}
+
+			context.WriteLine("--> Queued updates for all artists! ");
+		}
+
+		// this actually runs all of them without enqueing anything else
+		[Queue("artist_import")]
+		[AutomaticRetry(Attempts = 0)]
+		private async Task __old(PerformContext context)
 		{
 			var artists = (await _artistService.All()).ToList();
 
@@ -51,22 +82,12 @@ namespace Relisten
 			context.WriteLine("--> Imported all artists! " + stats);
 		}
 
-		//[RecurringJob("0 6,9,12,15,18 * * *", Enabled = true)]
-		//[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshPhish(PerformContext ctx)
+		[Queue("artist_import")]
+		[DisplayName("Refresh Artist: {0}")]
+		[AutomaticRetry(Attempts = 0)]
+		public async Task RefreshArtist(string idOrSlug, PerformContext ctx)
 		{
-			var artist = await _artistService.FindArtistWithIdOrSlug("phish");
-
-			var artistStats = await _importerService.Import(artist, ctx);
-
-			ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
-		}
-	
-		//[RecurringJob("0 */5 * * *", Enabled = true)]
-		//[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshWSP(PerformContext ctx)
-		{
-			var artist = await _artistService.FindArtistWithIdOrSlug("wsp");
+			var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
 			var artistStats = await _importerService.Import(artist, ctx);
 

@@ -96,16 +96,8 @@ namespace Relisten.Data
 				return null;
 			}
 
-			art.upstream_sources = await db.WithConnection(con => con.QueryAsync<ArtistUpstreamSource>(@"
-				SELECT
-					aus.*
-				FROM
-					artists_upstream_sources aus
-				WHERE
-					aus.artist_id = @artistId
-			", new { artistId = art.id }));
-
-			return art;
+			var filled = await FillInUpstreamSources((IEnumerable<T>)new[] { art });
+			return filled?.FirstOrDefault();
 		}
 
 		async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T> art) where T : Artist

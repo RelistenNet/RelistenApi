@@ -204,7 +204,7 @@ namespace Relisten.Import
                 dbShow.updated_at = setlistLastUpdated;
                 dbShow.date = date;
                 dbShow.venue_id = dbVenue.id;
-                dbShow.tour_id = dbTour.id;
+                dbShow.tour_id = dbTour?.id;
 
                 dbShow = await _setlistShowService.Save(dbShow);
 
@@ -310,21 +310,21 @@ namespace Relisten.Import
                     Stopwatch s = new Stopwatch();
                     s.Start();
 
-					ctx?.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
+					// ctx?.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
 
                     try
                     {
                         var thisStats = await ProcessSetlist(artist, setlist);
 
                         s.Stop();
-						ctx?.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
+						// ctx?.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
 
                         stats += thisStats;
                     }
                     catch (Exception e)
                     {
                         s.Stop();
-						ctx?.WriteLine("...failed in {0}! Stats: {1}", s.Elapsed, e.Message);
+						ctx?.WriteLine("{0}/{1}...failed in {2}! Stats: {3}", artist.name, setlist.eventDate, s.Elapsed, e.Message);
 
                         throw e;
                     }
