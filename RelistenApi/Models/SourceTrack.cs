@@ -30,7 +30,6 @@ namespace Relisten.Api.Models
         [Required]
         public string mp3_url { get; set; }
 
-        [Required]
         public string md5 { get; set; }
     }
 }

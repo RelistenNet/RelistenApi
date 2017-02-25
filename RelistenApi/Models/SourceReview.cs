@@ -15,13 +15,11 @@ namespace Relisten.Api.Models
 
         public int? rating { get; set; }
 
-        [Required]
         public string title { get; set; }
 
         [Required]
         public string review { get; set; }
 
-        [Required]
         public string author { get; set; }
     }
 }
