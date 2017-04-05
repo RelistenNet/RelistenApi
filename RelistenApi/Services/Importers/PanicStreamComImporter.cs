@@ -153,6 +153,8 @@ namespace Relisten.Import
                 return;
             }
 
+			var isUpdate = dbSource != null;
+
             var showDir = await FetchUrl(PanicShowUrl(upstreamId), ctx);
 
             if(showDir.Contains("-   \n<hr></pre>") || upstreamId == "1995_06_02" || upstreamId == "2010_04_30")
@@ -176,7 +178,7 @@ namespace Relisten.Import
 
             var desc = txt != null ? await FetchUrl(PanicShowFileUrl(upstreamId, txt), ctx) : "";
 
-            dbSource = await _sourceService.Save(new Source
+            var src = new Source
             {
                 artist_id = artist.id,
                 display_date = panicDate.Replace('_', '-'),
@@ -189,10 +191,26 @@ namespace Relisten.Import
                 upstream_identifier = upstreamId,
                 taper_notes = desc,
                 updated_at = panicUpdatedAt
-            });
+            };
+
+			if (isUpdate)
+			{
+				src.id = dbSource.id;
+			}
+
+			dbSource = await _sourceService.Save(dbSource);
 
             existingSources[dbSource.upstream_identifier] = dbSource;
-            stats.Created++;
+
+			if (isUpdate)
+			{
+				stats.Updated++;
+				stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
+			}
+			else
+			{
+				stats.Created++;
+			}
 
             var dbSet = await _sourceSetService.Insert(new SourceSet
             {
