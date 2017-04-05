@@ -138,8 +138,9 @@ namespace Relisten.Import
             var meta = detailsRoot.metadata;
 
             var mp3Files = detailsRoot.files.Where(file => file.format == "VBR MP3");
+			var flacFiles = detailsRoot.files.Where(file => file.format == "Flac");
 
-            if (mp3Files.Count() == 0)
+			if (mp3Files.Count() == 0)
             {
 				ctx?.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
 
@@ -208,7 +209,14 @@ namespace Relisten.Import
             var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
             stats.Created++;
 
-            var trackNum = 0;
+			if (mp3Files.Count() != flacFiles.Count())
+			{
+				throw new ArgumentException($"mp3 {mp3Files.Count()} != {flacFiles.Count()} on ${dbSource.upstream_identifier}");
+			}
+
+			var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
+
+			var trackNum = 0;
             var dbTracks = mp3Files.
                 Where(file =>
                 {
@@ -221,7 +229,7 @@ namespace Relisten.Import
                 OrderBy(file => file.name).
                 Select(file =>
                 {
-                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet);
+                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet, flacTracksByName);
                     trackNum = r.track_position;
                     return r;
                 })
@@ -301,31 +309,36 @@ namespace Relisten.Import
         private SourceTrack CreateSourceTrackForFile(
             Artist artist,
             Source dbSource,
-            Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta,
-            Relisten.Vendor.ArchiveOrg.Metadata.File file,
+            Vendor.ArchiveOrg.Metadata.Metadata meta,
+            Vendor.ArchiveOrg.Metadata.File file,
             int previousTrackNumber,
-            SourceSet set = null
+            SourceSet set = null,
+			IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles
         )
         {
             int trackNum = previousTrackNumber + 1;
 
             var title = !String.IsNullOrEmpty(file.title) ? file.title : file.original;
 
+			var flac = flacFiles.GetValue(file.original);
+
             return new SourceTrack()
-            {
-                title = title,
-                track_position = trackNum,
-                source_set_id = set == null ? -1 : set.id,
+			{
+				title = title,
+				track_position = trackNum,
+				source_set_id = set == null ? -1 : set.id,
 				source_id = dbSource.id,
-                duration = file.length.
-                    Split(':').
-                    Reverse().
-                    Select((v, k) => (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).
-                    Sum(),
-                slug = Slugify(title),
-                mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
-                md5 = file.md5,
-                updated_at = dbSource.updated_at
+				duration = file.length.
+					Split(':').
+					Reverse().
+					Select((v, k) => (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).
+					Sum(),
+				slug = Slugify(title),
+				mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
+				mp3_md5 = file.md5,
+				flac_url = flac == null ? null : $"https://archive.org/download/{meta.identifier}/{flac.name}",
+				flac_md5 = flac == null ? null : flac.md5,
+            	updated_at = dbSource.updated_at
             };
         }
 

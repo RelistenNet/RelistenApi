@@ -27,9 +27,10 @@ namespace Relisten.Api.Models
         [Required]
         public string slug { get; set; }
 
-        [Required]
-        public string mp3_url { get; set; }
+		public string mp3_url { get; set; }
+		public string mp3_md5 { get; set; }
 
-        public string md5 { get; set; }
+		public string flac_url { get; set; }
+		public string flac_md5 { get; set; }
     }
 }
