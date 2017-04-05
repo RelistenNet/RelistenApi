@@ -229,7 +229,7 @@ namespace Relisten.Import
                 OrderBy(file => file.name).
                 Select(file =>
                 {
-                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, dbSet, flacTracksByName);
+					var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacTracksByName, dbSet);
                     trackNum = r.track_position;
                     return r;
                 })
@@ -312,8 +312,8 @@ namespace Relisten.Import
             Vendor.ArchiveOrg.Metadata.Metadata meta,
             Vendor.ArchiveOrg.Metadata.File file,
             int previousTrackNumber,
-            SourceSet set = null,
-			IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles
+			IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles,
+            SourceSet set = null
         )
         {
             int trackNum = previousTrackNumber + 1;
