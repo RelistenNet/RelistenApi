@@ -198,7 +198,7 @@ namespace Relisten.Import
 				src.id = dbSource.id;
 			}
 
-			dbSource = await _sourceService.Save(dbSource);
+			dbSource = await _sourceService.Save(src);
 
             existingSources[dbSource.upstream_identifier] = dbSource;
 

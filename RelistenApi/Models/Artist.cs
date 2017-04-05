@@ -145,7 +145,10 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public bool track_durations { get; set; }
-	}
+
+		[Required]
+		public bool can_have_flac { get; set; }
+}
 
 	public class UpstreamSource {
 		[Required]

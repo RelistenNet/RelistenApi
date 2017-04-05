@@ -43,7 +43,9 @@ namespace Relisten.Data
                                 title,
                                 slug,
                                 mp3_url,
-                                md5,
+								mp3_md5,
+                                flac_url,
+								flac_md5,
                                 updated_at
                             )
                         VALUES
@@ -55,7 +57,9 @@ namespace Relisten.Data
                                 @title,
                                 @slug,
                                 @mp3_url,
-                                @md5,
+                                @mp3_md5,
+                                @flac_url,
+                                @flac_md5,
                                 @updated_at
                             )
                         RETURNING *
