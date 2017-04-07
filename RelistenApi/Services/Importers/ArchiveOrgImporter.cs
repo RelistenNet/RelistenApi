@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -209,11 +209,6 @@ namespace Relisten.Import
             var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
             stats.Created++;
 
-			if (mp3Files.Count() != flacFiles.Count())
-			{
-				throw new ArgumentException($"mp3 {mp3Files.Count()} != {flacFiles.Count()} on ${dbSource.upstream_identifier}");
-			}
-
 			var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
 
 			var trackNum = 0;
@@ -337,7 +332,7 @@ namespace Relisten.Import
 				mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
 				mp3_md5 = file.md5,
 				flac_url = flac == null ? null : $"https://archive.org/download/{meta.identifier}/{flac.name}",
-				flac_md5 = flac == null ? null : flac.md5,
+				flac_md5 = flac?.md5,
             	updated_at = dbSource.updated_at
             };
         }
