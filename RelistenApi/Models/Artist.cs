@@ -1,4 +1,4 @@
-
+﻿
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -39,7 +39,7 @@ namespace Relisten.Api.Models
 		}
 	}
 
-	public class Artist : BaseRelistenModel
+	public class SlimArtist : BaseRelistenModel
 	{
 		[Required]
 		public string musicbrainz_id { get; set; }
@@ -52,8 +52,10 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public string slug { get; set; }
+	}
 
-
+	public class Artist : SlimArtist
+	{
 		[Required]
 		public Features features { get; set; }
 

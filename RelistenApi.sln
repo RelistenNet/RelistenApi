@@ -19,4 +19,10 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{638879E3-CB02-49B0-8091-9DEFBE8D12A9} = {D0E7C3A1-F002-482A-A98C-AEA36171839F}
 	EndGlobalSection
+	GlobalSection(MonoDevelopProperties) = preSolution
+		Policies = $0
+		$0.TextStylePolicy = $1
+		$1.FileWidth = 80
+		$1.scope = text/plain
+	EndGlobalSection
 EndGlobal

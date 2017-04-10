@@ -94,6 +94,7 @@ namespace Relisten
 			services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
 			services.AddScoped<ArtistService, ArtistService>();
 			services.AddScoped<ScheduledService, ScheduledService>();
+			services.AddScoped<SearchService, SearchService>();
 		}
 
 		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

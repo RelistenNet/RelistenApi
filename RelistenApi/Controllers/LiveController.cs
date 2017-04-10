@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
 using Relisten.Api.Models.Api;
@@ -12,6 +12,7 @@ namespace Relisten.Controllers
     {
         public ShowService _showService { get; set; }
         public SourceTrackService _sourceTrackService { get; set; }
+		public RedisService _redisService { get; set; }
 
         public LiveController(
             RedisService redis,
@@ -21,6 +22,7 @@ namespace Relisten.Controllers
             SourceTrackService sourceTrackService
 		) : base(redis, db, artistService)
         {
+			_redisService = redis;
             _showService = showService;
             _sourceTrackService = sourceTrackService;
         }
@@ -38,7 +40,17 @@ namespace Relisten.Controllers
                 return JsonNotFound(false);
             }
 
+			//await redis.db.SortedSetAdd("played", )
+
             return JsonSuccess(true);
         }
+
+		[HttpPost("live/recently-played")]
+		[ProducesResponseType(typeof(ResponseEnvelope<bool>), 200)]
+		public async Task<IActionResult> RecentlyPlayed()
+		{
+			
+			return JsonSuccess(true);
+		}
     }
 }
