@@ -5,6 +5,7 @@ using Hangfire.PostgreSql;
 using Hangfire.RecurringJobExtensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Cors.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -35,6 +36,8 @@ namespace Relisten
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
 		{
+			services.AddCors();
+
 			// Add framework services.
 			services.
 				AddMvc().
@@ -108,6 +111,11 @@ namespace Relisten
 			loggerFactory.AddConsole(Configuration.GetSection("Logging"));
 			loggerFactory.AddDebug();
 
+			app.UseCors(builder => builder
+								  .WithMethods("GET", "POST", "OPTIONS", "HEAD")
+								  .WithOrigins("*")
+								  .AllowAnyMethod());
+
 			app.UseMvc();
 
 			app.UseHangfireServer(new BackgroundJobServerOptions
@@ -136,6 +144,8 @@ namespace Relisten
 				ctx.RoutePrefix = "api-docs";
 				ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
 			});
+
+			app.UseCors(builder => builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
 		}
 	}
 }
