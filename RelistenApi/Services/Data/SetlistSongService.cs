@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using Relisten.Api.Models;
 using Dapper;
 using System.Threading.Tasks;

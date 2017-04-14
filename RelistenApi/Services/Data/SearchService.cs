@@ -43,6 +43,24 @@ namespace Relisten.Data
 						LIMIT 20;
 					", (s, a) => { s.slim_artist = a; return s; }, parms),
 
+					Songs = await con.QueryAsync<SetlistSongWithSlimArtist, SlimArtist, SetlistSongWithSlimArtist>($@"
+		                SELECT
+		                    s.*, COUNT(shows.id) as shows_played_at, a.*
+		                FROM
+		                    setlist_songs s
+		                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
+		                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
+		                    JOIN shows shows ON shows.date = set_shows.date
+							JOIN artists a ON s.artist_id = a.id
+							WHERE
+								s.name ILIKE '%' || @searchTerm || '%'
+								{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
+		                GROUP BY
+		                    a.id, s.id
+		                ORDER BY s.name
+						LIMIT 20;
+					", (s, a) => { s.slim_artist = a; return s; }, parms),
+
 					Source = await con.QueryAsync<SourceWithSlimArtist, SlimArtist, SourceWithSlimArtist>($@"
 						SELECT
 							s.*, a.*
