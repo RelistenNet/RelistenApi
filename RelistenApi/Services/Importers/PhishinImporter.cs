@@ -86,7 +86,7 @@ namespace Relisten.Import
 
 			ctx?.WriteLine("Processing Songs");
             stats += await ProcessSongs(artist, ctx);
-   
+
 			ctx?.WriteLine("Processing Venues");
    		    stats += await ProcessVenues(artist, ctx);
 
@@ -414,7 +414,7 @@ namespace Relisten.Import
                     source_set_id = set.id,
 					source_id = dbSource.id,
                     title = track.title,
-                    duration = track.duration,
+                    duration = track.duration / 1000,
                     track_position = track.position,
                     slug = Slugify(track.title),
                     mp3_url = track.mp3,
