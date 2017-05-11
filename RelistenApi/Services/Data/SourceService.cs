@@ -116,7 +116,9 @@ namespace Relisten.Data
                     LEFT JOIN source_tracks t ON t.source_set_id = s.id
                 WHERE
                     src.show_id = @showId
-                ",
+				ORDER BY
+					s.index ASC
+            ",
                 TrackMapper.Map,
                 new { showId = show.id })
             );
