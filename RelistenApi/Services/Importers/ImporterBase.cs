@@ -137,6 +137,16 @@ namespace Relisten.Import
             this.http.Dispose();
         }
 
+		IDictionary<string, int> trackSlugCounts { get; set; } = new Dictionary<string, int>();
+
+		/// <summary>
+		/// Resets the slug counts. This needs to be called after each source is imported otherwise you'll get thing like you-enjoy-myself-624
+		/// </summary>
+		public void ResetTrackSlugCounts()
+		{
+			trackSlugCounts.Clear();
+		}
+
         public string Slugify(string full)
         {
             var slug = Regex.Replace(full.ToLower().Normalize(), @"['.]", "");
@@ -147,6 +157,24 @@ namespace Relisten.Import
                 Replace(" ", "-").
 				Trim('-');
         }
+
+		public string SlugifyTrack(string full)
+		{
+			var slug = Slugify(full);
+
+			int count = 1;
+
+			// we got a value, that means it is at least 1 and we need to add something to the end
+			if (trackSlugCounts.TryGetValue(slug, out count))
+			{
+				count++;
+				slug += $"-{count}";
+			}
+
+			trackSlugCounts[slug] = count;
+
+			return slug;
+		}
 
         public async Task<ImportStats> RebuildYears(Artist artist)
         {

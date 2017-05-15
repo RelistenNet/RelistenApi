@@ -211,26 +211,11 @@ namespace Relisten.Import
 
 			var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
 
-			var trackNum = 0;
-            var dbTracks = mp3Files.
-                Where(file =>
-                {
-                    return !(
-                        (file.title == null && file.original == null)
-                        || file.length == null
-                        || file.name == null
-                    );
-                }).
-                OrderBy(file => file.name).
-                Select(file =>
-                {
-					var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacTracksByName, dbSet);
-                    trackNum = r.track_position;
-                    return r;
-                })
-                ;
+            var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet);
 
             stats.Created += (await _sourceTrackService.InsertAll(dbTracks)).Count();
+
+			ResetTrackSlugCounts();
 
             return stats;
         }
@@ -301,7 +286,38 @@ namespace Relisten.Import
             };
         }
 
-        private SourceTrack CreateSourceTrackForFile(
+		private IEnumerable<SourceTrack> CreateSourceTracksForFiles(
+			Artist artist,
+			Source dbSource,
+			Vendor.ArchiveOrg.Metadata.Metadata meta,
+			IEnumerable<Vendor.ArchiveOrg.Metadata.File> mp3Files,
+			IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles,
+			SourceSet set = null
+		)
+		{
+			var trackNum = 0;
+
+			return mp3Files.
+				Where(file =>
+				{
+					return !(
+						(file.title == null && file.original == null)
+						|| file.length == null
+						|| file.name == null
+					);
+				}).
+				OrderBy(file => file.name).
+				Select(file =>
+				{
+					var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set);
+					trackNum = r.track_position;
+
+					return r;
+				})
+				;
+		}
+
+		private SourceTrack CreateSourceTrackForFile(
             Artist artist,
             Source dbSource,
             Vendor.ArchiveOrg.Metadata.Metadata meta,
@@ -328,7 +344,7 @@ namespace Relisten.Import
 					Reverse().
 					Select((v, k) => (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).
 					Sum(),
-				slug = Slugify(title),
+				slug = SlugifyTrack(title),
 				mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
 				mp3_md5 = file.md5,
 				flac_url = flac == null ? null : $"https://archive.org/download/{meta.identifier}/{flac.name}",

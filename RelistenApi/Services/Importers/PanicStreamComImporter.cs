@@ -245,11 +245,13 @@ namespace Relisten.Import
                         track_position = trackIndex,
                         duration = null,
                         title = trackName,
-                        slug = Slugify(trackName),
+                        slug = SlugifyTrack(trackName),
                         mp3_url = PanicShowFileUrl(upstreamId, fileName),
                         updated_at = panicUpdatedAt
                     };
                 });
+
+			ResetTrackSlugCounts();
 
             await _sourceTrackService.InsertAll(mp3s);
             stats.Created += mp3s.Count();

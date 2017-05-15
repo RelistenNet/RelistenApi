@@ -416,11 +416,13 @@ namespace Relisten.Import
                     title = track.title,
                     duration = track.duration / 1000,
                     track_position = track.position,
-                    slug = Slugify(track.title),
+                    slug = SlugifyTrack(track.title),
                     mp3_url = track.mp3,
                     updated_at = dbSource.updated_at
                 });
             }
+
+			ResetTrackSlugCounts();
 
             stats.Created += (await _sourceTrackService.InsertAll(sets.SelectMany(kvp => kvp.Value.tracks))).Count();
 

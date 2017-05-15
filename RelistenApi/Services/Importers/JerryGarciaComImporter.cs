@@ -210,7 +210,7 @@ namespace Relisten.Import
                 .Select(node =>
                 {
                     var trackName = node.InnerText.Trim().TrimEnd('>', '*', ' ');
-                    var slug = Slugify(trackName);
+                    var slug = SlugifyTrack(trackName);
 
                     return new SetlistSong
                     {
@@ -224,6 +224,8 @@ namespace Relisten.Import
                 .Select(g => g.First())
                 .ToList()
                 ;
+
+			ResetTrackSlugCounts();
 
             var dbSongsToAdd = dbSongs.Where(song => !existingSetlistSongs.ContainsKey(song.upstream_identifier));
 
