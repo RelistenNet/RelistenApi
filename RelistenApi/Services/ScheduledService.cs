@@ -49,7 +49,7 @@ namespace Relisten
 			foreach (var artist in artists)
 			{
 				context.WriteLine($"--> Queueing {artist.name} ({artist.slug})");
-				BackgroundJob.Enqueue(() => RefreshArtist(artist.slug, null));
+				BackgroundJob.Enqueue(() => RefreshArtist(artist.slug, false, null));
 			}
 
 			context.WriteLine("--> Queued updates for all artists! ");
@@ -85,9 +85,18 @@ namespace Relisten
 		[Queue("artist_import")]
 		[DisplayName("Refresh Artist: {0}")]
 		[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshArtist(string idOrSlug, PerformContext ctx)
+		public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
 		{
 			var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+
+			if(deleteOldContent)
+			{
+				ctx?.WriteLine("Removing content for " + artist.name);
+
+				var rows = await _artistService.RemoveAllContentForArtist(artist);
+
+				ctx?.WriteLine($"Removed {rows} rows!");
+			}
 
 			var artistStats = await _importerService.Import(artist, ctx);
 

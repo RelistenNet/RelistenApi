@@ -61,6 +61,22 @@ namespace Relisten.Data
 			})));
 		}
 
+		public Task<int> RemoveAllContentForArtist(Artist art)
+		{
+			return db.WithConnection(con => con.ExecuteAsync(@"
+				delete from setlist_songs where artist_id = @ArtistId;
+				delete from setlist_shows where artist_id = @ArtistId;
+				delete from shows where artist_id = @ArtistId;
+				delete from sources where artist_id = @ArtistId;
+				delete from tours where artist_id = @ArtistId;
+				delete from venues where artist_id = @ArtistId;
+				delete from years where artist_id = @ArtistId;
+				delete from eras where artist_id = @ArtistId;
+			", new {
+				ArtistId = art.id
+			}));
+		}
+
 		public async Task<IEnumerable<Artist>> All()
 		{
 			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"

@@ -32,12 +32,12 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{idOrSlug}")]
-        public async Task<IActionResult> Get(string idOrSlug)
+		public async Task<IActionResult> Get(string idOrSlug, [FromQuery] bool deleteOldContent = false)
         {
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, null));
+				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null));
 				
 				return JsonSuccess($"Queued as job {jobId}!");
             }
