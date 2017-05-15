@@ -205,7 +205,7 @@ namespace Relisten.Import
             if (dbSource.num_ratings != ratings.RatingVotesCast)
             {
                 dbSource.num_ratings = ratings.RatingVotesCast;
-                dbSource.avg_rating = ratings.RatingAverage;
+                dbSource.avg_rating = ratings.RatingAverage * 2.0;
 
                 dirty = true;
             }
