@@ -13,6 +13,7 @@ using Relisten.Services.Auth;
 
 namespace Relisten.Controllers.Admin
 {
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class AdminController : Controller
     {
 		private readonly UserManager<ApplicationUser> _userManager;
