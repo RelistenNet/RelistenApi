@@ -23,30 +23,35 @@ namespace Relisten.Data
             Artist artist,
             string where,
             object parms,
-            string order = "display_date ASC"
+			int? limit = null,
+			string orderBy = null
         ) where T : Show
         {
-            return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
-                    SELECT
-                        s.*, cnt.sources_count, v.*, t.*, e.*
-                    FROM
-                        shows s
-                        LEFT JOIN venues v ON s.venue_id = v.id
-                        LEFT JOIN tours t ON s.tour_id = t.id
-                        LEFT JOIN eras e ON s.era_id = e.id
-                        INNER JOIN (
-                        	SELECT
-                        		src.show_id, COUNT(*) as sources_count, MAX(src.avg_rating_weighted) as max_avg_rating_weighted
-                        	FROM
-                        		sources src
-                        	GROUP BY
-                        		src.show_id
-                        ) cnt ON cnt.show_id = s.id
-                    WHERE
-                        " + where + @"
-                    ORDER BY
-                        " + order + @"
-                ", (Show, venue, tour, era) =>
+			orderBy = orderBy == null ? "display_date ASC" : orderBy;
+			var limitClause = limit == null ? "" : "LIMIT " + limit;
+
+			return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
+                SELECT
+                    s.*, cnt.max_created_at as most_recent_source_created_at, cnt.sources_count, v.*, t.*, e.*
+                FROM
+                    shows s
+                    LEFT JOIN venues v ON s.venue_id = v.id
+                    LEFT JOIN tours t ON s.tour_id = t.id
+                    LEFT JOIN eras e ON s.era_id = e.id
+                    INNER JOIN (
+                    	SELECT
+                    		src.show_id, MAX(src.created_at) as max_created_at, COUNT(*) as sources_count, MAX(src.avg_rating_weighted) as max_avg_rating_weighted
+                    	FROM
+                    		sources src
+                    	GROUP BY
+                    		src.show_id
+                    ) cnt ON cnt.show_id = s.id
+                WHERE
+                    " + where + @"
+                ORDER BY
+                    " + orderBy + @"
+				" + limitClause + @"
+            ", (Show, venue, tour, era) =>
             {
                 Show.venue = venue;
 
@@ -68,16 +73,20 @@ namespace Relisten.Data
             Artist artist,
             string where,
             object parms,
-            string order = "display_date ASC")
+			int? limit = null,
+			string orderBy = null)
         {
-            return await ShowsForCriteriaGeneric<Show>(artist, where, parms, order);
+			return await ShowsForCriteriaGeneric<Show>(artist, where, parms, limit, orderBy);
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object parms)
+        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object parms, int? limit = null, string orderBy = null)
         {
+			orderBy = orderBy == null ? "display_date ASC" : orderBy;
+			var limitClause = limit == null ? "" : "LIMIT " + limit;
+
             return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, Venue, Tour, Era, Artist, Features, ShowWithArtist>(@"
                     SELECT
-                        s.*, cnt.sources_count, v.*, t.*, e.*, a.*
+                        s.*, cnt.max_created_at as most_recent_source_created_at, cnt.sources_count, v.*, t.*, e.*, a.*
                     FROM
                         shows s
                         LEFT JOIN venues v ON s.venue_id = v.id
@@ -92,7 +101,7 @@ namespace Relisten.Data
                         ) a ON s.artist_id = a.aid
                         INNER JOIN (
                         	SELECT
-                        		src.show_id, COUNT(*) as sources_count
+                        		src.show_id, MAX(src.created_at) as max_created_at, COUNT(*) as sources_count
                         	FROM
                         		sources src
                         	GROUP BY
@@ -101,7 +110,8 @@ namespace Relisten.Data
                     WHERE
                         " + where + @"
                     ORDER BY
-                        display_date ASC
+                        " + orderBy + @"
+                    " + limitClause + @"
                 ", (Show, venue, tour, era, art, features) =>
             {
                 art.features = features;

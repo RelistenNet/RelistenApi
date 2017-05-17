@@ -35,8 +35,15 @@ namespace Relisten.Api.Models
         [Required]
         public string display_date { get; set; }
 
+		/// <summary>
+		/// This can be used to determine the age of the source most recently added.
+		/// </summary>
+		/// <value>The most recent `created_at` date of all the sources for this show.</value>
+		[Required]
+		public DateTime most_recent_source_created_at { get; set; }
+
         [Required]
-        public int? sources_count { get; set; }
+        public int sources_count { get; set; }
     }
 
     public class ShowWithArtist : Show
