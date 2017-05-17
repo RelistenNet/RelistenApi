@@ -5,6 +5,7 @@ using Hangfire.PostgreSql;
 using Hangfire.RecurringJobExtensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Cors.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,6 +38,8 @@ namespace Relisten
 		public void ConfigureServices(IServiceCollection services)
 		{
 			services.AddCors();
+
+            SetupAuthentication(services);
 
 			// Add framework services.
 			services.
@@ -96,6 +99,7 @@ namespace Relisten
 			services.AddScoped<JerryGarciaComImporter, JerryGarciaComImporter>();
 			services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
 			services.AddScoped<ArtistService, ArtistService>();
+            services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
 			services.AddScoped<ScheduledService, ScheduledService>();
 			services.AddScoped<SearchService, SearchService>();
 		}
@@ -115,6 +119,9 @@ namespace Relisten
 								  .WithMethods("GET", "POST", "OPTIONS", "HEAD")
 								  .WithOrigins("*")
 								  .AllowAnyMethod());
+
+            app.UseIdentity();
+            app.UseStaticFiles();
 
 			app.UseMvc();
 
@@ -146,6 +153,33 @@ namespace Relisten
 			});
 
 			app.UseCors(builder => builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
+		}
+
+        public void SetupAuthentication(IServiceCollection services)
+        {
+            var userStore = new EnvUserStore(Configuration);
+			var roleStore = new EnvRoleStore();
+			services.AddScoped<IPasswordHasher<ApplicationUser>, PlaintextHasher>();
+			services.AddSingleton<IUserStore<ApplicationUser>>(userStore);
+			services.AddSingleton<IUserPasswordStore<ApplicationUser>>(userStore);
+			services.AddSingleton<IRoleStore<ApplicationRole>>(roleStore);
+			services.AddSingleton<IUserClaimsPrincipalFactory<ApplicationUser>, EnvUserPrincipalFactory>();
+
+			services.AddAuthentication();
+			services.AddAuthorization();
+			services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
+			{
+				options.Password.RequiredLength = 1;
+				options.Password.RequireLowercase = false;
+				options.Password.RequireUppercase = false;
+				options.Password.RequireDigit = false;
+				options.Password.RequireNonAlphanumeric = false;
+
+                options.Cookies.ApplicationCookie.AutomaticChallenge = true;
+                options.Cookies.ApplicationCookie.LoginPath = "/relisten-admin/login";
+
+                options.Cookies.ApplicationCookie.ExpireTimeSpan = TimeSpan.FromDays(365);
+			}).AddDefaultTokenProviders();
 		}
 	}
 }

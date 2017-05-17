@@ -117,6 +117,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc">
       <Version>1.1.3</Version>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Identity">
+      <Version>1.1.2</Version>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -125,9 +128,21 @@
     <Folder Include="Vendor\" />
     <Folder Include="Views\" />
     <Folder Include="Services\Auth\" />
+    <Folder Include="Controllers\Admin\" />
+    <Folder Include="Views\Admin\" />
+    <Folder Include="wwwroot\" />
+    <Folder Include="wwwroot\js\" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Views\index.cshtml" />
+    <None Include="Views\Admin\Login.cshtml" />
+    <None Include="Views\Admin\Index.cshtml" />
+    <None Include="Views\Shared\Error.cshtml" />
+    <None Include="Views\Shared\_Layout.cshtml" />
+    <None Include="Views\Shared\_LoginPartial.cshtml" />
+    <None Include="Views\_ViewImports.cshtml" />
+    <None Include="Views\_ViewStart.cshtml" />
+    <None Include="wwwroot\js\admin.js" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings.json">

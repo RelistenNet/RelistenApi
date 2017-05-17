@@ -1,0 +1,128 @@
+﻿@model AdminViewModel
+@{
+    ViewData["Title"] = "Relisten Admin";
+}
+
+<div class="row">
+    <div class="col-md-12">
+        <section>
+            <div id="add-artist">
+                <div class="row">
+                    <div class="col-md-12">
+                        <h2>Add/Update Artist</h2>
+		                <p>
+		                    Copy settings from an existing artist:
+		                    <select v-on:change="copyFromExistingArtist($event)">
+		                        <option disabled selected>Choose an artist...</option>
+		                        <option v-for="art in artists" v-bind:value="art.id">
+		                            {{ art.name }}
+		                        </option>
+		                    </select>
+		                </p>
+		                <hr/>
+		                <h3>Artist Info</h3>
+                    </div>
+                </div>
+				<div class="row">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="name">Name</label>
+                            <input type="text" class="form-control" id="name" placeholder="Name" v-model="selected.name" v-on:keyup="slugify($event)">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="slug">Slug</label>
+                            <input type="text" class="form-control" id="slug" placeholder="Slug" v-model="selected.slug">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="mbid">Musicbrainz Id</label>
+                            <input type="text" class="form-control" id="mbid" placeholder="Musicbrainz Id" v-model="selected.musicbrainz_id">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="featured">Featured?</label>
+                            <select v-model="selected.featured" class="form-control">
+                                <option selected value="0">Not Featured</option>
+                                <option value="1">Featured</option>
+							</select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <h3>Features</h3>
+                        <p>
+                            <ul class="feature-list">
+                                <li v-for="feature in features" class="feature">
+                                    <input type="checkbox" v-bind:id="'feature-'+feature" v-model="selected.features[feature]" />
+                                    &nbsp;<label v-bind:for="'feature-'+feature">{{ feature }}</label>
+                                </li>
+                            </ul>
+                        </p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <h3>Upstream Sources</h3>
+                        <div class="row" v-for="(source, index) in selected.upstream_sources">
+                            <div class="col-md-3">
+								<div class="form-group">
+	                                <select v-model="source.upstream_source_id" class="form-control">
+	                                    <option disabled>Choose an upstream source...</option>
+	                                    <option v-for="s in upstream_sources" v-bind:value="s.id">
+	                                        {{ s.name }}
+	                                    </option>
+	                                </select>
+								</div>
+                            </div>
+                            <div class="col-md-3">
+								<div class="form-group">
+                                    <input type="text" v-model="source.upstream_identifier" class="form-control" />
+								</div>
+                            </div>
+                            <div class="col-md-1">
+                                <div class="form-group">
+                                    <button class="btn btn-danger" v-on:click="removeUpstreamSource(index)">&times;</button>
+                                </div>
+                            </div>
+						</div>
+                        <p><button class="btn btn-success" v-on:click="addUpstreamSource()">Add Upstream Source</button></p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+						<br/>
+                        <button class="btn btn-primary">Update</button>
+						<button class="btn btn-primary">Add as New Artist</button>
+                    </div>
+                </div>
+			</div>
+		</section>
+    </div>
+</div>
+<style type="text/css">
+	.feature-list {
+        list-style:none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.feature-list li {
+        width: 220px;
+	    display: inline-block;
+	}
+</style>
+
+@section Scripts {
+    <script type="text/javascript" src="https://unpkg.com/vue@2.3.3"></script>
+    <script type="text/javascript">
+	    var artists = @Html.Raw(Json.Serialize(Model.Artists));
+	    var upstream_sources = @Html.Raw(Json.Serialize(Model.UpstreamSources));
+	</script>
+    <script type="text/javascript" src="~/js/admin.js"></script>
+}
+

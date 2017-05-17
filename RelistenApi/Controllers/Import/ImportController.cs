@@ -9,6 +9,7 @@ using Relisten.Api.Models;
 using Relisten.Import;
 using Relisten.Data;
 using Hangfire;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Relisten.Controllers
 {
@@ -32,6 +33,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{idOrSlug}")]
+        [Authorize]
 		public async Task<IActionResult> Get(string idOrSlug, [FromQuery] bool deleteOldContent = false)
         {
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
