@@ -43,7 +43,7 @@ namespace Relisten.Api.Models
 		public DateTime most_recent_source_created_at { get; set; }
 
         [Required]
-        public int sources_count { get; set; }
+        public int source_count { get; set; }
     }
 
     public class ShowWithArtist : Show
