@@ -42,6 +42,10 @@ namespace Relisten.Api.Models
 		[Required]
 		public DateTime most_recent_source_created_at { get; set; }
 
+        /// <value><c>true</c> if this show has at least one source that is a soundboard recording; otherwise, <c>false</c>.</value>
+        [Required]
+        public bool has_soundboard_source { get; set; }
+
         [Required]
         public int source_count { get; set; }
     }
