@@ -140,7 +140,7 @@ namespace Relisten
 				c.RouteTemplate = "api-docs/{documentName}/swagger.json";
 			});
 
-			app.UseSwaggerUi(ctx => {
+			app.UseSwaggerUI(ctx => {
 				ctx.RoutePrefix = "api-docs";
 				ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
 			});
