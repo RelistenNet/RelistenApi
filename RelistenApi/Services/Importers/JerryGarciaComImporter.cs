@@ -55,6 +55,16 @@ namespace Relisten.Import
              | ImportableData.Venues;
         }
 
+        string ShowPagesListingUrl(ArtistUpstreamSource src)
+        {
+            return $"https://phish.alecgorge.com/relisten/{src.upstream_identifier}/show_pages.json";
+		}
+
+        string ShowPageUrl(ArtistUpstreamSource src, string filename)
+        {
+            return $"https://phish.alecgorge.com/relisten/{src.upstream_identifier}/show_pages/{filename}";
+        }
+
         private const string ShowFilesDirectory = "Data/grateful_dead/show_pages/";
 
         private class FileMetaObject
@@ -71,8 +81,10 @@ namespace Relisten.Import
 
 			await PreloadData(artist);
 
-			var files = Directory.EnumerateFiles(ShowFilesDirectory)
-				.Where(f => f.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            var showFilesResponse = await http.GetStringAsync(ShowPagesListingUrl(src));
+            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
+
+            var files = showFiles
 				.Select(f =>
 				{
 					var fileName = Path.GetFileName(f);
@@ -84,16 +96,16 @@ namespace Relisten.Import
 						Identifier = fileName.Remove(fileName.LastIndexOf(".html", StringComparison.OrdinalIgnoreCase))
 					};
 				})
-								 .ToList()
+				.ToList()
 				;
 
 			ctx?.WriteLine($"Checking {files.Count} html files");
 			var prog = ctx?.WriteProgressBar();
 
-
 			await files.AsyncForEachWithProgress(prog, async f => 
 			{
-				await ProcessPage(stats, artist, f, File.ReadAllText(f.FilePath), ctx);
+                var pageContents = await http.GetStringAsync(ShowPageUrl(src, f.FilePath));
+				await ProcessPage(stats, artist, f, pageContents, ctx);
 			});
 
 			if (artist.features.tours)
