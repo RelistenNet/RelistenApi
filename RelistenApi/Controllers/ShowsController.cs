@@ -77,7 +77,7 @@ namespace Relisten.Controllers
         {
             return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteria(art, @"
                 s.artist_id = @artistId
-            ", new { artistId = art.id, limit }, "cnt.max_avg_rating_weighted DESC LIMIT @limit"));
+            ", new { artistId = art.id }, limit, "cnt.max_avg_rating_weighted DESC"));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/random")]

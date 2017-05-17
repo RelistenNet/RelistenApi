@@ -49,8 +49,9 @@ namespace Relisten.Controllers
 		[ProducesResponseType(typeof(ResponseEnvelope<bool>), 200)]
 		public async Task<IActionResult> RecentlyPlayed()
 		{
-			
-			return JsonSuccess(true);
+            await Task.Delay(10);
+
+            return JsonSuccess(true);
 		}
     }
 }
