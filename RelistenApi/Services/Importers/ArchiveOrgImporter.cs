@@ -30,17 +30,21 @@ namespace Relisten.Import
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
 
-        public ArchiveOrgImporter(
+		readonly LinkService linkService;
+
+		public ArchiveOrgImporter(
             DbService db,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
             SourceSetService sourceSetService,
-            SourceReviewService sourceReviewService,
+			SourceReviewService sourceReviewService,
+			LinkService linkService,
             SourceTrackService sourceTrackService
         ) : base(db)
         {
-            this._sourceService = sourceService;
+			this.linkService = linkService;
+			this._sourceService = sourceService;
             this._venueService = venueService;
             this._tourService = tourService;
             
@@ -66,7 +70,7 @@ namespace Relisten.Import
 		public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             await PreloadData(artist);
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), ctx);
+            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), src, ctx);
         }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
@@ -80,7 +84,7 @@ namespace Relisten.Import
             return $"http://archive.org/metadata/{identifier}";
         }
 
-		private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, PerformContext ctx)
+		private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, ArtistUpstreamSource src, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -109,7 +113,7 @@ namespace Relisten.Import
 						new Vendor.ArchiveOrg.TolerantStringConverter()
 					);
 
-					stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, ctx);
+					stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, ctx);
 				}
 			});
 
@@ -127,6 +131,7 @@ namespace Relisten.Import
             Source dbSource,
             Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
             Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
+			ArtistUpstreamSource upstreamSrc,
 			PerformContext ctx
         )
         {
@@ -204,7 +209,9 @@ namespace Relisten.Import
                 stats.Created++;
 
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
-            }
+
+				stats.Created += (await linkService.AddLinksForSource(dbSource, LinksForSource(dbSource, upstreamSrc))).Count();
+			}
 
             var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
             stats.Created++;
@@ -219,6 +226,23 @@ namespace Relisten.Import
 
             return stats;
         }
+
+		IEnumerable<Link> LinksForSource(Source dbSource, ArtistUpstreamSource src)
+		{
+			return new[]
+			{
+				new Link
+				{
+					source_id = dbSource.id,
+					for_ratings = true,
+					for_source = true,
+					for_reviews = true,
+					upstream_source_id = src.upstream_source_id,
+					url = "https://archive.org/details/" + dbSource.upstream_identifier,
+					label = "View on archive.org"
+				}
+			};
+		}
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source, IEnumerable<SourceReview> reviews)
         {
@@ -331,7 +355,7 @@ namespace Relisten.Import
 
             var title = !String.IsNullOrEmpty(file.title) ? file.title : file.original;
 
-			var flac = flacFiles.GetValue(file.original);
+			var flac = file.original == null ? null : flacFiles.GetValue(file.original);
 
             return new SourceTrack()
 			{

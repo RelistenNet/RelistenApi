@@ -61,5 +61,8 @@ namespace Relisten.Api.Models
   
 		[Required]
 		public IList<SourceSet> sets { get; set; }
+
+		[Required]
+		public IList<Link> links { get; set; }
     }
 }

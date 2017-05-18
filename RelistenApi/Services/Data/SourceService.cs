@@ -93,54 +93,71 @@ namespace Relisten.Data
                 ParentKey = (set) => set.id
             };
 
-            var t_srcsWithReviews = db.WithConnection(con => con.QueryAsync<SourceFull, SourceReview, SourceFull>(@"
-                SELECT
-                    s.*, r.*
-                FROM
-                    sources s
-                    LEFT JOIN source_reviews r ON r.source_id = s.id
-                WHERE
-                    s.artist_id = @artistId
-                    AND s.show_id = @showId
-                ",
-                ReviewMapper.Map,
-                new { showId = show.id, artistId = artist.id })
-            );
+			return await db.WithConnection(async con => {
+				var t_srcsWithReviews = await con.QueryAsync<SourceFull, SourceReview, SourceFull>(@"
+	                SELECT
+	                    s.*, r.*
+	                FROM
+	                    sources s
+	                    LEFT JOIN source_reviews r ON r.source_id = s.id
+	                WHERE
+	                    s.artist_id = @artistId
+	                    AND s.show_id = @showId
+	            ",
+					ReviewMapper.Map,
+					new { showId = show.id, artistId = artist.id }
+				);
 
-            var t_setsWithTracks = db.WithConnection(con => con.QueryAsync<SourceSet, SourceTrack, SourceSet>(@"
-                SELECT
-                    s.*, t.*
-                FROM
-                    source_sets s
-                    LEFT JOIN sources src ON src.id = s.source_id
-                    LEFT JOIN source_tracks t ON t.source_set_id = s.id
-                WHERE
-                    src.show_id = @showId
-				ORDER BY
-					s.index ASC
-            ",
-                TrackMapper.Map,
-                new { showId = show.id })
-            );
+				var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>(@"
+	                SELECT
+	                    s.*, t.*
+	                FROM
+	                    source_sets s
+	                    LEFT JOIN sources src ON src.id = s.source_id
+	                    LEFT JOIN source_tracks t ON t.source_set_id = s.id
+	                WHERE
+	                    src.show_id = @showId
+					ORDER BY
+						s.index ASC
+	            ",
+					TrackMapper.Map,
+					new { showId = show.id }
+				);
 
-            await Task.WhenAll(t_srcsWithReviews, t_setsWithTracks);
+				var t_linksForSources = await con.QueryAsync<Link>(@"
+					SELECT
+						l.*
+					FROM
+						links l
+					WHERE
+						l.source_id = ANY(@sourceIds)
+				", new { sourceIds = t_srcsWithReviews.Select(s => s.id).ToList() });
 
-            var srcsWithReviews = t_srcsWithReviews.Result
-                .Where(s => s != null)
-                ;
 
-            var setsWithTracks = t_setsWithTracks.Result
-                .Where(s => s != null)
-                .GroupBy(s => s.source_id)
-                .ToDictionary(grp => grp.Key, grp => grp.AsList())
-                ;
+				var srcsWithReviews = t_srcsWithReviews
+					.Where(s => s != null)
+					;
 
-            foreach (var src in srcsWithReviews)
-            {
-                src.sets = setsWithTracks[src.id];
-            }
+				var setsWithTracks = t_setsWithTracks
+					.Where(s => s != null)
+					.GroupBy(s => s.source_id)
+					.ToDictionary(grp => grp.Key, grp => grp.AsList())
+					;
 
-            return srcsWithReviews;
+				var linksBySource = t_linksForSources
+					.Where(s => s != null)
+					.GroupBy(s => s.source_id)
+					.ToDictionary(grp => grp.Key, grp => grp.AsList())
+					;
+
+				foreach (var src in srcsWithReviews)
+				{
+					src.sets = setsWithTracks[src.id];
+					src.links = linksBySource[src.id];
+				}
+
+				return srcsWithReviews;
+			});
         }
 
         public async Task<IEnumerable<Source>> AllForArtist(Artist artist)

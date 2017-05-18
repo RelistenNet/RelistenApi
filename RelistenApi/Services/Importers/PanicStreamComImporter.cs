@@ -33,7 +33,9 @@ namespace Relisten.Import
         protected TourService _tourService { get; set; }
         protected ILogger<PanicStreamComImporter> _log { get; set; }
 
-        public PanicStreamComImporter(
+		readonly LinkService linkService;
+
+		public PanicStreamComImporter(
             DbService db,
             VenueService venueService,
             TourService tourService,
@@ -41,10 +43,12 @@ namespace Relisten.Import
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
             SourceTrackService sourceTrackService,
+			LinkService linkService,
             ILogger<PanicStreamComImporter> log
         ) : base(db)
         {
-            this._sourceService = sourceService;
+			this.linkService = linkService;
+			this._sourceService = sourceService;
             this._venueService = venueService;
             this._tourService = tourService;
             this._log = log;
@@ -121,7 +125,7 @@ namespace Relisten.Import
                 // 27-Jul-2016 19:14
                 var panicUpdatedAt = DateTime.ParseExact(match.Groups[3].Value.Trim(), "dd-MMM-yyyy HH:mm", CultureInfo.InvariantCulture);
 
-                await ProcessShow(stats, artist, panicDate, panicRecLetter, panicUpdatedAt, ctx);
+                await ProcessShow(stats, artist, src, panicDate, panicRecLetter, panicUpdatedAt, ctx);
 
 				prog.SetValue(100.0 * counter / matches.Count);
 
@@ -143,7 +147,7 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-		private async Task ProcessShow(ImportStats stats, Artist artist, string panicDate, string panicRecLetter, DateTime panicUpdatedAt, PerformContext ctx)
+		private async Task ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource upstreamSrc, string panicDate, string panicRecLetter, DateTime panicUpdatedAt, PerformContext ctx)
         {
             var upstreamId = panicDate + panicRecLetter;
             var dbSource = existingSources.GetValue(upstreamId);
@@ -210,6 +214,29 @@ namespace Relisten.Import
 			else
 			{
 				stats.Created++;
+				stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
+				{
+					new Link
+					{
+						source_id = dbSource.id,
+						for_ratings = false,
+						for_source = true,
+						for_reviews = false,
+						upstream_source_id = upstreamSrc.upstream_source_id,
+						url = $"http://www.panicstream.com/vault/widespread-panic/{dbSource.display_date.Substring(0, 4)}-streams/",
+						label = "View show page on panicstream.com"
+					},
+					new Link
+					{
+						source_id = dbSource.id,
+						for_ratings = false,
+						for_source = true,
+						for_reviews = false,
+						upstream_source_id = upstreamSrc.upstream_source_id,
+						url = PanicShowUrl(upstreamId),
+						label = "View MP3s on panicstream.com"
+					}
+				})).Count();
 			}
 
             var dbSet = await _sourceSetService.Insert(new SourceSet

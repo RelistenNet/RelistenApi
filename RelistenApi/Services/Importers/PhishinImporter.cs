@@ -34,7 +34,9 @@ namespace Relisten.Import
         protected SetlistShowService _setlistShowService { get; set; }
         protected ILogger<PhishinImporter> _log { get; set; }
 
-        public PhishinImporter(
+		readonly LinkService linkService;
+
+		public PhishinImporter(
             DbService db,
             VenueService venueService,
             TourService tourService,
@@ -43,12 +45,14 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             SourceTrackService sourceTrackService,
             SetlistSongService setlistSongService,
+			LinkService linkService,
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<PhishinImporter> log
         ) : base(db)
         {
-            this._setlistSongService = setlistSongService;
+			this.linkService = linkService;
+			this._setlistSongService = setlistSongService;
             this._setlistShowService = setlistShowService;
             this._sourceService = sourceService;
             this._venueService = venueService;
@@ -91,7 +95,7 @@ namespace Relisten.Import
    		    stats += await ProcessVenues(artist, ctx);
 
 			ctx?.WriteLine("Processing Shows");
-			stats += await ProcessShows(artist, ctx);
+			stats += await ProcessShows(artist, src, ctx);
 
 			ctx?.WriteLine("Rebuilding");
             await RebuildShows(artist);
@@ -324,7 +328,7 @@ namespace Relisten.Import
             else { return 8; }
         }
 
-        private async Task ProcessSetlistShow(ImportStats stats, PhishinShow show, Artist artist, Source dbSource, IDictionary<string, SourceSet> sets)
+        private async Task ProcessSetlistShow(ImportStats stats, PhishinShow show, Artist artist, ArtistUpstreamSource src, Source dbSource, IDictionary<string, SourceSet> sets)
         {
             var dbShow = existingSetlistShows.GetValue(show.date);
 
@@ -345,7 +349,7 @@ namespace Relisten.Import
 
                 stats.Created++;
 
-                addSongs = true;
+				addSongs = true;
             }
             else if (show.updated_at > dbShow.updated_at)
             {
@@ -377,7 +381,7 @@ namespace Relisten.Import
             }
         }
 
-        private async Task<Source> ProcessShow(ImportStats stats, Artist artist, Source dbSource, PerformContext ctx)
+        private async Task<Source> ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
         {
             var fullShow = await PhishinApiRequest<PhishinShow>("shows/" + dbSource.upstream_identifier, ctx);
 
@@ -426,12 +430,12 @@ namespace Relisten.Import
 
             stats.Created += (await _sourceTrackService.InsertAll(sets.SelectMany(kvp => kvp.Value.tracks))).Count();
 
-            await ProcessSetlistShow(stats, fullShow, artist, dbSource, sets);
+            await ProcessSetlistShow(stats, fullShow, artist, src, dbSource, sets);
 
             return dbSource;
         }
 
-        public async Task<ImportStats> ProcessShows(Artist artist, PerformContext ctx)
+        public async Task<ImportStats> ProcessShows(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -445,7 +449,7 @@ namespace Relisten.Import
 
 				if (dbSource == null)
 				{
-					dbSource = await ProcessShow(stats, artist, new Source()
+					dbSource = await ProcessShow(stats, artist, src, new Source()
 					{
 						updated_at = show.updated_at,
 						artist_id = artist.id,
@@ -461,6 +465,20 @@ namespace Relisten.Import
 					existingSources[dbSource.upstream_identifier] = dbSource;
 
 					stats.Created++;
+
+					stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
+					{
+						new Link
+						{
+							source_id = dbSource.id,
+							for_ratings = false,
+							for_source = true,
+							for_reviews = false,
+							upstream_source_id = src.upstream_source_id,
+							url = $"http://phish.in/{dbSource.display_date}",
+							label = "View on phish.in"
+						}
+					})).Count();
 				}
 				else if (show.updated_at > dbSource.updated_at)
 				{
@@ -475,7 +493,7 @@ namespace Relisten.Import
 
 					stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
 
-					dbSource = await ProcessShow(stats, artist, dbSource, ctx);
+					dbSource = await ProcessShow(stats, artist, src, dbSource, ctx);
 
 					existingSources[dbSource.upstream_identifier] = dbSource;
 

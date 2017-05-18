@@ -106,6 +106,7 @@ namespace Relisten
             services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
 			services.AddScoped<ScheduledService, ScheduledService>();
 			services.AddScoped<SearchService, SearchService>();
+			services.AddScoped<LinkService, LinkService>();
 		}
 
 		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

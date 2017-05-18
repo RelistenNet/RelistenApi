@@ -187,7 +187,6 @@ namespace Relisten.Api.Models
 		[Required]
 		public int artist_id { get; set; }
 
-		[JsonIgnore]
 		public UpstreamSource upstream_source { get; set; }
 	}
 }

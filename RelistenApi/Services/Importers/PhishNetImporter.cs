@@ -20,14 +20,18 @@ namespace Relisten.Import
         protected SourceReviewService _sourceReviewService { get; set; }
         protected ILogger<PhishNetImporter> _log { get; set; }
 
-        public PhishNetImporter(
+		readonly LinkService linkService;
+
+		public PhishNetImporter(
             DbService db,
             SourceService sourceService,
             SourceReviewService sourceReviewService,
+			LinkService linkService,
             ILogger<PhishNetImporter> log
         ) : base(db)
         {
-            this._sourceService = sourceService;
+			this.linkService = linkService;
+			this._sourceService = sourceService;
             this._log = log;
             _sourceReviewService = sourceReviewService;
         }
@@ -54,7 +58,7 @@ namespace Relisten.Import
 
 			await shows.ForEachAsync(async dbSource =>
 			{
-				stats += await ProcessSource(artist, dbSource, ctx);
+				stats += await ProcessSource(artist, src, dbSource, ctx);
 			}, prog, 10);
 
 			ctx?.WriteLine("Rebuilding...");
@@ -195,7 +199,7 @@ namespace Relisten.Import
             return JsonConvert.DeserializeObject<IEnumerable<PhishNetApiReview>>(page);
         }
 
-        private async Task<ImportStats> ProcessSource(Artist artist, Source dbSource, PerformContext ctx)
+		private async Task<ImportStats> ProcessSource(Artist artist, ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -243,7 +247,22 @@ namespace Relisten.Import
                 stats.Updated++;
             }
 
-            return stats;
+			stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
+			{
+				new Link
+				{
+					source_id = dbSource.id,
+					for_ratings = true,
+					for_source = false,
+					for_reviews = true,
+					upstream_source_id = src.upstream_source_id,
+					url = PhishNetUrlForSource(dbSource),
+					label = "View on phish.net"
+				}
+			})).Count();
+
+
+			return stats;
         }
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(ImportStats stats, Source source, IEnumerable<SourceReview> reviews)

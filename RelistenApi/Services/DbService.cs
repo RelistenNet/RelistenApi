@@ -21,7 +21,8 @@ namespace Relisten
 
 			Console.WriteLine("DB Connection String: " + ConnStr);
 
-			// NpgsqlLogManager.Provider = (new LoggerFactory()).AddConsole((text, logLevel) => logLevel >= LogLevel.Debug);
+			// NpgsqlLogManager.IsParameterLoggingEnabled = true;
+			// NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
         }
 
         public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData)
