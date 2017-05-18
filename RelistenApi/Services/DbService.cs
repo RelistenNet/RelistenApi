@@ -9,7 +9,7 @@ namespace Relisten
 {
     public class DbService
     {
-		public string ConnStr { get; set; }
+		public static string ConnStr { get; set; }
 
         public DbService(string url)
         {

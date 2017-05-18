@@ -1,4 +1,4 @@
-﻿
+﻿﻿
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -52,13 +52,15 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public string slug { get; set; }
-	}
+    }
 
-	public class Artist : SlimArtist
-	{
+    public class SlimArtistWithFeatures : SlimArtist {
 		[Required]
 		public Features features { get; set; }
+	}
 
+    public class Artist : SlimArtistWithFeatures
+	{
 		[Required]
 		public IEnumerable<ArtistUpstreamSource> upstream_sources { get; set; }
 	}
@@ -134,7 +136,7 @@ namespace Relisten.Api.Models
 		public bool setlist_data_incomplete { get; set; }
 
 		[Required]
-		public bool artist_id { get; set; }
+		public int artist_id { get; set; }
 
 		[Required]
 		public bool track_names { get; set; }
@@ -149,7 +151,7 @@ namespace Relisten.Api.Models
 		public bool track_durations { get; set; }
 
 		[Required]
-		public bool can_have_flac { get; set; }
+        public bool can_have_flac { get; set; }
 }
 
 	public class UpstreamSource {
@@ -172,15 +174,18 @@ namespace Relisten.Api.Models
 		public ImporterBase importer { get; set; }
 	}
 
-	public class ArtistUpstreamSource {
+    public class SlimArtistUpstreamSource {
 		[Required]
 		public int upstream_source_id { get; set; }
 
 		[Required]
-		public int artist_id { get; set; }
+		public string upstream_identifier { get; set; }
+	}
+
+    public class ArtistUpstreamSource : SlimArtistUpstreamSource {
 
 		[Required]
-		public string upstream_identifier { get; set; }
+		public int artist_id { get; set; }
 
 		[JsonIgnore]
 		public UpstreamSource upstream_source { get; set; }

@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System;
 using Relisten.Import;
+using System.Text;
+using System.Reflection;
 
 namespace Relisten.Data
 {
@@ -53,7 +55,7 @@ namespace Relisten.Data
                     LEFT JOIN show_counts sh ON sh.artist_id = a.id
                     LEFT JOIN source_counts src ON src.artist_id = a.id
 				ORDER BY
-					a.featured, a.name
+					a.featured DESC, a.name
             ", (ArtistWithCounts artist, Features features) =>
 			{
 				artist.features = features;
@@ -86,7 +88,7 @@ namespace Relisten.Data
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
 				ORDER BY
-					a.featured, a.name
+					a.featured DESC, a.name
             ", joiner)));
 		}
 
@@ -206,6 +208,145 @@ namespace Relisten.Data
 			}
 
 			return art;
+		}
+
+		string UpdateFieldsForFeatures(Features features)
+		{
+			var sb = new StringBuilder();
+            var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
+
+            foreach (var prop in props)
+			{
+				sb.AppendLine($"{prop.Name} = @{prop.Name}");
+			}
+			return sb.ToString();
+		}
+
+
+		string InsertFieldsForFeatures(Features features)
+		{
+            var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
+
+			var sb = new StringBuilder();
+            sb.AppendLine("(");
+
+            for (var i = 0; i < props.Length; i++)
+			{
+				sb.Append($"{props[i].Name}");
+
+                if(i < props.Length - 1) {
+                    sb.Append(",");
+                }
+
+                sb.AppendLine();
+			}
+
+            sb.AppendLine(") VALUES (");
+
+			for (var i = 0; i < props.Length; i++)
+			{
+				sb.Append($"@{props[i].Name}");
+
+				if (i < props.Length - 1)
+				{
+					sb.Append(",");
+				}
+
+				sb.AppendLine();
+			}
+
+			sb.AppendLine(")");
+			return sb.ToString();
+		}
+
+		public async Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist)
+		{
+			if (artist.id != 0)
+			{
+                var art = await db.WithConnection(async con => {
+                    var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
+	                    UPDATE
+	                        artists
+	                    SET
+	                        musicbrainz_id = @musicbrainz_id,
+	                        name = @name,
+	                        featured = @featured,
+	                        slug = @slug,
+	                        updated_at = timezone('utc'::text, now())
+	                    WHERE
+	                        id = @id
+	                    RETURNING *
+	                ", new
+                    {
+                        artist.musicbrainz_id,
+                        artist.name,
+                        artist.slug,
+                        artist.featured,
+					});
+
+					innerArt.features = artist.features;
+					innerArt.features.artist_id = innerArt.id;
+
+					await con.ExecuteAsync(@"
+                        UPDATE
+                            features
+                        SET
+                            " + UpdateFieldsForFeatures(innerArt.features) + @"
+                        WHERE
+                            id = @id
+                    ", innerArt.features);
+
+                    return innerArt;
+                });
+
+                return art;
+			}
+			else
+			{
+                var art = await db.WithConnection(async con => {
+                    var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
+	                    INSERT INTO
+	                        artists
+
+	                        (
+	                            musicbrainz_id,
+	                            featured,
+	                            name,
+	                            slug,
+	                            updated_at
+	                        )
+	                    VALUES
+	                        (
+	                            @musicbrainz_id,
+	                            @featured,
+	                            @name,
+	                            @slug,
+	                            timezone('utc'::text, now())
+	                        )
+	                    RETURNING *
+	                ", new
+					{
+						artist.musicbrainz_id,
+						artist.name,
+						artist.slug,
+						artist.featured,
+					});
+
+					innerArt.features = artist.features;
+					innerArt.features.artist_id = innerArt.id;
+
+					await con.ExecuteAsync(@"
+                        INSERT INTO
+                            features
+
+                            " + InsertFieldsForFeatures(innerArt.features) + @"
+                    ", innerArt.features);
+					
+                    return innerArt;
+                });
+
+				return art;
+			}
 		}
 	}
 }

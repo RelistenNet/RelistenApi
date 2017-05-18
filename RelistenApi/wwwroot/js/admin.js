@@ -2,7 +2,9 @@
 var addArtist = new Vue({
     el: "#add-artist",
     data: () => {
-        var features = Object.keys(window.artists[0].features);
+        var features = Object.keys(window.artists[0].features)
+            .filter((f) => f != "id" && f != "artist_id");
+
         var sel = {};
 
         features.forEach((feature) => {
@@ -22,7 +24,10 @@ var addArtist = new Vue({
 	            musicbrainz_id: "",
                 featured: "0",
                 upstream_sources: []
-	        }
+	        },
+
+            loading: false,
+            result: null
         }
     },
     methods: {
@@ -67,6 +72,109 @@ var addArtist = new Vue({
         },
         removeUpstreamSource: function (idx) {
             this.$data.selected.upstream_sources.splice(idx, 1);
+        },
+        buildArtistPayload: function () {
+            var r = {
+                SlimArtist: {
+                    id: this.$data.selected.id,
+                    musicbrainz_id: this.$data.selected.musicbrainz_id,
+                    name: this.$data.selected.name,
+                    featured: parseInt(this.$data.selected.featured, 10),
+                    slug: this.$data.selected.slug,
+                    features: this.$data.selected.features
+                },
+                SlimUpstreamSources: this.$data.selected.upstream_sources
+            };
+
+            r.SlimArtist.features.id = 0;
+            r.SlimArtist.features.artist_id = 0;
+
+            return r;
+        },
+        sendArtistJson: function(route, method, payload) {
+            return fetch("/api/v2/" + route, {
+                method: method,
+                headers: {
+                  'Accept': 'application/json',
+                  'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify(payload)
+            });
+        },
+        addArtist: function() {
+            var payload = this.buildArtistPayload();
+
+            payload.SlimArtist.id = 0;
+
+            this.$data.loading = true;
+
+            this.sendArtistJson("artists", "POST", payload)
+                .then(() => {
+                    this.$data.loading = false;
+                    this.$data.result = "Artist added";
+                })
+                .catch((res) => {
+                    this.$data.loading = false;
+
+                    res.text().then((text) => {
+                        this.$data.result = "Error: " + text;
+                    });
+                })
+                ;
+        },
+        updateArtist: function() {
+            var payload = this.buildArtistPayload();
+
+            this.sendArtistJson("artists/" + payload.SlimArtist.id, "PUT", payload)
+                .then(() => {
+                    this.$data.loading = false;
+                    this.$data.result = "Artist updated";
+                })
+                .catch((res) => {
+                    this.$data.loading = false;
+
+                    res.text().then((text) => {
+                        this.$data.result = "Error: " + text;
+                    });
+                })
+                ;
+        }
+    }
+});
+
+var refresh = new Vue({
+    el: "#import",
+    data: {
+        artists: window.artists,
+        loading: false,
+        result: null,
+
+        selected: {
+            artist: -1,
+            delete_existing: false
+        }
+    },
+    methods: {
+        queueImport: function() {
+            fetch("/api/v2/import/" + this.$data.selected.artist + "?deleteOldContent=" + this.$data.selected.delete_existing, {
+                credentials: 'include'
+            })
+	            .then((res) => {
+	                this.$data.loading = false;
+
+                    res.text().then((text) => {
+                        this.$data.result = "Artist update queued: " + text;
+                    });
+	            })
+	            .catch((res) => {
+	                this.$data.loading = false;
+
+                    res.text().then((text) => {
+                        this.$data.result = "Error: " + text;
+                    });
+	            })
+	            ;
         }
     }
 })

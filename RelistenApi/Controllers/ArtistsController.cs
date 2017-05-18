@@ -8,6 +8,7 @@ using Dapper;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Api.Models.Api;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Relisten.Controllers
 {
@@ -15,12 +16,16 @@ namespace Relisten.Controllers
     [Produces("application/json")]
     public class ArtistsController : RelistenBaseController
     {
-		public ArtistsController(
+        readonly UpstreamSourceService upstreamSourceService;
+
+        public ArtistsController(
             RedisService redis,
             DbService db,
-			ArtistService artistService
-		) : base(redis, db, artistService)
+            ArtistService artistService,
+            UpstreamSourceService upstreamSourceService
+        ) : base(redis, db, artistService)
         {
+            this.upstreamSourceService = upstreamSourceService;
         }
 
         // GET api/values
@@ -45,5 +50,34 @@ namespace Relisten.Controllers
 
             return JsonNotFound(false);
         }
+
+		[ApiExplorerSettings(IgnoreApi = true)]
+		[HttpPost("artists")]
+        [Authorize]
+		public async Task<IActionResult> CreateArtist([FromBody] CreateUpdateArtistDto artist)
+		{
+            artist.SlimArtist.id = 0;
+
+            var art = await _artistService.Save(artist.SlimArtist);
+            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
+
+            return JsonSuccess(await _artistService.FindArtistById(art.id));
+		}
+
+		[ApiExplorerSettings(IgnoreApi = true)]
+        [HttpPut("artists/{artistIdOrSlug}")]
+		[Authorize]
+		public async Task<IActionResult> UpdateArtist([FromBody] CreateUpdateArtistDto artist)
+		{
+			var art = await _artistService.Save(artist.SlimArtist);
+			await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
+
+			return JsonSuccess(await _artistService.FindArtistById(art.id));
+		}
+	}
+
+    public class CreateUpdateArtistDto {
+        public SlimArtistWithFeatures SlimArtist { get; set; }
+        public IEnumerable<SlimArtistUpstreamSource> SlimUpstreamSources { get; set; }
     }
 }

@@ -96,14 +96,48 @@
                 <div class="row">
                     <div class="col-md-12">
 						<br/>
-                        <button class="btn btn-primary">Update</button>
-						<button class="btn btn-primary">Add as New Artist</button>
+                        <button class="btn btn-primary" v-on:click="updateArtist">Update</button>
+						<button class="btn btn-primary" v-on:click="addArtist">Add as New Artist</button>
+						<br />
+						<p v-if="loading || result">
+                            <span v-if="loading">Loading...</span>
+							<span v-if="result">{{ result }}</span>
+						</p>
                     </div>
                 </div>
 			</div>
 		</section>
     </div>
 </div>
+<div class="row">
+    <div class="col-md-12">
+        <section id="import">
+			<br/><br/><br/><br/>
+			<h2>Manually Trigger Artist Refresh</h2>
+			<p>
+                <select v-model="selected.artist">
+                    <option disabled selected>Choose an artist...</option>
+                    <option v-for="art in artists" v-bind:value="art.id">
+                        {{ art.name }}
+                    </option>
+                </select>
+				&nbsp;
+				<input type="checkbox" id="delete_existing" v-model="selected.delete_existing" />
+                &nbsp;<label for="delete_existing">Delete existing imported content</label>
+			</p>
+			<p>
+				<button class="btn btn-success" v-on:click="queueImport" v-bind:disabled="selected.artist == -1">Start Import</button>
+			</p>
+            <br />
+            <p v-if="loading || result">
+                <span v-if="loading">Loading...</span>
+                <span v-if="result">{{ result }}</span>
+            </p>
+			<p><a href="/relisten-admin/hangfire/jobs/processing">View processing jobs</a></p>
+        </section>
+    </div>
+</div>
+
 <style type="text/css">
 	.feature-list {
         list-style:none;

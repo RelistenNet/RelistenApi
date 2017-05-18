@@ -162,16 +162,19 @@ namespace Relisten.Import
 		{
 			var slug = Slugify(full);
 
-			int count = 1;
+            if(trackSlugCounts.ContainsKey(slug))
+            {
+                var count = trackSlugCounts[slug];
 
-			// we got a value, that means it is at least 1 and we need to add something to the end
-			if (trackSlugCounts.TryGetValue(slug, out count))
-			{
-				count++;
+                count++;
+				trackSlugCounts[slug] = count;
+
 				slug += $"-{count}";
 			}
-
-			trackSlugCounts[slug] = count;
+            else
+            {
+                trackSlugCounts[slug] = 1;
+            }
 
 			return slug;
 		}

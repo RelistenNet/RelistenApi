@@ -68,15 +68,19 @@ namespace Relisten
 				});
 			});
 
-			// use the static property because it is formatted correctly for NpgSQL
+			services.AddSingleton(new DbService(Configuration["POSTGRESQL_URL_INT"]));
+
+            // use the static property because it is formatted correctly for NpgSQL
 			services.AddHangfire(hangfire => {
-				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"] + ",syncTimeout=10000"));
+                // processed into a connection string
+                hangfire.UsePostgreSqlStorage(DbService.ConnStr);
+
+				// hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"] + ",syncTimeout=10000"));
 				hangfire.UseConsole();
 				hangfire.UseRecurringJob(typeof(ScheduledService));
 			});
 
 			services.AddSingleton(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
-			services.AddSingleton(new DbService(Configuration["POSTGRESQL_URL_INT"]));
 			services.AddSingleton(Configuration);
 
 			services.AddScoped<SetlistShowService, SetlistShowService>();
@@ -138,9 +142,9 @@ namespace Relisten
 				ServerName = "relistenapi:default"
 			});
 
-			app.UseHangfireDashboard("/admin/hangfire", new DashboardOptions
+			app.UseHangfireDashboard("/relisten-admin/hangfire", new DashboardOptions
 			{
-				Authorization = new[] { new HangfireBasicAuthFilter(Configuration["ADMIN:USERNAME"], Configuration["ADMIN:PASSWORD"]) }
+				Authorization = new[] { new MyAuthorizationFilter() }
 			});
 
 			app.UseSwagger(c => {
