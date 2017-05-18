@@ -36,11 +36,15 @@ namespace Relisten.Api.Models
         public string display_date { get; set; }
 
 		/// <summary>
-		/// This can be used to determine the age of the source most recently added.
+		/// This can be used to determine the age of the source most recently added. `updated_at`
+        /// for a source comes from the upstream source and won't be suffer recently imported biases.
+        /// 
+        /// The value pulled from upstream is based on when that source was published/updated, not
+        /// counting reviews, ratings, etc.
 		/// </summary>
-		/// <value>The most recent `created_at` date of all the sources for this show.</value>
+		/// <value>The most recent `updated_at` date of all the sources for this show.</value>
 		[Required]
-		public DateTime most_recent_source_created_at { get; set; }
+		public DateTime most_recent_source_updated_at { get; set; }
 
         /// <value><c>true</c> if this show has at least one source that is a soundboard recording; otherwise, <c>false</c>.</value>
         [Required]

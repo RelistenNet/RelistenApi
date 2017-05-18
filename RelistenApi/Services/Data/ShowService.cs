@@ -33,7 +33,7 @@ namespace Relisten.Data
 			return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
                 SELECT
                     s.*,
-                    cnt.max_created_at as most_recent_source_created_at,
+                    cnt.max_updated_at as most_recent_source_updated_at,
 					cnt.source_count,
                     cnt.has_soundboard_source,
 					v.*,
@@ -47,7 +47,7 @@ namespace Relisten.Data
                     INNER JOIN (
                     	SELECT
                     		src.show_id,
-							MAX(src.created_at) as max_created_at,
+							MAX(src.updated_at) as max_updated_at,
 							COUNT(*) as source_count,
 							MAX(src.avg_rating_weighted) as max_avg_rating_weighted,
 							BOOL_OR(src.is_soundboard) as has_soundboard_source
@@ -97,7 +97,7 @@ namespace Relisten.Data
             return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, Venue, Tour, Era, Artist, Features, ShowWithArtist>(@"
                     SELECT
                         s.*,
-						cnt.max_created_at as most_recent_source_created_at,
+                        cnt.max_updated_at as most_recent_source_updated_at,
 						cnt.source_count,
 						cnt.has_soundboard_source,
 						v.*,
@@ -119,7 +119,7 @@ namespace Relisten.Data
                         INNER JOIN (
                         	SELECT
                         		src.show_id,
-								MAX(src.created_at) as max_created_at,
+                                MAX(src.updated_at) as max_updated_at,
 								COUNT(*) as source_count,
 								BOOL_OR(src.is_soundboard) as has_soundboard_source
                         	FROM
