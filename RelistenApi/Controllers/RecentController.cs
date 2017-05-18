@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
 using Relisten.Api.Models;
@@ -9,6 +10,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
+    [Route("api/v2")]
 	public class RecentController : RelistenBaseController
 	{
 		public SourceService _sourceService { get; set; }
@@ -35,7 +37,7 @@ namespace Relisten.Controllers
 
 			return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteria(art, @"
                 s.artist_id = @artistId
-            ", new { artistId = art.id }, limit, "cnt.max_created_at DESC"));
+            ", new { artistId = art.id }, limit, "cnt.max_updated_at DESC"));
 		}
 
 		[HttpGet("artists/shows/recently-added")]
@@ -45,7 +47,7 @@ namespace Relisten.Controllers
 		{
 			limit = limit > 200 ? 200 : limit;
 
-			return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"1 = 1", null, limit, "cnt.max_created_at DESC"));
+			return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"1 = 1", null, limit, "cnt.max_updated_at DESC"));
 		}
 	}
 }
