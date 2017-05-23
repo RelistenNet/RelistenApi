@@ -33,7 +33,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/songs")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<SetlistSongWithPlayCount>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<SetlistSongWithPlayCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Songs(string artistIdOrSlug)
         {
@@ -44,7 +44,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/songs/{idAndSlug}")]
-        [ProducesResponseType(typeof(ResponseEnvelope<SetlistSongWithShows>), 200)]
+        [ProducesResponseType(typeof(SetlistSongWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
         {

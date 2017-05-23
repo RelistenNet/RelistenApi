@@ -79,7 +79,8 @@ namespace Relisten.Import
 
 			await PreloadData(artist);
 
-            var showFilesResponse = await http.GetStringAsync(ShowPagesListingUrl(src));
+            var resp = await http.GetAsync(ShowPagesListingUrl(src));
+            var showFilesResponse = await resp.Content.ReadAsStringAsync();
             var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
 
             var files = showFiles
@@ -102,14 +103,30 @@ namespace Relisten.Import
 
 			await files.AsyncForEachWithProgress(prog, async f => 
 			{
-                var pageContents = await http.GetStringAsync(ShowPageUrl(src, f.FilePath));
-				await ProcessPage(stats, artist, f, pageContents, ctx);
+                if(existingSetlistShows.ContainsKey(f.Identifier))
+                {
+                    return;
+                }
+
+                var url = ShowPageUrl(src, f.FilePath);
+                var pageResp = await http.GetAsync(url);
+                var pageContents = await pageResp.Content.ReadAsStringAsync();
+
+				await ProcessPage(stats, artist, f, pageContents, pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow, ctx);
 			});
 
 			if (artist.features.tours)
 			{
 				await UpdateTourStartEndDates(artist);
 			}
+
+            ctx.WriteLine("Rebuilding shows and years");
+
+            // update shows
+            await RebuildShows(artist);
+
+            // update years
+            await RebuildYears(artist);
 
 			return stats;
 		}
@@ -141,7 +158,7 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-		private async Task ProcessPage(ImportStats stats, Artist artist, FileMetaObject meta, string pageContents, PerformContext ctx)
+		private async Task ProcessPage(ImportStats stats, Artist artist, FileMetaObject meta, string pageContents, DateTime updated_at, PerformContext ctx)
         {
             var dbShow = existingSetlistShows.GetValue(meta.Identifier);
 
@@ -149,6 +166,8 @@ namespace Relisten.Import
             {
                 return;
             }
+
+            ctx.WriteLine($"Processing: {meta.FilePath}");
 
             var html = new HtmlDocument();
             html.LoadHtml(pageContents);
@@ -177,7 +196,8 @@ namespace Relisten.Import
                     name = venueName,
                     location = venueCityOrCityState + ", " + venueCountry,
                     upstream_identifier = venueUpstreamId,
-                    slug = Slugify(venueName)
+                    slug = Slugify(venueName),
+					updated_at = updated_at
                 });
 
                 existingVenues[dbVenue.upstream_identifier] = dbVenue;
@@ -194,7 +214,8 @@ namespace Relisten.Import
                     artist_id = artist.id,
                     name = tourName,
                     slug = Slugify(tourName),
-                    upstream_identifier = tourName
+                    upstream_identifier = tourName,
+					updated_at = updated_at
                 });
 
                 existingTours[dbTour.upstream_identifier] = dbTour;
@@ -208,7 +229,8 @@ namespace Relisten.Import
                 tour_id = dbTour?.id,
                 venue_id = dbVenue.id,
                 date = meta.Date,
-                upstream_identifier = meta.Identifier
+                upstream_identifier = meta.Identifier,
+				updated_at = updated_at
             });
 
             existingSetlistShows[dbShow.upstream_identifier] = dbShow;
@@ -227,7 +249,8 @@ namespace Relisten.Import
                         artist_id = artist.id,
                         name = trackName,
                         slug = slug,
-                        upstream_identifier = slug
+                        upstream_identifier = slug,
+						updated_at = updated_at
                     };
                 })
                 .GroupBy(s => s.upstream_identifier)

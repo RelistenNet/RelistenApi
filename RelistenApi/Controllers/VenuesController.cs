@@ -33,7 +33,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/venues")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<VenueWithShowCount>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<VenueWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> tours(string artistIdOrSlug)
         {
@@ -43,7 +43,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
-        [ProducesResponseType(typeof(ResponseEnvelope<VenueWithShows>), 200)]
+        [ProducesResponseType(typeof(VenueWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
         {

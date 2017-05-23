@@ -125,7 +125,8 @@ namespace Relisten.Import
 						}
 						else
 						{
-							throw;
+							ctx.WriteLine($"Caught {doc.identifier}: {e}");
+							//throw;
 						}
 					}
 				}

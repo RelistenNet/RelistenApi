@@ -108,7 +108,8 @@ namespace Relisten.Import
 
 			await srcs.AsyncForEachWithProgress(prog, async item =>
 			{
-				ctx?.WriteLine($"Importing with {item.GetType()}");
+				ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
+
 				stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
 			});
 

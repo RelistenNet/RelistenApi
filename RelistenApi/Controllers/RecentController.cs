@@ -29,7 +29,7 @@ namespace Relisten.Controllers
 		}
 
 		[HttpGet("artists/{artistIdOrSlug}/shows/recently-added")]
-		[ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+		[ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
 		[ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ArtistRecentlyAddedShows([FromRoute] string artistIdOrSlug, [FromQuery] int limit = 25)
 		{
@@ -41,7 +41,7 @@ namespace Relisten.Controllers
 		}
 
 		[HttpGet("artists/shows/recently-added")]
-		[ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+		[ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
 		[ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> RecentlyAddedShows([FromQuery] int limit = 25)
 		{

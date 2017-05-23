@@ -160,6 +160,29 @@ namespace Relisten.Data
 			});
         }
 
+		public Task<IEnumerable<SlimSourceWithShowAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
+		{
+			return db.WithConnection(con => con.QueryAsync<SlimSourceWithShowAndArtist, SlimArtistWithFeatures, Features, Show, SlimSourceWithShowAndArtist>($@"
+				SELECT
+					s.*, a.*, f.*, sh.*
+				FROM
+					sources s
+					JOIN artists a ON s.artist_id = a.id
+					JOIN features f ON f.artist_id = a.id
+					JOIN shows sh ON sh.id = s.show_id
+				WHERE
+					s.id = ANY(@ids)
+			", (s, a, f, sh) => 
+			{
+				a.features = f;
+
+				s.artist = a;
+				s.show = sh;
+
+				return s;
+			}, new { ids }));		
+		}
+
         public async Task<IEnumerable<Source>> AllForArtist(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<Source>(@"

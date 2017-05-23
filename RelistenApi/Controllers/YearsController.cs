@@ -33,7 +33,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Year>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<Year>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug)
         {
@@ -43,7 +43,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years/{year}")]
-        [ProducesResponseType(typeof(ResponseEnvelope<YearWithShows>), 200)]
+        [ProducesResponseType(typeof(YearWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year)
         {
@@ -53,7 +53,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/years/{year}/{showDate}")]
-        [ProducesResponseType(typeof(ResponseEnvelope<ShowWithSources>), 200)]
+        [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year, string showDate)
         {

@@ -15,45 +15,59 @@ namespace Relisten.Api.Models
 		Flac24Bit
 	}
 
-    public class Source : BaseRelistenModel
-    {
+	public class SlimSource : BaseRelistenModel
+	{
 		[Required]
-        public int artist_id { get; set; }
+		public int artist_id { get; set; }
 
-        public int? show_id { get; set; }
-        public Show show { get; set; }
-
-        public int? venue_id { get; set; }
-        public Venue venue { get; set; }
+		public int? venue_id { get; set; }
+		public Venue venue { get; set; }
 
 		[Required]
-        public string display_date { get; set; }
+		public string display_date { get; set; }
 
-  		[Required]
-  	    public bool is_soundboard { get; set; }
+		[Required]
+		public bool is_soundboard { get; set; }
 
 		[Required]
 		public bool is_remaster { get; set; }
 
 		[Required]
-        public bool has_jamcharts { get; set; }
+		public bool has_jamcharts { get; set; }
 
 		[Required]
-        public double avg_rating { get; set; }
+		public double avg_rating { get; set; }
 
 		[Required]
-        public int num_reviews { get; set; }
+		public int num_reviews { get; set; }
 
 		public int? num_ratings { get; set; }
-        
+
 		[Required]
 		public double avg_rating_weighted { get; set; }
 
 		public double duration { get; set; }
 
 		[Required]
-        public string upstream_identifier { get; set; }
-  
+		public string upstream_identifier { get; set; }
+	}
+
+	public class SlimSourceWithShowAndArtist : SlimSource
+	{
+		public int? show_id { get; set; }
+
+		[Required]
+		public Show show { get; set; }
+
+		[Required]
+		public SlimArtistWithFeatures artist { get; set; }
+	}
+
+    public class Source : SlimSource
+    {
+		public int? show_id { get; set; }
+		public Show show { get; set; }
+
 		public string description { get; set; }
         public string taper_notes { get; set; }
         public string source { get; set; }

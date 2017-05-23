@@ -28,7 +28,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("shows/today")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         public async Task<IActionResult> Today()
         {
             return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"
@@ -38,7 +38,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("shows/on-date")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
 		public async Task<IActionResult> OnDayInHistory([FromQuery] int month, [FromQuery] int day)
         {
             return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"
@@ -48,7 +48,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/today")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> TodayArtist([FromRoute] string artistIdOrSlug)
         {
@@ -60,7 +60,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/on-date")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<ShowWithArtist>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
 		public async Task<IActionResult> ArtistOnDayInHistory([FromRoute] string artistIdOrSlug, [FromQuery] int month, [FromQuery] int day)
         {
             return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteriaWithArtists(@"
@@ -71,7 +71,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/top")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Show>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<Show>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> TopByArtist([FromRoute] string artistIdOrSlug, [FromQuery] int limit = 25)
         {
@@ -81,7 +81,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/random")]
-        [ProducesResponseType(typeof(ResponseEnvelope<ShowWithSources>), 200)]
+        [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> RandomByArtist([FromRoute] string artistIdOrSlug)
         {
@@ -104,7 +104,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/{showDate}")]
-        [ProducesResponseType(typeof(ResponseEnvelope<ShowWithSources>), 200)]
+        [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ShowsOnSpecificDate([FromRoute] string artistIdOrSlug, [FromRoute] string showDate)
         {

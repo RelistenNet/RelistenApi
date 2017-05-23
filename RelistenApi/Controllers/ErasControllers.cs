@@ -27,7 +27,7 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("{artistIdOrSlug}/eras")]
-        [ProducesResponseType(typeof(ResponseEnvelope<IEnumerable<Era>>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<Era>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> eras(string artistIdOrSlug)
         {

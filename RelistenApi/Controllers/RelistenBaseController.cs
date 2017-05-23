@@ -28,7 +28,7 @@ namespace Relisten.Api
 
         protected IActionResult JsonSuccess<T>(T anything)
         {
-            return Json(ResponseEnvelope<T>.Success(anything));
+            return Json(anything);
         }
 
         protected IActionResult JsonNotFound<T>(T anything = default(T))
