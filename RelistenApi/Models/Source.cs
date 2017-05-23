@@ -4,9 +4,17 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Relisten.Api.Models
 {
+	public enum FlacType
+	{
+		NoFlac,
+		Flac16Bit,
+		Flac24Bit
+	}
+
     public class Source : BaseRelistenModel
     {
 		[Required]
@@ -52,6 +60,10 @@ namespace Relisten.Api.Models
         public string taper { get; set; }
         public string transferrer { get; set; }
         public string lineage { get; set; }
+
+		[Required]
+		[JsonConverter(typeof(StringEnumConverter))]
+		public FlacType flac_type { get; set; }
     }
 
     public class SourceFull : Source

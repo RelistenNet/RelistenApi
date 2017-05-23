@@ -51,7 +51,13 @@ namespace Relisten.Vendor.ArchiveOrg
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.String)
             {
-                var s = reader.Value.ToString();
+				var s = reader
+					.Value
+					.ToString()
+
+					// wtf is this archive.org??
+					.Replace("T::Z", "T00:00:00Z");
+				
                 if (s.Length == 20)
                 {
                     return new DateTime(

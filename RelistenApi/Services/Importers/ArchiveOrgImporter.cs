@@ -15,6 +15,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Hangfire.Server;
 using Hangfire.Console;
+using Npgsql;
 
 namespace Relisten.Import
 {
@@ -113,7 +114,20 @@ namespace Relisten.Import
 						new Vendor.ArchiveOrg.TolerantStringConverter()
 					);
 
-					stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, ctx);
+					try {
+						stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, ctx);
+					}
+					catch(PostgresException e)
+					{
+						if(e.SqlState == "23505")
+						{
+							ctx.WriteLine($"Caught Npgsql.PostgresException: 23505: duplicate key value violates unique constraint \"sources_upstream_identifier_key\": {doc.identifier}");
+						}
+						else
+						{
+							throw;
+						}
+					}
 				}
 			});
 
@@ -142,8 +156,8 @@ namespace Relisten.Import
 
             var meta = detailsRoot.metadata;
 
-            var mp3Files = detailsRoot.files.Where(file => file.format == "VBR MP3");
-			var flacFiles = detailsRoot.files.Where(file => file.format == "Flac");
+            var mp3Files = detailsRoot.files?.Where(file => file?.format == "VBR MP3");
+			var flacFiles = detailsRoot.files?.Where(file => file?.format == "Flac" || file?.format == "24bit Flac");
 
 			if (mp3Files.Count() == 0)
             {
@@ -168,7 +182,7 @@ namespace Relisten.Import
 
             if (isUpdate)
             {
-                var src = CreateSourceForMetadata(artist, meta, searchDoc);
+                var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc);
                 src.id = dbSource.id;
                 dbSource = await _sourceService.Save(src);
 
@@ -205,8 +219,10 @@ namespace Relisten.Import
                     }
                 }
 
-                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, meta, searchDoc, dbVenue));
+                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc, dbVenue));
                 stats.Created++;
+
+				existingSources[dbSource.upstream_identifier] = dbSource;
 
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
 
@@ -272,11 +288,13 @@ namespace Relisten.Import
 
         private Source CreateSourceForMetadata(
             Artist artist,
-            Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta,
+			Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
             Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
             Venue dbVenue = null
         )
         {
+			var meta = detailsRoot.metadata;
+
             var sbd = meta.identifier.EmptyIfNull().ContainsInsensitive("sbd")
                 || meta.title.EmptyIfNull().ContainsInsensitive("sbd")
                 || meta.source.EmptyIfNull().ContainsInsensitive("sbd")
@@ -289,7 +307,18 @@ namespace Relisten.Import
                 || meta.lineage.EmptyIfNull().ContainsInsensitive("remast")
                 ;
 
-            return new Source()
+			var flac_type = FlacType.NoFlac;
+
+			if (detailsRoot.files.Any(f => f.format == "24bit Flac"))
+			{
+				flac_type = FlacType.Flac24Bit;
+			}
+			else if (detailsRoot.files.Any(f => f.format == "Flac"))
+			{
+				flac_type = FlacType.Flac16Bit;
+			}
+
+			return new Source()
             {
                 artist_id = artist.id,
                 is_soundboard = sbd,
@@ -306,7 +335,8 @@ namespace Relisten.Import
                 lineage = meta.lineage.EmptyIfNull(),
                 updated_at = searchDoc._iguana_updated_at,
                 venue_id = dbVenue?.id,
-                display_date = meta.date
+                display_date = meta.date,
+				flac_type = flac_type
             };
         }
 

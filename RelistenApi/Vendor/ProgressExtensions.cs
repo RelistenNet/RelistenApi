@@ -50,7 +50,7 @@ namespace Relisten
 					var completed = await Task.WhenAny(activeTasks);
 
 					count++;
-					bar?.SetValue(100.0 * count / source.Count);
+					bar?.SetValue(Math.Min(100.0,  100.0 * count / source.Count));
 
 					activeTasks.Remove(completed);
 				}

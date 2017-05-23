@@ -73,7 +73,7 @@ namespace Relisten.Import
 				_setlistFm,
 				_archiveOrg,
 				_panic,
-				//_jerry,
+				_jerry,
 				_phishin,
 				_phishnet,
 				_phantasy
@@ -164,10 +164,16 @@ namespace Relisten.Import
 
             if(trackSlugCounts.ContainsKey(slug))
             {
-                var count = trackSlugCounts[slug];
+				var count = 0;
+				do
+				{
+					count = trackSlugCounts[slug];
 
-                count++;
-				trackSlugCounts[slug] = count;
+					count++;
+					trackSlugCounts[slug] = count;
+
+					// keep incrementing until we find a slug that isn't taken
+				} while(trackSlugCounts.ContainsKey(slug + $"-{count}"));
 
 				slug += $"-{count}";
 			}

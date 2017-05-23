@@ -174,6 +174,8 @@ namespace Relisten
 			services.AddAuthorization();
 			services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 			{
+				options.SecurityStampValidationInterval = TimeSpan.FromDays(365);
+
 				options.Password.RequiredLength = 1;
 				options.Password.RequireLowercase = false;
 				options.Password.RequireUppercase = false;

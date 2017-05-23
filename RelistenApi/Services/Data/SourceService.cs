@@ -124,6 +124,10 @@ namespace Relisten.Data
 					new { showId = show.id }
 				);
 
+				var srcsWithReviews = t_srcsWithReviews
+					.Where(s => s != null)
+					;
+
 				var t_linksForSources = await con.QueryAsync<Link>(@"
 					SELECT
 						l.*
@@ -131,12 +135,8 @@ namespace Relisten.Data
 						links l
 					WHERE
 						l.source_id = ANY(@sourceIds)
-				", new { sourceIds = t_srcsWithReviews.Select(s => s.id).ToList() });
+				", new { sourceIds = srcsWithReviews.Select(s => s.id).ToList() });
 
-
-				var srcsWithReviews = t_srcsWithReviews
-					.Where(s => s != null)
-					;
 
 				var setsWithTracks = t_setsWithTracks
 					.Where(s => s != null)
@@ -221,7 +221,8 @@ namespace Relisten.Data
                         updated_at = @updated_at,
                         display_date = @display_date,
                         venue_id = @venue_id,
-                        num_ratings = @num_ratings
+                        num_ratings = @num_ratings,
+						flac_type = @flac_type
                     WHERE
                         id = @id
                     RETURNING *
@@ -251,7 +252,8 @@ namespace Relisten.Data
                             updated_at,
                             display_date,
                             venue_id,
-                            num_ratings
+                            num_ratings,
+							flac_type
                         )
                     VALUES
                         (
@@ -272,7 +274,8 @@ namespace Relisten.Data
                             @updated_at,
                             @display_date,
                             @venue_id,
-                            @num_ratings
+                            @num_ratings,
+							@flac_type
                         )
                     RETURNING *
                 ", source));

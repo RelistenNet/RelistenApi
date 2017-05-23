@@ -65,8 +65,6 @@ namespace Relisten.Import
             return $"https://phish.alecgorge.com/relisten/{src.upstream_identifier}/show_pages/{filename}";
         }
 
-        private const string ShowFilesDirectory = "Data/grateful_dead/show_pages/";
-
         private class FileMetaObject
         {
             public string DisplayDate { get; set; }

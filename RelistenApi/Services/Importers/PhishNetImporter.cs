@@ -59,7 +59,7 @@ namespace Relisten.Import
 			await shows.ForEachAsync(async dbSource =>
 			{
 				stats += await ProcessSource(artist, src, dbSource, ctx);
-			}, prog, 10);
+			}, prog, 1);
 
 			ctx?.WriteLine("Rebuilding...");
 

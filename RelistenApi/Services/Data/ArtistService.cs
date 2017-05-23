@@ -215,10 +215,18 @@ namespace Relisten.Data
 			var sb = new StringBuilder();
             var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
 
-            foreach (var prop in props)
+			for (var i = 0; i < props.Length; i++)
 			{
-				sb.AppendLine($"{prop.Name} = @{prop.Name}");
+				sb.Append($"{props[i].Name} = @{props[i].Name}");
+
+				if (i < props.Length - 1)
+				{
+					sb.Append(",");
+				}
+
+				sb.AppendLine();
 			}
+
 			return sb.ToString();
 		}
 
@@ -278,6 +286,7 @@ namespace Relisten.Data
 	                    RETURNING *
 	                ", new
                     {
+						artist.id,
                         artist.musicbrainz_id,
                         artist.name,
                         artist.slug,
@@ -293,7 +302,7 @@ namespace Relisten.Data
                         SET
                             " + UpdateFieldsForFeatures(innerArt.features) + @"
                         WHERE
-                            id = @id
+                            artist_id = @artist_id
                     ", innerArt.features);
 
                     return innerArt;
