@@ -12,7 +12,8 @@ namespace Relisten.Api.Models
 	{
 		NoFlac,
 		Flac16Bit,
-		Flac24Bit
+		Flac24Bit,
+		NoPlayableFlac
 	}
 
 	public class SlimSource : BaseRelistenModel
