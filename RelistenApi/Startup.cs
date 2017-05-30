@@ -73,9 +73,9 @@ namespace Relisten
             // use the static property because it is formatted correctly for NpgSQL
 			services.AddHangfire(hangfire => {
                 // processed into a connection string
-                hangfire.UsePostgreSqlStorage(DbService.ConnStr);
+                // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
-				// hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"] + ",syncTimeout=10000"));
+				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"] + ",syncTimeout=10000"));
 				hangfire.UseConsole();
 				hangfire.UseRecurringJob(typeof(ScheduledService));
 			});
