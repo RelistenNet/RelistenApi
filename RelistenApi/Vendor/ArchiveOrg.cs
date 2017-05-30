@@ -23,6 +23,10 @@ namespace Relisten.Vendor.ArchiveOrg
                 serializer.Populate(reader, l);
                 return l.FirstOrDefault();
             }
+            else if(reader.TokenType == JsonToken.StartObject)
+            {
+                return "";
+            }
 
             return reader.Value;
         }

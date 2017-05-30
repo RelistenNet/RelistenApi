@@ -83,7 +83,7 @@ namespace Relisten.Vendor.SetlistFm
         public string encore { get; set; }
     }
 
-    class TolerantListConverter<T> : Newtonsoft.Json.Converters.CustomCreationConverter<IList<T>>
+    class TolerantListConverter<T> : Newtonsoft.Json.Converters.CustomCreationConverter<IList<T>> where T: new()
     {
         public override IList<T> Create(Type objectType)
         {
@@ -97,6 +97,17 @@ namespace Relisten.Vendor.SetlistFm
             {
                 var l = new List<T>();
                 serializer.Populate(reader, l);
+                return l;
+            }
+            else if(reader.TokenType == JsonToken.StartObject)
+            {
+                var l = new List<T>();
+
+                T obj = new T();
+                serializer.Populate(reader, obj);
+
+                l.Add(obj);
+
                 return l;
             }
             else if (reader.TokenType == JsonToken.String)

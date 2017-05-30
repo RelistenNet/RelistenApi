@@ -291,6 +291,7 @@ namespace Relisten.Import
                     body,
                     new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Song>(),
                     new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Set>(),
+                    new Vendor.SetlistFm.TolerantListConverter<Vendor.SetlistFm.Setlist>(),
                     new Vendor.SetlistFm.TolerantSetsConverter()
                 );
             }
