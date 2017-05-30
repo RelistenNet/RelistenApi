@@ -118,7 +118,7 @@ namespace Relisten.Data
 	                WHERE
 	                    src.show_id = @showId
 					ORDER BY
-						s.index ASC
+						s.index ASC, t.track_position ASC
 	            ",
 					TrackMapper.Map,
 					new { showId = show.id }
