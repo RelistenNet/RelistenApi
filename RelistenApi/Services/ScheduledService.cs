@@ -39,7 +39,7 @@ namespace Relisten
 			if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
 			{
 				context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
-//				return;
+				return;
 			}
 
 			var artists = (await _artistService.All()).ToList();

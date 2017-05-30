@@ -7,7 +7,7 @@ using Newtonsoft.Json.Linq;
 
 namespace Relisten.Vendor.ArchiveOrg
 {
-    class TolerantStringConverter : Newtonsoft.Json.Converters.CustomCreationConverter<string>
+    public class TolerantStringConverter : Newtonsoft.Json.Converters.CustomCreationConverter<string>
     {
         public override string Create(Type objectType)
         {
@@ -25,13 +25,17 @@ namespace Relisten.Vendor.ArchiveOrg
             }
             else if(reader.TokenType == JsonToken.StartObject)
             {
+                // consume the blank object
+                var l = new object();
+                serializer.Populate(reader, l);
+
                 return "";
             }
 
             return reader.Value;
         }
     }
-    class TolerantArchiveDateTimeConverter : Newtonsoft.Json.Converters.CustomCreationConverter<DateTime>
+    public class TolerantArchiveDateTimeConverter : Newtonsoft.Json.Converters.CustomCreationConverter<DateTime>
     {
         public override DateTime Create(Type objectType)
         {
