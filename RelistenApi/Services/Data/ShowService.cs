@@ -36,6 +36,7 @@ namespace Relisten.Data
                     cnt.max_updated_at as most_recent_source_updated_at,
 					cnt.source_count,
                     cnt.has_soundboard_source,
+                    cnt.has_flac as has_streamable_flac_source,
 					v.*,
 					t.*,
 					e.*
@@ -50,7 +51,8 @@ namespace Relisten.Data
 							MAX(src.updated_at) as max_updated_at,
 							COUNT(*) as source_count,
 							MAX(src.avg_rating_weighted) as max_avg_rating_weighted,
-							BOOL_OR(src.is_soundboard) as has_soundboard_source
+							BOOL_OR(src.is_soundboard) as has_soundboard_source,
+							BOOL_OR(CASE WHEN src.flac_type = 1 OR src.flac_type = 2 THEN true ELSE false END) as has_flac
                     	FROM
                     		sources src
                     	GROUP BY

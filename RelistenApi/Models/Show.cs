@@ -51,6 +51,9 @@ namespace Relisten.Api.Models
         public bool has_soundboard_source { get; set; }
 
         [Required]
+        public bool has_streamable_flac_source { get; set; }
+
+        [Required]
         public int source_count { get; set; }
     }
 
