@@ -30,7 +30,7 @@ namespace Relisten.Controllers
 
         // GET api/values
         [HttpGet("artists")]
-        [ProducesResponseType(typeof(IEnumerable<Artist>), 200)]
+        [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
         public async Task<IActionResult> Get()
         {
 			return JsonSuccess(await _artistService.AllWithCounts());
