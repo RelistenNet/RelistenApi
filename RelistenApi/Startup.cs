@@ -1,7 +1,7 @@
 ﻿using System;
 using Hangfire;
 using Hangfire.Console;
-using Hangfire.PostgreSql;
+// using Hangfire.PostgreSql;
 using Hangfire.RecurringJobExtensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
