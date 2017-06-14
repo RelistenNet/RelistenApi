@@ -61,14 +61,7 @@ namespace Relisten.Import
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
-            var r = ImportableData.Sources;
-
-            if (artist.features.per_source_venues)
-            {
-                r |= ImportableData.Venues;
-            }
-
-            return r;
+            return ImportableData.Sources;
         }
 
         private static Regex ShowDirMatcher = new Regex(@"href=""([0-9_]+)([a-z]?)\/"">[0-9_]+[a-z]?\/<\/a>\s+([0-9A-Za-z: -]+)\s+-");
@@ -143,7 +136,7 @@ namespace Relisten.Import
         async Task PreloadData(Artist artist)
         {
             existingSources = (await _sourceService.AllForArtist(artist)).
-                GroupBy(venue => venue.upstream_identifier).
+                GroupBy(src => src.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
