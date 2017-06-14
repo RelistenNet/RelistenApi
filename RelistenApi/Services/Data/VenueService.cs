@@ -80,11 +80,11 @@ namespace Relisten.Data
                     		COUNT(DISTINCT src.show_id)
                     END as shows_at_venue
                 FROM
-                    venues v
-                    LEFT JOIN shows s ON s.venue_id = v.id
+                	shows s
+                    JOIN venues v ON v.id = s.venue_id
                     LEFT JOIN sources src ON src.venue_id = v.id
                 WHERE
-                    v.artist_id = @id
+                    s.artist_id = @id
                 GROUP BY
                 	s.artist_id, v.id
                 ORDER BY
