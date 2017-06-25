@@ -103,6 +103,8 @@ namespace Relisten.Data
 	                WHERE
 	                    s.artist_id = @artistId
 	                    AND s.show_id = @showId
+                    ORDER BY
+                        s.avg_rating_weighted DESC
 	            ",
 					ReviewMapper.Map,
 					new { showId = show.id, artistId = artist.id }
