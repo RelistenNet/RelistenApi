@@ -12,6 +12,6 @@ RUN dotnet publish /p:Configuration=Release
 
 RUN test -f bin/netcoreapp1.1/publish/RelistenApi.dll
 
-EXPOSE $PORT/tcp
+EXPOSE 3823/tcp
 
 ENTRYPOINT ["dotnet", "bin/netcoreapp1.1/publish/RelistenApi.dll"]
