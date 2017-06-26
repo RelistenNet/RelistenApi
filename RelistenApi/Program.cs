@@ -19,11 +19,11 @@ namespace Relisten
 
 			var port = 3823;
 
-			foreach(KeyValuePair<string, string> envVar in Environment.GetEnvironmentVariables())
+			foreach(DictionaryEntry envVar in Environment.GetEnvironmentVariables())
 			{
-				if(envVar.Key.ToUpperInvariant() == "PORT")
+				if(envVar.Key.ToString().ToUpperInvariant() == "PORT")
 				{
-					int.TryParse(envVar.Value, NumberStyles.Integer, null, out port);
+					int.TryParse(envVar.Value.ToString(), NumberStyles.Integer, null, out port);
 				}
 				Console.WriteLine(envVar.Key + "=" + envVar.Value);
 			}
