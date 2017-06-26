@@ -8,10 +8,10 @@ RUN dotnet restore
 
 COPY RelistenApi/ .
 
-RUN dotnet publish /p:OutDir=out;Configuration=Release
+RUN dotnet publish /p:Configuration=Release
 
-RUN test -f out/RelistenApi.dll
+RUN test -f bin/netcoreapp1.1/publish/RelistenApi.dll
 
-EXPOSE 3823/tcp
+EXPOSE $PORT/tcp
 
-ENTRYPOINT ["dotnet", "out/RelistenApi.dll"]
+ENTRYPOINT ["dotnet", "bin/netcoreapp1.1/publish/RelistenApi.dll"]
