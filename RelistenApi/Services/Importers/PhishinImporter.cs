@@ -124,7 +124,7 @@ namespace Relisten.Import
                 GroupBy(era => era.name).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
-            existingVenues = (await _venueService.AllForArtist(artist)).
+            existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -240,7 +240,7 @@ namespace Relisten.Import
 
             foreach (var song in await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx))
             {
-                var dbSong = existingSetlistSongs.GetValue(song.id.ToString());
+                var dbSong = existingSetlistSongs.GetValue(song.slug);
 
                 // skip aliases for now
                 if (dbSong == null && song.alias_for.HasValue == false)
@@ -251,7 +251,7 @@ namespace Relisten.Import
                         artist_id = artist.id,
                         name = song.title,
                         slug = Slugify(song.title),
-                        upstream_identifier = song.id.ToString()
+                        upstream_identifier = song.slug
                     });
                 }
             }

@@ -47,6 +47,21 @@ namespace Relisten.Controllers
             return JsonNotFound(false);
         }
 
+        [HttpGet("{idOrSlug}/debug")]
+        [Authorize]
+		public async Task<IActionResult> GetDebug(string idOrSlug, [FromQuery] bool deleteOldContent = false)
+        {
+			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            if (art != null)
+            {
+				await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
+				
+				return JsonSuccess("done!");
+            }
+
+            return JsonNotFound(false);
+        }
+
         // private void update()
         // {
         //     var updateDates = @"

@@ -105,7 +105,7 @@ namespace Relisten.Import
 
         async Task PreloadData(Artist artist)
         {
-            existingVenues = (await _venueService.AllForArtist(artist)).
+            existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -330,7 +330,7 @@ namespace Relisten.Import
                         throw e;
                     }
 
-					prog.SetValue(((100.0 * (root.setlists.page - 1) * root.setlists.itemsPerPage) + count * 1.0) / root.setlists.total);
+					prog?.SetValue(((100.0 * (root.setlists.page - 1) * root.setlists.itemsPerPage) + count * 1.0) / root.setlists.total);
 
 					count++;
                 }

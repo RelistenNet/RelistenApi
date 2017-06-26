@@ -120,7 +120,7 @@ namespace Relisten.Import
 
                 await ProcessShow(stats, artist, src, panicDate, panicRecLetter, panicUpdatedAt, ctx);
 
-				prog.SetValue(100.0 * counter / matches.Count);
+				prog?.SetValue(100.0 * counter / matches.Count);
 
 				counter++;
             }

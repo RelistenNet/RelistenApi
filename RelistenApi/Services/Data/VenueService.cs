@@ -68,6 +68,29 @@ namespace Relisten.Data
             return await ForUpstreamIdentifier(null, upstreamId);
         }
 
+        public async Task<IEnumerable<Venue>> AllIncludingUnusedForArtist(Artist artist) {
+            return await db.WithConnection(con => con.QueryAsync<Venue>(@"
+                SELECT
+                    v.*,
+                    CASE
+                    	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                    		COUNT(s.id)
+                    	ELSE
+                    		COUNT(DISTINCT src.show_id)
+                    END as shows_at_venue
+                FROM
+                	venues v
+                    LEFT JOIN shows s ON v.id = s.venue_id
+                    LEFT JOIN sources src ON src.venue_id = v.id
+                WHERE
+                    v.artist_id = @id
+                GROUP BY
+                	v.artist_id, v.id
+                ORDER BY
+                	v.name ASC
+            ", artist)); 
+        }
+
         public async Task<IEnumerable<Venue>> AllForArtist(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<Venue>(@"
