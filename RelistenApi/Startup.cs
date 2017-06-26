@@ -5,6 +5,7 @@ using Hangfire;
 using Hangfire.Console;
 // using Hangfire.PostgreSql;
 using Hangfire.RecurringJobExtensions;
+using Hangfire.Redis;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -79,7 +80,10 @@ namespace Relisten
                 // processed into a connection string
                 // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
-				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions));
+				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions), new RedisStorageOptions() 
+				{
+					InvisibilityTimeout = TimeSpan.FromHours(4)
+				});
 				hangfire.UseConsole();
 				hangfire.UseRecurringJob(typeof(ScheduledService));
 			});
