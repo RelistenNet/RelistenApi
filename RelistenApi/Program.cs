@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Builder;
 using System.Collections;
+using System.Globalization;
 
 namespace Relisten
 {
@@ -16,14 +17,20 @@ namespace Relisten
 			Console.WriteLine("Launched from {0}", Directory.GetCurrentDirectory());
 			Console.WriteLine("Environment Variables:");
 
-			foreach(DictionaryEntry envVar in Environment.GetEnvironmentVariables())
+			var port = 3823;
+
+			foreach(KeyValuePair<string, string> envVar in Environment.GetEnvironmentVariables())
 			{
+				if(envVar.Key.ToUpperInvariant() == "PORT")
+				{
+					int.TryParse(envVar.Value, NumberStyles.Integer, null, out port);
+				}
 				Console.WriteLine(envVar.Key + "=" + envVar.Value);
 			}
 
 			var host = new WebHostBuilder()
 				.UseKestrel()
-				.UseUrls("http://*:3823/")
+				.UseUrls($"http://*:{port}/")
 				.UseContentRoot(Directory.GetCurrentDirectory())
 				.UseIISIntegration()
 				.UseStartup<Startup>()
