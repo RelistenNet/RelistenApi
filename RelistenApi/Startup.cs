@@ -68,19 +68,27 @@ namespace Relisten
 				});
 			});
 
-			services.AddSingleton(new DbService(Configuration["POSTGRESQL_URL_INT"]));
+			services.AddSingleton(new DbService(Configuration["DATABASE_URL"]));
+
+			var redisURL = new Uri(Configuration["REDIS_URL"]);
+			var configurationOptions = ConfigurationOptions.Parse($"{redisURL.Authority},syncTimeout=10000");
+			
+			if(redisURL.UserInfo != null && redisURL.UserInfo.Contains(":"))
+			{
+				configurationOptions.Password = redisURL.UserInfo.Split(':')[1];
+			}
 
             // use the static property because it is formatted correctly for NpgSQL
 			services.AddHangfire(hangfire => {
                 // processed into a connection string
                 // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
-				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(Configuration["REDIS_ADDRESS_INT"] + ",syncTimeout=10000"));
+				hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions));
 				hangfire.UseConsole();
 				hangfire.UseRecurringJob(typeof(ScheduledService));
 			});
 
-			services.AddSingleton(new RedisService(Configuration["REDIS_ADDRESS_INT"]));
+			services.AddSingleton(new RedisService(configurationOptions));
 			services.AddSingleton(Configuration);
 
 			services.AddScoped<SetlistShowService, SetlistShowService>();

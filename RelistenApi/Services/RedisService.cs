@@ -8,9 +8,9 @@ namespace Relisten
 
         public IDatabase db { get; }
 
-        public RedisService(string url)
+        public RedisService(ConfigurationOptions opts)
         {
-            connection = ConnectionMultiplexer.Connect(url);
+            connection = ConnectionMultiplexer.Connect(opts);
             db = connection.GetDatabase();
         }
     }
