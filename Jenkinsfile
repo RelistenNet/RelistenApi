@@ -26,6 +26,14 @@ pipeline {
                     flynn -a $FLYNN_APP route | grep \\:[^.]*\\.alecgorge\\.com\\ | cut -f2 | awk \'{ print $3; }\' | xargs -I % flynn -a $FLYNN_APP route update % -c /home/alecgorge/tls/server.crt -k /home/alecgorge/tls/server.key
                     flynn -a $FLYNN_APP scale app=1
                 '''
+
+                retry(3) {
+                    sh '''set -x
+                    sleep 5
+                    curl -f "http://relistenapi.aberforth.alecgorge.com/api-docs"
+                    curl -f "https://relistenapi.alecgorge.com/api-docs"
+                    '''
+                }
             }
         }
     }
