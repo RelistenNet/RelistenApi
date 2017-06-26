@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Linq;
+using System.Net;
 using Hangfire;
 using Hangfire.Console;
 // using Hangfire.PostgreSql;
@@ -70,13 +72,7 @@ namespace Relisten
 
 			services.AddSingleton(new DbService(Configuration["DATABASE_URL"]));
 
-			var redisURL = new Uri(Configuration["REDIS_URL"]);
-			var configurationOptions = ConfigurationOptions.Parse($"{redisURL.Authority},syncTimeout=10000");
-			
-			if(redisURL.UserInfo != null && redisURL.UserInfo.Contains(":"))
-			{
-				configurationOptions.Password = redisURL.UserInfo.Split(':')[1];
-			}
+			var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]);
 
             // use the static property because it is formatted correctly for NpgSQL
 			services.AddHangfire(hangfire => {
