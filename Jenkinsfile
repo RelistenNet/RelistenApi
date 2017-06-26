@@ -22,7 +22,7 @@ pipeline {
                 sh '''set -x
                     flynn -a $FLYNN_APP docker push flynn-$FLYNN_APP
                     echo "Updating SSL certs..."
-                    flynn -a $FLYNN_APP route add http relitenapi.alecgorge.com || true
+                    flynn -a $FLYNN_APP route add http relistenapi.alecgorge.com || true
                     flynn -a $FLYNN_APP route | grep \\:[^.]*\\.alecgorge\\.com\\ | cut -f2 | awk \'{ print $3; }\' | xargs -I % flynn -a $FLYNN_APP route update % -c /home/alecgorge/tls/server.crt -k /home/alecgorge/tls/server.key
                     flynn -a $FLYNN_APP scale app=1
                 '''
