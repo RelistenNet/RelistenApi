@@ -2,15 +2,17 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.4.10
--- Dumped by pg_dump version 9.5.3
+-- Dumped from database version 9.6.2
+-- Dumped by pg_dump version 9.6.2
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET client_min_messages = warning;
+SET row_security = off;
 
 --
 -- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
@@ -26,6 +28,20 @@ CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 
 
+--
+-- Name: pg_stat_statements; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pg_stat_statements; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pg_stat_statements IS 'track execution statistics of all SQL statements executed';
+
+
 SET search_path = public, pg_catalog;
 
 SET default_tablespace = '';
@@ -39,7 +55,7 @@ SET default_with_oids = false;
 CREATE TABLE artists (
     id integer NOT NULL,
     musicbrainz_id text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     name text NOT NULL,
     featured integer DEFAULT 0 NOT NULL,
@@ -86,7 +102,7 @@ CREATE TABLE eras (
     artist_id integer NOT NULL,
     "order" smallint DEFAULT (0)::smallint,
     name text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
 
@@ -138,7 +154,8 @@ CREATE TABLE features (
     track_names boolean DEFAULT false NOT NULL,
     venue_past_names boolean DEFAULT false NOT NULL,
     reviews_have_ratings boolean DEFAULT false NOT NULL,
-    track_durations boolean DEFAULT true NOT NULL
+    track_durations boolean DEFAULT true NOT NULL,
+    can_have_flac boolean DEFAULT false NOT NULL
 );
 
 
@@ -162,6 +179,43 @@ ALTER SEQUENCE featuresets_id_seq OWNED BY features.id;
 
 
 --
+-- Name: links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE links (
+    id integer NOT NULL,
+    source_id integer NOT NULL,
+    upstream_source_id integer NOT NULL,
+    for_reviews boolean NOT NULL,
+    for_ratings boolean NOT NULL,
+    for_source boolean NOT NULL,
+    url text NOT NULL,
+    label text NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+
+--
+-- Name: links_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE links_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: links_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE links_id_seq OWNED BY links.id;
+
+
+--
 -- Name: setlist_shows; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -171,7 +225,7 @@ CREATE TABLE setlist_shows (
     venue_id integer NOT NULL,
     upstream_identifier text NOT NULL,
     date date NOT NULL,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     tour_id integer,
     era_id integer
@@ -206,7 +260,7 @@ CREATE TABLE setlist_songs (
     artist_id integer NOT NULL,
     name text NOT NULL,
     slug text NOT NULL,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     upstream_identifier text NOT NULL
 );
@@ -255,7 +309,7 @@ CREATE TABLE shows (
     avg_rating real DEFAULT (0)::real,
     avg_duration real DEFAULT (0)::real,
     display_date text NOT NULL,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     venue_id integer
 );
@@ -291,7 +345,7 @@ CREATE TABLE source_reviews (
     title text,
     review text DEFAULT ''::text NOT NULL,
     author text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
 
@@ -332,7 +386,7 @@ CREATE TABLE source_sets (
     index integer DEFAULT 0 NOT NULL,
     is_encore boolean DEFAULT false NOT NULL,
     name text NOT NULL,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
 
@@ -363,7 +417,7 @@ ALTER SEQUENCE source_sets_id_seq OWNED BY source_sets.id;
 CREATE TABLE source_tracks_plays (
     id integer NOT NULL,
     source_track_id integer NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     user_id integer NOT NULL
 );
 
@@ -399,10 +453,13 @@ CREATE TABLE source_tracks (
     duration integer,
     title text NOT NULL,
     slug text NOT NULL,
-    mp3_url text NOT NULL,
-    md5 text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    mp3_url text,
+    mp3_md5 text,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    flac_md5 text,
+    flac_url text,
+    CONSTRAINT url_check CHECK (((mp3_url IS NOT NULL) OR (flac_url IS NOT NULL)))
 );
 
 
@@ -451,14 +508,15 @@ CREATE TABLE sources (
     taper text DEFAULT ''''''::text,
     transferrer text DEFAULT ''''''::text,
     lineage text DEFAULT ''''''::text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     artist_id integer NOT NULL,
     avg_rating_weighted real DEFAULT (0)::real,
     duration real DEFAULT (0)::real,
     venue_id integer,
     display_date text NOT NULL,
-    num_ratings integer
+    num_ratings integer,
+    flac_type integer DEFAULT 0 NOT NULL
 );
 
 
@@ -491,7 +549,7 @@ CREATE TABLE tours (
     start_date date,
     end_date date,
     name text NOT NULL,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     slug text NOT NULL,
     upstream_identifier text NOT NULL
@@ -561,7 +619,7 @@ CREATE TABLE venues (
     name text,
     location text,
     upstream_identifier text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     slug text,
     past_names text
@@ -600,7 +658,7 @@ CREATE TABLE years (
     avg_rating real DEFAULT (0)::real,
     artist_id integer NOT NULL,
     year text,
-    created_at timestamp with time zone DEFAULT (now())::timestamp(0) without time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
 
@@ -625,112 +683,119 @@ ALTER SEQUENCE years_id_seq OWNED BY years.id;
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: artists id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists ALTER COLUMN id SET DEFAULT nextval('artists_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: eras id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras ALTER COLUMN id SET DEFAULT nextval('eras_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: features id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features ALTER COLUMN id SET DEFAULT nextval('featuresets_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: links id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY links ALTER COLUMN id SET DEFAULT nextval('links_id_seq'::regclass);
+
+
+--
+-- Name: setlist_shows id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows ALTER COLUMN id SET DEFAULT nextval('setlist_show_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: setlist_songs id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs ALTER COLUMN id SET DEFAULT nextval('setlist_song_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: shows id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows ALTER COLUMN id SET DEFAULT nextval('shows_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: source_reviews id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews ALTER COLUMN id SET DEFAULT nextval('source_review_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: source_sets id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets ALTER COLUMN id SET DEFAULT nextval('source_sets_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: source_tracks id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks ALTER COLUMN id SET DEFAULT nextval('source_tracks_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: source_tracks_plays id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays ALTER COLUMN id SET DEFAULT nextval('source_track_play_history_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: sources id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources ALTER COLUMN id SET DEFAULT nextval('sources_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: tours id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours ALTER COLUMN id SET DEFAULT nextval('tours_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: upstream_sources id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY upstream_sources ALTER COLUMN id SET DEFAULT nextval('upstream_sources_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: venues id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues ALTER COLUMN id SET DEFAULT nextval('venues_id_seq'::regclass);
 
 
 --
--- Name: id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: years id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years ALTER COLUMN id SET DEFAULT nextval('years_id_seq'::regclass);
 
 
 --
--- Name: artists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: artists artists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists
@@ -738,7 +803,7 @@ ALTER TABLE ONLY artists
 
 
 --
--- Name: eras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: eras eras_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras
@@ -746,7 +811,7 @@ ALTER TABLE ONLY eras
 
 
 --
--- Name: featuresets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: features featuresets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features
@@ -754,7 +819,23 @@ ALTER TABLE ONLY features
 
 
 --
--- Name: setlist_show_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: links links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY links
+    ADD CONSTRAINT links_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: links links_source_id_upstream_source_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY links
+    ADD CONSTRAINT links_source_id_upstream_source_id_key UNIQUE (source_id, upstream_source_id);
+
+
+--
+-- Name: setlist_shows setlist_show_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -762,7 +843,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_show_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_shows setlist_show_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -770,7 +851,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_song_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_songs setlist_song_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs
@@ -778,7 +859,7 @@ ALTER TABLE ONLY setlist_songs
 
 
 --
--- Name: shows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -786,7 +867,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: source_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: source_reviews source_review_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews
@@ -794,7 +875,7 @@ ALTER TABLE ONLY source_reviews
 
 
 --
--- Name: source_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: source_sets source_sets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets
@@ -802,7 +883,7 @@ ALTER TABLE ONLY source_sets
 
 
 --
--- Name: source_track_play_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks_plays source_track_play_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays
@@ -810,7 +891,7 @@ ALTER TABLE ONLY source_tracks_plays
 
 
 --
--- Name: source_tracks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks source_tracks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -818,7 +899,15 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks source_tracks_source_id_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY source_tracks
+    ADD CONSTRAINT source_tracks_source_id_slug_key UNIQUE (source_id, slug);
+
+
+--
+-- Name: sources sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -826,7 +915,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: sources sources_upstream_identifier_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -834,7 +923,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: tours_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: tours tours_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours
@@ -842,7 +931,7 @@ ALTER TABLE ONLY tours
 
 
 --
--- Name: upstream_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: upstream_sources upstream_sources_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY upstream_sources
@@ -850,7 +939,7 @@ ALTER TABLE ONLY upstream_sources
 
 
 --
--- Name: venues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: venues venues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues
@@ -858,7 +947,7 @@ ALTER TABLE ONLY venues
 
 
 --
--- Name: years_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: years years_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years
@@ -870,6 +959,76 @@ ALTER TABLE ONLY years
 --
 
 CREATE UNIQUE INDEX artists_upstream_sources_key ON artists_upstream_sources USING btree (upstream_source_id, artist_id);
+
+
+--
+-- Name: idx_features_artist; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_features_artist ON features USING btree (artist_id);
+
+
+--
+-- Name: idx_shows_artist_id_display_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_shows_artist_id_display_date ON shows USING btree (artist_id, display_date);
+
+
+--
+-- Name: idx_source_artist_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_source_artist_id ON sources USING btree (artist_id);
+
+
+--
+-- Name: idx_source_reviews_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_source_reviews_source_id ON source_reviews USING btree (source_id);
+
+
+--
+-- Name: idx_source_sets_source_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_source_sets_source_id ON source_sets USING btree (source_id);
+
+
+--
+-- Name: idx_source_show_id_covering; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_source_show_id_covering ON sources USING btree (show_id, avg_rating_weighted, flac_type, is_soundboard, updated_at);
+
+
+--
+-- Name: idx_source_tracks_source_set_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_source_tracks_source_set_id ON source_tracks USING btree (source_set_id);
+
+
+--
+-- Name: idx_sources_flac_upstream; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_sources_flac_upstream ON sources USING btree (upstream_identifier, flac_type);
+
+
+--
+-- Name: idx_years_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_years_year ON years USING btree (artist_id, year);
+
+
+--
+-- Name: mp3_url_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX mp3_url_unique ON source_tracks USING btree (mp3_url);
 
 
 --
@@ -887,10 +1046,10 @@ CREATE UNIQUE INDEX shows_artist_id_display_date_key ON shows USING btree (artis
 
 
 --
--- Name: tour_artist_id_tour_slug; Type: INDEX; Schema: public; Owner: -
+-- Name: tour_artist_id_tour_upstream_identifier; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX tour_artist_id_tour_slug ON tours USING btree (artist_id, slug);
+CREATE UNIQUE INDEX tour_artist_id_tour_upstream_identifier ON tours USING btree (artist_id, upstream_identifier);
 
 
 --
@@ -915,14 +1074,7 @@ CREATE UNIQUE INDEX venues_upstream_identifier_null_artist_key ON venues USING b
 
 
 --
--- Name: years_year; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX years_year ON years USING btree (artist_id, year);
-
-
---
--- Name: artists_upstream_sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: artists_upstream_sources artists_upstream_sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists_upstream_sources
@@ -930,7 +1082,7 @@ ALTER TABLE ONLY artists_upstream_sources
 
 
 --
--- Name: artists_upstream_sources_upstream_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: artists_upstream_sources artists_upstream_sources_upstream_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY artists_upstream_sources
@@ -938,7 +1090,7 @@ ALTER TABLE ONLY artists_upstream_sources
 
 
 --
--- Name: eras_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: eras eras_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY eras
@@ -946,7 +1098,7 @@ ALTER TABLE ONLY eras
 
 
 --
--- Name: featuresets_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: features featuresets_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY features
@@ -954,7 +1106,23 @@ ALTER TABLE ONLY features
 
 
 --
--- Name: setlist_show_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: links links_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY links
+    ADD CONSTRAINT links_source_id_fkey FOREIGN KEY (source_id) REFERENCES sources(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- Name: links links_upstream_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY links
+    ADD CONSTRAINT links_upstream_source_id_fkey FOREIGN KEY (upstream_source_id) REFERENCES upstream_sources(id);
+
+
+--
+-- Name: setlist_shows setlist_show_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -962,7 +1130,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_show_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_shows setlist_show_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -970,7 +1138,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_shows setlist_shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -978,7 +1146,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_shows setlist_shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_shows
@@ -986,7 +1154,7 @@ ALTER TABLE ONLY setlist_shows
 
 
 --
--- Name: setlist_song_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_songs setlist_song_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs
@@ -994,7 +1162,7 @@ ALTER TABLE ONLY setlist_songs
 
 
 --
--- Name: setlist_song_plays_played_setlist_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_songs_plays setlist_song_plays_played_setlist_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs_plays
@@ -1002,7 +1170,7 @@ ALTER TABLE ONLY setlist_songs_plays
 
 
 --
--- Name: setlist_song_plays_played_setlist_song_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: setlist_songs_plays setlist_song_plays_played_setlist_song_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY setlist_songs_plays
@@ -1010,7 +1178,7 @@ ALTER TABLE ONLY setlist_songs_plays
 
 
 --
--- Name: shows_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1018,7 +1186,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_era_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1026,7 +1194,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_tour_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1034,7 +1202,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1042,7 +1210,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: shows_year_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: shows shows_year_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY shows
@@ -1050,7 +1218,7 @@ ALTER TABLE ONLY shows
 
 
 --
--- Name: source_review_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: source_reviews source_review_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_reviews
@@ -1058,7 +1226,7 @@ ALTER TABLE ONLY source_reviews
 
 
 --
--- Name: source_sets_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: source_sets source_sets_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_sets
@@ -1066,7 +1234,7 @@ ALTER TABLE ONLY source_sets
 
 
 --
--- Name: source_tracks_plays_source_track_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks_plays source_tracks_plays_source_track_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks_plays
@@ -1074,7 +1242,7 @@ ALTER TABLE ONLY source_tracks_plays
 
 
 --
--- Name: source_tracks_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks source_tracks_set_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -1082,7 +1250,7 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: source_tracks_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: source_tracks source_tracks_source_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY source_tracks
@@ -1090,7 +1258,7 @@ ALTER TABLE ONLY source_tracks
 
 
 --
--- Name: sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sources sources_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1098,7 +1266,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sources sources_show_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1106,7 +1274,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: sources_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: sources sources_venue_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY sources
@@ -1114,7 +1282,7 @@ ALTER TABLE ONLY sources
 
 
 --
--- Name: tours_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: tours tours_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY tours
@@ -1122,7 +1290,7 @@ ALTER TABLE ONLY tours
 
 
 --
--- Name: venues_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: venues venues_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY venues
@@ -1130,7 +1298,7 @@ ALTER TABLE ONLY venues
 
 
 --
--- Name: years_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: years years_artist_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY years
