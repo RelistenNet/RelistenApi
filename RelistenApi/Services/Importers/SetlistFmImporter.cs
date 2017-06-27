@@ -15,6 +15,9 @@ using System.Diagnostics;
 using Hangfire.Server;
 using Hangfire.Console;
 using Hangfire.Console.Progress;
+using System.Net;
+using Polly;
+using Polly.Retry;
 
 namespace Relisten.Import
 {
@@ -54,6 +57,12 @@ namespace Relisten.Import
              | ImportableData.Venues;
         }
 
+        private RetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Polly.Policy
+            .Handle<JsonReaderException>()
+            .OrResult<Tuple<bool, ImportStats>>(r => false /* never error on the result */)
+            //.HandleResult<HttpResponseMessage>(r => r.StatusCode == HttpStatusCode.ServiceUnavailable)
+            .WaitAndRetryAsync(7, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)));
+
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
             int page = 1;
@@ -66,7 +75,10 @@ namespace Relisten.Import
 
             do
             {
-                result = await ProcessSetlistPage(artist, await this.http.GetAsync(SetlistUrlForArtist(artist, page)), ctx, prog);
+                result = await retryPolicy.ExecuteAsync(async () => {
+                    var httpRes = await this.http.GetAsync(SetlistUrlForArtist(artist, page));
+                    return await ProcessSetlistPage(artist, httpRes, ctx, prog);
+                });
 
                 // max 10 per second
                 await Task.Delay(100);
