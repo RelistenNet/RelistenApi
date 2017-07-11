@@ -1,38 +1,21 @@
 pipeline {
     agent any
     environment { 
-        FLYNN_APP = 'relistenapi'
+        APP_NAME = 'relistenapi'
+        DOKKU_HOST = 'dumbledore.alecgorge.com'
     }
     stages {
-        stage('Build') {
+        stage('Build and Deploy') {
             steps {
-                sh '''set -x
-                    flynn create --remote \'\' $FLYNN_APP || true
-                    docker build -t flynn-$FLYNN_APP .
-                '''
-            }
-        }
-        stage('Deploy') {
-            when {
-                expression {
-                    currentBuild.result == null || currentBuild.result == 'SUCCESS' 
-                }
-            }
-            steps {
-                sh '''set -x
-                    flynn -a $FLYNN_APP docker push flynn-$FLYNN_APP
-                    echo "Updating SSL certs..."
-                    flynn -a $FLYNN_APP route add http relistenapi.alecgorge.com || true
-                    flynn -a $FLYNN_APP route | grep \\:[^.]*\\.alecgorge\\.com\\ | cut -f2 | awk \'{ print $3; }\' | xargs -I % flynn -a $FLYNN_APP route update % -c /home/alecgorge/tls/server.crt -k /home/alecgorge/tls/server.key
-                    flynn -a $FLYNN_APP scale app=1
-                '''
+                sh """set -x
+                    git remote add dokku dokku@${env.DOKKU_HOST}:${env.APP_NAME} || true
+                    git push dokku \$(git rev-parse HEAD):refs/heads/master
+                """
 
                 retry(3) {
-                    sh '''set -x
-                    sleep 5
-                    curl -f "http://relistenapi.aberforth.alecgorge.com/api-docs"
-                    curl -f "https://relistenapi.alecgorge.com/api-docs"
-                    '''
+                    sh """set -x
+                    curl -f "http://${env.APP_NAME}.dumbledore.alecgorge.com/"
+                    """
                 }
             }
         }
