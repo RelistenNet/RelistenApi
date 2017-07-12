@@ -86,10 +86,10 @@ namespace Relisten.Import
             return await page.Content.ReadAsStringAsync();
         }
 
-        private static string PanicIndexUrl() { return "http://www.panicstream.com/streams/wsp/?C=M;O=D"; }
+        private static string PanicIndexUrl() { return "https://www.panicstream.com/streams/wsp/?C=M;O=D"; }
         private static string PanicShowUrl(string panicDate)
         {
-            return "http://www.panicstream.com/streams/wsp/" + panicDate + "/";
+            return "https://www.panicstream.com/streams/wsp/" + panicDate + "/";
         }
 		private static string PanicShowFileUrl(string panicDate, string fileName)
         {
@@ -216,7 +216,7 @@ namespace Relisten.Import
 						for_source = true,
 						for_reviews = false,
 						upstream_source_id = upstreamSrc.upstream_source_id,
-						url = $"http://www.panicstream.com/vault/widespread-panic/{dbSource.display_date.Substring(0, 4)}-streams/",
+						url = $"https://www.panicstream.com/vault/widespread-panic/{dbSource.display_date.Substring(0, 4)}-streams/",
 						label = "View show page on panicstream.com"
 					},
 					new Link
