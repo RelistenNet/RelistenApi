@@ -52,6 +52,9 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public string slug { get; set; }
+
+		[Required]
+        public string sort_name { get; set; }
     }
 
     public class SlimArtistWithFeatures : SlimArtist {

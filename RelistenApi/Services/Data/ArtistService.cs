@@ -88,7 +88,7 @@ namespace Relisten.Data
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
 				ORDER BY
-					a.featured DESC, a.name
+					a.featured DESC, a.sort_name
             ", joiner)));
 		}
 
@@ -280,7 +280,8 @@ namespace Relisten.Data
 	                        name = @name,
 	                        featured = @featured,
 	                        slug = @slug,
-	                        updated_at = timezone('utc'::text, now())
+	                        updated_at = timezone('utc'::text, now()),
+							sort_name = @sort_name
 	                    WHERE
 	                        id = @id
 	                    RETURNING *
@@ -291,6 +292,7 @@ namespace Relisten.Data
                         artist.name,
                         artist.slug,
                         artist.featured,
+						sort_name = artist.name.Replace("The ", "")
 					});
 
 					innerArt.features = artist.features;
@@ -322,7 +324,8 @@ namespace Relisten.Data
 	                            featured,
 	                            name,
 	                            slug,
-	                            updated_at
+	                            updated_at,
+								sort_Name
 	                        )
 	                    VALUES
 	                        (
@@ -330,7 +333,8 @@ namespace Relisten.Data
 	                            @featured,
 	                            @name,
 	                            @slug,
-	                            timezone('utc'::text, now())
+	                            timezone('utc'::text, now()),
+								@sort_name
 	                        )
 	                    RETURNING *
 	                ", new
@@ -339,6 +343,7 @@ namespace Relisten.Data
 						artist.name,
 						artist.slug,
 						artist.featured,
+						sort_name = artist.name.Replace("The ", "")
 					});
 
 					innerArt.features = artist.features;
