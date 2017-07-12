@@ -14,7 +14,7 @@ pipeline {
 
                 retry(3) {
                     sh """set -x
-                    curl -f "http://${env.APP_NAME}.dumbledore.alecgorge.com/"
+                    curl -f "http://${env.APP_NAME}.dumbledore.alecgorge.com/api/v2/artists"
                     """
                 }
             }
