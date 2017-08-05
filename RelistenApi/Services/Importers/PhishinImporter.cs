@@ -242,6 +242,11 @@ namespace Relisten.Import
             {
                 var dbSong = existingSetlistSongs.GetValue(song.slug);
 
+                if(dbSong == null && song.slug.EndsWith("-song"))
+                {
+                    dbSong = existingSetlistSongs.GetValue(song.slug.Replace("-song", ""));
+                }
+
                 // skip aliases for now
                 if (dbSong == null && song.alias_for.HasValue == false)
                 {
