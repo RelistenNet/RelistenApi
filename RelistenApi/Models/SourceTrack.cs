@@ -14,6 +14,9 @@ namespace Relisten.Api.Models
 
         [Required]
         public int source_set_id { get; set; }
+        
+        [Required]
+        public int artist_id { get; set; }
 
 
         [Required]

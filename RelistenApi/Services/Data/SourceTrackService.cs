@@ -51,7 +51,8 @@ namespace Relisten.Data
 								mp3_md5,
                                 flac_url,
 								flac_md5,
-                                updated_at
+                                updated_at,
+                                artist_id
                             )
                         VALUES
                             (
@@ -65,7 +66,8 @@ namespace Relisten.Data
                                 @mp3_md5,
                                 @flac_url,
                                 @flac_md5,
-                                @updated_at
+                                @updated_at,
+                                @artist_id
                             )
                         RETURNING *
                     ", song));

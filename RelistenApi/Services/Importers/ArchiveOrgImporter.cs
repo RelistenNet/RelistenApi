@@ -404,7 +404,8 @@ namespace Relisten.Import
 				mp3_md5 = file.md5,
 				flac_url = flac == null ? null : $"https://archive.org/download/{meta.identifier}/{flac.name}",
 				flac_md5 = flac?.md5,
-            	updated_at = dbSource.updated_at
+            	updated_at = dbSource.updated_at,
+                artist_id = artist.id
             };
         }
 

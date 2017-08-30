@@ -267,7 +267,8 @@ namespace Relisten.Import
                         title = trackName,
                         slug = SlugifyTrack(trackName),
                         mp3_url = PanicShowFileUrl(upstreamId, fileName),
-                        updated_at = panicUpdatedAt
+                        updated_at = panicUpdatedAt,
+                        artist_id = artist.id
                     };
                 });
 
