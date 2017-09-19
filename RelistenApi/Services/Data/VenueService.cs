@@ -68,8 +68,8 @@ namespace Relisten.Data
             return await ForUpstreamIdentifier(null, upstreamId);
         }
 
-        public async Task<IEnumerable<Venue>> AllIncludingUnusedForArtist(Artist artist) {
-            return await db.WithConnection(con => con.QueryAsync<Venue>(@"
+        public async Task<IEnumerable<VenueWithShowCount>> AllIncludingUnusedForArtist(Artist artist) {
+            return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
                 SELECT
                     v.*,
                     CASE
@@ -91,9 +91,9 @@ namespace Relisten.Data
             ", artist)); 
         }
 
-        public async Task<IEnumerable<Venue>> AllForArtist(Artist artist)
+        public async Task<IEnumerable<VenueWithShowCount>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<Venue>(@"
+            return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
                 SELECT
                     v.*,
                     CASE
