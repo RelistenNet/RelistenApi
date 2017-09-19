@@ -74,7 +74,7 @@ namespace Relisten.Import
 
 		async Task PreloadData(Artist artist)
 		{
-			existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
+			existingVenues = (IDictionary<string, Venue>)(await _venueService.AllIncludingUnusedForArtist(artist)).
 				GroupBy(venue => venue.upstream_identifier).
 				ToDictionary(grp => grp.Key, grp => grp.First());
 
