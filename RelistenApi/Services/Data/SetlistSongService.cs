@@ -41,7 +41,7 @@ namespace Relisten.Data
             SetlistSongWithShows bigSong = null;
             await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, Venue, Tour, Era, SetlistSongWithShows>(@"
                 SELECT
-                    s.*, shows.*, v.*, t.*
+                    s.*, shows.*, v.*, t.*, e.*
                 FROM
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
