@@ -180,6 +180,33 @@ namespace Relisten.Import
                     updated_at = rev.reviewdate
                 };
             }).ToList();
+            
+            Venue dbVenue = null;
+            if (artist.features.per_source_venues)
+            {
+                var venueName = String.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
+
+                if (String.IsNullOrEmpty(venueName))
+                {
+                    venueName = "Unknown Venue";
+                }
+
+                var venueUpstreamId = venueName + (String.IsNullOrEmpty(meta.coverage) ? "blank coverage" : meta.coverage);
+                dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
+
+                if (dbVenue == null)
+                {
+                    dbVenue = await _venueService.Save(new Venue()
+                    {
+                        artist_id = artist.id,
+                        name = venueName,
+                        location = String.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
+                        upstream_identifier = venueUpstreamId,
+                        slug = Slugify(venueName),
+                        updated_at = searchDoc._iguana_updated_at
+                    });
+                }
+            }
 
             if (isUpdate)
             {
@@ -190,35 +217,13 @@ namespace Relisten.Import
                 stats.Updated++;
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
                 stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
+
+                dbSource.venue_id = dbVenue.id;
+                dbSource.venue = dbVenue;
             }
             else
             {
-                Venue dbVenue = null;
-                if (artist.features.per_source_venues)
-                {
-                    var venueName = String.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
 
-                    if (String.IsNullOrEmpty(venueName))
-                    {
-                        venueName = "Unknown Venue";
-                    }
-
-                    var venueUpstreamId = venueName;
-                    dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
-
-                    if (dbVenue == null)
-                    {
-                        dbVenue = await _venueService.Save(new Venue()
-                        {
-                            artist_id = artist.id,
-                            name = venueName,
-                            location = String.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
-                            upstream_identifier = venueUpstreamId,
-                            slug = Slugify(venueName),
-                            updated_at = searchDoc._iguana_updated_at
-                        });
-                    }
-                }
 
                 dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc, dbVenue));
                 stats.Created++;
