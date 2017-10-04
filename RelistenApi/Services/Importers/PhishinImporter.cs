@@ -107,7 +107,7 @@ namespace Relisten.Import
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
         private IDictionary<string, Era> existingEras = new Dictionary<string, Era>();
-        private IDictionary<string, Venue> existingVenues = new Dictionary<string, Venue>();
+        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
         private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
         private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
         private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
@@ -124,7 +124,7 @@ namespace Relisten.Import
                 GroupBy(era => era.name).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
-            existingVenues = (IDictionary<string, Venue>)(await _venueService.AllIncludingUnusedForArtist(artist)).
+            existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -283,7 +283,7 @@ namespace Relisten.Import
 
                 if (dbVenue == null)
                 {
-                    dbVenue = await _venueService.Save(new Venue()
+                    var sc = new VenueWithShowCount()
                     {
                         updated_at = venue.updated_at,
                         artist_id = artist.id,
@@ -294,11 +294,17 @@ namespace Relisten.Import
                         longitude = venue.longitude,
                         past_names = venue.past_names,
                         upstream_identifier = venue.id.ToString()
-                    });
+                    };
 
-                    existingVenues[dbVenue.upstream_identifier] = dbVenue;
+                    var createdDb = await _venueService.Save(sc);
+
+                    sc.id = createdDb.id;
+
+                    existingVenues[dbVenue.upstream_identifier] = sc;
 
                     stats.Created++;
+
+                    dbVenue = sc;
                 }
                 else if(venue.updated_at > dbVenue.updated_at)
                 {
@@ -309,7 +315,7 @@ namespace Relisten.Import
                     dbVenue.past_names = venue.past_names;
                     dbVenue.updated_at = venue.updated_at;
 
-                    dbVenue = await _venueService.Save(dbVenue);
+                    await _venueService.Save(dbVenue);
 
                     existingVenues[dbVenue.upstream_identifier] = dbVenue;
 

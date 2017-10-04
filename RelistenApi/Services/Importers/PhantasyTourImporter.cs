@@ -67,14 +67,14 @@ namespace Relisten.Import
 		IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
 		IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
-		IDictionary<string, Venue> existingVenues = new Dictionary<string, Venue>();
+		IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
 		IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
 		IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
 		IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
 
 		async Task PreloadData(Artist artist)
 		{
-			existingVenues = (IDictionary<string, Venue>)(await _venueService.AllIncludingUnusedForArtist(artist)).
+			existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
 				GroupBy(venue => venue.upstream_identifier).
 				ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -197,7 +197,7 @@ namespace Relisten.Import
 			Venue dbVenue = existingVenues.GetValue(UpstreamIdentifierForPhantasyTourId(json.venue.id));
 			if (dbVenue == null)
 			{
-				dbVenue = await _venueService.Save(new Venue()
+				var sc = new VenueWithShowCount()
 				{
 					updated_at = now,
 					artist_id = artist.id,
@@ -207,9 +207,13 @@ namespace Relisten.Import
 					location = $"{json.venue.city}, {json.venue.state}, {json.venue.country}",
 					upstream_identifier = UpstreamIdentifierForPhantasyTourId(json.venue.id),
 					slug = Slugify($"{json.venue.name}, {json.venue.city}, {json.venue.state}")
-				});
+				};
 
-				existingVenues[dbVenue.upstream_identifier] = dbVenue;
+				dbVenue = await _venueService.Save(sc);
+
+				sc.id = dbVenue.id;
+
+				existingVenues[dbVenue.upstream_identifier] = sc;
 
 				stats.Created++;
 			}

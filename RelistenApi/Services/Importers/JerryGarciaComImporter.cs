@@ -134,14 +134,14 @@ namespace Relisten.Import
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
-        private IDictionary<string, Venue> existingVenues = new Dictionary<string, Venue>();
+        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
         private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
         private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
         private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
 
         async Task PreloadData(Artist artist)
         {
-            existingVenues = (IDictionary<string, Venue>)(await _venueService.AllIncludingUnusedForArtist(artist)).
+            existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).
                 GroupBy(venue => venue.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
 
@@ -186,11 +186,11 @@ namespace Relisten.Import
 
             var venueUpstreamId = "jerrygarcia.com_" + venueName;
 
-            var dbVenue = existingVenues.GetValue(venueUpstreamId);
+            Venue dbVenue = existingVenues.GetValue(venueUpstreamId);
 
             if (dbVenue == null)
             {
-                dbVenue = await _venueService.Save(new Venue
+                var sc = new VenueWithShowCount
                 {
                     artist_id = artist.id,
                     name = venueName,
@@ -198,9 +198,13 @@ namespace Relisten.Import
                     upstream_identifier = venueUpstreamId,
                     slug = Slugify(venueName),
 					updated_at = updated_at
-                });
+                };
 
-                existingVenues[dbVenue.upstream_identifier] = dbVenue;
+                dbVenue = await _venueService.Save(sc);
+
+                sc.id = dbVenue.id;
+
+                existingVenues[dbVenue.upstream_identifier] = sc;
 
                 stats.Created++;
             }
