@@ -432,7 +432,7 @@ namespace Relisten.Import
                     duration = track.duration / 1000,
                     track_position = track.position,
                     slug = SlugifyTrack(track.title),
-                    mp3_url = track.mp3,
+                    mp3_url = track.mp3.Replace("http:", "https:"),
                     updated_at = dbSource.updated_at,
                     artist_id = artist.id
                 });
