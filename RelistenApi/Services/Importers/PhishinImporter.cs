@@ -300,7 +300,7 @@ namespace Relisten.Import
 
                     sc.id = createdDb.id;
 
-                    existingVenues[dbVenue.upstream_identifier] = sc;
+                    existingVenues[sc.upstream_identifier] = sc;
 
                     stats.Created++;
 
