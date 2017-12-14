@@ -160,7 +160,7 @@ namespace Relisten.Import
             var mp3Files = detailsRoot.files?.Where(file => file?.format == "VBR MP3");
 			var flacFiles = detailsRoot.files?.Where(file => file?.format == "Flac" || file?.format == "24bit Flac");
 
-			if (mp3Files.Count() == 0)
+			if (!mp3Files || mp3Files.Count() == 0)
             {
 				ctx?.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
 
