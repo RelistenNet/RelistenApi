@@ -57,7 +57,7 @@ namespace Relisten.Controllers
 		[ProducesResponseType(typeof(IEnumerable<PlayedSourceTrack>), 200)]
 		public async Task<IActionResult> RecentlyPlayed()
 		{
-			var trackIds = (await redis.db.SortedSetRangeByRankAsync("played", -26, -1)).Select(t =>
+			var trackIds = (await redis.db.SortedSetRangeByRankAsync("played", -1, -26)).Select(t =>
 			{
 				t.TryParse(out int id);
 				return id;
