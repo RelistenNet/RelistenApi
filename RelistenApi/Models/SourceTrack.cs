@@ -14,7 +14,7 @@ namespace Relisten.Api.Models
 
         [Required]
         public int source_set_id { get; set; }
-        
+
         [Required]
         public int artist_id { get; set; }
 
@@ -30,19 +30,34 @@ namespace Relisten.Api.Models
         [Required]
         public string slug { get; set; }
 
-		public string mp3_url { get; set; }
-		public string mp3_md5 { get; set; }
+        public string mp3_url { get; set; }
+        public string mp3_md5 { get; set; }
 
-		public string flac_url { get; set; }
-		public string flac_md5 { get; set; }
+        public string flac_url { get; set; }
+        public string flac_md5 { get; set; }
     }
 
-	public class PlayedSourceTrack
-	{
-		[Required]
-		public SlimSourceWithShowAndArtist source { get; set; }
+    public class PlayedSourceTrack
+    {
+        [Required]
+        public SlimSourceWithShowAndArtist source { get; set; }
 
-		[Required]
-		public SourceTrack track { get; set; }
-	}
+        [Required]
+        public SourceTrack track { get; set; }
+    }
+
+    public class SlimLivePlayedTrack
+    {
+        [Required]
+        public DateTime played_at { get; set; }
+
+        [Required]
+        public int track_id { get; set; }        
+    }
+
+    public class LivePlayedTrack : SlimLivePlayedTrack
+    {
+        [Required]
+        public PlayedSourceTrack track { get; set; }
+    }
 }

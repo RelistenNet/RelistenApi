@@ -7,6 +7,7 @@ using Relisten.Api;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
+using Newtonsoft.Json;
 
 namespace Relisten.Controllers
 {
@@ -48,7 +49,13 @@ namespace Relisten.Controllers
                 return JsonNotFound(false);
             }
 
-            await redis.db.SortedSetAddAsync("played", track_id, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            var lp = new SlimLivePlayedTrack
+            {
+                played_at = DateTime.UtcNow,
+                track_id = track_id
+            };
+
+            await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
             return JsonSuccess(true);
         }
@@ -57,29 +64,40 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(IEnumerable<PlayedSourceTrack>), 200)]
         public async Task<IActionResult> RecentlyPlayed()
         {
-            var trackIds = (await redis.db
+            var tracksPlays = (await redis.db
                 .SortedSetRangeByScoreAsync("played", start: -26, stop: -1, order: StackExchange.Redis.Order.Descending))
-                .Select(t =>
-            {
-                t.TryParse(out int id);
-                return id;
-            });
+                .Select(t => JsonConvert.DeserializeObject<SlimLivePlayedTrack>(t));
 
-            var tracks = await _sourceTrackService.ForIds(trackIds.ToList());
+            var tracks = await _sourceTrackService.ForIds(tracksPlays.Select(t => t.track_id).ToList());
 
             var sourceIds = tracks
                 .Select(t => t.source_id)
                 .GroupBy(t => t)
                 .Select(g => g.First());
 
+            var trackLookup = tracks
+                .ToDictionary(t => t.id, t => t)
+                ;
+
             var sources = (await sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
                 .GroupBy(s => s.id)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            return JsonSuccess(tracks.Select(t => new PlayedSourceTrack
+            return JsonSuccess(tracksPlays.Select(t =>
             {
-                source = sources[t.source_id],
-                track = t
+                var track = trackLookup[t.track_id];
+
+                return new LivePlayedTrack
+                {
+                    track_id = t.track_id,
+                    played_at = t.played_at,
+
+                    track = new PlayedSourceTrack
+                    {
+                        source = sources[track.source_id],
+                        track = track
+                    }
+                };
             }));
         }
     }
