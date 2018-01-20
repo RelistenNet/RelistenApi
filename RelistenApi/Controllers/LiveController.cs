@@ -60,12 +60,12 @@ namespace Relisten.Controllers
             return JsonSuccess(true);
         }
 
-        [HttpPost("live/recently-played")]
+        [HttpGet("live/recently-played")]
         [ProducesResponseType(typeof(IEnumerable<PlayedSourceTrack>), 200)]
         public async Task<IActionResult> RecentlyPlayed()
         {
             var tracksPlays = (await redis.db
-                .SortedSetRangeByScoreAsync("played", start: -26, stop: -1, order: StackExchange.Redis.Order.Descending))
+                .SortedSetRangeByScoreAsync("played", order: StackExchange.Redis.Order.Descending, take: 25))
                 .Select(t => JsonConvert.DeserializeObject<SlimLivePlayedTrack>(t));
 
             var tracks = await _sourceTrackService.ForIds(tracksPlays.Select(t => t.track_id).ToList());
