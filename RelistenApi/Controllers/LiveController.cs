@@ -40,7 +40,7 @@ namespace Relisten.Controllers
         [HttpPost("live/play")]
         [ProducesResponseType(typeof(bool), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> PlayedTrack([FromQuery] int track_id)
+        public async Task<IActionResult> PlayedTrack([FromQuery] int track_id, [FromQuery] string app_type)
         {
             var track = await _sourceTrackService.ForId(track_id);
 
@@ -49,10 +49,11 @@ namespace Relisten.Controllers
                 return JsonNotFound(false);
             }
 
-            var lp = new SlimLivePlayedTrack
+            var lp = new LivePlayedTrack
             {
                 played_at = DateTime.UtcNow,
-                track_id = track_id
+                track_id = track_id,
+                app_type = app_type
             };
 
             await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
@@ -66,7 +67,7 @@ namespace Relisten.Controllers
         {
             var tracksPlays = (await redis.db
                 .SortedSetRangeByScoreAsync("played", order: StackExchange.Redis.Order.Descending, take: 25))
-                .Select(t => JsonConvert.DeserializeObject<SlimLivePlayedTrack>(t));
+                .Select(t => JsonConvert.DeserializeObject<LivePlayedTrack>(t));
 
             var tracks = await _sourceTrackService.ForIds(tracksPlays.Select(t => t.track_id).ToList());
 
@@ -87,17 +88,13 @@ namespace Relisten.Controllers
             {
                 var track = trackLookup[t.track_id];
 
-                return new LivePlayedTrack
+                t.track = new PlayedSourceTrack
                 {
-                    track_id = t.track_id,
-                    played_at = t.played_at,
-
-                    track = new PlayedSourceTrack
-                    {
-                        source = sources[track.source_id],
-                        track = track
-                    }
+                    source = sources[track.source_id],
+                    track = track
                 };
+
+                return t;
             }));
         }
     }

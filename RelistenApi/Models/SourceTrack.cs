@@ -46,18 +46,17 @@ namespace Relisten.Api.Models
         public SourceTrack track { get; set; }
     }
 
-    public class SlimLivePlayedTrack
+    public class LivePlayedTrack
     {
         [Required]
         public DateTime played_at { get; set; }
 
         [Required]
-        public int track_id { get; set; }        
-    }
+        public int track_id { get; set; }
 
-    public class LivePlayedTrack : SlimLivePlayedTrack
-    {
         [Required]
-        public PlayedSourceTrack track { get; set; }
+        public string app_type { get; set; }
+
+        public PlayedSourceTrack track { get; set; } = null;
     }
 }
