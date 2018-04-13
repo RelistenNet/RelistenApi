@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ContentModelStore">
+    <e p="$PROJECT_DIR$" t="IncludeFlat">
+      <e p="packages" t="ExcludeRecursive" />
+      <e p="RelistenApi" t="IncludeRecursive">
+        <e p="appsettings.json" t="Include" />
+        <e p="bin" t="ExcludeRecursive" />
+        <e p="Controllers" t="Include">
+          <e p="Admin" t="Include">
+            <e p="AdminController.cs" t="Include" />
+          </e>
+          <e p="ArtistsController.cs" t="Include" />
+          <e p="ErasControllers.cs" t="Include" />
+          <e p="Import" t="Include">
+            <e p="ImportController.cs" t="Include" />
+          </e>
+          <e p="LiveController.cs" t="Include" />
+          <e p="RecentController.cs" t="Include" />
+          <e p="RelistenBaseController.cs" t="Include" />
+          <e p="SearchController.cs" t="Include" />
+          <e p="ShowsController.cs" t="Include" />
+          <e p="SongsController.cs" t="Include" />
+          <e p="ToursController.cs" t="Include" />
+          <e p="VenuesController.cs" t="Include" />
+          <e p="YearsController.cs" t="Include" />
+        </e>
+        <e p="launchSettings.json" t="Include" />
+        <e p="Models" t="Include">
+          <e p="Api" t="Include">
+            <e p="ResponseEnvelope.cs" t="Include" />
+          </e>
+          <e p="Artist.cs" t="Include" />
+          <e p="Era.cs" t="Include" />
+          <e p="Link.cs" t="Include" />
+          <e p="SearchResults.cs" t="Include" />
+          <e p="SetlistShow.cs" t="Include" />
+          <e p="SetlistSong.cs" t="Include" />
+          <e p="Show.cs" t="Include" />
+          <e p="Source.cs" t="Include" />
+          <e p="SourceReview.cs" t="Include" />
+          <e p="SourceSet.cs" t="Include" />
+          <e p="SourceTrack.cs" t="Include" />
+          <e p="Tour.cs" t="Include" />
+          <e p="Venue.cs" t="Include" />
+          <e p="Year.cs" t="Include" />
+        </e>
+        <e p="obj" t="ExcludeRecursive">
+          <e p="Debug" t="Include">
+            <e p="netcoreapp2.0" t="Include">
+              <e p="RelistenApi.AssemblyInfo.cs" t="Include" />
+            </e>
+          </e>
+        </e>
+        <e p="Program.cs" t="Include" />
+        <e p="RelistenApi.csproj" t="IncludeRecursive" />
+        <e p="Services" t="Include">
+          <e p="Auth" t="Include">
+            <e p="ApplicationRole.cs" t="Include" />
+            <e p="ApplicationUser.cs" t="Include" />
+            <e p="EnvRoleStore.cs" t="Include" />
+            <e p="EnvUserPrincipalFactory.cs" t="Include" />
+            <e p="EnvUserStore.cs" t="Include" />
+            <e p="HangfireBasicAuthFilter.cs" t="Include" />
+            <e p="PlaintextHasher.cs" t="Include" />
+          </e>
+          <e p="Data" t="Include">
+            <e p="ArtistService.cs" t="Include" />
+            <e p="EraService.cs" t="Include" />
+            <e p="LinkService.cs" t="Include" />
+            <e p="SearchService.cs" t="Include" />
+            <e p="SetlistShowService.cs" t="Include" />
+            <e p="SetlistSongService.cs" t="Include" />
+            <e p="ShowService.cs" t="Include" />
+            <e p="SourceReviewService.cs" t="Include" />
+            <e p="SourceService.cs" t="Include" />
+            <e p="SourceSetService.cs" t="Include" />
+            <e p="SourceTrackService.cs" t="Include" />
+            <e p="TourService.cs" t="Include" />
+            <e p="UpstreamSourceService.cs" t="Include" />
+            <e p="VenueService.cs" t="Include" />
+            <e p="YearService.cs" t="Include" />
+          </e>
+          <e p="DbService.cs" t="Include" />
+          <e p="Importers" t="Include">
+            <e p="ArchiveOrgImporter.cs" t="Include" />
+            <e p="ImporterBase.cs" t="Include" />
+            <e p="JerryGarciaComImporter.cs" t="Include" />
+            <e p="PanicStreamComImporter.cs" t="Include" />
+            <e p="PhantasyTourImporter.cs" t="Include" />
+            <e p="PhishinImporter.cs" t="Include" />
+            <e p="PhishNetImporter.cs" t="Include" />
+            <e p="SetlistFmImporter.cs" t="Include" />
+          </e>
+          <e p="RedisService.cs" t="Include" />
+          <e p="ScheduledService.cs" t="Include" />
+        </e>
+        <e p="Startup.cs" t="Include" />
+        <e p="Vendor" t="Include">
+          <e p="ArchiveOrg.cs" t="Include" />
+          <e p="DictionaryExtensions.cs" t="Include" />
+          <e p="PhantasyTour.cs" t="Include" />
+          <e p="Phishin.cs" t="Include" />
+          <e p="ProgressExtensions.cs" t="Include" />
+          <e p="SetlistFm.cs" t="Include" />
+          <e p="StringExtensions.cs" t="Include" />
+        </e>
+        <e p="Views" t="Include">
+          <e p="_ViewImports.cshtml" t="Include" />
+          <e p="_ViewStart.cshtml" t="Include" />
+          <e p="Admin" t="Include">
+            <e p="Index.cshtml" t="Include" />
+            <e p="Login.cshtml" t="Include" />
+          </e>
+          <e p="Index.cshtml" t="Include" />
+          <e p="Shared" t="Include">
+            <e p="_Layout.cshtml" t="Include" />
+            <e p="Error.cshtml" t="Include" />
+          </e>
+        </e>
+        <e p="wwwroot" t="Include">
+          <e p="js" t="Include">
+            <e p="admin.js" t="Include" />
+          </e>
+        </e>
+      </e>
+      <e p="RelistenApi.sln" t="IncludeFlat" />
+      <e p="src" t="Include" />
+    </e>
+    <e p="$USER_HOME$/Library/Caches/Rider2017.3/resharper-host/local/Transient/ReSharperHost/v11/SolutionCaches/_RelistenApi.1477288603.00" t="ExcludeRecursive" />
+  </component>
+</project>

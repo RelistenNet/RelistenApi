@@ -1,5 +1,6 @@
 ﻿using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -18,7 +19,7 @@ namespace Relisten.Services.Auth
         public Task<ClaimsPrincipal> CreateAsync(ApplicationUser user)
         {
             var identity = new ClaimsIdentity(
-                _options.Cookies.ApplicationCookieAuthenticationScheme,
+                CookieAuthenticationDefaults.AuthenticationScheme,
                 _options.ClaimsIdentity.UserNameClaimType,
                 _options.ClaimsIdentity.RoleClaimType);
 

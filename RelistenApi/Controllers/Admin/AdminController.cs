@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -19,14 +20,12 @@ namespace Relisten.Controllers.Admin
 		private readonly UserManager<ApplicationUser> _userManager;
 		private readonly SignInManager<ApplicationUser> _signInManager;
 		private readonly ILogger _logger;
-		private readonly string _externalCookieScheme;
         readonly ArtistService _artistService;
         readonly UpstreamSourceService _upstreamSourceService;
 
         public AdminController(
             UserManager<ApplicationUser> userManager,
             SignInManager<ApplicationUser> signInManager,
-            IOptions<IdentityCookieOptions> identityCookieOptions,
             ILoggerFactory loggerFactory,
             ArtistService artistService,
             UpstreamSourceService upstreamSourceService
@@ -35,7 +34,6 @@ namespace Relisten.Controllers.Admin
             _upstreamSourceService = upstreamSourceService;
             _userManager = userManager;
 			_signInManager = signInManager;
-			_externalCookieScheme = identityCookieOptions.Value.ExternalCookieAuthenticationScheme;
 			_logger = loggerFactory.CreateLogger<AdminController>();
 
             _artistService = artistService;
@@ -46,7 +44,7 @@ namespace Relisten.Controllers.Admin
 		public async Task<IActionResult> Login(string returnUrl = null)
 		{
 			// Clear the existing external cookie to ensure a clean login process
-			await HttpContext.Authentication.SignOutAsync(_externalCookieScheme);
+			await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
 			ViewData["ReturnUrl"] = returnUrl;
 			return View();
@@ -71,7 +69,7 @@ namespace Relisten.Controllers.Admin
 				if (result.IsLockedOut)
 				{
 					_logger.LogWarning(2, "User account locked out.");
-					return View("Lockout");
+					return Content("Locked out");
 				}
 				else
 				{
@@ -103,7 +101,7 @@ namespace Relisten.Controllers.Admin
 			}
 			else
 			{
-                return RedirectToAction(nameof(AdminController.Index), "Home");
+                return RedirectToAction(nameof(AdminController.Index), "Admin");
 			}
 		}
     }

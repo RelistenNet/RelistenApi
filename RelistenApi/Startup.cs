@@ -24,18 +24,12 @@ namespace Relisten
 {
 	public class Startup
 	{
-		public Startup(IHostingEnvironment env)
+		public Startup(IConfiguration configuration)
 		{
-			Console.WriteLine("Loading config from {0}", env.ContentRootPath);
-			var builder = new ConfigurationBuilder()
-				.SetBasePath(env.ContentRootPath)
-				.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-				.AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: true)
-				.AddEnvironmentVariables();
-			Configuration = builder.Build();
+			Configuration = configuration;
 		}
 
-		public IConfigurationRoot Configuration { get; }
+		public IConfiguration Configuration { get; }
 
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
@@ -133,7 +127,7 @@ namespace Relisten
 								  .WithOrigins("*")
 								  .AllowAnyMethod());
 
-            app.UseIdentity();
+            app.UseAuthentication();
             app.UseStaticFiles();
 
 			app.UseMvc();
@@ -182,19 +176,27 @@ namespace Relisten
 			services.AddAuthorization();
 			services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 			{
-				options.SecurityStampValidationInterval = TimeSpan.FromDays(365);
-
 				options.Password.RequiredLength = 1;
 				options.Password.RequireLowercase = false;
 				options.Password.RequireUppercase = false;
 				options.Password.RequireDigit = false;
 				options.Password.RequireNonAlphanumeric = false;
 
-                options.Cookies.ApplicationCookie.AutomaticChallenge = true;
-                options.Cookies.ApplicationCookie.LoginPath = "/relisten-admin/login";
-
-                options.Cookies.ApplicationCookie.ExpireTimeSpan = TimeSpan.FromDays(365);
 			}).AddDefaultTokenProviders();
-		}
+
+	        services.ConfigureApplicationCookie(options =>
+	        {
+		        options.LoginPath = "/relisten-admin/login";
+
+		        options.ExpireTimeSpan = TimeSpan.FromDays(365);
+
+	        });
+	        
+	        services.Configure<SecurityStampValidatorOptions>(options =>
+	        {
+		        // enables immediate logout, after updating the user's stat.
+		        options.ValidationInterval = TimeSpan.FromDays(365);
+	        });
+        }
 	}
 }

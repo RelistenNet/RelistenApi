@@ -14,7 +14,7 @@ namespace Relisten.Services.Auth
     {
         private static readonly List<ApplicationUser> _users = new List<ApplicationUser>();
 
-        public EnvUserStore(IConfigurationRoot config)
+        public EnvUserStore(IConfiguration config)
         {
             _users.Add(new ApplicationUser()
             {

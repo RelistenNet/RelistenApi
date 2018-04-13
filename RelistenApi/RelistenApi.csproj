@@ -1,74 +1,41 @@
-﻿<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" />
-
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp1.1</TargetFramework>
+    <TargetFramework>netcoreapp2.0</TargetFramework>
     <PreserveCompilationContext>true</PreserveCompilationContext>
     <OutputPath>bin</OutputPath>
   </PropertyGroup>
-
+  
+  <PropertyGroup>
+    <RuntimeFrameworkVersion>2.0.0</RuntimeFrameworkVersion>
+  </PropertyGroup>
+  
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugType>portable</DebugType>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="**\*.cs" Exclude="$(GlobalExclude)" />
-    <EmbeddedResource Include="**\*.resx" Exclude="$(GlobalExclude)" />
-    <Compile Remove="RelistenApi\Services\DbService.cs" />
-    <Compile Remove="RelistenApi\Services\RedisService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\EraService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SetlistShowService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SetlistSongService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\ShowService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SourceReviewService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SourceService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SourceSetService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\SourceTrackService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\TourService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\VenueService.cs" />
-    <Compile Remove="RelistenApi\Services\Data\YearService.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\ArchiveOrgImporter.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\ImporterBase.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\JerryGarciaComImporter.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\PanicStreamComImporter.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\PhishNetImporter.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\PhishinImporter.cs" />
-    <Compile Remove="RelistenApi\Services\Importers\SetlistFmImporter.cs" />
-    <Compile Remove="RelistenApi\Vendor\ArchiveOrg.cs" />
-    <Compile Remove="RelistenApi\Vendor\DictionaryExtensions.cs" />
-    <Compile Remove="RelistenApi\Vendor\Phishin.cs" />
-    <Compile Remove="RelistenApi\Vendor\SetlistFm.cs" />
-    <Compile Remove="RelistenApi\Vendor\StringExtensions.cs" />
-  </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETCore.Platforms" Version="1.1.0" />
-    <PackageReference Include="Microsoft.NET.Sdk" Version="1.0.0-alpha-20161104-2" />
-    <PackageReference Include="Dapper" Version="1.50.2" />
+    <PackageReference Include="Dapper" Version="1.50.4" />
     <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1" />
     <PackageReference Include="Hangfire.RecurringJobExtensions" Version="1.1.6" />
-    <PackageReference Include="Hangfire.Console" Version="1.3.3" />
-    <PackageReference Include="Hangfire.Core" Version="1.6.13" />
-    <PackageReference Include="Hangfire.AspNetCore" Version="1.6.13" />
-    <PackageReference Include="Npgsql" Version="3.2.3" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="1.0.0" />
-    <PackageReference Include="Polly" Version="5.1.0" />
-    <PackageReference Include="Microsoft.NETCore.App" Version="1.1.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Diagnostics" Version="1.1.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Server.IISIntegration" Version="1.1.2" />
-    <PackageReference Include="Microsoft.AspNetCore.Server.Kestrel" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="1.1.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="1.1.2" />
-    <PackageReference Include="StackExchange.Redis" Version="1.2.3" />
-    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.7.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc" Version="1.1.3" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="1.1.2" />
+    <PackageReference Include="Hangfire.Console" Version="1.3.10" />
+    <PackageReference Include="Hangfire.Core" Version="1.6.19" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.6.19" />
+    <PackageReference Include="Microsoft.NETCore.App" Version="2.0.6" />
+    <PackageReference Include="Npgsql" Version="3.2.7" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="2.4.0" />
+    <PackageReference Include="Polly" Version="5.9.0" />
+    <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="2.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="2.0.1" />
+    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.7.2" />
   </ItemGroup>
-
+  
+  <!--
   <ItemGroup>
     <Folder Include="Controllers\" />
     <Folder Include="Services\" />
@@ -80,17 +47,8 @@
     <Folder Include="wwwroot\" />
     <Folder Include="wwwroot\js\" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="Views\index.cshtml" />
-    <None Include="Views\Admin\Login.cshtml" />
-    <None Include="Views\Admin\Index.cshtml" />
-    <None Include="Views\Shared\Error.cshtml" />
-    <None Include="Views\Shared\_Layout.cshtml" />
-    <None Include="Views\Shared\_LoginPartial.cshtml" />
-    <None Include="Views\_ViewImports.cshtml" />
-    <None Include="Views\_ViewStart.cshtml" />
-    <None Include="wwwroot\js\admin.js" />
-  </ItemGroup>
+  -->
+  
   <ItemGroup>
     <Content Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -99,5 +57,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  
+  <Target Name="ChangeAliasesOfStrongNameAssemblies" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
+    <ItemGroup>
+      <ReferencePath Condition="'%(FileName)' == 'StackExchange.Redis.StrongName'">
+        <Aliases>signed</Aliases>
+      </ReferencePath>
+    </ItemGroup>
+  </Target>
 </Project>
