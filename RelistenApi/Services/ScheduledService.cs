@@ -17,14 +17,14 @@ namespace Relisten
     {
         ImporterService _importerService { get; set; }
         ArtistService _artistService { get; set; }
-        IConfigurationRoot _config { get; set; }
+        IConfiguration _config { get; set; }
         RedisService _redisService { get; set; }
 
         public ScheduledService(
             ImporterService importerService,
             ArtistService artistService,
             RedisService redisService,
-            IConfigurationRoot config
+            IConfiguration config
         )
         {
             _importerService = importerService;

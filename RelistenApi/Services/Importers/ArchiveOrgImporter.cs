@@ -387,9 +387,9 @@ namespace Relisten.Import
             SourceSet set = null
         )
         {
-            int trackNum = previousTrackNumber + 1;
+            var trackNum = previousTrackNumber + 1;
 
-            var title = !String.IsNullOrEmpty(file.title) ? file.title : file.original;
+            var title = !string.IsNullOrEmpty(file.title) ? file.title : file.original;
 
 			var flac = file.original == null ? null : flacFiles.GetValue(file.original);
 
@@ -397,7 +397,7 @@ namespace Relisten.Import
 			{
 				title = title,
 				track_position = trackNum,
-				source_set_id = set == null ? -1 : set.id,
+				source_set_id = set?.id ?? -1,
 				source_id = dbSource.id,
 				duration = file.length.
 					Split(':').
