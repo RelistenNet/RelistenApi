@@ -153,8 +153,8 @@ namespace Relisten.Import
                     updated_at = now,
                     artist_id = artist.id,
                     name = setlist.venue.name,
-                    latitude = setlist.venue.city.coords?.latitude,
-                    longitude = setlist.venue.city.coords?.longitude,
+                    latitude = setlist.venue.city.coords?.lat,
+                    longitude = setlist.venue.city.coords?.@long,
                     location = $"{setlist.venue.city.name}, {setlist.venue.city.state}",
                     upstream_identifier = setlist.venue._iguanaUpstreamId,
                     slug = Slugify(setlist.venue.name)
@@ -173,7 +173,7 @@ namespace Relisten.Import
             Tour dbTour = null;
             if (artist.features.tours)
             {
-                var tour_upstream = setlist.tour ?? "Not Part of a Tour";
+                var tour_upstream = setlist.tour?.name ?? "Not Part of a Tour";
                 dbTour = existingTours.GetValue(tour_upstream);
                 if (dbTour == null)
                 {
@@ -197,7 +197,7 @@ namespace Relisten.Import
             // show
             var dbShow = existingSetlistShows.GetValue(setlist.id);
             var date = DateTime.ParseExact(setlist.eventDate, "dd-MM-yyyy", null);
-            var setlistLastUpdated = DateTime.Parse(setlist.lastUpdated);
+            var setlistLastUpdated = setlist.lastUpdated;
 
             var shouldAddSongs = false;
 
@@ -325,7 +325,7 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
 			var count = 1;
-            foreach (var setlist in root.setlists.setlist)
+            foreach (var setlist in root.setlist)
             {
                 if (setlist.sets.set.Count > 0)
                 {
@@ -351,13 +351,13 @@ namespace Relisten.Import
                         throw e;
                     }
 
-					prog?.SetValue(((100.0 * (root.setlists.page - 1) * root.setlists.itemsPerPage) + count * 1.0) / root.setlists.total);
+					prog?.SetValue(((100.0 * (root.page - 1) * root.itemsPerPage) + count * 1.0) / root.total);
 
 					count++;
                 }
             }
 
-            var hasMorePages = root.setlists.page < Math.Ceiling(1.0 * root.setlists.total / root.setlists.itemsPerPage);
+            var hasMorePages = root.page < Math.Ceiling(1.0 * root.total / root.itemsPerPage);
 
             return new Tuple<bool, ImportStats>(hasMorePages, stats);
         }
