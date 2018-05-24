@@ -16,6 +16,7 @@ using Hangfire.Server;
 using Hangfire.Console;
 using Hangfire.Console.Progress;
 using System.Net;
+using System.Net.Http.Headers;
 using Polly;
 using Polly.Retry;
 
@@ -45,6 +46,10 @@ namespace Relisten.Import
             this._tourService = tourService;
             this._setlistSongService = setlistSongService;
             this._log = log;
+            
+            http.DefaultRequestHeaders.Accept.Clear();
+            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            http.DefaultRequestHeaders.Add("x-api-key", "a8e279f5-3209-4657-97dc-ad26f10d0109");
         }
 
 		public override string ImporterName => "setlist.fm";
@@ -104,7 +109,7 @@ namespace Relisten.Import
 
         private static string SetlistUrlForArtist(Artist artist, int page = 1)
         {
-            return $"http://api.setlist.fm/rest/0.1/artist/{artist.musicbrainz_id}/setlists.json?p={page}";
+            return $"https://api.setlist.fm/rest/1.0/artist/{artist.musicbrainz_id}/setlists?p={page}";
         }
 
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
