@@ -4,6 +4,7 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
     <PreserveCompilationContext>true</PreserveCompilationContext>
     <OutputPath>bin</OutputPath>
+    <PublishWithAspNetCoreTargetManifest>false</PublishWithAspNetCoreTargetManifest>
   </PropertyGroup>
   <PropertyGroup>
     <RuntimeFrameworkVersion>2.0.0</RuntimeFrameworkVersion>
