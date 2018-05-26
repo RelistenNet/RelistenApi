@@ -240,12 +240,7 @@ namespace Relisten.Import
 
             foreach (var song in await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx))
             {
-                var dbSong = existingSetlistSongs.GetValue(song.slug);
-
-                if(dbSong == null && song.slug.EndsWith("-song"))
-                {
-                    dbSong = existingSetlistSongs.GetValue(song.slug.Replace("-song", ""));
-                }
+                var dbSong = existingSetlistSongs.GetValue(song.id.ToString());
 
                 // skip aliases for now
                 if (dbSong == null && song.alias_for.HasValue == false)
@@ -256,7 +251,7 @@ namespace Relisten.Import
                         artist_id = artist.id,
                         name = song.title,
                         slug = Slugify(song.title),
-                        upstream_identifier = song.slug
+                        upstream_identifier = song.id.ToString()
                     });
                 }
             }
@@ -455,7 +450,7 @@ namespace Relisten.Import
 
 			var prog = ctx?.WriteProgressBar();
 
-			await shows.AsyncForEachWithProgress(prog, async show =>
+			await shows.ForEachAsync(async show =>
 			{
 				var dbSource = existingSources.GetValue(show.id.ToString());
 
@@ -511,7 +506,7 @@ namespace Relisten.Import
 
 					stats.Updated++;
 				}
-			});
+			}, prog, 5);
 
             return stats;
         }

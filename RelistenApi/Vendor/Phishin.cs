@@ -46,7 +46,7 @@ namespace Relisten.Vendor.Phishin
         public bool missing { get; set; }
         public bool sbd { get; set; }
         public bool remastered { get; set; }
-        public int tour_id { get; set; }
+        public int? tour_id { get; set; }
         public int venue_id { get; set; }
         public int likes_count { get; set; }
         public string taper_notes { get; set; }
