@@ -30,7 +30,7 @@ namespace Relisten.Data
 			orderBy = orderBy == null ? "display_date ASC" : orderBy;
 			var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-			return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, T>(@"
+			return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, Year, T>(@"
                 SELECT
                     s.*,
                     cnt.max_updated_at as most_recent_source_updated_at,
@@ -39,12 +39,14 @@ namespace Relisten.Data
                     cnt.has_flac as has_streamable_flac_source,
 					v.*,
 					t.*,
-					e.*
+					e.*,
+                    y.*
                 FROM
                     shows s
                     LEFT JOIN venues v ON s.venue_id = v.id
                     LEFT JOIN tours t ON s.tour_id = t.id
                     LEFT JOIN eras e ON s.era_id = e.id
+                    LEFT JOIN years y ON s.year_id = y.id
                     INNER JOIN (
                     	SELECT
                     		src.show_id,
@@ -63,7 +65,7 @@ namespace Relisten.Data
                 ORDER BY
                     " + orderBy + @"
 				" + limitClause + @"
-            ", (Show, venue, tour, era) =>
+            ", (Show, venue, tour, era, year) =>
             {
                 Show.venue = venue;
 
@@ -75,6 +77,11 @@ namespace Relisten.Data
                 if (artist == null || artist.features.eras)
                 {
                     Show.era = era;
+                }
+
+                if (artist == null || artist.features.years)
+                {
+                    Show.year = year;
                 }
 
                 return Show;
