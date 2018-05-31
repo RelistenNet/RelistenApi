@@ -144,7 +144,9 @@ namespace Relisten.Data
 					.ToDictionary(grp => grp.Key, grp => grp.AsList())
 					;
 
-				var sources = t_srcsWithReviews.ToList();
+				var sources = t_srcsWithReviews
+					.Where(s => s != null)
+					.ToList();
 
 				foreach (var src in sources)
 				{
