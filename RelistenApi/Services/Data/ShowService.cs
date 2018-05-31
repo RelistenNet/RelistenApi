@@ -48,37 +48,10 @@ namespace Relisten.Data
                     LEFT JOIN tours t ON s.tour_id = t.id
                     LEFT JOIN eras e ON s.era_id = e.id
                     LEFT JOIN years y ON s.year_id = y.id
-                    INNER JOIN (
-                    	SELECT
-                    		src.show_id,
-							MAX(src.updated_at) as max_updated_at,
-							COUNT(*) as source_count,
-							MAX(src.avg_rating_weighted) as max_avg_rating_weighted,
-							BOOL_OR(src.is_soundboard) as has_soundboard_source,
-							BOOL_OR(CASE WHEN src.flac_type = 1 OR src.flac_type = 2 THEN true ELSE false END) as has_flac
-                    	FROM
-                    		sources src
-                    	GROUP BY
-                    		src.show_id
-                    ) cnt ON cnt.show_id = s.id
 
-                    INNER JOIN (
-                        SELECT
-                            v.id
-        
-                            , CASE
-                                WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                                    COUNT(s.id)
-                                ELSE
-                                    COUNT(DISTINCT src.show_id)
-                            END as shows_at_venue
-                        FROM
-                            shows s
-                            JOIN venues v ON v.id = s.venue_id
-                            LEFT JOIN sources src ON src.venue_id = v.id
-                        GROUP BY
-                            v.id
-                    ) venue_counts ON venue_counts.id = s.venue_id
+                    INNER JOIN show_source_information cnt ON cnt.show_id = s.id
+                    LEFT JOIN venue_show_counts venue_counts ON venue_counts.id = s.venue_id
+
                 WHERE
                     " + where + @"
                 ORDER BY
@@ -128,8 +101,9 @@ namespace Relisten.Data
                         cnt.max_updated_at as most_recent_source_updated_at,
 						cnt.source_count,
 						cnt.has_soundboard_source,
+                        cnt.has_flac as has_streamable_flac_source,
 						v.*,
-                        venue_counts.shows_at_venue,
+                        COALESCE(venue_counts.shows_at_venue, 0) as shows_at_venue,
 						t.*,
 						e.*,
 						a.*
@@ -145,35 +119,9 @@ namespace Relisten.Data
                         		artists arts
                         		INNER JOIN features f ON f.artist_id = arts.id
                         ) a ON s.artist_id = a.aid
-                        INNER JOIN (
-                        	SELECT
-                        		src.show_id,
-                                MAX(src.updated_at) as max_updated_at,
-								COUNT(*) as source_count,
-								BOOL_OR(src.is_soundboard) as has_soundboard_source
-                        	FROM
-                        		sources src
-                        	GROUP BY
-                        		src.show_id
-                        ) cnt ON cnt.show_id = s.id
 
-                        INNER JOIN (
-                            SELECT
-                                v.id
-            
-                                , CASE
-                                    WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                                        COUNT(s.id)
-                                    ELSE
-                                        COUNT(DISTINCT src.show_id)
-                                END as shows_at_venue
-                            FROM
-                                shows s
-                                JOIN venues v ON v.id = s.venue_id
-                                LEFT JOIN sources src ON src.venue_id = v.id
-                            GROUP BY
-                                v.id
-                        ) venue_counts ON venue_counts.id = s.venue_id
+                        INNER JOIN show_source_information cnt ON cnt.show_id = s.id
+                        LEFT JOIN venue_show_counts venue_counts ON venue_counts.id = s.venue_id
                     WHERE
                         " + where + @"
                     ORDER BY

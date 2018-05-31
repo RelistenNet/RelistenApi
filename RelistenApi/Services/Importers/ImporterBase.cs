@@ -245,6 +245,10 @@ WHERE
     AND s.artist_id = @id
 	AND y.artist_id = @id
 ;
+
+REFRESH MATERIALIZED VIEW show_source_information;
+REFRESH MATERIALIZED VIEW venue_show_counts;
+
             ", artist));
             return ImportStats.None;
         }
@@ -526,6 +530,10 @@ WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
     ;
+
+REFRESH MATERIALIZED VIEW show_source_information;
+REFRESH MATERIALIZED VIEW venue_show_counts;
+
             ";
 
             await db.WithConnection(con => con.ExecuteAsync(sql, artist));
