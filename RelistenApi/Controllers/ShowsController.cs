@@ -16,15 +16,18 @@ namespace Relisten.Controllers
     public class ShowsController : RelistenBaseController
     {
         public ShowService _showService { get; set; }
+        public SourceService _sourceService { get; set; }
 
         public ShowsController(
             RedisService redis,
             DbService db,
 			ArtistService artistService,
-            ShowService showService
+            ShowService showService,
+            SourceService sourceService
 		) : base(redis, db, artistService)
         {
             _showService = showService;
+            _sourceService = sourceService;
         }
 
         [HttpGet("shows/today")]
@@ -111,5 +114,12 @@ namespace Relisten.Controllers
             return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
         }
 
+        [HttpGet("artists/{artistIdOrSlug}/sources/{sourceId}/reviews")]
+        [ProducesResponseType(typeof(IEnumerable<SourceReview>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public Task<IActionResult> ReviewsForShow([FromRoute] string artistIdOrSlug, [FromRoute] int sourceId)
+        {
+            return ApiRequest(artistIdOrSlug, (art) => _sourceService.ReviewsForSource(sourceId));
+        }
     }
 }

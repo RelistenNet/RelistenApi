@@ -39,9 +39,14 @@ namespace Relisten.Data
         public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
         {
             SetlistSongWithShows bigSong = null;
-            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, Venue, Tour, Era, SetlistSongWithShows>(@"
+            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, SetlistSongWithShows>(@"
                 SELECT
-                    s.*, shows.*, v.*, t.*, e.*
+                    s.*
+                    , shows.*
+                    , cnt.max_updated_at as most_recent_source_updated_at
+                    , cnt.source_count
+                    , cnt.has_soundboard_source
+                    , v.*, t.*, e.*
                 FROM
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
@@ -50,6 +55,18 @@ namespace Relisten.Data
                     LEFT JOIN venues v ON shows.venue_id = v.id
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
+
+                    INNER JOIN (
+                        SELECT
+                            src.show_id,
+                            MAX(src.updated_at) as max_updated_at,
+                            COUNT(*) as source_count,
+                            BOOL_OR(src.is_soundboard) as has_soundboard_source
+                        FROM
+                            sources src
+                        GROUP BY
+                            src.show_id
+                    ) cnt ON cnt.show_id = shows.id
                 WHERE
                     s.artist_id = @artistId
                     AND s.id = @songId

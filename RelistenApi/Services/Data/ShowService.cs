@@ -30,7 +30,7 @@ namespace Relisten.Data
 			orderBy = orderBy == null ? "display_date ASC" : orderBy;
 			var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-			return await db.WithConnection(con => con.QueryAsync<T, Venue, Tour, Era, Year, T>(@"
+			return await db.WithConnection(con => con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(@"
                 SELECT
                     s.*,
                     cnt.max_updated_at as most_recent_source_updated_at,
@@ -38,6 +38,7 @@ namespace Relisten.Data
                     cnt.has_soundboard_source,
                     cnt.has_flac as has_streamable_flac_source,
 					v.*,
+                    venue_counts.shows_at_venue,
 					t.*,
 					e.*,
                     y.*
@@ -60,6 +61,24 @@ namespace Relisten.Data
                     	GROUP BY
                     		src.show_id
                     ) cnt ON cnt.show_id = s.id
+
+                    INNER JOIN (
+                        SELECT
+                            v.id
+        
+                            , CASE
+                                WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                                    COUNT(s.id)
+                                ELSE
+                                    COUNT(DISTINCT src.show_id)
+                            END as shows_at_venue
+                        FROM
+                            shows s
+                            JOIN venues v ON v.id = s.venue_id
+                            LEFT JOIN sources src ON src.venue_id = v.id
+                        GROUP BY
+                            v.id
+                    ) venue_counts ON venue_counts.id = s.venue_id
                 WHERE
                     " + where + @"
                 ORDER BY
@@ -103,13 +122,14 @@ namespace Relisten.Data
 			orderBy = orderBy == null ? "display_date ASC" : orderBy;
 			var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, Venue, Tour, Era, Artist, Features, ShowWithArtist>(@"
+            return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, ShowWithArtist>(@"
                     SELECT
                         s.*,
                         cnt.max_updated_at as most_recent_source_updated_at,
 						cnt.source_count,
 						cnt.has_soundboard_source,
 						v.*,
+                        venue_counts.shows_at_venue,
 						t.*,
 						e.*,
 						a.*
@@ -136,6 +156,24 @@ namespace Relisten.Data
                         	GROUP BY
                         		src.show_id
                         ) cnt ON cnt.show_id = s.id
+
+                        INNER JOIN (
+                            SELECT
+                                v.id
+            
+                                , CASE
+                                    WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                                        COUNT(s.id)
+                                    ELSE
+                                        COUNT(DISTINCT src.show_id)
+                                END as shows_at_venue
+                            FROM
+                                shows s
+                                JOIN venues v ON v.id = s.venue_id
+                                LEFT JOIN sources src ON src.venue_id = v.id
+                            GROUP BY
+                                v.id
+                        ) venue_counts ON venue_counts.id = s.venue_id
                     WHERE
                         " + where + @"
                     ORDER BY
@@ -177,48 +215,6 @@ namespace Relisten.Data
             show.sources = await _sourceService.FullSourcesForShow(artist, show);
 
             return show;
-        }
-
-        public async Task<IEnumerable<Show>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)
-        {
-            if (withVenuesToursAndEras)
-            {
-                return await db.WithConnection(con => con.QueryAsync<Show, Tour, Venue, Era, Show>(@"
-                    SELECT
-                        s.*, t.*, v.*, e.*
-                    FROM
-                        setlist_shows s
-                        LEFT JOIN tours t ON s.tour_id = t.id
-                        LEFT JOIN venues v ON s.venue_id = v.id
-                        LEFT JOIN eras e ON s.era_id = e.id
-                    WHERE
-                        s.artist_id = @id
-                    ", (Show, tour, venue, era) =>
-                {
-                    Show.venue = venue;
-
-                    if (artist.features.tours)
-                    {
-                        Show.tour = tour;
-                    }
-
-                    if (artist.features.eras)
-                    {
-                        Show.era = era;
-                    }
-
-                    return Show;
-                }, artist));
-            }
-
-            return await db.WithConnection(con => con.QueryAsync<Show>(@"
-                SELECT
-                    *
-                FROM
-                    setlist_shows
-                WHERE
-                    artist_id = @id
-            ", artist));
         }
 
         public async Task<IEnumerable<Show>> AllSimpleForArtist(Artist artist)

@@ -13,7 +13,7 @@ namespace Relisten.Api.Models
         public int artist_id { get; set; }
 
         public int? venue_id { get; set; }
-        public Venue venue { get; set; }
+        public VenueWithShowCount venue { get; set; }
 
         public int? tour_id { get; set; }
         public Tour tour { get; set; }

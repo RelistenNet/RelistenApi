@@ -63,16 +63,16 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
         {
-            var ReviewMapper = new EntityOneToManyMapper<SourceFull, SourceReview, int>()
+            var LinkMapper = new EntityOneToManyMapper<SourceFull, Link, int>()
             {
-                AddChildAction = (source, review) =>
+                AddChildAction = (source, link) =>
                 {
-                    if (source.reviews == null)
-                        source.reviews = new List<SourceReview>();
+                    if (source.links == null)
+                        source.links = new List<Link>();
 
-                    if (review != null)
+                    if (link != null)
                     {
-                        source.reviews.Add(review);
+                        source.links.Add(link);
                     }
                 },
                 ParentKey = (source) => source.id
@@ -94,19 +94,31 @@ namespace Relisten.Data
             };
 
 			return await db.WithConnection(async con => {
-				var t_srcsWithReviews = await con.QueryAsync<SourceFull, SourceReview, SourceFull>(@"
+				var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>(@"
 	                SELECT
-	                    s.*, r.*
+	                    s.*
+						, COALESCE(review_counts.review_count, 0) as review_count
+						, l.*
 	                FROM
 	                    sources s
-	                    LEFT JOIN source_reviews r ON r.source_id = s.id
+						LEFT JOIN links l ON l.source_id = s.id
+
+						LEFT JOIN (
+							SELECT
+								r.source_id
+								, COUNT(*) as review_count
+							FROM
+								source_reviews r
+							GROUP BY
+								r.source_id
+						) review_counts ON review_counts.source_id = s.id
 	                WHERE
 	                    s.artist_id = @artistId
 	                    AND s.show_id = @showId
                     ORDER BY
                         s.avg_rating_weighted DESC
 	            ",
-					ReviewMapper.Map,
+					LinkMapper.Map,
 					new { showId = show.id, artistId = artist.id }
 				);
 
@@ -126,41 +138,36 @@ namespace Relisten.Data
 					new { showId = show.id }
 				);
 
-				var srcsWithReviews = t_srcsWithReviews
-					.Where(s => s != null)
-					;
-
-				var t_linksForSources = await con.QueryAsync<Link>(@"
-					SELECT
-						l.*
-					FROM
-						links l
-					WHERE
-						l.source_id = ANY(@sourceIds)
-				", new { sourceIds = srcsWithReviews.Select(s => s.id).ToList() });
-
-
 				var setsWithTracks = t_setsWithTracks
 					.Where(s => s != null)
 					.GroupBy(s => s.source_id)
 					.ToDictionary(grp => grp.Key, grp => grp.AsList())
 					;
 
-				var linksBySource = t_linksForSources
-					.Where(s => s != null)
-					.GroupBy(s => s.source_id)
-					.ToDictionary(grp => grp.Key, grp => grp.AsList())
-					;
+				var sources = t_srcsWithReviews.ToList();
 
-				foreach (var src in srcsWithReviews)
+				foreach (var src in sources)
 				{
 					src.sets = setsWithTracks[src.id];
-					src.links = linksBySource[src.id];
 				}
 
-				return srcsWithReviews;
+				return sources;
 			});
         }
+
+	    public Task<IEnumerable<SourceReview>> ReviewsForSource(int sourceId)
+	    {
+		    return db.WithConnection(conn => conn.QueryAsync<SourceReview>(@"
+				SELECT
+					r.*
+				FROM
+					source_reviews r
+				WHERE
+					r.source_id = @sourceId
+				ORDER BY
+					r.updated_at DESC
+			", new { sourceId }));
+	    }
 
 		public Task<IEnumerable<SlimSourceWithShowAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
 		{

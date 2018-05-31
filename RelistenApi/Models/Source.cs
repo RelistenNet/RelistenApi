@@ -83,8 +83,10 @@ namespace Relisten.Api.Models
 
     public class SourceFull : Source
     {
-		[Required]
-        public IList<SourceReview> reviews { get; set; }
+	    // public IList<SourceReview> reviews { get; set; }
+
+	    [Required]
+	    public int review_count { get; set; }
   
 		[Required]
 		public IList<SourceSet> sets { get; set; }
