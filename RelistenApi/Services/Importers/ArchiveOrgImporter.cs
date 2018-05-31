@@ -231,9 +231,9 @@ namespace Relisten.Import
 				existingSources[dbSource.upstream_identifier] = dbSource;
 
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
-
-				stats.Created += (await linkService.AddLinksForSource(dbSource, LinksForSource(dbSource, upstreamSrc))).Count();
 			}
+	        
+	        stats.Created += (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc))).Count();	        
 
             var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
             stats.Created++;
@@ -249,9 +249,9 @@ namespace Relisten.Import
             return stats;
         }
 
-		IEnumerable<Link> LinksForSource(Source dbSource, ArtistUpstreamSource src)
+		IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
 		{
-			return new[]
+			var links = new List<Link>
 			{
 				new Link
 				{
@@ -264,6 +264,22 @@ namespace Relisten.Import
 					label = "View on archive.org"
 				}
 			};
+
+			if (artist.upstream_sources.Any(s => s.upstream_source_id == 6 /* setlist.fm */))
+			{
+				links.Add(new Link()
+				{
+					source_id = dbSource.id,
+					for_ratings = false,
+					for_source = false,
+					for_reviews = false,
+					upstream_source_id = 6 /* setlist.fm */,
+					url = "https://www.setlist.fm/",
+					label = "Setlist Information from setlist.fm"
+				});
+			}
+
+			return links;
 		}
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source, IEnumerable<SourceReview> reviews)

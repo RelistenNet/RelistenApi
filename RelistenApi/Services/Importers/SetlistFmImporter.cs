@@ -26,6 +26,7 @@ namespace Relisten.Import
     {
         public const string DataSourceName = "setlist.fm";
 
+        private readonly LinkService _linkService;
         protected SetlistShowService _setlistShowService { get; set; }
         protected SetlistSongService _setlistSongService { get; set; }
         protected VenueService _venueService { get; set; }
@@ -38,9 +39,11 @@ namespace Relisten.Import
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
-            ILogger<SetlistFmImporter> log
+            ILogger<SetlistFmImporter> log,
+            LinkService linkService
         ) : base(db)
         {
+            _linkService = linkService;
             this._setlistShowService = setlistShowService;
             this._venueService = venueService;
             this._tourService = tourService;
@@ -217,7 +220,7 @@ namespace Relisten.Import
 
                 stats.Created++;
 
-                shouldAddSongs = true;
+                shouldAddSongs = true;                
             }
             else if (setlistLastUpdated > dbShow.updated_at)
             {
