@@ -175,7 +175,7 @@ namespace Relisten.Import
                 {
                     rating = rev.stars * 2, // scale to out of 10
                     title = rev.reviewtitle,
-                    review = rev.reviewbody,
+                    review = rev.reviewbody.Replace("Â", ""),
                     author = rev.reviewer,
                     updated_at = rev.reviewdate
                 };
