@@ -45,7 +45,15 @@ namespace Relisten.Data
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
                     LEFT JOIN show_counts sh ON sh.artist_id = a.id
-                    LEFT JOIN show_source_information src ON src.artist_id = a.id
+                    LEFT JOIN (
+						SELECT
+							ssi.artist_id
+							, SUM(ssi.source_count) as source_count
+						FROM
+							show_source_information ssi
+						GROUP BY
+							ssi.artist_id
+					) src ON src.artist_id = a.id
 				ORDER BY
 					a.featured DESC, a.name
             ", (ArtistWithCounts artist, Features features) =>
