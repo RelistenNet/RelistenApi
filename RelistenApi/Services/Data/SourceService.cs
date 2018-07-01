@@ -97,21 +97,13 @@ namespace Relisten.Data
 				var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>(@"
 	                SELECT
 	                    s.*
-						, COALESCE(review_counts.review_count, 0) as review_count
+						, COALESCE(review_counts.source_review_count, 0) as review_count
 						, l.*
 	                FROM
 	                    sources s
 						LEFT JOIN links l ON l.source_id = s.id
 
-						LEFT JOIN (
-							SELECT
-								r.source_id
-								, COUNT(*) as review_count
-							FROM
-								source_reviews r
-							GROUP BY
-								r.source_id
-						) review_counts ON review_counts.source_id = s.id
+						LEFT JOIN source_review_counts review_counts ON review_counts.source_id = s.id
 	                WHERE
 	                    s.artist_id = @artistId
 	                    AND s.show_id = @showId

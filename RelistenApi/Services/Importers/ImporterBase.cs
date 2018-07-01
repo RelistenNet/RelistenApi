@@ -533,6 +533,7 @@ WHERE
 
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
+REFRESH MATERIALIZED VIEW source_review_counts;
 
             ";
 
