@@ -37,14 +37,6 @@ namespace Relisten.Data
                         shows
                     GROUP BY
                         artist_id
-                ), source_counts AS (
-                    SELECT
-                        artist_id,
-                        COUNT(*) as source_count
-                    FROM
-                        sources
-                    GROUP BY
-                        artist_id	
                 )
 
                 SELECT
@@ -53,7 +45,7 @@ namespace Relisten.Data
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
                     LEFT JOIN show_counts sh ON sh.artist_id = a.id
-                    LEFT JOIN source_counts src ON src.artist_id = a.id
+                    LEFT JOIN show_source_information src ON src.artist_id = a.id
 				ORDER BY
 					a.featured DESC, a.name
             ", (ArtistWithCounts artist, Features features) =>
