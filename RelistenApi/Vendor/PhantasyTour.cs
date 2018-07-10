@@ -5,19 +5,11 @@ namespace Relisten.Vendor.PhantasyTour
 {
 	public class PhantasyTourShowListing
 	{
-		public int showId { get; set; }
-		public DateTime showDate { get; set; }
-		public string showUrl { get; set; }
-		public int bandId { get; set; }
-		public string bandName { get; set; }
-		public string bandPermalink { get; set; }
-		public string bandUrl { get; set; }
-		public int venueId { get; set; }
-		public string venueName { get; set; }
-		public string venueState { get; set; }
-		public string venueCountry { get; set; }
-		public string venueLocale { get; set; }
-		public string venueUrl { get; set; }
+		public int id { get; set; }
+		public DateTime dateTime { get; set; }
+		public string url { get; set; }
+		public PhantasyTourBand band { get; set; }
+		public PhantasyTourVenue venue { get; set; }
 		public string ticketUrl { get; set; }
 		public bool hasSetlist { get; set; }
 		public bool attended { get; set; }

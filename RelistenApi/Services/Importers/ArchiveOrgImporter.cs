@@ -175,7 +175,7 @@ namespace Relisten.Import
                 {
                     rating = rev.stars * 2, // scale to out of 10
                     title = rev.reviewtitle,
-                    review = rev.reviewbody.Replace("Â", ""),
+                    review = rev.reviewbody?.Replace("Â", "") ?? "",
                     author = rev.reviewer,
                     updated_at = rev.reviewdate
                 };
@@ -212,14 +212,14 @@ namespace Relisten.Import
             {
                 var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc);
                 src.id = dbSource.id;
+                src.venue_id = dbVenue.id;
+
                 dbSource = await _sourceService.Save(src);
+                dbSource.venue = dbVenue;
 
                 stats.Updated++;
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
                 stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
-
-                dbSource.venue_id = dbVenue.id;
-                dbSource.venue = dbVenue;
             }
             else
             {
@@ -357,9 +357,25 @@ namespace Relisten.Import
                 lineage = meta.lineage.EmptyIfNull(),
                 updated_at = searchDoc._iguana_updated_at,
                 venue_id = dbVenue?.id,
-                display_date = meta.date,
+                display_date = FixDisplayDate(meta.date),
 				flac_type = flac_type
             };
+        }
+
+        // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
+        private string FixDisplayDate(string date) {
+            var parts = date.Split('-');
+
+            if(parts.Length > 2 && int.TryParse(parts[1], out int month)) {
+                // must be YYYY-DD-MM instead
+                if(month > 12) {
+
+                    // rearrange to YYYY-MM-DD
+                    return parts[0] + "-" + parts[2] + "-" + parts[1];
+                }
+            }
+
+            return date;
         }
 
 		private IEnumerable<SourceTrack> CreateSourceTracksForFiles(

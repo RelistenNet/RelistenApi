@@ -149,19 +149,19 @@ namespace Relisten.Import
 
 			await json.AsyncForEachWithProgress(prog, async show =>
 			{
-				if (show.showDate.ToUniversalTime() > DateTime.UtcNow)
+				if (show.dateTime.ToUniversalTime() > DateTime.UtcNow)
 				{
 					// future shows can't have recordings
 					return;
 				}
 
-				var showId = UpstreamIdentifierForPhantasyTourId(show.showId);
-				var venueId = UpstreamIdentifierForPhantasyTourId(show.venueId);
+				var showId = UpstreamIdentifierForPhantasyTourId(show.id);
+				var venueId = UpstreamIdentifierForPhantasyTourId(show.venue.id);
 
 				// we have no way to tell if things get updated, so just pull once
 				if (!existingSetlistShows.ContainsKey(showId))
 				{
-					await ImportSingle(artist, stats, ctx, show.showId);
+					await ImportSingle(artist, stats, ctx, show.id);
 				}
 			});
 

@@ -126,6 +126,10 @@ namespace Relisten.Import
         {
             this.db = db;
 			http = new HttpClient();
+	        
+	        // iPhone on iOS 11.4
+	        http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
+	        http.DefaultRequestHeaders.Add("Accept", "*/*");
         }
 
         public abstract ImportableData ImportableDataForArtist(Artist artist);
