@@ -150,6 +150,14 @@ namespace Relisten.Import
 			var body = await res.Content.ReadAsStringAsync();
 			var json = JsonConvert.DeserializeObject<IList<PhantasyTourShowListing>>(body);
 
+			if(json == null)
+			{
+				ctx?.WriteLine("Improper response from phantasytour.com: " + body);
+				ctx?.WriteLine($"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
+				ctx?.WriteLine($"Request url: {res.RequestMessage.RequestUri}. Headers: {string.Join("\n", res.RequestMessage.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
+				return false;
+			}
+
 			var prog = ctx?.WriteProgressBar();
 
 			await json.AsyncForEachWithProgress(prog, async show =>
