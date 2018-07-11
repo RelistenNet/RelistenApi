@@ -240,19 +240,18 @@ namespace Relisten.Import
 
             foreach (var song in await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx))
             {
-                var dbSong = existingSetlistSongs.GetValue(song.slug);
+				var dbSong = existingSetlistSongs.GetValue(song.id.ToString());
 
                 // skip aliases for now
                 if (dbSong == null && song.alias_for.HasValue == false)
                 {
-                    var slug = Slugify(song.title);
                     songsToSave.Add(new SetlistSong()
                     {
                         updated_at = song.updated_at,
                         artist_id = artist.id,
                         name = song.title,
-                        slug = slug,
-                        upstream_identifier = slug
+                        slug = song.slug,
+						upstream_identifier = song.id.ToString()
                     });
                 }
             }
@@ -434,11 +433,11 @@ namespace Relisten.Import
                 });
             }
 
-			ResetTrackSlugCounts();
-
             stats.Created += (await _sourceTrackService.InsertAll(sets.SelectMany(kvp => kvp.Value.tracks))).Count();
 
             await ProcessSetlistShow(stats, fullShow, artist, src, dbSource, sets);
+
+			ResetTrackSlugCounts();
 
             return dbSource;
         }
