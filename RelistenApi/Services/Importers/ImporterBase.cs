@@ -97,8 +97,13 @@ namespace Relisten.Import
 			return importers[source.name];
 		}
 
-		public async Task<ImportStats> Import(Artist artist, PerformContext ctx)
-        {
+		public Task<ImportStats> Import(Artist artist, PerformContext ctx)
+		{
+			return Import(artist, null, ctx);
+		}
+
+		public async Task<ImportStats> Import(Artist artist, string showIdentifier, PerformContext ctx)
+		{
 			var stats = new ImportStats();
 
 			var srcs = artist.upstream_sources.ToList();
@@ -110,11 +115,18 @@ namespace Relisten.Import
 			{
 				ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
 
-				stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
+				if(showIdentifier != null)
+				{
+					stats += await item.upstream_source.importer.ImportSpecificShowDataForArtist(artist, item, showIdentifier, ctx);
+				}
+				else
+				{
+					stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
+				}
 			});
 
 			return stats;
-        }
+		}
     }
 
     public abstract class ImporterBase : IDisposable
@@ -134,6 +146,7 @@ namespace Relisten.Import
 
         public abstract ImportableData ImportableDataForArtist(Artist artist);
 		public abstract Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx);
+		public abstract Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx);
 
 		public abstract string ImporterName { get; }
 
@@ -167,7 +180,7 @@ namespace Relisten.Import
 		{
 			var slug = Slugify(full);
 
-            if(trackSlugCounts.ContainsKey(slug))
+			if(trackSlugCounts.ContainsKey(slug))
             {
 				var count = 0;
 				do
@@ -181,11 +194,13 @@ namespace Relisten.Import
 				} while(trackSlugCounts.ContainsKey(slug + $"-{count}"));
 
 				slug += $"-{count}";
+
+				trackSlugCounts[slug] = 1;
 			}
-            else
-            {
-                trackSlugCounts[slug] = 1;
-            }
+			else
+			{
+				trackSlugCounts[slug] = 1;
+			}
 
 			return slug;
 		}

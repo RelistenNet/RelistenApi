@@ -110,6 +110,11 @@ namespace Relisten.Import
             return stats;
         }
 
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
+
         private static string SetlistUrlForArtist(Artist artist, int page = 1)
         {
             return $"https://api.setlist.fm/rest/1.0/artist/{artist.musicbrainz_id}/setlists?p={page}";

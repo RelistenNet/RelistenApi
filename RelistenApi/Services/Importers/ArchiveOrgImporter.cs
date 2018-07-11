@@ -16,6 +16,7 @@ using System.Globalization;
 using Hangfire.Server;
 using Hangfire.Console;
 using Npgsql;
+using System.Transactions;
 
 namespace Relisten.Import
 {
@@ -70,9 +71,14 @@ namespace Relisten.Import
 
 		public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
         {
-            await PreloadData(artist);
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), src, ctx);
+			return await ImportSpecificShowDataForArtist(artist, src, null, ctx);
         }
+
+		public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			await PreloadData(artist);
+			return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), src, showIdentifier, ctx);
+		}
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
 
@@ -85,7 +91,7 @@ namespace Relisten.Import
             return $"http://archive.org/metadata/{identifier}";
         }
 
-		private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, ArtistUpstreamSource src, PerformContext ctx)
+		private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
         {
             var stats = new ImportStats();
 
@@ -101,9 +107,16 @@ namespace Relisten.Import
 
 			await root.response.docs.AsyncForEachWithProgress(prog, async doc =>
 			{
+				var currentIsTargetedShow = doc.identifier == showIdentifier;
+
+				if(showIdentifier != null && !currentIsTargetedShow)
+				{
+					return;
+				}
+
 				var dbShow = existingSources.GetValue(doc.identifier);
-				if (dbShow == null
-				|| doc._iguana_updated_at > dbShow.updated_at)
+
+				if (currentIsTargetedShow || dbShow == null || doc._iguana_updated_at > dbShow.updated_at)
 				{
 					ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
@@ -114,29 +127,36 @@ namespace Relisten.Import
 						new Vendor.ArchiveOrg.TolerantStringConverter()
 					);
 
-					try {
-						stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, ctx);
-					}
-					catch(PostgresException e)
+					var properDate = FixDisplayDate(detailsRoot.metadata);
+
+					if (properDate != null)
 					{
-						if(e.SqlState == "23505")
+						using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
 						{
-							ctx.WriteLine($"Caught Npgsql.PostgresException: 23505: duplicate key value violates unique constraint \"sources_upstream_identifier_key\": {doc.identifier}");
+							stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
+
+							scope.Complete();
 						}
-						else
-						{
-							ctx.WriteLine($"Caught {doc.identifier}: {e}");
-							//throw;
-						}
+					}
+					else
+					{
+						ctx?.WriteLine("Skipped {0} because it has an invalid, unrecoverable date: {1}", doc.identifier, detailsRoot.metadata.date);
 					}
 				}
 			});
 
+			ctx?.WriteLine("Rebuilding shows...");
+
             // update shows
             await RebuildShows(artist);
 
+			ctx?.WriteLine("--> rebuilt shows!");
+			ctx?.WriteLine("Rebuilding years...");
+
             // update years
             await RebuildYears(artist);
+
+			ctx?.WriteLine("--> rebuilt years!");
 
             return stats;
         }
@@ -147,6 +167,7 @@ namespace Relisten.Import
             Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
             Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
 			ArtistUpstreamSource upstreamSrc,
+			string properDisplayDate,
 			PerformContext ctx
         )
         {
@@ -210,7 +231,7 @@ namespace Relisten.Import
 
             if (isUpdate)
             {
-                var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc);
+				var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc, properDisplayDate);
                 src.id = dbSource.id;
                 src.venue_id = dbVenue.id;
 
@@ -225,7 +246,7 @@ namespace Relisten.Import
             {
 
 
-                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc, dbVenue));
+				dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc, properDisplayDate, dbVenue));
                 stats.Created++;
 
 				existingSources[dbSource.upstream_identifier] = dbSource;
@@ -312,6 +333,7 @@ namespace Relisten.Import
             Artist artist,
 			Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
             Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
+			string properDisplayDate,
             Venue dbVenue = null
         )
         {
@@ -357,26 +379,79 @@ namespace Relisten.Import
                 lineage = meta.lineage.EmptyIfNull(),
                 updated_at = searchDoc._iguana_updated_at,
                 venue_id = dbVenue?.id,
-                display_date = FixDisplayDate(meta.date),
+				display_date = properDisplayDate,
 				flac_type = flac_type
             };
         }
 
+		private static Regex ExtractDateFromIdentifier = new Regex(@"(\d{4}-\d{2}-\d{2})");
+
         // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
-        private string FixDisplayDate(string date) {
-            var parts = date.Split('-');
+		private string FixDisplayDate(Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta) {
+			// 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
+			if (meta.date.Contains('X'))
+			{
+				return meta.date;
+			}
 
-            if(parts.Length > 2 && int.TryParse(parts[1], out int month)) {
-                // must be YYYY-DD-MM instead
-                if(month > 12) {
+			// happy case
+			if(TestDate(meta.date)) {
+				return meta.date;
+			}
 
-                    // rearrange to YYYY-MM-DD
-                    return parts[0] + "-" + parts[2] + "-" + parts[1];
-                }
-            }
+			var d = TryFlippingMonthAndDate(meta.date);
 
-            return date;
+			if(d != null)
+			{
+				return d;
+			}
+
+			// try to parse it out of the identifier
+			var matches = ExtractDateFromIdentifier.Match(meta.identifier);
+
+			if(matches.Success) {
+				var tdate = matches.Groups[1].Value;
+
+				if(TestDate(tdate)) {
+					return tdate;
+				}
+
+				var flipped = TryFlippingMonthAndDate(tdate);
+
+				if(flipped != null) {
+					return flipped;
+				}
+			}
+
+            return null;
         }
+
+		private bool TestDate(string date) {
+			return DateTime.TryParseExact(date, "yyyy-MM-dd", DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out var _);
+		}
+
+		private string TryFlippingMonthAndDate(string date) {
+			// not a valid date
+			var parts = date.Split('-');
+
+			// try to see if it is YYYY-DD-MM instead
+			if (parts.Length > 2 && int.TryParse(parts[1], out int month))
+			{
+				if (month > 12)
+				{
+
+					// rearrange to YYYY-MM-DD
+					var dateStr = parts[0] + "-" + parts[2] + "-" + parts[1];
+
+					if (TestDate(dateStr))
+					{
+						return dateStr;
+					}
+				}
+			}
+
+			return null;
+		}
 
 		private IEnumerable<SourceTrack> CreateSourceTracksForFiles(
 			Artist artist,

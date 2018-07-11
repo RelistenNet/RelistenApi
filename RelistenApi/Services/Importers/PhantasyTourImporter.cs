@@ -140,6 +140,11 @@ namespace Relisten.Import
 			return stats;
 		}
 
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
+
 		async Task<bool> ImportPage(Artist artist, ImportStats stats, PerformContext ctx, HttpResponseMessage res)
 		{
 			var body = await res.Content.ReadAsStringAsync();

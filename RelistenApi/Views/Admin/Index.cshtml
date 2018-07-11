@@ -117,13 +117,16 @@
 			<p>
                 <select v-model="selected.artist">
                     <option disabled selected>Choose an artist...</option>
-                    <option v-for="art in artists" v-bind:value="art.id">
+                    <option v-for="art in artists" v-bind:value="art.slug">
                         {{ art.name }}
                     </option>
                 </select>
 				&nbsp;
 				<input type="checkbox" id="delete_existing" v-model="selected.delete_existing" />
                 &nbsp;<label for="delete_existing">Delete existing imported content</label>
+			</p>
+			<p v-if="selected.artist != -1">
+				<input class="form-control" v-model="selected.upstream_identifier" placeholder="Optional: provide a source upstream identifier to only import 1" width="75" />
 			</p>
 			<p>
 				<button class="btn btn-success" v-on:click="queueImport" v-bind:disabled="selected.artist == -1">Start Import</button>

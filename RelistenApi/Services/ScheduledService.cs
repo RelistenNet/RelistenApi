@@ -88,40 +88,57 @@ namespace Relisten
 
 		private ConcurrentDictionary<int, bool> artistsCurrentlySyncing = new ConcurrentDictionary<int, bool>();
 
-        [Queue("artist_import")]
-        [DisplayName("Refresh Artist: {0}")]
-        [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
-        {
+		[Queue("artist_import")]
+		[DisplayName("Refresh Artist: {0}")]
+		[AutomaticRetry(Attempts = 0)]
+		public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
+		{
+			await RefreshArtist(idOrSlug, null, deleteOldContent, ctx);
+		}
+
+		[Queue("artist_import")]
+		[DisplayName("Refresh Artist: {0}")]
+		[AutomaticRetry(Attempts = 0)]
+		public async Task RefreshArtist(string idOrSlug, string specificShowId, bool deleteOldContent, PerformContext ctx)
+		{
 			var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
-			if(artistsCurrentlySyncing.ContainsKey(artist.id))
+			if (artistsCurrentlySyncing.ContainsKey(artist.id))
 			{
 				ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
 				return;
 			}
 
-            try
-            {
+			try
+			{
 				artistsCurrentlySyncing[artist.id] = true;
 
-                if (deleteOldContent)
-                {
-                    ctx?.WriteLine("Removing content for " + artist.name);
+				if (deleteOldContent)
+				{
+					ctx?.WriteLine("Removing content for " + artist.name);
 
-                    var rows = await _artistService.RemoveAllContentForArtist(artist);
+					var rows = await _artistService.RemoveAllContentForArtist(artist);
 
-                    ctx?.WriteLine($"Removed {rows} rows!");
-                }
+					ctx?.WriteLine($"Removed {rows} rows!");
+				}
 
-                var artistStats = await _importerService.Import(artist, ctx);
+				ImportStats artistStats;
 
-                ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
-            }
-            finally
-            {
+				if(specificShowId != null)
+				{
+					artistStats = await _importerService.Import(artist, specificShowId, ctx);
+				}
+				else 
+				{
+					artistStats = await _importerService.Import(artist, ctx);
+				}
+
+				ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
+			}
+			finally
+			{
 				artistsCurrentlySyncing.TryRemove(artist.id, out bool _);
-            }
-        }
+			}
+		}
     }
 }

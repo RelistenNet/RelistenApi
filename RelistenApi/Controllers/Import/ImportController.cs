@@ -47,20 +47,35 @@ namespace Relisten.Controllers
             return JsonNotFound(false);
         }
 
-        [HttpGet("{idOrSlug}/debug")]
-        [Authorize]
+		[HttpGet("{idOrSlug}/debug")]
+		[Authorize]
 		public async Task<IActionResult> GetDebug(string idOrSlug, [FromQuery] bool deleteOldContent = false)
-        {
+		{
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
-            if (art != null)
-            {
+			if (art != null)
+			{
 				await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
-				
-				return JsonSuccess("done!");
-            }
 
-            return JsonNotFound(false);
-        }
+				return JsonSuccess("done!");
+			}
+
+			return JsonNotFound(false);
+		}
+
+		[HttpGet("{idOrSlug}/{showIdentifier}")]
+		[Authorize]
+		public async Task<IActionResult> GetDebug(string idOrSlug, string showIdentifier, [FromQuery] bool deleteOldContent = false)
+		{
+			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+			if (art != null)
+			{
+				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null));
+
+				return JsonSuccess($"Queued as job {jobId}!");
+			}
+
+			return JsonNotFound(false);
+		}
 
         // private void update()
         // {

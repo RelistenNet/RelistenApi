@@ -24,7 +24,7 @@ var addArtist = new Vue({
 	            musicbrainz_id: "",
                 featured: "0",
                 upstream_sources: []
-	        },
+			},
 
             loading: false,
             result: null
@@ -152,12 +152,15 @@ var refresh = new Vue({
 
         selected: {
             artist: -1,
-            delete_existing: false
+			delete_existing: false,
+			upstream_identifier: ""
         }
     },
     methods: {
         queueImport: function() {
-            fetch("/api/v2/import/" + this.$data.selected.artist + "?deleteOldContent=" + this.$data.selected.delete_existing, {
+			var specificShow = this.$data.selected.upstream_identifier.length > 0 ? "/" + this.$data.selected.upstream_identifier : "";
+
+            fetch("/api/v2/import/" + this.$data.selected.artist + specificShow + "?deleteOldContent=" + this.$data.selected.delete_existing, {
                 credentials: 'include'
             })
 	            .then((res) => {

@@ -131,6 +131,11 @@ namespace Relisten.Import
             return stats;
         }
 
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
+
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
 
         async Task PreloadData(Artist artist)

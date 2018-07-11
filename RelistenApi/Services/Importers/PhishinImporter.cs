@@ -16,6 +16,7 @@ using System.Globalization;
 using Relisten.Vendor.Phishin;
 using Hangfire.Server;
 using Hangfire.Console;
+using System.Transactions;
 
 namespace Relisten.Import
 {
@@ -104,6 +105,11 @@ namespace Relisten.Import
             return stats;
             //return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)));
         }
+
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
         private IDictionary<string, Era> existingEras = new Dictionary<string, Era>();
@@ -452,59 +458,63 @@ namespace Relisten.Import
 
 			await shows.ForEachAsync(async show =>
 			{
-				var dbSource = existingSources.GetValue(show.id.ToString());
-
-				if (dbSource == null)
+				using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
 				{
-					dbSource = await ProcessShow(stats, artist, src, new Source()
+					var dbSource = existingSources.GetValue(show.id.ToString());
+
+					if (dbSource == null)
 					{
-						updated_at = show.updated_at,
-						artist_id = artist.id,
-						venue_id = existingVenues[show.venue_id.ToString()].id,
-						display_date = show.date,
-						upstream_identifier = show.id.ToString(),
-						is_soundboard = show.sbd,
-						is_remaster = show.remastered,
-						description = "",
-						taper_notes = show.taper_notes
-					}, ctx);
-
-					existingSources[dbSource.upstream_identifier] = dbSource;
-
-					stats.Created++;
-
-					stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
-					{
-						new Link
+						dbSource = await ProcessShow(stats, artist, src, new Source()
 						{
-							source_id = dbSource.id,
-							for_ratings = false,
-							for_source = true,
-							for_reviews = false,
-							upstream_source_id = src.upstream_source_id,
-							url = $"http://phish.in/{dbSource.display_date}",
-							label = "View on phish.in"
-						}
-					})).Count();
-				}
-				else if (show.updated_at > dbSource.updated_at)
-				{
-					dbSource.updated_at = show.updated_at;
-					dbSource.venue_id = existingVenues[show.venue_id.ToString()].id;
-					dbSource.display_date = show.date;
-					dbSource.upstream_identifier = show.id.ToString();
-					dbSource.is_soundboard = show.sbd;
-					dbSource.is_remaster = show.remastered;
-					dbSource.description = "";
-					dbSource.taper_notes = show.taper_notes;
+							updated_at = show.updated_at,
+							artist_id = artist.id,
+							venue_id = existingVenues[show.venue_id.ToString()].id,
+							display_date = show.date,
+							upstream_identifier = show.id.ToString(),
+							is_soundboard = show.sbd,
+							is_remaster = show.remastered,
+							description = "",
+							taper_notes = show.taper_notes
+						}, ctx);
 
-					stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
+						existingSources[dbSource.upstream_identifier] = dbSource;
 
-					dbSource = await ProcessShow(stats, artist, src, dbSource, ctx);
+						stats.Created++;
 
-					existingSources[dbSource.upstream_identifier] = dbSource;
+						stats.Created += (await linkService.AddLinksForSource(dbSource, new[] {
+							new Link 
+							{
+								source_id = dbSource.id,
+								for_ratings = false,
+								for_source = true,
+								for_reviews = false,
+								upstream_source_id = src.upstream_source_id,
+								url = $"http://phish.in/{dbSource.display_date}",
+								label = "View on phish.in"
+							}
+						})).Count();
+					}
+					else if (show.updated_at > dbSource.updated_at)
+					{
+						dbSource.updated_at = show.updated_at;
+						dbSource.venue_id = existingVenues[show.venue_id.ToString()].id;
+						dbSource.display_date = show.date;
+						dbSource.upstream_identifier = show.id.ToString();
+						dbSource.is_soundboard = show.sbd;
+						dbSource.is_remaster = show.remastered;
+						dbSource.description = "";
+						dbSource.taper_notes = show.taper_notes;
 
-					stats.Updated++;
+						stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
+
+						dbSource = await ProcessShow(stats, artist, src, dbSource, ctx);
+
+						existingSources[dbSource.upstream_identifier] = dbSource;
+
+						stats.Updated++;
+					}
+
+					scope.Complete();
 				}
 			}, prog, 5);
 

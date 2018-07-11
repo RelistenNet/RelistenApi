@@ -69,6 +69,11 @@ namespace Relisten.Import
             return stats;
         }
 
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
+
         private string PhishNetUrlForSource(Source dbSource)
         {
             return "http://phish.net/setlists/?d=" + dbSource.display_date;

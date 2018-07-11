@@ -131,6 +131,11 @@ namespace Relisten.Import
 			return stats;
 		}
 
+		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+		{
+			return Task.FromResult(new ImportStats());
+		}
+
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
