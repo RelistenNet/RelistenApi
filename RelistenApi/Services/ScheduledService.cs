@@ -97,7 +97,7 @@ namespace Relisten
 		}
 
 		[Queue("artist_import")]
-		[DisplayName("Refresh Artist: {0}")]
+		[DisplayName("Refresh Artist Show: {0}, {1}")]
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshArtist(string idOrSlug, string specificShowId, bool deleteOldContent, PerformContext ctx)
 		{
