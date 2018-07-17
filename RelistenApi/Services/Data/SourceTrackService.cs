@@ -52,7 +52,8 @@ namespace Relisten.Data
                                 flac_url,
 								flac_md5,
                                 updated_at,
-                                artist_id
+                                artist_id,
+                                uuid
                             )
                         VALUES
                             (
@@ -67,7 +68,8 @@ namespace Relisten.Data
                                 @flac_url,
                                 @flac_md5,
                                 @updated_at,
-                                @artist_id
+                                @artist_id,
+                                md5(@artist_id || '::track::' || @mp3_url)::uuid
                             )
                         RETURNING *
                     ", song));

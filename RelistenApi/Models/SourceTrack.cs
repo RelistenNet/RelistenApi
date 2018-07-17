@@ -35,6 +35,9 @@ namespace Relisten.Api.Models
 
         public string flac_url { get; set; }
         public string flac_md5 { get; set; }
+
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class PlayedSourceTrack
