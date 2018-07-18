@@ -232,7 +232,7 @@ WITH year_sources AS (
 INSERT INTO
 	years
 	
-	(year, show_count, source_count, duration, avg_duration, avg_rating, artist_id, updated_at)
+	(year, show_count, source_count, duration, avg_duration, avg_rating, artist_id, updated_at, uuid)
 	
 	SELECT
 		to_char(s.date, 'YYYY') as year,
@@ -242,7 +242,8 @@ INSERT INTO
 		AVG(s.avg_duration) as avg_duration,
 		AVG(s.avg_rating) as avg_rating,
 		s.artist_id as artist_id,
-		MAX(so.updated_at) as updated_at
+		MAX(so.updated_at) as updated_at,
+		md5(s.artist_id || '::year::' || to_char(s.date, 'YYYY'))::uuid as uuid
 	FROM
 		shows s
 		JOIN sources so ON so.show_id = s.id
@@ -318,7 +319,7 @@ WHERE
 INSERT INTO
 	shows
 	
-	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration)
+	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration, uuid)
 	
 	SELECT
 		--array_agg(source.id) as srcs,
@@ -335,7 +336,8 @@ INSERT INTO
 		MAX(setlist_show.tour_id) as tour_id,
 		MAX(setlist_show.era_id) as era_id,
 		COALESCE(MAX(setlist_show.venue_id), MAX(source.venue_id)) as venue_id,
-		MAX(source.duration) as avg_duration
+		MAX(source.duration) as avg_duration,
+		md5(source.artist_id || '::show::' || source.display_date)::uuid
 	FROM
 		sources source
 		LEFT JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date AND setlist_show.artist_id = @id

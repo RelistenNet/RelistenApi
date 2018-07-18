@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class Venue : BaseRelistenModel
+    public class Venue : BaseRelistenModel, IHasPersistentIdentifier
     {
         [Required]
         public int artist_id { get; set; }
@@ -41,6 +41,9 @@ namespace Relisten.Api.Models
                 return name;
             }
         }
+
+		[Required]
+		public Guid uuid { get; set; }
     }
 
     public class VenueWithShowCount : Venue

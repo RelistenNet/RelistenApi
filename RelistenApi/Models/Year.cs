@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class Year : BaseRelistenModel
+    public class Year : BaseRelistenModel, IHasPersistentIdentifier
     {
         [Required]
         public int show_count { get; set; }
@@ -28,6 +28,9 @@ namespace Relisten.Api.Models
 
         [Required]
         public int artist_id { get; set; }
+
+		[Required]
+		public Guid uuid { get; set; }
     }
 
     public class YearWithShows : Year

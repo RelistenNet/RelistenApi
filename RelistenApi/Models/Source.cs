@@ -16,7 +16,7 @@ namespace Relisten.Api.Models
 		NoPlayableFlac
 	}
 
-	public class SlimSource : BaseRelistenModel
+	public class SlimSource : BaseRelistenModel, IHasPersistentIdentifier
 	{
 		[Required]
 		public int artist_id { get; set; }
@@ -51,6 +51,9 @@ namespace Relisten.Api.Models
 
 		[Required]
 		public string upstream_identifier { get; set; }
+
+		[Required]
+		public Guid uuid { get; set; }
 	}
 
 	public class SlimSourceWithShowAndArtist : SlimSource

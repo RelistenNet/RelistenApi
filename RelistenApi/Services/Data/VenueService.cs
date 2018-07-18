@@ -203,7 +203,8 @@ namespace Relisten.Data
                         upstream_identifier = @upstream_identifier,
                         updated_at = @updated_at,
                         past_names = @past_names,
-                        slug = @slug
+                        slug = @slug,
+                        uuid = md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                     WHERE
                         id = @id
                     RETURNING *
@@ -224,7 +225,8 @@ namespace Relisten.Data
                             upstream_identifier,
                             updated_at,
                             past_names,
-                            slug
+                            slug,
+                            uuid
                         )
                     VALUES
                         (
@@ -236,7 +238,8 @@ namespace Relisten.Data
                             @upstream_identifier,
                             @updated_at,
                             @past_names,
-                            @slug
+                            @slug,
+                            md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
                 ", venue));

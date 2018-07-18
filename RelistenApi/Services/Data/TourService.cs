@@ -95,7 +95,8 @@ namespace Relisten.Data
                         name = @name,
                         slug = @slug,
                         upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
+                        updated_at = @updated_at,
+                        uuid = md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                     WHERE
                         id = @id
                     RETURNING *
@@ -114,7 +115,8 @@ namespace Relisten.Data
                             name,
                             slug,
                             upstream_identifier,
-                            updated_at
+                            updated_at,
+                            uuid
                         )
                     VALUES
                         (
@@ -124,7 +126,8 @@ namespace Relisten.Data
                             @name,
                             @slug,
                             @upstream_identifier,
-                            @updated_at
+                            @updated_at,
+                            md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
                 ", tour));

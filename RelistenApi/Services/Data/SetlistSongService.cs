@@ -142,7 +142,8 @@ namespace Relisten.Data
                                 name,
                                 slug,
                                 upstream_identifier,
-                                updated_at
+                                updated_at,
+                                uuid
                             )
                         VALUES
                             (
@@ -150,7 +151,8 @@ namespace Relisten.Data
                                 @name,
                                 @slug,
                                 @upstream_identifier,
-                                @updated_at
+                                @updated_at,
+                                md5(@artist_id || '::setlist_song::' || @upstream_identifier)::uuid
                             )
                         RETURNING *
                     ", song));

@@ -248,7 +248,8 @@ namespace Relisten.Data
                         display_date = @display_date,
                         venue_id = @venue_id,
                         num_ratings = @num_ratings,
-						flac_type = @flac_type
+						flac_type = @flac_type,
+                        uuid = md5(@artist_id || '::source::' || @upstream_identifier)::uuid
                     WHERE
                         id = @id
                     RETURNING *
@@ -279,7 +280,8 @@ namespace Relisten.Data
                             display_date,
                             venue_id,
                             num_ratings,
-							flac_type
+							flac_type,
+                            uuid
                         )
                     VALUES
                         (
@@ -301,7 +303,8 @@ namespace Relisten.Data
                             @display_date,
                             @venue_id,
                             @num_ratings,
-							@flac_type
+							@flac_type,
+                            md5(@artist_id || '::source::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
                 ", source));

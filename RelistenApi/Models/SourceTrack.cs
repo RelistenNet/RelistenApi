@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class SourceTrack : BaseRelistenModel
+    public class SourceTrack : BaseRelistenModel, IHasPersistentIdentifier
     {
         [Required]
         public int source_id { get; set; }

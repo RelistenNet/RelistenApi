@@ -281,7 +281,8 @@ namespace Relisten.Data
 	                        featured = @featured,
 	                        slug = @slug,
 	                        updated_at = timezone('utc'::text, now()),
-							sort_name = @sort_name
+							sort_name = @sort_name,
+							uuid = md5('root::artist::' || @slug)::uuid
 	                    WHERE
 	                        id = @id
 	                    RETURNING *
@@ -325,7 +326,8 @@ namespace Relisten.Data
 	                            name,
 	                            slug,
 	                            updated_at,
-								sort_Name
+								sort_name,
+								uuid
 	                        )
 	                    VALUES
 	                        (
@@ -334,7 +336,8 @@ namespace Relisten.Data
 	                            @name,
 	                            @slug,
 	                            timezone('utc'::text, now()),
-								@sort_name
+								@sort_name,
+								md5('root::artist::' || @slug)::uuid
 	                        )
 	                    RETURNING *
 	                ", new

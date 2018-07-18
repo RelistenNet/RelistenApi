@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class Tour : BaseRelistenModel
+    public class Tour : BaseRelistenModel, IHasPersistentIdentifier
     {
         [Required]
         public int artist_id { get; set; }
@@ -27,6 +27,9 @@ namespace Relisten.Api.Models
 
         [Required]
         public string upstream_identifier { get; set; }
+
+        [Required]
+		public Guid uuid { get; set; }
     }
 
     public class TourWithShowCount : Tour

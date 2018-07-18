@@ -9,6 +9,11 @@ using Relisten.Import;
 
 namespace Relisten.Api.Models
 {
+	public interface IHasPersistentIdentifier {
+		[Required]
+		Guid uuid { get; set; }
+	}
+
 	public abstract class BaseRelistenModel
 	{
 		[Required]
@@ -39,7 +44,7 @@ namespace Relisten.Api.Models
 		}
 	}
 
-	public class SlimArtist : BaseRelistenModel
+	public class SlimArtist : BaseRelistenModel, IHasPersistentIdentifier
 	{
 		[Required]
 		public string musicbrainz_id { get; set; }
@@ -55,6 +60,9 @@ namespace Relisten.Api.Models
 
 		[Required]
         public string sort_name { get; set; }
+
+		[Required]
+		public Guid uuid { get; set; }
     }
 
     public class SlimArtistWithFeatures : SlimArtist {
@@ -186,7 +194,6 @@ namespace Relisten.Api.Models
 	}
 
     public class ArtistUpstreamSource : SlimArtistUpstreamSource {
-
 		[Required]
 		public int artist_id { get; set; }
 

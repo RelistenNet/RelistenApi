@@ -101,7 +101,8 @@ namespace Relisten.Data
                         date = @date,
                         tour_id = @tour_id,
                         upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
+                        updated_at = @updated_at,
+                        uuid = md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
                     WHERE
                         id = @id
                     RETURNING *
@@ -119,7 +120,8 @@ namespace Relisten.Data
                             date,
                             tour_id,
                             upstream_identifier,
-                            updated_at
+                            updated_at,
+                            uuid
                         )
                     VALUES
                         (
@@ -128,7 +130,8 @@ namespace Relisten.Data
                             @date,
                             @tour_id,
                             @upstream_identifier,
-                            @updated_at
+                            @updated_at,
+                            md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
                 ", show));
