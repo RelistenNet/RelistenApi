@@ -62,6 +62,13 @@ namespace Relisten.Controllers
 			return JsonNotFound(false);
 		}
 
+		[HttpGet("all-years-and-shows")]
+		[Authorize]
+		public async Task<IActionResult> AllYearsAndShows()
+		{
+			return JsonSuccess(BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
+		}
+
 		[HttpGet("{idOrSlug}/{showIdentifier}")]
 		[Authorize]
 		public async Task<IActionResult> GetDebug(string idOrSlug, string showIdentifier, [FromQuery] bool deleteOldContent = false)

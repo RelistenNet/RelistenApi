@@ -59,6 +59,29 @@ namespace Relisten
             context.WriteLine("--> Queued updates for all artists! ");
         }
 
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("artist_import")]
+        [DisplayName("Rebuild All Artists Shows/Years")]
+        public async Task RebuildAllArtists(PerformContext context)
+        {
+            if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            var artists = (await _artistService.All()).ToList();
+
+            context.WriteLine($"--> Rebuilding all {artists.Count} artists");
+            var bar = context.WriteProgressBar();
+
+            await artists.AsyncForEachWithProgress(bar, async artist => {
+                await _importerService.Rebuild(artist, context);
+            });
+
+            context.WriteLine("--> Rebuilt all artists! ");
+        }
+
         // this actually runs all of them without enqueing anything else
         [Queue("artist_import")]
         [AutomaticRetry(Attempts = 0)]

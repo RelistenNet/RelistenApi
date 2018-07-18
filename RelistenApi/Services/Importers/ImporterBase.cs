@@ -102,6 +102,21 @@ namespace Relisten.Import
 			return Import(artist, null, ctx);
 		}
 
+		public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
+		{
+			var importer = artist.upstream_sources.First().upstream_source.importer;
+
+			ctx?.WriteLine("Rebuilding Shows");
+			var stats = await importer.RebuildShows(artist);
+
+			ctx?.WriteLine("Rebuilding Years");
+			stats += await importer.RebuildYears(artist);
+
+			ctx?.WriteLine("Done!");
+
+			return stats;
+		}
+
 		public async Task<ImportStats> Import(Artist artist, string showIdentifier, PerformContext ctx)
 		{
 			var stats = new ImportStats();
@@ -269,7 +284,7 @@ WHERE
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
 
-            ", artist));
+            ", new { id = artist.id }));
             return ImportStats.None;
         }
         public async Task<ImportStats> RebuildShows(Artist artist)
@@ -558,7 +573,7 @@ REFRESH MATERIALIZED VIEW source_review_counts;
 
             ";
 
-            await db.WithConnection(con => con.ExecuteAsync(sql, artist));
+            await db.WithConnection(con => con.ExecuteAsync(sql, new { id = artist.id }));
             return ImportStats.None;
         }
     }
