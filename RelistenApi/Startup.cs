@@ -65,6 +65,7 @@ namespace Relisten
 				});
 			});
 
+            Dapper.SqlMapper.AddTypeHandler(new Api.Models.PersistentIdentifierHandler());
 			services.AddSingleton(new DbService(Configuration["DATABASE_URL"]));
 
 			var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]);

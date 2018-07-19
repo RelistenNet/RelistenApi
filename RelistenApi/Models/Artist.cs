@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
+using Dapper;
 using Newtonsoft.Json;
 using Relisten.Import;
 
@@ -12,6 +13,16 @@ namespace Relisten.Api.Models
 	public interface IHasPersistentIdentifier {
 		[Required]
 		Guid uuid { get; set; }
+	}
+
+	public class PersistentIdentifierHandler : SqlMapper.TypeHandler<Guid> {
+		public override Guid Parse(object value) {
+			return new Guid(value.ToString());
+		}
+
+		public override void SetValue(System.Data.IDbDataParameter parameter, Guid value) {
+			parameter.Value = value.ToString();
+		}
 	}
 
 	public abstract class BaseRelistenModel
