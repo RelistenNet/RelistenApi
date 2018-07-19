@@ -190,6 +190,7 @@ namespace Relisten.Data
         public async Task<Venue> Save(Venue venue)
         {
             var p = new {
+                venue.id,
                 venue.artist_id,
                 venue.latitude,
                 venue.longitude,

@@ -134,6 +134,7 @@ namespace Relisten.Data
                 foreach (var song in songs)
                 {
                     var p = new {
+                        song.id,
                         song.artist_id,
                         song.name,
                         song.slug,

@@ -37,6 +37,7 @@ namespace Relisten.Data
                 foreach (var song in songs)
                 {
                     var p = new {
+                        song.id,
                         song.source_id,
                         song.source_set_id,
                         song.track_position,

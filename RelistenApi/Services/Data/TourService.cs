@@ -84,6 +84,7 @@ namespace Relisten.Data
         public async Task<Tour> Save(Tour tour)
         {
             var p = new {
+                tour.id,
                 tour.artist_id,
                 tour.start_date,
                 tour.end_date,
