@@ -269,6 +269,7 @@ INSERT INTO
 	GROUP BY
 		s.artist_id, to_char(s.date, 'YYYY')
 ;
+COMMIT;
 
 -- Associate shows with years
 UPDATE
@@ -283,8 +284,6 @@ WHERE
 	AND y.artist_id = @id
 ;
 
-COMMIT;
-
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
 
@@ -294,8 +293,6 @@ REFRESH MATERIALIZED VIEW venue_show_counts;
         public async Task<ImportStats> RebuildShows(Artist artist)
         {
 			var sql = @"
-BEGIN TRANSACTION;
-
 -- Update durations
 WITH durs AS (
 	SELECT
@@ -320,6 +317,7 @@ WHERE
 	AND s.artist_id =  @id
 ;
 
+BEGIN TRANSACTION;
 -- Drop all the shows to rebuild them
 DELETE
 FROM
@@ -371,7 +369,9 @@ INSERT INTO
 	ORDER BY
 		setlist_show.date
 ;
+COMMIT;
 
+BEGIN;
 -- Associate sources with show
 WITH show_assoc AS (
 	SELECT
@@ -393,11 +393,13 @@ WHERE
 	a.source_id = s.id
 	AND s.artist_id = @id
 ;
+COMMIT;
 			";
 
 			if (artist.features.reviews_have_ratings)
 			{
 				sql += @"
+	BEGIN;
 	-- Update sources with calculated rating/review information
 	WITH review_info AS (
 	    SELECT
@@ -483,10 +485,12 @@ WHERE
 		i.id = s.id
 		AND s.artist_id = @id
 	    ;
+	COMMIT;
 				";
 			}
 			else {
 				sql += @"
+	BEGIN;
 	-- used for things like Phish where ratings aren't attached to textual reviews
 	-- Calculate weighted averages for sources once we have average data and update sources
 	WITH show_info AS (
@@ -530,11 +534,13 @@ WHERE
 		i.id = s.id
 		AND s.artist_id = @id
 	    ;
+	COMMIT;
 				";
 			}
 
 			sql += @"
 
+BEGIN;
 -- Update shows with rating based on weighted averages
 WITH rating_ranks AS (
 	SELECT
@@ -572,7 +578,6 @@ WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
     ;
-
 COMMIT;
 
 REFRESH MATERIALIZED VIEW show_source_information;
