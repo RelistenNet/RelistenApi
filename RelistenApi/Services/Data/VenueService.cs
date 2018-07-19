@@ -88,7 +88,7 @@ namespace Relisten.Data
                 	v.artist_id, v.id
                 ORDER BY
                 	v.name ASC
-            ", artist)); 
+            ", new { artist.id })); 
         }
 
         public async Task<IEnumerable<VenueWithShowCount>> AllForArtist(Artist artist)
@@ -112,7 +112,7 @@ namespace Relisten.Data
                 	s.artist_id, v.id
                 ORDER BY
                 	v.name ASC
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<Venue> ForUpstreamIdentifier(Artist artist, string upstreamId)
@@ -189,6 +189,18 @@ namespace Relisten.Data
 
         public async Task<Venue> Save(Venue venue)
         {
+            var p = new {
+                venue.artist_id,
+                venue.latitude,
+                venue.longitude,
+                venue.name,
+                venue.location,
+                venue.upstream_identifier,
+                venue.updated_at,
+                venue.past_names,
+                venue.slug,
+            };
+
             if (venue.id != 0)
             {
                 return await db.WithConnection(con => con.QuerySingleAsync<Venue>(@"
@@ -208,7 +220,7 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", venue));
+                ", p));
             }
             else
             {
@@ -242,7 +254,7 @@ namespace Relisten.Data
                             md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", venue));
+                ", p));
             }
         }
 

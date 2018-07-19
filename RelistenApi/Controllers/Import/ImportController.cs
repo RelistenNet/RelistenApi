@@ -64,7 +64,7 @@ namespace Relisten.Controllers
 
 		[HttpGet("all-years-and-shows")]
 		[Authorize]
-		public async Task<IActionResult> AllYearsAndShows()
+		public IActionResult AllYearsAndShows()
 		{
 			return JsonSuccess(BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
 		}

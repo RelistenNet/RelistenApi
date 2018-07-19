@@ -40,11 +40,19 @@ namespace Relisten.Data
                     artist_id = @id
                 ORDER BY
                     ""order"" ASC
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<Era> Save(Era era)
         {
+            var p = new {
+                era.id,
+                era.artist_id,
+                era.name,
+                era.order,
+                era.updated_at
+            };
+
             if (era.id != 0)
             {
                 return await db.WithConnection(con => con.QuerySingleAsync<Era>(@"
@@ -58,7 +66,7 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", era));
+                ", p));
             }
             else
             {
@@ -80,7 +88,7 @@ namespace Relisten.Data
                             @updated_at
                         )
                     RETURNING *
-                ", era));
+                ", p));
             }
         }
     }

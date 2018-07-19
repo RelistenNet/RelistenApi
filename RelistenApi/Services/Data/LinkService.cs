@@ -21,6 +21,17 @@ namespace Relisten.Data
 
 				foreach (var link in links)
 				{
+					var p = new {
+						link.id,
+						link.source_id,
+						link.upstream_source_id,
+						link.for_reviews,
+						link.for_ratings,
+						link.for_source,
+						link.url,
+						link.label
+					};
+
 					inserted.Add(await con.QuerySingleAsync<Link>(@"
 	                    INSERT INTO
 	                        links
@@ -52,7 +63,7 @@ namespace Relisten.Data
 							label = EXCLUDED.label
 
 	                    RETURNING *
-                    ", link));
+                    ", p));
 				}
 
 				return inserted;

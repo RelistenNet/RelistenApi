@@ -31,7 +31,7 @@ namespace Relisten.Data
                         artists_upstream_sources
                     WHERE
                         artist_id = @id
-                ", artist);
+                ", new { artist.id });
 
                 var artistSources = sources.Select(s => new ArtistUpstreamSource {
                     artist_id = artist.id,

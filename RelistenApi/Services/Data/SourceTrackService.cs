@@ -36,6 +36,21 @@ namespace Relisten.Data
 
                 foreach (var song in songs)
                 {
+                    var p = new {
+                        song.source_id,
+                        song.source_set_id,
+                        song.track_position,
+                        song.duration,
+                        song.title,
+                        song.slug,
+                        song.mp3_url,
+                        song.mp3_md5,
+                        song.flac_url,
+                        song.flac_md5,
+                        song.updated_at,
+                        song.artist_id,
+                    };
+
                     inserted.Add(await con.QuerySingleAsync<SourceTrack>(@"
                         INSERT INTO
                             source_tracks
@@ -72,7 +87,7 @@ namespace Relisten.Data
                                 md5(@artist_id || '::track::' || @mp3_url)::uuid
                             )
                         RETURNING *
-                    ", song));
+                    ", p));
                 }
 
                 return inserted;

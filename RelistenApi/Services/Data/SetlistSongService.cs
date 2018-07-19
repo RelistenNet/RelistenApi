@@ -33,7 +33,7 @@ namespace Relisten.Data
                     setlist_songs 
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
@@ -106,7 +106,7 @@ namespace Relisten.Data
                 GROUP BY
                     s.id
                 ORDER BY name
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<IEnumerable<SetlistSong>> InsertAll(Artist artist, IEnumerable<SetlistSong> songs)
@@ -133,6 +133,14 @@ namespace Relisten.Data
 
                 foreach (var song in songs)
                 {
+                    var p = new {
+                        song.artist_id,
+                        song.name,
+                        song.slug,
+                        song.upstream_identifier,
+                        song.updated_at,
+                    };
+
                     inserted.Add(await con.QuerySingleAsync<SetlistSong>(@"
                         INSERT INTO
                             setlist_songs
@@ -155,7 +163,7 @@ namespace Relisten.Data
                                 md5(@artist_id || '::setlist_song::' || @upstream_identifier)::uuid
                             )
                         RETURNING *
-                    ", song));
+                    ", p));
                 }
 
                 return inserted;

@@ -195,7 +195,7 @@ namespace Relisten.Data
                     sources
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<int> DropAllSetsAndTracksForSource(Source source)
@@ -208,7 +208,7 @@ namespace Relisten.Data
                         source_sets
                     WHERE
                         source_id = @id
-                ", source);
+                ", new { source.id });
 
                 cnt += await con.ExecuteAsync(@"
                     DELETE
@@ -216,7 +216,7 @@ namespace Relisten.Data
                         source_tracks
                     WHERE
                         source_id = @id
-                ", source);
+                ", new { source.id });
 
                 return cnt;
             });
@@ -224,6 +224,29 @@ namespace Relisten.Data
 
         public async Task<Source> Save(Source source)
         {
+            var p = new {
+                source.id,
+                source.artist_id,
+                source.show_id,
+                source.is_soundboard,
+                source.is_remaster,
+                source.avg_rating,
+                source.num_reviews,
+                source.upstream_identifier,
+                source.has_jamcharts,
+                source.description,
+                source.taper_notes,
+                source.source,
+                source.taper,
+                source.transferrer,
+                source.lineage,
+                source.updated_at,
+                source.display_date,
+                source.venue_id,
+                source.num_ratings,
+                source.flac_type
+            };
+
             if (source.id != 0)
             {
                 return await db.WithConnection(con => con.QuerySingleAsync<Source>(@"
@@ -253,7 +276,7 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", source));
+                ", p));
             }
             else
             {
@@ -307,7 +330,7 @@ namespace Relisten.Data
                             md5(@artist_id || '::source::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", source));
+                ", p));
             }
         }
     }

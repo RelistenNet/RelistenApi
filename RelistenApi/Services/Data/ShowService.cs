@@ -174,7 +174,7 @@ namespace Relisten.Data
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
     }
 }

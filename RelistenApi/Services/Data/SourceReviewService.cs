@@ -31,7 +31,7 @@ namespace Relisten.Data
                     source_reviews r
                 WHERE
                     source_id = @id
-            ", source));
+            ", new { source.id }));
         }
 
         public async Task<IEnumerable<SourceReview>> InsertAll(IEnumerable<SourceReview> reviews)
@@ -42,6 +42,16 @@ namespace Relisten.Data
 
                 foreach (var review in reviews)
                 {
+                    var p = new {
+                        review.id,
+                        review.source_id,
+                        review.rating,
+                        review.title,
+                        review.review,
+                        review.author,
+                        review.updated_at,
+                    };
+
                     inserted.Add(await con.QuerySingleAsync<SourceReview>(@"
                     INSERT INTO
                         source_reviews
@@ -64,7 +74,7 @@ namespace Relisten.Data
                             @updated_at
                         )
                         RETURNING *
-                    ", review));
+                    ", p));
                 }
 
                 return inserted;

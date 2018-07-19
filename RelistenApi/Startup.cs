@@ -136,14 +136,14 @@ namespace Relisten
 			app.UseHangfireServer(new BackgroundJobServerOptions
 			{
 				Queues = new[] { "artist_import" },
-				ServerName = "relistenapi:artist_import",
+				ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
 				WorkerCount = 3
 			});
 
 			app.UseHangfireServer(new BackgroundJobServerOptions
 			{
 				Queues = new[] { "default" },
-				ServerName = "relistenapi:default"
+				ServerName = $"relistenapi:default ({Environment.MachineName})"
 			});
 
 			app.UseHangfireDashboard("/relisten-admin/hangfire", new DashboardOptions

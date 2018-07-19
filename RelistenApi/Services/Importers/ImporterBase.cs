@@ -223,6 +223,8 @@ namespace Relisten.Import
         public async Task<ImportStats> RebuildYears(Artist artist)
         {
             await db.WithConnection(con => con.ExecuteAsync(@"
+BEGIN TRANSACTION;
+
 -- Drop years
 DELETE FROM
 	years
@@ -281,6 +283,8 @@ WHERE
 	AND y.artist_id = @id
 ;
 
+COMMIT;
+
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
 
@@ -290,6 +294,8 @@ REFRESH MATERIALIZED VIEW venue_show_counts;
         public async Task<ImportStats> RebuildShows(Artist artist)
         {
 			var sql = @"
+BEGIN TRANSACTION;
+
 -- Update durations
 WITH durs AS (
 	SELECT
@@ -566,6 +572,8 @@ WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
     ;
+
+COMMIT;
 
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;

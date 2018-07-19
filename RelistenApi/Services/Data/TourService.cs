@@ -38,7 +38,7 @@ namespace Relisten.Data
                     tours
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<TourWithShows> ForIdWithShows(Artist artist, int id)
@@ -50,7 +50,7 @@ namespace Relisten.Data
                     tours
                 WHERE
                     id = @id
-            ", id));
+            ", new { id }));
 
             if (tour == null)
             {
@@ -78,11 +78,21 @@ namespace Relisten.Data
                     GROUP BY
                     	t.id
                     ORDER BY t.start_date
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<Tour> Save(Tour tour)
         {
+            var p = new {
+                tour.artist_id,
+                tour.start_date,
+                tour.end_date,
+                tour.name,
+                tour.slug,
+                tour.upstream_identifier,
+                tour.updated_at,
+            };
+
             if (tour.id != 0)
             {
                 return await db.WithConnection(con => con.QuerySingleAsync<Tour>(@"
@@ -100,7 +110,7 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", tour));
+                ", p));
             }
             else
             {
@@ -130,7 +140,7 @@ namespace Relisten.Data
                             md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", tour));
+                ", p));
             }
         }
     }

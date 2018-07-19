@@ -63,7 +63,7 @@ namespace Relisten.Data
                     }
 
                     return setlistShow;
-                }, artist));
+                }, new { artist.id }));
             }
 
             return await db.WithConnection(con => con.QueryAsync<SetlistShow>(@"
@@ -73,7 +73,7 @@ namespace Relisten.Data
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<IEnumerable<SimpleSetlistShow>> AllSimpleForArtist(Artist artist)
@@ -85,11 +85,21 @@ namespace Relisten.Data
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", artist));
+            ", new { artist.id }));
         }
 
         public async Task<SetlistShow> Save(SetlistShow show)
         {
+            var p = new {
+                show.id,
+                show.artist_id,
+                show.venue_id,
+                show.date,
+                show.tour_id,
+                show.upstream_identifier,
+                show.updated_at,
+            };
+
             if (show.id != 0)
             {
                 return await db.WithConnection(con => con.QuerySingleAsync<SetlistShow>(@"
@@ -106,7 +116,7 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", show));
+                ", p));
             }
             else
             {
@@ -134,7 +144,7 @@ namespace Relisten.Data
                             md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", show));
+                ", p));
             }
         }
 

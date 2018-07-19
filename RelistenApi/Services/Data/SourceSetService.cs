@@ -39,6 +39,15 @@ namespace Relisten.Data
 
                 foreach (var set in sets)
                 {
+                    var p = new {
+                        set.id,
+                        set.source_id,
+                        set.index,
+                        set.is_encore,
+                        set.name,
+                        set.updated_at,
+                    };
+
                     inserted.Add(await con.QuerySingleAsync<SourceSet>(@"
                         INSERT INTO
                             source_sets
@@ -59,7 +68,7 @@ namespace Relisten.Data
                                 @updated_at
                             )
                         RETURNING *
-                    ", set));
+                    ", p));
                 }
 
                 return inserted;
