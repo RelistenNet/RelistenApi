@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class SetlistShow : BaseRelistenModel
+    public class SetlistShow : BaseRelistenModel, IHasPersistentIdentifier
     {
 
         [Required]
@@ -40,6 +40,9 @@ namespace Relisten.Api.Models
 
         [Required]
         public string upstream_identifier { get; set; }
+
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class SimpleSetlistShow : BaseRelistenModel

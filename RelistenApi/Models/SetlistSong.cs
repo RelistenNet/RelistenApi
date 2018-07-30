@@ -7,7 +7,7 @@ using Newtonsoft.Json;
 
 namespace Relisten.Api.Models
 {
-    public class SetlistSong : BaseRelistenModel
+    public class SetlistSong : BaseRelistenModel, IHasPersistentIdentifier
     {
         [Required]
         public int artist_id { get; set; }
@@ -33,6 +33,9 @@ namespace Relisten.Api.Models
                 return name;
             }
         }
+
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class SetlistSongWithPlayCount : SetlistSong
