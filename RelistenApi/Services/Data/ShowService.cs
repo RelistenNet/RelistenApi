@@ -95,7 +95,7 @@ namespace Relisten.Data
 			orderBy = orderBy == null ? "display_date ASC" : orderBy;
 			var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, ShowWithArtist>(@"
+            return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, Year, ShowWithArtist>(@"
                     SELECT
                         s.*,
                         cnt.max_updated_at as most_recent_source_updated_at,
@@ -106,12 +106,14 @@ namespace Relisten.Data
                         COALESCE(venue_counts.shows_at_venue, 0) as shows_at_venue,
 						t.*,
 						e.*,
-						a.*
+						a.*,
+                        y.*
                     FROM
                         shows s
                         LEFT JOIN venues v ON s.venue_id = v.id
                         LEFT JOIN tours t ON s.tour_id = t.id
                         LEFT JOIN eras e ON s.era_id = e.id
+                        LEFT JOIN years y ON s.year_id = y.id
                         LEFT JOIN (
                         	SELECT
                         		arts.id as aid, arts.*, f.*
@@ -127,11 +129,12 @@ namespace Relisten.Data
                     ORDER BY
                         " + orderBy + @"
                     " + limitClause + @"
-                ", (Show, venue, tour, era, art, features) =>
+                ", (Show, venue, tour, era, art, features, year) =>
             {
                 art.features = features;
                 Show.artist = art;
                 Show.venue = venue;
+                Show.year = year;
 
                 if (art.features.tours)
                 {
