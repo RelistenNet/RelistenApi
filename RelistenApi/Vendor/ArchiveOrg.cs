@@ -110,18 +110,14 @@ namespace Relisten.Vendor.ArchiveOrg
     {
         public DateTime date { get; set; }
         public string identifier { get; set; }
-        public IList<DateTime> oai_updatedate { get; set; }
+        public DateTime? addeddate { get; set; }
+        public DateTime publicdate { get; set; }
 
-        private DateTime? _maxOaiUpdateDate = null;
         public DateTime _iguana_updated_at
         {
             get
             {
-                if (!_maxOaiUpdateDate.HasValue)
-                {
-                    _maxOaiUpdateDate = oai_updatedate.Max();
-                }
-                return _maxOaiUpdateDate.Value;
+                return addeddate ?? publicdate;
             }
         }
     }
