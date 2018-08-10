@@ -8,6 +8,7 @@ using Dapper;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
+using Newtonsoft.Json;
 
 namespace Relisten.Controllers
 {
@@ -52,16 +53,16 @@ namespace Relisten.Controllers
 
         [HttpGet("shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIdsSlugsOrUUIDs = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+		public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return JsonSuccess(await ApiRequest(artistIdsSlugsOrUUIDs, (arts) => _showService.RecentlyPerformed(arts, shows, days)));
+            return await ApiRequest(artistIds, (arts) => _showService.RecentlyPerformed(arts, shows, days));
         }
 
         [HttpGet("shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIdsSlugsOrUUIDs = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+		public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return JsonSuccess(await ApiRequest(artistIdsSlugsOrUUIDs, (arts) => _showService.RecentlyUpdated(arts, shows, days)));
+            return await ApiRequest(artistIds, (arts) => _showService.RecentlyUpdated(arts, shows, days));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/today")]

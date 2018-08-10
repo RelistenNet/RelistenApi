@@ -95,11 +95,17 @@ namespace Relisten.Api
         }
 
         protected async Task<IActionResult> ApiRequest<T>(
-            IEnumerable<string> artistIdsOrSlugs,
+            IReadOnlyList<string> artistIdsOrSlugs,
             Func<IReadOnlyList<Artist>, Task<T>> cb
         )
         {
-            IEnumerable<Artist> art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsOrSlugs.ToList());
+            IReadOnlyList<string> artistIdsSlugsOrUUIDs = artistIdsOrSlugs;
+            if(artistIdsOrSlugs.Count == 1 && artistIdsOrSlugs[0][0] == '[')
+            {
+                artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(artistIdsOrSlugs[0]);
+            }
+
+            IEnumerable<Artist> art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsSlugsOrUUIDs);
             if (art != null)
             {
                 var data = await cb(art.ToList());
