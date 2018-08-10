@@ -50,6 +50,20 @@ namespace Relisten.Controllers
             ", new { month, day }));
         }
 
+        [HttpGet("shows/recently-performed")]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
+		public async Task<IActionResult> RecentlyPerformed([FromQuery] int[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        {
+            return JsonSuccess(await _showService.RecentlyPerformed(artistIds, shows, days));
+        }
+
+        [HttpGet("shows/recently-updated")]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
+		public async Task<IActionResult> RecentlyUpdated([FromQuery] int[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        {
+            return JsonSuccess(await _showService.RecentlyUpdated(artistIds, shows, days));
+        }
+
         [HttpGet("artists/{artistIdOrSlug}/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
@@ -60,6 +74,22 @@ namespace Relisten.Controllers
                 AND EXTRACT(month from s.date) = EXTRACT(month from NOW())
 	            AND EXTRACT(day from s.date) = EXTRACT(day from NOW())
             ", new { artistId = art.id }));
+        }
+
+        [HttpGet("artists/{artistIdOrSlug}/recently-performed")]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+		public async Task<IActionResult> ArtistRecentlyPerformed([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        {
+            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyPerformed(new[] { art.id }, shows, days));
+        }
+
+        [HttpGet("artists/{artistIdOrSlug}/recently-updated")]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+		public async Task<IActionResult> ArtistRecentlyUpdated([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        {
+            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyUpdated(new[] { art.id }, shows, days));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/on-date")]

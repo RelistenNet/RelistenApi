@@ -150,6 +150,86 @@ namespace Relisten.Data
             }, parms));
         }
 
+		public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(int[] artistIds = null, int? shows = null, int? days = null)
+        {
+            if(shows == null && days == null)
+            {
+                shows = 25;
+            }
+
+            if(shows > 250) {
+                shows = 250;
+            }
+
+            if(days > 90) {
+                days = 90;
+            }
+
+            if(days.HasValue) {
+                if(artistIds != null)
+                {
+                    return await ShowsForCriteriaWithArtists($@"
+                        s.artist_id = ANY(@artistIds)
+                        AND s.date > (CURRENT_DATE - INTERVAL '{days}' day)
+                    ", new { artistIds}, null, "s.display_date DESC");
+                }
+
+                return await ShowsForCriteriaWithArtists($@"
+                    s.date > (CURRENT_DATE - INTERVAL '{days}' day)
+                ", new { }, null, "s.display_date DESC");
+            }
+
+            if(artistIds != null)
+            {
+                return await ShowsForCriteriaWithArtists(@"
+                    s.artist_id = ANY(@artistIds)
+                ", new { artistIds }, shows, "s.display_date DESC");
+            }
+
+            return await ShowsForCriteriaWithArtists(@"
+            ", new { }, shows, "s.display_date DESC");
+        }
+
+		public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(int[] artistIds = null, int? shows = null, int? days = null)
+        {
+            if(shows == null && days == null)
+            {
+                shows = 25;
+            }
+
+            if(shows > 250) {
+                shows = 250;
+            }
+
+            if(days > 90) {
+                days = 90;
+            }
+
+            if(days.HasValue) {
+                if(artistIds != null)
+                {
+                    return await ShowsForCriteriaWithArtists($@"
+                        s.artist_id = ANY(@artistIds)
+                        AND s.updated_at > (CURRENT_DATE - INTERVAL '{days}' day)
+                    ", new { artistIds}, null, "s.updated_at DESC");
+                }
+
+                return await ShowsForCriteriaWithArtists($@"
+                    s.updated_at > (CURRENT_DATE - INTERVAL '{days}' day)
+                ", new { }, null, "s.updated_at DESC");
+            }
+
+            if(artistIds != null)
+            {
+                return await ShowsForCriteriaWithArtists(@"
+                    s.artist_id = ANY(@artistIds)
+                ", new { artistIds }, shows, "s.updated_at DESC");
+            }
+
+            return await ShowsForCriteriaWithArtists(@"
+            ", new { }, shows, "s.updated_at DESC");
+        }
+
         public async Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
         {
             var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist,
