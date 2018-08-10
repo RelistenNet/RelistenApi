@@ -76,7 +76,7 @@ namespace Relisten.Controllers
             ", new { artistId = art.id }));
         }
 
-        [HttpGet("artists/{artistIdOrSlug}/recently-performed")]
+        [HttpGet("artists/{artistIdOrSlug}/shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ArtistRecentlyPerformed([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
@@ -84,7 +84,7 @@ namespace Relisten.Controllers
             return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyPerformed(new[] { art.id }, shows, days));
         }
 
-        [HttpGet("artists/{artistIdOrSlug}/recently-updated")]
+        [HttpGet("artists/{artistIdOrSlug}/shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ArtistRecentlyUpdated([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
