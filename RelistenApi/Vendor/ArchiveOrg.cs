@@ -65,6 +65,12 @@ namespace Relisten.Vendor.ArchiveOrg
 
 					// wtf is this archive.org??
 					.Replace("T::Z", "T00:00:00Z");
+
+                // really. what the hell are you doing archive.org?!
+                if (s == "0000-01-01T00:00:00Z")
+                {
+                    return null;
+                }
 				
                 if (s.Length == 20)
                 {
