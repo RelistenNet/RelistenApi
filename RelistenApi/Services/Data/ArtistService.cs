@@ -166,9 +166,11 @@ namespace Relisten.Data
 
 		public async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
 		{
-			int id;
-			Artist art = null;
+			return (await FindArtistsWithIdsOrSlugs(new[] { idOrSlug })).FirstOrDefault();
+		}
 
+		public async Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(IReadOnlyList<string> idsOrSlugs)
+		{
 			var baseSql = @"
                 SELECT
                     a.*, f.*, au.*
@@ -180,34 +182,28 @@ namespace Relisten.Data
                 WHERE
             ";
 
-			if (int.TryParse(idOrSlug, out id))
-			{
-				art = await db.WithConnection(async con =>
-				{
-					var artists = await con.QueryAsync(
-						baseSql + " a.id = @id",
-						joiner,
-						new { id = id }
-					);
+			var ids = new List<int>();
+			var slugsOrUuids = new List<string>();
 
-					return await FillInUpstreamSources(artists.FirstOrDefault());
-				});
-			}
-			else
-			{
-				art = await db.WithConnection(async con =>
-				{
-					var artists = await con.QueryAsync(
-						baseSql + " a.slug = @slug OR a.uuid = @slug",
-						joiner,
-						new { slug = idOrSlug }
-					);
-
-					return await FillInUpstreamSources(artists.FirstOrDefault());
-				});
+			foreach(var idOrSlug in idsOrSlugs) {
+				if(int.TryParse(idOrSlug, out var id)) {
+					ids.Add(id);
+				}
+				else {
+					slugsOrUuids.Add(idOrSlug);
+				}
 			}
 
-			return art;
+			return await db.WithConnection(async con =>
+			{
+				var artists = await con.QueryAsync(
+					baseSql + " a.id = ANY(@ids) OR a.slug = ANY(@slugsOrUuids) OR a.uuid = ANY(@slugsOrUuids)",
+					joiner,
+					new { ids, slugsOrUuids }
+				);
+
+				return await FillInUpstreamSources(artists);
+			});
 		}
 
 		string UpdateFieldsForFeatures(Features features)

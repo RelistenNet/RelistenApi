@@ -52,16 +52,16 @@ namespace Relisten.Controllers
 
         [HttpGet("shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyPerformed([FromQuery] int[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+		public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIdsSlugsOrUUIDs = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return JsonSuccess(await _showService.RecentlyPerformed(artistIds, shows, days));
+            return JsonSuccess(await ApiRequest(artistIdsSlugsOrUUIDs, (arts) => _showService.RecentlyPerformed(arts, shows, days)));
         }
 
         [HttpGet("shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyUpdated([FromQuery] int[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+		public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIdsSlugsOrUUIDs = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return JsonSuccess(await _showService.RecentlyUpdated(artistIds, shows, days));
+            return JsonSuccess(await ApiRequest(artistIdsSlugsOrUUIDs, (arts) => _showService.RecentlyUpdated(arts, shows, days)));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/today")]

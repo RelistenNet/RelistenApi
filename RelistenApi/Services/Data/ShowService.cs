@@ -150,7 +150,7 @@ namespace Relisten.Data
             }, parms));
         }
 
-		public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(int[] artistIds = null, int? shows = null, int? days = null)
+		public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(IReadOnlyList<Artist> artists = null, int? shows = null, int? days = null)
         {
             if(shows == null && days == null)
             {
@@ -166,12 +166,12 @@ namespace Relisten.Data
             }
 
             if(days.HasValue) {
-                if(artistIds != null)
+                if(artists != null)
                 {
                     return await ShowsForCriteriaWithArtists($@"
                         s.artist_id = ANY(@artistIds)
                         AND s.date > (CURRENT_DATE - INTERVAL '{days}' day)
-                    ", new { artistIds}, null, "s.display_date DESC");
+                    ", new { artistIds= artists.Select(a => a.id).ToList() }, null, "s.display_date DESC");
                 }
 
                 return await ShowsForCriteriaWithArtists($@"
@@ -179,18 +179,18 @@ namespace Relisten.Data
                 ", new { }, null, "s.display_date DESC");
             }
 
-            if(artistIds != null)
+            if(artists != null)
             {
                 return await ShowsForCriteriaWithArtists(@"
                     s.artist_id = ANY(@artistIds)
-                ", new { artistIds }, shows, "s.display_date DESC");
+                ", new { artistIds = artists.Select(a => a.id).ToList() }, shows, "s.display_date DESC");
             }
 
             return await ShowsForCriteriaWithArtists(@"
             ", new { }, shows, "s.display_date DESC");
         }
 
-		public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(int[] artistIds = null, int? shows = null, int? days = null)
+		public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(IReadOnlyList<Artist> artists = null, int? shows = null, int? days = null)
         {
             if(shows == null && days == null)
             {
@@ -206,12 +206,12 @@ namespace Relisten.Data
             }
 
             if(days.HasValue) {
-                if(artistIds != null)
+                if(artists != null)
                 {
                     return await ShowsForCriteriaWithArtists($@"
                         s.artist_id = ANY(@artistIds)
                         AND s.updated_at > (CURRENT_DATE - INTERVAL '{days}' day)
-                    ", new { artistIds}, null, "s.updated_at DESC");
+                    ", new { artistIds = artists.Select(a => a.id).ToList() }, null, "s.updated_at DESC");
                 }
 
                 return await ShowsForCriteriaWithArtists($@"
@@ -219,11 +219,11 @@ namespace Relisten.Data
                 ", new { }, null, "s.updated_at DESC");
             }
 
-            if(artistIds != null)
+            if(artists != null)
             {
                 return await ShowsForCriteriaWithArtists(@"
                     s.artist_id = ANY(@artistIds)
-                ", new { artistIds }, shows, "s.updated_at DESC");
+                ", new { artistIds = artists.Select(a => a.id).ToList() }, shows, "s.updated_at DESC");
             }
 
             return await ShowsForCriteriaWithArtists(@"

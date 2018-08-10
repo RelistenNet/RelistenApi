@@ -93,5 +93,26 @@ namespace Relisten.Api
 
             return JsonNotFound(false);
         }
+
+        protected async Task<IActionResult> ApiRequest<T>(
+            IEnumerable<string> artistIdsOrSlugs,
+            Func<IReadOnlyList<Artist>, Task<T>> cb
+        )
+        {
+            IEnumerable<Artist> art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsOrSlugs.ToList());
+            if (art != null)
+            {
+                var data = await cb(art.ToList());
+
+                if (data == null)
+                {
+                    return JsonNotFound(false);
+                }
+
+                return JsonSuccess(data);
+            }
+
+            return JsonNotFound(false);
+        }
     }
 }
