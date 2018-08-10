@@ -183,23 +183,34 @@ namespace Relisten.Data
             ";
 
 			var ids = new List<int>();
-			var slugsOrUuids = new List<string>();
+			var slugs = new List<string>();
+			var uuids = new List<Guid>();
 
 			foreach(var idOrSlug in idsOrSlugs) {
 				if(int.TryParse(idOrSlug, out var id)) {
 					ids.Add(id);
 				}
+				else if(idOrSlug.Length == 36)  {
+					var guid = Guid.Parse(idOrSlug);
+
+					if(guid != null) {
+						uuids.Add(guid);
+					}
+					else {
+						slugs.Add(idOrSlug);
+					}
+				}
 				else {
-					slugsOrUuids.Add(idOrSlug);
+					slugs.Add(idOrSlug);
 				}
 			}
 
 			return await db.WithConnection(async con =>
 			{
 				var artists = await con.QueryAsync(
-					baseSql + " a.id = ANY(@ids) OR a.slug = ANY(@slugsOrUuids) OR a.uuid = ANY(@slugsOrUuids)",
+					baseSql + " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)",
 					joiner,
-					new { ids, slugsOrUuids }
+					new { ids, slugs, uuids }
 				);
 
 				return await FillInUpstreamSources(artists);

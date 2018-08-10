@@ -81,7 +81,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ArtistRecentlyPerformed([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyPerformed(new[] { art.id }, shows, days));
+            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyPerformed(new[] { art }, shows, days));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/recently-updated")]
@@ -89,7 +89,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
 		public async Task<IActionResult> ArtistRecentlyUpdated([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyUpdated(new[] { art.id }, shows, days));
+            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyUpdated(new[] { art }, shows, days));
         }
 
         [HttpGet("artists/{artistIdOrSlug}/shows/on-date")]
