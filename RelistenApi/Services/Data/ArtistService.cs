@@ -207,8 +207,16 @@ namespace Relisten.Data
 
 			return await db.WithConnection(async con =>
 			{
+				string where;
+				if(idsOrSlugs.Count == 0) {
+					where = "1=1";
+				}
+				else {
+					where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+				}
+				
 				var artists = await con.QueryAsync(
-					baseSql + " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)",
+					baseSql + where,
 					joiner,
 					new { ids, slugs, uuids }
 				);
