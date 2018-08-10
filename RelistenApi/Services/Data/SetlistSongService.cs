@@ -39,14 +39,14 @@ namespace Relisten.Data
         public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
         {
             SetlistSongWithShows bigSong = null;
-            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, SetlistSongWithShows>(@"
+            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
                 SELECT
                     s.*
                     , shows.*
                     , cnt.max_updated_at as most_recent_source_updated_at
                     , cnt.source_count
                     , cnt.has_soundboard_source
-                    , v.*, t.*, e.*
+                    , v.*, t.*, e.*, y.*
                 FROM
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
@@ -55,6 +55,7 @@ namespace Relisten.Data
                     LEFT JOIN venues v ON shows.venue_id = v.id
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
+                    LEFT JOIN years y ON shows.year_id = y.id
 
                     INNER JOIN (
                         SELECT
@@ -72,7 +73,7 @@ namespace Relisten.Data
                     AND s.id = @songId
                 ORDER BY shows.date
                 ",
-                (song, show, venue, tour, era) => {
+                (song, show, venue, tour, era, year) => {
                     if(bigSong == null) {
                         bigSong = song;
                         bigSong.shows = new List<Show>();
@@ -81,6 +82,7 @@ namespace Relisten.Data
                     show.venue = venue;
                     show.tour = tour;
                     show.era = era;
+                    show.year = year;
 
                     bigSong.shows.Add(show);
 
