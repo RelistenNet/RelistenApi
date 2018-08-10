@@ -198,7 +198,7 @@ namespace Relisten.Data
 				art = await db.WithConnection(async con =>
 				{
 					var artists = await con.QueryAsync(
-						baseSql + " a.slug = @slug",
+						baseSql + " a.slug = @slug OR a.uuid = @slug",
 						joiner,
 						new { slug = idOrSlug }
 					);
