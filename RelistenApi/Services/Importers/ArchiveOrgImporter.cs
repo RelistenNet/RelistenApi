@@ -84,7 +84,7 @@ namespace Relisten.Import
 
 		private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
-			return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=publicdate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
+			return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
         }
         private static string DetailsUrlForIdentifier(string identifier)
         {
@@ -116,7 +116,7 @@ namespace Relisten.Import
 
 				var dbShow = existingSources.GetValue(doc.identifier);
 
-				if (currentIsTargetedShow || dbShow == null || doc._iguana_updated_at > dbShow.updated_at)
+				if (currentIsTargetedShow || dbShow == null || doc._iguana_index_date > dbShow.created_at)
 				{
 					ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 

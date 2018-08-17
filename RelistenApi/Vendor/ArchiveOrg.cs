@@ -118,12 +118,29 @@ namespace Relisten.Vendor.ArchiveOrg
         public string identifier { get; set; }
         public DateTime? addeddate { get; set; }
         public DateTime publicdate { get; set; }
+        public DateTime? reviewdate { get; set; }
+        public DateTime? indexdate { get; set; }
+
+        private DateTime? _max = null;
+
+        public DateTime _iguana_index_date
+        {
+            get
+            {
+                if(_max == null) {
+                    _max = (new[] { addeddate, publicdate, reviewdate /*, indexdate*/ }).Where(d => d.HasValue).Max().Value;
+                }
+
+                return _max.Value;
+            }
+        }
 
         public DateTime _iguana_updated_at
         {
             get
             {
-                return addeddate ?? publicdate;
+                var a = addeddate ?? publicdate;
+                return a > publicdate ? a : publicdate;
             }
         }
     }
