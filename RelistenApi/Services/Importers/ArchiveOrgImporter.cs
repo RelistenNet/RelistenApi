@@ -97,7 +97,7 @@ namespace Relisten.Import
 
             var json = await res.Content.ReadAsStringAsync();
             var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(
-                json,
+                json.Replace("\"0000-01-01T00:00:00Z\"", "null") /* serious...wtf archive */,
                 new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter()
             );
 
