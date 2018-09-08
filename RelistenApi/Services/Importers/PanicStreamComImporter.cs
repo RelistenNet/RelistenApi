@@ -349,7 +349,7 @@ namespace Relisten.Import.PanicStream
                 {
                     var parts = SourceFile.Split('/');
 
-                    if (parts.Length == 3)
+                    if (parts.Length == 3 && Regex.IsMatch(parts[1], @"\d{4}-\d{2}-\d{2}"))
                     {
                         _sourceName = parts[1];
                         _fileName = parts[2];
