@@ -18,6 +18,7 @@ using System.Globalization;
 using System.Net;
 using Hangfire.Server;
 using Hangfire.Console;
+using Microsoft.Extensions.Configuration;
 
 namespace Relisten.Import
 {
@@ -32,10 +33,11 @@ namespace Relisten.Import
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
         protected ILogger<PanicStreamComImporter> _log { get; set; }
+        public IConfiguration _configuration { get; }
 
-		readonly LinkService linkService;
+        readonly LinkService linkService;
 
-		public PanicStreamComImporter(
+        public PanicStreamComImporter(
             DbService db,
             VenueService venueService,
             TourService tourService,
@@ -43,21 +45,23 @@ namespace Relisten.Import
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
             SourceTrackService sourceTrackService,
-			LinkService linkService,
-            ILogger<PanicStreamComImporter> log
+            LinkService linkService,
+            ILogger<PanicStreamComImporter> log,
+            IConfiguration configuration
         ) : base(db)
         {
-			this.linkService = linkService;
-			this._sourceService = sourceService;
+            this.linkService = linkService;
+            this._sourceService = sourceService;
             this._venueService = venueService;
             this._tourService = tourService;
             this._log = log;
+            _configuration = configuration;
             _sourceReviewService = sourceReviewService;
             _sourceTrackService = sourceTrackService;
             _sourceSetService = sourceSetService;
         }
 
-		public override string ImporterName => "panicstream.com";
+        public override string ImporterName => "panicstream.com";
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -69,10 +73,10 @@ namespace Relisten.Import
         private static Regex Mp3FileFinder = new Regex(@" href=""(.*\.(?:mp3|m4a|MP3|M4A))""");
         private static Regex TxtFileFinder = new Regex(@" href=""(.*\.txt)""");
 
-		private async Task<string> FetchUrl(string url, PerformContext ctx)
+        private async Task<string> FetchUrl(string url, PerformContext ctx)
         {
             url = url.Replace("&amp;", "&");
-			ctx?.WriteLine("Fetching URL: " + url);
+            ctx?.WriteLine("Fetching URL: " + url);
             var page = await http.GetAsync(url);
 
             if (page.StatusCode != HttpStatusCode.OK)
@@ -86,12 +90,12 @@ namespace Relisten.Import
             return await page.Content.ReadAsStringAsync();
         }
 
-        private static string PanicIndexUrl() { return "https://www.panicstream.com/streams/wsp/?C=M;O=D"; }
+        private string PanicIndexUrl() { return "https://www.panicstream.com/streams/wsp/relisten__/slim-metadata.json?key=" + _configuration["PANIC_KEY"]; }
         private static string PanicShowUrl(string panicDate)
         {
             return "https://www.panicstream.com/streams/wsp/" + panicDate + "/";
         }
-		private static string PanicShowFileUrl(string panicDate, string fileName)
+        private static string PanicShowFileUrl(string panicDate, string fileName)
         {
             return PanicShowUrl(panicDate) + fileName;
         }
@@ -103,27 +107,43 @@ namespace Relisten.Import
             await PreloadData(artist);
 
             var contents = await FetchUrl(PanicIndexUrl(), ctx);
+            var tracks = JsonConvert.DeserializeObject<List<PanicStream.PanicStreamTrack>>(contents);
 
-			var matches = ShowDirMatcher.Matches(contents);
+            var tracksByShow = tracks
+                .Where(t => t.SourceName != null)
+                .GroupBy(t => t.ShowDate)
+                .Select(g => new
+                {
+                    ShowDate = g.Key,
+                    Sources = g
+                        .GroupBy(subg => subg.SourceName)
+                        .Select(subg => new
+                        {
+                            SourceName = subg.Key,
+                            Tracks = subg.ToList()
+                        })
+                })
+                .ToList();
 
-			ctx?.WriteLine($"Check {matches.Count} subdirectories");
-			var prog = ctx?.WriteProgressBar();
+            ctx?.WriteLine($"Found {tracksByShow.Count} shows");
 
-			var counter = 1;
-            foreach (Match match in ShowDirMatcher.Matches(contents))
+            var prog = ctx?.WriteProgressBar();
+
+            await tracksByShow.AsyncForEachWithProgress(prog, async grp =>
             {
-                var panicDate = match.Groups[1].Value;
-                var panicRecLetter = match.Groups[2].Value;
-
-                // 27-Jul-2016 19:14
-                var panicUpdatedAt = DateTime.ParseExact(match.Groups[3].Value.Trim(), "dd-MMM-yyyy HH:mm", CultureInfo.InvariantCulture);
-
-                await ProcessShow(stats, artist, src, panicDate, panicRecLetter, panicUpdatedAt, ctx);
-
-				prog?.SetValue(100.0 * counter / matches.Count);
-
-				counter++;
-            }
+                foreach (var source in grp.Sources)
+                {
+                    try {
+                        await ProcessShow(stats, artist, src, grp.ShowDate, source.SourceName, source.Tracks, ctx);
+                    }
+                    catch(Exception e) {
+                        ctx?.WriteLine("EXCEPTION: " + e.Message);
+                        ctx?.WriteLine("Source name: " + source.SourceName);
+                        ctx?.WriteLine(e.ToString());
+                        ctx?.WriteLine(JsonConvert.SerializeObject(source));
+                    }
+                }
+            });
 
             await RebuildShows(artist);
             await RebuildYears(artist);
@@ -131,10 +151,10 @@ namespace Relisten.Import
             return stats;
         }
 
-		public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
-		{
-			return Task.FromResult(new ImportStats());
-		}
+        public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+        {
+            return Task.FromResult(new ImportStats());
+        }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
 
@@ -145,45 +165,26 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-		private async Task ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource upstreamSrc, string panicDate, string panicRecLetter, DateTime panicUpdatedAt, PerformContext ctx)
+        private async Task ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource upstreamSrc, string showDate, string sourceName, IList<PanicStream.PanicStreamTrack> sourceTracks, PerformContext ctx)
         {
-            var upstreamId = panicDate + panicRecLetter;
+            var upstreamId = sourceName;
             var dbSource = existingSources.GetValue(upstreamId);
+
+            var panicUpdatedAt = sourceTracks
+                .Where(t => t.System.ParsedModificationTime.HasValue)
+                .Max(t => t.System.ParsedModificationTime.Value);
 
             if (dbSource != null && dbSource.updated_at <= panicUpdatedAt)
             {
                 return;
             }
 
-			var isUpdate = dbSource != null;
-
-            var showDir = await FetchUrl(PanicShowUrl(upstreamId), ctx);
-
-            if(showDir.Contains("-   \n<hr></pre>") || upstreamId == "1995_06_02" || upstreamId == "2010_04_30")
-            {
-                return;
-            }
-
-            var txt = TxtFileFinder.Matches(showDir)
-                .Cast<Match>()
-                .Select(m => m.Groups[1].Value)
-                .Where(m => !m.Contains("ffp") && !m.Contains("FFP"))
-                .FirstOrDefault()
-                ;
-
-            var mp3matches = Mp3FileFinder.Matches(showDir);
-
-            if (mp3matches.Count == 0)
-            {
-                throw new Exception("No mp3's or m4a's for " + upstreamId);
-            }
-
-            var desc = txt != null ? await FetchUrl(PanicShowFileUrl(upstreamId, txt), ctx) : "";
+            var isUpdate = dbSource != null;
 
             var src = new Source
             {
                 artist_id = artist.id,
-                display_date = panicDate.Replace('_', '-'),
+                display_date = showDate,
                 is_soundboard = false,
                 is_remaster = false,
                 has_jamcharts = false,
@@ -191,51 +192,41 @@ namespace Relisten.Import
                 num_reviews = 0,
                 avg_rating_weighted = 0,
                 upstream_identifier = upstreamId,
-                taper_notes = desc,
+                taper_notes = "",
                 updated_at = panicUpdatedAt
             };
 
-			if (isUpdate)
-			{
-				src.id = dbSource.id;
-			}
+            if (isUpdate)
+            {
+                src.id = dbSource.id;
+            }
 
-			dbSource = await _sourceService.Save(src);
+            dbSource = await _sourceService.Save(src);
 
             existingSources[dbSource.upstream_identifier] = dbSource;
 
-			if (isUpdate)
-			{
-				stats.Updated++;
-				stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
-			}
-			else
-			{
-				stats.Created++;
-				stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
-				{
-					new Link
-					{
-						source_id = dbSource.id,
-						for_ratings = false,
-						for_source = true,
-						for_reviews = false,
-						upstream_source_id = upstreamSrc.upstream_source_id,
-						url = $"https://www.panicstream.com/vault/widespread-panic/{dbSource.display_date.Substring(0, 4)}-streams/",
-						label = "View show page on panicstream.com"
-					},
-					new Link
-					{
-						source_id = dbSource.id,
-						for_ratings = false,
-						for_source = true,
-						for_reviews = false,
-						upstream_source_id = upstreamSrc.upstream_source_id,
-						url = PanicShowUrl(upstreamId),
-						label = "View MP3s on panicstream.com"
-					}
-				})).Count();
-			}
+            if (isUpdate)
+            {
+                stats.Updated++;
+                stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
+            }
+            else
+            {
+                stats.Created++;
+                stats.Created += (await linkService.AddLinksForSource(dbSource, new[]
+                {
+                    new Link
+                    {
+                        source_id = dbSource.id,
+                        for_ratings = false,
+                        for_source = true,
+                        for_reviews = false,
+                        upstream_source_id = upstreamSrc.upstream_source_id,
+                        url = $"https://www.panicstream.com/vault/widespread-panic/{dbSource.display_date.Substring(0, 4)}-streams/",
+                        label = "View show page on panicstream.com"
+                    }
+                })).Count();
+            }
 
             var dbSet = await _sourceSetService.Insert(new SourceSet
             {
@@ -248,18 +239,22 @@ namespace Relisten.Import
             stats.Created++;
 
             var trackIndex = 0;
-            var mp3s = mp3matches
-                .Cast<Match>()
-                .Select(m =>
+            var mp3s = sourceTracks
+                .OrderBy(t => t.FileName)
+                .Select(t =>
                 {
-                    var fileName = m.Groups[1].Value;
-
-                    var trackName = TrackPrefixFinder
-                        .Replace(WebUtility.UrlDecode(fileName), "")
+                    var trackName = t.FileName
                         .Replace(".mp3", "")
                         .Replace(".MP3", "")
                         .Replace(".M4A", "")
-                        .Replace(".m4a", "");
+                        .Replace(".m4a", "")
+                        .Trim();
+
+                    var cleanedTrackName = Regex.Replace(trackName, @"(wsp[0-9-]+d\d+t\d+\.)|(^\d+ ?-? ?)", "").Trim();
+
+                    if(cleanedTrackName.Length != 0) {
+                        trackName = cleanedTrackName;
+                    }
 
                     trackIndex++;
 
@@ -268,19 +263,120 @@ namespace Relisten.Import
                         source_id = dbSource.id,
                         source_set_id = dbSet.id,
                         track_position = trackIndex,
-                        duration = null,
+                        duration = ((int?)t.Composite?.CalculatedDuration.TotalSeconds ?? (int?)0).Value,
                         title = trackName,
                         slug = SlugifyTrack(trackName),
-                        mp3_url = PanicShowFileUrl(upstreamId, fileName),
+                        mp3_url = t.AbsoluteUrl(_configuration["PANIC_KEY"]),
                         updated_at = panicUpdatedAt,
                         artist_id = artist.id
                     };
                 });
 
-			ResetTrackSlugCounts();
+            ResetTrackSlugCounts();
 
             await _sourceTrackService.InsertAll(mp3s);
             stats.Created += mp3s.Count();
         }
+    }
+}
+
+namespace Relisten.Import.PanicStream
+{
+    public class PanicStreamShowSystem
+    {
+        public string FileModifyDate { get; set; }
+
+        public DateTime? ParsedModificationTime
+        {
+            get
+            {
+                if (DateTime.TryParseExact(FileModifyDate, "yyyy:MM:dd HH:mm:sszzz", null, DateTimeStyles.AssumeUniversal, out var res))
+                {
+                    return res;
+                }
+                
+                return null;
+            }
+        }
+    }
+
+    public class PanicStreamShowComposite
+    {
+        public string Duration { get; set; }
+
+        private TimeSpan? _calculatedDuration = null;
+        public TimeSpan CalculatedDuration
+        {
+            get
+            {
+                if (_calculatedDuration == null)
+                {
+                    if(Duration.EndsWith(" s (approx)")) {
+                        _calculatedDuration = TimeSpan.FromSeconds(double.Parse(Duration.Replace(" s (approx)", "")));
+                    }
+                    else {
+                        var parts = Duration
+                            .Replace(" (approx)", "")
+                            .Split(':')
+                            .Select(i => i.Length == 1 ? i : i.TrimStart('0'))
+                            .Select(i => i.Length == 0 ? "0" : i)
+                            .Select(i => int.Parse(i))
+                            .ToList();
+
+                        _calculatedDuration = TimeSpan.FromSeconds((parts[0] * 60 * 60) + (parts[1] * 60) + parts[2]);
+                    }
+                }
+
+                return _calculatedDuration.Value;
+            }
+        }
+    }
+
+    public class PanicStreamTrack
+    {
+        public string SourceFile { get; set; }
+
+        private string _fileName = null;
+
+        public string FileName => SourceName != null ? _fileName : null;
+
+        private string _sourceName = null;
+        public string SourceName
+        {
+            get
+            {
+                if (_sourceName == null)
+                {
+                    var parts = SourceFile.Split('/');
+
+                    if (parts.Length == 3)
+                    {
+                        _sourceName = parts[1];
+                        _fileName = parts[2];
+                    }
+                }
+
+                return _sourceName;
+            }
+        }
+
+        private string _showDate = null;
+        public string ShowDate
+        {
+            get
+            {
+                if (_showDate == null && SourceName != null)
+                {
+                    _showDate = Regex.Replace(SourceName.Replace('_', '-'), @"(\d)([^0-9-]+)", @"$1");
+                }
+
+                return _showDate;
+            }
+        }
+
+        public string AbsoluteUrl(string key) => "https://www.panicstream.com/streams/wsp/" + SourceFile.Substring(3) + "?key=" + key;
+
+        public PanicStreamShowSystem System { get; set; }
+        public PanicStreamShowComposite Composite { get; set; }
     }
 }
