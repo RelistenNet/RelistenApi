@@ -97,7 +97,7 @@ namespace Relisten.Controllers
                 .ToDictionary(g => g.Key, g => g.First());
 
             return JsonSuccess(tracksPlays
-                .Where(t => trackLookup.ContainsKey(t.track_id) && sources.ContainsKey(t.source_id))
+                .Where(t => trackLookup.ContainsKey(t.track_id) && sources.ContainsKey(trackLookup[t.track_id].source_id))
                 .Select(t =>
             {
                 var track = trackLookup[t.track_id];
