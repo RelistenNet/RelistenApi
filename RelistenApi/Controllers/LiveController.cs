@@ -44,7 +44,8 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(void), 400)]
         public async Task<IActionResult> PlayedTrack([FromQuery] int track_id, [FromQuery] string app_type)
         {
-            if(app_type != "ios" && app_type != "web" && app_type != "sonos") {
+            if (app_type != "ios" && app_type != "web" && app_type != "sonos")
+            {
                 return BadRequest();
             }
 
@@ -95,7 +96,9 @@ namespace Relisten.Controllers
                 .GroupBy(s => s.id)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            return JsonSuccess(tracksPlays.Select(t =>
+            return JsonSuccess(tracksPlays
+                .Where(t => trackLookup.ContainsKey(t.track_id) && sources.ContainsKey(t.source_id))
+                .Select(t =>
             {
                 var track = trackLookup[t.track_id];
 

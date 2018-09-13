@@ -136,6 +136,7 @@ namespace Relisten.Import
 
 						if (detailsRoot.is_dark ?? false) {
 							ctx?.WriteLine("\tis_dark == true, skipping...");
+							return;
 						}
 
                         var properDate = FixDisplayDate(detailsRoot.metadata);
