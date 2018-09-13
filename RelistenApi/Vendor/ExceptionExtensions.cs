@@ -20,16 +20,18 @@ namespace Relisten.Import
 
             ctx.WriteLine(e.ToString());
             ctx.WriteLine("> Exception Data: ");
-            
-            foreach (DictionaryEntry kvp in e.Data) {
+
+            foreach (DictionaryEntry kvp in e.Data)
+            {
                 var val = "";
-                try {
-                    val = JsonConvert.SerializeObject(kvp.Value, new JsonSerializerSettings 
+                try
+                {
+                    val = JsonConvert.SerializeObject(kvp.Value, new JsonSerializerSettings
                     {
                         PreserveReferencesHandling = PreserveReferencesHandling.Objects
                     });
                 }
-                catch(JsonSerializationException e)
+                catch (JsonSerializationException)
                 {
                     val = kvp.Value.ToString();
                 }
