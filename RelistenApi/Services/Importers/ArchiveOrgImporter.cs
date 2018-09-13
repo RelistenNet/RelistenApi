@@ -78,7 +78,11 @@ namespace Relisten.Import
         public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
         {
             await PreloadData(artist);
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist, src)), src, showIdentifier, ctx);
+
+			var url = SearchUrlForArtist(artist, src);
+			ctx?.WriteLine($"All shows URL: {url}");
+
+            return await ProcessIdentifiers(artist, await this.http.GetAsync(url), src, showIdentifier, ctx);
         }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();

@@ -4,6 +4,8 @@ using Hangfire.Server;
 using Hangfire.Console;
 using System.Diagnostics;
 using System.Text;
+using System.Collections;
+using Newtonsoft.Json;
 
 namespace Relisten.Import
 {
@@ -16,23 +18,24 @@ namespace Relisten.Import
                 return;
             }
 
-            var st = new StackTrace(e, true);
-            var frames = st.GetFrames();
-            var traceString = new StringBuilder();
-
-            foreach (var frame in frames)
-            {
-                if (frame.GetFileLineNumber() < 1)
-                    continue;
-
-                traceString.Append("File: " + frame.GetFileName());
-                traceString.Append(", Method:" + frame.GetMethod().Name);
-                traceString.Append(", LineNumber: " + frame.GetFileLineNumber());
-                traceString.Append("  -->  ");
-            }
-
-            ctx.WriteLine(traceString.ToString());
             ctx.WriteLine(e.ToString());
+            ctx.WriteLine("> Exception Data: ");
+            
+            foreach (DictionaryEntry kvp in e.Data) {
+                var val = "";
+                try {
+                    val = JsonConvert.SerializeObject(kvp.Value, new JsonSerializerSettings 
+                    {
+                        PreserveReferencesHandling = PreserveReferencesHandling.Objects
+                    });
+                }
+                catch(JsonSerializationException e)
+                {
+                    val = kvp.Value.ToString();
+                }
+
+                ctx.WriteLine($"\t{kvp.Key}: {val}");
+            }
         }
     }
 }
