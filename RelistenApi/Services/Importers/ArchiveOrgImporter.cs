@@ -17,6 +17,7 @@ using Hangfire.Server;
 using Hangfire.Console;
 using Npgsql;
 using System.Transactions;
+using Microsoft.ApplicationInsights;
 
 namespace Relisten.Import
 {
@@ -131,11 +132,23 @@ namespace Relisten.Import
 
 					if (properDate != null)
 					{
-						using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
-						{
-							stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
+						try {
+							using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+							{
+								stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
 
-							scope.Complete();
+								scope.Complete();
+							}
+						}
+						catch(Exception e) {
+							ctx?.WriteLine($"Error processing {doc.identifier} ({properDate}): {e.Message}");
+
+							var telementry = new TelemetryClient();
+
+							telementry.TrackException(e, new Dictionary<string, string> {
+								{ "upstream_identifier", doc.identifier },
+								{ "properDate", properDate },
+							});
 						}
 					}
 					else

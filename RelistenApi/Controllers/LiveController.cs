@@ -8,6 +8,7 @@ using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Newtonsoft.Json;
+using Microsoft.ApplicationInsights;
 
 namespace Relisten.Controllers
 {
@@ -40,8 +41,13 @@ namespace Relisten.Controllers
         [HttpPost("live/play")]
         [ProducesResponseType(typeof(bool), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        [ProducesResponseType(typeof(void), 400)]
         public async Task<IActionResult> PlayedTrack([FromQuery] int track_id, [FromQuery] string app_type)
         {
+            if(app_type != "ios" && app_type != "web" && app_type != "sonos") {
+                return BadRequest();
+            }
+
             var track = await _sourceTrackService.ForId(track_id);
 
             if (track == null)
@@ -57,6 +63,11 @@ namespace Relisten.Controllers
             };
 
             await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+            var telementry = new TelemetryClient();
+            telementry.TrackEvent("played_track", new Dictionary<string, string> {
+                { "app_type", app_type },
+            });
 
             return JsonSuccess(true);
         }

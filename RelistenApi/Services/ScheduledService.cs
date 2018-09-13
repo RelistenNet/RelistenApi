@@ -10,6 +10,9 @@ using System.Linq;
 using Microsoft.Extensions.Configuration;
 using System.ComponentModel;
 using System.Collections.Concurrent;
+using System;
+using Microsoft.ApplicationInsights;
+using System.Collections.Generic;
 
 namespace Relisten
 {
@@ -158,6 +161,16 @@ namespace Relisten
 
 				ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 			}
+            catch(Exception e) {
+                ctx?.WriteLine($"Error processing {artist.name}: {e.Message}");
+
+                var telementry = new TelemetryClient();
+
+                telementry.TrackException(e, new Dictionary<string, string> {
+                    { "artist_name", artist.name },
+                    { "artist_id", artist.id.ToString() },
+                });
+            }            
 			finally
 			{
 				artistsCurrentlySyncing.TryRemove(artist.id, out bool _);
