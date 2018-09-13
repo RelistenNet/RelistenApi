@@ -134,6 +134,10 @@ namespace Relisten.Import
                             new Vendor.ArchiveOrg.TolerantStringConverter()
                         );
 
+						if (detailsRoot.is_dark ?? false) {
+							ctx?.WriteLine("\tis_dark == true, skipping...");
+						}
+
                         var properDate = FixDisplayDate(detailsRoot.metadata);
 
                         if (properDate != null)
@@ -147,7 +151,7 @@ namespace Relisten.Import
                         }
                         else
                         {
-                            ctx?.WriteLine("Skipped {0} because it has an invalid, unrecoverable date: {1}", doc.identifier, detailsRoot.metadata.date);
+                            ctx?.WriteLine("\tSkipped {0} because it has an invalid, unrecoverable date: {1}", doc.identifier, detailsRoot.metadata.date);
                         }
                     }
                 }
@@ -202,7 +206,7 @@ namespace Relisten.Import
 
             if (mp3Files == null || mp3Files.Count() == 0)
             {
-                ctx?.WriteLine("No VBR MP3 files found for {0}", searchDoc.identifier);
+                ctx?.WriteLine("\tNo VBR MP3 files found for {0}", searchDoc.identifier);
 
                 return stats;
             }

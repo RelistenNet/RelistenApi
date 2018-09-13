@@ -23,7 +23,7 @@ namespace Relisten.Vendor.ArchiveOrg
                 serializer.Populate(reader, l);
                 return l.FirstOrDefault();
             }
-            else if(reader.TokenType == JsonToken.StartObject)
+            else if (reader.TokenType == JsonToken.StartObject)
             {
                 // consume the blank object
                 var l = new object();
@@ -59,19 +59,19 @@ namespace Relisten.Vendor.ArchiveOrg
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.String)
             {
-				var s = reader
-					.Value
-					.ToString()
+                var s = reader
+                    .Value
+                    .ToString()
 
-					// wtf is this archive.org??
-					.Replace("T::Z", "T00:00:00Z");
+                    // wtf is this archive.org??
+                    .Replace("T::Z", "T00:00:00Z");
 
                 // really. what the hell are you doing archive.org?!
                 if (s == "0000-01-01T00:00:00Z")
                 {
                     return null;
                 }
-				
+
                 if (s.Length == 20)
                 {
                     return new DateTime(
@@ -84,7 +84,8 @@ namespace Relisten.Vendor.ArchiveOrg
                         DateTimeKind.Utc
                     );
                 }
-                else {
+                else
+                {
                     return DateTime.Parse(s, null);
                 }
             }
@@ -127,7 +128,8 @@ namespace Relisten.Vendor.ArchiveOrg
         {
             get
             {
-                if(_max == null) {
+                if (_max == null)
+                {
                     _max = (new[] { addeddate, publicdate, reviewdate /*, indexdate*/ }).Where(d => d.HasValue).Max().Value;
                 }
 
@@ -202,6 +204,7 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
     public class RootObject
     {
         public int created { get; set; }
+        public bool? is_dark { get; set; }
         public string d1 { get; set; }
         public string d2 { get; set; }
         public string dir { get; set; }
