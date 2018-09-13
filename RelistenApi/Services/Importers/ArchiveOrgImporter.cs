@@ -141,7 +141,8 @@ namespace Relisten.Import
 							}
 						}
 						catch(Exception e) {
-							ctx?.WriteLine($"Error processing {doc.identifier} ({properDate}): {e.Message}");
+							ctx?.WriteLine($"Error processing {doc.identifier} ({properDate}):");
+							ctx?.LogException(e);
 
 							var telementry = new TelemetryClient();
 

@@ -162,7 +162,8 @@ namespace Relisten
 				ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 			}
             catch(Exception e) {
-                ctx?.WriteLine($"Error processing {artist.name}: {e.Message}");
+                ctx?.WriteLine($"Error processing {artist.name}:");
+                ctx?.LogException(e);
 
                 var telementry = new TelemetryClient();
 
@@ -170,6 +171,8 @@ namespace Relisten
                     { "artist_name", artist.name },
                     { "artist_id", artist.id.ToString() },
                 });
+
+                throw;
             }            
 			finally
 			{
