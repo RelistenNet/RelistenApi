@@ -36,8 +36,8 @@ namespace Relisten
 			_redisService = redisService;
         }
 
-        // run every day at 3AM
-        [RecurringJob("0 3 * * *", Enabled = true)]
+        // run every day at 3 AM EST, midnight PST, 7 AM UTC
+        [RecurringJob("0 7 * * *", Enabled = true)]
         [AutomaticRetry(Attempts = 0)]
         [Queue("artist_import")]
         [DisplayName("Refresh All Artists")]
