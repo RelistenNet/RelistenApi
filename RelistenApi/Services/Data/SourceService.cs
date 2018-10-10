@@ -190,11 +190,27 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<Source>(@"
                 SELECT
-                    *
+                    s.*
                 FROM
-                    sources
+                    sources s
                 WHERE
-                    artist_id = @id
+                    s.artist_id = @id
+            ", new { artist.id }));
+        }
+
+        public async Task<IEnumerable<SourceReviewInformation>> AllSourceReviewInformationForArtist(Artist artist)
+        {
+            return await db.WithConnection(con => con.QueryAsync<SourceReviewInformation>(@"
+                SELECT
+                    r.source_id
+                    , s.upstream_identifier
+                    , r.source_review_max_updated_at as review_max_updated_at
+                    , r.source_review_count as review_count
+                FROM
+                    sources s
+                    JOIN source_review_counts r ON s.id = r.source_id
+                WHERE
+                    s.artist_id = @id
             ", new { artist.id }));
         }
 

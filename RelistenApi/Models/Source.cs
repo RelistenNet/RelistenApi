@@ -84,6 +84,21 @@ namespace Relisten.Api.Models
 		public FlacType flac_type { get; set; }
     }
 
+	public class SourceReviewInformation
+	{
+		[Required]
+		public int source_id { get; set; }
+
+		[Required]
+		public string upstream_identifier { get; set; }
+
+	    [Required]
+	    public int review_count { get; set; }
+
+	    [Required]
+	    public DateTime review_max_updated_at { get; set; }
+	}
+
     public class SourceFull : Source
     {
 	    // public IList<SourceReview> reviews { get; set; }

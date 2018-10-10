@@ -86,6 +86,7 @@ namespace Relisten.Import
         }
 
         private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
+        private IDictionary<string, SourceReviewInformation> existingSourceReviewInformation = new Dictionary<string, SourceReviewInformation>();
 
         private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
@@ -123,7 +124,11 @@ namespace Relisten.Import
 
                     var dbShow = existingSources.GetValue(doc.identifier);
 
-                    if (currentIsTargetedShow || dbShow == null || doc._iguana_index_date > dbShow.created_at)
+                    var maxSourceInformation = existingSourceReviewInformation.GetValue(doc.identifier);
+                    var isNew = dbShow == null;
+                    var needsToUpdateReviews = maxSourceInformation != null && doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
+
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews)
                     {
                         ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
@@ -555,7 +560,11 @@ namespace Relisten.Import
         async Task PreloadData(Artist artist)
         {
             existingSources = (await _sourceService.AllForArtist(artist)).
-                GroupBy(venue => venue.upstream_identifier).
+                GroupBy(source => source.upstream_identifier).
+                ToDictionary(grp => grp.Key, grp => grp.First());
+            
+            existingSourceReviewInformation = (await _sourceService.AllSourceReviewInformationForArtist(artist)).
+                GroupBy(source => source.upstream_identifier).
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
     }
