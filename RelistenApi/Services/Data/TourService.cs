@@ -58,7 +58,7 @@ namespace Relisten.Data
             }
 
             tour.shows = await _showService.ShowsForCriteria(artist,
-                "s.artist_id = artistId AND s.tour_id = @tourId",
+                "s.artist_id = @artistId AND s.tour_id = @tourId",
                 new { artistId = artist.id, tourId = id }
             );
 
