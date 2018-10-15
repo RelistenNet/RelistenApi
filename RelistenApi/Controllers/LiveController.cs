@@ -42,11 +42,25 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(bool), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         [ProducesResponseType(typeof(void), 400)]
-        public async Task<IActionResult> PlayedTrack([FromQuery] int track_id, [FromQuery] string app_type)
-        {
+        public async Task<IActionResult> PlayedTrack(
+            [FromQuery] string app_type,
+            [FromQuery] int? track_id = null,
+            [FromQuery] string track_uuid = null
+        ) {
             if (app_type != "ios" && app_type != "web" && app_type != "sonos")
             {
                 return BadRequest();
+            }
+
+            if (track_id == null && track_uuid == null)
+            {
+                return BadRequest();
+            }
+
+            Guid track_guid = Guid.Empty;
+            if (track_uuid != null && !Guid.TryParse(track_uuid, out track_guid))
+            {
+                return BadRequest("Invalid track_uuid format");
             }
 
             var telementry = new TelemetryClient();
@@ -54,7 +68,16 @@ namespace Relisten.Controllers
                 { "app_type", app_type },
             });
 
-            var track = await _sourceTrackService.ForId(track_id);
+            SourceTrack track = null;
+
+            if(track_uuid != null && track_guid != Guid.Empty)
+            {
+                track = await _sourceTrackService.ForUUID(track_guid);
+            }
+            else if (track_id != null)
+            {
+                track = await _sourceTrackService.ForId(track_id.Value);
+            }
 
             if (track == null)
             {
@@ -64,7 +87,7 @@ namespace Relisten.Controllers
             var lp = new LivePlayedTrack
             {
                 played_at = DateTime.UtcNow,
-                track_id = track_id,
+                track_id = track.id,
                 app_type = app_type
             };
 

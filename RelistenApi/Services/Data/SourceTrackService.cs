@@ -4,6 +4,7 @@ using Dapper;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 
 namespace Relisten.Data
 {
@@ -26,6 +27,23 @@ namespace Relisten.Data
                 WHERE
                     t.id = ANY(@trackIds)
             ", new { trackIds = ids }));
+		}
+
+		public async Task<SourceTrack> ForUUID(Guid uuid)
+		{
+			return (await ForUUIDs(new[] { uuid })).FirstOrDefault();
+		}
+
+		public Task<IEnumerable<SourceTrack>> ForUUIDs(IList<Guid> uuids)
+		{
+			return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
+                SELECT
+                    t.*
+                FROM
+                    source_tracks t
+                WHERE
+                    t.uuid = ANY(@trackUUIDs)
+            ", new { trackUUIDs = uuids }));
 		}
 
 		public async Task<IEnumerable<SourceTrack>> InsertAll(IEnumerable<SourceTrack> songs)
