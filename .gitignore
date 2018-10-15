@@ -5,6 +5,10 @@
 /Data/base-with-data.sql
 
 /local-dev/postgres-data/
+/local-dev/db.version
+/local-dev/relisten.tar
+/local-dev/relisten.tgz
+/local-dev/backup
 /local-dev/redis-data/
 
 RelistenApi/out/

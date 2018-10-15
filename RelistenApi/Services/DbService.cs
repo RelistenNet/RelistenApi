@@ -17,7 +17,7 @@ namespace Relisten
 
 			var uri = new Uri(url);
 			var parts = uri.UserInfo.Split(':');
-			ConnStr = $"Host={uri.Host};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
+			ConnStr = $"Host={uri.Host};Port={uri.Port};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
 
 			Console.WriteLine("DB Connection String: " + ConnStr);
 

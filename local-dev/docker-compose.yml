@@ -4,18 +4,22 @@ services:
   relisten-redis:
     image: redis:3.2.8
     restart: always
+    volumes:
+      - ./redis-data:/data
     ports:
-      - 6379:6379
+      - 16379:6379
 
   relisten-db:
     image: postgres:9.6.1
     restart: always
+    volumes:
+      - ./postgres-data/pgdata:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: local_dev_password
       POSTGRES_USER: relisten
-      POSTGRES_DB: relisten_local_dev
+      POSTGRES_DB: relisten_db
     ports:
-      - 5432:5432
+      - 15432:5432
 
   adminer:
     image: adminer
@@ -25,4 +29,4 @@ services:
     environment:
       ADMINER_DEFAULT_SERVER: relisten-db
     ports:
-      - 8080:8080
+      - 18080:8080
