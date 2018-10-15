@@ -58,6 +58,9 @@ namespace Relisten.Api.Models
         public int track_id { get; set; }
 
         [Required]
+        public Guid uuid { get; set; } = Guid.Empty;
+
+        [Required]
         public string app_type { get; set; }
 
         public PlayedSourceTrack track { get; set; } = null;

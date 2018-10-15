@@ -88,7 +88,8 @@ namespace Relisten.Controllers
             {
                 played_at = DateTime.UtcNow,
                 track_id = track.id,
-                app_type = app_type
+                app_type = app_type,
+                uuid = Guid.NewGuid()
             };
 
             await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
