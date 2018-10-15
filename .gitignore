@@ -4,6 +4,9 @@
 /Data/
 /Data/base-with-data.sql
 
+/local-dev/postgres-data/
+/local-dev/redis-data/
+
 RelistenApi/out/
 
 # Common IntelliJ Platform excludes

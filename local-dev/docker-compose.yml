@@ -1,0 +1,28 @@
+version: '3.1'
+
+services:
+  relisten-redis:
+    image: redis:3.2.8
+    restart: always
+    ports:
+      - 6379:6379
+
+  relisten-db:
+    image: postgres:9.6.1
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: local_dev_password
+      POSTGRES_USER: relisten
+      POSTGRES_DB: relisten_local_dev
+    ports:
+      - 5432:5432
+
+  adminer:
+    image: adminer
+    restart: always
+    depends_on:
+      - relisten-db
+    environment:
+      ADMINER_DEFAULT_SERVER: relisten-db
+    ports:
+      - 8080:8080

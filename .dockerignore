@@ -1,5 +1,6 @@
-Data/
-RelistenApi/out/
-RelistenApi/bin/
-RelistenApi/obj/
-.git/
+/Data/
+/local-dev/
+/RelistenApi/out/
+/RelistenApi/bin/
+/RelistenApi/obj/
+/.git/
