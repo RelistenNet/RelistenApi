@@ -49,6 +49,11 @@ namespace Relisten.Controllers
                 return BadRequest();
             }
 
+            var telementry = new TelemetryClient();
+            telementry.TrackEvent("played_track", new Dictionary<string, string> {
+                { "app_type", app_type },
+            });
+
             var track = await _sourceTrackService.ForId(track_id);
 
             if (track == null)
@@ -64,11 +69,6 @@ namespace Relisten.Controllers
             };
 
             await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-
-            var telementry = new TelemetryClient();
-            telementry.TrackEvent("played_track", new Dictionary<string, string> {
-                { "app_type", app_type },
-            });
 
             return JsonSuccess(true);
         }
