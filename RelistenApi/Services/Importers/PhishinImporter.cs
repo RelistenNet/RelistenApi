@@ -147,24 +147,24 @@ namespace Relisten.Import
                 ToDictionary(grp => grp.Key, grp => grp.First());
         }
 
-        private string PhishinApiUrl(string api, string sort_attr = null)
+        private string PhishinApiUrl(string api, string sort_attr = null, int per_page = 99999, int? page = null)
         {
-            return $"http://phish.in/api/v1/{api}.json?per_page=99999" + (sort_attr != null ? "&sort_attr=" + sort_attr : "");
+            return $"http://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
         }
 
-		private async Task<T> PhishinApiRequest<T>(string apiRoute, PerformContext ctx, string sort_attr = null)
+		private async Task<PhishinRootObject<T>> PhishinApiRequest<T>(string apiRoute, PerformContext ctx, string sort_attr = null, int per_page = 99999, int? page = null)
         {
-            var url = PhishinApiUrl(apiRoute, sort_attr);
+            var url = PhishinApiUrl(apiRoute, sort_attr, per_page, page);
 			ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
-            return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync()).data;
+            return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync());
         }
 
 		public async Task<ImportStats> ProcessTours(Artist artist, PerformContext ctx)
         {
             var stats = new ImportStats();
 
-            foreach (var tour in await PhishinApiRequest<IEnumerable<PhishinSmallTour>>("tours", ctx))
+            foreach (var tour in (await PhishinApiRequest<IEnumerable<PhishinSmallTour>>("tours", ctx)).data)
             {
                 var dbTour = existingTours.GetValue(tour.id.ToString());
 
@@ -208,7 +208,7 @@ namespace Relisten.Import
 
             var order = 0;
 
-            foreach (var era in await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", ctx))
+            foreach (var era in (await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", ctx)).data)
             {
                 var dbEra = existingEras.GetValue(era.Key);
 
@@ -244,7 +244,7 @@ namespace Relisten.Import
 
             var songsToSave = new List<SetlistSong>();
 
-            foreach (var song in await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx))
+            foreach (var song in (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data)
             {
 				var dbSong = existingSetlistSongs.GetValue(song.id.ToString());
 
@@ -278,7 +278,7 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-            foreach (var venue in await PhishinApiRequest<IEnumerable<PhishinSmallVenue>>("venues", ctx))
+            foreach (var venue in (await PhishinApiRequest<IEnumerable<PhishinSmallVenue>>("venues", ctx)).data)
             {
                 var dbVenue = existingVenues.GetValue(venue.id.ToString());
 
@@ -393,10 +393,8 @@ namespace Relisten.Import
             }
         }
 
-        private async Task<Source> ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
+        private async Task<Source> ProcessShow(ImportStats stats, Artist artist, PhishinShow fullShow, ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
         {
-            var fullShow = await PhishinApiRequest<PhishinShow>("shows/" + dbSource.upstream_identifier, ctx);
-
             dbSource.has_jamcharts = fullShow.tags.Contains("Jamcharts");
             dbSource = await _sourceService.Save(dbSource);
 
@@ -452,11 +450,26 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-			var shows = (await PhishinApiRequest<IEnumerable<PhishinSmallShow>>("shows", ctx, "date")).ToList();
+            var pages = 8;
 
 			var prog = ctx?.WriteProgressBar();
+            var pageSize = 200;
 
-			await shows.ForEachAsync(async show =>
+            for (var currentPage = 1; currentPage <= pages; currentPage++)
+            {
+                var apiShows = await PhishinApiRequest<IEnumerable<PhishinShow>>("shows", ctx, "date", per_page: pageSize, page: currentPage);
+                pages = apiShows.total_pages;
+
+			    var shows = apiShows.data.ToList();
+                
+                foreach(var (idx, show) in shows.Select((s, i) => (i, s)))
+                {
+                    await processShow(show);
+                    prog.SetValue(100.0 * ((currentPage - 1) * pageSize + idx + 1) / apiShows.total_entries);
+                }
+            }
+
+            async Task processShow(PhishinShow show)
 			{
 				using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
 				{
@@ -464,11 +477,11 @@ namespace Relisten.Import
 
 					if (dbSource == null)
 					{
-						dbSource = await ProcessShow(stats, artist, src, new Source()
+						dbSource = await ProcessShow(stats, artist, show, src, new Source()
 						{
 							updated_at = show.updated_at,
 							artist_id = artist.id,
-							venue_id = existingVenues[show.venue_id.ToString()].id,
+							venue_id = existingVenues[show.venue.id.ToString()].id,
 							display_date = show.date,
 							upstream_identifier = show.id.ToString(),
 							is_soundboard = show.sbd,
@@ -497,7 +510,7 @@ namespace Relisten.Import
 					else if (show.updated_at > dbSource.updated_at)
 					{
 						dbSource.updated_at = show.updated_at;
-						dbSource.venue_id = existingVenues[show.venue_id.ToString()].id;
+						dbSource.venue_id = existingVenues[show.venue.id.ToString()].id;
 						dbSource.display_date = show.date;
 						dbSource.upstream_identifier = show.id.ToString();
 						dbSource.is_soundboard = show.sbd;
@@ -507,7 +520,7 @@ namespace Relisten.Import
 
 						stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
 
-						dbSource = await ProcessShow(stats, artist, src, dbSource, ctx);
+						dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
 
 						existingSources[dbSource.upstream_identifier] = dbSource;
 
@@ -516,7 +529,7 @@ namespace Relisten.Import
 
 					scope.Complete();
 				}
-			}, prog, 5);
+            }
 
             return stats;
         }

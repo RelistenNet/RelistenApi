@@ -136,7 +136,7 @@ namespace Relisten.Vendor.Phishin
         public List<string> tags { get; set; }
         public int tour_id { get; set; }
         public PhishinSmallVenue venue { get; set; }
-        public object taper_notes { get; set; }
+        public string taper_notes { get; set; }
         public int likes_count { get; set; }
         public List<PhishinShowTrack> tracks { get; set; }
         public DateTime updated_at { get; set; }
