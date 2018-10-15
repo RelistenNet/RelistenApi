@@ -13,37 +13,25 @@
     <DebugType>portable</DebugType>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="1.50.5" />
-    <PackageReference Include="Hangfire.Console" Version="1.4.0" />
-    <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1" />
-    <PackageReference Include="Hangfire.RecurringJobExtensions" Version="1.1.6" />
-    <PackageReference Include="Hangfire.Core" Version="1.6.19" />
-    <PackageReference Include="Hangfire.AspNetCore" Version="1.6.19" />
-    <PackageReference Include="Microsoft.AspNetCore.All" Version="2.1.0" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="2.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="2.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.1.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="2.1.1" />
-    <PackageReference Include="Npgsql" Version="4.0.2" />
-    <PackageReference Include="Polly" Version="6.0.1" />
-    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.7.2" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="3.0.0" />
+    <PackageReference Include="Dapper" Version="1.50.5"/>
+    <PackageReference Include="Hangfire.Console" Version="1.4.2"/>
+    <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1"/>
+    <PackageReference Include="Hangfire.RecurringJobExtensions" Version="1.1.6"/>
+    <PackageReference Include="Hangfire.Core" Version="1.6.20"/>
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.6.20"/>
+    <PackageReference Include="Microsoft.AspNetCore.App" Version="2.1.5"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="2.1.1"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="2.1.1"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="2.1.1"/>
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="2.1.1"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="2.1.1"/>
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="2.1.1"/>
+    <PackageReference Include="Npgsql" Version="4.0.3"/>
+    <PackageReference Include="Polly" Version="6.1.0"/>
+    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.7.2"/>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="3.0.0"/>
+    <PackageReference Include="Microsoft.AspNetCore.ApplicationInsights.HostingStartup" Version="2.1.1"/>
   </ItemGroup>
-  <!--
-  <ItemGroup>
-    <Folder Include="Controllers\" />
-    <Folder Include="Services\" />
-    <Folder Include="Vendor\" />
-    <Folder Include="Views\" />
-    <Folder Include="Services\Auth\" />
-    <Folder Include="Controllers\Admin\" />
-    <Folder Include="Views\Admin\" />
-    <Folder Include="wwwroot\" />
-    <Folder Include="wwwroot\js\" />
-  </ItemGroup>
-  -->
   <ItemGroup>
     <Content Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -52,11 +40,4 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
-  <Target Name="ChangeAliasesOfStrongNameAssemblies" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
-    <ItemGroup>
-      <ReferencePath Condition="'%(FileName)' == 'StackExchange.Redis.StrongName'">
-        <Aliases>signed</Aliases>
-      </ReferencePath>
-    </ItemGroup>
-  </Target>
 </Project>
