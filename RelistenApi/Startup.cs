@@ -6,6 +6,9 @@ using Hangfire.Console;
 // using Hangfire.PostgreSql;
 using Hangfire.RecurringJobExtensions;
 using Hangfire.Redis;
+using Microsoft.ApplicationInsights.Channel;
+using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -36,6 +39,8 @@ namespace Relisten
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
 		{
+			SetupApplicationInsightsFilters();
+			
 			services.AddCors();
 
             SetupAuthentication(services);
@@ -189,6 +194,14 @@ namespace Relisten
             }
         }
 
+        public void SetupApplicationInsightsFilters()
+        {
+            var builder = TelemetryConfiguration.Active.TelemetryProcessorChainBuilder;
+            builder.Use((next) => new HangfireRequestFilter(next));
+
+            builder.Build();
+        }
+
         public void SetupAuthentication(IServiceCollection services)
         {
             var userStore = new EnvUserStore(Configuration);
@@ -226,4 +239,35 @@ namespace Relisten
 	        });
         }
 	}
+
+    public class HangfireRequestFilter : ITelemetryProcessor
+    {
+
+        private ITelemetryProcessor Next { get; set; }
+
+        // You can pass values from .config
+        public string MyParamFromConfigFile { get; set; }
+
+        // Link processors to each other in a chain.
+        public HangfireRequestFilter(ITelemetryProcessor next)
+        {
+            this.Next = next;
+        }
+        public void Process(ITelemetry item)
+        {
+            // To filter out an item, just return
+            if (!OKtoSend(item)) { return; }
+
+            this.Next.Process(item);
+        }
+
+        // Example: replace with your own criteria.
+        private bool OKtoSend(ITelemetry item)
+        {
+            var request = item as RequestTelemetry;
+            if (request == null) return true;
+
+            return !request.Url.AbsolutePath.StartsWith("/relisten-admin/hangfire");
+        }
+    }
 }
