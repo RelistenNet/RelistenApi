@@ -182,7 +182,7 @@ namespace Relisten
                 var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
                 migrator.Load();
 
-				if (migrator.CurrentMigration == null)
+				if (migrator.CurrentMigration == null || migrator.CurrentMigration.Version == 0)
 				{
 					migrator.Baseline(2);
 				}
