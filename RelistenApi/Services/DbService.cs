@@ -9,27 +9,29 @@ namespace Relisten
 {
     public class DbService
     {
-		public static string ConnStr { get; set; }
+        public static string ConnStr { get; set; }
 
         public DbService(string url)
         {
-			Console.WriteLine("Attempting to connect to {0}", url);
+            Console.WriteLine("Attempting to connect to {0}", url);
 
-			var uri = new Uri(url);
-			var parts = uri.UserInfo.Split(':');
-			ConnStr = $"Host={uri.Host};Port={uri.Port};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
+            var uri = new Uri(url);
+            var parts = uri.UserInfo.Split(':');
+            ConnStr = $"Host={uri.Host};Port={uri.Port};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
 
-			Console.WriteLine("DB Connection String: " + ConnStr);
+            Console.WriteLine("DB Connection String: " + ConnStr);
 
-			// NpgsqlLogManager.IsParameterLoggingEnabled = true;
-			// NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+            // NpgsqlLogManager.IsParameterLoggingEnabled = true;
+            // NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
         }
+
+        public NpgsqlConnection CreateConnection() => new NpgsqlConnection(ConnStr);
 
         public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData)
         {
             try
             {
-                using (var connection = new NpgsqlConnection(ConnStr))
+                using (var connection = CreateConnection())
                 {
                     await connection.OpenAsync();
                     return await getData(connection);
@@ -50,7 +52,7 @@ namespace Relisten
         {
             try
             {
-                using (var connection = new NpgsqlConnection(ConnStr))
+                using (var connection = CreateConnection())
                 {
                     await connection.OpenAsync();
                     await getData(connection);
@@ -71,7 +73,7 @@ namespace Relisten
         {
             try
             {
-                using (var connection = new NpgsqlConnection(ConnStr))
+                using (var connection = CreateConnection())
                 {
                     await connection.OpenAsync();
                     var data = await getData(connection);

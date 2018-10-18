@@ -17,6 +17,8 @@ using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Auth;
+using SimpleMigrations;
+using SimpleMigrations.DatabaseProvider;
 using StackExchange.Redis;
 using Swashbuckle.AspNetCore.Swagger;
 
@@ -66,7 +68,10 @@ namespace Relisten
 			});
 
             Dapper.SqlMapper.AddTypeHandler(new Api.Models.PersistentIdentifierHandler());
-			services.AddSingleton(new DbService(Configuration["DATABASE_URL"]));
+
+			var db = new DbService(Configuration["DATABASE_URL"]);
+			RunMigrations(db);
+			services.AddSingleton(db);
 
 			var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]);
 
@@ -162,6 +167,27 @@ namespace Relisten
 
 			app.UseCors(builder => builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
 		}
+
+        public void RunMigrations(DbService db)
+        {
+            var migrationsAssembly = typeof(Startup).Assembly;
+            using (var pg = db.CreateConnection())
+            {
+                var databaseProvider = new PostgresqlDatabaseProvider(pg);
+                var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
+                migrator.Load();
+
+				if (migrator.CurrentMigration == null)
+				{
+					migrator.Baseline(2);
+				}
+
+				if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
+				{
+					throw new Exception($"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration.Version}). You probably need to add a call to run the migration.");
+				}
+            }
+        }
 
         public void SetupAuthentication(IServiceCollection services)
         {
