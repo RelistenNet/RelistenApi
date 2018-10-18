@@ -102,7 +102,7 @@ namespace Relisten
             {
                 context.WriteLine($"--> Importing {artist.name}");
 
-                var artistStats = await _importerService.Import(artist, context);
+                var artistStats = await _importerService.Import(artist, null, context);
 
                 context.WriteLine($"--> Imported {artist.name}! " + artistStats);
 
@@ -119,13 +119,27 @@ namespace Relisten
 		[AutomaticRetry(Attempts = 0)]
 		public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
 		{
-			await RefreshArtist(idOrSlug, null, deleteOldContent, ctx);
+			await RefreshArtist(idOrSlug, null, deleteOldContent, null, ctx);
+		}
+
+		[Queue("artist_import")]
+		[DisplayName("Refresh from Phish.in")]
+		[AutomaticRetry(Attempts = 0)]
+		public async Task RefreshPhishFromPhishinOnly(PerformContext ctx)
+		{
+			await RefreshArtist("phish", null, false, (u) => u.upstream_source_id == 3 /* phish.in */, ctx);
 		}
 
 		[Queue("artist_import")]
 		[DisplayName("Refresh Artist Show: {0}, {1}")]
 		[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshArtist(string idOrSlug, string specificShowId, bool deleteOldContent, PerformContext ctx)
+		public async Task RefreshArtist(
+            string idOrSlug,
+            string specificShowId,
+            bool deleteOldContent,
+            Func<ArtistUpstreamSource, bool> filterUpstreamSources,
+            PerformContext ctx
+        )
 		{
 			var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
@@ -152,11 +166,11 @@ namespace Relisten
 
 				if(specificShowId != null)
 				{
-					artistStats = await _importerService.Import(artist, specificShowId, ctx);
+					artistStats = await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
 				}
 				else 
 				{
-					artistStats = await _importerService.Import(artist, ctx);
+					artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
 				}
 
 				ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);

@@ -97,9 +97,9 @@ namespace Relisten.Import
 			return importers[source.name];
 		}
 
-		public Task<ImportStats> Import(Artist artist, PerformContext ctx)
+		public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources, PerformContext ctx)
 		{
-			return Import(artist, null, ctx);
+			return Import(artist, filterUpstreamSources, null, ctx);
 		}
 
 		public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
@@ -117,7 +117,7 @@ namespace Relisten.Import
 			return stats;
 		}
 
-		public async Task<ImportStats> Import(Artist artist, string showIdentifier, PerformContext ctx)
+		public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources, string showIdentifier, PerformContext ctx)
 		{
 			var stats = new ImportStats();
 
@@ -128,6 +128,12 @@ namespace Relisten.Import
 
 			await srcs.AsyncForEachWithProgress(prog, async item =>
 			{
+				if (filterUpstreamSources != null && !filterUpstreamSources(item))
+				{
+					ctx?.WriteLine($"Skipping (rejected by filter): {item.upstream_source_id}, {item.upstream_identifier}");
+					return;
+				}
+				
 				ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
 
 				if(showIdentifier != null)

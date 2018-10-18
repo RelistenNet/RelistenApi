@@ -450,10 +450,10 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-            var pages = 8;
+            var pages = 80;
 
 			var prog = ctx?.WriteProgressBar();
-            var pageSize = 200;
+            var pageSize = 20;
 
             for (var currentPage = 1; currentPage <= pages; currentPage++)
             {

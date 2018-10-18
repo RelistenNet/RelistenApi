@@ -10,6 +10,8 @@ using Relisten.Import;
 using Relisten.Data;
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
+using Newtonsoft.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace Relisten.Controllers
 {
@@ -19,15 +21,18 @@ namespace Relisten.Controllers
     {
         protected ImporterService _importer { get; set; }
 		protected ScheduledService _scheduledService { get; set; }
+		protected IConfiguration _configuration { get; }
 
 		public ImportController(
             RedisService redis,
             DbService db,
 			ArtistService artistService,
             ImporterService importer,
-			ScheduledService scheduledService
+			ScheduledService scheduledService,
+			IConfiguration configuration
 		) : base(redis, db, artistService)
         {
+			_configuration = configuration;
 			_scheduledService = scheduledService;
 			_importer = importer;
         }
@@ -62,6 +67,16 @@ namespace Relisten.Controllers
 			return JsonNotFound(false);
 		}
 
+		[HttpPost("phishin")]
+		public IActionResult JustRefreshPhishin() {
+			if (!Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key) || key != _configuration["PANIC_KEY"])
+			{
+				return Unauthorized();
+			}
+
+			return JsonSuccess(BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null)));
+		}
+
 		[HttpGet("all-years-and-shows")]
 		[Authorize]
 		public IActionResult AllYearsAndShows()
@@ -76,7 +91,7 @@ namespace Relisten.Controllers
 			Artist art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 			if (art != null)
 			{
-				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null));
+				var jobId = BackgroundJob.Enqueue(() => _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null, null));
 
 				return JsonSuccess($"Queued as job {jobId}!");
 			}
