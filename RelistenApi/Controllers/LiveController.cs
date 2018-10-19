@@ -16,11 +16,11 @@ namespace Relisten.Controllers
     [Produces("application/json")]
     public class LiveController : RelistenBaseController
     {
-        public ShowService _showService { get; set; }
-        public SourceTrackService _sourceTrackService { get; set; }
-        public RedisService _redisService { get; set; }
-
-        readonly SourceService sourceService;
+        protected ShowService _showService { get; }
+        protected SourceTrackService _sourceTrackService { get; }
+        protected SourceTrackPlaysService _sourceTrackPlaysService { get; }
+        protected RedisService _redisService { get; }
+        protected SourceService _sourceService { get; }
 
         public LiveController(
             RedisService redis,
@@ -28,25 +28,29 @@ namespace Relisten.Controllers
             ArtistService artistService,
             ShowService showService,
             SourceService sourceService,
-            SourceTrackService sourceTrackService
+            SourceTrackService sourceTrackService,
+            SourceTrackPlaysService sourceTrackPlaysService
         ) : base(redis, db, artistService)
         {
-            this.sourceService = sourceService;
+            _sourceService = sourceService;
             _redisService = redis;
             _showService = showService;
             _sourceTrackService = sourceTrackService;
+            _sourceTrackPlaysService = sourceTrackPlaysService;
         }
 
 
         [HttpPost("live/play")]
-        [ProducesResponseType(typeof(bool), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<SourceTrackPlay>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         [ProducesResponseType(typeof(void), 400)]
         public async Task<IActionResult> PlayedTrack(
             [FromQuery] string app_type,
             [FromQuery] int? track_id = null,
-            [FromQuery] string track_uuid = null
-        ) {
+            [FromQuery] string track_uuid = null,
+            [FromQuery] string user_uuid = null
+        )
+        {
             if (app_type != "ios" && app_type != "web" && app_type != "sonos")
             {
                 return BadRequest();
@@ -70,7 +74,7 @@ namespace Relisten.Controllers
 
             SourceTrack track = null;
 
-            if(track_uuid != null && track_guid != Guid.Empty)
+            if (track_uuid != null && track_guid != Guid.Empty)
             {
                 track = await _sourceTrackService.ForUUID(track_guid);
             }
@@ -84,6 +88,13 @@ namespace Relisten.Controllers
                 return JsonNotFound(false);
             }
 
+            var stp = new SourceTrackPlay
+            {
+                source_track_uuid = track.uuid,
+                app_type = SourceTrackPlayAppTypeHelper.FromString(app_type),
+                user_uuid = user_uuid != null ? Guid.Parse(user_uuid) : (Guid?)null
+            };
+
             var lp = new LivePlayedTrack
             {
                 played_at = DateTime.UtcNow,
@@ -93,8 +104,7 @@ namespace Relisten.Controllers
             };
 
             await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-
-            return JsonSuccess(true);
+            return JsonSuccess(await _sourceTrackPlaysService.RecordPlayedTrack(stp));
         }
 
         [HttpGet("live/recently-played")]
@@ -116,7 +126,7 @@ namespace Relisten.Controllers
                 .ToDictionary(t => t.id, t => t)
                 ;
 
-            var sources = (await sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
+            var sources = (await _sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
                 .GroupBy(s => s.id)
                 .ToDictionary(g => g.Key, g => g.First());
 
@@ -133,6 +143,44 @@ namespace Relisten.Controllers
                 };
 
                 return t;
+            }));
+        }
+
+        [HttpGet("live/history")]
+        [ProducesResponseType(typeof(IEnumerable<SourceTrackPlay>), 200)]
+        public async Task<IActionResult> RecentlyPlayed(int? lastSeenId = null, int limit = 20)
+        {
+            limit = Math.Max(limit, 2000);
+            var tracksPlays = (await _sourceTrackPlaysService.PlayedTracksSince(lastSeenId, limit));
+
+            var tracks = await _sourceTrackService.ForUUIDs(tracksPlays.Select(t => t.source_track_uuid).ToList());
+
+            var sourceIds = tracks
+                .Select(t => t.source_id)
+                .GroupBy(t => t)
+                .Select(g => g.First());
+
+            var trackLookup = tracks
+                .ToDictionary(t => t.uuid, t => t)
+                ;
+
+            var sources = (await _sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
+                .GroupBy(s => s.id)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            return JsonSuccess(tracksPlays
+                .Where(t => trackLookup.ContainsKey(t.source_track_uuid) && sources.ContainsKey(trackLookup[t.source_track_uuid].source_id))
+                .Select(trackPlay =>
+            {
+                var track = trackLookup[trackPlay.source_track_uuid];
+
+                trackPlay.track = new PlayedSourceTrack
+                {
+                    source = sources[track.source_id],
+                    track = track
+                };
+
+                return trackPlay;
             }));
         }
     }

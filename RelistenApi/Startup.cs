@@ -120,6 +120,7 @@ namespace Relisten
 			services.AddScoped<ScheduledService, ScheduledService>();
 			services.AddScoped<SearchService, SearchService>();
 			services.AddScoped<LinkService, LinkService>();
+			services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
 		}
 
 		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -186,6 +187,8 @@ namespace Relisten
 				{
 					migrator.Baseline(2);
 				}
+
+				migrator.MigrateTo(3);
 
 				if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
 				{
