@@ -150,7 +150,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(IEnumerable<SourceTrackPlay>), 200)]
         public async Task<IActionResult> RecentlyPlayed(int? lastSeenId = null, int limit = 20)
         {
-            limit = Math.Max(limit, 2000);
+            limit = Math.Min(limit, 2000);
             var tracksPlays = (await _sourceTrackPlaysService.PlayedTracksSince(lastSeenId, limit));
 
             var tracks = await _sourceTrackService.ForUUIDs(tracksPlays.Select(t => t.source_track_uuid).ToList());
