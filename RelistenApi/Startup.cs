@@ -144,23 +144,26 @@ namespace Relisten
 
 			app.UseMvc();
 
-			app.UseHangfireServer(new BackgroundJobServerOptions
+			if (!env.IsDevelopment())
 			{
-				Queues = new[] { "artist_import" },
-				ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-				WorkerCount = 3
-			});
+				app.UseHangfireServer(new BackgroundJobServerOptions
+				{
+					Queues = new[] { "artist_import" },
+					ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
+					WorkerCount = 3
+				});
 
-			app.UseHangfireServer(new BackgroundJobServerOptions
-			{
-				Queues = new[] { "default" },
-				ServerName = $"relistenapi:default ({Environment.MachineName})"
-			});
+				app.UseHangfireServer(new BackgroundJobServerOptions
+				{
+					Queues = new[] { "default" },
+					ServerName = $"relistenapi:default ({Environment.MachineName})"
+				});
 
-			app.UseHangfireDashboard("/relisten-admin/hangfire", new DashboardOptions
-			{
-				Authorization = new[] { new MyAuthorizationFilter() }
-			});
+				app.UseHangfireDashboard("/relisten-admin/hangfire", new DashboardOptions
+				{
+					Authorization = new[] { new MyAuthorizationFilter() }
+				});
+			}
 
 			app.UseSwagger(c => {
 				c.RouteTemplate = "api-docs/{documentName}/swagger.json";
