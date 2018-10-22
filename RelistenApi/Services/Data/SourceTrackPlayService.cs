@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -37,7 +38,7 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceTrackPlay>> PlayedTracksSince(int? lastSeenId = null, int limit = 2000)
         {
-            return await db.WithConnection(con => con.QueryAsync<SourceTrackPlay>($@"
+            var tracks = await db.WithConnection(con => con.QueryAsync<SourceTrackPlay>($@"
 				SELECT
 					t.*
 				FROM
@@ -46,10 +47,12 @@ namespace Relisten.Data
 					1=1
 					{(lastSeenId != null ? "AND t.id > @lastSeenId" : "")}
 				ORDER BY
-					t.id
+					t.id {(lastSeenId != null ? "" : "DESC")}
 				LIMIT
 					@limit
 			", new { lastSeenId, limit }));
+
+			return tracks.OrderBy(t => t.id);
         }
     }
 }
