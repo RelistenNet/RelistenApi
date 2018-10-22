@@ -43,7 +43,7 @@ namespace Relisten.Api.Models
     public class PlayedSourceTrack
     {
         [Required]
-        public SlimSourceWithShowAndArtist source { get; set; }
+        public SlimSourceWithShowVenueAndArtist source { get; set; }
 
         [Required]
         public SourceTrack track { get; set; }

@@ -56,7 +56,7 @@ namespace Relisten.Api.Models
 		public Guid uuid { get; set; }
 	}
 
-	public class SlimSourceWithShowAndArtist : SlimSource
+	public class SlimSourceWithShowVenueAndArtist : SlimSource
 	{
 		public int? show_id { get; set; }
 

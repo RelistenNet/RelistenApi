@@ -163,20 +163,26 @@ namespace Relisten.Data
 			", new { sourceId }));
 	    }
 
-		public Task<IEnumerable<SlimSourceWithShowAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
+		public Task<IEnumerable<SlimSourceWithShowVenueAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
 		{
-			return db.WithConnection(con => con.QueryAsync<SlimSourceWithShowAndArtist, SlimArtistWithFeatures, Features, Show, SlimSourceWithShowAndArtist>($@"
+			return db.WithConnection(con => con.QueryAsync<SlimSourceWithShowVenueAndArtist, SlimArtistWithFeatures, Features, Show, VenueWithShowCount, Venue, SlimSourceWithShowVenueAndArtist>($@"
 				SELECT
-					s.*, a.*, f.*, sh.*
+					s.*, a.*, f.*, sh.*, shVenue.*, shVenue_counts.shows_at_venue, sVenue.*
 				FROM
 					sources s
 					JOIN artists a ON s.artist_id = a.id
 					JOIN features f ON f.artist_id = a.id
 					JOIN shows sh ON sh.id = s.show_id
+                    LEFT JOIN venues shVenue ON shVenue.id = sh.venue_id
+                    LEFT JOIN venues sVenue ON sVenue.id = sh.venue_id
+                    LEFT JOIN venue_show_counts shVenue_counts ON shVenue_counts.id = sh.venue_id
 				WHERE
 					s.id = ANY(@ids)
-			", (s, a, f, sh) => 
+			", (s, a, f, sh, shVenue, sVenue) => 
 			{
+                sh.venue = shVenue;
+                s.venue = sVenue;
+
 				a.features = f;
 
 				s.artist = a;
