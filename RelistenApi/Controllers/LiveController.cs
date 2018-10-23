@@ -95,55 +95,7 @@ namespace Relisten.Controllers
                 user_uuid = user_uuid != null ? Guid.Parse(user_uuid) : (Guid?)null
             };
 
-            var lp = new LivePlayedTrack
-            {
-                played_at = DateTime.UtcNow,
-                track_id = track.id,
-                app_type = app_type,
-                uuid = Guid.NewGuid()
-            };
-
-            await redis.db.SortedSetAddAsync("played", JsonConvert.SerializeObject(lp), DateTimeOffset.UtcNow.ToUnixTimeSeconds());
             return JsonSuccess(await _sourceTrackPlaysService.RecordPlayedTrack(stp));
-        }
-
-        [HttpGet("live/recently-played")]
-        [ProducesResponseType(typeof(IEnumerable<PlayedSourceTrack>), 200)]
-        public async Task<IActionResult> RecentlyPlayed()
-        {
-            var tracksPlays = (await redis.db
-                .SortedSetRangeByScoreAsync("played", order: StackExchange.Redis.Order.Descending, take: 25))
-                .Select(t => JsonConvert.DeserializeObject<LivePlayedTrack>(t));
-
-            var tracks = await _sourceTrackService.ForIds(tracksPlays.Select(t => t.track_id).ToList());
-
-            var sourceIds = tracks
-                .Select(t => t.source_id)
-                .GroupBy(t => t)
-                .Select(g => g.First());
-
-            var trackLookup = tracks
-                .ToDictionary(t => t.id, t => t)
-                ;
-
-            var sources = (await _sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
-                .GroupBy(s => s.id)
-                .ToDictionary(g => g.Key, g => g.First());
-
-            return JsonSuccess(tracksPlays
-                .Where(t => trackLookup.ContainsKey(t.track_id) && sources.ContainsKey(trackLookup[t.track_id].source_id))
-                .Select(t =>
-            {
-                var track = trackLookup[t.track_id];
-
-                t.track = new PlayedSourceTrack
-                {
-                    source = sources[track.source_id],
-                    track = track
-                };
-
-                return t;
-            }));
         }
 
         [HttpGet("live/history")]
