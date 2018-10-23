@@ -220,28 +220,14 @@ namespace Relisten.Data
             ", new { artist.id }));
         }
 
-        public async Task<int> DropAllSetsAndTracksForSource(Source source)
+        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers) 
         {
-            return await db.WithConnection(async con =>
-            {
-                var cnt = await con.ExecuteAsync(@"
-                    DELETE
-                    FROM
-                        source_sets
-                    WHERE
-                        source_id = @id
-                ", new { source.id });
-
-                cnt += await con.ExecuteAsync(@"
-                    DELETE
-                    FROM
-                        source_tracks
-                    WHERE
-                        source_id = @id
-                ", new { source.id });
-
-                return cnt;
-            });
+            return await db.WithConnection(con => con.ExecuteAsync(@"
+                DELETE FROM
+                    sources
+                WHERE
+                    upstream_identifier = ANY(@upstreamIdentifiers)
+            ", new { upstreamIdentifiers = upstreamIdentifiers.ToList() })); 
         }
 
         public async Task<Source> Save(Source source)
@@ -269,91 +255,79 @@ namespace Relisten.Data
                 source.flac_type
             };
 
-            if (source.id != 0)
-            {
-                return await db.WithConnection(con => con.QuerySingleAsync<Source>(@"
-                    UPDATE
-                        sources
-                    SET
-                        artist_id = @artist_id,
-                        show_id = @show_id,
-                        is_soundboard = @is_soundboard,
-                        is_remaster = @is_remaster,
-                        avg_rating = @avg_rating,
-                        num_reviews = @num_reviews,
-                        upstream_identifier = @upstream_identifier,
-                        has_jamcharts = @has_jamcharts,
-                        description = @description,
-                        taper_notes = @taper_notes,
-                        source = @source,
-                        taper = @taper,
-                        transferrer = @transferrer,
-                        lineage = @lineage,
-                        updated_at = @updated_at,
-                        display_date = @display_date,
-                        venue_id = @venue_id,
-                        num_ratings = @num_ratings,
-						flac_type = @flac_type,
-                        uuid = md5(@artist_id || '::source::' || @upstream_identifier)::uuid
-                    WHERE
-                        id = @id
-                    RETURNING *
-                ", p));
-            }
-            else
-            {
-                return await db.WithConnection(con => con.QuerySingleAsync<Source>(@"
-                    INSERT INTO
-                        sources
-
-                        (
-                            artist_id,
-                            show_id,
-                            is_soundboard,
-                            is_remaster,
-                            avg_rating,
-                            num_reviews,
-                            upstream_identifier,
-                            has_jamcharts,
-                            description,
-                            taper_notes,
-                            source,
-                            taper,
-                            transferrer,
-                            lineage,
-                            updated_at,
-                            display_date,
-                            venue_id,
-                            num_ratings,
-							flac_type,
-                            uuid
-                        )
-                    VALUES
-                        (
-                            @artist_id,
-                            @show_id,
-                            @is_soundboard,
-                            @is_remaster,
-                            @avg_rating,
-                            @num_reviews,
-                            @upstream_identifier,
-                            @has_jamcharts,
-                            @description,
-                            @taper_notes,
-                            @source,
-                            @taper,
-                            @transferrer,
-                            @lineage,
-                            @updated_at,
-                            @display_date,
-                            @venue_id,
-                            @num_ratings,
-							@flac_type,
-                            md5(@artist_id || '::source::' || @upstream_identifier)::uuid
-                        )
-                    RETURNING *
-                ", p));
-            }
+            return await db.WithConnection(con => con.QuerySingleAsync<Source>(@"
+                INSERT INTO
+                    sources
+                    (
+                        artist_id,
+                        show_id,
+                        is_soundboard,
+                        is_remaster,
+                        avg_rating,
+                        num_reviews,
+                        upstream_identifier,
+                        has_jamcharts,
+                        description,
+                        taper_notes,
+                        source,
+                        taper,
+                        transferrer,
+                        lineage,
+                        updated_at,
+                        display_date,
+                        venue_id,
+                        num_ratings,
+                        flac_type,
+                        uuid
+                    )
+                VALUES
+                    (
+                        @artist_id,
+                        @show_id,
+                        @is_soundboard,
+                        @is_remaster,
+                        @avg_rating,
+                        @num_reviews,
+                        @upstream_identifier,
+                        @has_jamcharts,
+                        @description,
+                        @taper_notes,
+                        @source,
+                        @taper,
+                        @transferrer,
+                        @lineage,
+                        @updated_at,
+                        @display_date,
+                        @venue_id,
+                        @num_ratings,
+                        @flac_type,
+                        md5(@artist_id || '::source::' || @upstream_identifier)::uuid
+                    )
+                ON CONFLICT ON CONSTRAINT sources_uuid_key
+                DO
+                    UPDATE SET
+                        artist_id = EXCLUDED.artist_id,
+                        show_id = EXCLUDED.show_id,
+                        is_soundboard = EXCLUDED.is_soundboard,
+                        is_remaster = EXCLUDED.is_remaster,
+                        avg_rating = EXCLUDED.avg_rating,
+                        num_reviews = EXCLUDED.num_reviews,
+                        upstream_identifier = EXCLUDED.upstream_identifier,
+                        has_jamcharts = EXCLUDED.has_jamcharts,
+                        description = EXCLUDED.description,
+                        taper_notes = EXCLUDED.taper_notes,
+                        source = EXCLUDED.source,
+                        taper = EXCLUDED.taper,
+                        transferrer = EXCLUDED.transferrer,
+                        lineage = EXCLUDED.lineage,
+                        updated_at = EXCLUDED.updated_at,
+                        display_date = EXCLUDED.display_date,
+                        venue_id = EXCLUDED.venue_id,
+                        num_ratings = EXCLUDED.num_ratings,
+                        flac_type = EXCLUDED.flac_type
+                                        
+                RETURNING *
+            ", p));
         }
     }
 }

@@ -337,7 +337,7 @@ namespace Relisten.Import
 				}
 			}
 
-			stats.Created += await _setlistShowService.AddSongPlays(dbShow, dbSongs);
+			stats += await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
 		}
 
 		async Task UpdateTourStartEndDates(Artist artist)

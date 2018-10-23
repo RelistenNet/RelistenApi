@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Relisten.Api.Models
 {
@@ -52,6 +53,10 @@ namespace Relisten.Api.Models
 
         [Required]
         public SourceTrackPlayAppType app_type { get; set; }
+
+        [Required]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public SourceTrackPlayAppType app_type_description => app_type;
 
         public PlayedSourceTrack track { get; set; } = null;
     }

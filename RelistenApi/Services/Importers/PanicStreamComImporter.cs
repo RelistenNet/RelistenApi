@@ -211,7 +211,6 @@ namespace Relisten.Import
             if (isUpdate)
             {
                 stats.Updated++;
-                stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
             }
             else
             {
@@ -231,7 +230,7 @@ namespace Relisten.Import
                 })).Count();
             }
 
-            var dbSet = await _sourceSetService.Insert(new SourceSet
+            var dbSet = await _sourceSetService.Update(dbSource, new SourceSet
             {
                 source_id = dbSource.id,
                 index = 0,
@@ -277,7 +276,7 @@ namespace Relisten.Import
 
             ResetTrackSlugCounts();
 
-            await _sourceTrackService.InsertAll(mp3s);
+            await _sourceTrackService.InsertAll(dbSource, mp3s);
             stats.Created += mp3s.Count();
         }
     }

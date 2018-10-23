@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Data;
 using System.Reflection;
 using System.Text;
 using Dapper;
@@ -24,6 +25,19 @@ namespace Relisten.Api.Models
 			parameter.Value = value.ToString();
 		}
 	}
+
+    public class DateTimeHandler : SqlMapper.TypeHandler<DateTime>
+    {
+        public override void SetValue(IDbDataParameter parameter, DateTime value)
+        {
+            parameter.Value = value;
+        }
+
+        public override DateTime Parse(object value)
+        {
+            return ((DateTime)value).ToUniversalTime();
+        }
+    }
 
 	public abstract class BaseRelistenModel
 	{

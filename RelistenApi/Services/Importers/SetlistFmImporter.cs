@@ -240,7 +240,6 @@ namespace Relisten.Import
                 existingSetlistShows[dbShow.upstream_identifier] = dbShow;
 
                 stats.Updated++;
-                stats.Removed += await _setlistShowService.RemoveSongPlays(dbShow);
 
                 shouldAddSongs = true;
             }
@@ -304,7 +303,7 @@ namespace Relisten.Import
                     }
                 }
 
-                stats.Created += await _setlistShowService.AddSongPlays(dbShow, dbSongs);
+                stats += await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
             }
 
             return stats;

@@ -4,6 +4,7 @@ using Dapper;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using Relisten.Import;
 
 namespace Relisten.Data
 {
@@ -148,34 +149,40 @@ namespace Relisten.Data
             }
         }
 
-        public async Task<int> RemoveSongPlays(SetlistShow show)
+        public async Task<ImportStats> UpdateSongPlays(SetlistShow show, IEnumerable<SetlistSong> songs)
         {
-            return await db.WithConnection(con => con.ExecuteAsync(@"
-                DELETE
-                FROM
-                    setlist_songs_plays
-                WHERE
-                    played_setlist_show_id = @showId
-            ", new { showId = show.id }));
-        }
+            var stats = new ImportStats();
+            await db.WithConnection(async con => {
+                stats.Created += await con.ExecuteAsync(@"
+                    INSERT
+                    INTO
+                        setlist_songs_plays
 
-        public async Task<int> AddSongPlays(SetlistShow show, IEnumerable<SetlistSong> songs)
-        {
-            return await db.WithConnection(con => con.ExecuteAsync(@"
-                INSERT
-                INTO
-                    setlist_songs_plays
+                        (
+                            played_setlist_song_id,
+                            played_setlist_show_id
+                        )
+                    VALUES
+                        (
+                            @songId,
+                            @showId
+                        )
+                    ON CONFLICT
+                        ON CONSTRAINT setlist_songs_plays_song_id_show_id_key
+                        DO NOTHING
+                ", songs.Select(song => new { showId = show.id, songId = song.id }));
 
-                    (
-                        played_setlist_song_id,
-                        played_setlist_show_id
-                    )
-                VALUES
-                    (
-                        @songId,
-                        @showId
-                    )
-            ", songs.Select(song => new { showId = show.id, songId = song.id })));
+                stats.Removed += await con.ExecuteAsync(@"
+                    DELETE
+                    FROM
+                        setlist_songs_plays
+                    WHERE
+                        played_setlist_show_id = @showId
+                        AND NOT(played_setlist_song_id = ANY(@songIds))
+                ", new { showId = show.id, songIds = songs.Select(s => s.id)});
+            });
+
+            return stats;
         }
     }
 }

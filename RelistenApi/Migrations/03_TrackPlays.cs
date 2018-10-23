@@ -2,7 +2,7 @@ using SimpleMigrations;
 
 namespace Migrations
 {
-    [Migration(3, "Baseline Artist Data")]
+    [Migration(3, "Add table to store track plays persistently")]
     public class TrackPlays : Migration
     {
         protected override void Up()

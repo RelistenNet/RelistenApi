@@ -25,13 +25,13 @@ namespace Relisten
             // NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
         }
 
-        public NpgsqlConnection CreateConnection() => new NpgsqlConnection(ConnStr);
+        public NpgsqlConnection CreateConnection(bool longTimeout) => new NpgsqlConnection(ConnStr + (longTimeout ? ";CommandTimeout=300" : ""));
 
-        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData)
+        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false)
         {
             try
             {
-                using (var connection = CreateConnection())
+                using (var connection = CreateConnection(longTimeout))
                 {
                     await connection.OpenAsync();
                     return await getData(connection);
@@ -48,11 +48,11 @@ namespace Relisten
         }
 
         // use for buffered queries that do not return a type
-        public async Task WithConnection(Func<IDbConnection, Task> getData)
+        public async Task WithConnection(Func<IDbConnection, Task> getData, bool longTimeout = false)
         {
             try
             {
-                using (var connection = CreateConnection())
+                using (var connection = CreateConnection(longTimeout))
                 {
                     await connection.OpenAsync();
                     await getData(connection);
@@ -69,11 +69,11 @@ namespace Relisten
         }
 
         // use for non-buffered queries that return a type
-        public async Task<TResult> WithConnection<TRead, TResult>(Func<IDbConnection, Task<TRead>> getData, Func<TRead, Task<TResult>> process)
+        public async Task<TResult> WithConnection<TRead, TResult>(Func<IDbConnection, Task<TRead>> getData, Func<TRead, Task<TResult>> process, bool longTimeout = false)
         {
             try
             {
-                using (var connection = CreateConnection())
+                using (var connection = CreateConnection(longTimeout))
                 {
                     await connection.OpenAsync();
                     var data = await getData(connection);

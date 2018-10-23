@@ -21,5 +21,8 @@ namespace Relisten.Api.Models
         public string review { get; set; }
 
         public string author { get; set; }
+
+        [Required]
+        public Guid uuid { get; set; }
     }
 }

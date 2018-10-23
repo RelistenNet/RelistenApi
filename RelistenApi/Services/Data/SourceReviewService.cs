@@ -4,6 +4,9 @@ using Dapper;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System;
+using System.Text;
 
 namespace Relisten.Data
 {
@@ -23,19 +26,9 @@ namespace Relisten.Data
             ", new { source_ids }));
         }
 
-        public async Task<int> RemoveAllForSource(Source source)
+        public async Task<IEnumerable<SourceReview>> UpdateAll(Source source, IEnumerable<SourceReview> reviews)
         {
-            return await db.WithConnection(con => con.ExecuteAsync(@"
-                DELETE
-                FROM
-                    source_reviews r
-                WHERE
-                    source_id = @id
-            ", new { source.id }));
-        }
-
-        public async Task<IEnumerable<SourceReview>> InsertAll(IEnumerable<SourceReview> reviews)
-        {
+            const string guidSnippet = @"md5(@source_id || '::review::' || COALESCE('' || @rating, 'NULL') || COALESCE('' || @title, 'NULL') || COALESCE('' || @author, 'NULL') || @updated_at)::uuid";
             return await db.WithConnection(async con =>
             {
                 var inserted = new List<SourceReview>();
@@ -52,7 +45,7 @@ namespace Relisten.Data
                         review.updated_at,
                     };
 
-                    inserted.Add(await con.QuerySingleAsync<SourceReview>(@"
+                    inserted.Add(await con.QuerySingleAsync<SourceReview>($@"
                     INSERT INTO
                         source_reviews
 
@@ -62,7 +55,8 @@ namespace Relisten.Data
                             title,
                             review,
                             author,
-                            updated_at
+                            updated_at,
+                            uuid
                         )
                     VALUES
                         (
@@ -71,14 +65,41 @@ namespace Relisten.Data
                             @title,
                             COALESCE(@review, ''),
                             @author,
-                            @updated_at
+                            @updated_at,
+                            {guidSnippet}
                         )
-                        RETURNING *
+                    ON CONFLICT ON CONSTRAINT source_reviews_uuid
+                    DO
+                        UPDATE SET
+                            review = EXCLUDED.review
+                    
+                    RETURNING *
                     ", p));
                 }
 
+                await con.ExecuteAsync(@"
+                    DELETE
+                    FROM
+                        source_reviews
+                    WHERE
+                        source_id = @sourceId
+                        AND NOT(uuid = ANY(@reviewGuids))
+                ", new {
+                    sourceId = source.id,
+                    reviewGuids = inserted.Select(i => i.uuid).ToList()
+                });
+
                 return inserted;
             });
+        }
+
+        private Guid GuidForReview(SourceReview review)
+        {
+            using (MD5 md5 = MD5.Create())
+            {
+                byte[] hash = md5.ComputeHash(Encoding.Default.GetBytes($"{review.source_id}::review::{review.rating?.ToString() ?? "NULL"}{review.title ?? "NULL"}{review.author ?? "NULL"}"));
+                return new Guid(hash);
+            }
         }
     }
 }

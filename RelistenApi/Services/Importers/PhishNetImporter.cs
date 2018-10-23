@@ -272,14 +272,12 @@ namespace Relisten.Import
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(ImportStats stats, Source source, IEnumerable<SourceReview> reviews)
         {
-            stats.Removed += await _sourceReviewService.RemoveAllForSource(source);
-
             foreach (var review in reviews)
             {
                 review.source_id = source.id;
             }
 
-            var res = await _sourceReviewService.InsertAll(reviews);
+            var res = await _sourceReviewService.UpdateAll(source, reviews);
 
             stats.Created += res.Count();
 

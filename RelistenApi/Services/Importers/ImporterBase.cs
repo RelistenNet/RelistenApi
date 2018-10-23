@@ -231,13 +231,6 @@ namespace Relisten.Import
             await db.WithConnection(con => con.ExecuteAsync(@"
 BEGIN TRANSACTION;
 
--- Drop years
-DELETE FROM
-	years
-WHERE
-	artist_id = @id
-;
-
 -- Build Years
 WITH year_sources AS (
 	SELECT
@@ -274,6 +267,15 @@ INSERT INTO
 		s.artist_id = @id
 	GROUP BY
 		s.artist_id, to_char(s.date, 'YYYY')
+ON CONFLICT ON CONSTRAINT years_uuid_key
+DO
+	UPDATE SET -- don't update artist_id or year since uuid is based on that
+		show_count = EXCLUDED.show_count,
+		source_count = EXCLUDED.source_count,
+		duration = EXCLUDED.duration,
+		avg_duration = EXCLUDED.avg_duration,
+		avg_rating = EXCLUDED.avg_rating,
+		updated_at = EXCLUDED.updated_at
 ;
 COMMIT;
 
@@ -324,22 +326,6 @@ WHERE
 ;
 
 BEGIN TRANSACTION;
--- Drop all the shows to rebuild them
-DELETE
-FROM
-	shows	
-WHERE
-	artist_id = @id
-;
-
-UPDATE
-	sources
-SET
-	show_id = NULL
-WHERE
-	artist_id = @id
-;
-
 -- Generate shows table without years or rating information
 INSERT INTO
 	shows
@@ -374,6 +360,15 @@ INSERT INTO
 		date, source.display_date, source.artist_id
 	ORDER BY
 		setlist_show.date
+ON CONFLICT ON CONSTRAINT shows_uuid_key
+DO
+	UPDATE SET -- don't update artist_id or display_date since uuid is based on those
+		date = EXCLUDED.date,
+		updated_at = EXCLUDED.updated_at,
+		tour_id = EXCLUDED.tour_id,
+		era_id = EXCLUDED.era_id,
+		venue_id = EXCLUDED.venue_id,
+		avg_duration = EXCLUDED.avg_duration
 ;
 COMMIT;
 

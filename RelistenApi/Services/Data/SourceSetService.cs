@@ -23,15 +23,15 @@ namespace Relisten.Data
             ", new { source_ids }));
         }
 
-        public async Task<SourceSet> Insert(SourceSet set)
+        public async Task<SourceSet> Update(Source source, SourceSet set)
         {
             var l = new List<SourceSet>();
             l.Add(set);
 
-            return (await InsertAll(l)).FirstOrDefault(); 
+            return (await UpdateAll(source, l)).FirstOrDefault(); 
         }
 
-        public async Task<IEnumerable<SourceSet>> InsertAll(IEnumerable<SourceSet> sets)
+        public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets)
         {
             return await db.WithConnection(async con =>
             {
@@ -67,9 +67,27 @@ namespace Relisten.Data
                                 @name,
                                 @updated_at
                             )
+                        ON CONFLICT ON CONSTRAINT source_sets_source_id_index_key
+                        DO
+                            UPDATE SET
+                                is_encore = EXCLUDED.is_encore,
+                                name = EXCLUDED.name,
+                                updated_at = EXCLUDED.updated_at
+
                         RETURNING *
                     ", p));
                 }
+
+                await con.ExecuteAsync(@"
+                    DELETE FROM
+                        source_sets
+                    WHERE
+                        source_id = @sourceId
+                        AND NOT(index = ANY(@indicies))
+                ", new {
+                    sourceId = source.id,
+                    indicies = sets.Select(s => s.index).ToList()
+                });
 
                 return inserted;
             });

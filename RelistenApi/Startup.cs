@@ -73,6 +73,12 @@ namespace Relisten
 			});
 
             Dapper.SqlMapper.AddTypeHandler(new Api.Models.PersistentIdentifierHandler());
+            Dapper.SqlMapper.AddTypeHandler(new Api.Models.DateTimeHandler());
+
+			JsonConvert.DefaultSettings = () => new JsonSerializerSettings
+			{
+				DateTimeZoneHandling = DateTimeZoneHandling.Utc
+			};
 
 			var db = new DbService(Configuration["DATABASE_URL"]);
 			RunMigrations(db);
@@ -180,7 +186,7 @@ namespace Relisten
         public void RunMigrations(DbService db)
         {
             var migrationsAssembly = typeof(Startup).Assembly;
-            using (var pg = db.CreateConnection())
+            using (var pg = db.CreateConnection(longTimeout: true))
             {
                 var databaseProvider = new PostgresqlDatabaseProvider(pg);
                 var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
@@ -191,7 +197,7 @@ namespace Relisten
 					migrator.Baseline(2);
 				}
 
-				migrator.MigrateTo(3);
+				migrator.MigrateTo(4);
 
 				if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
 				{

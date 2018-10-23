@@ -35,6 +35,40 @@ namespace Relisten.Vendor.ArchiveOrg
             return reader.Value;
         }
     }
+
+    public class SingleOrArrayConverter<T> : JsonConverter
+    {
+        public override bool CanConvert(Type objectType)
+        {
+            return (objectType == typeof(List<T>));
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            JToken token = JToken.Load(reader);
+            if (token.Type == JTokenType.Array)
+            {
+                return token.ToObject<List<T>>();
+            }
+            return new List<T> { token.ToObject<T>() };
+        }
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            List<T> list = (List<T>)value;
+            if (list.Count == 1)
+            {
+                value = list[0];
+            }
+            serializer.Serialize(writer, value);
+        }
+
+        public override bool CanWrite
+        {
+            get { return true; }
+        }
+    }
+
     public class TolerantArchiveDateTimeConverter : Newtonsoft.Json.Converters.CustomCreationConverter<DateTime>
     {
         public override DateTime Create(Type objectType)
@@ -118,7 +152,10 @@ namespace Relisten.Vendor.ArchiveOrg
         public DateTime date { get; set; }
         public string identifier { get; set; }
         public DateTime? addeddate { get; set; }
-        public DateTime publicdate { get; set; }
+        public DateTime? publicdate { get; set; }
+        
+        [JsonConverter(typeof(SingleOrArrayConverter<DateTime>))]
+        public List<DateTime> updatedate { get; set; }
         public DateTime? reviewdate { get; set; }
         public DateTime? indexdate { get; set; }
 
@@ -141,8 +178,13 @@ namespace Relisten.Vendor.ArchiveOrg
         {
             get
             {
-                var a = addeddate ?? publicdate;
-                return a > publicdate ? a : publicdate;
+                var dates = (new[] { updatedate != null ? (DateTime?)updatedate.Max() : (DateTime?)DateTime.MinValue, addeddate, publicdate }).Where(d => d.HasValue).ToList();
+                
+                if (dates.Count == 0) {
+                    throw new Exception($"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible...");
+                }
+                
+                return dates.Max().Value;
             }
         }
     }

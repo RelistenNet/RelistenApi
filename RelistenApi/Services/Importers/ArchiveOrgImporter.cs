@@ -24,6 +24,8 @@ namespace Relisten.Import
 
     public class ArchiveOrgImporter : ImporterBase
     {
+        private class NoVBRMp3FilesException : Exception {}
+
         public const string DataSourceName = "archive.org";
 
         protected SourceService _sourceService { get; set; }
@@ -90,7 +92,7 @@ namespace Relisten.Import
 
         private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
-            return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
+            return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
         }
         private static string DetailsUrlForIdentifier(string identifier)
         {
@@ -110,6 +112,8 @@ namespace Relisten.Import
             ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
 
             var prog = ctx?.WriteProgressBar();
+
+            var identifiersWithoutMP3s = new HashSet<string>();
 
             await root.response.docs.AsyncForEachWithProgress(prog, async doc =>
             {
@@ -150,7 +154,12 @@ namespace Relisten.Import
                         {
                             using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
                             {
-                                stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
+                                try {
+                                    stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
+                                }
+                                catch (NoVBRMp3FilesException) {
+                                    identifiersWithoutMP3s.Add(doc.identifier);
+                                }
 
                                 scope.Complete();
                             }
@@ -173,6 +182,23 @@ namespace Relisten.Import
 					});
                 }
             });
+
+            // we want to keep all the shows from this import--aside from ones that no longer have MP3s
+            var showsToKeep = root.response.docs
+                .Select(d => d.identifier)
+                .Except(identifiersWithoutMP3s)
+                ;
+
+            // find sources that no longer exist
+            var deletedSourceUpstreamIdentifiers = existingSources
+                .Select(kvp => kvp.Key)
+                .Except(showsToKeep)
+                .ToList()
+                ;
+            
+            ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
+                $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
+            stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
 
             ctx?.WriteLine("Rebuilding shows...");
 
@@ -214,7 +240,7 @@ namespace Relisten.Import
             {
                 ctx?.WriteLine("\tNo VBR MP3 files found for {0}", searchDoc.identifier);
 
-                return stats;
+                throw new NoVBRMp3FilesException();
             }
 
             var dbReviews = detailsRoot.reviews == null
@@ -269,7 +295,6 @@ namespace Relisten.Import
 
                 stats.Updated++;
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
-                stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
             }
             else
             {
@@ -285,14 +310,14 @@ namespace Relisten.Import
 
             stats.Created += (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc))).Count();
 
-            var dbSet = (await _sourceSetService.InsertAll(new[] { CreateSetForSource(dbSource) })).First();
+            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] { CreateSetForSource(dbSource) })).First();
             stats.Created++;
 
             var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
 
             var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet);
 
-            stats.Created += (await _sourceTrackService.InsertAll(dbTracks)).Count();
+            stats.Created += (await _sourceTrackService.InsertAll(dbSource, dbTracks)).Count();
 
             ResetTrackSlugCounts();
 
@@ -334,14 +359,12 @@ namespace Relisten.Import
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source, IEnumerable<SourceReview> reviews)
         {
-            await _sourceReviewService.RemoveAllForSource(source);
-
             foreach (var review in reviews)
             {
                 review.source_id = source.id;
             }
 
-            return await _sourceReviewService.InsertAll(reviews);
+            return await _sourceReviewService.UpdateAll(source, reviews);
         }
 
         private SourceSet CreateSetForSource(

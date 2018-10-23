@@ -374,7 +374,6 @@ namespace Relisten.Import
                 dbShow = await _setlistShowService.Save(dbShow);
 
                 stats.Updated++;
-                stats.Removed += await _setlistShowService.RemoveSongPlays(dbShow);
 
                 addSongs = true;
             }
@@ -389,7 +388,7 @@ namespace Relisten.Import
                     ToList()
                     ;
 
-                stats.Created += await _setlistShowService.AddSongPlays(dbShow, dbSongs);
+                stats += await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
             }
         }
 
@@ -406,7 +405,7 @@ namespace Relisten.Import
 
                 if (set == null)
                 {
-                    set = await _sourceSetService.Insert(new SourceSet()
+                    set = await _sourceSetService.Update(dbSource, new SourceSet()
                     {
                         source_id = dbSource.id,
                         index = SetIndexForIdentifier(track.set),
@@ -437,7 +436,7 @@ namespace Relisten.Import
                 });
             }
 
-            stats.Created += (await _sourceTrackService.InsertAll(sets.SelectMany(kvp => kvp.Value.tracks))).Count();
+            stats.Created += (await _sourceTrackService.InsertAll(dbSource, sets.SelectMany(kvp => kvp.Value.tracks))).Count();
 
             await ProcessSetlistShow(stats, fullShow, artist, src, dbSource, sets);
 
@@ -517,8 +516,6 @@ namespace Relisten.Import
 						dbSource.is_remaster = show.remastered;
 						dbSource.description = "";
 						dbSource.taper_notes = show.taper_notes;
-
-						stats.Removed += await _sourceService.DropAllSetsAndTracksForSource(dbSource);
 
 						dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
 
