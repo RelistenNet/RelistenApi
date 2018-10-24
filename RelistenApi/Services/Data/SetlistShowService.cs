@@ -179,7 +179,7 @@ namespace Relisten.Data
                     WHERE
                         played_setlist_show_id = @showId
                         AND NOT(played_setlist_song_id = ANY(@songIds))
-                ", new { showId = show.id, songIds = songs.Select(s => s.id)});
+                ", new { showId = show.id, songIds = songs.Select(s => s.id).ToList() });
             });
 
             return stats;
