@@ -405,23 +405,34 @@ namespace Relisten.Import
 
                 if (set == null)
                 {
-                    set = await _sourceSetService.Update(dbSource, new SourceSet()
+                    set = new SourceSet()
                     {
                         source_id = dbSource.id,
                         index = SetIndexForIdentifier(track.set),
                         name = track.set_name,
                         is_encore = track.set[0] == 'E',
                         updated_at = dbSource.updated_at
-                    });
+                    };
 
                     // this needs to be set after loading from the db
                     set.tracks = new List<SourceTrack>();
 
-                    stats.Created++;
-
                     sets[track.set] = set;
                 }
+            }
 
+            var setMaps = (await _sourceSetService.UpdateAll(dbSource, sets.Values))
+                .GroupBy(s => s.index)
+                .ToDictionary(kvp => kvp.Key, kvp => kvp.Single());
+
+            foreach (var kvp in setMaps)
+            {
+                kvp.Value.tracks = new List<SourceTrack>();
+            }
+
+            foreach (var track in fullShow.tracks)
+            {
+                var set = setMaps[SetIndexForIdentifier(track.set)];
                 set.tracks.Add(new SourceTrack()
                 {
                     source_set_id = set.id,
@@ -464,7 +475,7 @@ namespace Relisten.Import
                 foreach(var (idx, show) in shows.Select((s, i) => (i, s)))
                 {
                     await processShow(show);
-                    prog.SetValue(100.0 * ((currentPage - 1) * pageSize + idx + 1) / apiShows.total_entries);
+                    prog?.SetValue(100.0 * ((currentPage - 1) * pageSize + idx + 1) / apiShows.total_entries);
                 }
             }
 

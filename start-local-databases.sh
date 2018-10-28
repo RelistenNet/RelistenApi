@@ -4,7 +4,7 @@ cd "$(dirname "$(realpath "$0")")"
 
 cd local-dev
 
-DB_VERSION="postgres-relisten-db-2018-10-15-10-00-49"
+DB_VERSION="postgres-relisten-db-2018-10-28-10-00-52"
 DB_VERSION_FILE="db.version"
 
 launch() {
