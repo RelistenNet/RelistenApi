@@ -447,7 +447,7 @@ namespace Relisten.Import
                 });
             }
 
-            stats.Created += (await _sourceTrackService.InsertAll(dbSource, sets.SelectMany(kvp => kvp.Value.tracks))).Count();
+            stats.Created += (await _sourceTrackService.InsertAll(dbSource, setMaps.SelectMany(kvp => kvp.Value.tracks))).Count();
 
             await ProcessSetlistShow(stats, fullShow, artist, src, dbSource, sets);
 
