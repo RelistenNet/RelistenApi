@@ -17,6 +17,8 @@ using Relisten.Vendor.Phishin;
 using Hangfire.Server;
 using Hangfire.Console;
 using System.Transactions;
+using System.Net.Http.Headers;
+using Microsoft.Extensions.Configuration;
 
 namespace Relisten.Import
 {
@@ -34,8 +36,9 @@ namespace Relisten.Import
         protected SetlistSongService _setlistSongService { get; set; }
         protected SetlistShowService _setlistShowService { get; set; }
         protected ILogger<PhishinImporter> _log { get; set; }
+        public IConfiguration _configuration { get; }
 
-		readonly LinkService linkService;
+        readonly LinkService linkService;
 
 		public PhishinImporter(
             DbService db,
@@ -49,7 +52,8 @@ namespace Relisten.Import
 			LinkService linkService,
             SetlistShowService setlistShowService,
             EraService eraService,
-            ILogger<PhishinImporter> log
+            ILogger<PhishinImporter> log,
+            IConfiguration configuration
         ) : base(db)
         {
 			this.linkService = linkService;
@@ -59,10 +63,14 @@ namespace Relisten.Import
             this._venueService = venueService;
             this._tourService = tourService;
             this._log = log;
+            _configuration = configuration;
             _sourceReviewService = sourceReviewService;
             _sourceTrackService = sourceTrackService;
             _sourceSetService = sourceSetService;
             _eraService = eraService;
+            _configuration = configuration;
+
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", configuration["PHISHIN_KEY"]);
         }
 
 		public override string ImporterName => "phish.in";
