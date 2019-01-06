@@ -474,7 +474,16 @@ namespace Relisten.Import
                 
                 foreach(var (idx, show) in shows.Select((s, i) => (i, s)))
                 {
-                    await processShow(show);
+                    try
+                    {
+                        await processShow(show);
+                    }
+                    catch (Exception e)
+                    {
+                        ctx?.WriteLine($"Error processing show (but continuing): {show.date} (id: {show.id})");
+                        ctx?.LogException(e);
+                    }
+
                     prog?.SetValue(100.0 * ((currentPage - 1) * pageSize + idx + 1) / apiShows.total_entries);
                 }
             }
