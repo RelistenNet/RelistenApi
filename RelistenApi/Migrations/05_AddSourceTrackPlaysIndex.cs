@@ -9,7 +9,7 @@ namespace Migrations
         {
             Execute(@"
                 CREATE INDEX IF NOT EXISTS idx_source_track_plays_id_btree ON source_track_plays(id);
-                CREATE INDEX CONCURRENTLY ON setlist_shows (artist_id);
+                CREATE INDEX IF NOT EXISTS idx_setlist_shows_artist_id ON setlist_shows (artist_id);
             ");
         }
 
