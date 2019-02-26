@@ -402,7 +402,7 @@ namespace Relisten.Import
 
         private async Task<Source> ProcessShow(ImportStats stats, Artist artist, PhishinShow fullShow, ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
         {
-            dbSource.has_jamcharts = fullShow.tags.Contains("Jamcharts");
+            dbSource.has_jamcharts = fullShow.tags.Count(t => t.name == "Jamcharts") > 0;
             dbSource = await _sourceService.Save(dbSource);
 
             var sets = new Dictionary<string, SourceSet>();

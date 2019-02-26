@@ -133,12 +133,22 @@ namespace Relisten.Vendor.Phishin
         public bool missing { get; set; }
         public bool sbd { get; set; }
         public bool remastered { get; set; }
-        public List<string> tags { get; set; }
+        public List<PhishinTag> tags { get; set; }
         public int tour_id { get; set; }
         public PhishinSmallVenue venue { get; set; }
         public string taper_notes { get; set; }
         public int likes_count { get; set; }
         public List<PhishinShowTrack> tracks { get; set; }
         public DateTime updated_at { get; set; }
+    }
+
+    public class PhishinTag
+    {
+        public long id { get; set; }
+        public string name { get; set; }
+        public long priority { get; set; }
+        public string group { get; set; }
+        public string color { get; set; }
+        public object notes { get; set; }
     }
 }
