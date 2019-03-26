@@ -527,7 +527,7 @@ namespace Relisten.Import
                 Where(file =>
                 {
                     return !(
-                        (file.title == null && file.original == null)
+                        (file.title == null && file.original == null && file.name == null)
                         || file.length == null
                         || file.name == null
                     );
@@ -555,7 +555,14 @@ namespace Relisten.Import
         {
             var trackNum = previousTrackNumber + 1;
 
-            var title = !string.IsNullOrEmpty(file.title) ? file.title : file.original;
+            var title = file.name;
+
+            if (!string.IsNullOrEmpty(file.title)) {
+                title = file.title;
+            }
+            else if (!string.IsNullOrEmpty(file.original)) {
+                title = file.original;
+            }
 
             var flac = file.original == null ? null : flacFiles.GetValue(file.original);
 
