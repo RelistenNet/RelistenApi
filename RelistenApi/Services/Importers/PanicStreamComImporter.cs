@@ -353,6 +353,10 @@ namespace Relisten.Import.PanicStream
 
                     if (parts.Length == 3 && Regex.IsMatch(parts[1], @"^\d{4}_\d{2}_\d{2}[a-zA-Z]*"))
                     {
+                        // some new file paths have "wsp 2019_01_01"
+                        // TODO: make this more robust maybe by using a regex?
+                        // e.g. replace /^[a-zA-Z\s]*/ with ''
+                        // but I'll leave that up to you
                         _sourceName = parts[1].Replace("wsp ", "");
                         _fileName = parts[2];
                     }
