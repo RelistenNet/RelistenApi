@@ -351,7 +351,7 @@ namespace Relisten.Import.PanicStream
                 {
                     var parts = SourceFile.Split('/');
 
-                    if (parts.Length == 3 && Regex.IsMatch(parts[1], @"^\d{4}_\d{2}_\d{2}[a-zA-Z]*"))
+                    if (parts.Length == 3 && Regex.IsMatch(parts[1], @"\d{4}_\d{2}_\d{2}[a-zA-Z]*"))
                     {
                         // some new file paths have "wsp 2019_01_01"
                         // TODO: make this more robust maybe by using a regex?
