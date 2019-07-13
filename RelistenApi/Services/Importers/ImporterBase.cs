@@ -355,7 +355,6 @@ INSERT INTO
 	WHERE
 		(setlist_show.artist_id = @id OR setlist_show.artist_id IS NULL)
 		AND source.artist_id = @id
-		AND source.show_id IS NULL
 	GROUP BY
 		date, source.display_date, source.artist_id
 	ORDER BY
