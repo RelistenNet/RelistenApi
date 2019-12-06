@@ -20,7 +20,7 @@ launch() {
     echo "To launch the Relisten API server, open the git repo in Visual Studio Code and do Debug > Start Debugging (F5) or Debug > Start without Debugging (shift+F5)"
     echo "The API server will be available at: http://localhost:3823/api-docs"
     echo
-    echo "Running:"
+    echo "Running this command:"
     echo "> docker-compose -f local-dev/docker-compose.yml up -d"
     echo 
     echo "Stop the databases with:"
@@ -28,6 +28,7 @@ launch() {
     echo "or"
     echo "> ./stop-local-databases.sh"
     docker-compose up -d
+    echo "Databases running :) Happy development!"
 }
 
 if [ "$DB_VERSION" = "$(cat $DB_VERSION_FILE)" ]; then
@@ -43,7 +44,12 @@ TMPFILE="relisten.tgz"
 TMPFILETAR="relisten.tar"
 URL="https://s3.us-east-2.amazonaws.com/relistenapi-db/relistenapi-db/${DB_VERSION}.tgz"
 
-curl "$URL" > $TMPFILE
+curl --fail "$URL" > $TMPFILE
+
+res=$?
+if test "$res" != "0"; then
+   echo "the curl command failed with: $res"
+fi
 
 gunzip "$TMPFILE"
 tar xvf "$TMPFILETAR"
