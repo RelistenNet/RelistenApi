@@ -12,10 +12,10 @@ using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.Cors.Internal;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
@@ -47,14 +47,22 @@ namespace Relisten
 
 			// Add framework services.
 			services.
-				AddMvc().
-				AddJsonOptions(jsonOptions =>
+				AddMvc(mvcOptions => 
+				{
+					mvcOptions.EnableEndpointRouting = false;
+				}).
+				AddNewtonsoftJson(jsonOptions =>
 				{
 					jsonOptions.SerializerSettings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
 					jsonOptions.SerializerSettings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
 				});
 
-			services.AddLogging();
+			services.AddLogging(loggingBuilder =>
+			{
+				loggingBuilder.AddConfiguration(Configuration.GetSection("Logging"));
+				loggingBuilder.AddConsole();
+				loggingBuilder.AddDebug();
+			});
 
 			services.AddSwaggerGen(c =>
 			{
@@ -130,15 +138,12 @@ namespace Relisten
 		}
 
 		// This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-		public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+		public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILoggerFactory loggerFactory)
 		{
 			if (env.IsDevelopment())
 			{
 				app.UseDeveloperExceptionPage();
 			}
-
-			loggerFactory.AddConsole(Configuration.GetSection("Logging"));
-			loggerFactory.AddDebug();
 
 			app.UseCors(builder => builder
 								  .WithMethods("GET", "POST", "OPTIONS", "HEAD")

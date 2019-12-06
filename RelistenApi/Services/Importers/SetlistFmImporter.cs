@@ -65,7 +65,7 @@ namespace Relisten.Import
              | ImportableData.Venues;
         }
 
-        private RetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Polly.Policy
+        private AsyncRetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Polly.Policy
             .Handle<JsonReaderException>()
             .OrResult<Tuple<bool, ImportStats>>(r => false /* never error on the result */)
             //.HandleResult<HttpResponseMessage>(r => r.StatusCode == HttpStatusCode.ServiceUnavailable)
