@@ -157,7 +157,7 @@ namespace Relisten.Import
 
         private string PhishinApiUrl(string api, string sort_attr = null, int per_page = 99999, int? page = null)
         {
-            return $"http://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
+            return $"https://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
         }
 
 		private async Task<PhishinRootObject<T>> PhishinApiRequest<T>(string apiRoute, PerformContext ctx, string sort_attr = null, int per_page = 99999, int? page = null)

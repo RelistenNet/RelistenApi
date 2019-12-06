@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
+using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
@@ -66,16 +67,16 @@ namespace Relisten
 
 			services.AddSwaggerGen(c =>
 			{
-				c.SwaggerDoc("v2", new Info {
+				c.SwaggerDoc("v2", new OpenApiInfo {
 					Version = "v2",
 					Title = "Relisten API",
-					Contact = new Contact {
+					Contact = new OpenApiContact {
 						Name = "Alec Gorge",
-						Url = "https://twitter.com/alecgorge"
+						Url = new Uri("https://twitter.com/alecgorge")
 					},
-					License = new License {
+					License = new OpenApiLicense {
 						Name = "MIT",
-						Url = "https://opensource.org/licenses/MIT"
+						Url = new Uri("https://opensource.org/licenses/MIT")
 					}
 				});
 			});

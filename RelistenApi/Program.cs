@@ -26,7 +26,6 @@ namespace Relisten
 				{
 					int.TryParse(envVar.Value.ToString(), NumberStyles.Integer, null, out port);
 				}
-				Console.WriteLine(envVar.Key + "=" + envVar.Value);
 			}
 
             BuildWebHost(args, port).Run();

@@ -13,25 +13,25 @@
     <DebugType>portable</DebugType>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.0.30"/>
-    <PackageReference Include="Hangfire.Console" Version="1.4.2"/>
-    <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1"/>
-    <PackageReference Include="Hangfire.RecurringJobExtensions" Version="1.1.6"/>
-    <PackageReference Include="Hangfire.Core" Version="1.7.8"/>
-    <PackageReference Include="Hangfire.AspNetCore" Version="1.7.8"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="3.1.0"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="3.1.0"/>
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="3.1.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="3.1.0"/>
-    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="3.1.0"/>
-    <PackageReference Include="Npgsql" Version="4.1.2"/>
-    <PackageReference Include="Polly" Version="7.2.0"/>
-    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.8.0"/>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="4.0.1"/>
-    <PackageReference Include="Microsoft.AspNetCore.ApplicationInsights.HostingStartup" Version="2.2.0"/>
-    <PackageReference Include="Simple.Migrations" Version="0.9.20"/>
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="3.1.0"/>
+    <PackageReference Include="Dapper" Version="2.0.30" />
+    <PackageReference Include="Hangfire.Console" Version="1.4.2" />
+    <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1" />
+    <PackageReference Include="Hangfire.RecurringJobExtensions" Version="1.1.6" />
+    <PackageReference Include="Hangfire.Core" Version="1.7.8" />
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.7.8" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.FileExtensions" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="3.1.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="3.1.0" />
+    <PackageReference Include="Npgsql" Version="4.1.2" />
+    <PackageReference Include="Polly" Version="7.2.0" />
+    <PackageReference Include="HangFire.Redis.StackExchange" Version="1.8.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="5.0.0-rc4" />
+    <PackageReference Include="Microsoft.AspNetCore.ApplicationInsights.HostingStartup" Version="2.2.0" />
+    <PackageReference Include="Simple.Migrations" Version="0.9.20" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="3.1.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings.json">
