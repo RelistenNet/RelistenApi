@@ -10,8 +10,8 @@
   "profiles": {
     "RelistenApi": {
       "commandName": "Project",
-      "launchBrowser": true,
-      "launchUrl": "http://localhost:5000/api/values",
+      "launchBrowser": false,
+      "launchUrl": "http://localhost:3823/api/v2",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

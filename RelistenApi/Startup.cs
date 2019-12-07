@@ -30,12 +30,14 @@ namespace Relisten
 {
 	public class Startup
 	{
-		public Startup(IConfiguration configuration)
+		public Startup(IConfiguration configuration, IHostEnvironment hostEnvironment)
 		{
 			Configuration = configuration;
+			HostEnvironment = hostEnvironment;
 		}
 
-		public IConfiguration Configuration { get; }
+		private IConfiguration Configuration { get; }
+		private IHostEnvironment HostEnvironment { get; }
 
 		// This method gets called by the runtime. Use this method to add services to the container.
 		public void ConfigureServices(IServiceCollection services)
@@ -61,6 +63,12 @@ namespace Relisten
 			services.AddLogging(loggingBuilder =>
 			{
 				loggingBuilder.AddConfiguration(Configuration.GetSection("Logging"));
+
+				if (HostEnvironment.IsProduction())
+				{
+					loggingBuilder.SetMinimumLevel(LogLevel.Warning);
+				}
+
 				loggingBuilder.AddConsole();
 				loggingBuilder.AddDebug();
 			});
