@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Npgsql.Logging;
@@ -11,18 +12,20 @@ namespace Relisten
     {
         public static string ConnStr { get; set; }
 
-        public DbService(string url)
+        public DbService(string url, IHostEnvironment hostEnvironment)
         {
-            Console.WriteLine("Attempting to connect to {0}", url);
-
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
-            ConnStr = $"Host={uri.Host};Port={uri.Port};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
+            ConnStr = $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
 
-            Console.WriteLine("DB Connection String: " + ConnStr);
+            Console.WriteLine("Attempting to connect to {0}", url.Replace(parts[1], "********"));
+            Console.WriteLine($"DB Connection String: {ConnStr.Replace(parts[1], "********")}");
 
-            // NpgsqlLogManager.IsParameterLoggingEnabled = true;
-            // NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+            if (hostEnvironment.IsDevelopment())
+            {
+                NpgsqlLogManager.IsParameterLoggingEnabled = true;
+                NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+            }
         }
 
         public NpgsqlConnection CreateConnection(bool longTimeout) => new NpgsqlConnection(ConnStr + (longTimeout ? ";CommandTimeout=300" : ""));

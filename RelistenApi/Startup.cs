@@ -63,12 +63,7 @@ namespace Relisten
 			services.AddLogging(loggingBuilder =>
 			{
 				loggingBuilder.AddConfiguration(Configuration.GetSection("Logging"));
-
-				if (HostEnvironment.IsProduction())
-				{
-					loggingBuilder.SetMinimumLevel(LogLevel.Warning);
-				}
-
+				loggingBuilder.SetMinimumLevel(HostEnvironment.IsProduction() ? LogLevel.Warning : LogLevel.Information);
 				loggingBuilder.AddConsole();
 				loggingBuilder.AddDebug();
 			});
@@ -97,7 +92,7 @@ namespace Relisten
 				DateTimeZoneHandling = DateTimeZoneHandling.Utc
 			};
 
-			var db = new DbService(Configuration["DATABASE_URL"]);
+			var db = new DbService(Configuration["DATABASE_URL"], HostEnvironment);
 			RunMigrations(db);
 			services.AddSingleton(db);
 

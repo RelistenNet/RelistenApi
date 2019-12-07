@@ -16,7 +16,6 @@ namespace Relisten
 		public static void Main(string[] args)
         {
 			Console.WriteLine("Launched from {0}", Directory.GetCurrentDirectory());
-			Console.WriteLine("Environment Variables:");
 
 	        var port = 3823;
 	        
