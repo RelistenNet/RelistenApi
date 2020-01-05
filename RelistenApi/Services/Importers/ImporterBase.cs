@@ -340,7 +340,7 @@ INSERT INTO
 		source.artist_id,
 		COALESCE(setlist_show.date, CASE
 			WHEN MIN(source.display_date) LIKE '%X%' THEN to_date(MIN(source.display_date), 'YYYY')
-			ELSE to_date(MIN(source.display_date), 'YYYY-MM-DD')
+			ELSE to_date(LEFT(MIN(source.display_date), 10), 'YYYY-MM-DD')
 		END) as date,
 		MIN(source.display_date) as display_date,
 		MAX(source.updated_at) as updated_at,
