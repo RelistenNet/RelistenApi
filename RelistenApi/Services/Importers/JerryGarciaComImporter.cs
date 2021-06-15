@@ -57,12 +57,12 @@ namespace Relisten.Import
 
         string ShowPagesListingUrl(ArtistUpstreamSource src)
         {
-            return $"https://phish.alecgorge.com/relisten/{src.upstream_identifier}/show_pages.json";
+            return $"https://relisten-grateful-dead-metadata-mirror.s3.amazonaws.com/{src.upstream_identifier}/show_pages.json";
 		}
 
         string ShowPageUrl(ArtistUpstreamSource src, string filename)
         {
-            return $"https://phish.alecgorge.com/relisten/{src.upstream_identifier}/show_pages/{filename}";
+            return $"https://relisten-grateful-dead-metadata-mirror.s3.amazonaws.com/{src.upstream_identifier}/show_pages/{filename}";
         }
 
         private class FileMetaObject
