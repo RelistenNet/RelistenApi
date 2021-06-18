@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 
+realpath() {
+    [[ $1 = /* ]] && echo "$1" || echo "$PWD/${1#./}"
+}
+
 cd "$(dirname "$(realpath "$0")")"
 
 cd local-dev
 
-DB_VERSION="postgres-relisten-db-2019-12-05-10-02-28"
+DB_VERSION="postgres-relisten-db-2021-06-14-10-04-17"
 DB_VERSION_FILE="db.version"
 
 launch() {
@@ -42,7 +46,7 @@ docker-compose up -d
 
 TMPFILE="relisten.tgz"
 TMPFILETAR="relisten.tar"
-URL="https://s3.us-east-2.amazonaws.com/relistenapi-db/relistenapi-db/${DB_VERSION}.tgz"
+URL="https://s3.us-east-2.amazonaws.com/relistenapi-db/${DB_VERSION}.tgz"
 
 curl --fail "$URL" > $TMPFILE
 
