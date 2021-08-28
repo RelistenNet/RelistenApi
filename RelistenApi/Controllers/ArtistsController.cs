@@ -38,11 +38,11 @@ namespace Relisten.Controllers
 
         // GET api/values/5
         [HttpGet("artists/{artistIdOrSlug}")]
-        [ProducesResponseType(typeof(Artist), 200)]
+        [ProducesResponseType(typeof(ArtistWithCounts), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Get(string artistIdOrSlug)
         {
-			Artist art = await _artistService.FindArtistWithIdOrSlug(artistIdOrSlug);
+	        var art = (await _artistService.AllWithCounts(new List<string>() { artistIdOrSlug })).FirstOrDefault();
             if (art != null)
             {
                 return JsonSuccess(art);

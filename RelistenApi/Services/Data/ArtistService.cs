@@ -26,9 +26,29 @@ namespace Relisten.Data
 				return artist;
 			};
 
-		public async Task<IEnumerable<ArtistWithCounts>> AllWithCounts()
+		public async Task<IEnumerable<ArtistWithCounts>> AllWithCounts(IReadOnlyList<string> idsOrSlugs = null)
 		{
-			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
+			var where = "";
+			if(idsOrSlugs == null || idsOrSlugs.Count == 0) {
+				where = "1=1";
+			}
+			else {
+				where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+			}
+			
+			var ids = new List<int>();
+			var slugs = new List<string>();
+			var uuids = new List<Guid>();
+
+			if (idsOrSlugs != null)
+			{
+				foreach(var idOrSlug in idsOrSlugs)
+				{
+					FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
+				}
+			}
+			
+			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync($@"
                 WITH show_counts AS (
                     SELECT
                         artist_id,
@@ -54,13 +74,15 @@ namespace Relisten.Data
 						GROUP BY
 							ssi.artist_id
 					) src ON src.artist_id = a.id
+				WHERE
+					{where}
 				ORDER BY
 					a.featured DESC, a.name
             ", (ArtistWithCounts artist, Features features) =>
 			{
 				artist.features = features;
 				return artist;
-			})));
+			}, new {ids, uuids, slugs})));
 		}
 
 		public Task<int> RemoveAllContentForArtist(Artist art)
@@ -186,23 +208,9 @@ namespace Relisten.Data
 			var slugs = new List<string>();
 			var uuids = new List<Guid>();
 
-			foreach(var idOrSlug in idsOrSlugs) {
-				if(int.TryParse(idOrSlug, out var id)) {
-					ids.Add(id);
-				}
-				else if(idOrSlug.Length == 36)  {
-					var guid = Guid.Parse(idOrSlug);
-
-					if(guid != null) {
-						uuids.Add(guid);
-					}
-					else {
-						slugs.Add(idOrSlug);
-					}
-				}
-				else {
-					slugs.Add(idOrSlug);
-				}
+			foreach(var idOrSlug in idsOrSlugs)
+			{
+				FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
 			}
 
 			return await db.WithConnection(async con =>
@@ -223,6 +231,23 @@ namespace Relisten.Data
 
 				return await FillInUpstreamSources(artists);
 			});
+		}
+
+		private static void FlexiblyParseArtistIdentifier(string idOrSlug, List<int> ids, List<Guid> guids, List<string> slugs)
+		{
+			if (int.TryParse(idOrSlug, out var id))
+			{
+				ids.Add(id);
+				return;
+			}
+			
+			if (idOrSlug?.Length == 36 && Guid.TryParse(idOrSlug, out var guid))
+			{
+				guids.Add(guid);
+				return;
+			}
+			
+			slugs.Add(idOrSlug);
 		}
 
 		string UpdateFieldsForFeatures(Features features)
