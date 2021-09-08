@@ -27,12 +27,13 @@ namespace Relisten.Data
 			string orderBy = null
         ) where T : Show
         {
-			orderBy = orderBy == null ? "display_date ASC" : orderBy;
+			orderBy ??= "display_date ASC";
 			var limitClause = limit == null ? "" : "LIMIT " + limit;
 
 			return await db.WithConnection(con => con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(@"
                 SELECT
                     s.*,
+                    a.uuid as artist_uuid,
                     cnt.max_updated_at as most_recent_source_updated_at,
 					cnt.source_count,
                     cnt.has_soundboard_source,
@@ -44,6 +45,7 @@ namespace Relisten.Data
                     y.*
                 FROM
                     shows s
+                    JOIN artists a ON s.artist_id = a.id
                     LEFT JOIN venues v ON s.venue_id = v.id
                     LEFT JOIN tours t ON s.tour_id = t.id
                     LEFT JOIN eras e ON s.era_id = e.id
@@ -57,26 +59,26 @@ namespace Relisten.Data
                 ORDER BY
                     " + orderBy + @"
 				" + limitClause + @"
-            ", (Show, venue, tour, era, year) =>
+            ", (show, venue, tour, era, year) =>
             {
-                Show.venue = venue;
+                show.venue = venue;
 
                 if (artist == null || artist.features.tours)
                 {
-                    Show.tour = tour;
+                    show.tour = tour;
                 }
 
                 if (artist == null || artist.features.eras)
                 {
-                    Show.era = era;
+                    show.era = era;
                 }
 
                 if (artist == null || artist.features.years)
                 {
-                    Show.year = year;
+                    show.year = year;
                 }
 
-                return Show;
+                return show;
             }, parms));
         }
 
@@ -98,6 +100,7 @@ namespace Relisten.Data
             return await db.WithConnection(con => con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, Year, ShowWithArtist>(@"
                     SELECT
                         s.*,
+                        a.uuid as artist_uuid,
                         cnt.max_updated_at as most_recent_source_updated_at,
 						cnt.source_count,
 						cnt.has_soundboard_source,

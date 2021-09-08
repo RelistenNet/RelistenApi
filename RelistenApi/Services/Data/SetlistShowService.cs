@@ -22,19 +22,6 @@ namespace Relisten.Data
     {
         public SetlistShowService(DbService db) : base(db) { }
 
-        public async Task<SetlistShow> ForUpstreamIdentifier(Artist artist, string upstreamId)
-        {
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<SetlistShow>(@"
-                SELECT
-                    *
-                FROM
-                    setlist_shows
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstreamId
-            ", new { artistId = artist.id, upstreamId }));
-        }
-
         public async Task<IEnumerable<SetlistShow>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)
         {
             if (withVenuesToursAndEras)

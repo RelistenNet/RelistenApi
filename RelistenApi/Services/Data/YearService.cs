@@ -20,13 +20,15 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<Year>(@"
                 SELECT
-                    *
+                    y.*
+                    , a.uuid as artist_uuid
                 FROM
-                    years
+                    years y
+                    JOIN artists a ON a.id = y.artist_id
                 WHERE
-                    artist_id = @artistId
+                    y.artist_id = @artistId
                 ORDER BY
-                    year ASC
+                    y.year ASC
             ", new { artistId = artist.id }));
         }
 
@@ -34,9 +36,11 @@ namespace Relisten.Data
         {
             var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<YearWithShows>(@"
                 SELECT
-                    *
+                    y.*
+                    , a.uuid as artist_uuid
                 FROM
                     years y
+                    JOIN artists a ON a.id = y.artist_id
                 WHERE
                     y.artist_id = @artistId
                     AND " + (id.Id.HasValue ? "y.id = @year_id" : "y.year = @year") + @"

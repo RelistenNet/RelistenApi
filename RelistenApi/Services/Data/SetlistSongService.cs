@@ -15,12 +15,14 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
                 SELECT
-                    *
+                    s.*
+                    , a.uuid as artist_uuid
                 FROM
-                    setlist_songs
+                    setlist_songs s
+                    JOIN artists a on s.artist_id = a.id
                 WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = ANY(@upstreamIds)
+                    s.artist_id = @artistId
+                    AND s.upstream_identifier = ANY(@upstreamIds)
             ", new { artistId = artist.id, upstreamIds = upstreamIds.ToList() }));
         }
 
@@ -28,11 +30,13 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
                 SELECT
-                    *
+                    s.*
+                    , a.uuid as artist_uuid
                 FROM
-                    setlist_songs 
+                    setlist_songs s
+                    JOIN artists a on s.artist_id = a.id
                 WHERE
-                    artist_id = @id
+                    s.artist_id = @artistId
             ", new { artist.id }));
         }
 
@@ -42,7 +46,9 @@ namespace Relisten.Data
             await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
                 SELECT
                     s.*
+                    , a.id as artist_uuid
                     , shows.*
+                    , a.id as artist_uuid
                     , cnt.max_updated_at as most_recent_source_updated_at
                     , cnt.source_count
                     , cnt.has_soundboard_source
@@ -56,6 +62,7 @@ namespace Relisten.Data
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
                     LEFT JOIN years y ON shows.year_id = y.id
+                    JOIN artists a ON a.id = shows.artist_id
 
                     INNER JOIN (
                         SELECT
@@ -97,17 +104,18 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
                 SELECT
-                    s.*, COUNT(shows.id) as shows_played_at
+                    s.*, a.id as artist_uuid, COUNT(shows.id) as shows_played_at
                 FROM
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
                     LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
                     JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @id
+                    JOIN artists a ON a.id = shows.artist_id
                 WHERE
                     s.artist_id = @id
                 GROUP BY
                     s.id
-                ORDER BY name
+                ORDER BY s.name
             ", new { artist.id }));
         }
 

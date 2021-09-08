@@ -326,7 +326,7 @@ namespace Relisten.Import
             catch (JsonReaderException e)
             {
 				ctx?.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
-                throw e;
+                throw;
             }
 
             var stats = new ImportStats();
@@ -355,7 +355,7 @@ namespace Relisten.Import
                         s.Stop();
 						ctx?.WriteLine("{0}/{1}...failed in {2}! Stats: {3}", artist.name, setlist.eventDate, s.Elapsed, e.Message);
 
-                        throw e;
+                        throw;
                     }
 
 					prog?.SetValue(((100.0 * (root.page - 1) * root.itemsPerPage) + count * 1.0) / root.total);
