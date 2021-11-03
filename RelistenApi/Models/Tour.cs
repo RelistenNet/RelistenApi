@@ -4,12 +4,13 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
     public class Tour : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [Required] public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
         [Required] public DateTime? start_date { get; set; }
         [Required] public DateTime? end_date { get; set; }

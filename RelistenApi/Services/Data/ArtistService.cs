@@ -26,7 +26,7 @@ namespace Relisten.Data
 				return artist;
 			};
 
-		public async Task<IEnumerable<ArtistWithCounts>> AllWithCounts(IReadOnlyList<string> idsOrSlugs = null)
+		public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null) where T: ArtistWithCounts
 		{
 			var where = "";
 			if(idsOrSlugs == null || idsOrSlugs.Count == 0) {
@@ -78,7 +78,7 @@ namespace Relisten.Data
 					{where}
 				ORDER BY
 					a.featured DESC, a.name
-            ", (ArtistWithCounts artist, Features features) =>
+            ", (T artist, Features features) =>
 			{
 				artist.features = features;
 				return artist;
@@ -125,6 +125,22 @@ namespace Relisten.Data
 				WHERE
 					a.id = @id
             ", joiner, new { id }));
+
+			return await FillInUpstreamSources(a.SingleOrDefault());
+		}
+
+		public async Task<Artist> FindArtistByShowUuid(Guid uuid)
+		{
+			var a = await db.WithConnection(con => con.QueryAsync(@"
+                SELECT
+                    a.*, f.*
+                FROM
+                    shows s
+                    JOIN artists a ON s.artist_id = a.id
+                    LEFT JOIN features f on f.artist_id = a.id
+				WHERE
+					s.uuid = @uuid
+            ", joiner, new { uuid }));
 
 			return await FillInUpstreamSources(a.SingleOrDefault());
 		}

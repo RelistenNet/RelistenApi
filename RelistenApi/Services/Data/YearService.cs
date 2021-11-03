@@ -29,7 +29,7 @@ namespace Relisten.Data
                     y.artist_id = @artistId
                 ORDER BY
                     y.year ASC
-            ", new { artistId = artist.id }));
+            ", new {artistId = artist.id}));
         }
 
         public async Task<YearWithShows> ForIdentifierWithShows(Artist artist, Identifier id)
@@ -46,7 +46,7 @@ namespace Relisten.Data
                     AND " + (id.Id.HasValue ? "y.id = @year_id" : "y.year = @year") + @"
                 ORDER BY
                     y.year ASC
-            ", new { artistId = artist.id, year_id = id.Id, year = id.Slug }));
+            ", new {artistId = artist.id, year_id = id.Id, year = id.Slug}));
 
             if (year == null)
             {
@@ -56,7 +56,7 @@ namespace Relisten.Data
             year.shows = new List<Show>();
             year.shows.AddRange(await _showService.ShowsForCriteria(artist,
                 "s.artist_id = @artist_id AND s.year_id = @year_id",
-                new { artist_id = artist.id, year_id = year.id }
+                new {artist_id = artist.id, year_id = year.id}
             ));
 
             return year;

@@ -47,8 +47,9 @@ namespace Relisten.Import
             SourceTrackService sourceTrackService,
             LinkService linkService,
             ILogger<PanicStreamComImporter> log,
-            IConfiguration configuration
-        ) : base(db)
+            IConfiguration configuration,
+            RedisService redisService
+        ) : base(db, redisService)
         {
             this.linkService = linkService;
             this._sourceService = sourceService;

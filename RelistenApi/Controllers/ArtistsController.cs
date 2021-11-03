@@ -1,48 +1,67 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Mvc;
-using Relisten.Api;
-using Dapper;
-using Relisten.Api.Models;
-using Relisten.Data;
-using Relisten.Api.Models.Api;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Newtonsoft.Json;
+using Relisten.Api;
+using Relisten.Api.Models;
+using Relisten.Api.Models.Api;
+using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2")]
     [Produces("application/json")]
+    [Route("api")]
     public class ArtistsController : RelistenBaseController
     {
-        readonly UpstreamSourceService upstreamSourceService;
+        private readonly YearService yearService;
+        private readonly VenueService venueService;
+        private readonly SetlistSongService setlistSongService;
+        private readonly TourService tourService;
+        private readonly UpstreamSourceService upstreamSourceService;
+        private readonly ShowService showService;
+        private readonly SourceService sourceService;
 
         public ArtistsController(
             RedisService redis,
             DbService db,
             ArtistService artistService,
-            UpstreamSourceService upstreamSourceService
+            YearService yearService,
+            VenueService venueService,
+            SetlistSongService setlistSongService,
+            TourService tourService,
+            UpstreamSourceService upstreamSourceService,
+            ShowService showService,
+            SourceService sourceService,
+            RedisService redisService
         ) : base(redis, db, artistService)
         {
+            this.yearService = yearService;
+            this.venueService = venueService;
+            this.setlistSongService = setlistSongService;
+            this.tourService = tourService;
             this.upstreamSourceService = upstreamSourceService;
+            this.showService = showService;
+            this.sourceService = sourceService;
         }
 
-        // GET api/values
-        [HttpGet("artists")]
+        [HttpGet("v2/artists")]
+        [HttpGet("v3/artists")]
         [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
         public async Task<IActionResult> Get()
         {
-			return JsonSuccess(await _artistService.AllWithCounts());
+            return JsonSuccess(await _artistService.AllWithCounts<ArtistWithCounts>());
         }
 
-        // GET api/values/5
-        [HttpGet("artists/{artistIdOrSlug}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}")]
+        [HttpGet("v3/artists/{artistIdOrSlug}")]
         [ProducesResponseType(typeof(ArtistWithCounts), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Get(string artistIdOrSlug)
         {
-	        var art = (await _artistService.AllWithCounts(new List<string>() { artistIdOrSlug })).FirstOrDefault();
+            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string>() {artistIdOrSlug}))
+                .FirstOrDefault();
             if (art != null)
             {
                 return JsonSuccess(art);
@@ -51,32 +70,82 @@ namespace Relisten.Controllers
             return JsonNotFound(false);
         }
 
-		[ApiExplorerSettings(IgnoreApi = true)]
-		[HttpPost("artists")]
+        public static string FullArtistCacheKey(Artist art)
+        {
+            return $"full-artist:{art.uuid.ToString()}";
+        }
+
+        [HttpGet("v3/artists/{artistUuid}/normalized")]
+        [ProducesResponseType(typeof(FullArtist), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> GetFullArtist(string artistUuid)
+        {
+            var art = (await _artistService.AllWithCounts<FullArtist>(new List<string>() {artistUuid}))
+                .FirstOrDefault();
+
+            if (art == null)
+            {
+                return JsonNotFound(false);
+            }
+
+            var cacheKey = FullArtistCacheKey(art);
+            var cacheResult = await redis.db.StringGetAsync(cacheKey);
+
+            if (cacheResult.HasValue && !cacheResult.IsNullOrEmpty)
+            {
+                return Content(cacheResult, "application/json");
+            }
+
+            var yearsTask = yearService.AllForArtist(art);
+            var venuesTask = venueService.AllForArtist(art);
+            var songsTask = setlistSongService.AllForArtistWithPlayCount(art);
+            var toursTask = tourService.AllForArtistWithShowCount(art);
+            var showsTask = showService.ShowsForCriteria(art, "s.artist_id = @artistId", new {artistId = art.id},
+                includeNestedObject: false);
+
+            await Task.WhenAll(yearsTask, venuesTask, songsTask, toursTask, showsTask);
+
+            art.years = yearsTask.Result.ToList();
+            art.venues = venuesTask.Result.ToList();
+            art.songs = songsTask.Result.ToList();
+            art.tours = toursTask.Result.ToList();
+            art.shows = showsTask.Result.ToList();
+
+            var json = JsonConvert.SerializeObject(
+                art, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
+
+            // await redis.db.StringSetAsync(cacheKey, json, TimeSpan.FromHours(24));
+
+            return Content(json, "application/json");
+        }
+
+        [ApiExplorerSettings(IgnoreApi = true)]
+        [HttpPost("v2/artists")]
         [Authorize]
-		public async Task<IActionResult> CreateArtist([FromBody] CreateUpdateArtistDto artist)
-		{
+        public async Task<IActionResult> CreateArtist([FromBody] CreateUpdateArtistDto artist)
+        {
             artist.SlimArtist.id = 0;
 
             var art = await _artistService.Save(artist.SlimArtist);
             await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
 
             return JsonSuccess(await _artistService.FindArtistById(art.id));
-		}
+        }
 
-		[ApiExplorerSettings(IgnoreApi = true)]
-        [HttpPut("artists/{artistIdOrSlug}")]
-		[Authorize]
-		public async Task<IActionResult> UpdateArtist([FromBody] CreateUpdateArtistDto artist)
-		{
-			var art = await _artistService.Save(artist.SlimArtist);
-			await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
+        [ApiExplorerSettings(IgnoreApi = true)]
+        [HttpPut("v2/artists/{artistIdOrSlug}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateArtist([FromBody] CreateUpdateArtistDto artist)
+        {
+            var art = await _artistService.Save(artist.SlimArtist);
+            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
 
-			return JsonSuccess(await _artistService.FindArtistById(art.id));
-		}
-	}
+            return JsonSuccess(await _artistService.FindArtistById(art.id));
+        }
+    }
 
-    public class CreateUpdateArtistDto {
+    public class CreateUpdateArtistDto
+    {
         public SlimArtistWithFeatures SlimArtist { get; set; }
         public IEnumerable<SlimArtistUpstreamSource> SlimUpstreamSources { get; set; }
     }

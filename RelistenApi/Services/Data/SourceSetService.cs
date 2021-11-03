@@ -46,6 +46,7 @@ namespace Relisten.Data
                         set.is_encore,
                         set.name,
                         set.updated_at,
+                        sourceUuid = source.uuid
                     };
 
                     inserted.Add(await con.QuerySingleAsync<SourceSet>(@"
@@ -57,7 +58,8 @@ namespace Relisten.Data
                                 index,
                                 is_encore,
                                 name,
-                                updated_at
+                                updated_at,
+                                uuid
                             )
                         VALUES
                             (
@@ -65,7 +67,8 @@ namespace Relisten.Data
                                 @index,
                                 @is_encore,
                                 @name,
-                                @updated_at
+                                @updated_at,
+                                md5(@sourceUuid || '::source_set::' || @index)::uuid
                             )
                         ON CONFLICT ON CONSTRAINT source_sets_source_id_index_key
                         DO

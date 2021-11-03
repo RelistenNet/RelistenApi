@@ -45,8 +45,9 @@ namespace Relisten.Import
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
             LinkService linkService,
-            SourceTrackService sourceTrackService
-        ) : base(db)
+            SourceTrackService sourceTrackService,
+            RedisService redisService
+        ) : base(db, redisService)
         {
             this.linkService = linkService;
             this._sourceService = sourceService;

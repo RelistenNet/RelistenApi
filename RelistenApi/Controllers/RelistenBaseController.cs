@@ -8,11 +8,18 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using System;
+using System.Buffers;
 using System.Linq;
+using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Formatters;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Newtonsoft.Json.Serialization;
 using Relisten.Data;
 
 namespace Relisten.Api
 {
+    [ApiV3Formatting]
     public class RelistenBaseController : Controller
     {
         protected RedisService redis { get; set; }
@@ -79,6 +86,14 @@ namespace Relisten.Api
         )
         {
             Artist art = await _artistService.FindArtistWithIdOrSlug(artistIdOrSlug);
+            return await ApiRequest(art, cb);
+        }
+        
+        protected async Task<IActionResult> ApiRequest<T>(
+            Artist art,
+            Func<Artist, Task<T>> cb
+        )
+        {
             if (art != null)
             {
                 var data = await cb(art);
@@ -119,6 +134,23 @@ namespace Relisten.Api
             }
 
             return JsonNotFound(false);
+        }
+    }
+    
+    public class ApiV3FormattingAttribute : ActionFilterAttribute
+    {
+        public override void OnActionExecuted(ActionExecutedContext ctx)
+        {
+            if (ctx.Result is not JsonResult objectResult)
+            {
+                return;
+            }
+            
+            var isV3 = ctx.HttpContext.Request.Path.StartsWithSegments("/api/v3");
+
+            objectResult.SerializerSettings = isV3
+                ? RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+                : RelistenApiJsonOptionsWrapper.DefaultSerializerSettings;
         }
     }
 }

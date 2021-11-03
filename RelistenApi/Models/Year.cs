@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
@@ -15,7 +16,7 @@ namespace Relisten.Api.Models
         public float? avg_duration { get; set; }
         [Required] public float avg_rating { get; set; }
         [Required] public string year { get; set; }
-        [Required] public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
         [Required] public Guid uuid { get; set; }
     }

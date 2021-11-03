@@ -1,3 +1,4 @@
+using System;
 using System.Data;
 using Relisten.Api.Models;
 using Dapper;
@@ -24,7 +25,8 @@ namespace Relisten.Data
             string where,
             object parms,
 			int? limit = null,
-			string orderBy = null
+			string orderBy = null,
+            bool includeNestedObject = true
         ) where T : Show
         {
 			orderBy ??= "display_date ASC";
@@ -38,11 +40,18 @@ namespace Relisten.Data
 					cnt.source_count,
                     cnt.has_soundboard_source,
                     cnt.has_flac as has_streamable_flac_source,
+                    v.uuid as venue_uuid,
+                    t.uuid as tour_uuid,
+                    y.uuid as year_uuid,
 					v.*,
-                    venue_counts.shows_at_venue,
+                    a.uuid as artist_uuid,
+                    COALESCE(venue_counts.shows_at_venue, 0) as shows_at_venue,
 					t.*,
+                    a.uuid as artist_uuid,
 					e.*,
-                    y.*
+                    a.uuid as artist_uuid,
+                    y.*,
+                    a.uuid as artist_uuid
                 FROM
                     shows s
                     JOIN artists a ON s.artist_id = a.id
@@ -61,6 +70,11 @@ namespace Relisten.Data
 				" + limitClause + @"
             ", (show, venue, tour, era, year) =>
             {
+                if (!includeNestedObject)
+                {
+                    return show;
+                }
+                
                 show.venue = venue;
 
                 if (artist == null || artist.features.tours)
@@ -87,9 +101,10 @@ namespace Relisten.Data
             string where,
             object parms,
 			int? limit = null,
-			string orderBy = null)
+			string orderBy = null,
+            bool includeNestedObject = true)
         {
-			return await ShowsForCriteriaGeneric<Show>(artist, where, parms, limit, orderBy);
+			return await ShowsForCriteriaGeneric<Show>(artist, where, parms, limit, orderBy, includeNestedObject);
         }
 
         public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object parms, int? limit = null, string orderBy = null)
@@ -105,12 +120,18 @@ namespace Relisten.Data
 						cnt.source_count,
 						cnt.has_soundboard_source,
                         cnt.has_flac as has_streamable_flac_source,
-						v.*,
+                        v.uuid as venue_uuid,
+                        t.uuid as tour_uuid,
+                        y.uuid as year_uuid,
+					    v.*,
+                        a.uuid as artist_uuid,
                         COALESCE(venue_counts.shows_at_venue, 0) as shows_at_venue,
-						t.*,
-						e.*,
-						a.*,
-                        y.*
+					    t.*,
+                        a.uuid as artist_uuid,
+					    e.*,
+                        a.uuid as artist_uuid,
+                        y.*,
+                        a.uuid as artist_uuid
                     FROM
                         shows s
                         LEFT JOIN venues v ON s.venue_id = v.id
@@ -233,12 +254,27 @@ namespace Relisten.Data
             ", new { }, shows, "s.updated_at DESC");
         }
 
-        public async Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
+        public Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
         {
-            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist,
+            return ShowWithSourcesForGeneric(
+                artist,
                 "s.artist_id = @artistId AND s.display_date = @showDate",
-                new { artistId = artist.id, showDate = displayDate }
+                new {artistId = artist.id, showDate = displayDate}
             );
+        }
+        
+        public Task<ShowWithSources> ShowWithSourcesForUuid(Artist artist, Guid uuid)
+        {
+            return ShowWithSourcesForGeneric(
+                artist,
+                "s.artist_id = @artistId AND s.uuid = @uuid",
+                new {artistId = artist.id, uuid}
+            );
+        }
+        
+        public async Task<ShowWithSources> ShowWithSourcesForGeneric(Artist artist, string where, object param)
+        {
+            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist, where, param);
             var show = shows.FirstOrDefault();
 
             if (show == null)

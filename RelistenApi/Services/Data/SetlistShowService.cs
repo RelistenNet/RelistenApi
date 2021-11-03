@@ -28,12 +28,13 @@ namespace Relisten.Data
             {
                 return await db.WithConnection(con => con.QueryAsync<SetlistShow, Tour, Venue, Era, SetlistShow>(@"
                     SELECT
-                        s.*, t.*, v.*, e.*
+                        s.*, a.uuid as artist_uuid, t.uuid as tour_uuid, v.uuid as venue_uuid, t.*, v.*, e.*
                     FROM
                         setlist_shows s
                         LEFT JOIN tours t ON s.tour_id = t.id
                         LEFT JOIN venues v ON s.venue_id = v.id
                         LEFT JOIN eras e ON s.era_id = e.id
+                        LEFT JOIN artists a ON s.artist_id = a.id
                     WHERE
                         s.artist_id = @id
                     ", (setlistShow, tour, venue, era) =>

@@ -15,6 +15,7 @@ using System.Diagnostics;
 using Hangfire.Server;
 using Hangfire.Console;
 using System.Threading;
+using Relisten.Controllers;
 
 namespace Relisten.Import
 {
@@ -152,12 +153,14 @@ namespace Relisten.Import
 
     public abstract class ImporterBase : IDisposable
     {
-        protected DbService db { get; set; }
+	    protected readonly RedisService redisService;
+	    protected DbService db { get; set; }
         protected HttpClient http { get; set; }
 
-        public ImporterBase(DbService db)
+        public ImporterBase(DbService db, RedisService redisService)
         {
-            this.db = db;
+	        this.redisService = redisService;
+	        this.db = db;
 			http = new HttpClient();
 	        
 	        // iPhone on iOS 11.4
@@ -296,6 +299,9 @@ REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
 
             ", new { id = artist.id }));
+
+            await redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
+            
             return ImportStats.None;
         }
         public async Task<ImportStats> RebuildShows(Artist artist)

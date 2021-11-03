@@ -11,6 +11,7 @@ namespace Relisten.Api.Models
     {
         [Required]
         public int artist_id { get; set; }
+        [Required] public Guid artist_uuid { get; set; }
 
         [Required]
         public int order { get; set; }

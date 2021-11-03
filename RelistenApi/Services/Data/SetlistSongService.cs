@@ -46,9 +46,9 @@ namespace Relisten.Data
             await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
                 SELECT
                     s.*
-                    , a.id as artist_uuid
+                    , a.uuid as artist_uuid
                     , shows.*
-                    , a.id as artist_uuid
+                    , a.uuid as artist_uuid
                     , cnt.max_updated_at as most_recent_source_updated_at
                     , cnt.source_count
                     , cnt.has_soundboard_source
@@ -57,7 +57,7 @@ namespace Relisten.Data
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
                     LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @artistId
+                    JOIN shows ON shows.date = set_shows.date AND shows.artist_id = s.artist_id
                     LEFT JOIN venues v ON shows.venue_id = v.id
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
@@ -104,17 +104,24 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
                 SELECT
-                    s.*, a.id as artist_uuid, COUNT(shows.id) as shows_played_at
+                    s.*, a.uuid as artist_uuid, shows.shows_played_at
                 FROM
                     setlist_songs s
-                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
-                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @id
-                    JOIN artists a ON a.id = shows.artist_id
+                    LEFT JOIN (
+                        SELECT
+                            s_inner.id as setlist_song_id
+                            , COUNT(shows.id) as shows_played_at
+                        FROM
+                            setlist_songs s_inner
+                            LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s_inner.id
+                            LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
+                            LEFT JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = s_inner.artist_id 
+                        GROUP BY
+                            s_inner.id
+                    ) shows ON shows.setlist_song_id = s.id
+                    JOIN artists a ON a.id = s.artist_id
                 WHERE
                     s.artist_id = @id
-                GROUP BY
-                    s.id
                 ORDER BY s.name
             ", new { artist.id }));
         }

@@ -69,14 +69,17 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<TourWithShowCount>(@"
                     SELECT
-                        t.*, COUNT(s.id) as shows_on_tour
+                        t.*
+                        , a.uuid as artist_uuid
+                        , s.shows_on_tour
                     FROM
                         tours t
-                        LEFT JOIN setlist_shows s ON s.tour_id = t.id
+                        LEFT JOIN (
+                            SELECT s.tour_id, count(*) as shows_on_tour FROM setlist_shows s GROUP BY s.tour_id
+                        ) s ON s.tour_id = t.id
+                        LEFT JOIN artists a ON a.id = t.artist_id
                     WHERE
                         t.artist_id = @id
-                    GROUP BY
-                    	t.id
                     ORDER BY t.start_date
             ", new { artist.id }));
         }

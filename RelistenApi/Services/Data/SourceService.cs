@@ -52,16 +52,24 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Source>(@"
                 SELECT
-                    *
+                    src.*
                 FROM
-                    sources
+                    sources src
                 WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstreamId
+                    src.artist_id = @artistId
+                    AND src.upstream_identifier = @upstreamId
             ", new { artistId = artist.id, upstreamId }));
         }
 
-        public async Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
+        public Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
+        {
+	        return FullSourcesGeneric(
+		        "s.artist_id = @artistId AND s.show_id = @showId",
+		        new {showId = show.id, artistId = artist.id}
+		    );
+        }
+        
+        public async Task<IEnumerable<SourceFull>> FullSourcesGeneric(string where, object param)
         {
             var LinkMapper = new EntityOneToManyMapper<SourceFull, Link, int>()
             {
@@ -94,40 +102,47 @@ namespace Relisten.Data
             };
 
 			return await db.WithConnection(async con => {
-				var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>(@"
+				var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>($@"
 	                SELECT
 	                    s.*
+						, a.uuid as artist_uuid
+						, v.uuid as venue_uuid
+                        , sh.uuid as show_uuid
 						, COALESCE(review_counts.source_review_count, 0) as review_count
 						, l.*
 	                FROM
 	                    sources s
+						JOIN artists a ON a.id = s.artist_id
+						LEFT JOIN venues v ON v.id = s.venue_id
+						LEFT JOIN shows sh ON sh.id = s.show_id
 						LEFT JOIN links l ON l.source_id = s.id
 
 						LEFT JOIN source_review_counts review_counts ON review_counts.source_id = s.id
 	                WHERE
-	                    s.artist_id = @artistId
-	                    AND s.show_id = @showId
+	                    {where}
                     ORDER BY
                         s.avg_rating_weighted DESC
 	            ",
 					LinkMapper.Map,
-					new { showId = show.id, artistId = artist.id }
+					param
 				);
 
-				var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>(@"
+				var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>($@"
 	                SELECT
-	                    s.*, t.*
+	                    sets.*, a.uuid as artist_uuid, s.uuid as source_uuid
+                        , t.*, s.uuid as source_uuid, sets.uuid as source_set_uuid, a.uuid as artist_uuid
 	                FROM
-	                    source_sets s
-	                    LEFT JOIN sources src ON src.id = s.source_id
-	                    LEFT JOIN source_tracks t ON t.source_set_id = s.id
+	                    source_sets sets
+	                    LEFT JOIN sources s ON s.id = sets.source_id
+						LEFT JOIN artists a ON a.id = s.artist_id
+	                    LEFT JOIN source_tracks t ON t.source_set_id = sets.id
 	                WHERE
-	                    src.show_id = @showId
+	                    {where}
 					ORDER BY
-						s.index ASC, t.track_position ASC
+						sets.index ASC, t.track_position ASC
 	            ",
 					TrackMapper.Map,
-					new { showId = show.id }
+					param
 				);
 
 				var setsWithTracks = t_setsWithTracks

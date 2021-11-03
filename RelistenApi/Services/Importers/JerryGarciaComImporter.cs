@@ -35,8 +35,9 @@ namespace Relisten.Import
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
-            ILogger<JerryGarciaComImporter> log
-        ) : base(db)
+            ILogger<JerryGarciaComImporter> log,
+            RedisService redisService
+        ) : base(db, redisService)
         {
             this._setlistShowService = setlistShowService;
             this._venueService = venueService;

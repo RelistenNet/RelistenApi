@@ -11,13 +11,18 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Auth;
@@ -45,8 +50,11 @@ namespace Relisten
 			SetupApplicationInsightsFilters();
 			
 			services.AddCors();
+			services.AddResponseCompression();
+			services.AddHttpContextAccessor();
+			services.AddTransient<IConfigureOptions<MvcNewtonsoftJsonOptions>,RelistenApiJsonOptionsWrapper>();
 
-            SetupAuthentication(services);
+			SetupAuthentication(services);
 
 			// Add framework services.
 			services.
@@ -54,11 +62,7 @@ namespace Relisten
 				{
 					mvcOptions.EnableEndpointRouting = false;
 				}).
-				AddNewtonsoftJson(jsonOptions =>
-				{
-					jsonOptions.SerializerSettings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
-					jsonOptions.SerializerSettings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
-				});
+				AddNewtonsoftJson();
 
 			services.AddLogging(loggingBuilder =>
 			{
@@ -82,6 +86,21 @@ namespace Relisten
 						Url = new Uri("https://opensource.org/licenses/MIT")
 					}
 				});
+				
+				c.SwaggerDoc("v3", new OpenApiInfo {
+					Version = "v3",
+					Title = "Relisten API",
+					Contact = new OpenApiContact {
+						Name = "Alec Gorge",
+						Url = new Uri("https://twitter.com/alecgorge")
+					},
+					License = new OpenApiLicense {
+						Name = "MIT",
+						Url = new Uri("https://opensource.org/licenses/MIT")
+					}
+				});
+				
+				c.SchemaFilter<SwaggerSkipV2PropertyFilter>();
 			});
 
             Dapper.SqlMapper.AddTypeHandler(new Api.Models.PersistentIdentifierHandler());
@@ -149,6 +168,7 @@ namespace Relisten
 				app.UseDeveloperExceptionPage();
 			}
 
+			app.UseResponseCompression();
 			app.UseCors(builder => builder
 								  .WithMethods("GET", "POST", "OPTIONS", "HEAD")
 								  .WithOrigins("*")
@@ -188,6 +208,11 @@ namespace Relisten
 				ctx.RoutePrefix = "api-docs";
 				ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
 			});
+			
+			app.UseSwaggerUI(ctx => {
+				ctx.RoutePrefix = "api-docs-v3";
+				ctx.SwaggerEndpoint("/api-docs/v3/swagger.json", "Relisten API v3");
+			});
 
 			app.UseCors(builder => builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
 		}
@@ -206,7 +231,7 @@ namespace Relisten
 					migrator.Baseline(2);
 				}
 
-				migrator.MigrateTo(5);
+				migrator.MigrateTo(6);
 
 				if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
 				{
@@ -290,5 +315,31 @@ namespace Relisten
 
             return !request.Url.AbsolutePath.StartsWith("/relisten-admin/hangfire");
         }
+    }
+    
+    public class RelistenApiJsonOptionsWrapper : IConfigureOptions<MvcNewtonsoftJsonOptions>
+    {
+	    public void Configure(MvcNewtonsoftJsonOptions jsonOptions)
+	    {
+		    ApplyDefaultSerializerSettings(jsonOptions.SerializerSettings);
+	    }
+
+	    public static readonly JsonSerializerSettings DefaultSerializerSettings =
+		    ApplyDefaultSerializerSettings(new JsonSerializerSettings());
+	    public static readonly JsonSerializerSettings ApiV3SerializerSettings =
+		    new Lazy<JsonSerializerSettings>(() =>
+		    {
+			    var settings = ApplyDefaultSerializerSettings(new JsonSerializerSettings());
+			    settings.ContractResolver = new ApiV3ContractResolver(); 
+			    
+			    return settings;
+		    }).Value;
+
+	    private static JsonSerializerSettings ApplyDefaultSerializerSettings(JsonSerializerSettings settings)
+	    {
+		    settings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
+		    settings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;
+		    return settings;
+	    }
     }
 }

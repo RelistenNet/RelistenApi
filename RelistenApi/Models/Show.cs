@@ -4,23 +4,24 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
     public class Show : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [Required] public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
-        public int? venue_id { get; set; }
+        [V2JsonOnly] public int? venue_id { get; set; }
         public VenueWithShowCount venue { get; set; }
-        public Guid? venue_uuid => venue.uuid;
-        public int? tour_id { get; set; }
-        public Guid? tour_uuid => tour?.uuid;
+        public Guid? venue_uuid { get; set; }
+        [V2JsonOnly] public int? tour_id { get; set; }
+        public Guid? tour_uuid { get; set; }
         public Tour tour { get; set; }
-        public int? year_id { get; set; }
-        public Guid? year_uuid => year?.uuid;
+        [V2JsonOnly] public int year_id { get; set; }
+        public Guid year_uuid { get; set; }
         public Year year { get; set; }
-        public int? era_id { get; set; }
+        [V2JsonOnly] public int? era_id { get; set; }
         public Era era { get; set; }
 
         /// <summary>ONLY DATE</summary>

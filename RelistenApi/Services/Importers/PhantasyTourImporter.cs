@@ -29,8 +29,9 @@ namespace Relisten.Import
 			VenueService venueService,
 			TourService tourService,
 			SetlistShowService setlistShowService,
-			SetlistSongService setlistSongService
-		) : base(db)
+			SetlistSongService setlistSongService,
+			RedisService redisService
+		) : base(db, redisService)
 		{
 			_setlistSongService = setlistSongService;
 			_setlistShowService = setlistShowService;

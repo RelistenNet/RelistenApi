@@ -27,8 +27,9 @@ namespace Relisten.Import
             SourceService sourceService,
             SourceReviewService sourceReviewService,
 			LinkService linkService,
-            ILogger<PhishNetImporter> log
-        ) : base(db)
+            ILogger<PhishNetImporter> log,
+            RedisService redisService
+        ) : base(db, redisService)
         {
 			this.linkService = linkService;
 			this._sourceService = sourceService;

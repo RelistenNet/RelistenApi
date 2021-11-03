@@ -53,8 +53,9 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<PhishinImporter> log,
-            IConfiguration configuration
-        ) : base(db)
+            IConfiguration configuration,
+            RedisService redisService
+        ) : base(db, redisService)
         {
 			this.linkService = linkService;
 			this._setlistSongService = setlistSongService;

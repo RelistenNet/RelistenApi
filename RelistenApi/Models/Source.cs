@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
@@ -18,10 +19,14 @@ namespace Relisten.Api.Models
 
 	public class SlimSource : BaseRelistenModel, IHasPersistentIdentifier
 	{
+		[V2JsonOnly]
 		[Required]
 		public int artist_id { get; set; }
+		[Required] public Guid artist_uuid { get; set; }
 
-		public int? venue_id { get; set; }
+		[V2JsonOnly]
+		[Required] public int? venue_id { get; set; }
+		[Required] public Guid? venue_uuid { get; set; }
 		public Venue venue { get; set; }
 
 		[Required]
@@ -58,9 +63,10 @@ namespace Relisten.Api.Models
 
 	public class SlimSourceWithShowVenueAndArtist : SlimSource
 	{
-		public int? show_id { get; set; }
+		[V2JsonOnly]
+		[Required] public int? show_id { get; set; }
+		[Required] public Guid? show_uuid { get; set; }
 
-		[Required]
 		public Show show { get; set; }
 
 		[Required]
@@ -69,15 +75,17 @@ namespace Relisten.Api.Models
 
     public class Source : SlimSource
     {
-		public int? show_id { get; set; }
-		public Show show { get; set; }
+	    [V2JsonOnly]
+	    [Required] public int? show_id { get; set; }
+	    [Required] public Guid show_uuid { get; set; }
+	    public Show show { get; set; }
 
-		public string description { get; set; }
-        public string taper_notes { get; set; }
-        public string source { get; set; }
-        public string taper { get; set; }
-        public string transferrer { get; set; }
-        public string lineage { get; set; }
+	    [Required] public string description { get; set; }
+	    [Required] public string taper_notes { get; set; }
+	    [Required] public string source { get; set; }
+	    [Required] public string taper { get; set; }
+	    [Required] public string transferrer { get; set; }
+	    [Required] public string lineage { get; set; }
 
 		[Required]
 		[JsonConverter(typeof(StringEnumConverter))]
@@ -86,6 +94,7 @@ namespace Relisten.Api.Models
 
 	public class SourceReviewInformation
 	{
+		[V2JsonOnly]
 		[Required]
 		public int source_id { get; set; }
 

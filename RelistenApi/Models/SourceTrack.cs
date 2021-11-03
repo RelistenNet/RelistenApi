@@ -4,19 +4,20 @@ using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
     public class SourceTrack : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [Required]
-        public int source_id { get; set; }
+        [V2JsonOnly] [Required] public int source_id { get; set; }
+        [Required] public Guid source_uuid { get; set; }
 
-        [Required]
-        public int source_set_id { get; set; }
+        [V2JsonOnly] [Required] public int source_set_id { get; set; }
+        [Required] public Guid source_set_uuid { get; set; }
 
-        [Required]
-        public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
+        [Required] public Guid artist_uuid { get; set; }
 
 
         [Required]

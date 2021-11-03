@@ -40,8 +40,9 @@ namespace Relisten.Import
             TourService tourService,
             SetlistSongService setlistSongService,
             ILogger<SetlistFmImporter> log,
-            LinkService linkService
-        ) : base(db)
+            LinkService linkService,
+            RedisService redisService
+        ) : base(db, redisService)
         {
             _linkService = linkService;
             this._setlistShowService = setlistShowService;
@@ -323,7 +324,7 @@ namespace Relisten.Import
                     new Vendor.SetlistFm.TolerantSetsConverter()
                 );
             }
-            catch (JsonReaderException e)
+            catch (JsonReaderException)
             {
 				ctx?.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
                 throw;

@@ -35,7 +35,7 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/venues")]
         [ProducesResponseType(typeof(IEnumerable<VenueWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> tours(string artistIdOrSlug)
+        public async Task<IActionResult> Venues(string artistIdOrSlug)
         {
             return await ApiRequest(artistIdOrSlug, (art) => {
                 return _venueService.AllForArtist(art);
@@ -45,7 +45,7 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
         [ProducesResponseType(typeof(VenueWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
+        public async Task<IActionResult> Venues(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) => {
                 return _venueService.ForIdWithShows(art, id.Id.Value);

@@ -96,20 +96,28 @@ namespace Relisten.Data
             return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
                 SELECT
                     v.*,
-                    CASE
-                    	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                    		COUNT(s.id)
-                    	ELSE
-                    		COUNT(DISTINCT src.show_id)
-                    END as shows_at_venue
+                    a.uuid as artist_uuid,
+                    src.shows_at_venue
                 FROM
-                	shows s
-                    JOIN venues v ON v.id = s.venue_id
-                    LEFT JOIN sources src ON src.venue_id = v.id
+                	venues v
+                	JOIN artists a ON v.artist_id = a.id
+                    LEFT JOIN (
+                        SELECT 
+                            src.venue_id
+                            , CASE
+                    	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                    		          COUNT(s.id)
+                    	          ELSE
+                    		          COUNT(DISTINCT src.show_id)
+                              END as shows_at_venue
+                        FROM
+                            sources src
+                            JOIN shows s ON s.id = src.show_id
+                        GROUP BY
+                            src.venue_id
+                    ) src ON src.venue_id = v.id
                 WHERE
-                    s.artist_id = @id
-                GROUP BY
-                	s.artist_id, v.id
+                    v.artist_id = @id
                 ORDER BY
                 	v.name ASC
             ", new { artist.id }));

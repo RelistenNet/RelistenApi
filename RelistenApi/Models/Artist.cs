@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text;
 using Dapper;
 using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 using Relisten.Import;
 
 namespace Relisten.Api.Models
@@ -41,7 +42,7 @@ namespace Relisten.Api.Models
 
 	public abstract class BaseRelistenModel
 	{
-		[Required]
+		[V2JsonOnly] [Required]
 		public int id { get; set; }
 
 		[Required]
@@ -110,10 +111,19 @@ namespace Relisten.Api.Models
 		public int source_count { get; set; }
 	}
 
+	public class FullArtist : ArtistWithCounts
+	{
+		[Required] public List<VenueWithShowCount> venues { get; set; }
+		[Required] public List<SetlistSongWithPlayCount> songs { get; set; }
+		[Required] public List<TourWithShowCount> tours { get; set; }
+		[Required] public List<Year> years { get; set; }
+		[Required] public List<Show> shows { get; set; }
+	}
+
 	public class Features
 	{
 
-		[Required]
+		[V2JsonOnly] [Required]
 		public int id { get; set; }
 
 
@@ -171,7 +181,7 @@ namespace Relisten.Api.Models
 		[Required]
 		public bool setlist_data_incomplete { get; set; }
 
-		[Required]
+		[V2JsonOnly] [Required]
 		public int artist_id { get; set; }
 
 		[Required]
