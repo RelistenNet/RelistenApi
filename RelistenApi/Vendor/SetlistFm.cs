@@ -1,12 +1,11 @@
-
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
 namespace Relisten.Vendor.SetlistFm
 {
-
     public class Artist
     {
         public string mbid { get; set; }
@@ -46,11 +45,7 @@ namespace Relisten.Vendor.SetlistFm
         public City city { get; set; }
         public string url { get; set; }
 
-        public string _iguanaUpstreamId {
-            get {
-                return "setlistfm:" + id;
-            }
-        }
+        public string _iguanaUpstreamId => "setlistfm:" + id;
     }
 
     public class Song
@@ -68,14 +63,15 @@ namespace Relisten.Vendor.SetlistFm
         public int? encore { get; set; }
     }
 
-    class TolerantListConverter<T> : Newtonsoft.Json.Converters.CustomCreationConverter<IList<T>> where T: new()
+    internal class TolerantListConverter<T> : CustomCreationConverter<IList<T>> where T : new()
     {
         public override IList<T> Create(Type objectType)
         {
             return new List<T>();
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+            JsonSerializer serializer)
         {
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.StartArray)
@@ -84,23 +80,25 @@ namespace Relisten.Vendor.SetlistFm
                 serializer.Populate(reader, l);
                 return l;
             }
-            else if(reader.TokenType == JsonToken.StartObject)
+
+            if (reader.TokenType == JsonToken.StartObject)
             {
                 var l = new List<T>();
 
-                T obj = new T();
+                var obj = new T();
                 serializer.Populate(reader, obj);
 
                 l.Add(obj);
 
                 return l;
             }
-            else if (reader.TokenType == JsonToken.String)
+
+            if (reader.TokenType == JsonToken.String)
             {
                 return new List<T>();
             }
 
-            JObject jObject = JObject.Load(reader);
+            var jObject = JObject.Load(reader);
 
             // Create target object based on JObject 
             var target = (T)Activator.CreateInstance(typeof(T));
@@ -114,19 +112,21 @@ namespace Relisten.Vendor.SetlistFm
         }
     }
 
-    class TolerantSetsConverter : Newtonsoft.Json.Converters.CustomCreationConverter<Sets>
+    internal class TolerantSetsConverter : CustomCreationConverter<Sets>
     {
         public override Sets Create(Type objectType)
         {
-            return new Sets() { set = new List<Set>() };
+            return new Sets {set = new List<Set>()};
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+            JsonSerializer serializer)
         {
             var s = Create(objectType);
 
             // Load JObject from stream 
-            if(reader.TokenType == JsonToken.String) {
+            if (reader.TokenType == JsonToken.String)
+            {
                 return s;
             }
 
@@ -155,7 +155,7 @@ namespace Relisten.Vendor.SetlistFm
         public string url { get; set; }
         public int? lastFmEventId { get; set; }
     }
-    
+
     public class Tour
     {
         public string name { get; set; }
@@ -169,5 +169,4 @@ namespace Relisten.Vendor.SetlistFm
         public int total { get; set; }
         public List<Setlist> setlist { get; set; }
     }
-
 }

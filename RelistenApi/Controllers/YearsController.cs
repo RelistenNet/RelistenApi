@@ -1,13 +1,10 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
-using Dapper;
 using Relisten.Api.Models;
-using Relisten.Data;
 using Relisten.Api.Models.Api;
+using Relisten.Data;
 
 namespace Relisten.Controllers
 {
@@ -22,11 +19,12 @@ namespace Relisten.Controllers
         public YearsController(
             RedisService redis,
             DbService db,
-			ArtistService artistService,
+            ArtistService artistService,
             ShowService showService,
             SourceService sourceService,
             YearService yearService
-		) : base(redis, db, artistService) {
+        ) : base(redis, db, artistService)
+        {
             _showService = showService;
             _yearService = yearService;
             _sourceService = sourceService;
@@ -37,7 +35,8 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => {
+            return await ApiRequest(artistIdOrSlug, art =>
+            {
                 return _yearService.AllForArtist(art);
             });
         }
@@ -47,7 +46,8 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year)
         {
-            return await ApiRequestWithIdentifier(artistIdOrSlug, year, (art, id) => {
+            return await ApiRequestWithIdentifier(artistIdOrSlug, year, (art, id) =>
+            {
                 return _yearService.ForIdentifierWithShows(art, id);
             }, true, true);
         }
@@ -57,7 +57,8 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year, string showDate)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
+            return await ApiRequest(artistIdOrSlug,
+                art => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
         }
     }
 }

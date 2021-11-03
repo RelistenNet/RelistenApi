@@ -1,12 +1,11 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
-using System;
 using System.Text;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
@@ -23,26 +22,28 @@ namespace Relisten.Data
                     source_reviews r
                 WHERE
                     source_id = ANY(@source_ids)
-            ", new { source_ids }));
+            ", new {source_ids}));
         }
 
         public async Task<IEnumerable<SourceReview>> UpdateAll(Source source, IEnumerable<SourceReview> reviews)
         {
-            const string guidSnippet = @"md5(@source_id || '::review::' || COALESCE('' || @rating, 'NULL') || COALESCE('' || @title, 'NULL') || COALESCE('' || @author, 'NULL') || @updated_at)::uuid";
+            const string guidSnippet =
+                @"md5(@source_id || '::review::' || COALESCE('' || @rating, 'NULL') || COALESCE('' || @title, 'NULL') || COALESCE('' || @author, 'NULL') || @updated_at)::uuid";
             return await db.WithConnection(async con =>
             {
                 var inserted = new List<SourceReview>();
 
                 foreach (var review in reviews)
                 {
-                    var p = new {
+                    var p = new
+                    {
                         review.id,
                         review.source_id,
                         review.rating,
                         review.title,
                         review.review,
                         review.author,
-                        review.updated_at,
+                        review.updated_at
                     };
 
                     inserted.Add(await con.QuerySingleAsync<SourceReview>($@"
@@ -84,10 +85,7 @@ namespace Relisten.Data
                     WHERE
                         source_id = @sourceId
                         AND NOT(uuid = ANY(@reviewGuids))
-                ", new {
-                    sourceId = source.id,
-                    reviewGuids = inserted.Select(i => i.uuid).ToList()
-                });
+                ", new {sourceId = source.id, reviewGuids = inserted.Select(i => i.uuid).ToList()});
 
                 return inserted;
             });
@@ -95,9 +93,10 @@ namespace Relisten.Data
 
         private Guid GuidForReview(SourceReview review)
         {
-            using (MD5 md5 = MD5.Create())
+            using (var md5 = MD5.Create())
             {
-                byte[] hash = md5.ComputeHash(Encoding.Default.GetBytes($"{review.source_id}::review::{review.rating?.ToString() ?? "NULL"}{review.title ?? "NULL"}{review.author ?? "NULL"}"));
+                var hash = md5.ComputeHash(Encoding.Default.GetBytes(
+                    $"{review.source_id}::review::{review.rating?.ToString() ?? "NULL"}{review.title ?? "NULL"}{review.author ?? "NULL"}"));
                 return new Guid(hash);
             }
         }

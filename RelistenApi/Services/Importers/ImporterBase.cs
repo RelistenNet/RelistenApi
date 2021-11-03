@@ -1,20 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Linq;
 using System.Net.Http;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Relisten.Api.Models;
-using Dapper;
-using Relisten.Vendor;
-using Relisten.Data;
 using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using Hangfire.Server;
+using System.Threading.Tasks;
+using Dapper;
 using Hangfire.Console;
-using System.Threading;
+using Hangfire.Server;
+using Relisten.Api.Models;
 using Relisten.Controllers;
 
 namespace Relisten.Import
@@ -34,15 +27,15 @@ namespace Relisten.Import
 
     public class ImportStats
     {
-        public static readonly ImportStats None = new ImportStats();
+        public static readonly ImportStats None = new();
 
-        public int Updated { get; set; } = 0;
-        public int Created { get; set; } = 0;
-        public int Removed { get; set; } = 0;
+        public int Updated { get; set; }
+        public int Created { get; set; }
+        public int Removed { get; set; }
 
         public static ImportStats operator +(ImportStats c1, ImportStats c2)
         {
-            return new ImportStats()
+            return new ImportStats
             {
                 Updated = c1.Updated + c2.Updated,
                 Removed = c1.Removed + c2.Removed,
@@ -58,176 +51,176 @@ namespace Relisten.Import
 
     public class ImporterService
     {
-		IDictionary<string, ImporterBase> importers { get; set; }
-
         public ImporterService(
             ArchiveOrgImporter _archiveOrg,
             SetlistFmImporter _setlistFm,
-			PhishinImporter _phishin,
-			PhishNetImporter _phishnet,
-			JerryGarciaComImporter _jerry,
-			PanicStreamComImporter _panic,
-			PhantasyTourImporter _phantasy
+            PhishinImporter _phishin,
+            PhishNetImporter _phishnet,
+            JerryGarciaComImporter _jerry,
+            PanicStreamComImporter _panic,
+            PhantasyTourImporter _phantasy
         )
         {
-			var imps = new ImporterBase[] {
-				_setlistFm,
-				_archiveOrg,
-				_panic,
-				_jerry,
-				_phishin,
-				_phishnet,
-				_phantasy
-			};
+            var imps = new ImporterBase[] {_setlistFm, _archiveOrg, _panic, _jerry, _phishin, _phishnet, _phantasy};
 
-			importers = new Dictionary<string, ImporterBase>();
+            importers = new Dictionary<string, ImporterBase>();
 
-			foreach (var i in imps)
-			{
-				importers[i.ImporterName] = i;
-			}
+            foreach (var i in imps)
+            {
+                importers[i.ImporterName] = i;
+            }
         }
 
-		public IEnumerable<ImporterBase> ImportersForArtist(Artist art)
-		{
-			return art.upstream_sources.Select(s => importers[s.upstream_source.name]);
-		}
+        private IDictionary<string, ImporterBase> importers { get; }
 
-		public ImporterBase ImporterForUpstreamSource(UpstreamSource source)
-		{
-			return importers[source.name];
-		}
+        public IEnumerable<ImporterBase> ImportersForArtist(Artist art)
+        {
+            return art.upstream_sources.Select(s => importers[s.upstream_source.name]);
+        }
 
-		public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources, PerformContext ctx)
-		{
-			return Import(artist, filterUpstreamSources, null, ctx);
-		}
+        public ImporterBase ImporterForUpstreamSource(UpstreamSource source)
+        {
+            return importers[source.name];
+        }
 
-		public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
-		{
-			var importer = artist.upstream_sources.First().upstream_source.importer;
+        public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources,
+            PerformContext ctx)
+        {
+            return Import(artist, filterUpstreamSources, null, ctx);
+        }
 
-			ctx?.WriteLine("Rebuilding Shows");
-			var stats = await importer.RebuildShows(artist);
+        public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
+        {
+            var importer = artist.upstream_sources.First().upstream_source.importer;
 
-			ctx?.WriteLine("Rebuilding Years");
-			stats += await importer.RebuildYears(artist);
+            ctx?.WriteLine("Rebuilding Shows");
+            var stats = await importer.RebuildShows(artist);
 
-			ctx?.WriteLine("Done!");
+            ctx?.WriteLine("Rebuilding Years");
+            stats += await importer.RebuildYears(artist);
 
-			return stats;
-		}
+            ctx?.WriteLine("Done!");
 
-		public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources, string showIdentifier, PerformContext ctx)
-		{
-			var stats = new ImportStats();
+            return stats;
+        }
 
-			var srcs = artist.upstream_sources.ToList();
+        public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources,
+            string showIdentifier, PerformContext ctx)
+        {
+            var stats = new ImportStats();
 
-			ctx?.WriteLine($"Found {srcs.Count} valid importers.");
-			var prog = ctx?.WriteProgressBar();
+            var srcs = artist.upstream_sources.ToList();
 
-			await srcs.AsyncForEachWithProgress(prog, async item =>
-			{
-				if (filterUpstreamSources != null && !filterUpstreamSources(item))
-				{
-					ctx?.WriteLine($"Skipping (rejected by filter): {item.upstream_source_id}, {item.upstream_identifier}");
-					return;
-				}
-				
-				ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
+            ctx?.WriteLine($"Found {srcs.Count} valid importers.");
+            var prog = ctx?.WriteProgressBar();
 
-				if(showIdentifier != null)
-				{
-					stats += await item.upstream_source.importer.ImportSpecificShowDataForArtist(artist, item, showIdentifier, ctx);
-				}
-				else
-				{
-					stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
-				}
-			});
+            await srcs.AsyncForEachWithProgress(prog, async item =>
+            {
+                if (filterUpstreamSources != null && !filterUpstreamSources(item))
+                {
+                    ctx?.WriteLine(
+                        $"Skipping (rejected by filter): {item.upstream_source_id}, {item.upstream_identifier}");
+                    return;
+                }
 
-			return stats;
-		}
+                ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
+
+                if (showIdentifier != null)
+                {
+                    stats += await item.upstream_source.importer.ImportSpecificShowDataForArtist(artist, item,
+                        showIdentifier, ctx);
+                }
+                else
+                {
+                    stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
+                }
+            });
+
+            return stats;
+        }
     }
 
     public abstract class ImporterBase : IDisposable
     {
-	    protected readonly RedisService redisService;
-	    protected DbService db { get; set; }
-        protected HttpClient http { get; set; }
+        protected readonly RedisService redisService;
 
         public ImporterBase(DbService db, RedisService redisService)
         {
-	        this.redisService = redisService;
-	        this.db = db;
-			http = new HttpClient();
-	        
-	        // iPhone on iOS 11.4
-	        http.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
-	        http.DefaultRequestHeaders.Add("Accept", "*/*");
+            this.redisService = redisService;
+            this.db = db;
+            http = new HttpClient();
+
+            // iPhone on iOS 11.4
+            http.DefaultRequestHeaders.Add("User-Agent",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
+            http.DefaultRequestHeaders.Add("Accept", "*/*");
         }
 
-        public abstract ImportableData ImportableDataForArtist(Artist artist);
-		public abstract Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx);
-		public abstract Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx);
+        protected DbService db { get; set; }
+        protected HttpClient http { get; set; }
 
-		public abstract string ImporterName { get; }
+        public abstract string ImporterName { get; }
+
+        private IDictionary<string, int> trackSlugCounts { get; } = new Dictionary<string, int>();
 
         public void Dispose()
         {
-            this.http.Dispose();
+            http.Dispose();
         }
 
-		IDictionary<string, int> trackSlugCounts { get; set; } = new Dictionary<string, int>();
+        public abstract ImportableData ImportableDataForArtist(Artist artist);
 
-		/// <summary>
-		/// Resets the slug counts. This needs to be called after each source is imported otherwise you'll get thing like you-enjoy-myself-624
-		/// </summary>
-		public void ResetTrackSlugCounts()
-		{
-			trackSlugCounts.Clear();
-		}
+        public abstract Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
+            PerformContext ctx);
+
+        public abstract Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
+            string showIdentifier, PerformContext ctx);
+
+        /// <summary>
+        ///     Resets the slug counts. This needs to be called after each source is imported otherwise you'll get thing like
+        ///     you-enjoy-myself-624
+        /// </summary>
+        public void ResetTrackSlugCounts()
+        {
+            trackSlugCounts.Clear();
+        }
 
         public string Slugify(string full)
         {
             var slug = Regex.Replace(full.ToLower().Normalize(), @"['.]", "");
             slug = Regex.Replace(slug, @"[^a-z0-9\s-]", " ");
 
-            return Regex.Replace(slug, @"\s+", " ").
-                Trim().
-                Replace(" ", "-").
-				Trim('-');
+            return Regex.Replace(slug, @"\s+", " ").Trim().Replace(" ", "-").Trim('-');
         }
 
-		public string SlugifyTrack(string full)
-		{
-			var slug = Slugify(full);
+        public string SlugifyTrack(string full)
+        {
+            var slug = Slugify(full);
 
-			if(trackSlugCounts.ContainsKey(slug))
+            if (trackSlugCounts.ContainsKey(slug))
             {
-				var count = 0;
-				do
-				{
-					count = trackSlugCounts[slug];
+                var count = 0;
+                do
+                {
+                    count = trackSlugCounts[slug];
 
-					count++;
-					trackSlugCounts[slug] = count;
+                    count++;
+                    trackSlugCounts[slug] = count;
 
-					// keep incrementing until we find a slug that isn't taken
-				} while(trackSlugCounts.ContainsKey(slug + $"-{count}"));
+                    // keep incrementing until we find a slug that isn't taken
+                } while (trackSlugCounts.ContainsKey(slug + $"-{count}"));
 
-				slug += $"-{count}";
+                slug += $"-{count}";
 
-				trackSlugCounts[slug] = 1;
-			}
-			else
-			{
-				trackSlugCounts[slug] = 1;
-			}
+                trackSlugCounts[slug] = 1;
+            }
+            else
+            {
+                trackSlugCounts[slug] = 1;
+            }
 
-			return slug;
-		}
+            return slug;
+        }
 
         public async Task<ImportStats> RebuildYears(Artist artist)
         {
@@ -298,15 +291,16 @@ WHERE
 REFRESH MATERIALIZED VIEW show_source_information;
 REFRESH MATERIALIZED VIEW venue_show_counts;
 
-            ", new { id = artist.id }));
+            ", new {artist.id}));
 
             await redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
-            
+
             return ImportStats.None;
         }
+
         public async Task<ImportStats> RebuildShows(Artist artist)
         {
-			var sql = @"
+            var sql = @"
 -- Update durations
 WITH durs AS (
 	SELECT
@@ -402,9 +396,9 @@ WHERE
 COMMIT;
 			";
 
-			if (artist.features.reviews_have_ratings)
-			{
-				sql += @"
+            if (artist.features.reviews_have_ratings)
+            {
+                sql += @"
 	BEGIN;
 	-- Update sources with calculated rating/review information
 	WITH review_info AS (
@@ -493,9 +487,10 @@ COMMIT;
 	    ;
 	COMMIT;
 				";
-			}
-			else {
-				sql += @"
+            }
+            else
+            {
+                sql += @"
 	BEGIN;
 	-- used for things like Phish where ratings aren't attached to textual reviews
 	-- Calculate weighted averages for sources once we have average data and update sources
@@ -542,9 +537,9 @@ COMMIT;
 	    ;
 	COMMIT;
 				";
-			}
+            }
 
-			sql += @"
+            sql += @"
 
 BEGIN;
 -- Update shows with rating based on weighted averages
@@ -592,7 +587,7 @@ REFRESH MATERIALIZED VIEW source_review_counts;
 
             ";
 
-            await db.WithConnection(con => con.ExecuteAsync(sql, new { id = artist.id }));
+            await db.WithConnection(con => con.ExecuteAsync(sql, new {artist.id}));
             return ImportStats.None;
         }
     }

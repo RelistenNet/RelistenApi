@@ -1,54 +1,55 @@
-﻿using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
-using Relisten.Import;
 using System.Text;
-using System.Reflection;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
+using Relisten.Import;
 
 namespace Relisten.Data
 {
-	public class ArtistService : RelistenDataServiceBase
-	{
-		public ImporterService _importService { get; set; }
+    public class ArtistService : RelistenDataServiceBase
+    {
+        private static Func<Artist, Features, Artist> joiner = (Artist artist, Features features) =>
+        {
+            artist.features = features;
+            return artist;
+        };
 
-		public ArtistService(DbService db, ImporterService importService) : base(db)
-		{
-			_importService = importService;
-		}
+        public ArtistService(DbService db, ImporterService importService) : base(db)
+        {
+            _importService = importService;
+        }
 
-		private static Func<Artist, Features, Artist> joiner = (Artist artist, Features features) =>
-			{
-				artist.features = features;
-				return artist;
-			};
+        public ImporterService _importService { get; set; }
 
-		public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null) where T: ArtistWithCounts
-		{
-			var where = "";
-			if(idsOrSlugs == null || idsOrSlugs.Count == 0) {
-				where = "1=1";
-			}
-			else {
-				where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
-			}
-			
-			var ids = new List<int>();
-			var slugs = new List<string>();
-			var uuids = new List<Guid>();
+        public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null)
+            where T : ArtistWithCounts
+        {
+            var where = "";
+            if (idsOrSlugs == null || idsOrSlugs.Count == 0)
+            {
+                where = "1=1";
+            }
+            else
+            {
+                where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+            }
 
-			if (idsOrSlugs != null)
-			{
-				foreach(var idOrSlug in idsOrSlugs)
-				{
-					FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
-				}
-			}
-			
-			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync($@"
+            var ids = new List<int>();
+            var slugs = new List<string>();
+            var uuids = new List<Guid>();
+
+            if (idsOrSlugs != null)
+            {
+                foreach (var idOrSlug in idsOrSlugs)
+                {
+                    FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
+                }
+            }
+
+            return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync($@"
                 WITH show_counts AS (
                     SELECT
                         artist_id,
@@ -79,15 +80,15 @@ namespace Relisten.Data
 				ORDER BY
 					a.featured DESC, a.name
             ", (T artist, Features features) =>
-			{
-				artist.features = features;
-				return artist;
-			}, new {ids, uuids, slugs})));
-		}
+            {
+                artist.features = features;
+                return artist;
+            }, new {ids, uuids, slugs})));
+        }
 
-		public Task<int> RemoveAllContentForArtist(Artist art)
-		{
-			return db.WithConnection(con => con.ExecuteAsync(@"
+        public Task<int> RemoveAllContentForArtist(Artist art)
+        {
+            return db.WithConnection(con => con.ExecuteAsync(@"
 				delete from setlist_songs where artist_id = @ArtistId;
 				delete from setlist_shows where artist_id = @ArtistId;
 				delete from shows where artist_id = @ArtistId;
@@ -96,14 +97,12 @@ namespace Relisten.Data
 				delete from venues where artist_id = @ArtistId;
 				delete from years where artist_id = @ArtistId;
 				delete from eras where artist_id = @ArtistId;
-			", new {
-				ArtistId = art.id
-			}));
-		}
+			", new {ArtistId = art.id}));
+        }
 
-		public async Task<IEnumerable<Artist>> All()
-		{
-			return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
+        public async Task<IEnumerable<Artist>> All()
+        {
+            return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
                     a.*, f.*
                 FROM
@@ -112,11 +111,11 @@ namespace Relisten.Data
 				ORDER BY
 					a.featured DESC, a.sort_name
             ", joiner)));
-		}
+        }
 
-		public async Task<Artist> FindArtistById(int id)
-		{
-			var a = await db.WithConnection(con => con.QueryAsync(@"
+        public async Task<Artist> FindArtistById(int id)
+        {
+            var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
                     a.*, f.*
                 FROM
@@ -124,14 +123,14 @@ namespace Relisten.Data
                     LEFT JOIN features f on f.artist_id = a.id
 				WHERE
 					a.id = @id
-            ", joiner, new { id }));
+            ", joiner, new {id}));
 
-			return await FillInUpstreamSources(a.SingleOrDefault());
-		}
+            return await FillInUpstreamSources(a.SingleOrDefault());
+        }
 
-		public async Task<Artist> FindArtistByShowUuid(Guid uuid)
-		{
-			var a = await db.WithConnection(con => con.QueryAsync(@"
+        public async Task<Artist> FindArtistByShowUuid(Guid uuid)
+        {
+            var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
                     a.*, f.*
                 FROM
@@ -140,30 +139,30 @@ namespace Relisten.Data
                     LEFT JOIN features f on f.artist_id = a.id
 				WHERE
 					s.uuid = @uuid
-            ", joiner, new { uuid }));
+            ", joiner, new {uuid}));
 
-			return await FillInUpstreamSources(a.SingleOrDefault());
-		}
+            return await FillInUpstreamSources(a.SingleOrDefault());
+        }
 
-		async Task<T> FillInUpstreamSources<T>(T art) where T : Artist
-		{
-			if (art == null)
-			{
-				return null;
-			}
+        async Task<T> FillInUpstreamSources<T>(T art) where T : Artist
+        {
+            if (art == null)
+            {
+                return null;
+            }
 
-			var filled = await FillInUpstreamSources((IEnumerable<T>)new[] { art });
-			return filled?.FirstOrDefault();
-		}
+            var filled = await FillInUpstreamSources((IEnumerable<T>)new[] {art});
+            return filled?.FirstOrDefault();
+        }
 
-		async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T> art) where T : Artist
-		{
-			if (art == null)
-			{
-				return null;
-			}
+        async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T> art) where T : Artist
+        {
+            if (art == null)
+            {
+                return null;
+            }
 
-			var srcs = await db.WithConnection(con => con.QueryAsync(@"
+            var srcs = await db.WithConnection(con => con.QueryAsync(@"
 				SELECT
 					aus.*, s.*
 				FROM
@@ -172,44 +171,44 @@ namespace Relisten.Data
 				WHERE
 					aus.artist_id = ANY(@artistIds)
 			", (ArtistUpstreamSource aus, UpstreamSource src) =>
-			{
-				aus.upstream_source = src;
-				return aus;
-			}, new { artistIds = art.Select(a => a.id).ToList() }));
+            {
+                aus.upstream_source = src;
+                return aus;
+            }, new {artistIds = art.Select(a => a.id).ToList()}));
 
-			var gsrcs = srcs
-				.Select(s =>
-				{
-					s.upstream_source.importer = _importService.ImporterForUpstreamSource(s.upstream_source);
-					return s;
-				})
-				.GroupBy(src => src.artist_id)
-				.ToDictionary(g => g.Key, g => g.Select(s => s))
-				;
+            var gsrcs = srcs
+                    .Select(s =>
+                    {
+                        s.upstream_source.importer = _importService.ImporterForUpstreamSource(s.upstream_source);
+                        return s;
+                    })
+                    .GroupBy(src => src.artist_id)
+                    .ToDictionary(g => g.Key, g => g.Select(s => s))
+                ;
 
-			foreach(var a in art)
-			{
-				IEnumerable<ArtistUpstreamSource> s;
+            foreach (var a in art)
+            {
+                IEnumerable<ArtistUpstreamSource> s;
 
-				if(!gsrcs.TryGetValue(a.id, out s))
-				{
-					s = new List<ArtistUpstreamSource>();
-				}
+                if (!gsrcs.TryGetValue(a.id, out s))
+                {
+                    s = new List<ArtistUpstreamSource>();
+                }
 
-				a.upstream_sources = s;
-			}
+                a.upstream_sources = s;
+            }
 
-			return art;
-		}
+            return art;
+        }
 
-		public async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
-		{
-			return (await FindArtistsWithIdsOrSlugs(new[] { idOrSlug })).FirstOrDefault();
-		}
+        public async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
+        {
+            return (await FindArtistsWithIdsOrSlugs(new[] {idOrSlug})).FirstOrDefault();
+        }
 
-		public async Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(IReadOnlyList<string> idsOrSlugs)
-		{
-			var baseSql = @"
+        public async Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(IReadOnlyList<string> idsOrSlugs)
+        {
+            var baseSql = @"
                 SELECT
                     a.*, f.*, au.*
                 FROM
@@ -220,114 +219,119 @@ namespace Relisten.Data
                 WHERE
             ";
 
-			var ids = new List<int>();
-			var slugs = new List<string>();
-			var uuids = new List<Guid>();
+            var ids = new List<int>();
+            var slugs = new List<string>();
+            var uuids = new List<Guid>();
 
-			foreach(var idOrSlug in idsOrSlugs)
-			{
-				FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
-			}
+            foreach (var idOrSlug in idsOrSlugs)
+            {
+                FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
+            }
 
-			return await db.WithConnection(async con =>
-			{
-				string where;
-				if(idsOrSlugs.Count == 0) {
-					where = "1=1";
-				}
-				else {
-					where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
-				}
-				
-				var artists = await con.QueryAsync(
-					baseSql + where,
-					joiner,
-					new { ids, slugs, uuids }
-				);
+            return await db.WithConnection(async con =>
+            {
+                string where;
+                if (idsOrSlugs.Count == 0)
+                {
+                    where = "1=1";
+                }
+                else
+                {
+                    where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+                }
 
-				return await FillInUpstreamSources(artists);
-			});
-		}
+                var artists = await con.QueryAsync(
+                    baseSql + where,
+                    joiner,
+                    new {ids, slugs, uuids}
+                );
 
-		private static void FlexiblyParseArtistIdentifier(string idOrSlug, List<int> ids, List<Guid> guids, List<string> slugs)
-		{
-			if (int.TryParse(idOrSlug, out var id))
-			{
-				ids.Add(id);
-				return;
-			}
-			
-			if (idOrSlug?.Length == 36 && Guid.TryParse(idOrSlug, out var guid))
-			{
-				guids.Add(guid);
-				return;
-			}
-			
-			slugs.Add(idOrSlug);
-		}
+                return await FillInUpstreamSources(artists);
+            });
+        }
 
-		string UpdateFieldsForFeatures(Features features)
-		{
-			var sb = new StringBuilder();
+        private static void FlexiblyParseArtistIdentifier(string idOrSlug, List<int> ids, List<Guid> guids,
+            List<string> slugs)
+        {
+            if (int.TryParse(idOrSlug, out var id))
+            {
+                ids.Add(id);
+                return;
+            }
+
+            if (idOrSlug?.Length == 36 && Guid.TryParse(idOrSlug, out var guid))
+            {
+                guids.Add(guid);
+                return;
+            }
+
+            slugs.Add(idOrSlug);
+        }
+
+        string UpdateFieldsForFeatures(Features features)
+        {
+            var sb = new StringBuilder();
             var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
-
-			for (var i = 0; i < props.Length; i++)
-			{
-				sb.Append($"{props[i].Name} = @{props[i].Name}");
-
-				if (i < props.Length - 1)
-				{
-					sb.Append(",");
-				}
-
-				sb.AppendLine();
-			}
-
-			return sb.ToString();
-		}
-
-
-		string InsertFieldsForFeatures(Features features)
-		{
-            var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
-
-			var sb = new StringBuilder();
-            sb.AppendLine("(");
 
             for (var i = 0; i < props.Length; i++)
-			{
-				sb.Append($"{props[i].Name}");
+            {
+                sb.Append($"{props[i].Name} = @{props[i].Name}");
 
-                if(i < props.Length - 1) {
+                if (i < props.Length - 1)
+                {
                     sb.Append(",");
                 }
 
                 sb.AppendLine();
-			}
+            }
+
+            return sb.ToString();
+        }
+
+
+        string InsertFieldsForFeatures(Features features)
+        {
+            var props = features.GetType().GetProperties().ToList().Where(p => p.Name != "id").ToArray();
+
+            var sb = new StringBuilder();
+            sb.AppendLine("(");
+
+            for (var i = 0; i < props.Length; i++)
+            {
+                sb.Append($"{props[i].Name}");
+
+                if (i < props.Length - 1)
+                {
+                    sb.Append(",");
+                }
+
+                sb.AppendLine();
+            }
 
             sb.AppendLine(") VALUES (");
 
-			for (var i = 0; i < props.Length; i++)
-			{
-				sb.Append($"@{props[i].Name}");
+            for (var i = 0; i < props.Length; i++)
+            {
+                sb.Append($"@{props[i].Name}");
 
-				if (i < props.Length - 1)
-				{
-					sb.Append(",");
-				}
+                if (i < props.Length - 1)
+                {
+                    sb.Append(",");
+                }
 
-				sb.AppendLine();
-			}
+                sb.AppendLine();
+            }
 
-			sb.AppendLine(")");
-			return sb.ToString();
-		}
+            sb.AppendLine(")");
+            return sb.ToString();
+        }
 
-		public async Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist)
-		{
-			if (artist.id != 0)
-			{
-                var art = await db.WithConnection(async con => {
+        public async Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist)
+        {
+            if (artist.id != 0)
+            {
+                var art = await db.WithConnection(async con =>
+                {
                     var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
 	                    UPDATE
 	                        artists
@@ -344,18 +348,18 @@ namespace Relisten.Data
 	                    RETURNING *
 	                ", new
                     {
-						artist.id,
+                        artist.id,
                         artist.musicbrainz_id,
                         artist.name,
                         artist.slug,
                         artist.featured,
-						sort_name = artist.name.Replace("The ", "")
-					});
+                        sort_name = artist.name.Replace("The ", "")
+                    });
 
-					innerArt.features = artist.features;
-					innerArt.features.artist_id = innerArt.id;
+                    innerArt.features = artist.features;
+                    innerArt.features.artist_id = innerArt.id;
 
-					await con.ExecuteAsync(@"
+                    await con.ExecuteAsync(@"
                         UPDATE
                             features
                         SET
@@ -368,10 +372,11 @@ namespace Relisten.Data
                 });
 
                 return art;
-			}
-			else
-			{
-                var art = await db.WithConnection(async con => {
+            }
+            else
+            {
+                var art = await db.WithConnection(async con =>
+                {
                     var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
 	                    INSERT INTO
 	                        artists
@@ -397,29 +402,29 @@ namespace Relisten.Data
 	                        )
 	                    RETURNING *
 	                ", new
-					{
-						artist.musicbrainz_id,
-						artist.name,
-						artist.slug,
-						artist.featured,
-						sort_name = artist.name.Replace("The ", "")
-					});
+                    {
+                        artist.musicbrainz_id,
+                        artist.name,
+                        artist.slug,
+                        artist.featured,
+                        sort_name = artist.name.Replace("The ", "")
+                    });
 
-					innerArt.features = artist.features;
-					innerArt.features.artist_id = innerArt.id;
+                    innerArt.features = artist.features;
+                    innerArt.features.artist_id = innerArt.id;
 
-					await con.ExecuteAsync(@"
+                    await con.ExecuteAsync(@"
                         INSERT INTO
                             features
 
                             " + InsertFieldsForFeatures(innerArt.features) + @"
                     ", innerArt.features);
-					
+
                     return innerArt;
                 });
 
-				return art;
-			}
-		}
-	}
+                return art;
+            }
+        }
+    }
 }

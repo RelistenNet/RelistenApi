@@ -1,9 +1,8 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
@@ -20,7 +19,7 @@ namespace Relisten.Data
                     source_sets r
                 WHERE
                     source_id = ANY(@source_ids)
-            ", new { source_ids }));
+            ", new {source_ids}));
         }
 
         public async Task<SourceSet> Update(Source source, SourceSet set)
@@ -28,7 +27,7 @@ namespace Relisten.Data
             var l = new List<SourceSet>();
             l.Add(set);
 
-            return (await UpdateAll(source, l)).FirstOrDefault(); 
+            return (await UpdateAll(source, l)).FirstOrDefault();
         }
 
         public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets)
@@ -39,7 +38,8 @@ namespace Relisten.Data
 
                 foreach (var set in sets)
                 {
-                    var p = new {
+                    var p = new
+                    {
                         set.id,
                         set.source_id,
                         set.index,
@@ -87,10 +87,7 @@ namespace Relisten.Data
                     WHERE
                         source_id = @sourceId
                         AND NOT(index = ANY(@indicies))
-                ", new {
-                    sourceId = source.id,
-                    indicies = sets.Select(s => s.index).ToList()
-                });
+                ", new {sourceId = source.id, indicies = sets.Select(s => s.index).ToList()});
 
                 return inserted;
             });

@@ -1,26 +1,24 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
-	public class SearchService : RelistenDataServiceBase
-	{
-		public SearchService(DbService db) : base(db)
-		{
+    public class SearchService : RelistenDataServiceBase
+    {
+        public SearchService(DbService db) : base(db)
+        {
+        }
 
-		}
+        public async Task<SearchResults> Search(string searchTerm, int? artistId = null)
+        {
+            return await db.WithConnection(async con =>
+            {
+                var parms = new {searchTerm, artistId};
 
-		public async Task<SearchResults> Search(string searchTerm, int? artistId = null)
-		{
-			return await db.WithConnection(async con =>
-			{
-				var parms = new { searchTerm, artistId };
-
-				return new SearchResults
-				{
-					Artists = await con.QueryAsync<SlimArtist>($@"
+                return new SearchResults
+                {
+                    Artists = await con.QueryAsync<SlimArtist>($@"
 						SELECT
 							*
 						FROM
@@ -30,8 +28,7 @@ namespace Relisten.Data
 							{(artistId.HasValue ? "AND id = @artistId" : "")}
 						LIMIT 20;
 					", parms),
-
-					Shows = await con.QueryAsync<ShowWithSlimArtist, SlimArtist, ShowWithSlimArtist>($@"
+                    Shows = await con.QueryAsync<ShowWithSlimArtist, SlimArtist, ShowWithSlimArtist>($@"
 						SELECT
 							s.*, a.*
 						FROM
@@ -41,9 +38,12 @@ namespace Relisten.Data
 							s.display_date ILIKE '%' || @searchTerm || '%'
 							{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
 						LIMIT 20;
-					", (s, a) => { s.slim_artist = a; return s; }, parms),
-
-					Songs = await con.QueryAsync<SetlistSongWithSlimArtist, SlimArtist, SetlistSongWithSlimArtist>($@"
+					", (s, a) =>
+                    {
+                        s.slim_artist = a;
+                        return s;
+                    }, parms),
+                    Songs = await con.QueryAsync<SetlistSongWithSlimArtist, SlimArtist, SetlistSongWithSlimArtist>($@"
 		                SELECT
 		                    s.*, COUNT(shows.id) as shows_played_at, a.*
 		                FROM
@@ -59,9 +59,12 @@ namespace Relisten.Data
 		                    a.id, s.id
 		                ORDER BY s.name
 						LIMIT 20;
-					", (s, a) => { s.slim_artist = a; return s; }, parms),
-
-					Source = await con.QueryAsync<SourceWithSlimArtist, SlimArtist, SourceWithSlimArtist>($@"
+					", (s, a) =>
+                    {
+                        s.slim_artist = a;
+                        return s;
+                    }, parms),
+                    Source = await con.QueryAsync<SourceWithSlimArtist, SlimArtist, SourceWithSlimArtist>($@"
 						SELECT
 							s.*, a.*
 						FROM
@@ -77,9 +80,12 @@ namespace Relisten.Data
 							OR s.lineage ILIKE '%' || @searchTerm || '%')
 							{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
 						LIMIT 20;
-					", (s, a) => { s.slim_artist = a; return s; }, parms),
-
-					Tours = await con.QueryAsync<TourWithSlimArtist, SlimArtist, TourWithSlimArtist>($@"
+					", (s, a) =>
+                    {
+                        s.slim_artist = a;
+                        return s;
+                    }, parms),
+                    Tours = await con.QueryAsync<TourWithSlimArtist, SlimArtist, TourWithSlimArtist>($@"
 						SELECT
 							t.*, a.*
 						FROM
@@ -89,9 +95,12 @@ namespace Relisten.Data
 							t.name ILIKE '%' || @searchTerm || '%'
 							{(artistId.HasValue ? "AND t.artist_id = @artistId" : "")}
 					    LIMIT 20;
-					", (t, a) => { t.slim_artist = a; return t; }, parms),
-
-					Venues = await con.QueryAsync<VenueWithSlimArtist, SlimArtist, VenueWithSlimArtist>($@"
+					", (t, a) =>
+                    {
+                        t.slim_artist = a;
+                        return t;
+                    }, parms),
+                    Venues = await con.QueryAsync<VenueWithSlimArtist, SlimArtist, VenueWithSlimArtist>($@"
 						SELECT
 							v.*, a.*
 						FROM
@@ -103,9 +112,13 @@ namespace Relisten.Data
 					        OR v.past_names ILIKE '%' || @searchTerm || '%')
 							{(artistId.HasValue ? "AND v.artist_id = @artistId" : "")}
 						LIMIT 20;
-					", (v, a) => { v.slim_artist = a; return v; }, parms)
-				};
-			});
-		}
-	}
+					", (v, a) =>
+                    {
+                        v.slim_artist = a;
+                        return v;
+                    }, parms)
+                };
+            });
+        }
+    }
 }

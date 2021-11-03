@@ -1,45 +1,42 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
-	public class EntityOneToManyMapper<TP, TC, TPk>
-	{
-		private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
+    public class EntityOneToManyMapper<TP, TC, TPk>
+    {
+        private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
 
-		public Action<TP, TC> AddChildAction { get; set; }
+        public Action<TP, TC> AddChildAction { get; set; }
 
-		public Func<TP, TPk> ParentKey { get; set; }
+        public Func<TP, TPk> ParentKey { get; set; }
 
 
-		public virtual TP Map(TP parent, TC child)
-		{
-			TP entity;
-			var found = true;
-			var primaryKey = ParentKey(parent);
+        public virtual TP Map(TP parent, TC child)
+        {
+            TP entity;
+            var found = true;
+            var primaryKey = ParentKey(parent);
 
-			if (!_lookup.TryGetValue(primaryKey, out entity))
-			{
-				_lookup.Add(primaryKey, parent);
-				entity = parent;
-				found = false;
-			}
+            if (!_lookup.TryGetValue(primaryKey, out entity))
+            {
+                _lookup.Add(primaryKey, parent);
+                entity = parent;
+                found = false;
+            }
 
-			AddChildAction(entity, child);
+            AddChildAction(entity, child);
 
-			return !found ? entity : default(TP);
-		}
-	}
+            return !found ? entity : default;
+        }
+    }
 
     public class SourceService : RelistenDataServiceBase
     {
-        private SourceSetService _sourceSetService { get; set; }
-
         public SourceService(
             DbService db,
             SourceSetService sourceSetService
@@ -47,6 +44,8 @@ namespace Relisten.Data
         {
             _sourceSetService = sourceSetService;
         }
+
+        private SourceSetService _sourceSetService { get; }
 
         public async Task<Source> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
@@ -58,51 +57,56 @@ namespace Relisten.Data
                 WHERE
                     src.artist_id = @artistId
                     AND src.upstream_identifier = @upstreamId
-            ", new { artistId = artist.id, upstreamId }));
+            ", new {artistId = artist.id, upstreamId}));
         }
 
         public Task<IEnumerable<SourceFull>> FullSourcesForShow(Artist artist, Show show)
         {
-	        return FullSourcesGeneric(
-		        "s.artist_id = @artistId AND s.show_id = @showId",
-		        new {showId = show.id, artistId = artist.id}
-		    );
+            return FullSourcesGeneric(
+                "s.artist_id = @artistId AND s.show_id = @showId",
+                new {showId = show.id, artistId = artist.id}
+            );
         }
-        
+
         public async Task<IEnumerable<SourceFull>> FullSourcesGeneric(string where, object param)
         {
-            var LinkMapper = new EntityOneToManyMapper<SourceFull, Link, int>()
+            var LinkMapper = new EntityOneToManyMapper<SourceFull, Link, int>
             {
                 AddChildAction = (source, link) =>
                 {
                     if (source.links == null)
+                    {
                         source.links = new List<Link>();
+                    }
 
                     if (link != null)
                     {
                         source.links.Add(link);
                     }
                 },
-                ParentKey = (source) => source.id
+                ParentKey = source => source.id
             };
 
-            var TrackMapper = new EntityOneToManyMapper<SourceSet, SourceTrack, int>()
+            var TrackMapper = new EntityOneToManyMapper<SourceSet, SourceTrack, int>
             {
                 AddChildAction = (set, track) =>
                 {
                     if (set.tracks == null)
+                    {
                         set.tracks = new List<SourceTrack>();
+                    }
 
                     if (track != null)
                     {
                         set.tracks.Add(track);
                     }
                 },
-                ParentKey = (set) => set.id
+                ParentKey = set => set.id
             };
 
-			return await db.WithConnection(async con => {
-				var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>($@"
+            return await db.WithConnection(async con =>
+            {
+                var t_srcsWithReviews = await con.QueryAsync<SourceFull, Link, SourceFull>($@"
 	                SELECT
 	                    s.*
 						, a.uuid as artist_uuid
@@ -123,11 +127,11 @@ namespace Relisten.Data
                     ORDER BY
                         s.avg_rating_weighted DESC
 	            ",
-					LinkMapper.Map,
-					param
-				);
+                    LinkMapper.Map,
+                    param
+                );
 
-				var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>($@"
+                var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>($@"
 	                SELECT
 	                    sets.*, a.uuid as artist_uuid, s.uuid as source_uuid
                         , t.*, s.uuid as source_uuid, sets.uuid as source_set_uuid, a.uuid as artist_uuid
@@ -141,32 +145,32 @@ namespace Relisten.Data
 					ORDER BY
 						sets.index ASC, t.track_position ASC
 	            ",
-					TrackMapper.Map,
-					param
-				);
+                    TrackMapper.Map,
+                    param
+                );
 
-				var setsWithTracks = t_setsWithTracks
-					.Where(s => s != null)
-					.GroupBy(s => s.source_id)
-					.ToDictionary(grp => grp.Key, grp => grp.AsList())
-					;
+                var setsWithTracks = t_setsWithTracks
+                        .Where(s => s != null)
+                        .GroupBy(s => s.source_id)
+                        .ToDictionary(grp => grp.Key, grp => grp.AsList())
+                    ;
 
-				var sources = t_srcsWithReviews
-					.Where(s => s != null)
-					.ToList();
+                var sources = t_srcsWithReviews
+                    .Where(s => s != null)
+                    .ToList();
 
-				foreach (var src in sources)
-				{
-					src.sets = setsWithTracks[src.id];
-				}
+                foreach (var src in sources)
+                {
+                    src.sets = setsWithTracks[src.id];
+                }
 
-				return sources;
-			});
+                return sources;
+            });
         }
 
-	    public Task<IEnumerable<SourceReview>> ReviewsForSource(int sourceId)
-	    {
-		    return db.WithConnection(conn => conn.QueryAsync<SourceReview>(@"
+        public Task<IEnumerable<SourceReview>> ReviewsForSource(int sourceId)
+        {
+            return db.WithConnection(conn => conn.QueryAsync<SourceReview>(@"
 				SELECT
 					r.*
 				FROM
@@ -175,12 +179,14 @@ namespace Relisten.Data
 					r.source_id = @sourceId
 				ORDER BY
 					r.updated_at DESC
-			", new { sourceId }));
-	    }
+			", new {sourceId}));
+        }
 
-		public Task<IEnumerable<SlimSourceWithShowVenueAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
-		{
-			return db.WithConnection(con => con.QueryAsync<SlimSourceWithShowVenueAndArtist, SlimArtistWithFeatures, Features, Show, VenueWithShowCount, Venue, SlimSourceWithShowVenueAndArtist>($@"
+        public Task<IEnumerable<SlimSourceWithShowVenueAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)
+        {
+            return db.WithConnection(con =>
+                con.QueryAsync<SlimSourceWithShowVenueAndArtist, SlimArtistWithFeatures, Features, Show,
+                    VenueWithShowCount, Venue, SlimSourceWithShowVenueAndArtist>(@"
 				SELECT
 					s.*, a.*, f.*, sh.*, shVenue.*, shVenue_counts.shows_at_venue, sVenue.*
 				FROM
@@ -193,19 +199,19 @@ namespace Relisten.Data
                     LEFT JOIN venue_show_counts shVenue_counts ON shVenue_counts.id = sh.venue_id
 				WHERE
 					s.id = ANY(@ids)
-			", (s, a, f, sh, shVenue, sVenue) => 
-			{
-                sh.venue = shVenue;
-                s.venue = sVenue;
+			", (s, a, f, sh, shVenue, sVenue) =>
+                {
+                    sh.venue = shVenue;
+                    s.venue = sVenue;
 
-				a.features = f;
+                    a.features = f;
 
-				s.artist = a;
-				s.show = sh;
+                    s.artist = a;
+                    s.show = sh;
 
-				return s;
-			}, new { ids }));		
-		}
+                    return s;
+                }, new {ids}));
+        }
 
         public async Task<IEnumerable<Source>> AllForArtist(Artist artist)
         {
@@ -216,7 +222,7 @@ namespace Relisten.Data
                     sources s
                 WHERE
                     s.artist_id = @id
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
         public async Task<IEnumerable<SourceReviewInformation>> AllSourceReviewInformationForArtist(Artist artist)
@@ -232,22 +238,23 @@ namespace Relisten.Data
                     JOIN source_review_counts r ON s.id = r.source_id
                 WHERE
                     s.artist_id = @id
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
-        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers) 
+        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers)
         {
             return await db.WithConnection(con => con.ExecuteAsync(@"
                 DELETE FROM
                     sources
                 WHERE
                     upstream_identifier = ANY(@upstreamIdentifiers)
-            ", new { upstreamIdentifiers = upstreamIdentifiers.ToList() })); 
+            ", new {upstreamIdentifiers = upstreamIdentifiers.ToList()}));
         }
 
         public async Task<Source> Save(Source source)
         {
-            var p = new {
+            var p = new
+            {
                 source.id,
                 source.artist_id,
                 source.show_id,
@@ -340,7 +347,7 @@ namespace Relisten.Data
                         venue_id = EXCLUDED.venue_id,
                         num_ratings = EXCLUDED.num_ratings,
                         flac_type = EXCLUDED.flac_type
-                                        
+
                 RETURNING *
             ", p));
         }

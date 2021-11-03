@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -11,7 +10,6 @@ namespace Relisten.Data
     {
         public SourceTrackPlaysService(DbService db) : base(db)
         {
-
         }
 
         public async Task<SourceTrackPlay> RecordPlayedTrack(SourceTrackPlay track)
@@ -50,9 +48,9 @@ namespace Relisten.Data
 					t.id {(lastSeenId != null ? "" : "DESC")}
 				LIMIT
 					@limit
-			", new { lastSeenId, limit }));
+			", new {lastSeenId, limit}));
 
-			return tracks.OrderBy(t => t.id);
+            return tracks.OrderBy(t => t.id);
         }
     }
 }

@@ -1,9 +1,7 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
@@ -14,38 +12,38 @@ namespace Relisten.Data
             Id = null;
             Slug = null;
         }
-        
+
         public Identifier(string idAndOrSlug)
         {
-            int id = -1;
+            var id = -1;
 
-            var parts = idAndOrSlug.Split(new[] { '-' }, 2);
+            var parts = idAndOrSlug.Split(new[] {'-'}, 2);
 
             if (parts.Length == 1)
             {
                 if (int.TryParse(parts[0], out id))
                 {
-                    this.Id = id;
-                    this.Slug = null;
+                    Id = id;
+                    Slug = null;
                 }
                 else
                 {
-                    this.Id = null;
-                    this.Slug = idAndOrSlug;
+                    Id = null;
+                    Slug = idAndOrSlug;
                 }
             }
             else
             {
                 if (int.TryParse(parts[0], out id))
                 {
-                    this.Id = id;
-                    this.Slug = parts[1];
+                    Id = id;
+                    Slug = parts[1];
                 }
                 else
                 {
                     // ¯\_(ツ)_/¯
-                    this.Id = null;
-                    this.Slug = idAndOrSlug;
+                    Id = null;
+                    Slug = idAndOrSlug;
                 }
             }
         }
@@ -56,19 +54,20 @@ namespace Relisten.Data
 
     public class VenueService : RelistenDataServiceBase
     {
-        private ShowService _showService { get; set; }
-
         public VenueService(DbService db, ShowService showService) : base(db)
         {
             _showService = showService;
         }
+
+        private ShowService _showService { get; }
 
         public async Task<Venue> ForGlobalUpstreamIdentifier(string upstreamId)
         {
             return await ForUpstreamIdentifier(null, upstreamId);
         }
 
-        public async Task<IEnumerable<VenueWithShowCount>> AllIncludingUnusedForArtist(Artist artist) {
+        public async Task<IEnumerable<VenueWithShowCount>> AllIncludingUnusedForArtist(Artist artist)
+        {
             return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
                 SELECT
                     v.*,
@@ -88,7 +87,7 @@ namespace Relisten.Data
                 	v.artist_id, v.id
                 ORDER BY
                 	v.name ASC
-            ", new { artist.id })); 
+            ", new {artist.id}));
         }
 
         public async Task<IEnumerable<VenueWithShowCount>> AllForArtist(Artist artist)
@@ -120,7 +119,7 @@ namespace Relisten.Data
                     v.artist_id = @id
                 ORDER BY
                 	v.name ASC
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
         public async Task<Venue> ForUpstreamIdentifier(Artist artist, string upstreamId)
@@ -135,19 +134,17 @@ namespace Relisten.Data
                     WHERE
                         artist_id = @artistId
                         AND upstream_identifier = @upstreamId
-                ", new { artistId = artist.id, upstreamId }));
+                ", new {artistId = artist.id, upstreamId}));
             }
-            else
-            {
-                return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
+
+            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
                     SELECT
                         *
                     FROM
                         venues
                     WHERE
                         upstream_identifier = @upstreamId
-                ", new { upstreamId }));
-            }
+                ", new {upstreamId}));
         }
 
         public async Task<T> ForId<T>(int id) where T : Venue
@@ -170,8 +167,9 @@ namespace Relisten.Data
                     v.id = @id
                 GROUP BY
                 	v.id
-            ", new { id = id }));
+            ", new {id}));
         }
+
         public async Task<VenueWithShowCount> ForId(int id)
         {
             return await ForId<VenueWithShowCount>(id);
@@ -189,7 +187,7 @@ namespace Relisten.Data
             venue.shows = new List<Show>();
             venue.shows.AddRange(await _showService.ShowsForCriteria(artist,
                 "s.artist_id = @artist_id AND s.venue_id = @venue_id",
-                new { artist_id = artist.id, venue_id = venue.id }
+                new {artist_id = artist.id, venue_id = venue.id}
             ));
 
             return venue;
@@ -197,7 +195,8 @@ namespace Relisten.Data
 
         public async Task<Venue> Save(Venue venue)
         {
-            var p = new {
+            var p = new
+            {
                 venue.id,
                 venue.artist_id,
                 venue.latitude,
@@ -207,7 +206,7 @@ namespace Relisten.Data
                 venue.upstream_identifier,
                 venue.updated_at,
                 venue.past_names,
-                venue.slug,
+                venue.slug
             };
 
             if (venue.id != 0)
@@ -231,9 +230,8 @@ namespace Relisten.Data
                     RETURNING *
                 ", p));
             }
-            else
-            {
-                return await db.WithConnection(con => con.QuerySingleAsync<Venue>(@"
+
+            return await db.WithConnection(con => con.QuerySingleAsync<Venue>(@"
                     INSERT INTO
                         venues
 
@@ -264,10 +262,6 @@ namespace Relisten.Data
                         )
                     RETURNING *
                 ", p));
-            }
         }
-
     }
-
-
 }

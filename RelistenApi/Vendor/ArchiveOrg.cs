@@ -1,20 +1,21 @@
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 
 namespace Relisten.Vendor.ArchiveOrg
 {
-    public class TolerantStringConverter : Newtonsoft.Json.Converters.CustomCreationConverter<string>
+    public class TolerantStringConverter : CustomCreationConverter<string>
     {
         public override string Create(Type objectType)
         {
             return "";
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+            JsonSerializer serializer)
         {
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.StartArray)
@@ -23,7 +24,8 @@ namespace Relisten.Vendor.ArchiveOrg
                 serializer.Populate(reader, l);
                 return l.FirstOrDefault();
             }
-            else if (reader.TokenType == JsonToken.StartObject)
+
+            if (reader.TokenType == JsonToken.StartObject)
             {
                 // consume the blank object
                 var l = new object();
@@ -38,38 +40,38 @@ namespace Relisten.Vendor.ArchiveOrg
 
     public class SingleOrArrayConverter<T> : JsonConverter
     {
+        public override bool CanWrite => true;
+
         public override bool CanConvert(Type objectType)
         {
-            return (objectType == typeof(List<T>));
+            return objectType == typeof(List<T>);
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+            JsonSerializer serializer)
         {
-            JToken token = JToken.Load(reader);
+            var token = JToken.Load(reader);
             if (token.Type == JTokenType.Array)
             {
                 return token.ToObject<List<T>>();
             }
-            return new List<T> { token.ToObject<T>() };
+
+            return new List<T> {token.ToObject<T>()};
         }
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            List<T> list = (List<T>)value;
+            var list = (List<T>)value;
             if (list.Count == 1)
             {
                 value = list[0];
             }
-            serializer.Serialize(writer, value);
-        }
 
-        public override bool CanWrite
-        {
-            get { return true; }
+            serializer.Serialize(writer, value);
         }
     }
 
-    public class TolerantArchiveDateTimeConverter : Newtonsoft.Json.Converters.CustomCreationConverter<DateTime>
+    public class TolerantArchiveDateTimeConverter : CustomCreationConverter<DateTime>
     {
         public override DateTime Create(Type objectType)
         {
@@ -88,7 +90,8 @@ namespace Relisten.Vendor.ArchiveOrg
             return min;
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+            JsonSerializer serializer)
         {
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.String)
@@ -108,20 +111,14 @@ namespace Relisten.Vendor.ArchiveOrg
 
                 if (s.Length == 20)
                 {
-                    return new DateTime(
-                        BoundedInt(s, 0, 4, 1, 9999),
-                        BoundedInt(s, 5, 2, 1, 12),
-                        BoundedInt(s, 8, 2, 1, 30),
-                        BoundedInt(s, 11, 2, 0, 23),
-                        BoundedInt(s, 14, 2, 0, 59),
-                        BoundedInt(s, 17, 2, 0, 59),
+                    return new DateTime(BoundedInt(s, 0, 4, 1, 9999), BoundedInt(s, 5, 2, 1, 12),
+                        BoundedInt(s, 8, 2, 1, 30), BoundedInt(s, 11, 2, 0, 23),
+                        BoundedInt(s, 14, 2, 0, 59), BoundedInt(s, 17, 2, 0, 59),
                         DateTimeKind.Utc
                     );
                 }
-                else
-                {
-                    return DateTime.Parse(s, null);
-                }
+
+                return DateTime.Parse(s, null);
             }
 
             return reader.Value;
@@ -143,23 +140,23 @@ namespace Relisten.Vendor.ArchiveOrg
     {
         public int status { get; set; }
         public int QTime { get; set; }
-        [JsonProperty("@params")]
-        public SearchParams parameters { get; set; }
+
+        [JsonProperty("@params")] public SearchParams parameters { get; set; }
     }
 
     public class SearchDoc
     {
+        private DateTime? _max;
         public DateTime date { get; set; }
         public string identifier { get; set; }
         public DateTime? addeddate { get; set; }
         public DateTime? publicdate { get; set; }
-        
+
         [JsonConverter(typeof(SingleOrArrayConverter<DateTime>))]
         public List<DateTime> updatedate { get; set; }
+
         public DateTime? reviewdate { get; set; }
         public DateTime? indexdate { get; set; }
-
-        private DateTime? _max = null;
 
         public DateTime _iguana_index_date
         {
@@ -167,7 +164,8 @@ namespace Relisten.Vendor.ArchiveOrg
             {
                 if (_max == null)
                 {
-                    _max = (new[] { addeddate, publicdate, reviewdate /*, indexdate*/ }).Where(d => d.HasValue).Max().Value;
+                    _max = new[] {addeddate, publicdate, reviewdate /*, indexdate*/}
+                        .Where(d => d.HasValue).Max().Value;
                 }
 
                 return _max.Value;
@@ -178,12 +176,17 @@ namespace Relisten.Vendor.ArchiveOrg
         {
             get
             {
-                var dates = (new[] { updatedate != null ? (DateTime?)updatedate.Max() : (DateTime?)DateTime.MinValue, addeddate, publicdate }).Where(d => d.HasValue).ToList();
-                
-                if (dates.Count == 0) {
-                    throw new Exception($"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible...");
+                var dates = new[]
+                {
+                    updatedate != null ? updatedate.Max() : (DateTime?)DateTime.MinValue, addeddate, publicdate
+                }.Where(d => d.HasValue).ToList();
+
+                if (dates.Count == 0)
+                {
+                    throw new Exception(
+                        $"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible...");
                 }
-                
+
                 return dates.Max().Value;
             }
         }
@@ -201,7 +204,6 @@ namespace Relisten.Vendor.ArchiveOrg
         public SearchResponseHeader responseHeader { get; set; }
         public SearchResponse response { get; set; }
     }
-
 }
 
 namespace Relisten.Vendor.ArchiveOrg.Metadata
@@ -260,5 +262,4 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
         public int updated { get; set; }
         public List<string> workable_servers { get; set; }
     }
-
 }

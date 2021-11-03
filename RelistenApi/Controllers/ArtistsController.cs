@@ -15,13 +15,13 @@ namespace Relisten.Controllers
     [Route("api")]
     public class ArtistsController : RelistenBaseController
     {
-        private readonly YearService yearService;
-        private readonly VenueService venueService;
         private readonly SetlistSongService setlistSongService;
-        private readonly TourService tourService;
-        private readonly UpstreamSourceService upstreamSourceService;
         private readonly ShowService showService;
         private readonly SourceService sourceService;
+        private readonly TourService tourService;
+        private readonly UpstreamSourceService upstreamSourceService;
+        private readonly VenueService venueService;
+        private readonly YearService yearService;
 
         public ArtistsController(
             RedisService redis,
@@ -60,7 +60,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Get(string artistIdOrSlug)
         {
-            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string>() {artistIdOrSlug}))
+            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string> {artistIdOrSlug}))
                 .FirstOrDefault();
             if (art != null)
             {
@@ -80,7 +80,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> GetFullArtist(string artistUuid)
         {
-            var art = (await _artistService.AllWithCounts<FullArtist>(new List<string>() {artistUuid}))
+            var art = (await _artistService.AllWithCounts<FullArtist>(new List<string> {artistUuid}))
                 .FirstOrDefault();
 
             if (art == null)

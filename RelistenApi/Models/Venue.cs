@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
-using System.Text;
-using Newtonsoft.Json;
 using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models

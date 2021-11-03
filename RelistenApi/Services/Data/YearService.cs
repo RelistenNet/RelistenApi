@@ -1,15 +1,13 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
     public class YearService : RelistenDataServiceBase
     {
-        ShowService _showService;
+        private readonly ShowService _showService;
 
         public YearService(DbService db, ShowService showService) : base(db)
         {

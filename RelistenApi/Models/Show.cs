@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
-using System.Text;
-using Newtonsoft.Json;
 using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
@@ -33,11 +30,10 @@ namespace Relisten.Api.Models
         [Required] public string display_date { get; set; }
 
         /// <summary>
-        /// This can be used to determine the age of the source most recently added. `updated_at`
-        /// for a source comes from the upstream source and won't be suffer recently imported biases.
-        /// 
-        /// The value pulled from upstream is based on when that source was published/updated, not
-        /// counting reviews, ratings, etc.
+        ///     This can be used to determine the age of the source most recently added. `updated_at`
+        ///     for a source comes from the upstream source and won't be suffer recently imported biases.
+        ///     The value pulled from upstream is based on when that source was published/updated, not
+        ///     counting reviews, ratings, etc.
         /// </summary>
         /// <value>The most recent `updated_at` date of all the sources for this show.</value>
         [Required]

@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
-using Dapper;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
-using Newtonsoft.Json;
 
 namespace Relisten.Controllers
 {
@@ -16,20 +14,20 @@ namespace Relisten.Controllers
     [Produces("application/json")]
     public class ShowsController : RelistenBaseController
     {
-        public ShowService _showService { get; set; }
-        public SourceService _sourceService { get; set; }
-
         public ShowsController(
             RedisService redis,
             DbService db,
-			ArtistService artistService,
+            ArtistService artistService,
             ShowService showService,
             SourceService sourceService
-		) : base(redis, db, artistService)
+        ) : base(redis, db, artistService)
         {
             _showService = showService;
             _sourceService = sourceService;
         }
+
+        public ShowService _showService { get; set; }
+        public SourceService _sourceService { get; set; }
 
         [HttpGet("v2/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
@@ -43,83 +41,92 @@ namespace Relisten.Controllers
 
         [HttpGet("v2/shows/on-date")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> OnDayInHistory([FromQuery] int month, [FromQuery] int day)
+        public async Task<IActionResult> OnDayInHistory([FromQuery] int month, [FromQuery] int day)
         {
             return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"
                 EXTRACT(month from s.date) = @month
 	            AND EXTRACT(day from s.date) = @day
-            ", new { month, day }));
+            ", new {month, day}));
         }
 
         [HttpGet("v2/shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIds = null,
+            [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIds, (arts) => _showService.RecentlyPerformed(arts, shows, days));
+            return await ApiRequest(artistIds,
+                arts => _showService.RecentlyPerformed(arts, shows, days));
         }
 
         [HttpGet("v2/shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIds = null, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIds = null,
+            [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIds, (arts) => _showService.RecentlyUpdated(arts, shows, days));
+            return await ApiRequest(artistIds,
+                arts => _showService.RecentlyUpdated(arts, shows, days));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> TodayArtist([FromRoute] string artistIdOrSlug)
+        public async Task<IActionResult> TodayArtist([FromRoute] string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteriaWithArtists(@"
+            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteriaWithArtists(@"
                 s.artist_id = @artistId
                 AND EXTRACT(month from s.date) = EXTRACT(month from NOW())
 	            AND EXTRACT(day from s.date) = EXTRACT(day from NOW())
-            ", new { artistId = art.id }));
+            ", new {artistId = art.id}));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> ArtistRecentlyPerformed([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        public async Task<IActionResult> ArtistRecentlyPerformed([FromRoute] string artistIdOrSlug,
+            [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyPerformed(new[] { art }, shows, days));
+            return await ApiRequest(artistIdOrSlug,
+                art => _showService.RecentlyPerformed(new[] {art}, shows, days));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> ArtistRecentlyUpdated([FromRoute] string artistIdOrSlug, [FromQuery] int? shows = null, [FromQuery] int? days = null)
+        public async Task<IActionResult> ArtistRecentlyUpdated([FromRoute] string artistIdOrSlug,
+            [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.RecentlyUpdated(new[] { art }, shows, days));
+            return await ApiRequest(artistIdOrSlug,
+                art => _showService.RecentlyUpdated(new[] {art}, shows, days));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/on-date")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-		public async Task<IActionResult> ArtistOnDayInHistory([FromRoute] string artistIdOrSlug, [FromQuery] int month, [FromQuery] int day)
+        public async Task<IActionResult> ArtistOnDayInHistory([FromRoute] string artistIdOrSlug, [FromQuery] int month,
+            [FromQuery] int day)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteriaWithArtists(@"
+            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteriaWithArtists(@"
                 s.artist_id = @artistId
                 AND EXTRACT(month from s.date) = @month
 	            AND EXTRACT(day from s.date) = @day
-            ", new { artistId = art.id, month, day }));
+            ", new {artistId = art.id, month, day}));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/top")]
         [ProducesResponseType(typeof(IEnumerable<Show>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> TopByArtist([FromRoute] string artistIdOrSlug, [FromQuery] int limit = 25)
+        public async Task<IActionResult> TopByArtist([FromRoute] string artistIdOrSlug, [FromQuery] int limit = 25)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowsForCriteria(art, @"
+            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteria(art, @"
                 s.artist_id = @artistId
-            ", new { artistId = art.id }, limit, "cnt.max_avg_rating_weighted DESC"));
+            ", new {artistId = art.id}, limit, "cnt.max_avg_rating_weighted DESC"));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/random")]
         [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> RandomByArtist([FromRoute] string artistIdOrSlug)
+        public async Task<IActionResult> RandomByArtist([FromRoute] string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, async (art) =>
+            return await ApiRequest(artistIdOrSlug, async art =>
             {
                 var randShow = await db.WithConnection(con => con.QuerySingleAsync<Show>(@"
                     SELECT
@@ -140,11 +147,13 @@ namespace Relisten.Controllers
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/{showDate}")]
         [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-		public async Task<IActionResult> ShowsOnSpecificDate([FromRoute] string artistIdOrSlug, [FromRoute] string showDate)
+        public async Task<IActionResult>
+            ShowsOnSpecificDate([FromRoute] string artistIdOrSlug, [FromRoute] string showDate)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
+            return await ApiRequest(artistIdOrSlug,
+                art => _showService.ShowWithSourcesForArtistOnDate(art, showDate));
         }
-        
+
         [HttpGet("v3/shows/{showUuid}")]
         [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
@@ -152,7 +161,7 @@ namespace Relisten.Controllers
         {
             return await ApiRequest(
                 await _artistService.FindArtistByShowUuid(showUuid),
-                (art) => _showService.ShowWithSourcesForUuid(art, showUuid));
+                art => _showService.ShowWithSourcesForUuid(art, showUuid));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/sources/{sourceId}/reviews")]
@@ -160,7 +169,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public Task<IActionResult> ReviewsForShow([FromRoute] string artistIdOrSlug, [FromRoute] int sourceId)
         {
-            return ApiRequest(artistIdOrSlug, (art) => _sourceService.ReviewsForSource(sourceId));
+            return ApiRequest(artistIdOrSlug, art => _sourceService.ReviewsForSource(sourceId));
         }
     }
 }

@@ -1,13 +1,10 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
-using Dapper;
 using Relisten.Api.Models;
-using Relisten.Data;
 using Relisten.Api.Models.Api;
+using Relisten.Data;
 
 namespace Relisten.Controllers
 {
@@ -20,9 +17,10 @@ namespace Relisten.Controllers
         public ErasController(
             RedisService redis,
             DbService db,
-			ArtistService artistService,
+            ArtistService artistService,
             EraService eraService
-		) : base(redis, db, artistService) {
+        ) : base(redis, db, artistService)
+        {
             _eraService = eraService;
         }
 
@@ -31,10 +29,10 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> eras(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => {
+            return await ApiRequest(artistIdOrSlug, art =>
+            {
                 return _eraService.AllForArtist(art);
             });
         }
-
     }
 }

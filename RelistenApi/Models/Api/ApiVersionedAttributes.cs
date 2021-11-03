@@ -1,8 +1,6 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
@@ -10,12 +8,12 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Relisten.Api.Models.Api
 {
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+    [AttributeUsage(AttributeTargets.Property)]
     public class V3JsonOnlyAttribute : Attribute
     {
     }
 
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
+    [AttributeUsage(AttributeTargets.Property)]
     public class V2JsonOnlyAttribute : Attribute
     {
     }

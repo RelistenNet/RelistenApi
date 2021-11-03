@@ -1,10 +1,7 @@
-
 using System;
-using Hangfire.Server;
-using Hangfire.Console;
-using System.Diagnostics;
-using System.Text;
 using System.Collections;
+using Hangfire.Console;
+using Hangfire.Server;
 using Newtonsoft.Json;
 
 namespace Relisten.Import
@@ -26,10 +23,8 @@ namespace Relisten.Import
                 var val = "";
                 try
                 {
-                    val = JsonConvert.SerializeObject(kvp.Value, new JsonSerializerSettings
-                    {
-                        PreserveReferencesHandling = PreserveReferencesHandling.Objects
-                    });
+                    val = JsonConvert.SerializeObject(kvp.Value,
+                        new JsonSerializerSettings {PreserveReferencesHandling = PreserveReferencesHandling.Objects});
                 }
                 catch (JsonSerializationException)
                 {
