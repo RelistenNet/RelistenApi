@@ -32,10 +32,8 @@ namespace Relisten.Services.Auth
 
                 return Task.FromResult(IdentityResult.Success);
             }
-            else
-            {
-                return Task.FromResult(IdentityResult.Failed());
-            }
+
+            return Task.FromResult(IdentityResult.Failed());
         }
 
         public Task<IdentityResult> DeleteAsync(ApplicationRole role, CancellationToken cancellationToken)
@@ -47,10 +45,8 @@ namespace Relisten.Services.Auth
 
                 return Task.FromResult(IdentityResult.Success);
             }
-            else
-            {
-                return Task.FromResult(IdentityResult.Failed());
-            }
+
+            return Task.FromResult(IdentityResult.Failed());
         }
 
         public Task<ApplicationRole> FindByIdAsync(string roleId, CancellationToken cancellationToken)
@@ -62,7 +58,8 @@ namespace Relisten.Services.Auth
 
         public Task<ApplicationRole> FindByNameAsync(string normalizedRoleName, CancellationToken cancellationToken)
         {
-            var role = _roles.FirstOrDefault(r => String.Equals(r.RoleNameNormalized, normalizedRoleName, StringComparison.OrdinalIgnoreCase));
+            var role = _roles.FirstOrDefault(r =>
+                string.Equals(r.RoleNameNormalized, normalizedRoleName, StringComparison.OrdinalIgnoreCase));
 
             return Task.FromResult(role);
         }
@@ -89,10 +86,10 @@ namespace Relisten.Services.Auth
             return Task.FromResult(true);
         }
 
-        public Task SetNormalizedRoleNameAsync(ApplicationRole role, string normalizedName, CancellationToken cancellationToken)
+        public Task SetNormalizedRoleNameAsync(ApplicationRole role, string normalizedName,
+            CancellationToken cancellationToken)
         {
             // Do nothing. In this simple example, the normalized name is generated from the role name.
-            
             return Task.FromResult(true);
         }
 

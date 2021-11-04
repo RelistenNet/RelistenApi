@@ -1,15 +1,10 @@
-using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
-using Dapper;
 using Relisten.Api.Models;
-using Relisten.Data;
-using Relisten.Vendor;
-using System.Linq.Expressions;
 using Relisten.Api.Models.Api;
+using Relisten.Data;
 
 namespace Relisten.Controllers
 {
@@ -17,24 +12,25 @@ namespace Relisten.Controllers
     [Produces("application/json")]
     public class ToursController : RelistenBaseController
     {
-        private TourService _tourService { get; set; }
-
         public ToursController(
             RedisService redis,
             DbService db,
-			ArtistService artistService,
+            ArtistService artistService,
             TourService tourService
-		) : base(redis, db, artistService)
+        ) : base(redis, db, artistService)
         {
             _tourService = tourService;
         }
+
+        private TourService _tourService { get; }
 
         [HttpGet("{artistIdOrSlug}/tours")]
         [ProducesResponseType(typeof(IEnumerable<TourWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> tours(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, (art) => {
+            return await ApiRequest(artistIdOrSlug, art =>
+            {
                 return _tourService.AllForArtistWithShowCount(art);
             });
         }
@@ -44,7 +40,8 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> tours(string artistIdOrSlug, string idAndSlug)
         {
-            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) => {
+            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
+            {
                 return _tourService.ForIdWithShows(artist, id.Id.Value);
             });
         }

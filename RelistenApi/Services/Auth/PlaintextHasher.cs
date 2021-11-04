@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 
 namespace Relisten.Services.Auth
 {
@@ -10,9 +9,12 @@ namespace Relisten.Services.Auth
             return password;
         }
 
-        public PasswordVerificationResult VerifyHashedPassword(ApplicationUser user, string hashedPassword, string providedPassword)
+        public PasswordVerificationResult VerifyHashedPassword(ApplicationUser user, string hashedPassword,
+            string providedPassword)
         {
-            return hashedPassword == providedPassword ? PasswordVerificationResult.Success : PasswordVerificationResult.Failed;
+            return hashedPassword == providedPassword
+                ? PasswordVerificationResult.Success
+                : PasswordVerificationResult.Failed;
         }
     }
 }

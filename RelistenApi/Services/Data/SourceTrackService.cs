@@ -1,10 +1,9 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using System;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
@@ -12,41 +11,41 @@ namespace Relisten.Data
     {
         public SourceTrackService(DbService db) : base(db) { }
 
-		public async Task<SourceTrack> ForId(int id)
-		{
-			return (await ForIds(new[] { id })).FirstOrDefault();
-		}
+        public async Task<SourceTrack> ForId(int id)
+        {
+            return (await ForIds(new[] {id})).FirstOrDefault();
+        }
 
-		public Task<IEnumerable<SourceTrack>> ForIds(IList<int> ids)
-		{
-			return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
+        public Task<IEnumerable<SourceTrack>> ForIds(IList<int> ids)
+        {
+            return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
                 SELECT
                     t.*
                 FROM
                     source_tracks t
                 WHERE
                     t.id = ANY(@trackIds)
-            ", new { trackIds = ids }));
-		}
+            ", new {trackIds = ids}));
+        }
 
-		public async Task<SourceTrack> ForUUID(Guid uuid)
-		{
-			return (await ForUUIDs(new[] { uuid })).FirstOrDefault();
-		}
+        public async Task<SourceTrack> ForUUID(Guid uuid)
+        {
+            return (await ForUUIDs(new[] {uuid})).FirstOrDefault();
+        }
 
-		public Task<IEnumerable<SourceTrack>> ForUUIDs(IList<Guid> uuids)
-		{
-			return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
+        public Task<IEnumerable<SourceTrack>> ForUUIDs(IList<Guid> uuids)
+        {
+            return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
                 SELECT
                     t.*
                 FROM
                     source_tracks t
                 WHERE
                     t.uuid = ANY(@trackUUIDs)
-            ", new { trackUUIDs = uuids }));
-		}
+            ", new {trackUUIDs = uuids}));
+        }
 
-		public async Task<IEnumerable<SourceTrack>> InsertAll(Source source, IEnumerable<SourceTrack> tracks)
+        public async Task<IEnumerable<SourceTrack>> InsertAll(Source source, IEnumerable<SourceTrack> tracks)
         {
             return await db.WithConnection(async con =>
             {
@@ -54,7 +53,8 @@ namespace Relisten.Data
 
                 foreach (var song in tracks)
                 {
-                    var p = new {
+                    var p = new
+                    {
                         song.id,
                         song.source_id,
                         song.source_set_id,
@@ -67,7 +67,7 @@ namespace Relisten.Data
                         song.flac_url,
                         song.flac_md5,
                         song.updated_at,
-                        song.artist_id,
+                        song.artist_id
                     };
 
                     inserted.Add(await con.QuerySingleAsync<SourceTrack>(@"
@@ -134,10 +134,7 @@ namespace Relisten.Data
                     WHERE
                         source_id = @sourceId
                         AND NOT(mp3_url = ANY(@mp3Urls))
-                ", new {
-                    sourceId = source.id,
-                    mp3Urls = tracks.Select(t => t.mp3_url).ToList()
-                });
+                ", new {sourceId = source.id, mp3Urls = tracks.Select(t => t.mp3_url).ToList()});
 
                 return inserted;
             });

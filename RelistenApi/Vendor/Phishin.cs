@@ -1,9 +1,5 @@
-
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Relisten.Vendor.Phishin
 {
@@ -18,7 +14,6 @@ namespace Relisten.Vendor.Phishin
 
     public class PhishinEraResponse : PhishinRootObject<IDictionary<string, IList<string>>>
     {
-
     }
 
     public class PhishinSmallTour

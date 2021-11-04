@@ -1,41 +1,35 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Transactions;
+using Hangfire.Console;
+using Hangfire.Server;
+using Microsoft.ApplicationInsights;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
-using Dapper;
-using Relisten.Vendor;
 using Relisten.Data;
-using System.Text.RegularExpressions;
-using Microsoft.Extensions.Logging;
-using System.Diagnostics;
-using System.Globalization;
-using Hangfire.Server;
-using Hangfire.Console;
-using Npgsql;
-using System.Transactions;
-using Microsoft.ApplicationInsights;
+using Relisten.Vendor;
+using Relisten.Vendor.ArchiveOrg;
+using Relisten.Vendor.ArchiveOrg.Metadata;
 
 namespace Relisten.Import
 {
-
     public class ArchiveOrgImporter : ImporterBase
     {
-        private class NoVBRMp3FilesException : Exception {}
-
         public const string DataSourceName = "archive.org";
 
-        protected SourceService _sourceService { get; set; }
-        protected SourceSetService _sourceSetService { get; set; }
-        protected SourceReviewService _sourceReviewService { get; set; }
-        protected SourceTrackService _sourceTrackService { get; set; }
-        protected VenueService _venueService { get; set; }
-        protected TourService _tourService { get; set; }
+        private static readonly Regex ExtractDateFromIdentifier = new(@"(\d{4}-\d{2}-\d{2})");
 
-        readonly LinkService linkService;
+        private readonly LinkService linkService;
+
+        private IDictionary<string, SourceReviewInformation> existingSourceReviewInformation =
+            new Dictionary<string, SourceReviewInformation>();
+
+        private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
 
         public ArchiveOrgImporter(
             DbService db,
@@ -45,18 +39,26 @@ namespace Relisten.Import
             SourceSetService sourceSetService,
             SourceReviewService sourceReviewService,
             LinkService linkService,
-            SourceTrackService sourceTrackService
-        ) : base(db)
+            SourceTrackService sourceTrackService,
+            RedisService redisService
+        ) : base(db, redisService)
         {
             this.linkService = linkService;
-            this._sourceService = sourceService;
-            this._venueService = venueService;
-            this._tourService = tourService;
+            _sourceService = sourceService;
+            _venueService = venueService;
+            _tourService = tourService;
 
             _sourceReviewService = sourceReviewService;
             _sourceTrackService = sourceTrackService;
             _sourceSetService = sourceSetService;
         }
+
+        protected SourceService _sourceService { get; set; }
+        protected SourceSetService _sourceSetService { get; set; }
+        protected SourceReviewService _sourceReviewService { get; set; }
+        protected SourceTrackService _sourceTrackService { get; set; }
+        protected VenueService _venueService { get; set; }
+        protected TourService _tourService { get; set; }
 
         public override string ImporterName => "archive.org";
 
@@ -72,41 +74,43 @@ namespace Relisten.Import
             return r;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
+        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
+            PerformContext ctx)
         {
             return await ImportSpecificShowDataForArtist(artist, src, null, ctx);
         }
 
-        public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+        public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
+            string showIdentifier, PerformContext ctx)
         {
             await PreloadData(artist);
 
-			var url = SearchUrlForArtist(artist, src);
-			ctx?.WriteLine($"All shows URL: {url}");
+            var url = SearchUrlForArtist(artist, src);
+            ctx?.WriteLine($"All shows URL: {url}");
 
-            return await ProcessIdentifiers(artist, await this.http.GetAsync(url), src, showIdentifier, ctx);
+            return await ProcessIdentifiers(artist, await http.GetAsync(url), src, showIdentifier, ctx);
         }
-
-        private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
-        private IDictionary<string, SourceReviewInformation> existingSourceReviewInformation = new Dictionary<string, SourceReviewInformation>();
 
         private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
-            return $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
+            return
+                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=9999999&page=1&output=json&save=yes";
         }
+
         private static string DetailsUrlForIdentifier(string identifier)
         {
             return $"http://archive.org/metadata/{identifier}";
         }
 
-        private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res, ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+        private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res,
+            ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
         {
             var stats = new ImportStats();
 
             var json = await res.Content.ReadAsStringAsync();
-            var root = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.SearchRootObject>(
+            var root = JsonConvert.DeserializeObject<SearchRootObject>(
                 json.Replace("\"0000-01-01T00:00:00Z\"", "null") /* serious...wtf archive */,
-                new Relisten.Vendor.ArchiveOrg.TolerantArchiveDateTimeConverter()
+                new TolerantArchiveDateTimeConverter()
             );
 
             ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
@@ -130,7 +134,8 @@ namespace Relisten.Import
 
                     var maxSourceInformation = existingSourceReviewInformation.GetValue(doc.identifier);
                     var isNew = dbShow == null;
-                    var needsToUpdateReviews = maxSourceInformation != null && doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
+                    var needsToUpdateReviews = maxSourceInformation != null &&
+                                               doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
 
                     if (currentIsTargetedShow || isNew || needsToUpdateReviews)
                     {
@@ -138,15 +143,16 @@ namespace Relisten.Import
 
                         var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
                         var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                        var detailsRoot = JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
+                        var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
                             detailsJson,
-                            new Vendor.ArchiveOrg.TolerantStringConverter()
+                            new TolerantStringConverter()
                         );
 
-						if (detailsRoot.is_dark ?? false) {
-							ctx?.WriteLine("\tis_dark == true, skipping...");
-							return;
-						}
+                        if (detailsRoot.is_dark ?? false)
+                        {
+                            ctx?.WriteLine("\tis_dark == true, skipping...");
+                            return;
+                        }
 
                         var properDate = FixDisplayDate(detailsRoot.metadata);
 
@@ -154,10 +160,13 @@ namespace Relisten.Import
                         {
                             using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
                             {
-                                try {
-                                    stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src, properDate, ctx);
+                                try
+                                {
+                                    stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                                        properDate, ctx);
                                 }
-                                catch (NoVBRMp3FilesException) {
+                                catch (NoVBRMp3FilesException)
+                                {
                                     identifiersWithoutMP3s.Add(doc.identifier);
                                 }
 
@@ -166,7 +175,8 @@ namespace Relisten.Import
                         }
                         else
                         {
-                            ctx?.WriteLine("\tSkipped {0} because it has an invalid, unrecoverable date: {1}", doc.identifier, detailsRoot.metadata.date);
+                            ctx?.WriteLine("\tSkipped {0} because it has an invalid, unrecoverable date: {1}",
+                                doc.identifier, detailsRoot.metadata.date);
                         }
                     }
                 }
@@ -177,28 +187,28 @@ namespace Relisten.Import
 
                     var telementry = new TelemetryClient();
 
-                    telementry.TrackException(e, new Dictionary<string, string> {
-						{ "upstream_identifier", doc.identifier }
-					});
+                    telementry.TrackException(e,
+                        new Dictionary<string, string> {{"upstream_identifier", doc.identifier}});
                 }
             });
 
             // we want to keep all the shows from this import--aside from ones that no longer have MP3s
             var showsToKeep = root.response.docs
-                .Select(d => d.identifier)
-                .Except(identifiersWithoutMP3s)
+                    .Select(d => d.identifier)
+                    .Except(identifiersWithoutMP3s)
                 ;
 
             // find sources that no longer exist
             var deletedSourceUpstreamIdentifiers = existingSources
-                .Select(kvp => kvp.Key)
-                .Except(showsToKeep)
-                .ToList()
+                    .Select(kvp => kvp.Key)
+                    .Except(showsToKeep)
+                    .ToList()
                 ;
-            
+
             ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
-                $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
-            stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+                           $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
+            stats.Removed +=
+                await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
 
             ctx?.WriteLine("Rebuilding shows...");
 
@@ -219,8 +229,8 @@ namespace Relisten.Import
         private async Task<ImportStats> ImportSingleIdentifier(
             Artist artist,
             Source dbSource,
-            Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
-            Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
+            SearchDoc searchDoc,
+            RootObject detailsRoot,
             ArtistUpstreamSource upstreamSrc,
             string properDisplayDate,
             PerformContext ctx
@@ -246,37 +256,38 @@ namespace Relisten.Import
             var dbReviews = detailsRoot.reviews == null
                 ? new List<SourceReview>()
                 : detailsRoot.reviews.Select(rev =>
-            {
-                return new SourceReview()
                 {
-                    rating = rev.stars * 2, // scale to out of 10
-                    title = rev.reviewtitle,
-                    review = rev.reviewbody?.Replace("Â", "") ?? "",
-                    author = rev.reviewer,
-                    updated_at = rev.reviewdate
-                };
-            }).ToList();
+                    return new SourceReview
+                    {
+                        rating = rev.stars * 2, // scale to out of 10
+                        title = rev.reviewtitle,
+                        review = rev.reviewbody?.Replace("Â", "") ?? "",
+                        author = rev.reviewer,
+                        updated_at = rev.reviewdate
+                    };
+                }).ToList();
 
             Venue dbVenue = null;
             if (artist.features.per_source_venues)
             {
-                var venueName = String.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
+                var venueName = string.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
 
-                if (String.IsNullOrEmpty(venueName))
+                if (string.IsNullOrEmpty(venueName))
                 {
                     venueName = "Unknown Venue";
                 }
 
-                var venueUpstreamId = venueName + (String.IsNullOrEmpty(meta.coverage) ? "blank coverage" : meta.coverage);
+                var venueUpstreamId =
+                    venueName + (string.IsNullOrEmpty(meta.coverage) ? "blank coverage" : meta.coverage);
                 dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
 
                 if (dbVenue == null)
                 {
-                    dbVenue = await _venueService.Save(new Venue()
+                    dbVenue = await _venueService.Save(new Venue
                     {
                         artist_id = artist.id,
                         name = venueName,
-                        location = String.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
+                        location = string.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
                         upstream_identifier = venueUpstreamId,
                         slug = Slugify(venueName),
                         updated_at = searchDoc._iguana_updated_at
@@ -298,9 +309,8 @@ namespace Relisten.Import
             }
             else
             {
-
-
-                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc, properDisplayDate, dbVenue));
+                dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc,
+                    properDisplayDate, dbVenue));
                 stats.Created++;
 
                 existingSources[dbSource.upstream_identifier] = dbSource;
@@ -308,9 +318,12 @@ namespace Relisten.Import
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
 
-            stats.Created += (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc))).Count();
+            stats.Created +=
+                (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
+                .Count();
 
-            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] { CreateSetForSource(dbSource) })).First();
+            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] {CreateSetForSource(dbSource)}))
+                .First();
             stats.Created++;
 
             var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
@@ -324,11 +337,11 @@ namespace Relisten.Import
             return stats;
         }
 
-        IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
+        private IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
         {
             var links = new List<Link>
             {
-                new Link
+                new()
                 {
                     source_id = dbSource.id,
                     for_ratings = true,
@@ -342,7 +355,7 @@ namespace Relisten.Import
 
             if (artist.upstream_sources.Any(s => s.upstream_source_id == 6 /* setlist.fm */))
             {
-                links.Add(new Link()
+                links.Add(new Link
                 {
                     source_id = dbSource.id,
                     for_ratings = false,
@@ -357,7 +370,8 @@ namespace Relisten.Import
             return links;
         }
 
-        private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source, IEnumerable<SourceReview> reviews)
+        private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(Source source,
+            IEnumerable<SourceReview> reviews)
         {
             foreach (var review in reviews)
             {
@@ -371,7 +385,7 @@ namespace Relisten.Import
             Source source
         )
         {
-            return new SourceSet()
+            return new SourceSet
             {
                 source_id = source.id,
                 index = 0,
@@ -383,8 +397,8 @@ namespace Relisten.Import
 
         private Source CreateSourceForMetadata(
             Artist artist,
-            Relisten.Vendor.ArchiveOrg.Metadata.RootObject detailsRoot,
-            Relisten.Vendor.ArchiveOrg.SearchDoc searchDoc,
+            RootObject detailsRoot,
+            SearchDoc searchDoc,
             string properDisplayDate,
             Venue dbVenue = null
         )
@@ -392,15 +406,15 @@ namespace Relisten.Import
             var meta = detailsRoot.metadata;
 
             var sbd = meta.identifier.EmptyIfNull().ContainsInsensitive("sbd")
-                || meta.title.EmptyIfNull().ContainsInsensitive("sbd")
-                || meta.source.EmptyIfNull().ContainsInsensitive("sbd")
-                || meta.lineage.EmptyIfNull().ContainsInsensitive("sbd")
+                      || meta.title.EmptyIfNull().ContainsInsensitive("sbd")
+                      || meta.source.EmptyIfNull().ContainsInsensitive("sbd")
+                      || meta.lineage.EmptyIfNull().ContainsInsensitive("sbd")
                 ;
 
             var remaster = meta.identifier.EmptyIfNull().ContainsInsensitive("remast")
-                || meta.title.EmptyIfNull().ContainsInsensitive("remast")
-                || meta.source.EmptyIfNull().ContainsInsensitive("remast")
-                || meta.lineage.EmptyIfNull().ContainsInsensitive("remast")
+                           || meta.title.EmptyIfNull().ContainsInsensitive("remast")
+                           || meta.source.EmptyIfNull().ContainsInsensitive("remast")
+                           || meta.lineage.EmptyIfNull().ContainsInsensitive("remast")
                 ;
 
             var flac_type = FlacType.NoFlac;
@@ -414,7 +428,7 @@ namespace Relisten.Import
                 flac_type = FlacType.Flac16Bit;
             }
 
-            return new Source()
+            return new Source
             {
                 artist_id = artist.id,
                 is_soundboard = sbd,
@@ -436,10 +450,8 @@ namespace Relisten.Import
             };
         }
 
-        private static Regex ExtractDateFromIdentifier = new Regex(@"(\d{4}-\d{2}-\d{2})");
-
         // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
-        private string FixDisplayDate(Relisten.Vendor.ArchiveOrg.Metadata.Metadata meta)
+        private string FixDisplayDate(Metadata meta)
         {
             // 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
             if (meta.date.Contains('X'))
@@ -485,7 +497,8 @@ namespace Relisten.Import
 
         private bool TestDate(string date)
         {
-            return DateTime.TryParseExact(date, "yyyy-MM-dd", DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out var _);
+            return DateTime.TryParseExact(date, "yyyy-MM-dd",
+                DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out var _);
         }
 
         private string TryFlippingMonthAndDate(string date)
@@ -494,11 +507,10 @@ namespace Relisten.Import
             var parts = date.Split('-');
 
             // try to see if it is YYYY-DD-MM instead
-            if (parts.Length > 2 && int.TryParse(parts[1], out int month))
+            if (parts.Length > 2 && int.TryParse(parts[1], out var month))
             {
                 if (month > 12)
                 {
-
                     // rearrange to YYYY-MM-DD
                     var dateStr = parts[0] + "-" + parts[2] + "-" + parts[1];
 
@@ -515,25 +527,22 @@ namespace Relisten.Import
         private IEnumerable<SourceTrack> CreateSourceTracksForFiles(
             Artist artist,
             Source dbSource,
-            Vendor.ArchiveOrg.Metadata.Metadata meta,
-            IEnumerable<Vendor.ArchiveOrg.Metadata.File> mp3Files,
-            IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles,
+            Metadata meta,
+            IEnumerable<File> mp3Files,
+            IDictionary<string, File> flacFiles,
             SourceSet set = null
         )
         {
             var trackNum = 0;
 
-            return mp3Files.
-                Where(file =>
+            return mp3Files.Where(file =>
                 {
                     return !(
                         (file.title == null && file.original == null && file.name == null)
                         || file.length == null
                         || file.name == null
                     );
-                }).
-                OrderBy(file => file.name).
-                Select(file =>
+                }).OrderBy(file => file.name).Select(file =>
                 {
                     var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set);
                     trackNum = r.track_position;
@@ -546,10 +555,10 @@ namespace Relisten.Import
         private SourceTrack CreateSourceTrackForFile(
             Artist artist,
             Source dbSource,
-            Vendor.ArchiveOrg.Metadata.Metadata meta,
-            Vendor.ArchiveOrg.Metadata.File file,
+            Metadata meta,
+            File file,
             int previousTrackNumber,
-            IDictionary<string, Vendor.ArchiveOrg.Metadata.File> flacFiles,
+            IDictionary<string, File> flacFiles,
             SourceSet set = null
         )
         {
@@ -557,26 +566,26 @@ namespace Relisten.Import
 
             var title = file.name;
 
-            if (!string.IsNullOrEmpty(file.title)) {
+            if (!string.IsNullOrEmpty(file.title))
+            {
                 title = file.title;
             }
-            else if (!string.IsNullOrEmpty(file.original)) {
+            else if (!string.IsNullOrEmpty(file.original))
+            {
                 title = file.original;
             }
 
             var flac = file.original == null ? null : flacFiles.GetValue(file.original);
 
-            return new SourceTrack()
+            return new SourceTrack
             {
                 title = title,
                 track_position = trackNum,
                 source_set_id = set?.id ?? -1,
                 source_id = dbSource.id,
-                duration = file.length.
-                    Split(':').
-                    Reverse().
-                    Select((v, k) => (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).
-                    Sum(),
+                duration =
+                    file.length.Split(':').Reverse().Select((v, k) =>
+                        (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).Sum(),
                 slug = SlugifyTrack(title),
                 mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
                 mp3_md5 = file.md5,
@@ -587,16 +596,18 @@ namespace Relisten.Import
             };
         }
 
-        async Task PreloadData(Artist artist)
+        private async Task PreloadData(Artist artist)
         {
-            existingSources = (await _sourceService.AllForArtist(artist)).
-                GroupBy(source => source.upstream_identifier).
-                ToDictionary(grp => grp.Key, grp => grp.First());
-            
-            existingSourceReviewInformation = (await _sourceService.AllSourceReviewInformationForArtist(artist)).
-                GroupBy(source => source.upstream_identifier).
-                ToDictionary(grp => grp.Key, grp => grp.First());
+            existingSources = (await _sourceService.AllForArtist(artist))
+                .GroupBy(source => source.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+
+            existingSourceReviewInformation =
+                (await _sourceService.AllSourceReviewInformationForArtist(artist))
+                .GroupBy(source => source.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+        }
+
+        private class NoVBRMp3FilesException : Exception
+        {
         }
     }
-
 }

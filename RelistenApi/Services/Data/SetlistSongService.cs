@@ -1,9 +1,8 @@
-﻿using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
@@ -11,38 +10,46 @@ namespace Relisten.Data
     {
         public SetlistSongService(DbService db) : base(db) { }
 
-        public async Task<IEnumerable<SetlistSong>> ForUpstreamIdentifiers(Artist artist, IEnumerable<string> upstreamIds)
+        public async Task<IEnumerable<SetlistSong>> ForUpstreamIdentifiers(Artist artist,
+            IEnumerable<string> upstreamIds)
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
                 SELECT
-                    *
+                    s.*
+                    , a.uuid as artist_uuid
                 FROM
-                    setlist_songs
+                    setlist_songs s
+                    JOIN artists a on s.artist_id = a.id
                 WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = ANY(@upstreamIds)
-            ", new { artistId = artist.id, upstreamIds = upstreamIds.ToList() }));
+                    s.artist_id = @artistId
+                    AND s.upstream_identifier = ANY(@upstreamIds)
+            ", new {artistId = artist.id, upstreamIds = upstreamIds.ToList()}));
         }
 
         public async Task<IEnumerable<SetlistSong>> AllForArtist(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
                 SELECT
-                    *
+                    s.*
+                    , a.uuid as artist_uuid
                 FROM
-                    setlist_songs 
+                    setlist_songs s
+                    JOIN artists a on s.artist_id = a.id
                 WHERE
-                    artist_id = @id
-            ", new { artist.id }));
+                    s.artist_id = @artistId
+            ", new {artist.id}));
         }
 
         public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
         {
             SetlistSongWithShows bigSong = null;
-            await db.WithConnection(con => con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
+            await db.WithConnection(con =>
+                con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
                 SELECT
                     s.*
+                    , a.uuid as artist_uuid
                     , shows.*
+                    , a.uuid as artist_uuid
                     , cnt.max_updated_at as most_recent_source_updated_at
                     , cnt.source_count
                     , cnt.has_soundboard_source
@@ -51,11 +58,12 @@ namespace Relisten.Data
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
                     LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @artistId
+                    JOIN shows ON shows.date = set_shows.date AND shows.artist_id = s.artist_id
                     LEFT JOIN venues v ON shows.venue_id = v.id
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
                     LEFT JOIN years y ON shows.year_id = y.id
+                    JOIN artists a ON a.id = shows.artist_id
 
                     INNER JOIN (
                         SELECT
@@ -73,22 +81,24 @@ namespace Relisten.Data
                     AND s.id = @songId
                 ORDER BY shows.date
                 ",
-                (song, show, venue, tour, era, year) => {
-                    if(bigSong == null) {
-                        bigSong = song;
-                        bigSong.shows = new List<Show>();
-                    }
+                    (song, show, venue, tour, era, year) =>
+                    {
+                        if (bigSong == null)
+                        {
+                            bigSong = song;
+                            bigSong.shows = new List<Show>();
+                        }
 
-                    show.venue = venue;
-                    show.tour = tour;
-                    show.era = era;
-                    show.year = year;
+                        show.venue = venue;
+                        show.tour = tour;
+                        show.era = era;
+                        show.year = year;
 
-                    bigSong.shows.Add(show);
+                        bigSong.shows.Add(show);
 
-                    return song;
-                },
-                new { artistId = artist.id, songId = id }));
+                        return song;
+                    },
+                    new {artistId = artist.id, songId = id}));
 
             return bigSong;
         }
@@ -97,18 +107,26 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
                 SELECT
-                    s.*, COUNT(shows.id) as shows_played_at
+                    s.*, a.uuid as artist_uuid, shows.shows_played_at
                 FROM
                     setlist_songs s
-                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
-                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = @id
+                    LEFT JOIN (
+                        SELECT
+                            s_inner.id as setlist_song_id
+                            , COUNT(shows.id) as shows_played_at
+                        FROM
+                            setlist_songs s_inner
+                            LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s_inner.id
+                            LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
+                            LEFT JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = s_inner.artist_id
+                        GROUP BY
+                            s_inner.id
+                    ) shows ON shows.setlist_song_id = s.id
+                    JOIN artists a ON a.id = s.artist_id
                 WHERE
                     s.artist_id = @id
-                GROUP BY
-                    s.id
-                ORDER BY name
-            ", new { artist.id }));
+                ORDER BY s.name
+            ", new {artist.id}));
         }
 
         public async Task<IEnumerable<SetlistSong>> InsertAll(Artist artist, IEnumerable<SetlistSong> songs)
@@ -135,13 +153,14 @@ namespace Relisten.Data
 
                 foreach (var song in songs)
                 {
-                    var p = new {
+                    var p = new
+                    {
                         song.id,
                         song.artist_id,
                         song.name,
                         song.slug,
                         song.upstream_identifier,
-                        song.updated_at,
+                        song.updated_at
                     };
 
                     inserted.Add(await con.QuerySingleAsync<SetlistSong>(@"

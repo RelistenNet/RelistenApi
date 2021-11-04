@@ -1,15 +1,13 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
     public class YearService : RelistenDataServiceBase
     {
-        ShowService _showService;
+        private readonly ShowService _showService;
 
         public YearService(DbService db, ShowService showService) : base(db)
         {
@@ -20,29 +18,33 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<Year>(@"
                 SELECT
-                    *
+                    y.*
+                    , a.uuid as artist_uuid
                 FROM
-                    years
+                    years y
+                    JOIN artists a ON a.id = y.artist_id
                 WHERE
-                    artist_id = @artistId
+                    y.artist_id = @artistId
                 ORDER BY
-                    year ASC
-            ", new { artistId = artist.id }));
+                    y.year ASC
+            ", new {artistId = artist.id}));
         }
 
         public async Task<YearWithShows> ForIdentifierWithShows(Artist artist, Identifier id)
         {
             var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<YearWithShows>(@"
                 SELECT
-                    *
+                    y.*
+                    , a.uuid as artist_uuid
                 FROM
                     years y
+                    JOIN artists a ON a.id = y.artist_id
                 WHERE
                     y.artist_id = @artistId
                     AND " + (id.Id.HasValue ? "y.id = @year_id" : "y.year = @year") + @"
                 ORDER BY
                     y.year ASC
-            ", new { artistId = artist.id, year_id = id.Id, year = id.Slug }));
+            ", new {artistId = artist.id, year_id = id.Id, year = id.Slug}));
 
             if (year == null)
             {
@@ -52,7 +54,7 @@ namespace Relisten.Data
             year.shows = new List<Show>();
             year.shows.AddRange(await _showService.ShowsForCriteria(artist,
                 "s.artist_id = @artist_id AND s.year_id = @year_id",
-                new { artist_id = artist.id, year_id = year.id }
+                new {artist_id = artist.id, year_id = year.id}
             ));
 
             return year;

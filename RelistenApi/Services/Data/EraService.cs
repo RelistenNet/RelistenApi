@@ -1,20 +1,18 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
     public class EraService : RelistenDataServiceBase
     {
-        private ShowService _showService { get; set; }
-
         public EraService(DbService db, ShowService showService) : base(db)
         {
             _showService = showService;
         }
+
+        private ShowService _showService { get; }
 
         public async Task<Era> ForName(Artist artist, string name)
         {
@@ -26,7 +24,7 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND name = @name
-            ", new { artistId = artist.id, name }));
+            ", new {artistId = artist.id, name}));
         }
 
         public async Task<IEnumerable<Era>> AllForArtist(Artist artist)
@@ -40,12 +38,13 @@ namespace Relisten.Data
                     artist_id = @id
                 ORDER BY
                     ""order"" ASC
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
         public async Task<Era> Save(Era era)
         {
-            var p = new {
+            var p = new
+            {
                 era.id,
                 era.artist_id,
                 era.name,
@@ -68,9 +67,8 @@ namespace Relisten.Data
                     RETURNING *
                 ", p));
             }
-            else
-            {
-                return await db.WithConnection(con => con.QuerySingleAsync<Era>(@"
+
+            return await db.WithConnection(con => con.QuerySingleAsync<Era>(@"
                     INSERT INTO
                         eras
 
@@ -89,7 +87,6 @@ namespace Relisten.Data
                         )
                     RETURNING *
                 ", p));
-            }
         }
     }
 }

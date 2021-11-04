@@ -1,20 +1,18 @@
-using System.Data;
-using Relisten.Api.Models;
-using Dapper;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-using System.Linq;
+using System.Threading.Tasks;
+using Dapper;
+using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
-        private ShowService _showService { get; set; }
-
         public TourService(DbService db, ShowService showService) : base(db)
         {
             _showService = showService;
         }
+
+        private ShowService _showService { get; }
 
         public async Task<Tour> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
@@ -26,7 +24,7 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND upstream_identifier = @upstreamId
-            ", new { artistId = artist.id, upstreamId }));
+            ", new {artistId = artist.id, upstreamId}));
         }
 
         public async Task<IEnumerable<Tour>> AllForArtist(Artist artist)
@@ -38,7 +36,7 @@ namespace Relisten.Data
                     tours
                 WHERE
                     artist_id = @id
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
         public async Task<TourWithShows> ForIdWithShows(Artist artist, int id)
@@ -50,7 +48,7 @@ namespace Relisten.Data
                     tours
                 WHERE
                     id = @id
-            ", new { id }));
+            ", new {id}));
 
             if (tour == null)
             {
@@ -59,7 +57,7 @@ namespace Relisten.Data
 
             tour.shows = await _showService.ShowsForCriteria(artist,
                 "s.artist_id = @artistId AND s.tour_id = @tourId",
-                new { artistId = artist.id, tourId = id }
+                new {artistId = artist.id, tourId = id}
             );
 
             return tour;
@@ -69,21 +67,25 @@ namespace Relisten.Data
         {
             return await db.WithConnection(con => con.QueryAsync<TourWithShowCount>(@"
                     SELECT
-                        t.*, COUNT(s.id) as shows_on_tour
+                        t.*
+                        , a.uuid as artist_uuid
+                        , s.shows_on_tour
                     FROM
                         tours t
-                        LEFT JOIN setlist_shows s ON s.tour_id = t.id
+                        LEFT JOIN (
+                            SELECT s.tour_id, count(*) as shows_on_tour FROM setlist_shows s GROUP BY s.tour_id
+                        ) s ON s.tour_id = t.id
+                        LEFT JOIN artists a ON a.id = t.artist_id
                     WHERE
                         t.artist_id = @id
-                    GROUP BY
-                    	t.id
                     ORDER BY t.start_date
-            ", new { artist.id }));
+            ", new {artist.id}));
         }
 
         public async Task<Tour> Save(Tour tour)
         {
-            var p = new {
+            var p = new
+            {
                 tour.id,
                 tour.artist_id,
                 tour.start_date,
@@ -91,7 +93,7 @@ namespace Relisten.Data
                 tour.name,
                 tour.slug,
                 tour.upstream_identifier,
-                tour.updated_at,
+                tour.updated_at
             };
 
             if (tour.id != 0)
@@ -113,9 +115,8 @@ namespace Relisten.Data
                     RETURNING *
                 ", p));
             }
-            else
-            {
-                return await db.WithConnection(con => con.QuerySingleAsync<Tour>(@"
+
+            return await db.WithConnection(con => con.QuerySingleAsync<Tour>(@"
                     INSERT INTO
                         tours
 
@@ -142,7 +143,6 @@ namespace Relisten.Data
                         )
                     RETURNING *
                 ", p));
-            }
         }
     }
 }

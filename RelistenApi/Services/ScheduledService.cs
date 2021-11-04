@@ -1,27 +1,24 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Linq;
+using System.Threading.Tasks;
 using Hangfire;
+using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
 using Hangfire.Server;
+using Microsoft.ApplicationInsights;
+using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
-using Hangfire.Console;
-using System.Linq;
-using Microsoft.Extensions.Configuration;
-using System.ComponentModel;
-using System.Collections.Concurrent;
-using System;
-using Microsoft.ApplicationInsights;
-using System.Collections.Generic;
 
 namespace Relisten
 {
     public class ScheduledService
     {
-        ImporterService _importerService { get; set; }
-        ArtistService _artistService { get; set; }
-        IConfiguration _config { get; set; }
-        RedisService _redisService { get; set; }
+        private readonly ConcurrentDictionary<int, bool> artistsCurrentlySyncing = new();
 
         public ScheduledService(
             ImporterService importerService,
@@ -33,8 +30,13 @@ namespace Relisten
             _importerService = importerService;
             _artistService = artistService;
             _config = config;
-			_redisService = redisService;
+            _redisService = redisService;
         }
+
+        private ImporterService _importerService { get; }
+        private ArtistService _artistService { get; }
+        private IConfiguration _config { get; }
+        private RedisService _redisService { get; }
 
         // run every day at 3 AM EST, midnight PST, 7 AM UTC
         [RecurringJob("0 7 * * *", Enabled = true)]
@@ -78,7 +80,8 @@ namespace Relisten
             context.WriteLine($"--> Rebuilding all {artists.Count} artists");
             var bar = context.WriteProgressBar();
 
-            await artists.AsyncForEachWithProgress(bar, async artist => {
+            await artists.AsyncForEachWithProgress(bar, async artist =>
+            {
                 await _importerService.Rebuild(artist, context);
             });
 
@@ -112,86 +115,85 @@ namespace Relisten
             context.WriteLine("--> Imported all artists! " + stats);
         }
 
-		private ConcurrentDictionary<int, bool> artistsCurrentlySyncing = new ConcurrentDictionary<int, bool>();
+        [Queue("artist_import")]
+        [DisplayName("Refresh Artist: {0}")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
+        {
+            await RefreshArtist(idOrSlug, null, deleteOldContent, null, ctx);
+        }
 
-		[Queue("artist_import")]
-		[DisplayName("Refresh Artist: {0}")]
-		[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
-		{
-			await RefreshArtist(idOrSlug, null, deleteOldContent, null, ctx);
-		}
+        [Queue("artist_import")]
+        [DisplayName("Refresh from Phish.in")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task RefreshPhishFromPhishinOnly(PerformContext ctx)
+        {
+            await RefreshArtist("phish", null,
+                false, u => u.upstream_source_id == 3 /* phish.in */, ctx);
+        }
 
-		[Queue("artist_import")]
-		[DisplayName("Refresh from Phish.in")]
-		[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshPhishFromPhishinOnly(PerformContext ctx)
-		{
-			await RefreshArtist("phish", null, false, (u) => u.upstream_source_id == 3 /* phish.in */, ctx);
-		}
-
-		[Queue("artist_import")]
-		[DisplayName("Refresh Artist Show: {0}, {1}")]
-		[AutomaticRetry(Attempts = 0)]
-		public async Task RefreshArtist(
+        [Queue("artist_import")]
+        [DisplayName("Refresh Artist Show: {0}, {1}")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task RefreshArtist(
             string idOrSlug,
             string specificShowId,
             bool deleteOldContent,
             Func<ArtistUpstreamSource, bool> filterUpstreamSources,
             PerformContext ctx
         )
-		{
-			var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+        {
+            var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
-			if (artistsCurrentlySyncing.ContainsKey(artist.id))
-			{
-				ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
-				return;
-			}
+            if (artistsCurrentlySyncing.ContainsKey(artist.id))
+            {
+                ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
+                return;
+            }
 
-			try
-			{
-				artistsCurrentlySyncing[artist.id] = true;
+            try
+            {
+                artistsCurrentlySyncing[artist.id] = true;
 
-				if (deleteOldContent)
-				{
-					ctx?.WriteLine("Removing content for " + artist.name);
+                if (deleteOldContent)
+                {
+                    ctx?.WriteLine("Removing content for " + artist.name);
 
-					var rows = await _artistService.RemoveAllContentForArtist(artist);
+                    var rows = await _artistService.RemoveAllContentForArtist(artist);
 
-					ctx?.WriteLine($"Removed {rows} rows!");
-				}
+                    ctx?.WriteLine($"Removed {rows} rows!");
+                }
 
-				ImportStats artistStats;
+                ImportStats artistStats;
 
-				if(specificShowId != null)
-				{
-					artistStats = await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
-				}
-				else 
-				{
-					artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
-				}
+                if (specificShowId != null)
+                {
+                    artistStats =
+                        await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
+                }
+                else
+                {
+                    artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
+                }
 
-				ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
-			}
-            catch(Exception e) {
+                ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
+            }
+            catch (Exception e)
+            {
                 ctx?.WriteLine($"Error processing {artist.name}:");
                 ctx?.LogException(e);
 
                 var telementry = new TelemetryClient();
 
-                telementry.TrackException(e, new Dictionary<string, string> {
-                    { "artist_name", artist.name },
-                    { "artist_id", artist.id.ToString() },
-                });
+                telementry.TrackException(e,
+                    new Dictionary<string, string> {{"artist_name", artist.name}, {"artist_id", artist.id.ToString()}});
 
                 throw;
-            }            
-			finally
-			{
-				artistsCurrentlySyncing.TryRemove(artist.id, out bool _);
-			}
-		}
+            }
+            finally
+            {
+                artistsCurrentlySyncing.TryRemove(artist.id, out var _);
+            }
+        }
     }
 }

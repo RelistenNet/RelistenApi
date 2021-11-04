@@ -1,32 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Reflection;
-using System.Text;
-using Newtonsoft.Json;
+using Relisten.Api.Models.Api;
 
 namespace Relisten.Api.Models
 {
     public class Venue : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [Required]
-        public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
+        [Required] public Guid artist_uuid { get; set; }
 
         public double? latitude { get; set; }
         public double? longitude { get; set; }
 
-        [Required]
-        public string name { get; set; }
-
-        [Required]
-        public string location { get; set; }
-
-        [Required]
-        public string upstream_identifier { get; set; }
-
-        [Required]
-        public string slug { get; set; }
-
+        [Required] public string name { get; set; }
+        [Required] public string location { get; set; }
+        [Required] public string upstream_identifier { get; set; }
+        [Required] public string slug { get; set; }
         public string past_names { get; set; }
 
         [Required]
@@ -38,23 +28,21 @@ namespace Relisten.Api.Models
                 {
                     return name.Substring(4) + ", The";
                 }
+
                 return name;
             }
         }
 
-		[Required]
-		public Guid uuid { get; set; }
+        [Required] public Guid uuid { get; set; }
     }
 
     public class VenueWithShowCount : Venue
     {
-        [Required]
-        public int shows_at_venue { get; set; }
+        [Required] public int shows_at_venue { get; set; }
     }
 
     public class VenueWithShows : VenueWithShowCount
     {
-        [Required]
-        public List<Show> shows { get; set; }
+        [Required] public List<Show> shows { get; set; }
     }
 }
