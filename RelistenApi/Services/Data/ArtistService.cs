@@ -164,10 +164,11 @@ namespace Relisten.Data
 
             var srcs = await db.WithConnection(con => con.QueryAsync(@"
 				SELECT
-					aus.*, s.*
+					aus.*, a.uuid as artist_uuid, s.*
 				FROM
 					artists_upstream_sources aus
 					JOIN upstream_sources s ON s.id = aus.upstream_source_id
+				    JOIN artists a on a.id = aus.artist_id
 				WHERE
 					aus.artist_id = ANY(@artistIds)
 			", (ArtistUpstreamSource aus, UpstreamSource src) =>

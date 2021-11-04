@@ -80,7 +80,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> GetFullArtist(string artistUuid)
         {
-            var art = (await _artistService.AllWithCounts<FullArtist>(new List<string> {artistUuid}))
+            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string> {artistUuid}))
                 .FirstOrDefault();
 
             if (art == null)
@@ -105,14 +105,18 @@ namespace Relisten.Controllers
 
             await Task.WhenAll(yearsTask, venuesTask, songsTask, toursTask, showsTask);
 
-            art.years = yearsTask.Result.ToList();
-            art.venues = venuesTask.Result.ToList();
-            art.songs = songsTask.Result.ToList();
-            art.tours = toursTask.Result.ToList();
-            art.shows = showsTask.Result.ToList();
+            var resp = new FullArtist()
+            {
+                artist = art,
+                years = yearsTask.Result.ToList(),
+                venues = venuesTask.Result.ToList(),
+                songs = songsTask.Result.ToList(),
+                tours = toursTask.Result.ToList(),
+                shows = showsTask.Result.ToList(),
+            };
 
             var json = JsonConvert.SerializeObject(
-                art, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
+                resp, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
 
             // await redis.db.StringSetAsync(cacheKey, json, TimeSpan.FromHours(24));
 

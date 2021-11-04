@@ -103,8 +103,9 @@ namespace Relisten.Api.Models
         [Required] public int source_count { get; set; }
     }
 
-    public class FullArtist : ArtistWithCounts
+    public class FullArtist
     {
+        [Required] public ArtistWithCounts artist { get; set; }
         [Required] public List<VenueWithShowCount> venues { get; set; }
         [Required] public List<SetlistSongWithPlayCount> songs { get; set; }
         [Required] public List<TourWithShowCount> tours { get; set; }
@@ -168,7 +169,7 @@ namespace Relisten.Api.Models
 
     public class UpstreamSource
     {
-        [Required] public int id { get; set; }
+        [V2JsonOnly] [Required] public int id { get; set; }
 
         [Required] public string name { get; set; }
 
@@ -185,12 +186,13 @@ namespace Relisten.Api.Models
     {
         [Required] public int upstream_source_id { get; set; }
 
-        [Required] public string upstream_identifier { get; set; }
+        public string upstream_identifier { get; set; }
     }
 
     public class ArtistUpstreamSource : SlimArtistUpstreamSource
     {
-        [Required] public int artist_id { get; set; }
+        [V2JsonOnly] [Required] public int artist_id { get; set; }
+        [Required] public Guid artist_uuid { get; set; }
 
         public UpstreamSource upstream_source { get; set; }
     }
