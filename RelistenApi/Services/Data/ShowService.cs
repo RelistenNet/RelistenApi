@@ -131,6 +131,7 @@ namespace Relisten.Data
                         a.uuid as artist_uuid,
 					    e.*,
                         a.uuid as artist_uuid,
+                        a.*,
                         y.*,
                         a.uuid as artist_uuid
                     FROM
