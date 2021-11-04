@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -118,7 +119,7 @@ namespace Relisten.Controllers
             var json = JsonConvert.SerializeObject(
                 resp, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
 
-            // await redis.db.StringSetAsync(cacheKey, json, TimeSpan.FromHours(24));
+            await redis.db.StringSetAsync(cacheKey, json, TimeSpan.FromHours(24));
 
             return Content(json, "application/json");
         }
