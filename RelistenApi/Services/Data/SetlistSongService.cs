@@ -37,7 +37,7 @@ namespace Relisten.Data
                     JOIN artists a on s.artist_id = a.id
                 WHERE
                     s.artist_id = @artistId
-            ", new {artist.id}));
+            ", new {artistId = artist.id}));
         }
 
         public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
