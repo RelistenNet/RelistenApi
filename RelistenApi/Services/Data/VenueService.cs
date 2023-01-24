@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
@@ -11,11 +12,20 @@ namespace Relisten.Data
         {
             Id = null;
             Slug = null;
+            Guid = null;
         }
 
         public Identifier(string idAndOrSlug)
         {
             var id = -1;
+
+            if (idAndOrSlug.Length == 36 && System.Guid.TryParse(idAndOrSlug, out var guid))
+            {
+                Guid = guid;
+                Id = null;
+                Slug = null;
+                return;
+            }
 
             var parts = idAndOrSlug.Split(new[] {'-'}, 2);
 
@@ -25,11 +35,13 @@ namespace Relisten.Data
                 {
                     Id = id;
                     Slug = null;
+                    Guid = null;
                 }
                 else
                 {
                     Id = null;
                     Slug = idAndOrSlug;
+                    Guid = null;
                 }
             }
             else
@@ -38,18 +50,21 @@ namespace Relisten.Data
                 {
                     Id = id;
                     Slug = parts[1];
+                    Guid = null;
                 }
                 else
                 {
                     // ¯\_(ツ)_/¯
                     Id = null;
                     Slug = idAndOrSlug;
+                    Guid = null;
                 }
             }
         }
 
         public int? Id { get; set; }
         public string Slug { get; set; }
+        public Guid? Guid { get; set; }
     }
 
     public class VenueService : RelistenDataServiceBase
@@ -101,7 +116,7 @@ namespace Relisten.Data
                 	venues v
                 	JOIN artists a ON v.artist_id = a.id
                     LEFT JOIN (
-                        SELECT 
+                        SELECT
                             src.venue_id
                             , CASE
                     	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN

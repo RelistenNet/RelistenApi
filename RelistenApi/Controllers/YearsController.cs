@@ -8,7 +8,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2/artists")]
+    [Route("api")]
     [Produces("application/json")]
     public class YearsController : RelistenBaseController
     {
@@ -30,7 +30,8 @@ namespace Relisten.Controllers
             _sourceService = sourceService;
         }
 
-        [HttpGet("{artistIdOrSlug}/years")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/years")]
+        [HttpGet("v3/artists/{artistIdOrSlug}/years")]
         [ProducesResponseType(typeof(IEnumerable<Year>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug)
@@ -41,7 +42,8 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("{artistIdOrSlug}/years/{year}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/years/{year}")]
+        [HttpGet("v3/artists/{artistIdOrSlug}/years/{year}")]
         [ProducesResponseType(typeof(YearWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year)
@@ -52,7 +54,7 @@ namespace Relisten.Controllers
             }, true, true);
         }
 
-        [HttpGet("{artistIdOrSlug}/years/{year}/{showDate}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/years/{year}/{showDate}")]
         [ProducesResponseType(typeof(ShowWithSources), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year, string showDate)

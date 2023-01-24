@@ -32,7 +32,21 @@ namespace Relisten.Data
 
         public async Task<YearWithShows> ForIdentifierWithShows(Artist artist, Identifier id)
         {
-            var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<YearWithShows>(@"
+            var where = "";
+
+            if (id.Id.HasValue)
+            {
+                where = "y.id = @year_id";
+            } else if (id.Guid.HasValue)
+            {
+                where = "y.uuid = @year_guid";
+            }
+            else
+            {
+                where = "y.year = @year";
+            }
+
+            var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<YearWithShows>(@$"
                 SELECT
                     y.*
                     , a.uuid as artist_uuid
@@ -41,10 +55,10 @@ namespace Relisten.Data
                     JOIN artists a ON a.id = y.artist_id
                 WHERE
                     y.artist_id = @artistId
-                    AND " + (id.Id.HasValue ? "y.id = @year_id" : "y.year = @year") + @"
+                    AND {where}
                 ORDER BY
                     y.year ASC
-            ", new {artistId = artist.id, year_id = id.Id, year = id.Slug}));
+            ", new {artistId = artist.id, year_id = id.Id, year = id.Slug, year_guid = id.Guid}));
 
             if (year == null)
             {
