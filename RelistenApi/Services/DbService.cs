@@ -2,8 +2,8 @@ using System;
 using System.Data;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
-using Npgsql.Logging;
 
 namespace Relisten
 {
@@ -21,8 +21,8 @@ namespace Relisten
 
             if (hostEnvironment.IsDevelopment())
             {
-                NpgsqlLogManager.IsParameterLoggingEnabled = true;
-                NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+                var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+                NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory, parameterLoggingEnabled: true);
             }
         }
 
@@ -70,13 +70,12 @@ namespace Relisten
             catch (TimeoutException ex)
             {
                 throw new Exception(
-                    string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
+                    $"{GetType().FullName}.WithConnection() experienced a SQL timeout", ex);
             }
             catch (NpgsqlException ex)
             {
                 throw new Exception(
-                    string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                        GetType().FullName), ex);
+                    $"{GetType().FullName}.WithConnection() experienced a SQL exception (not a timeout)", ex);
             }
         }
 

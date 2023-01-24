@@ -178,11 +178,6 @@ namespace Relisten.Data
             }, new {artistIds = art.Select(a => a.id).ToList()}));
 
             var gsrcs = srcs
-                    .Select(s =>
-                    {
-                        s.upstream_source.importer = _importService.ImporterForUpstreamSource(s.upstream_source);
-                        return s;
-                    })
                     .GroupBy(src => src.artist_id)
                     .ToDictionary(g => g.Key, g => g.Select(s => s))
                 ;

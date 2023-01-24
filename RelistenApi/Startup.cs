@@ -1,6 +1,4 @@
-﻿// using Hangfire.PostgreSql;
-
-using System;
+﻿using System;
 using Dapper;
 using Hangfire;
 using Hangfire.Console;
@@ -20,11 +18,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
-using Relisten.Api.Models;
-using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Models;
 using Relisten.Services.Auth;
+using Relisten.Util;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
 using StackExchange.Redis;
@@ -68,6 +66,19 @@ namespace Relisten
                     : LogLevel.Information);
                 loggingBuilder.AddConsole();
                 loggingBuilder.AddDebug();
+            });
+
+            services.AddHangfireServer((hangfireOptions) =>
+            {
+                hangfireOptions.Queues = new[] { "artist_import" };
+                hangfireOptions.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
+                hangfireOptions.WorkerCount = 3;
+            });
+
+            services.AddHangfireServer((hangfireOptions) =>
+            {
+                hangfireOptions.Queues = new[] { "default" };
+                hangfireOptions.ServerName = $"relistenapi:default ({Environment.MachineName})";
             });
 
             services.AddSwaggerGen(c =>
@@ -178,18 +189,6 @@ namespace Relisten
 
             if (!env.IsDevelopment())
             {
-                app.UseHangfireServer(new BackgroundJobServerOptions
-                {
-                    Queues = new[] {"artist_import"},
-                    ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-                    WorkerCount = 3
-                });
-
-                app.UseHangfireServer(new BackgroundJobServerOptions
-                {
-                    Queues = new[] {"default"}, ServerName = $"relistenapi:default ({Environment.MachineName})"
-                });
-
                 app.UseHangfireDashboard("/relisten-admin/hangfire",
                     new DashboardOptions {Authorization = new[] {new MyAuthorizationFilter()}});
             }

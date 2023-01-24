@@ -63,6 +63,7 @@ namespace Relisten.Import
         {
             var imps = new ImporterBase[] {_setlistFm, _archiveOrg, _panic, _jerry, _phishin, _phishnet, _phantasy};
 
+
             importers = new Dictionary<string, ImporterBase>();
 
             foreach (var i in imps)
@@ -91,7 +92,7 @@ namespace Relisten.Import
 
         public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
         {
-            var importer = artist.upstream_sources.First().upstream_source.importer;
+            var importer = ImporterForUpstreamSource(artist.upstream_sources.First().upstream_source);
 
             ctx?.WriteLine("Rebuilding Shows");
             var stats = await importer.RebuildShows(artist);
@@ -127,12 +128,12 @@ namespace Relisten.Import
 
                 if (showIdentifier != null)
                 {
-                    stats += await item.upstream_source.importer.ImportSpecificShowDataForArtist(artist, item,
+                    stats += await ImporterForUpstreamSource(item.upstream_source).ImportSpecificShowDataForArtist(artist, item,
                         showIdentifier, ctx);
                 }
                 else
                 {
-                    stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
+                    stats += await ImporterForUpstreamSource(item.upstream_source).ImportDataForArtist(artist, item, ctx);
                 }
             });
 
@@ -243,9 +244,9 @@ WITH year_sources AS (
 
 INSERT INTO
 	years
-	
+
 	(year, show_count, source_count, duration, avg_duration, avg_rating, artist_id, updated_at, uuid)
-	
+
 	SELECT
 		to_char(s.date, 'YYYY') as year,
 		COUNT(DISTINCT s.id) as show_count,
@@ -329,9 +330,9 @@ BEGIN TRANSACTION;
 -- Generate shows table without years or rating information
 INSERT INTO
 	shows
-	
+
 	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration, uuid)
-	
+
 	SELECT
 		--array_agg(source.id) as srcs,
 		--array_agg(setlist_show.id) as setls,
@@ -414,7 +415,7 @@ COMMIT;
 	    GROUP BY
 	        s.id
 	    ORDER BY
-	    	s.id 
+	    	s.id
 	)
 	UPDATE
 		sources s
@@ -442,7 +443,7 @@ COMMIT;
 	    GROUP BY
 	        s.id
 	    ORDER BY
-	    	s.id 
+	    	s.id
 	), show_info AS (
 		SELECT
 			s.show_id,

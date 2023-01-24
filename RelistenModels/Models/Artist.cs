@@ -1,45 +1,13 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Data;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 using System.Text;
-using Dapper;
-using Newtonsoft.Json;
 using Relisten.Api.Models.Api;
-using Relisten.Import;
 
 namespace Relisten.Api.Models
 {
     public interface IHasPersistentIdentifier
     {
         [Required] Guid uuid { get; set; }
-    }
-
-    public class PersistentIdentifierHandler : SqlMapper.TypeHandler<Guid>
-    {
-        public override Guid Parse(object value)
-        {
-            return new Guid(value.ToString());
-        }
-
-        public override void SetValue(IDbDataParameter parameter, Guid value)
-        {
-            parameter.Value = value.ToString();
-        }
-    }
-
-    public class DateTimeHandler : SqlMapper.TypeHandler<DateTime>
-    {
-        public override void SetValue(IDbDataParameter parameter, DateTime value)
-        {
-            parameter.Value = value;
-        }
-
-        public override DateTime Parse(object value)
-        {
-            return ((DateTime)value).ToUniversalTime();
-        }
     }
 
     public abstract class BaseRelistenModel
@@ -178,8 +146,6 @@ namespace Relisten.Api.Models
         [Required] public string description { get; set; }
 
         [Required] public string credit_line { get; set; }
-
-        [JsonIgnore] public ImporterBase importer { get; set; }
     }
 
     public class SlimArtistUpstreamSource
