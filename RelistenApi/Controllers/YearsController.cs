@@ -43,7 +43,6 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/years/{year}")]
-        [HttpGet("v3/artists/{artistIdOrSlug}/years/{year}")]
         [ProducesResponseType(typeof(YearWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug, string year)
@@ -52,6 +51,17 @@ namespace Relisten.Controllers
             {
                 return _yearService.ForIdentifierWithShows(art, id);
             }, true, true);
+        }
+
+        [HttpGet("v3/artists/{artistIdOrSlug}/years/{yearUuid}")]
+        [ProducesResponseType(typeof(YearWithShows), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> yearByUuid(string artistIdOrSlug, string yearUuid)
+        {
+            return await ApiRequestWithIdentifier(artistIdOrSlug, yearUuid, (art, id) =>
+            {
+                return _yearService.ForIdentifierWithShows(art, id);
+            }, true, false);
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/years/{year}/{showDate}")]
