@@ -1,32 +1,11 @@
 version: '3.1'
 
 services:
-  relisten-redis:
-    image: redis:3.2.8
-    restart: always
-    volumes:
-      - ./redis-data:/data
-    ports:
-      - 16379:6379
-
-  relisten-db:
-    image: postgres:9.6.1
-    restart: always
-    volumes:
-      - ./postgres-data/pgdata:/var/lib/postgresql/data
-    environment:
-      POSTGRES_PASSWORD: local_dev_password
-      POSTGRES_USER: relisten
-      POSTGRES_DB: relisten_db
-    ports:
-      - 15432:5432
-
   adminer:
     image: adminer
     restart: always
-    depends_on:
-      - relisten-db
+
     environment:
-      ADMINER_DEFAULT_SERVER: relisten-db
+      ADMINER_DEFAULT_SERVER: docker.for.mac.localhost:5432/relisten_db
     ports:
       - 18080:8080
