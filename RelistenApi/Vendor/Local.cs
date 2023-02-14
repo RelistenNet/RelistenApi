@@ -12,6 +12,12 @@ namespace Relisten.Vendor.Local
         public T data { get; set; }
     }
 
+    public class LocalShowObject
+    {
+        public List<LocalTrack> tracks { get; set; }
+        public List<string> txts { get; set; }
+    }
+
     public class LocalEraResponse : LocalRootObject<IDictionary<string, IList<string>>>
     {
     }
@@ -112,6 +118,18 @@ namespace Relisten.Vendor.Local
         public int likes_count { get; set; }
         public string slug { get; set; }
         public string mp3 { get; set; }
+        public LocalTrackTags tags { get; set; }
+    }
+
+    public class LocalTrackTags {
+        public int duration { get; set; }
+        public string title { get; set; }
+        public LocalTrackTagsTrack track { get; set; }
+    }
+
+    public class LocalTrackTagsTrack {
+        public int no { get; set; }
+        public int of { get; set; }
     }
 
     public class LocalShowTrack : LocalTrack
@@ -120,6 +138,29 @@ namespace Relisten.Vendor.Local
     }
 
     public class LocalShow
+    {
+        public int id { get; set; }
+        public string date { get; set; }
+        public string year { get; set; }
+        public string month { get; set; }
+        public string day { get; set; }
+        public string dir { get; set; }
+        public int duration { get; set; }
+        public bool incomplete { get; set; }
+        public bool missing { get; set; }
+        public bool sbd { get; set; }
+        public bool remastered { get; set; }
+        public List<LocalTag> tags { get; set; }
+        public int tour_id { get; set; }
+        public LocalSmallVenue venue { get; set; }
+        public string taper_notes { get; set; }
+        public int likes_count { get; set; }
+        public List<LocalShowTrack> tracks { get; set; }
+        public DateTime updated_at { get; set; }
+    }
+
+
+    public class ShowMetadata
     {
         public int id { get; set; }
         public string date { get; set; }
