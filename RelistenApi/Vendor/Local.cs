@@ -152,7 +152,9 @@ namespace Relisten.Vendor.Local
         public bool remastered { get; set; }
         public List<LocalTag> tags { get; set; }
         public int tour_id { get; set; }
-        public LocalSmallVenue venue { get; set; }
+        public string venue { get; set; }
+        public string city { get; set; }
+        public string state { get; set; }
         public string taper_notes { get; set; }
         public int likes_count { get; set; }
         public List<LocalShowTrack> tracks { get; set; }
