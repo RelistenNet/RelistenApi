@@ -23,11 +23,11 @@ namespace Relisten
                 Console.WriteLine($"DB Connection String: {ConnStr.Replace(parts[1], "********")}");
             }
 
-            if (hostEnvironment.IsDevelopment())
-            {
-                NpgsqlLogManager.IsParameterLoggingEnabled = true;
-                NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
-            }
+            // if (hostEnvironment.IsDevelopment())
+            // {
+            //     NpgsqlLogManager.IsParameterLoggingEnabled = true;
+            //     NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+            // }
         }
 
         public static string ConnStr { get; set; }

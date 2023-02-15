@@ -289,54 +289,69 @@ namespace Relisten.Import
 
             var sets = new Dictionary<string, SourceSet>();
 
-            foreach (var (idx, fullShow) in fullShows.Select((value, i) => (i, value))) {
-                // dbSource.has_jamcharts = fullShow.tags.Count(t => t.name == "Jamcharts") > 0;
-                dbSource = await _sourceService.Save(dbSource);
+            // dbSource.has_jamcharts = fullShow.tags.Count(t => t.name == "Jamcharts") > 0;
+            dbSource = await _sourceService.Save(dbSource);
 
-                var set = new SourceSet
-                {
-                    source_id = dbSource.id,
-                    index = idx,
-                    is_encore = false,
-                    name = "Set",
-                    updated_at = dbSource.updated_at
-                };
+            var set = new SourceSet
+            {
+                source_id = dbSource.id,
+                index = 0,
+                is_encore = false,
+                name = "Set",
+                updated_at = dbSource.updated_at
+            };
 
-                sets.Add(idx.ToString(), set);
+            sets.Add("0", set);
 
-            }
+            var taperNotes = new List<string>();
 
             var setMaps = (await _sourceSetService.UpdateAll(dbSource, sets.Values))
                 .GroupBy(s => s.index)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Single());
 
-            foreach (var kvp in setMaps)
-            {
-                var show = fullShows[kvp.Key];
+            var localSet = setMaps.Values.First();
+            localSet.tracks = new List<SourceTrack>();
+
+            var tracksAdded = 0;
+
+            foreach (var (idx, fullShow) in fullShows.Select((value, i) => (i, value))) {
                 var apiShow =
-                    await LocalShowRequest($"{src.upstream_identifier}/{show.dir}/metadata", ctx);
+                    await LocalShowRequest($"{src.upstream_identifier}/{fullShow.dir}/metadata", ctx);
 
                 var tracks = apiShow.tracks.ToList();
-                kvp.Value.tracks = new List<SourceTrack>();
+
+                taperNotes.AddRange(apiShow.txts);
         
                 foreach (var track in tracks)
                 {
+                    var localTrackPosition = track.tags.track.no;
+
+                    // we add one to tracksAdded because track positions are not zero-indexed
+                    // they start at 1, but tracksAdded is zero indexed 
+                    if (localTrackPosition < tracksAdded + 1) localTrackPosition += tracksAdded;
+
                     var st = new SourceTrack
                     {
-                        source_set_id = kvp.Value.id,
+                        source_set_id = localSet.id,
                         source_id = dbSource.id,
                         title = track.tags.title,
-                        duration = track.tags.duration,
-                        track_position = track.tags.track.no,
+                        duration = Convert.ToInt16(track.tags.duration),
+                        track_position = localTrackPosition,
                         slug = SlugifyTrack(track.tags.title),
-                        mp3_url = $"https://audio.relisten.net/{src.upstream_identifier}/{show.dir}/{track.mp3}",
+                        mp3_url = $"https://audio.relisten.net/{src.upstream_identifier}/{fullShow.dir}/{track.mp3}",
                         updated_at = dbSource.updated_at,
                         artist_id = artist.id
                     };
-                    kvp.Value.tracks.Add(st);
+
+                    tracksAdded++;
+
+                    localSet.tracks.Add(st);
                 }
             }
 
+            dbSource.taper_notes = String.Join("\n", taperNotes.ToArray());
+
+            dbSource = await _sourceService.Save(dbSource);
 
             stats.Created +=
                 (await _sourceTrackService.InsertAll(dbSource, setMaps.SelectMany(kvp => kvp.Value.tracks)))
@@ -402,6 +417,21 @@ namespace Relisten.Import
                         existingSources[dbSource.upstream_identifier] = dbSource;
 
                         stats.Created++;
+
+                        await linkService.AddLinksForSource(dbSource,
+                            new[]
+                            {
+                                new Link
+                                {
+                                    source_id = dbSource.id,
+                                    for_ratings = true,
+                                    for_source = false,
+                                    for_reviews = true,
+                                    upstream_source_id = src.upstream_source_id,
+                                    url = "http://phish.net/setlists/?d=" + dbSource.display_date,
+                                    label = "View on phish.net"
+                                }
+                            });
                     }
                     // else if (show.updated_at > dbSource.updated_at)
                     // {

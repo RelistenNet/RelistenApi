@@ -122,7 +122,7 @@ namespace Relisten.Vendor.Local
     }
 
     public class LocalTrackTags {
-        public int duration { get; set; }
+        public long duration { get; set; }
         public string title { get; set; }
         public LocalTrackTagsTrack track { get; set; }
     }
