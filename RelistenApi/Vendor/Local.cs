@@ -9,7 +9,7 @@ namespace Relisten.Vendor.Local
         public int total_entries { get; set; }
         public int total_pages { get; set; }
         public int page { get; set; }
-        public T data { get; set; }
+        public IDictionary<string, IList<T>> data { get; set; }
     }
 
     public class LocalShowObject
@@ -18,7 +18,7 @@ namespace Relisten.Vendor.Local
         public List<string> txts { get; set; }
     }
 
-    public class LocalEraResponse : LocalRootObject<IDictionary<string, IList<string>>>
+    public class LocalEraReiponse : LocalRootObject<IDictionary<string, IList<string>>>
     {
     }
 
