@@ -190,10 +190,10 @@ namespace Relisten.Import
 
                         dbVenue = sc;
                     }
-                    else if (show.updated_at > dbVenue.updated_at)
+                    else if (show.updatedAt > dbVenue.updated_at)
                     {
                         dbVenue.name = show.venue;
-                        dbVenue.updated_at = show.updated_at;
+                        dbVenue.updated_at = show.updatedAt;
 
                         await _venueService.Save(dbVenue);
 
@@ -254,7 +254,7 @@ namespace Relisten.Import
 
                 addSongs = true;
             }
-            else if (show.updated_at > dbShow.updated_at)
+            else if (show.updatedAt > dbShow.updated_at)
             {
                 dbShow.date = DateTime.Parse(show.date);
                 dbShow.venue_id = existingVenues[venueUpstreamId].id;
@@ -374,6 +374,9 @@ namespace Relisten.Import
                 await LocalApiRequest<LocalShow>($"{src.upstream_identifier}/metadata", ctx);
 
             var shows = apiShows.data;
+            var totalShows = shows.Count;
+
+            var idx = 0;
 
             foreach (var (date, day) in shows)
             {
@@ -386,8 +389,8 @@ namespace Relisten.Import
                     ctx?.WriteLine($"Error processing show (but continuing): {date}");
                     ctx?.LogException(e);
                 }
-
-                // prog?.SetValue(100.0 * (idx / apiShows.total_entries));
+                prog?.SetValue(100.0 * (++idx / totalShows));
+                ctx?.WriteLine($"Processing Show {idx} of {totalShows}");
             }
 
             async Task processDay(string date, IList<LocalShow> shows)
@@ -403,10 +406,10 @@ namespace Relisten.Import
                         dbSource = await ProcessShow(stats, artist, date, shows, src,
                             new Source
                             {
-                                updated_at = DateTime.Now,
+                                updated_at = firstShow.updatedAt,
                                 artist_id = artist.id,
                                 venue_id = existingVenues[venueUpstreamId].id,
-                                display_date = $"{firstShow.year}-{firstShow.month}-{firstShow.day}",
+                                display_date = date,
                                 upstream_identifier = date,
                                 is_soundboard = false,
                                 is_remaster = false,
@@ -433,23 +436,23 @@ namespace Relisten.Import
                                 }
                             });
                     }
-                    // else if (show.updated_at > dbSource.updated_at)
-                    // {
-                    //     dbSource.updated_at = show.updated_at;
-                    //     dbSource.venue_id = existingVenues[venueUpstreamId].id;
-                    //     dbSource.display_date = show.date;
-                    //     dbSource.upstream_identifier = show.id.ToString();
-                    //     dbSource.is_soundboard = show.sbd;
-                    //     dbSource.is_remaster = show.remastered;
-                    //     dbSource.description = "";
-                    //     dbSource.taper_notes = show.taper_notes;
+                    else if (firstShow.updatedAt > dbSource.updated_at)
+                    {
+                        dbSource.updated_at = firstShow.updatedAt;
+                        dbSource.venue_id = existingVenues[venueUpstreamId].id;
+                        dbSource.display_date = date;
+                        dbSource.upstream_identifier = date;
+                        dbSource.is_soundboard = firstShow.sbd;
+                        dbSource.is_remaster = firstShow.remastered;
+                        dbSource.description = "";
+                        dbSource.taper_notes = "";
 
-                    //     dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
+                        dbSource = await ProcessShow(stats, artist, date, shows, src, dbSource, ctx);
 
-                    //     existingSources[dbSource.upstream_identifier] = dbSource;
+                        existingSources[dbSource.upstream_identifier] = dbSource;
 
-                    //     stats.Updated++;
-                    // }
+                        stats.Updated++;
+                    }
 
                     scope.Complete();
                 }
