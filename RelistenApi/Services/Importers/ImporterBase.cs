@@ -58,10 +58,11 @@ namespace Relisten.Import
             PhishNetImporter _phishnet,
             JerryGarciaComImporter _jerry,
             PanicStreamComImporter _panic,
-            PhantasyTourImporter _phantasy
+            PhantasyTourImporter _phantasy,
+						LocalImporter _local
         )
         {
-            var imps = new ImporterBase[] {_setlistFm, _archiveOrg, _panic, _jerry, _phishin, _phishnet, _phantasy};
+            var imps = new ImporterBase[] {_setlistFm, _archiveOrg, _panic, _jerry, _phishin, _phishnet, _phantasy, _local};
 
             importers = new Dictionary<string, ImporterBase>();
 

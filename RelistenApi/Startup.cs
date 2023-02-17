@@ -144,6 +144,7 @@ namespace Relisten
             services.AddScoped<SourceTrackService, SourceTrackService>();
             services.AddScoped<PhishNetImporter, PhishNetImporter>();
             services.AddScoped<PhantasyTourImporter, PhantasyTourImporter>();
+            services.AddScoped<LocalImporter, LocalImporter>();
             services.AddScoped<YearService, YearService>();
             services.AddScoped<EraService, EraService>();
             services.AddScoped<ImporterService, ImporterService>();
