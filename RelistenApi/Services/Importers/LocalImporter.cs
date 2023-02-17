@@ -190,10 +190,10 @@ namespace Relisten.Import
 
                         dbVenue = sc;
                     }
-                    else if (show.updatedAt > dbVenue.updated_at)
+                    else if (show.updated_at > dbVenue.updated_at)
                     {
                         dbVenue.name = show.venue;
-                        dbVenue.updated_at = show.updatedAt;
+                        dbVenue.updated_at = show.updated_at;
 
                         await _venueService.Save(dbVenue);
 
@@ -254,7 +254,7 @@ namespace Relisten.Import
 
                 addSongs = true;
             }
-            else if (show.updatedAt > dbShow.updated_at)
+            else if (show.updated_at > dbShow.updated_at)
             {
                 dbShow.date = DateTime.Parse(show.date);
                 dbShow.venue_id = existingVenues[venueUpstreamId].id;
@@ -406,7 +406,7 @@ namespace Relisten.Import
                         dbSource = await ProcessShow(stats, artist, date, shows, src,
                             new Source
                             {
-                                updated_at = firstShow.updatedAt,
+                                updated_at = firstShow.updated_at,
                                 artist_id = artist.id,
                                 venue_id = existingVenues[venueUpstreamId].id,
                                 display_date = date,
@@ -436,9 +436,9 @@ namespace Relisten.Import
                                 }
                             });
                     }
-                    else if (firstShow.updatedAt > dbSource.updated_at)
+                    else if (firstShow.updated_at > dbSource.updated_at)
                     {
-                        dbSource.updated_at = firstShow.updatedAt;
+                        dbSource.updated_at = firstShow.updated_at;
                         dbSource.venue_id = existingVenues[venueUpstreamId].id;
                         dbSource.display_date = date;
                         dbSource.upstream_identifier = date;

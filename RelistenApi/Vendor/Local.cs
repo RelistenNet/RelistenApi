@@ -158,7 +158,7 @@ namespace Relisten.Vendor.Local
         public string taper_notes { get; set; }
         public int likes_count { get; set; }
         public List<LocalShowTrack> tracks { get; set; }
-        public DateTime updatedAt { get; set; }
+        public DateTime updated_at { get; set; }
     }
 
 
