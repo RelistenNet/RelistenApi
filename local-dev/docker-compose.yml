@@ -2,7 +2,7 @@ version: '3.1'
 
 services:
   relisten-redis:
-    image: redis:3.2.8
+    image: redis:5.0.7
     restart: always
     volumes:
       - ./redis-data:/data
@@ -10,7 +10,7 @@ services:
       - 16379:6379
 
   relisten-db:
-    image: postgres:9.6.1
+    image: postgres:11.6
     restart: always
     volumes:
       - ./postgres-data/pgdata:/var/lib/postgresql/data

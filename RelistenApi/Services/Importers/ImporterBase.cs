@@ -244,9 +244,9 @@ WITH year_sources AS (
 
 INSERT INTO
 	years
-	
+
 	(year, show_count, source_count, duration, avg_duration, avg_rating, artist_id, updated_at, uuid)
-	
+
 	SELECT
 		to_char(s.date, 'YYYY') as year,
 		COUNT(DISTINCT s.id) as show_count,
@@ -302,6 +302,8 @@ REFRESH MATERIALIZED VIEW venue_show_counts;
         public async Task<ImportStats> RebuildShows(Artist artist)
         {
             var sql = @"
+BEGIN;
+
 -- Update durations
 WITH durs AS (
 	SELECT
@@ -326,13 +328,12 @@ WHERE
 	AND s.artist_id =  @id
 ;
 
-BEGIN TRANSACTION;
 -- Generate shows table without years or rating information
 INSERT INTO
 	shows
-	
+
 	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration, uuid)
-	
+
 	SELECT
 		--array_agg(source.id) as srcs,
 		--array_agg(setlist_show.id) as setls,
@@ -370,9 +371,7 @@ DO
 		venue_id = EXCLUDED.venue_id,
 		avg_duration = EXCLUDED.avg_duration
 ;
-COMMIT;
 
-BEGIN;
 -- Associate sources with show
 WITH show_assoc AS (
 	SELECT
@@ -394,13 +393,11 @@ WHERE
 	a.source_id = s.id
 	AND s.artist_id = @id
 ;
-COMMIT;
 			";
 
             if (artist.features.reviews_have_ratings)
             {
                 sql += @"
-	BEGIN;
 	-- Update sources with calculated rating/review information
 	WITH review_info AS (
 	    SELECT
@@ -415,7 +412,7 @@ COMMIT;
 	    GROUP BY
 	        s.id
 	    ORDER BY
-	    	s.id 
+	    	s.id
 	)
 	UPDATE
 		sources s
@@ -443,7 +440,7 @@ COMMIT;
 	    GROUP BY
 	        s.id
 	    ORDER BY
-	    	s.id 
+	    	s.id
 	), show_info AS (
 		SELECT
 			s.show_id,
@@ -486,13 +483,11 @@ COMMIT;
 		i.id = s.id
 		AND s.artist_id = @id
 	    ;
-	COMMIT;
 				";
             }
             else
             {
                 sql += @"
-	BEGIN;
 	-- used for things like Phish where ratings aren't attached to textual reviews
 	-- Calculate weighted averages for sources once we have average data and update sources
 	WITH show_info AS (
@@ -536,13 +531,11 @@ COMMIT;
 		i.id = s.id
 		AND s.artist_id = @id
 	    ;
-	COMMIT;
 				";
             }
 
             sql += @"
 
-BEGIN;
 -- Update shows with rating based on weighted averages
 WITH rating_ranks AS (
 	SELECT
@@ -580,6 +573,26 @@ WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
     ;
+
+-- delete shows without
+WITH shows_with_zero_sources AS (
+    SELECT
+        s.id as show_id
+        , sum(case when src.id is not null then 1 else 0 end) as source_count
+    FROM
+        shows s
+        LEFT JOIN sources src ON s.id = src.show_id
+    WHERE
+        s.artist_id = @id
+    GROUP BY
+        1
+    HAVING
+        sum(case when src.id is not null then 1 else 0 end) = 0
+)
+DELETE FROM shows
+USING shows_with_zero_sources
+WHERE shows.id = shows_with_zero_sources.show_id;
+
 COMMIT;
 
 REFRESH MATERIALIZED VIEW show_source_information;
