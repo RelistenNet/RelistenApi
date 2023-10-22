@@ -15,6 +15,7 @@ namespace Relisten.Api.Models
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
 
+        [Required] public Guid show_uuid { get; set; }
 
         [Required] public int track_position { get; set; }
 

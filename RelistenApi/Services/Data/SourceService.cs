@@ -134,12 +134,13 @@ namespace Relisten.Data
                 var t_setsWithTracks = await con.QueryAsync<SourceSet, SourceTrack, SourceSet>($@"
 	                SELECT
 	                    sets.*, a.uuid as artist_uuid, s.uuid as source_uuid
-                        , t.*, s.uuid as source_uuid, sets.uuid as source_set_uuid, a.uuid as artist_uuid
+                        , t.*, s.uuid as source_uuid, sets.uuid as source_set_uuid, a.uuid as artist_uuid, sh.uuid as show_uuid
 	                FROM
 	                    source_sets sets
-	                    LEFT JOIN sources s ON s.id = sets.source_id
-						LEFT JOIN artists a ON a.id = s.artist_id
-	                    LEFT JOIN source_tracks t ON t.source_set_id = sets.id
+	                    JOIN sources s ON s.id = sets.source_id
+						JOIN artists a ON a.id = s.artist_id
+	                    JOIN source_tracks t ON t.source_set_id = sets.id
+	                    JOIN shows sh ON sh.id = s.show_id
 	                WHERE
 	                    {where}
 					ORDER BY
