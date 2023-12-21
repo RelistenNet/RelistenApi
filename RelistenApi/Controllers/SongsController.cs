@@ -9,7 +9,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2/artists")]
+    [Route("api")]
     [Produces("application/json")]
     public class SongsController : RelistenBaseController
     {
@@ -28,7 +28,7 @@ namespace Relisten.Controllers
         private SetlistSongService _setlistSongService { get; }
         private SetlistShowService _setlistShowService { get; }
 
-        [HttpGet("{artistIdOrSlug}/songs")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/songs")]
         [ProducesResponseType(typeof(IEnumerable<SetlistSongWithPlayCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Songs(string artistIdOrSlug)
@@ -39,7 +39,7 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("{artistIdOrSlug}/songs/{idAndSlug}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/songs/{idAndSlug}")]
         [ProducesResponseType(typeof(SetlistSongWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> SongsWithShows(string artistIdOrSlug, string idAndSlug)

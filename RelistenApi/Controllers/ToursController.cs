@@ -9,7 +9,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2/artists")]
+    [Route("api")]
     [Produces("application/json")]
     public class ToursController : RelistenBaseController
     {
@@ -25,7 +25,7 @@ namespace Relisten.Controllers
 
         private TourService _tourService { get; }
 
-        [HttpGet("{artistIdOrSlug}/tours")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/tours")]
         [ProducesResponseType(typeof(IEnumerable<TourWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Tours(string artistIdOrSlug)
@@ -36,7 +36,7 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("{artistIdOrSlug}/tours/{idAndSlug}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/tours/{idAndSlug}")]
         [ProducesResponseType(typeof(TourWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> ToursWithShows(string artistIdOrSlug, string idAndSlug)
