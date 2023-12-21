@@ -162,7 +162,7 @@ namespace Relisten.Data
                 ", new {upstreamId}));
         }
 
-        public async Task<T> ForId<T>(int id) where T : Venue
+        public async Task<T> ForId<T>(int? id = null, Guid? uuid = null) where T : Venue
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
                 SELECT
@@ -179,10 +179,10 @@ namespace Relisten.Data
                     JOIN venues v ON v.id = s.venue_id
                     LEFT JOIN sources src ON src.venue_id = v.id
                 WHERE
-                    v.id = @id
+                    (v.id = @id OR v.uuid = @uuid)
                 GROUP BY
                 	v.id
-            ", new {id}));
+            ", new {id, uuid}));
         }
 
         public async Task<VenueWithShowCount> ForId(int id)
@@ -190,9 +190,9 @@ namespace Relisten.Data
             return await ForId<VenueWithShowCount>(id);
         }
 
-        public async Task<VenueWithShows> ForIdWithShows(Artist artist, int id)
+        public async Task<VenueWithShows> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
         {
-            var venue = await ForId<VenueWithShows>(id);
+            var venue = await ForId<VenueWithShows>(id, uuid);
 
             if (venue == null)
             {
@@ -201,8 +201,8 @@ namespace Relisten.Data
 
             venue.shows = new List<Show>();
             venue.shows.AddRange(await _showService.ShowsForCriteria(artist,
-                "s.artist_id = @artist_id AND s.venue_id = @venue_id",
-                new {artist_id = artist.id, venue_id = venue.id}
+                "s.artist_id = @artist_id AND (s.venue_id = @venue_id or v.uuid = @venue_uuid)",
+                new {artist_id = artist.id, venue_id = venue.id, venue_uuid = venue.uuid}
             ));
 
             return venue;

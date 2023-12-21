@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
@@ -40,7 +41,7 @@ namespace Relisten.Data
             ", new {artistId = artist.id}));
         }
 
-        public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int id)
+        public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
         {
             SetlistSongWithShows bigSong = null;
             await db.WithConnection(con =>
@@ -78,7 +79,7 @@ namespace Relisten.Data
                     ) cnt ON cnt.show_id = shows.id
                 WHERE
                     s.artist_id = @artistId
-                    AND s.id = @songId
+                    AND (s.id = @songId OR s.uuid = @songUuid)
                 ORDER BY shows.date
                 ",
                     (song, show, venue, tour, era, year) =>
@@ -98,7 +99,7 @@ namespace Relisten.Data
 
                         return song;
                     },
-                    new {artistId = artist.id, songId = id}));
+                    new {artistId = artist.id, songId = id, songUuid = uuid}));
 
             return bigSong;
         }

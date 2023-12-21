@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +9,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2/artists")]
+    [Route("api")]
     [Produces("application/json")]
     public class VenuesController : RelistenBaseController
     {
@@ -27,7 +28,7 @@ namespace Relisten.Controllers
         private VenueService _venueService { get; }
         private ShowService _showService { get; }
 
-        [HttpGet("{artistIdOrSlug}/venues")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/venues")]
         [ProducesResponseType(typeof(IEnumerable<VenueWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Venues(string artistIdOrSlug)
@@ -38,15 +39,25 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("{artistIdOrSlug}/venues/{idAndSlug}")]
+        [HttpGet("v2/artists/{artistIdOrSlug}/venues/{idAndSlug}")]
         [ProducesResponseType(typeof(VenueWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> Venues(string artistIdOrSlug, string idAndSlug)
+        public async Task<IActionResult> VenuesWithShows(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) =>
             {
                 return _venueService.ForIdWithShows(art, id.Id.Value);
             });
+        }
+
+        [HttpGet("v3/artists/{artistUuid}/venues/{venueUuid}")]
+        [ProducesResponseType(typeof(VenueWithShows), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> VenuesWithShows([FromRoute] Guid artistUuid, [FromRoute] Guid venueUuid)
+        {
+            return await ApiRequest(
+                await _artistService.FindArtistByUuid(artistUuid),
+                art => _venueService.ForIdWithShows(art, null, venueUuid));
         }
     }
 }

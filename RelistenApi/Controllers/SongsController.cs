@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -41,12 +42,22 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/songs/{idAndSlug}")]
         [ProducesResponseType(typeof(SetlistSongWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> years(string artistIdOrSlug, string idAndSlug)
+        public async Task<IActionResult> SongsWithShows(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
             {
                 return _setlistSongService.ForIdWithShows(artist, id.Id.Value);
             });
+        }
+
+        [HttpGet("v3/artists/{artistUuid}/songs/{songUuid}")]
+        [ProducesResponseType(typeof(SetlistSongWithShows), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> SongsWithShows([FromRoute] Guid artistUuid, [FromRoute] Guid songUuid)
+        {
+            return await ApiRequest(
+                await _artistService.FindArtistByUuid(artistUuid),
+                art => _setlistSongService.ForIdWithShows(art, null, songUuid));
         }
     }
 }

@@ -128,6 +128,21 @@ namespace Relisten.Data
             return await FillInUpstreamSources(a.SingleOrDefault());
         }
 
+        public async Task<Artist> FindArtistByUuid(Guid uuid)
+        {
+            var a = await db.WithConnection(con => con.QueryAsync(@"
+                SELECT
+                    a.*, f.*
+                FROM
+                    artists a
+                    LEFT JOIN features f on f.artist_id = a.id
+				WHERE
+					a.uuid = @uuid
+            ", joiner, new {uuid}));
+
+            return await FillInUpstreamSources(a.SingleOrDefault());
+        }
+
         public async Task<Artist> FindArtistByShowUuid(Guid uuid)
         {
             var a = await db.WithConnection(con => con.QueryAsync(@"

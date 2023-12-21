@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -27,7 +28,7 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/tours")]
         [ProducesResponseType(typeof(IEnumerable<TourWithShowCount>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> tours(string artistIdOrSlug)
+        public async Task<IActionResult> Tours(string artistIdOrSlug)
         {
             return await ApiRequest(artistIdOrSlug, art =>
             {
@@ -38,12 +39,22 @@ namespace Relisten.Controllers
         [HttpGet("{artistIdOrSlug}/tours/{idAndSlug}")]
         [ProducesResponseType(typeof(TourWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> tours(string artistIdOrSlug, string idAndSlug)
+        public async Task<IActionResult> ToursWithShows(string artistIdOrSlug, string idAndSlug)
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
             {
                 return _tourService.ForIdWithShows(artist, id.Id.Value);
             });
+        }
+
+        [HttpGet("v3/artists/{artistUuid}/tours/{tourUuid}")]
+        [ProducesResponseType(typeof(TourWithShows), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> ToursWithShows([FromRoute] Guid artistUuid, [FromRoute] Guid tourUuid)
+        {
+            return await ApiRequest(
+                await _artistService.FindArtistByUuid(artistUuid),
+                art => _tourService.ForIdWithShows(art, null, tourUuid));
         }
     }
 }

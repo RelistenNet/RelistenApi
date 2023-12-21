@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Dapper;
@@ -39,7 +40,7 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<TourWithShows> ForIdWithShows(Artist artist, int id)
+        public async Task<TourWithShows> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
         {
             var tour = await db.WithConnection(con => con.QuerySingleAsync<TourWithShows>(@"
                 SELECT
@@ -48,7 +49,8 @@ namespace Relisten.Data
                     tours
                 WHERE
                     id = @id
-            ", new {id}));
+                    OR uuid = @uuid
+            ", new {id, uuid}));
 
             if (tour == null)
             {
@@ -56,8 +58,8 @@ namespace Relisten.Data
             }
 
             tour.shows = await _showService.ShowsForCriteria(artist,
-                "s.artist_id = @artistId AND s.tour_id = @tourId",
-                new {artistId = artist.id, tourId = id}
+                "s.artist_id = @artistId AND (s.tour_id = @tourId OR t.uuid = @tourUuid)",
+                new {artistId = artist.id, tourId = id, tourUuid = uuid}
             );
 
             return tour;
