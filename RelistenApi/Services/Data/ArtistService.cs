@@ -154,6 +154,24 @@ namespace Relisten.Data
                     LEFT JOIN features f on f.artist_id = a.id
 				WHERE
 					s.uuid = @uuid
+                LIMIT 1
+            ", joiner, new {uuid}));
+
+            return await FillInUpstreamSources(a.SingleOrDefault());
+        }
+
+        public async Task<Artist> FindArtistBySourceUuid(Guid uuid)
+        {
+            var a = await db.WithConnection(con => con.QueryAsync(@"
+                SELECT
+                    a.*, f.*
+                FROM
+                    sources s
+                    JOIN artists a ON s.artist_id = a.id
+                    LEFT JOIN features f on f.artist_id = a.id
+				WHERE
+					s.uuid = @uuid
+                LIMIT 1
             ", joiner, new {uuid}));
 
             return await FillInUpstreamSources(a.SingleOrDefault());

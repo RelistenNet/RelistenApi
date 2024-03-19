@@ -169,18 +169,19 @@ namespace Relisten.Data
             });
         }
 
-        public Task<IEnumerable<SourceReview>> ReviewsForSource(int sourceId)
+        public Task<IEnumerable<SourceReview>> ReviewsForSource(int? sourceId, Guid? sourceUuid = null)
         {
             return db.WithConnection(conn => conn.QueryAsync<SourceReview>(@"
 				SELECT
 					r.*
 				FROM
 					source_reviews r
+				    JOIN sources s on s.id = r.source_id
 				WHERE
-					r.source_id = @sourceId
+					(s.id = @sourceId OR s.uuid = @sourceUuid)
 				ORDER BY
 					r.updated_at DESC
-			", new {sourceId}));
+			", new {sourceId, sourceUuid}));
         }
 
         public Task<IEnumerable<SlimSourceWithShowVenueAndArtist>> SlimSourceWithShowAndArtistForIds(IList<int> ids)

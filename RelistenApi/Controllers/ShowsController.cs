@@ -171,5 +171,16 @@ namespace Relisten.Controllers
         {
             return ApiRequest(artistIdOrSlug, art => _sourceService.ReviewsForSource(sourceId));
         }
+
+
+        [HttpGet("v3/sources/{sourceUuid}/reviews")]
+        [ProducesResponseType(typeof(IEnumerable<SourceReview>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> ReviewsForShow([FromRoute] Guid sourceUuid)
+        {
+            return await ApiRequest(
+                await _artistService.FindArtistBySourceUuid(sourceUuid),
+                art => _sourceService.ReviewsForSource(sourceId: null, sourceUuid: sourceUuid));
+        }
     }
 }
