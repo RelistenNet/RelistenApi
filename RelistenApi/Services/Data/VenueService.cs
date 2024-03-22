@@ -167,7 +167,7 @@ namespace Relisten.Data
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
                 SELECT
                     v.*
-
+                    , a.uuid as artist_uuid
                     , CASE
                     	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
                     		COUNT(s.id)
@@ -178,10 +178,11 @@ namespace Relisten.Data
                 	shows s
                     JOIN venues v ON v.id = s.venue_id
                     LEFT JOIN sources src ON src.venue_id = v.id
+                    JOIN artists a ON a.id = v.artist_id
                 WHERE
                     (v.id = @id OR v.uuid = @uuid)
                 GROUP BY
-                	v.id
+                	v.id, a.uuid
             ", new {id, uuid}));
         }
 
