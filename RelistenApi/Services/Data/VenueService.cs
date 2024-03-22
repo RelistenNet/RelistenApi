@@ -199,9 +199,20 @@ namespace Relisten.Data
                 return null;
             }
 
+            var show_ids_sql = @"
+                SELECT
+                    DISTINCT s.show_id
+                FROM
+                    sources s
+                    JOIN venues v ON v.id = s.venue_id
+                WHERE
+                    s.artist_id = @artist_id
+                    AND (s.venue_id = @venue_id or v.uuid = @venue_uuid)
+            ";
+
             venue.shows = new List<Show>();
             venue.shows.AddRange(await _showService.ShowsForCriteria(artist,
-                "s.artist_id = @artist_id AND (s.venue_id = @venue_id or v.uuid = @venue_uuid)",
+                $"s.artist_id = @artist_id AND s.id IN ({show_ids_sql})",
                 new {artist_id = artist.id, venue_id = venue.id, venue_uuid = venue.uuid}
             ));
 

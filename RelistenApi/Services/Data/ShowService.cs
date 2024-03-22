@@ -155,24 +155,24 @@ namespace Relisten.Data
                     ORDER BY
                         " + orderBy + @"
                     " + limitClause + @"
-                ", (Show, venue, tour, era, art, features, year) =>
+                ", (show, venue, tour, era, art, features, year) =>
                 {
                     art.features = features;
-                    Show.artist = art;
-                    Show.venue = venue;
-                    Show.year = year;
+                    show.artist = art;
+                    show.venue = venue;
+                    show.year = year;
 
                     if (art.features.tours)
                     {
-                        Show.tour = tour;
+                        show.tour = tour;
                     }
 
                     if (art.features.eras)
                     {
-                        Show.era = era;
+                        show.era = era;
                     }
 
-                    return Show;
+                    return show;
                 }, parms));
         }
 
