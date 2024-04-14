@@ -328,7 +328,9 @@ namespace Relisten.Import
 
             var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
 
-            var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet);
+            var allFilesByName = detailsRoot.files?.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
+
+            var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet, allFilesByName);
 
             stats.Created += (await _sourceTrackService.InsertAll(dbSource, dbTracks)).Count();
 
@@ -530,8 +532,8 @@ namespace Relisten.Import
             Metadata meta,
             IEnumerable<File> mp3Files,
             IDictionary<string, File> flacFiles,
-            SourceSet set = null
-        )
+            SourceSet set,
+            IDictionary<string, File> allFilesByName)
         {
             var trackNum = 0;
 
@@ -544,7 +546,7 @@ namespace Relisten.Import
                     );
                 }).OrderBy(file => file.name).Select(file =>
                 {
-                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set);
+                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set, allFilesByName);
                     trackNum = r.track_position;
 
                     return r;
@@ -559,8 +561,8 @@ namespace Relisten.Import
             File file,
             int previousTrackNumber,
             IDictionary<string, File> flacFiles,
-            SourceSet set = null
-        )
+            SourceSet set,
+            IDictionary<string, File> allFilesByName)
         {
             var trackNum = previousTrackNumber + 1;
 
@@ -572,7 +574,14 @@ namespace Relisten.Import
             }
             else if (!string.IsNullOrEmpty(file.original))
             {
-                title = file.original;
+                if (allFilesByName.TryGetValue(file.original, out var original))
+                {
+                    title = original.title;
+                }
+                else
+                {
+                    title = file.original;
+                }
             }
 
             var flac = file.original == null ? null : flacFiles.GetValue(file.original);
