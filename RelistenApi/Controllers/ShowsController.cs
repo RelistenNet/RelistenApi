@@ -54,7 +54,7 @@ namespace Relisten.Controllers
         public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIds = null,
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIds,
+            return await ApiRequest(artistIds ?? [],
                 arts => _showService.RecentlyPerformed(arts, shows, days));
         }
 
@@ -63,7 +63,7 @@ namespace Relisten.Controllers
         public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIds = null,
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
-            return await ApiRequest(artistIds,
+            return await ApiRequest(artistIds ?? [],
                 arts => _showService.RecentlyUpdated(arts, shows, days));
         }
 
