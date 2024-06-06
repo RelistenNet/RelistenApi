@@ -5,7 +5,7 @@ using Dapper;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
-using Hangfire.Redis;
+using Hangfire.Redis.StackExchange;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
