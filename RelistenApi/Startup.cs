@@ -109,7 +109,11 @@ namespace Relisten
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc
             };
 
-            var db = new DbService(Configuration["DATABASE_URL"], HostEnvironment);
+            var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
+                    ? Configuration["PGBOUNCER_DATABASE_URL"]
+                    : Configuration["DATABASE_URL"];
+
+            var db = new DbService(dbUrl, HostEnvironment);
             RunMigrations(db);
             services.AddSingleton(db);
 
