@@ -72,10 +72,10 @@ echo "Recreating databases...ignore errors about a relisten_db not existing. Thi
 DOCKER_DB_NAME="$(docker-compose ps -q relisten-db)"
 docker exec -i "$DOCKER_DB_NAME" psql -U relisten -d postgres -c "DROP DATABASE relisten_db"
 docker exec -i "$DOCKER_DB_NAME" psql -U relisten -d postgres -c "CREATE DATABASE relisten_db"
-docker exec -i "$DOCKER_DB_NAME" pg_restore --dbname=relisten_db --no-acl --no-owner -U relisten -d relisten_db < "backup/export"
+pv backup/export | docker exec -i "$DOCKER_DB_NAME" pg_restore --dbname=relisten_db --no-acl --no-owner -U relisten -d relisten_db -vv
 
-rm "$TMPFILETAR"
-rm -rf backup/
+#rm "$TMPFILETAR"
+#rm -rf backup/
 
 printf "%s" "${DB_VERSION}" > "$DB_VERSION_FILE"
 

@@ -572,16 +572,14 @@ namespace Relisten.Import
             {
                 title = file.title;
             }
-            else if (!string.IsNullOrEmpty(file.original))
+            else if (
+                !string.IsNullOrEmpty(file.original)
+                && allFilesByName.TryGetValue(file.original, out var original)
+                && !string.IsNullOrWhiteSpace(original.title)
+            )
             {
-                if (allFilesByName.TryGetValue(file.original, out var original))
-                {
-                    title = original.title;
-                }
-                else
-                {
-                    title = file.original;
-                }
+                // sometimes if file.title is null the original file.title will be null as well
+                title = original.title;
             }
 
             var flac = file.original == null ? null : flacFiles.GetValue(file.original);

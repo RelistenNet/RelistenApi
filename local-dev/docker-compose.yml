@@ -21,6 +21,15 @@ services:
     ports:
       - 15432:5432
 
+  relisten-db-pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: always
+    environment:
+      DATABASE_URL: postgres://relisten:local_dev_password@relisten-db:5432/relisten_db
+      POOL_MODE: transaction
+    ports:
+      - 16432:5432
+
   adminer:
     image: adminer
     restart: always

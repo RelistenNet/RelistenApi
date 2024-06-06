@@ -5,7 +5,7 @@ using Dapper;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
-using Hangfire.Redis;
+using Hangfire.Redis.StackExchange;
 using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -109,7 +109,11 @@ namespace Relisten
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc
             };
 
-            var db = new DbService(Configuration["DATABASE_URL"], HostEnvironment);
+            var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
+                    ? Configuration["PGBOUNCER_DATABASE_URL"]
+                    : Configuration["DATABASE_URL"];
+
+            var db = new DbService(dbUrl, HostEnvironment);
             RunMigrations(db);
             services.AddSingleton(db);
 

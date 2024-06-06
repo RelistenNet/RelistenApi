@@ -91,9 +91,25 @@ namespace Relisten.Controllers
             if (art != null)
             {
                 var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null, null));
+                    _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null));
 
                 return JsonSuccess($"Queued as job {jobId}!");
+            }
+
+            return JsonNotFound(false);
+        }
+
+        [HttpGet("{idOrSlug}/{showIdentifier}/debug")]
+        [Authorize]
+        public async Task<IActionResult> GetSingleDebug(string idOrSlug, string showIdentifier,
+            [FromQuery] bool deleteOldContent = false)
+        {
+            var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            if (art != null)
+            {
+                await _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null, null);
+
+                return JsonSuccess("done!");
             }
 
             return JsonNotFound(false);

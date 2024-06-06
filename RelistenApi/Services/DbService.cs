@@ -2,8 +2,8 @@ using System;
 using System.Data;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Npgsql;
-using Npgsql.Logging;
 
 namespace Relisten
 {
@@ -21,8 +21,9 @@ namespace Relisten
 
             if (hostEnvironment.IsDevelopment())
             {
-                NpgsqlLogManager.IsParameterLoggingEnabled = true;
-                NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug, true);
+                var loggerFactory =
+                    LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
+                NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory, parameterLoggingEnabled: true);
             }
         }
 
