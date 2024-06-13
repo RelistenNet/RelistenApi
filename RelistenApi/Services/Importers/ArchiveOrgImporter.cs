@@ -154,30 +154,45 @@ namespace Relisten.Import
                             return;
                         }
 
+                        // in the future it might be better to retry intead of skipping
+                        if (detailsRoot.metadata?.date == null)
+                        {
+                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata: {1}",
+                                doc.identifier, detailsRoot.metadata);
+
+                            var telementry = new TelemetryClient();
+
+                            telementry.TrackException(new ArgumentException("Invalid, unrecoverable metadata"),
+                                new Dictionary<string, string>
+                                {
+                                    { "upstream_identifier", doc.identifier },
+                                    { "background_job_id", ctx?.BackgroundJob.Id }
+                                });
+
+                            return;
+                        }
+
                         var properDate = FixDisplayDate(detailsRoot.metadata);
 
-                        if (properDate != null)
+                        if (properDate == null)
                         {
-                            using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
-                            {
-                                try
-                                {
-                                    stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
-                                        properDate, ctx);
-                                }
-                                catch (NoVBRMp3FilesException)
-                                {
-                                    identifiersWithoutMP3s.Add(doc.identifier);
-                                }
-
-                                scope.Complete();
-                            }
-                        }
-                        else
-                        {
-                            ctx?.WriteLine("\tSkipped {0} because it has an invalid, unrecoverable date: {1}",
+                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
                                 doc.identifier, detailsRoot.metadata.date);
                         }
+
+                        using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+
+                        try
+                        {
+                            stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                                properDate, ctx);
+                        }
+                        catch (NoVBRMp3FilesException)
+                        {
+                            identifiersWithoutMP3s.Add(doc.identifier);
+                        }
+
+                        scope.Complete();
                     }
                 }
                 catch (Exception e)
@@ -459,6 +474,13 @@ namespace Relisten.Import
             if (meta.date.Contains('X'))
             {
                 return meta.date;
+            }
+
+            if (meta.date == "2013-14-02")
+            {
+                // this date from The Werks always gives us issues and TryFlippingMonthAndDate doesn't work...I suspect
+                // some sort cultural issue because I cannot reproduce this locally
+                return "2013-02-14";
             }
 
             // happy case
