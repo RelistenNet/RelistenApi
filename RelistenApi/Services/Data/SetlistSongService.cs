@@ -90,10 +90,31 @@ namespace Relisten.Data
                             bigSong.shows = new List<Show>();
                         }
 
+                        if (venue != null)
+                        {
+                            venue.artist_uuid = artist.uuid;
+                        }
+
+                        if (tour != null)
+                        {
+                            tour.artist_uuid = artist.uuid;
+                        }
+
+                        if (era != null)
+                        {
+                            era.artist_uuid = artist.uuid;
+                        }
+
+                        year.artist_uuid = artist.uuid;
+
                         show.venue = venue;
                         show.tour = tour;
                         show.era = era;
                         show.year = year;
+
+                        show.venue_uuid = venue?.uuid;
+                        show.tour_uuid = tour?.uuid;
+                        show.year_uuid = year!.uuid;
 
                         bigSong.shows.Add(show);
 

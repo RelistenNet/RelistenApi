@@ -117,7 +117,7 @@ namespace Relisten.Data
                 	JOIN artists a ON v.artist_id = a.id
                     LEFT JOIN (
                         SELECT
-                            src.venue_id
+                            s.venue_id
                             , CASE
                     	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN
                     		          COUNT(s.id)
@@ -125,10 +125,10 @@ namespace Relisten.Data
                     		          COUNT(DISTINCT src.show_id)
                               END as shows_at_venue
                         FROM
-                            sources src
-                            JOIN shows s ON s.id = src.show_id
+                            shows s
+                            JOIN sources src ON s.id = src.show_id
                         GROUP BY
-                            src.venue_id
+                            s.venue_id
                     ) src ON src.venue_id = v.id
                 WHERE
                     v.artist_id = @id
@@ -168,21 +168,27 @@ namespace Relisten.Data
                 SELECT
                     v.*
                     , a.uuid as artist_uuid
-                    , CASE
-                    	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                    		COUNT(s.id)
-                    	ELSE
-                    		COUNT(DISTINCT src.show_id)
-                    END as shows_at_venue
+                    , src.shows_at_venue
                 FROM
-                	shows s
-                    JOIN venues v ON v.id = s.venue_id
-                    LEFT JOIN sources src ON src.venue_id = v.id
+                	venues v
+                    LEFT JOIN (
+                        SELECT
+                            s.venue_id
+                            , CASE
+                    	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN
+                    		          COUNT(s.id)
+                    	          ELSE
+                    		          COUNT(DISTINCT src.show_id)
+                              END as shows_at_venue
+                        FROM
+                            shows s
+                            JOIN sources src ON s.id = src.show_id
+                        GROUP BY
+                            s.venue_id
+                    ) src ON src.venue_id = v.id
                     JOIN artists a ON a.id = v.artist_id
                 WHERE
                     (v.id = @id OR v.uuid = @uuid)
-                GROUP BY
-                	v.id, a.uuid
             ", new {id, uuid}));
         }
 
@@ -202,9 +208,9 @@ namespace Relisten.Data
 
             var show_ids_sql = @"
                 SELECT
-                    DISTINCT s.show_id
+                    DISTINCT s.id
                 FROM
-                    sources s
+                    shows s
                     JOIN venues v ON v.id = s.venue_id
                 WHERE
                     s.artist_id = @artist_id
