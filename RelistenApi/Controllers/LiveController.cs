@@ -50,7 +50,7 @@ namespace Relisten.Controllers
             [FromQuery] string user_uuid = null
         )
         {
-            if (app_type != "ios" && app_type != "web" && app_type != "sonos")
+            if (app_type != "ios" && app_type != "web" && app_type != "sonos" && app_type != "android")
             {
                 return BadRequest();
             }
