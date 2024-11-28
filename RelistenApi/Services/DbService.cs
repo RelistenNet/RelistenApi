@@ -14,20 +14,16 @@ namespace Relisten
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             ConnStr =
-                $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Max Pool Size=300;";
+                $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
 
             Console.WriteLine("Attempting to connect to {0}", url.Replace(parts[1], "********"));
             Console.WriteLine($"DB Connection String: {ConnStr.Replace(parts[1], "********")}");
 
             if (hostEnvironment.IsDevelopment())
             {
-                var loggerFactory = LoggerFactory.Create(builder =>
-                    builder.SetMinimumLevel(LogLevel.Debug).AddConsole()
-                );
-                NpgsqlLoggingConfiguration.InitializeLogging(
-                    loggerFactory,
-                    parameterLoggingEnabled: true
-                );
+                var loggerFactory =
+                    LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
+                NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory, parameterLoggingEnabled: true);
             }
         }
 
@@ -38,10 +34,7 @@ namespace Relisten
             return new NpgsqlConnection(ConnStr + (longTimeout ? ";CommandTimeout=300" : ""));
         }
 
-        public async Task<T> WithConnection<T>(
-            Func<IDbConnection, Task<T>> getData,
-            bool longTimeout = false
-        )
+        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false)
         {
             try
             {
@@ -54,30 +47,18 @@ namespace Relisten
             catch (TimeoutException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL timeout",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
             }
             catch (NpgsqlException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                        GetType().FullName), ex);
             }
         }
 
         // use for buffered queries that do not return a type
-        public async Task WithConnection(
-            Func<IDbConnection, Task> getData,
-            bool longTimeout = false
-        )
+        public async Task WithConnection(Func<IDbConnection, Task> getData, bool longTimeout = false)
         {
             try
             {
@@ -90,31 +71,19 @@ namespace Relisten
             catch (TimeoutException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL timeout",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
             }
             catch (NpgsqlException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                        GetType().FullName), ex);
             }
         }
 
         // use for non-buffered queries that return a type
-        public async Task<TResult> WithConnection<TRead, TResult>(
-            Func<IDbConnection, Task<TRead>> getData,
-            Func<TRead, Task<TResult>> process,
-            bool longTimeout = false
-        )
+        public async Task<TResult> WithConnection<TRead, TResult>(Func<IDbConnection, Task<TRead>> getData,
+            Func<TRead, Task<TResult>> process, bool longTimeout = false)
         {
             try
             {
@@ -128,22 +97,13 @@ namespace Relisten
             catch (TimeoutException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL timeout",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
             }
             catch (NpgsqlException ex)
             {
                 throw new Exception(
-                    string.Format(
-                        "{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                        GetType().FullName
-                    ),
-                    ex
-                );
+                    string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                        GetType().FullName), ex);
             }
         }
     }
