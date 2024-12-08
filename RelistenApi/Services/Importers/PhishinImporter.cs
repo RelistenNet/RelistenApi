@@ -241,8 +241,9 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var songsToSave = new List<SetlistSong>();
+            var songs = (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data;
 
-            foreach (var song in (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data)
+            foreach (var song in songs)
             {
                 var dbSong = existingSetlistSongs.GetValue(song.id.ToString());
 
@@ -536,7 +537,7 @@ namespace Relisten.Import
                                     for_source = true,
                                     for_reviews = false,
                                     upstream_source_id = src.upstream_source_id,
-                                    url = $"http://phish.in/{dbSource.display_date}",
+                                    url = $"https://phish.in/{dbSource.display_date}",
                                     label = "View on phish.in"
                                 }
                             })).Count();

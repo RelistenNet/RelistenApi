@@ -14,7 +14,7 @@ namespace Relisten
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             ConnStr =
-                $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)}";
+                $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Include Error Detail=true";
 
             Console.WriteLine("Attempting to connect to {0}", url.Replace(parts[1], "********"));
             Console.WriteLine($"DB Connection String: {ConnStr.Replace(parts[1], "********")}");

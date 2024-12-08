@@ -141,8 +141,9 @@ namespace Relisten.Data
 						JOIN artists a ON a.id = s.artist_id
 	                    JOIN source_tracks t ON t.source_set_id = sets.id
 	                    JOIN shows sh ON sh.id = s.show_id
-	                WHERE
-	                    {where}
+	                WHERE 1=1
+	                    AND t.is_orphaned = false
+	                    AND {where}
 					ORDER BY
 						sets.index ASC, t.track_position ASC
 	            ",
