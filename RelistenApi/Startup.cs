@@ -10,6 +10,7 @@ using Microsoft.ApplicationInsights.Channel;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -78,7 +79,7 @@ namespace Relisten
                         Version = "v2",
                         Title = "Relisten API",
                         Contact =
-                            new OpenApiContact {Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge")},
+                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
                         License = new OpenApiLicense
                         {
                             Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
@@ -91,7 +92,7 @@ namespace Relisten
                         Version = "v3",
                         Title = "Relisten API",
                         Contact =
-                            new OpenApiContact {Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge")},
+                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
                         License = new OpenApiLicense
                         {
                             Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
@@ -110,8 +111,8 @@ namespace Relisten
             };
 
             var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
-                    ? Configuration["PGBOUNCER_DATABASE_URL"]
-                    : Configuration["DATABASE_URL"];
+                ? Configuration["PGBOUNCER_DATABASE_URL"]
+                : Configuration["DATABASE_URL"];
 
             var db = new DbService(dbUrl, HostEnvironment);
             RunMigrations(db);
@@ -126,13 +127,18 @@ namespace Relisten
                 // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
                 hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions),
-                    new RedisStorageOptions {InvisibilityTimeout = TimeSpan.FromHours(4)});
+                    new RedisStorageOptions { InvisibilityTimeout = TimeSpan.FromHours(4) });
                 hangfire.UseConsole();
                 hangfire.UseRecurringJob(typeof(ScheduledService));
             });
 
-            services.AddSingleton(new RedisService(configurationOptions));
+            var redis = new RedisService(configurationOptions);
+            services.AddSingleton(redis);
             services.AddSingleton(Configuration);
+
+            services.AddDataProtection()
+                .PersistKeysToStackExchangeRedis(redis.connection, "DataProtection-Keys")
+                .SetApplicationName("RelistenApi");
 
             services.AddScoped<SetlistShowService, SetlistShowService>();
             services.AddScoped<VenueService, VenueService>();
@@ -185,18 +191,18 @@ namespace Relisten
             {
                 app.UseHangfireServer(new BackgroundJobServerOptions
                 {
-                    Queues = new[] {"artist_import"},
+                    Queues = new[] { "artist_import" },
                     ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
                     WorkerCount = 3
                 });
 
                 app.UseHangfireServer(new BackgroundJobServerOptions
                 {
-                    Queues = new[] {"default"}, ServerName = $"relistenapi:default ({Environment.MachineName})"
+                    Queues = new[] { "default" }, ServerName = $"relistenapi:default ({Environment.MachineName})"
                 });
 
                 app.UseHangfireDashboard("/relisten-admin/hangfire",
-                    new DashboardOptions {Authorization = new[] {new MyAuthorizationFilter()}});
+                    new DashboardOptions { Authorization = new[] { new MyAuthorizationFilter() } });
             }
 
             app.UseSwagger(c =>
