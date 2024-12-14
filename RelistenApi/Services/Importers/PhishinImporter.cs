@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
@@ -450,7 +451,8 @@ namespace Relisten.Import
                     title = track.title,
                     duration = track.duration / 1000,
                     track_position = track.position,
-                    slug = SlugifyTrack(track.title),
+                    // Phish.in slugs could stay the same when the track changes
+                    slug = SlugifyTrack(track.title) + "-" + track.id.ToString(CultureInfo.InvariantCulture),
                     mp3_url = track.mp3.Replace("http:", "https:"),
                     updated_at = dbSource.updated_at,
                     artist_id = artist.id

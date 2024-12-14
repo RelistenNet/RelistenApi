@@ -113,6 +113,12 @@ namespace Relisten.Import
                 new TolerantArchiveDateTimeConverter()
             );
 
+            if (root?.response?.docs == null)
+            {
+                ctx?.WriteLine($"No results found. json={json}");
+                return stats;
+            }
+
             ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
 
             var prog = ctx?.WriteProgressBar();
