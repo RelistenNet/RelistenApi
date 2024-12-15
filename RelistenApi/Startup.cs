@@ -21,6 +21,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
@@ -70,6 +73,23 @@ namespace Relisten
                 loggingBuilder.AddConsole();
                 loggingBuilder.AddDebug();
             });
+
+            var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
+            if (otlpEndpoint != null)
+            {
+                services.AddOpenTelemetry()
+                    .ConfigureResource(resource =>
+                        resource.AddService(serviceName: "relistenapi"))
+                    .WithTracing(tracing => tracing
+                        .AddAspNetCoreInstrumentation()
+                        .AddOtlpExporter(otlpOptions =>
+                        {
+                            otlpOptions.Endpoint = new Uri(otlpEndpoint);
+
+                            otlpOptions.Protocol = OtlpExportProtocol.Grpc;
+                        }));
+            }
+
 
             services.AddSwaggerGen(c =>
             {
