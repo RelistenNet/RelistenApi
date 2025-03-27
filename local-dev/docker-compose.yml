@@ -20,6 +20,7 @@ services:
       POSTGRES_DB: relisten_db
     ports:
       - 15432:5432
+    shm_size: 1g
 
   relisten-db-pgbouncer:
     image: edoburu/pgbouncer:latest

@@ -1,6 +1,9 @@
 ﻿// using Hangfire.PostgreSql;
 
 using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Net.Http;
 using Dapper;
 using Hangfire;
 using Hangfire.Console;
@@ -12,8 +15,11 @@ using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +27,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -81,7 +88,31 @@ namespace Relisten
                     .ConfigureResource(resource =>
                         resource.AddService(serviceName: "relistenapi"))
                     .WithTracing(tracing => tracing
-                        .AddAspNetCoreInstrumentation()
+                        .AddAspNetCoreInstrumentation(options =>
+                        {
+                            options.EnrichWithHttpResponse = (activity, response) =>
+                            {
+                                var endpoint = response.HttpContext.GetEndpoint();
+                                if (endpoint is RouteEndpoint routeEndpoint)
+                                {
+                                    var descriptor = routeEndpoint.Metadata.GetMetadata<ControllerActionDescriptor>();
+                                    if (descriptor is not null)
+                                    {
+                                        var controller = descriptor.ControllerName;
+                                        var action = descriptor.ActionName;
+
+                                        var pathParameters = descriptor.Parameters
+                                            .Where(p => p.BindingInfo is null || p.BindingInfo.BindingSource?.Id == "Path")
+                                            .Select(p => $"{{{p.Name}}}");
+
+                                        var route = string.Join("/", [controller, action, .. pathParameters]);
+
+                                        activity.DisplayName = $"{route}";
+                                        activity.SetTag("http.route", route);
+                                    }
+                                }
+                            };
+                        })
                         .AddOtlpExporter(otlpOptions =>
                         {
                             otlpOptions.Endpoint = new Uri(otlpEndpoint);
