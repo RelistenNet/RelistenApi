@@ -8,8 +8,7 @@ on:
 
 env:
   IMAGE_NAME: relistenapi                 # <‑‑ repo/image name in the registry
-  REGISTRY_DOMAIN: 100.97.22.118
-  REGISTRY_PORT: 32000
+  REGISTRY: 100.97.22.118:32000
   TAG: latest   
   
 jobs:
@@ -32,8 +31,8 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
       with:
-        config-inline: |
-          [registry."${{ env.REGISTRY_DOMAIN }}"]
+        buildkitd-config-inline: |
+          [registry."${{ env.REGISTRY }}"]
             http = true
             insecure = true
 
@@ -42,5 +41,5 @@ jobs:
       with:
         context: .
         platforms: linux/amd64          # x86_64
-        tags: ${{ env.REGISTRY_DOMAIN }}:${{ env.REGISTRY_PORT }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
         push: true
