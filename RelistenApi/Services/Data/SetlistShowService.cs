@@ -91,7 +91,7 @@ namespace Relisten.Data
 
             if (show.id != 0)
             {
-                return await db.WithConnection(con => con.QuerySingleAsync<SetlistShow>(@"
+                return await db.WithWriteConnection(con => con.QuerySingleAsync<SetlistShow>(@"
                     UPDATE
                         setlist_shows
                     SET
@@ -108,7 +108,7 @@ namespace Relisten.Data
                 ", p));
             }
 
-            return await db.WithConnection(con => con.QuerySingleAsync<SetlistShow>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<SetlistShow>(@"
                     INSERT INTO
                         setlist_shows
 

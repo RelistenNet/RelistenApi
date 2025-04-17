@@ -29,7 +29,7 @@ namespace Relisten.Data
         {
             const string guidSnippet =
                 @"md5(@source_id || '::review::' || COALESCE('' || @rating, 'NULL') || COALESCE('' || @title, 'NULL') || COALESCE('' || @author, 'NULL') || @updated_at)::uuid";
-            return await db.WithConnection(async con =>
+            return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<SourceReview>();
 
@@ -73,7 +73,7 @@ namespace Relisten.Data
                     DO
                         UPDATE SET
                             review = EXCLUDED.review
-                    
+
                     RETURNING *
                     ", p));
                 }

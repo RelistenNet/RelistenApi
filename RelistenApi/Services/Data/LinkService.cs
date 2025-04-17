@@ -13,7 +13,7 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<Link>> AddLinksForSource(Source src, IEnumerable<Link> links)
         {
-            return await db.WithConnection(async con =>
+            return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<Link>();
 

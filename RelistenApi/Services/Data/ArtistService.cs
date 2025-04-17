@@ -88,7 +88,7 @@ namespace Relisten.Data
 
         public Task<int> RemoveAllContentForArtist(Artist art)
         {
-            return db.WithConnection(con => con.ExecuteAsync(@"
+            return db.WithWriteConnection(con => con.ExecuteAsync(@"
 				delete from setlist_songs where artist_id = @ArtistId;
 				delete from setlist_shows where artist_id = @ArtistId;
 				delete from shows where artist_id = @ArtistId;
@@ -364,7 +364,7 @@ namespace Relisten.Data
         {
             if (artist.id != 0)
             {
-                var art = await db.WithConnection(async con =>
+                var art = await db.WithWriteConnection(async con =>
                 {
                     var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
 	                    UPDATE
@@ -409,7 +409,7 @@ namespace Relisten.Data
             }
             else
             {
-                var art = await db.WithConnection(async con =>
+                var art = await db.WithWriteConnection(async con =>
                 {
                     var innerArt = await con.QuerySingleAsync<SlimArtistWithFeatures>(@"
 	                    INSERT INTO

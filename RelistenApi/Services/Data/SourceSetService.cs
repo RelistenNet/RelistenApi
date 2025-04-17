@@ -32,7 +32,7 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets)
         {
-            return await db.WithConnection(async con =>
+            return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<SourceSet>();
 

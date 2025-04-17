@@ -14,7 +14,7 @@ namespace Relisten.Data
 
         public async Task<SourceTrackPlay> RecordPlayedTrack(SourceTrackPlay track)
         {
-            return await db.WithConnection(con => con.QuerySingleAsync<SourceTrackPlay>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<SourceTrackPlay>(@"
 				INSERT INTO
 					source_track_plays
 

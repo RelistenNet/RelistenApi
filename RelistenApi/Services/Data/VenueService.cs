@@ -244,7 +244,7 @@ namespace Relisten.Data
 
             if (venue.id != 0)
             {
-                return await db.WithConnection(con => con.QuerySingleAsync<Venue>(@"
+                return await db.WithWriteConnection(con => con.QuerySingleAsync<Venue>(@"
                     UPDATE
                         venues
                     SET
@@ -264,7 +264,7 @@ namespace Relisten.Data
                 ", p));
             }
 
-            return await db.WithConnection(con => con.QuerySingleAsync<Venue>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<Venue>(@"
                     INSERT INTO
                         venues
 

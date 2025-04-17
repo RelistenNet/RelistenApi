@@ -225,7 +225,7 @@ namespace Relisten.Import
 
         public async Task<ImportStats> RebuildYears(Artist artist)
         {
-            await db.WithConnection(con => con.ExecuteAsync(@"
+            await db.WithWriteConnection(con => con.ExecuteAsync(@"
 BEGIN TRANSACTION;
 
 -- Build Years
@@ -601,7 +601,7 @@ REFRESH MATERIALIZED VIEW source_review_counts;
 
             ";
 
-            await db.WithConnection(con => con.ExecuteAsync(sql, new {artist.id}));
+            await db.WithWriteConnection(con => con.ExecuteAsync(sql, new {artist.id}));
             return ImportStats.None;
         }
     }

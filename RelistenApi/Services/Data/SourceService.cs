@@ -246,7 +246,7 @@ namespace Relisten.Data
 
         public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers)
         {
-            return await db.WithConnection(con => con.ExecuteAsync(@"
+            return await db.WithWriteConnection(con => con.ExecuteAsync(@"
                 DELETE FROM
                     sources
                 WHERE
@@ -280,7 +280,7 @@ namespace Relisten.Data
                 source.flac_type
             };
 
-            return await db.WithConnection(con => con.QuerySingleAsync<Source>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<Source>(@"
                 INSERT INTO
                     sources
                     (

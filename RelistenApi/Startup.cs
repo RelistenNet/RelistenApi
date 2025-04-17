@@ -280,7 +280,7 @@ namespace Relisten
         public void RunMigrations(DbService db)
         {
             var migrationsAssembly = typeof(Startup).Assembly;
-            using (var pg = db.CreateConnection(true))
+            using (var pg = db.CreateConnection(longTimeout: true, readOnly: false))
             {
                 var databaseProvider = new PostgresqlDatabaseProvider(pg);
                 var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);

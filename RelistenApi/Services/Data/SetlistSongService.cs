@@ -169,7 +169,7 @@ namespace Relisten.Data
                     RETURNING *
                 ", song));
             }*/
-            return await db.WithConnection(async con =>
+            return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<SetlistSong>();
 

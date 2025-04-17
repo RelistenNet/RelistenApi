@@ -370,7 +370,7 @@ namespace Relisten.Import
 
         private async Task UpdateTourStartEndDates(Artist artist)
         {
-            await db.WithConnection(con => con.ExecuteAsync(@"
+            await db.WithWriteConnection(con => con.ExecuteAsync(@"
                 UPDATE
                     tours
                 SET

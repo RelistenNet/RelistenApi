@@ -54,7 +54,7 @@ namespace Relisten.Data
 
             if (era.id != 0)
             {
-                return await db.WithConnection(con => con.QuerySingleAsync<Era>(@"
+                return await db.WithWriteConnection(con => con.QuerySingleAsync<Era>(@"
                     UPDATE
                         eras
                     SET
@@ -68,7 +68,7 @@ namespace Relisten.Data
                 ", p));
             }
 
-            return await db.WithConnection(con => con.QuerySingleAsync<Era>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<Era>(@"
                     INSERT INTO
                         eras
 

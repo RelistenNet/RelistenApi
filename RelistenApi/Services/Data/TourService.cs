@@ -100,7 +100,7 @@ namespace Relisten.Data
 
             if (tour.id != 0)
             {
-                return await db.WithConnection(con => con.QuerySingleAsync<Tour>(@"
+                return await db.WithWriteConnection(con => con.QuerySingleAsync<Tour>(@"
                     UPDATE
                         tours
                     SET
@@ -118,7 +118,7 @@ namespace Relisten.Data
                 ", p));
             }
 
-            return await db.WithConnection(con => con.QuerySingleAsync<Tour>(@"
+            return await db.WithWriteConnection(con => con.QuerySingleAsync<Tour>(@"
                     INSERT INTO
                         tours
 

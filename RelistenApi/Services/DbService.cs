@@ -16,8 +16,12 @@ namespace Relisten
             ConnStr =
                 $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Include Error Detail=true";
 
+            // A bit of a hack, but it'll work well enough in prod and locally we don't need multiple dbs
+            ReadOnlyConnStr = ConnStr.Replace("relisten-db-rw.default", "relisten-db-ro.default");
+
             Console.WriteLine("Attempting to connect to {0}", url.Replace(parts[1], "********"));
-            Console.WriteLine($"DB Connection String: {ConnStr.Replace(parts[1], "********")}");
+            Console.WriteLine($"DB Connection: {ConnStr.Replace(parts[1], "********")}");
+            Console.WriteLine($"DB Connection (read-only): {ReadOnlyConnStr.Replace(parts[1], "********")}");
 
             if (hostEnvironment.IsDevelopment())
             {
@@ -28,17 +32,30 @@ namespace Relisten
         }
 
         public static string ConnStr { get; set; }
+        public static string ReadOnlyConnStr { get; set; }
 
-        public NpgsqlConnection CreateConnection(bool longTimeout)
+        public NpgsqlConnection CreateConnection(bool longTimeout, bool readOnly)
         {
-            return new NpgsqlConnection(ConnStr + (longTimeout ? ";CommandTimeout=300" : ""));
+            var connectionSuffix = (longTimeout ? ";CommandTimeout=300" : "");
+
+            if (readOnly)
+            {
+                return new NpgsqlConnection(ReadOnlyConnStr + connectionSuffix);
+            }
+
+            return new NpgsqlConnection(ConnStr + connectionSuffix);
         }
 
-        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false)
+        public Task<T> WithWriteConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false)
+        {
+            return WithConnection(getData, longTimeout, readOnly: false);
+        }
+
+        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false, bool readOnly = true)
         {
             try
             {
-                using (var connection = CreateConnection(longTimeout))
+                using (var connection = CreateConnection(longTimeout, readOnly))
                 {
                     await connection.OpenAsync();
                     return await getData(connection);
@@ -58,11 +75,11 @@ namespace Relisten
         }
 
         // use for buffered queries that do not return a type
-        public async Task WithConnection(Func<IDbConnection, Task> getData, bool longTimeout = false)
+        public async Task WithConnection(Func<IDbConnection, Task> getData, bool longTimeout = false, bool readOnly = false)
         {
             try
             {
-                using (var connection = CreateConnection(longTimeout))
+                using (var connection = CreateConnection(longTimeout, readOnly))
                 {
                     await connection.OpenAsync();
                     await getData(connection);
@@ -83,11 +100,11 @@ namespace Relisten
 
         // use for non-buffered queries that return a type
         public async Task<TResult> WithConnection<TRead, TResult>(Func<IDbConnection, Task<TRead>> getData,
-            Func<TRead, Task<TResult>> process, bool longTimeout = false)
+            Func<TRead, Task<TResult>> process, bool longTimeout = false, bool readOnly = false)
         {
             try
             {
-                using (var connection = CreateConnection(longTimeout))
+                using (var connection = CreateConnection(longTimeout, readOnly))
                 {
                     await connection.OpenAsync();
                     var data = await getData(connection);

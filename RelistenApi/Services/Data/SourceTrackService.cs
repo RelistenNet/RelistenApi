@@ -47,7 +47,7 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceTrack>> InsertAll(Source source, IEnumerable<SourceTrack> tracks)
         {
-            return await db.WithConnection(async con =>
+            return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<SourceTrack>();
 
