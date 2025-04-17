@@ -13,7 +13,7 @@ env:
   
 jobs:
 
-  build:
+  build_push_and_rollout_restart:
     runs-on: ubuntu-latest
 
     steps:
