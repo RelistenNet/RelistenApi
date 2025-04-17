@@ -1,10 +1,6 @@
 name: Build and push image
 
-on:
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+on: workflow_dispatch
 
 env:
   IMAGE_NAME: relistennet/relistenapi                 # <‑‑ repo/image name in the registry
