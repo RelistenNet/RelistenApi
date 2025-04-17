@@ -1,0 +1,37 @@
+name: Build and push image
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+env:
+  IMAGE_NAME: relistenapi                 # <‑‑ repo/image name in the registry
+  REGISTRY: 100.97.22.118:32000
+  TAG: latest   
+  
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Tailscale
+      uses: tailscale/github-action@v3
+      with:
+        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        use-cache: 'true'
+        tags: tag:ci
+        version: latest
+
+    - name: Build and push image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64          # x86_64
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+        push: true
