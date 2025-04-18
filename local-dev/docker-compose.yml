@@ -2,7 +2,7 @@ version: '3.1'
 
 services:
   relisten-redis:
-    image: redis:5.0.7
+    image: redis:7.4
     restart: always
     volumes:
       - ./redis-data:/data
@@ -10,7 +10,7 @@ services:
       - 16379:6379
 
   relisten-db:
-    image: postgres:11.6
+    image: postgres:17.4
     restart: always
     volumes:
       - ./postgres-data/pgdata:/var/lib/postgresql/data
@@ -23,11 +23,12 @@ services:
     shm_size: 1g
 
   relisten-db-pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: edoburu/pgbouncer:v1.24.0-p1
     restart: always
     environment:
       DATABASE_URL: postgres://relisten:local_dev_password@relisten-db:5432/relisten_db
       POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
     ports:
       - 16432:5432
 
