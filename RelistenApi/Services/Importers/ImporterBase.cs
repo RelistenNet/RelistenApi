@@ -314,6 +314,7 @@ WITH durs AS (
 		JOIN sources s ON t.source_id = s.id
 	WHERE
 		s.artist_id = @id
+        AND t.is_orphaned != true
 	GROUP BY
 		t.source_id
 )
