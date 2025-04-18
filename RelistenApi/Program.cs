@@ -30,9 +30,6 @@ namespace Relisten
             .UseContentRoot(Directory.GetCurrentDirectory())
             .UseUrls($"http://*:{port}/")
             .UseStartup<Startup>()
-#if !DEBUG
-	        	.UseApplicationInsights()
-#endif
             .Build();
     }
 }
