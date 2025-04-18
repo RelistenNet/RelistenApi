@@ -36,7 +36,7 @@ namespace Relisten
 
         public NpgsqlConnection CreateConnection(bool longTimeout, bool readOnly)
         {
-            var connectionSuffix = (longTimeout ? ";CommandTimeout=300" : "");
+            var connectionSuffix = ((!readOnly || longTimeout) ? ";CommandTimeout=300" : "");
 
             if (readOnly)
             {
