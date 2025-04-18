@@ -31,12 +31,12 @@ namespace Relisten.Controllers
 
         [HttpGet("v2/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-        public async Task<IActionResult> Today()
+        public async Task<IActionResult> Today([FromQuery] int? month = null, [FromQuery] int? day = null)
         {
-            return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"
-                EXTRACT(month from s.date) = EXTRACT(month from NOW())
-	            AND EXTRACT(day from s.date) = EXTRACT(day from NOW())
-            ", new { }));
+            return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@$"
+                EXTRACT(month from s.date) = {(month != null ? "@month" : "EXTRACT(month from NOW())")}
+	            AND EXTRACT(day from s.date) = {(day != null ? "@day" : "EXTRACT(day from NOW())")}
+            ", new { month, day }));
         }
 
         [HttpGet("v2/shows/on-date")]
@@ -46,7 +46,7 @@ namespace Relisten.Controllers
             return JsonSuccess(await _showService.ShowsForCriteriaWithArtists(@"
                 EXTRACT(month from s.date) = @month
 	            AND EXTRACT(day from s.date) = @day
-            ", new {month, day}));
+            ", new { month, day }));
         }
 
         [HttpGet("v2/shows/recently-performed")]
@@ -70,13 +70,14 @@ namespace Relisten.Controllers
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> TodayArtist([FromRoute] string artistIdOrSlug)
+        public async Task<IActionResult> TodayArtist([FromRoute] string artistIdOrSlug, [FromQuery] int? month = null,
+            [FromQuery] int? day = null)
         {
-            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteriaWithArtists(@"
+            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteriaWithArtists(@$"
                 s.artist_id = @artistId
-                AND EXTRACT(month from s.date) = EXTRACT(month from NOW())
-	            AND EXTRACT(day from s.date) = EXTRACT(day from NOW())
-            ", new {artistId = art.id}));
+                AND EXTRACT(month from s.date) = {(month != null ? "@month" : "EXTRACT(month from NOW())")}
+	            AND EXTRACT(day from s.date) = {(day != null ? "@day" : "EXTRACT(day from NOW())")}
+            ", new { artistId = art.id, month, day }));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/recently-performed")]
@@ -86,7 +87,7 @@ namespace Relisten.Controllers
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
             return await ApiRequest(artistIdOrSlug,
-                art => _showService.RecentlyPerformed(new[] {art}, shows, days));
+                art => _showService.RecentlyPerformed([art], shows, days));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/recently-updated")]
@@ -96,7 +97,7 @@ namespace Relisten.Controllers
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
             return await ApiRequest(artistIdOrSlug,
-                art => _showService.RecentlyUpdated(new[] {art}, shows, days));
+                art => _showService.RecentlyUpdated(new[] { art }, shows, days));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/on-date")]
@@ -108,7 +109,7 @@ namespace Relisten.Controllers
                 s.artist_id = @artistId
                 AND EXTRACT(month from s.date) = @month
 	            AND EXTRACT(day from s.date) = @day
-            ", new {artistId = art.id, month, day}));
+            ", new { artistId = art.id, month, day }));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/top")]
@@ -118,7 +119,7 @@ namespace Relisten.Controllers
         {
             return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteria(art, @"
                 s.artist_id = @artistId
-            ", new {artistId = art.id}, limit, "cnt.max_avg_rating_weighted DESC"));
+            ", new { artistId = art.id }, limit, "cnt.max_avg_rating_weighted DESC"));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/shows/random")]
