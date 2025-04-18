@@ -244,7 +244,7 @@ namespace Relisten
                 {
                     Queues = new[] { "artist_import" },
                     ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-                    WorkerCount = 3
+                    WorkerCount = 1
                 });
 
                 app.UseHangfireServer(new BackgroundJobServerOptions
