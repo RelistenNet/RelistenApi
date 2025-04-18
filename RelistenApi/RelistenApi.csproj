@@ -34,7 +34,6 @@
     <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.11.0-beta.1" />
     <PackageReference Include="Polly" Version="8.5.2" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
-    <PackageReference Include="Microsoft.AspNetCore.ApplicationInsights.HostingStartup" Version="2.3.0" />
     <PackageReference Include="Simple.Migrations" Version="0.9.21"/>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="9.0.4" />
     <PackageReference Include="Hangfire.Redis.StackExchange" Version="1.12.0" />

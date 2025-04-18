@@ -1,17 +1,10 @@
-﻿// using Hangfire.PostgreSql;
-
-using System;
-using System.Diagnostics;
+﻿using System;
 using System.Linq;
-using System.Net.Http;
 using Dapper;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
 using Hangfire.Redis.StackExchange;
-using Microsoft.ApplicationInsights.Channel;
-using Microsoft.ApplicationInsights.DataContracts;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
@@ -27,7 +20,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
-using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
@@ -56,8 +48,6 @@ namespace Relisten
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            SetupApplicationInsightsFilters();
-
             services.AddCors();
             services.AddResponseCompression();
             services.AddHttpContextAccessor();
@@ -74,9 +64,7 @@ namespace Relisten
             services.AddLogging(loggingBuilder =>
             {
                 loggingBuilder.AddConfiguration(Configuration.GetSection("Logging"));
-                loggingBuilder.SetMinimumLevel(HostEnvironment.IsProduction()
-                    ? LogLevel.Warning
-                    : LogLevel.Information);
+                loggingBuilder.SetMinimumLevel(LogLevel.Information);
                 loggingBuilder.AddConsole();
                 loggingBuilder.AddDebug();
             });
@@ -301,14 +289,6 @@ namespace Relisten
             }
         }
 
-        public void SetupApplicationInsightsFilters()
-        {
-            var builder = TelemetryConfiguration.Active.TelemetryProcessorChainBuilder;
-            builder.Use(next => new HangfireRequestFilter(next));
-
-            builder.Build();
-        }
-
         public void SetupAuthentication(IServiceCollection services)
         {
             var userStore = new EnvUserStore(Configuration);
@@ -342,40 +322,6 @@ namespace Relisten
                 // enables immediate logout, after updating the user's stat.
                 options.ValidationInterval = TimeSpan.FromDays(365);
             });
-        }
-    }
-
-    public class HangfireRequestFilter : ITelemetryProcessor
-    {
-        // Link processors to each other in a chain.
-        public HangfireRequestFilter(ITelemetryProcessor next)
-        {
-            Next = next;
-        }
-
-        private ITelemetryProcessor Next { get; }
-
-        // You can pass values from .config
-        public string MyParamFromConfigFile { get; set; }
-
-        public void Process(ITelemetry item)
-        {
-            // To filter out an item, just return
-            if (!OKtoSend(item)) { return; }
-
-            Next.Process(item);
-        }
-
-        // Example: replace with your own criteria.
-        private bool OKtoSend(ITelemetry item)
-        {
-            var request = item as RequestTelemetry;
-            if (request == null)
-            {
-                return true;
-            }
-
-            return !request.Url.AbsolutePath.StartsWith("/relisten-admin/hangfire");
         }
     }
 
