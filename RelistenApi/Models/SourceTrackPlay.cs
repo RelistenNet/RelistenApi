@@ -10,7 +10,8 @@ namespace Relisten.Api.Models
         Unknown = 0,
         iOS,
         Web,
-        Sonos
+        Sonos,
+        Android
     }
 
     public static class SourceTrackPlayAppTypeHelper
@@ -28,6 +29,9 @@ namespace Relisten.Api.Models
                 case "web":
                     return SourceTrackPlayAppType.Web;
 
+                case "android":
+                    return SourceTrackPlayAppType.Android;
+
                 default:
                     return SourceTrackPlayAppType.Unknown;
             }
@@ -36,15 +40,20 @@ namespace Relisten.Api.Models
 
     public class SourceTrackPlay
     {
-        [Required] public int id { get; set; }
+        [Required]
+        public int id { get; set; }
 
-        [Required] public DateTime created_at { get; set; }
+        [Required]
+        public DateTime created_at { get; set; }
 
-        [Required] public Guid source_track_uuid { get; set; }
+        [Required]
+        public Guid source_track_uuid { get; set; }
 
-        [Required] public Guid? user_uuid { get; set; } = null;
+        [Required]
+        public Guid? user_uuid { get; set; } = null;
 
-        [Required] public SourceTrackPlayAppType app_type { get; set; }
+        [Required]
+        public SourceTrackPlayAppType app_type { get; set; }
 
         [Required]
         [JsonConverter(typeof(StringEnumConverter))]
