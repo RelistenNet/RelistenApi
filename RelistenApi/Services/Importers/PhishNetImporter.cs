@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Import.PhishNet;
 
 namespace Relisten.Import
 {
@@ -16,12 +17,8 @@ namespace Relisten.Import
     {
         public const string DataSourceName = "phish.net";
 
-        private static readonly Regex PhishNetRatingScraper =
-            new(@"Overall: (?<AverageRating>[\d.]+)\/5 \((?<VotesCast>\d+) ratings\)");
-
-        private static readonly Regex PhishNetReviewCountScraper = new(@"class='tpc-comment review'");
-
-        private readonly LinkService linkService;
+        readonly LinkService linkService;
+        readonly PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
             DbService db,
@@ -36,6 +33,8 @@ namespace Relisten.Import
             _sourceService = sourceService;
             _log = log;
             _sourceReviewService = sourceReviewService;
+            http = new PhishNetHttpClientFactory().HttpClient;
+            phishNetApiClient = new PhishNetApiClient(http);
         }
 
         protected SourceService _sourceService { get; set; }
@@ -62,10 +61,12 @@ namespace Relisten.Import
 
             ctx?.WriteLine($"Processing {shows.Count} shows");
 
+            var phishNetApiShows = await phishNetApiClient.Shows(ctx);
+
             await shows.ForEachAsync(async dbSource =>
             {
-                stats += await ProcessSource(artist, src, dbSource, ctx);
-            }, prog, 1);
+                stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
+            }, prog, 10);
 
             ctx?.WriteLine("Rebuilding...");
 
@@ -81,90 +82,16 @@ namespace Relisten.Import
             return Task.FromResult(new ImportStats());
         }
 
-        private string PhishNetUrlForSource(Source dbSource)
-        {
-            return "http://phish.net/setlists/?d=" + dbSource.display_date;
-        }
-
-        private string PhishNetApiReviewsUrlForSource(Source dbSource)
-        {
-            return
-                "https://api.phish.net/api.js?api=2.0&method=pnet.reviews.query&format=json&apikey=B6570BEDA805B616AB6C&showdate=" +
-                dbSource.display_date;
-        }
-
-        private string PhishNetApiSetlistUrlForSource(Source dbSource)
-        {
-            return
-                "https://api.phish.net/api.js?api=2.0&method=pnet.shows.setlists.get&format=json&apikey=C60F490D1358FBBE31DA&showdate=" +
-                dbSource.display_date;
-        }
-
-        private int TryParseInt(string str)
-        {
-            var i = 0;
-            int.TryParse(str, out i);
-            return i;
-        }
-
-        private double TryParseDouble(string str)
-        {
-            double i = 0;
-            double.TryParse(str, out i);
-            return i;
-        }
-
         private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext ctx)
         {
-            var url = PhishNetUrlForSource(dbSource);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
-            var page = await resp.Content.ReadAsStringAsync();
+            var ratingScraper = new PhishNetRatingsScraper(http, dbSource.display_date);
+            ctx?.WriteLine($"Requesting {PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date)}");
 
-            var ratingMatches = PhishNetRatingScraper.Match(page);
-
-            return new PhishNetScrapeResults
-            {
-                RatingAverage = TryParseDouble(ratingMatches.Groups["AverageRating"].Value),
-                RatingVotesCast = TryParseInt(ratingMatches.Groups["VotesCast"].Value),
-                NumberOfReviewsWritten = PhishNetReviewCountScraper.Matches(page).Count
-            };
-        }
-
-        private async Task<PhishNetApiSetlist> GetPhishNetApiSetlist(Source dbSource, PerformContext ctx)
-        {
-            var url = PhishNetApiSetlistUrlForSource(dbSource);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
-            var page = await resp.Content.ReadAsStringAsync();
-
-            if (page.Length == 0)
-            {
-                return null;
-            }
-
-            var setlists = JsonConvert.DeserializeObject<IEnumerable<PhishNetApiSetlist>>(page);
-
-            return setlists.Where(setlist => setlist.artist_name == "Phish").FirstOrDefault();
-        }
-
-        private async Task<IEnumerable<PhishNetApiReview>> GetPhishNetApiReviews(Source dbSource, PerformContext ctx)
-        {
-            var url = PhishNetApiReviewsUrlForSource(dbSource);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
-            var page = await resp.Content.ReadAsStringAsync();
-
-            // some shows have no reviews
-            if (page.Length == 0 || page[0] == '{')
-            {
-                return new List<PhishNetApiReview>();
-            }
-
-            return JsonConvert.DeserializeObject<IEnumerable<PhishNetApiReview>>(page);
+            return await ratingScraper.ScrapeRatings();
         }
 
         private async Task<ImportStats> ProcessSource(Artist artist, ArtistUpstreamSource src, Source dbSource,
+            IList<PhishNetApiShow> phishNetApiShows,
             PerformContext ctx)
         {
             var stats = new ImportStats();
@@ -175,32 +102,34 @@ namespace Relisten.Import
             if (dbSource.num_ratings != ratings.RatingVotesCast)
             {
                 dbSource.num_ratings = ratings.RatingVotesCast;
-                dbSource.avg_rating = ratings.RatingAverage * 2.0;
+                dbSource.avg_rating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
+
+                dirty = true;
+            }
+
+            var phishNetApiShow = phishNetApiShows.FirstOrDefault(pnetShow => pnetShow.showdate == dbSource.display_date);
+
+            if (!dbSource.description.Contains(phishNetApiShow.setlist_notes))
+            {
+                dbSource.description = phishNetApiShow.setlist_notes;
 
                 dirty = true;
             }
 
             if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
             {
-                var reviewsTask = GetPhishNetApiReviews(dbSource, ctx);
-                var setlistTask = GetPhishNetApiSetlist(dbSource, ctx);
+                var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
 
-                await Task.WhenAll(reviewsTask, setlistTask);
-
-                var dbReviews = reviewsTask.Result.Select(rev =>
+                var dbReviews = reviews.Select(rev => new SourceReview
                 {
-                    return new SourceReview
-                    {
-                        rating = null,
-                        title = null,
-                        review = rev.review,
-                        author = rev.author,
-                        updated_at = DateTimeOffset.FromUnixTimeSeconds(rev.tstamp).UtcDateTime
-                    };
+                    rating = null,
+                    title = null,
+                    review = rev.review_text,
+                    author = rev.username,
+                    updated_at = rev.posted_at
                 }).ToList();
 
-                dbSource.num_reviews = dbReviews.Count();
-                dbSource.description = setlistTask.Result.setlistnotes + "\n\n\n" + setlistTask.Result.setlistdata;
+                dbSource.num_reviews = dbReviews.Count;
 
                 dirty = true;
 
@@ -209,31 +138,31 @@ namespace Relisten.Import
 
             if (dirty)
             {
+                ctx?.WriteLine($"{dbSource.display_date} changed!");
                 await _sourceService.Save(dbSource);
                 stats.Updated++;
             }
 
             stats.Created += (await linkService.AddLinksForSource(dbSource,
-                new[]
-                {
-                    new Link
+            [
+                new Link
                     {
                         source_id = dbSource.id,
                         for_ratings = true,
                         for_source = false,
                         for_reviews = true,
                         upstream_source_id = src.upstream_source_id,
-                        url = PhishNetUrlForSource(dbSource),
+                        url = PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date),
                         label = "View on phish.net"
                     }
-                })).Count();
+            ])).Count();
 
 
             return stats;
         }
 
         private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(ImportStats stats, Source source,
-            IEnumerable<SourceReview> reviews)
+            IList<SourceReview> reviews)
         {
             foreach (var review in reviews)
             {
@@ -245,51 +174,6 @@ namespace Relisten.Import
             stats.Created += res.Count();
 
             return res;
-        }
-
-        private class PhishNetScrapeResults
-        {
-            public double RatingAverage { get; set; }
-            public int RatingVotesCast { get; set; }
-            public int NumberOfReviewsWritten { get; set; }
-        }
-
-        public class PhishNetApiReview
-        {
-            public string commentid { get; set; }
-            public string showdate { get; set; }
-            public string showyear { get; set; }
-            public string review { get; set; }
-            public string venue { get; set; }
-            public string city { get; set; }
-            public string state { get; set; }
-            public string country { get; set; }
-            public int tstamp { get; set; }
-            public string author { get; set; }
-        }
-
-        public class PhishNetApiSetlist
-        {
-            public string artist { get; set; }
-            public string showid { get; set; }
-            public string showdate { get; set; }
-            public string showyear { get; set; }
-            public string meta { get; set; }
-            public string city { get; set; }
-            public string state { get; set; }
-            public string country { get; set; }
-            public string venue { get; set; }
-            public string setlistnotes { get; set; }
-            public string venuenotes { get; set; }
-            public string venueid { get; set; }
-            public string url { get; set; }
-
-            [JsonProperty("artist-name")] public string artist_name { get; set; }
-
-            public string mmddyy { get; set; }
-            public string nicedate { get; set; }
-            public string relativetime { get; set; }
-            public string setlistdata { get; set; }
         }
     }
 }
