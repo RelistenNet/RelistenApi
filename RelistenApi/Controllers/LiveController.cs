@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
 using Relisten.Api.Models;
@@ -65,9 +64,6 @@ namespace Relisten.Controllers
             {
                 return BadRequest("Invalid track_uuid format");
             }
-
-            var telementry = new TelemetryClient();
-            telementry.TrackEvent("played_track", new Dictionary<string, string> {{"app_type", app_type}});
 
             SourceTrack track = null;
 

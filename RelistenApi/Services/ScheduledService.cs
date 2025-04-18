@@ -8,7 +8,6 @@ using Hangfire;
 using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
 using Hangfire.Server;
-using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Data;
@@ -195,11 +194,6 @@ namespace Relisten
             {
                 ctx?.WriteLine($"Error processing {artist.name}:");
                 ctx?.LogException(e);
-
-                var telementry = new TelemetryClient();
-
-                telementry.TrackException(e,
-                    new Dictionary<string, string> {{"artist_name", artist.name}, {"artist_id", artist.id.ToString()}});
 
                 throw;
             }

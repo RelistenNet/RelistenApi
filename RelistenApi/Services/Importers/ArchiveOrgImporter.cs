@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
 using Hangfire.Server;
-using Microsoft.ApplicationInsights;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
@@ -166,15 +165,6 @@ namespace Relisten.Import
                             ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata: {1}",
                                 doc.identifier, detailsRoot.metadata);
 
-                            var telementry = new TelemetryClient();
-
-                            telementry.TrackException(new ArgumentException("Invalid, unrecoverable metadata"),
-                                new Dictionary<string, string>
-                                {
-                                    { "upstream_identifier", doc.identifier },
-                                    { "background_job_id", ctx?.BackgroundJob.Id }
-                                });
-
                             return;
                         }
 
@@ -205,11 +195,6 @@ namespace Relisten.Import
                 {
                     ctx?.WriteLine($"Error processing {doc.identifier}:");
                     ctx?.LogException(e);
-
-                    var telementry = new TelemetryClient();
-
-                    telementry.TrackException(e,
-                        new Dictionary<string, string> {{"upstream_identifier", doc.identifier}});
                 }
             });
 
