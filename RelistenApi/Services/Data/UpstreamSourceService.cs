@@ -25,7 +25,7 @@ namespace Relisten.Data
         public async Task ReplaceUpstreamSourcesForArtist(SlimArtist artist,
             IEnumerable<SlimArtistUpstreamSource> sources)
         {
-            await db.WithConnection(async conn =>
+            await db.WithWriteConnection(async conn =>
             {
                 await conn.ExecuteAsync(@"
                     DELETE FROM
