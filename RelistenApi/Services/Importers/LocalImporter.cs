@@ -13,6 +13,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor;
 using Relisten.Vendor.Local;
+using Sentry;
 
 namespace Relisten.Import
 {
@@ -388,6 +389,8 @@ namespace Relisten.Import
                 {
                     ctx?.WriteLine($"Error processing show (but continuing): {date}");
                     ctx?.LogException(e);
+
+                    SentrySdk.CaptureException(e);
                 }
                 prog?.SetValue(100.0 * (++idx / totalShows));
                 ctx?.WriteLine($"Processing Show {idx} of {totalShows}");

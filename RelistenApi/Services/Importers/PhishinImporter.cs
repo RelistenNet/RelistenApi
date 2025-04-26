@@ -14,6 +14,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor;
 using Relisten.Vendor.Phishin;
+using Sentry;
 
 namespace Relisten.Import
 {
@@ -497,6 +498,11 @@ namespace Relisten.Import
                     {
                         ctx?.WriteLine($"Error processing show (but continuing): {show.date} (id: {show.id})");
                         ctx?.LogException(e);
+
+                        e.Data["phishin_show_date"] = show.date;
+                        e.Data["phishin_show_id"] = show.id;
+
+                        SentrySdk.CaptureException(e);
                     }
 
                     prog?.SetValue(100.0 * (((currentPage - 1) * pageSize) + idx + 1) / apiShows.total_entries);

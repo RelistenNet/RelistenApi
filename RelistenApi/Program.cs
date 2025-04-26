@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace Relisten
 {
@@ -25,6 +26,23 @@ namespace Relisten
 
             BuildWebHost(args, port).Run();
         }
+
+        public static IHostBuilder CreateHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    var sentryDsn = Environment.GetEnvironmentVariable("SENTRY_DSN");
+
+                    if (!string.IsNullOrEmpty(sentryDsn))
+                    {
+                        // Add the following line:
+                        webBuilder.UseSentry(o =>
+                        {
+                            o.Dsn = sentryDsn;
+                            o.SendDefaultPii = true; // we don't have PII?
+                        });
+                    }
+                });
 
         public static IWebHost BuildWebHost(string[] args, int port) => WebHost.CreateDefaultBuilder(args)
             .UseContentRoot(Directory.GetCurrentDirectory())

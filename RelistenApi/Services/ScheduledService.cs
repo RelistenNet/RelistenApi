@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
+using Sentry;
 
 namespace Relisten
 {
@@ -194,6 +195,10 @@ namespace Relisten
             {
                 ctx?.WriteLine($"Error processing {artist.name}:");
                 ctx?.LogException(e);
+
+                e.Data["artist"] = artist.name;
+
+                SentrySdk.CaptureException(e);
 
                 throw;
             }

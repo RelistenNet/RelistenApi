@@ -14,6 +14,7 @@ using Relisten.Data;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
+using Sentry;
 
 namespace Relisten.Import
 {
@@ -165,6 +166,18 @@ namespace Relisten.Import
                             ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata: {1}",
                                 doc.identifier, detailsRoot.metadata);
 
+                            var e = new ArgumentException("Invalid, unrecoverable metadata")
+                            {
+                                Data =
+                                {
+                                    ["artist"] = artist.name,
+                                    ["archive_identifier"] = doc.identifier,
+                                    ["background_job_id"] = ctx?.BackgroundJob.Id
+                                }
+                            };
+
+                            SentrySdk.CaptureException(e);
+
                             return;
                         }
 
@@ -174,6 +187,20 @@ namespace Relisten.Import
                         {
                             ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
                                 doc.identifier, detailsRoot.metadata.date);
+
+                            var e = new ArgumentException("Skipping doc because it has an invalid, unrecoverable date")
+                            {
+                                Data =
+                                {
+                                    ["artist"] = artist.name,
+                                    ["archive_identifier"] = doc.identifier,
+                                    ["date"] = detailsRoot.metadata.date
+                                }
+                            };
+
+                            SentrySdk.CaptureException(e);
+
+                            return;
                         }
 
                         using var scope = new TransactionScope(TransactionScopeOption.Required,
@@ -197,6 +224,11 @@ namespace Relisten.Import
                 {
                     ctx?.WriteLine($"Error processing {doc.identifier}:");
                     ctx?.LogException(e);
+
+                    e.Data["artist"] = artist.name;
+                    e.Data["archive_org_identifier"] = doc.identifier;
+
+                    SentrySdk.CaptureException(e);
                 }
             });
 
@@ -330,7 +362,7 @@ namespace Relisten.Import
                 (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
                 .Count();
 
-            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] {CreateSetForSource(dbSource)}))
+            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] { CreateSetForSource(dbSource) }))
                 .First();
             stats.Created++;
 
@@ -338,7 +370,8 @@ namespace Relisten.Import
 
             var allFilesByName = detailsRoot.files?.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
 
-            var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet, allFilesByName);
+            var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet,
+                allFilesByName);
 
             stats.Created += (await _sourceTrackService.InsertAll(dbSource, dbTracks)).Count();
 
@@ -561,7 +594,8 @@ namespace Relisten.Import
                     );
                 }).OrderBy(file => file.name).Select(file =>
                 {
-                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set, allFilesByName);
+                    var r = CreateSourceTrackForFile(artist, dbSource, meta, file, trackNum, flacFiles, set,
+                        allFilesByName);
                     trackNum = r.track_position;
 
                     return r;
