@@ -58,6 +58,12 @@ namespace Relisten
 
         public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false, bool readOnly = true)
         {
+            if (System.Transactions.Transaction.Current != null)
+            {
+                // If there's an active transaction make sure we always hit the primary db to replicate the old behavior
+                readOnly = false;
+            }
+
             try
             {
                 using (var connection = CreateConnection(longTimeout, readOnly))
