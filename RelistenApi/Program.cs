@@ -27,28 +27,28 @@ namespace Relisten
             BuildWebHost(args, port).Run();
         }
 
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .ConfigureWebHostDefaults(webBuilder =>
+        public static IWebHost BuildWebHost(string[] args, int port)
+        {
+            var host = WebHost.CreateDefaultBuilder(args);
+
+            var sentryDsn = Environment.GetEnvironmentVariable("SENTRY_DSN");
+
+            if (!string.IsNullOrEmpty(sentryDsn))
+            {
+                Console.WriteLine($"Configuring Sentry: ${sentryDsn}");
+                // Add the following line:
+                host.UseSentry(o =>
                 {
-                    var sentryDsn = Environment.GetEnvironmentVariable("SENTRY_DSN");
-
-                    if (!string.IsNullOrEmpty(sentryDsn))
-                    {
-                        // Add the following line:
-                        webBuilder.UseSentry(o =>
-                        {
-                            o.Dsn = sentryDsn;
-                            o.SendDefaultPii = true; // we don't have PII?
-                            o.Debug = true;
-                        });
-                    }
+                    o.Dsn = sentryDsn;
+                    o.SendDefaultPii = true; // we don't have PII?
                 });
+            }
 
-        public static IWebHost BuildWebHost(string[] args, int port) => WebHost.CreateDefaultBuilder(args)
-            .UseContentRoot(Directory.GetCurrentDirectory())
-            .UseUrls($"http://*:{port}/")
-            .UseStartup<Startup>()
-            .Build();
+            return host
+                .UseContentRoot(Directory.GetCurrentDirectory())
+                .UseUrls($"http://*:{port}/")
+                .UseStartup<Startup>()
+                .Build();
+        }
     }
 }
