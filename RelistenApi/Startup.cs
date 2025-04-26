@@ -90,7 +90,8 @@ namespace Relisten
                                         var action = descriptor.ActionName;
 
                                         var pathParameters = descriptor.Parameters
-                                            .Where(p => p.BindingInfo is null || p.BindingInfo.BindingSource?.Id == "Path")
+                                            .Where(p => p.BindingInfo is null ||
+                                                        p.BindingInfo.BindingSource?.Id == "Path")
                                             .Select(p => $"{{{p.Name}}}");
 
                                         var route = string.Join("/", [controller, action, .. pathParameters]);
@@ -228,20 +229,25 @@ namespace Relisten
 
             if (!env.IsDevelopment())
             {
-                app.UseHangfireServer(new BackgroundJobServerOptions
+                if (!string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"]) &&
+                    Configuration["ENABLE_HANGFIRE_SERVER"] != "false")
                 {
-                    Queues = new[] { "artist_import" },
-                    ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-                    WorkerCount = 1
-                });
+                    app.UseHangfireServer(new BackgroundJobServerOptions
+                    {
+                        Queues = ["artist_import"],
+                        ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
+                        WorkerCount = 3
+                    });
 
-                app.UseHangfireServer(new BackgroundJobServerOptions
-                {
-                    Queues = new[] { "default" }, ServerName = $"relistenapi:default ({Environment.MachineName})"
-                });
+                    app.UseHangfireServer(new BackgroundJobServerOptions
+                    {
+                        Queues = ["default"],
+                        ServerName = $"relistenapi:default ({Environment.MachineName})"
+                    });
+                }
 
                 app.UseHangfireDashboard("/relisten-admin/hangfire",
-                    new DashboardOptions { Authorization = new[] { new MyAuthorizationFilter() } });
+                    new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
             }
 
             app.UseSwagger(c =>

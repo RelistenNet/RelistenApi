@@ -40,6 +40,7 @@ namespace Relisten
                         {
                             o.Dsn = sentryDsn;
                             o.SendDefaultPii = true; // we don't have PII?
+                            o.Debug = true;
                         });
                     }
                 });
