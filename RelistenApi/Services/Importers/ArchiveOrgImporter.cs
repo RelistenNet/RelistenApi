@@ -496,6 +496,12 @@ namespace Relisten.Import
         // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
         private string FixDisplayDate(Metadata meta)
         {
+            if (meta.date.Contains("00"))
+            {
+                // XX is the preferred unknown date identifier
+                return meta.date.Replace("00", "XX");
+            }
+
             // 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
             if (meta.date.Contains('X'))
             {

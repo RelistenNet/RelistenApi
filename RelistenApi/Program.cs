@@ -35,7 +35,7 @@ namespace Relisten
 
             if (!string.IsNullOrEmpty(sentryDsn))
             {
-                Console.WriteLine($"Configuring Sentry: ${sentryDsn}");
+                Console.WriteLine($"Configuring Sentry: {sentryDsn}");
                 // Add the following line:
                 host.UseSentry(o =>
                 {
