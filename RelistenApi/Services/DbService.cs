@@ -51,6 +51,11 @@ namespace Relisten
             return WithConnection(getData, longTimeout, readOnly: false);
         }
 
+        public Task WithWriteConnection(Func<IDbConnection, Task> getData, bool longTimeout = false)
+        {
+            return WithConnection(getData, longTimeout, readOnly: false);
+        }
+
         public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false, bool readOnly = true)
         {
             try

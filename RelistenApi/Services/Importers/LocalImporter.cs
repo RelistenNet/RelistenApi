@@ -321,13 +321,13 @@ namespace Relisten.Import
                 var tracks = apiShow.tracks.ToList();
 
                 taperNotes.AddRange(apiShow.txts);
-        
+
                 foreach (var track in tracks)
                 {
                     var localTrackPosition = track.tags.track.no;
 
                     // we add one to tracksAdded because track positions are not zero-indexed
-                    // they start at 1, but tracksAdded is zero indexed 
+                    // they start at 1, but tracksAdded is zero indexed
                     if (localTrackPosition < tracksAdded + 1) localTrackPosition += tracksAdded;
 
                     var st = new SourceTrack
@@ -395,67 +395,68 @@ namespace Relisten.Import
 
             async Task processDay(string date, IList<LocalShow> shows)
             {
-                using (var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled))
+                using var scope = new TransactionScope(TransactionScopeOption.Required,
+                    new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                    TransactionScopeAsyncFlowOption.Enabled);
+
+                var firstShow = shows.First();
+                var dbSource = existingSources.GetValue(date);
+                var venueUpstreamId = $"{firstShow.venue} {firstShow.city}, {firstShow.state}";
+
+                if (dbSource == null)
                 {
-                    var firstShow = shows.First();
-                    var dbSource = existingSources.GetValue(date);
-                    var venueUpstreamId = $"{firstShow.venue} {firstShow.city}, {firstShow.state}";
+                    dbSource = await ProcessShow(stats, artist, date, shows, src,
+                        new Source
+                        {
+                            updated_at = firstShow.updated_at,
+                            artist_id = artist.id,
+                            venue_id = existingVenues[venueUpstreamId].id,
+                            display_date = date,
+                            upstream_identifier = date,
+                            is_soundboard = false,
+                            is_remaster = false,
+                            description = "",
+                            taper_notes = ""
+                        }, ctx);
 
-                    if (dbSource == null)
-                    {
-                        dbSource = await ProcessShow(stats, artist, date, shows, src,
-                            new Source
+                    existingSources[dbSource.upstream_identifier] = dbSource;
+
+                    stats.Created++;
+
+                    await linkService.AddLinksForSource(dbSource,
+                        new[]
+                        {
+                            new Link
                             {
-                                updated_at = firstShow.updated_at,
-                                artist_id = artist.id,
-                                venue_id = existingVenues[venueUpstreamId].id,
-                                display_date = date,
-                                upstream_identifier = date,
-                                is_soundboard = false,
-                                is_remaster = false,
-                                description = "",
-                                taper_notes = ""
-                            }, ctx);
-
-                        existingSources[dbSource.upstream_identifier] = dbSource;
-
-                        stats.Created++;
-
-                        await linkService.AddLinksForSource(dbSource,
-                            new[]
-                            {
-                                new Link
-                                {
-                                    source_id = dbSource.id,
-                                    for_ratings = true,
-                                    for_source = false,
-                                    for_reviews = true,
-                                    upstream_source_id = src.upstream_source_id,
-                                    url = "http://phish.net/setlists/?d=" + dbSource.display_date,
-                                    label = "View on phish.net"
-                                }
-                            });
-                    }
-                    else if (firstShow.updated_at > dbSource.updated_at)
-                    {
-                        dbSource.updated_at = firstShow.updated_at;
-                        dbSource.venue_id = existingVenues[venueUpstreamId].id;
-                        dbSource.display_date = date;
-                        dbSource.upstream_identifier = date;
-                        dbSource.is_soundboard = firstShow.sbd;
-                        dbSource.is_remaster = firstShow.remastered;
-                        dbSource.description = "";
-                        dbSource.taper_notes = "";
-
-                        dbSource = await ProcessShow(stats, artist, date, shows, src, dbSource, ctx);
-
-                        existingSources[dbSource.upstream_identifier] = dbSource;
-
-                        stats.Updated++;
-                    }
-
-                    scope.Complete();
+                                source_id = dbSource.id,
+                                for_ratings = true,
+                                for_source = false,
+                                for_reviews = true,
+                                upstream_source_id = src.upstream_source_id,
+                                url = "http://phish.net/setlists/?d=" + dbSource.display_date,
+                                label = "View on phish.net"
+                            }
+                        });
                 }
+                else if (firstShow.updated_at > dbSource.updated_at)
+                {
+                    dbSource.updated_at = firstShow.updated_at;
+                    dbSource.venue_id = existingVenues[venueUpstreamId].id;
+                    dbSource.display_date = date;
+                    dbSource.upstream_identifier = date;
+                    dbSource.is_soundboard = firstShow.sbd;
+                    dbSource.is_remaster = firstShow.remastered;
+                    dbSource.description = "";
+                    dbSource.taper_notes = "";
+
+                    dbSource = await ProcessShow(stats, artist, date, shows, src, dbSource, ctx);
+
+                    existingSources[dbSource.upstream_identifier] = dbSource;
+
+                    stats.Updated++;
+                }
+
+                scope.Complete();
             }
 
             return stats;

@@ -176,7 +176,9 @@ namespace Relisten.Import
                                 doc.identifier, detailsRoot.metadata.date);
                         }
 
-                        using var scope = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+                        using var scope = new TransactionScope(TransactionScopeOption.Required,
+                            new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                            TransactionScopeAsyncFlowOption.Enabled);
 
                         try
                         {
