@@ -140,15 +140,18 @@ namespace Relisten.Import
                     var isNew = dbShow == null;
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
+                    var needsDateUpdate = dbShow?.display_date?.Contains('XX');
 
-                    ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
+                    {
+                        ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
-                    var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
-                    var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                    var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
-                        detailsJson,
-                        new TolerantStringConverter()
-                    );
+                        var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
+                        var detailsJson = await detailRes.Content.ReadAsStringAsync();
+                        var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
+                            detailsJson,
+                            new TolerantStringConverter()
+                        );
 
                         if (detailsRoot.is_dark ?? false)
                         {
@@ -199,27 +202,22 @@ namespace Relisten.Import
                             return;
                         }
 
-                        var needsDateUpdate = dbShow != null && dbShow.display_date != properDate;
+                        using var scope = new TransactionScope(TransactionScopeOption.Required,
+                            new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                            TransactionScopeAsyncFlowOption.Enabled);
 
-                        if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
+                        try
                         {
-                            using var scope = new TransactionScope(TransactionScopeOption.Required,
-                                new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
-                                TransactionScopeAsyncFlowOption.Enabled);
-
-                            try
-                            {
-                                stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
-                                    properDate, ctx);
-                            }
-                            catch (NoVBRMp3FilesException)
-                            {
-                                identifiersWithoutMP3s.Add(doc.identifier);
-                            }
-
-                            scope.Complete();
+                            stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                                properDate, ctx);
+                        }
+                        catch (NoVBRMp3FilesException)
+                        {
+                            identifiersWithoutMP3s.Add(doc.identifier);
                         }
 
+                        scope.Complete();
+                    }
                 }
                 catch (Exception e)
                 {
