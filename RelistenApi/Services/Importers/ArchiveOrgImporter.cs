@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
@@ -22,7 +21,6 @@ namespace Relisten.Import
     {
         public const string DataSourceName = "archive.org";
 
-        private static readonly Regex ExtractDateFromIdentifier = new(@"(\d{4}-\d{2}-\d{2})");
 
         private readonly LinkService linkService;
 
@@ -142,8 +140,9 @@ namespace Relisten.Import
                     var isNew = dbShow == null;
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
+                    var needsDateUpdate = dbShow?.display_date?.Contains('XX');
 
-                    if (currentIsTargetedShow || isNew || needsToUpdateReviews)
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
                     {
                         ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
@@ -181,7 +180,7 @@ namespace Relisten.Import
                             return;
                         }
 
-                        var properDate = FixDisplayDate(detailsRoot.metadata);
+                        var properDate = ArchiveOrgImporterUtils.FixDisplayDate(detailsRoot.metadata);
 
                         if (properDate == null)
                         {
@@ -493,92 +492,6 @@ namespace Relisten.Import
             };
         }
 
-        // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
-        private string FixDisplayDate(Metadata meta)
-        {
-            if (meta.date.Contains("00"))
-            {
-                // XX is the preferred unknown date identifier
-                return meta.date.Replace("00", "XX");
-            }
-
-            // 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
-            if (meta.date.Contains('X'))
-            {
-                return meta.date;
-            }
-
-            if (meta.date == "2013-14-02")
-            {
-                // this date from The Werks always gives us issues and TryFlippingMonthAndDate doesn't work...I suspect
-                // some sort cultural issue because I cannot reproduce this locally
-                return "2013-02-14";
-            }
-
-            // happy case
-            if (TestDate(meta.date))
-            {
-                return meta.date;
-            }
-
-            var d = TryFlippingMonthAndDate(meta.date);
-
-            if (d != null)
-            {
-                return d;
-            }
-
-            // try to parse it out of the identifier
-            var matches = ExtractDateFromIdentifier.Match(meta.identifier);
-
-            if (matches.Success)
-            {
-                var tdate = matches.Groups[1].Value;
-
-                if (TestDate(tdate))
-                {
-                    return tdate;
-                }
-
-                var flipped = TryFlippingMonthAndDate(tdate);
-
-                if (flipped != null)
-                {
-                    return flipped;
-                }
-            }
-
-            return null;
-        }
-
-        private bool TestDate(string date)
-        {
-            return DateTime.TryParseExact(date, "yyyy-MM-dd",
-                DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out var _);
-        }
-
-        private string TryFlippingMonthAndDate(string date)
-        {
-            // not a valid date
-            var parts = date.Split('-');
-
-            // try to see if it is YYYY-DD-MM instead
-            if (parts.Length > 2 && int.TryParse(parts[1], out var month))
-            {
-                if (month > 12)
-                {
-                    // rearrange to YYYY-MM-DD
-                    var dateStr = parts[0] + "-" + parts[2] + "-" + parts[1];
-
-                    if (TestDate(dateStr))
-                    {
-                        return dateStr;
-                    }
-                }
-            }
-
-            return null;
-        }
 
         private IEnumerable<SourceTrack> CreateSourceTracksForFiles(
             Artist artist,
