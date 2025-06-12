@@ -140,7 +140,7 @@ namespace Relisten.Import
                     var isNew = dbShow == null;
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
-                    var needsDateUpdate = dbShow?.display_date?.Contains('XX');
+                    var needsDateUpdate = dbShow?.display_date?.Contains("XX");
 
                     if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
                     {
