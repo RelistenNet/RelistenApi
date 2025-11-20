@@ -442,7 +442,10 @@ namespace Relisten.Import
                 kvp.Value.tracks = new List<SourceTrack>();
             }
 
-            foreach (var track in fullShow.tracks)
+            // shows with incomplete=true won't have mp3s for every track. we don't care about those.
+            var tracksWithMp3s = fullShow.tracks.Where(t => t.mp3 != null);
+
+            foreach (var track in tracksWithMp3s)
             {
                 var set = setMaps[SetIndexForIdentifier(track.set)];
                 set.tracks.Add(new SourceTrack
@@ -455,7 +458,7 @@ namespace Relisten.Import
                     // Phish.in slugs could stay the same when the track changes
                     slug = SlugifyTrack(track.title) + "-" + track.id.ToString(CultureInfo.InvariantCulture),
                     mp3_url = track.mp3.Replace("http:", "https:"),
-                    updated_at = dbSource.updated_at,
+                    updated_at = track.updated_at ?? dbSource.updated_at,
                     artist_id = artist.id
                 });
             }

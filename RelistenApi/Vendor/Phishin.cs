@@ -111,6 +111,8 @@ namespace Relisten.Vendor.Phishin
         public int position { get; set; }
         public int likes_count { get; set; }
         public string slug { get; set; }
+        public DateTime? updated_at { get; set; }
+        public DateTime? created_at { get; set; }
         public string mp3 { get; set; }
     }
 

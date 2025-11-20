@@ -285,7 +285,7 @@ namespace Relisten
                     migrator.Baseline(2);
                 }
 
-                migrator.MigrateTo(6);
+                migrator.MigrateTo(7);
 
                 if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
                 {
