@@ -141,6 +141,32 @@
             <p>
                 <a href="/relisten-admin/hangfire/jobs/processing">View processing jobs</a>
             </p>
+            <br/>
+            <h3>Archive.org Artist Index</h3>
+            <p>
+                Run the archive.org artist indexer to auto-create missing artists before imports.
+            </p>
+            <p>
+                <button class="btn btn-warning" v-on:click="queueArchiveOrgIndex">Queue Index Job</button>
+            </p>
+            <br/>
+            <h3>Refresh All Artists (Dev)</h3>
+            <p>
+                Queue a full artist refresh in development without waiting for production schedules.
+            </p>
+            <p>
+                <button class="btn btn-warning" v-on:click="queueRefreshAllArtists">Queue Refresh Job</button>
+            </p>
+            <br/>
+            <h3>JerryGarcia Venue Backfill</h3>
+            <p>
+                Fix JerryGarcia venue IDs for Grateful Dead by re-parsing show pages and rebuilding shows.
+            </p>
+            <p>
+                <button class="btn btn-warning" v-on:click="queueJerryGarciaVenueBackfill">
+                    Queue Grateful Dead Backfill
+                </button>
+            </p>
         </section>
     </div>
 </div>

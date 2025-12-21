@@ -6,7 +6,7 @@ using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
-    public class UpstreamSourceService : RelistenDataServiceBase
+    public class UpstreamSourceService : RelistenDataServiceBase, IUpstreamSourceLookup
     {
         public UpstreamSourceService(DbService db) : base(db)
         {
@@ -20,6 +20,18 @@ namespace Relisten.Data
                 FROM
                     upstream_sources
             "));
+        }
+
+        public async Task<UpstreamSource?> FindUpstreamSourceByName(string name)
+        {
+            return await db.WithConnection(conn => conn.QuerySingleOrDefaultAsync<UpstreamSource>(@"
+                SELECT
+                    *
+                FROM
+                    upstream_sources
+                WHERE
+                    name = @name
+            ", new {name}));
         }
 
         public async Task ReplaceUpstreamSourcesForArtist(SlimArtist artist,
@@ -50,6 +62,26 @@ namespace Relisten.Data
                         (@upstream_source_id, @artist_id, @upstream_identifier)
                 ", artistSources);
             });
+        }
+
+        public async Task EnsureUpstreamSourceForArtist(int artistId, int upstreamSourceId, string upstreamIdentifier)
+        {
+            await db.WithWriteConnection(conn => conn.ExecuteAsync(@"
+                INSERT INTO
+                    artists_upstream_sources
+                    (upstream_source_id, artist_id, upstream_identifier)
+                SELECT
+                    @upstreamSourceId, @artistId, @upstreamIdentifier
+                WHERE NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        artists_upstream_sources
+                    WHERE
+                        upstream_source_id = @upstreamSourceId
+                        AND artist_id = @artistId
+                )
+            ", new {artistId, upstreamSourceId, upstreamIdentifier}));
         }
     }
 }

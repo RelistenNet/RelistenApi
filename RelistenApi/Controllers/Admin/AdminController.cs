@@ -18,6 +18,7 @@ namespace Relisten.Controllers.Admin
         private readonly ArtistService _artistService;
         private readonly ILogger _logger;
         private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly ScheduledService _scheduledService;
         private readonly UpstreamSourceService _upstreamSourceService;
         private readonly UserManager<ApplicationUser> _userManager;
 
@@ -26,6 +27,7 @@ namespace Relisten.Controllers.Admin
             SignInManager<ApplicationUser> signInManager,
             ILoggerFactory loggerFactory,
             ArtistService artistService,
+            ScheduledService scheduledService,
             UpstreamSourceService upstreamSourceService
         )
         {
@@ -35,6 +37,7 @@ namespace Relisten.Controllers.Admin
             _logger = loggerFactory.CreateLogger<AdminController>();
 
             _artistService = artistService;
+            _scheduledService = scheduledService;
         }
 
         [HttpGet("/relisten-admin/login")]
@@ -90,6 +93,31 @@ namespace Relisten.Controllers.Admin
                 Artists = await _artistService.All(),
                 UpstreamSources = await _upstreamSourceService.AllUpstreamSources()
             });
+        }
+
+        [HttpPost("/relisten-admin/index-archiveorg")]
+        [Authorize]
+        public IActionResult IndexArchiveOrgArtists()
+        {
+            var jobId = Hangfire.BackgroundJob.Enqueue(() => _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true));
+            return Json(new {message = $"Queued as job {jobId}!"});
+        }
+
+        [HttpPost("/relisten-admin/refresh-all-artists")]
+        [Authorize]
+        public IActionResult RefreshAllArtists()
+        {
+            var jobId = Hangfire.BackgroundJob.Enqueue(() => _scheduledService.RefreshAllArtists(null, allowedInDev: true));
+            return Json(new {message = $"Queued as job {jobId}!"});
+        }
+
+        [HttpPost("/relisten-admin/backfill-jerrygarcia-venues")]
+        [Authorize]
+        public IActionResult BackfillJerryGarciaVenues([FromQuery] string artistSlug = "grateful-dead")
+        {
+            var jobId =
+                Hangfire.BackgroundJob.Enqueue(() => _scheduledService.BackfillJerryGarciaVenues(artistSlug, null));
+            return Json(new {message = $"Queued as job {jobId}!"});
         }
 
         private IActionResult RedirectToLocal(string returnUrl)

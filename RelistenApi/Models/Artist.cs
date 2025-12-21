@@ -11,6 +11,14 @@ using Relisten.Import;
 
 namespace Relisten.Api.Models
 {
+    [Flags]
+    public enum ArtistFeaturedFlags
+    {
+        None = 0,
+        Featured = 1 << 0,
+        AutoCreated = 1 << 1
+    }
+
     public interface IHasPersistentIdentifier
     {
         [Required] Guid uuid { get; set; }
@@ -38,6 +46,11 @@ namespace Relisten.Api.Models
 
         public override DateTime Parse(object value)
         {
+            if (value is DateOnly dateOnly)
+            {
+                return dateOnly.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            }
+
             return ((DateTime)value).ToUniversalTime();
         }
     }

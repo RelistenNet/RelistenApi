@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "title": "Guster",
+      "identifier": "Guster",
+      "item_count": 12,
+      "month": 120
+    },
+    {
+      "title": "Tiny Band",
+      "identifier": "TinyBand",
+      "item_count": 2,
+      "month": 1
+    },
+    {
+      "title": "Godspeed You Black Emperor!",
+      "identifier": "GodspeedYouBlackEmperor",
+      "item_count": 42,
+      "month": 340
+    }
+  ],
+  "count": 3,
+  "cursor": "fake-cursor",
+  "total": 3
+}

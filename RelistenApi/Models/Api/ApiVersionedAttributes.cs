@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Reflection;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -37,7 +37,7 @@ namespace Relisten.Api.Models.Api
 
     public class SwaggerSkipV2PropertyFilter : ISchemaFilter
     {
-        public void Apply(OpenApiSchema schema, SchemaFilterContext context)
+        public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
         {
             if (schema?.Properties == null || context.DocumentName == "v2")
             {

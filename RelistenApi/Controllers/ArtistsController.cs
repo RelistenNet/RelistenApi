@@ -50,9 +50,9 @@ namespace Relisten.Controllers
         [HttpGet("v2/artists")]
         [HttpGet("v3/artists")]
         [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> Get([FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false)
         {
-            return JsonSuccess(await _artistService.AllWithCounts<ArtistWithCounts>());
+            return JsonSuccess(await _artistService.AllWithCounts<ArtistWithCounts>(includeAutoCreated: includeAutoCreated));
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}")]

@@ -24,13 +24,21 @@ namespace Relisten.Data
 
         public ImporterService _importService { get; set; }
 
-        public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null)
+        public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null,
+            bool includeAutoCreated = true)
             where T : ArtistWithCounts
         {
             var where = "";
             if (idsOrSlugs == null || idsOrSlugs.Count == 0)
             {
-                where = "1=1";
+                if (includeAutoCreated)
+                {
+                    where = "1=1";
+                }
+                else
+                {
+                    where = "(a.featured & @autoCreatedFlag) = 0";
+                }
             }
             else
             {
@@ -83,7 +91,13 @@ namespace Relisten.Data
             {
                 artist.features = features;
                 return artist;
-            }, new {ids, uuids, slugs})));
+            }, new
+            {
+                ids,
+                uuids,
+                slugs,
+                autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated
+            })));
         }
 
         public Task<int> RemoveAllContentForArtist(Artist art)
@@ -100,17 +114,21 @@ namespace Relisten.Data
 			", new {ArtistId = art.id}));
         }
 
-        public async Task<IEnumerable<Artist>> All()
+        public async Task<IEnumerable<Artist>> All(bool includeAutoCreated = true)
         {
-            return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@"
+            var where = includeAutoCreated ? "1=1" : "(a.featured & @autoCreatedFlag) = 0";
+
+            return await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync($@"
                 SELECT
                     a.*, f.*
                 FROM
                     artists a
                     LEFT JOIN features f on f.artist_id = a.id
+				WHERE
+                    {where}
 				ORDER BY
 					a.featured DESC, a.sort_name
-            ", joiner)));
+            ", joiner, new {autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated})));
         }
 
         public async Task<Artist> FindArtistById(int id)
@@ -301,6 +319,28 @@ namespace Relisten.Data
 
             slugs.Add(idOrSlug);
         }
+
+        public async Task<Artist> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier)
+        {
+            return await db.WithConnection(async con =>
+            {
+                var artist = await con.QueryAsync(@"
+                    SELECT
+                        a.*, f.*
+                    FROM
+                        artists a
+                        JOIN artists_upstream_sources aus ON aus.artist_id = a.id
+                        LEFT JOIN features f on f.artist_id = a.id
+                    WHERE
+                        aus.upstream_source_id = @upstreamSourceId
+                        AND aus.upstream_identifier = @upstreamIdentifier
+                    LIMIT 1
+                ", joiner, new {upstreamSourceId, upstreamIdentifier});
+
+                return (await FillInUpstreamSources(artist)).FirstOrDefault();
+            });
+        }
+
 
         string UpdateFieldsForFeatures(Features features)
         {

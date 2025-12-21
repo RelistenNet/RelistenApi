@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Services.Indexing;
 using Sentry;
 
 namespace Relisten
@@ -23,29 +24,51 @@ namespace Relisten
         public ScheduledService(
             ImporterService importerService,
             ArtistService artistService,
+            ArchiveOrgArtistIndexer archiveOrgArtistIndexer,
             RedisService redisService,
+            JerryGarciaComImporter jerryGarciaComImporter,
             IConfiguration config
         )
         {
             _importerService = importerService;
             _artistService = artistService;
+            _archiveOrgArtistIndexer = archiveOrgArtistIndexer;
             _config = config;
             _redisService = redisService;
+            _jerryGarciaComImporter = jerryGarciaComImporter;
         }
 
         private ImporterService _importerService { get; }
         private ArtistService _artistService { get; }
+        private ArchiveOrgArtistIndexer _archiveOrgArtistIndexer { get; }
         private IConfiguration _config { get; }
         private RedisService _redisService { get; }
+        private JerryGarciaComImporter _jerryGarciaComImporter { get; }
+
+        // run every day at 6:30 AM UTC to seed artists before the refresh
+        [RecurringJob("30 6 * * *", Enabled = true)]
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("artist_import")]
+        [DisplayName("Index archive.org Artists")]
+        public async Task IndexArchiveOrgArtists(PerformContext context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            await _archiveOrgArtistIndexer.IndexArtists(context);
+        }
 
         // run every day at 3 AM EST, midnight PST, 7 AM UTC
         [RecurringJob("0 7 * * *", Enabled = true)]
         [AutomaticRetry(Attempts = 0)]
         [Queue("artist_import")]
         [DisplayName("Refresh All Artists")]
-        public async Task RefreshAllArtists(PerformContext context)
+        public async Task RefreshAllArtists(PerformContext context, bool allowedInDev = false)
         {
-            if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
                 context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
                 return;
@@ -206,6 +229,33 @@ namespace Relisten
             {
                 artistsCurrentlySyncing.TryRemove(artist.id, out var _);
             }
+        }
+
+        [Queue("artist_import")]
+        [DisplayName("Backfill JerryGarcia Venues: {0}")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task BackfillJerryGarciaVenues(string artistSlug, PerformContext ctx)
+        {
+            var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
+
+            if (artist == null)
+            {
+                ctx?.WriteLine($"No artist found for {artistSlug}");
+                return;
+            }
+
+            var src = artist.upstream_sources.FirstOrDefault(s =>
+                s.upstream_source.name == JerryGarciaComImporter.DataSourceName);
+
+            if (src == null)
+            {
+                ctx?.WriteLine($"No {JerryGarciaComImporter.DataSourceName} upstream source for {artist.name}");
+                return;
+            }
+
+            var stats = await _jerryGarciaComImporter.BackfillVenuesForArtist(artist, src, ctx);
+
+            ctx?.WriteLine($"Backfill complete for {artist.name}. {stats}");
         }
     }
 }

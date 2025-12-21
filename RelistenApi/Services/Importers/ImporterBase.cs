@@ -188,10 +188,7 @@ namespace Relisten.Import
 
         public string Slugify(string full)
         {
-            var slug = Regex.Replace(full.ToLower().Normalize(), @"['.]", "");
-            slug = Regex.Replace(slug, @"[^a-z0-9\s-]", " ");
-
-            return Regex.Replace(slug, @"\s+", " ").Trim().Replace(" ", "-").Trim('-');
+            return SlugUtils.Slugify(full);
         }
 
         public string SlugifyTrack(string full)

@@ -174,6 +174,75 @@ var refresh = new Vue({
           });
         })
       ;
+    },
+    queueArchiveOrgIndex: function () {
+      this.$data.loading = true;
+
+      fetch("/relisten-admin/index-archiveorg", {
+        method: "POST",
+        credentials: "include"
+      })
+        .then((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "Archive.org index queued: " + text;
+          });
+        })
+        .catch((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "Error: " + text;
+          });
+        })
+      ;
+    },
+    queueRefreshAllArtists: function () {
+      this.$data.loading = true;
+
+      fetch("/relisten-admin/refresh-all-artists", {
+        method: "POST",
+        credentials: "include"
+      })
+        .then((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "Refresh all artists queued: " + text;
+          });
+        })
+        .catch((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "Error: " + text;
+          });
+        })
+      ;
+    },
+    queueJerryGarciaVenueBackfill: function () {
+      this.$data.loading = true;
+
+      fetch("/relisten-admin/backfill-jerrygarcia-venues?artistSlug=grateful-dead", {
+        method: "POST",
+        credentials: "include"
+      })
+        .then((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "JerryGarcia venue backfill queued: " + text;
+          });
+        })
+        .catch((res) => {
+          this.$data.loading = false;
+
+          res.text().then((text) => {
+            this.$data.result = "Error: " + text;
+          });
+        })
+      ;
     }
   }
 })

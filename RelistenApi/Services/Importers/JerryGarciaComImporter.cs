@@ -84,21 +84,7 @@ namespace Relisten.Import
             var showFilesResponse = await resp.Content.ReadAsStringAsync();
             var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
 
-            var files = showFiles
-                    .Select(f =>
-                    {
-                        var fileName = Path.GetFileName(f);
-                        return new FileMetaObject
-                        {
-                            DisplayDate = fileName.Substring(0, 10),
-                            Date = DateTime.Parse(fileName.Substring(0, 10)),
-                            FilePath = f,
-                            Identifier =
-                                fileName.Remove(fileName.LastIndexOf(".html", StringComparison.OrdinalIgnoreCase))
-                        };
-                    })
-                    .ToList()
-                ;
+            var files = BuildFileMetaObjects(showFiles);
 
             ctx?.WriteLine($"Checking {files.Count} html files");
             var prog = ctx?.WriteProgressBar();
@@ -167,57 +153,26 @@ namespace Relisten.Import
 
             ctx.WriteLine($"Processing: {meta.FilePath}");
 
-            var html = new HtmlDocument();
-            html.LoadHtml(pageContents);
-
-            var root = html.DocumentNode;
-
-            var ps = root.DescendantsWithClass("venue-name").ToList();
-
-            var bandName = ps[1].InnerText.CollapseSpacesAndTrim();
-
-            var venueName = ps[0].InnerText.CollapseSpacesAndTrim();
-            var venueCityOrCityState = root.DescendantsWithClass("venue-address").Single().InnerText
-                .CollapseSpacesAndTrim().TrimEnd(',');
-            var venueCountry = root.DescendantsWithClass("venue-country").Single().InnerText.CollapseSpacesAndTrim();
-
-            var tourName = ps.Count > 2 ? ps[2].InnerText.CollapseSpacesAndTrim() : "Not Part of a Tour";
-
-            var venueUpstreamId = "jerrygarcia.com_" + venueName;
-
-            Venue dbVenue = existingVenues.GetValue(venueUpstreamId);
-
-            if (dbVenue == null)
+            var parsedPage = ParseShowPage(pageContents);
+            if (parsedPage == null)
             {
-                var sc = new VenueWithShowCount
-                {
-                    artist_id = artist.id,
-                    name = venueName,
-                    location = venueCityOrCityState + ", " + venueCountry,
-                    upstream_identifier = venueUpstreamId,
-                    slug = Slugify(venueName),
-                    updated_at = updated_at
-                };
-
-                dbVenue = await _venueService.Save(sc);
-
-                sc.id = dbVenue.id;
-
-                existingVenues[dbVenue.upstream_identifier] = sc;
-
-                stats.Created++;
+                return;
             }
 
-            var dbTour = existingTours.GetValue(tourName);
+            var venueResult = await EnsureVenue(artist, parsedPage, updated_at);
+            var dbVenue = venueResult.venue;
+            stats.Created += venueResult.created ? 1 : 0;
+
+            var dbTour = existingTours.GetValue(parsedPage.tourName);
 
             if (dbTour == null && artist.features.tours)
             {
                 dbTour = await _tourService.Save(new Tour
                 {
                     artist_id = artist.id,
-                    name = tourName,
-                    slug = Slugify(tourName),
-                    upstream_identifier = tourName,
+                    name = parsedPage.tourName,
+                    slug = Slugify(parsedPage.tourName),
+                    upstream_identifier = parsedPage.tourName,
                     updated_at = updated_at
                 });
 
@@ -240,7 +195,7 @@ namespace Relisten.Import
 
             stats.Created++;
 
-            var dbSongs = root.Descendants("ol")
+            var dbSongs = parsedPage.root.Descendants("ol")
                     .SelectMany(node => node.Descendants("li"))
                     .Select(node =>
                     {
@@ -302,6 +257,175 @@ namespace Relisten.Import
             await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
         }
 
+        public async Task<ImportStats> BackfillVenuesForArtist(Artist artist, ArtistUpstreamSource src,
+            PerformContext ctx)
+        {
+            var stats = new ImportStats();
+
+            await PreloadData(artist);
+
+            var resp = await http.GetAsync(ShowPagesListingUrl(src));
+            var showFilesResponse = await resp.Content.ReadAsStringAsync();
+            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
+
+            var files = BuildFileMetaObjects(showFiles);
+
+            ctx?.WriteLine($"Checking {files.Count} html files for venue backfill");
+            var prog = ctx?.WriteProgressBar();
+
+            await files.AsyncForEachWithProgress(prog, async f =>
+            {
+                if (!existingSetlistShows.TryGetValue(f.Identifier, out var dbShow))
+                {
+                    return;
+                }
+
+                var url = ShowPageUrl(src, f.FilePath);
+                var pageResp = await http.GetAsync(url);
+                var pageContents = await pageResp.Content.ReadAsStringAsync();
+
+                var parsedPage = ParseShowPage(pageContents);
+                if (parsedPage == null)
+                {
+                    return;
+                }
+
+                var venueResult = await EnsureVenue(artist, parsedPage,
+                    pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow);
+                var dbVenue = venueResult.venue;
+                stats.Created += venueResult.created ? 1 : 0;
+
+                if (dbShow.venue_id != dbVenue.id)
+                {
+                    dbShow.venue_id = dbVenue.id;
+                    dbShow.updated_at = DateTime.UtcNow;
+                    await _setlistShowService.Save(dbShow);
+                    stats.Updated++;
+                }
+            });
+
+            ctx?.WriteLine("Rebuilding shows and years");
+            await RebuildShows(artist);
+            await RebuildYears(artist);
+
+            stats.Removed += await db.WithWriteConnection(con => con.ExecuteAsync(@"
+                WITH orphaned AS (
+                    SELECT
+                        v.id
+                    FROM
+                        venues v
+                        LEFT JOIN sources s ON s.venue_id = v.id
+                        LEFT JOIN shows sh ON sh.venue_id = v.id
+                        LEFT JOIN setlist_shows ss ON ss.venue_id = v.id
+                    WHERE
+                        v.artist_id = @artistId
+                    GROUP BY
+                        v.id
+                    HAVING
+                        COUNT(s.id) = 0
+                        AND COUNT(sh.id) = 0
+                        AND COUNT(ss.id) = 0
+                )
+                DELETE FROM venues v
+                USING orphaned o
+                WHERE v.id = o.id
+            ", new {artistId = artist.id}));
+
+            return stats;
+        }
+
+        private static string BuildVenueLocation(string venueCityOrCityState, string venueCountry)
+        {
+            var location = $"{venueCityOrCityState}, {venueCountry}".CollapseSpacesAndTrim().TrimEnd(',');
+            return string.IsNullOrWhiteSpace(location) ? "Unknown Location" : location;
+        }
+
+        private static string BuildVenueUpstreamId(string venueName, string venueLocation)
+        {
+            return $"jerrygarcia.com_{venueName}::{venueLocation}";
+        }
+
+        private static List<FileMetaObject> BuildFileMetaObjects(IEnumerable<string> showFiles)
+        {
+            return showFiles
+                .Select(f =>
+                {
+                    var fileName = Path.GetFileName(f);
+                    return new FileMetaObject
+                    {
+                        DisplayDate = fileName.Substring(0, 10),
+                        Date = DateTime.Parse(fileName.Substring(0, 10)),
+                        FilePath = f,
+                        Identifier =
+                            fileName.Remove(fileName.LastIndexOf(".html", StringComparison.OrdinalIgnoreCase))
+                    };
+                })
+                .ToList();
+        }
+
+        private async Task<(Venue venue, bool created)> EnsureVenue(Artist artist, ParsedShowPage parsedPage,
+            DateTime updatedAt)
+        {
+            if (existingVenues.TryGetValue(parsedPage.venueUpstreamId, out var existingVenue))
+            {
+                return (existingVenue, false);
+            }
+
+            var dbVenue = await _venueService.Save(new Venue
+            {
+                artist_id = artist.id,
+                name = parsedPage.venueName,
+                location = parsedPage.venueLocation,
+                upstream_identifier = parsedPage.venueUpstreamId,
+                slug = Slugify(parsedPage.venueName),
+                updated_at = updatedAt
+            });
+
+            existingVenues[dbVenue.upstream_identifier] = new VenueWithShowCount
+            {
+                id = dbVenue.id,
+                artist_id = dbVenue.artist_id,
+                name = dbVenue.name,
+                location = dbVenue.location,
+                upstream_identifier = dbVenue.upstream_identifier,
+                slug = dbVenue.slug,
+                updated_at = dbVenue.updated_at
+            };
+
+            return (dbVenue, true);
+        }
+
+        private ParsedShowPage ParseShowPage(string pageContents)
+        {
+            var html = new HtmlDocument();
+            html.LoadHtml(pageContents);
+
+            var root = html.DocumentNode;
+            var ps = root.DescendantsWithClass("venue-name").ToList();
+
+            if (ps.Count == 0)
+            {
+                return null;
+            }
+
+            var venueName = ps[0].InnerText.CollapseSpacesAndTrim();
+            var venueCityOrCityState = root.DescendantsWithClass("venue-address").Single().InnerText
+                .CollapseSpacesAndTrim().TrimEnd(',');
+            var venueCountry = root.DescendantsWithClass("venue-country").Single().InnerText.CollapseSpacesAndTrim();
+            var tourName = ps.Count > 2 ? ps[2].InnerText.CollapseSpacesAndTrim() : "Not Part of a Tour";
+
+            var venueLocation = BuildVenueLocation(venueCityOrCityState, venueCountry);
+
+            return new ParsedShowPage
+            {
+                root = root,
+                venueName = venueName,
+                venueLocation = venueLocation,
+                venueUpstreamId = BuildVenueUpstreamId(venueName, venueLocation),
+                tourName = tourName
+            };
+        }
+
         private async Task UpdateTourStartEndDates(Artist artist)
         {
             await db.WithWriteConnection(con => con.ExecuteAsync(@"
@@ -334,6 +458,15 @@ namespace Relisten.Import
             public DateTime Date { get; set; }
             public string FilePath { get; set; }
             public string Identifier { get; set; }
+        }
+
+        private class ParsedShowPage
+        {
+            public HtmlNode root { get; set; }
+            public string venueName { get; set; }
+            public string venueLocation { get; set; }
+            public string venueUpstreamId { get; set; }
+            public string tourName { get; set; }
         }
     }
 

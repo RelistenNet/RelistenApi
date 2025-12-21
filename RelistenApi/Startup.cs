@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Newtonsoft.Json;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Resources;
@@ -27,7 +27,9 @@ using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
+using Relisten.Vendor.ArchiveOrg;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
 using StackExchange.Redis;
@@ -202,6 +204,10 @@ namespace Relisten
             services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
             services.AddScoped<ArtistService, ArtistService>();
             services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
+            services.AddScoped<IUpstreamSourceLookup>(sp => sp.GetRequiredService<UpstreamSourceService>());
+            services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();
+            services.AddScoped<IArchiveOrgArtistIndexRepository, ArchiveOrgArtistIndexRepository>();
+            services.AddScoped<ArchiveOrgArtistIndexer, ArchiveOrgArtistIndexer>();
             services.AddScoped<ScheduledService, ScheduledService>();
             services.AddScoped<SearchService, SearchService>();
             services.AddScoped<LinkService, LinkService>();
@@ -236,7 +242,7 @@ namespace Relisten
                     {
                         Queues = ["artist_import"],
                         ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-                        WorkerCount = 3
+                        WorkerCount = 6
                     });
 
                     app.UseHangfireServer(new BackgroundJobServerOptions
