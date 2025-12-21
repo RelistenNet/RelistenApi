@@ -30,7 +30,7 @@ namespace Relisten.Api
             return Json(anything);
         }
 
-        protected IActionResult JsonNotFound<T>(T anything = default)
+        protected IActionResult JsonNotFound<T>(T? anything = default)
         {
             return NotFound(ResponseEnvelope<T>.Error(ApiErrorCode.NotFound, anything));
         }
@@ -81,7 +81,7 @@ namespace Relisten.Api
         }
 
         protected async Task<IActionResult> ApiRequest<T>(
-            Artist art,
+            Artist? art,
             Func<Artist, Task<T>> cb
         )
         {
@@ -108,7 +108,8 @@ namespace Relisten.Api
             var artistIdsSlugsOrUUIDs = artistIdsOrSlugs;
             if (artistIdsOrSlugs.Count == 1 && artistIdsOrSlugs[0][0] == '[')
             {
-                artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(artistIdsOrSlugs[0]);
+                artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(artistIdsOrSlugs[0])
+                                         ?? new List<string>();
             }
 
             var art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsSlugsOrUUIDs);

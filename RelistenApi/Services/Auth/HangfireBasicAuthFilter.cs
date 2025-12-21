@@ -14,7 +14,7 @@ namespace Relisten.Services.Auth
             var httpContext = context.GetHttpContext();
 
             // Allow all authenticated users to see the Dashboard (potentially dangerous).
-            return httpContext.User.Identity.IsAuthenticated;
+            return httpContext.User?.Identity?.IsAuthenticated == true;
         }
     }
 
@@ -32,7 +32,7 @@ namespace Relisten.Services.Auth
         public bool Authorize([NotNull] DashboardContext dashboardContext)
         {
             var context = dashboardContext.GetHttpContext();
-            string header = context.Request.Headers["Authorization"];
+            string? header = context.Request.Headers["Authorization"];
 
             if (string.IsNullOrWhiteSpace(header) == false)
             {
@@ -40,6 +40,11 @@ namespace Relisten.Services.Auth
 
                 if ("Basic".Equals(authValues.Scheme, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (string.IsNullOrWhiteSpace(authValues.Parameter))
+                    {
+                        return Challenge(context);
+                    }
+
                     var parameter = Encoding.UTF8.GetString(Convert.FromBase64String(authValues.Parameter));
                     var parts = parameter.Split(':');
 

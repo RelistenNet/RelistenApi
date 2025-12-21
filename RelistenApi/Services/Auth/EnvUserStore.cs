@@ -18,8 +18,8 @@ namespace Relisten.Services.Auth
         {
             _users.Add(new ApplicationUser
             {
-                Username = config.GetSection("RELISTEN_ADMIN")["USERNAME"],
-                Password = config.GetSection("RELISTEN_ADMIN")["PASSWORD"]
+                Username = config.GetSection("RELISTEN_ADMIN")["USERNAME"]!,
+                Password = config.GetSection("RELISTEN_ADMIN")["PASSWORD"]!
             });
         }
 
@@ -30,7 +30,7 @@ namespace Relisten.Services.Auth
             return Task.FromResult(logins);
         }
 
-        public Task<ApplicationUser> FindByLoginAsync(string loginProvider, string providerKey,
+        public Task<ApplicationUser?> FindByLoginAsync(string loginProvider, string providerKey,
             CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
@@ -47,15 +47,15 @@ namespace Relisten.Services.Auth
             throw new NotImplementedException();
         }
 
-        public Task SetPasswordHashAsync(ApplicationUser user, string passwordHash,
+        public Task SetPasswordHashAsync(ApplicationUser user, string? passwordHash,
             CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public Task<string> GetPasswordHashAsync(ApplicationUser user, CancellationToken cancellationToken)
+        public Task<string?> GetPasswordHashAsync(ApplicationUser user, CancellationToken cancellationToken)
         {
-            return Task.FromResult(user.Password);
+            return Task.FromResult<string?>(user.Password);
         }
 
         public Task<bool> HasPasswordAsync(ApplicationUser user, CancellationToken cancellationToken)
@@ -80,7 +80,7 @@ namespace Relisten.Services.Auth
             throw new NotSupportedException();
         }
 
-        public Task<ApplicationUser> FindByNameAsync(string username, CancellationToken cancellationToken)
+        public Task<ApplicationUser?> FindByNameAsync(string username, CancellationToken cancellationToken)
         {
             var user = _users.FirstOrDefault(u =>
                 string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
@@ -88,9 +88,9 @@ namespace Relisten.Services.Auth
             return Task.FromResult(user);
         }
 
-        public Task<string> GetUserNameAsync(ApplicationUser user, CancellationToken cancellationToken)
+        public Task<string?> GetUserNameAsync(ApplicationUser user, CancellationToken cancellationToken)
         {
-            return Task.FromResult(user.Username);
+            return Task.FromResult<string?>(user.Username);
         }
 
         public void Dispose() { }
@@ -100,23 +100,23 @@ namespace Relisten.Services.Auth
             return Task.FromResult(user.Username);
         }
 
-        public Task SetUserNameAsync(ApplicationUser user, string userName, CancellationToken cancellationToken)
+        public Task SetUserNameAsync(ApplicationUser user, string? userName, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public Task<string> GetNormalizedUserNameAsync(ApplicationUser user, CancellationToken cancellationToken)
+        public Task<string?> GetNormalizedUserNameAsync(ApplicationUser user, CancellationToken cancellationToken)
         {
-            return Task.FromResult(user.Username.ToLower());
+            return Task.FromResult<string?>(user.Username.ToLowerInvariant());
         }
 
-        public Task SetNormalizedUserNameAsync(ApplicationUser user, string normalizedName,
+        public Task SetNormalizedUserNameAsync(ApplicationUser user, string? normalizedName,
             CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }
 
-        public Task<ApplicationUser> FindByIdAsync(string userId, CancellationToken cancellationToken)
+        public Task<ApplicationUser?> FindByIdAsync(string userId, CancellationToken cancellationToken)
         {
             return FindByNameAsync(userId, cancellationToken);
         }

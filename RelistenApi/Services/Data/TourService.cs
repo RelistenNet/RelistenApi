@@ -15,7 +15,7 @@ namespace Relisten.Data
 
         private ShowService _showService { get; }
 
-        public async Task<Tour> ForUpstreamIdentifier(Artist artist, string upstreamId)
+        public async Task<Tour?> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Tour>(@"
                 SELECT
@@ -51,11 +51,6 @@ namespace Relisten.Data
                     id = @id
                     OR uuid = @uuid
             ", new {id, uuid}));
-
-            if (tour == null)
-            {
-                return null;
-            }
 
             tour.shows = await _showService.ShowsForCriteria(artist,
                 "s.artist_id = @artistId AND (s.tour_id = @tourId OR t.uuid = @tourUuid)",

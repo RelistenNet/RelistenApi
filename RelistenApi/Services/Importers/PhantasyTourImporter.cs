@@ -20,11 +20,11 @@ namespace Relisten.Import
         public const string DataSourceName = "phantasytour.com";
 
         private const uint ITEMS_PER_PAGE = 100;
-        private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
-        private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
-        private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
+        private IDictionary<string, SetlistShow?> existingSetlistShows = new Dictionary<string, SetlistShow?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
+        private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
 
-        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
+        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
@@ -66,7 +66,7 @@ namespace Relisten.Import
         private string UrlForArtist(ArtistUpstreamSource src, uint page)
         {
             return
-                $"https://www.phantasytour.com/api/bands/{uint.Parse(src.upstream_identifier)}/shows?pageSize={ITEMS_PER_PAGE}&page={page}";
+                $"https://www.phantasytour.com/api/bands/{uint.Parse(src.upstream_identifier!)}/shows?pageSize={ITEMS_PER_PAGE}&page={page}";
         }
 
         private string UrlForShow(int showId)
@@ -77,16 +77,19 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(venue => venue.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
             existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
-                .GroupBy(show => show.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(show => show.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistShow?)grp.First());
 
             existingSetlistSongs = (await _setlistSongService.AllForArtist(artist))
-                .GroupBy(song => song.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(song => song.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
 
             var tours = await _tourService.AllForArtist(artist);
 
@@ -110,7 +113,7 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             uint page = 1;
             var stats = new ImportStats();
@@ -141,12 +144,12 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
 
-        private async Task<bool> ImportPage(Artist artist, ImportStats stats, PerformContext ctx,
+        private async Task<bool> ImportPage(Artist artist, ImportStats stats, PerformContext? ctx,
             HttpResponseMessage res)
         {
             var body = await res.Content.ReadAsStringAsync();
@@ -157,14 +160,17 @@ namespace Relisten.Import
                 ctx?.WriteLine("Improper response from phantasytour.com: " + body);
                 ctx?.WriteLine(
                     $"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
-                ctx?.WriteLine(
-                    $"Request url: {res.RequestMessage.RequestUri}. Headers: {string.Join("\n", res.RequestMessage.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
+                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
+                var requestHeaders = res.RequestMessage?.Headers != null
+                    ? string.Join("\n", res.RequestMessage.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))
+                    : "<unknown>";
+                ctx?.WriteLine($"Request url: {requestUri}. Headers: {requestHeaders}");
                 return false;
             }
 
             var prog = ctx?.WriteProgressBar();
 
-            await json.AsyncForEachWithProgress(prog, async show =>
+            Func<PhantasyTourShowListing, Task> processShow = async show =>
             {
                 if (show.dateTime.ToUniversalTime() > DateTime.UtcNow)
                 {
@@ -173,14 +179,25 @@ namespace Relisten.Import
                 }
 
                 var showId = UpstreamIdentifierForPhantasyTourId(show.id);
-                var venueId = UpstreamIdentifierForPhantasyTourId(show.venue.id);
 
                 // we have no way to tell if things get updated, so just pull once
                 if (!existingSetlistShows.ContainsKey(showId))
                 {
                     await ImportSingle(artist, stats, ctx, show.id);
                 }
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var show in json)
+                {
+                    await processShow(show);
+                }
+            }
+            else
+            {
+                await json.AsyncForEachWithProgress(prog, processShow);
+            }
 
             // once we aren't at the full items per page this is the last page and we should stop
             var shouldContinue = json.Count == ITEMS_PER_PAGE;
@@ -188,7 +205,7 @@ namespace Relisten.Import
             return shouldContinue;
         }
 
-        private async Task ImportSingle(Artist artist, ImportStats stats, PerformContext ctx, int showId)
+        private async Task ImportSingle(Artist artist, ImportStats stats, PerformContext? ctx, int showId)
         {
             var policy = Policy
                 .Handle<JsonReaderException>()
@@ -197,7 +214,7 @@ namespace Relisten.Import
             await policy.ExecuteAsync(() => _ImportSingle(artist, stats, ctx, showId));
         }
 
-        private async Task _ImportSingle(Artist artist, ImportStats stats, PerformContext ctx, int showId)
+        private async Task _ImportSingle(Artist artist, ImportStats stats, PerformContext? ctx, int showId)
         {
             ctx?.WriteLine($"Requesting page for show id {showId}");
 
@@ -207,11 +224,17 @@ namespace Relisten.Import
 
             ctx?.WriteLine($"Result: [{res.StatusCode}]: {body.Length}");
 
-            var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body).data;
+            var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data;
 
             var now = DateTime.UtcNow;
 
-            Venue dbVenue = existingVenues.GetValue(UpstreamIdentifierForPhantasyTourId(json.venue.id));
+            if (json == null)
+            {
+                ctx?.WriteLine($"Improper response for show id {showId}: {body}");
+                return;
+            }
+
+            Venue? dbVenue = existingVenues.GetValue(UpstreamIdentifierForPhantasyTourId(json.venue.id));
             if (dbVenue == null)
             {
                 var sc = new VenueWithShowCount
@@ -238,7 +261,7 @@ namespace Relisten.Import
             ctx?.WriteLine($"Importing show id {showId}");
 
             // tour
-            Tour dbTour = null;
+            Tour? dbTour = null;
             if (artist.features.tours)
             {
                 var tour_name = json.tour?.name ?? "Not Part of a Tour";
@@ -258,7 +281,7 @@ namespace Relisten.Import
                         upstream_identifier = tour_upstream
                     });
 
-                    existingTours[dbTour.upstream_identifier] = dbTour;
+                    existingTours[dbTour.upstream_identifier] = dbTour!;
 
                     stats.Created++;
                 }
@@ -275,11 +298,11 @@ namespace Relisten.Import
                     updated_at = now,
                     date = date,
                     upstream_identifier = UpstreamIdentifierForPhantasyTourId(json.id),
-                    venue_id = dbVenue.id,
+                    venue_id = dbVenue!.id,
                     tour_id = artist.features.tours ? dbTour?.id : null
                 });
 
-                existingSetlistShows[dbShow.upstream_identifier] = dbShow;
+                existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
                 stats.Created++;
             }
@@ -287,19 +310,19 @@ namespace Relisten.Import
             // phantasy tour doesn't provide much info about tours so we need to find the start
             // and end date ourselves.
             if (artist.features.tours &&
-                (dbTour.start_date == null
+                (dbTour!.start_date == null
                  || dbTour.end_date == null
-                 || dbShow.date < dbTour.start_date
+                 || dbShow!.date < dbTour.start_date
                  || dbShow.date > dbTour.end_date))
             {
                 if (!tourToStartDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow.date < tourToStartDate[dbTour.upstream_identifier])
+                    || dbShow!.date < tourToStartDate[dbTour.upstream_identifier])
                 {
                     tourToStartDate[dbTour.upstream_identifier] = dbShow.date;
                 }
 
                 if (!tourToEndDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow.date > tourToEndDate[dbTour.upstream_identifier])
+                    || dbShow!.date > tourToEndDate[dbTour.upstream_identifier])
                 {
                     tourToEndDate[dbTour.upstream_identifier] = dbShow.date;
                 }
@@ -310,7 +333,10 @@ namespace Relisten.Import
                 .Select(grp => grp.First()).ToList();
 
             var dbSongs = existingSetlistSongs.Where(kvp => songs.Select(song => song.Slug).Contains(kvp.Key))
-                .Select(kvp => kvp.Value).ToList();
+                .Select(kvp => kvp.Value)
+                .Where(song => song != null)
+                .Select(song => song!)
+                .ToList();
 
             if (songs.Count != dbSongs.Count)
             {
@@ -334,7 +360,7 @@ namespace Relisten.Import
                 }
             }
 
-            stats += await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
+            stats += await _setlistShowService.UpdateSongPlays(dbShow!, dbSongs);
         }
 
         private async Task UpdateTourStartEndDates(Artist artist)

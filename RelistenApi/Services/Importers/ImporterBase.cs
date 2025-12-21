@@ -84,15 +84,15 @@ namespace Relisten.Import
             return importers[source.name];
         }
 
-        public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources,
-            PerformContext ctx)
+        public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+            PerformContext? ctx)
         {
             return Import(artist, filterUpstreamSources, null, ctx);
         }
 
-        public async Task<ImportStats> Rebuild(Artist artist, PerformContext ctx)
+        public async Task<ImportStats> Rebuild(Artist artist, PerformContext? ctx)
         {
-            var importer = artist.upstream_sources.First().upstream_source.importer;
+            var importer = artist.upstream_sources.First().upstream_source.importer!;
 
             ctx?.WriteLine("Rebuilding Shows");
             var stats = await importer.RebuildShows(artist);
@@ -105,8 +105,8 @@ namespace Relisten.Import
             return stats;
         }
 
-        public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool> filterUpstreamSources,
-            string showIdentifier, PerformContext ctx)
+        public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+            string? showIdentifier, PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -115,7 +115,7 @@ namespace Relisten.Import
             ctx?.WriteLine($"Found {srcs.Count} valid importers.");
             var prog = ctx?.WriteProgressBar();
 
-            await srcs.AsyncForEachWithProgress(prog, async item =>
+            Func<ArtistUpstreamSource, Task> processSource = async item =>
             {
                 if (filterUpstreamSources != null && !filterUpstreamSources(item))
                 {
@@ -128,14 +128,26 @@ namespace Relisten.Import
 
                 if (showIdentifier != null)
                 {
-                    stats += await item.upstream_source.importer.ImportSpecificShowDataForArtist(artist, item,
+                    stats += await item.upstream_source.importer!.ImportSpecificShowDataForArtist(artist, item,
                         showIdentifier, ctx);
                 }
                 else
                 {
-                    stats += await item.upstream_source.importer.ImportDataForArtist(artist, item, ctx);
+                    stats += await item.upstream_source.importer!.ImportDataForArtist(artist, item, ctx);
                 }
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var item in srcs)
+                {
+                    await processSource(item);
+                }
+            }
+            else
+            {
+                await srcs.AsyncForEachWithProgress(prog, processSource);
+            }
 
             return stats;
         }
@@ -172,10 +184,10 @@ namespace Relisten.Import
         public abstract ImportableData ImportableDataForArtist(Artist artist);
 
         public abstract Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx);
+            PerformContext? ctx);
 
         public abstract Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx);
+            string? showIdentifier, PerformContext? ctx);
 
         /// <summary>
         ///     Resets the slug counts. This needs to be called after each source is imported otherwise you'll get thing like

@@ -28,7 +28,7 @@ namespace Relisten.Api.Models
     {
         public override Guid Parse(object value)
         {
-            return new Guid(value.ToString());
+            return new Guid(value.ToString()!);
         }
 
         public override void SetValue(IDbDataParameter parameter, Guid value)
@@ -57,7 +57,7 @@ namespace Relisten.Api.Models
 
     public abstract class BaseRelistenModel
     {
-        private PropertyInfo[] _PropertyInfos;
+        private PropertyInfo[]? _propertyInfos;
 
         [V2JsonOnly] [Required] public int id { get; set; }
 
@@ -67,14 +67,14 @@ namespace Relisten.Api.Models
 
         public override string ToString()
         {
-            if (_PropertyInfos == null)
+            if (_propertyInfos == null)
             {
-                _PropertyInfos = GetType().GetProperties();
+                _propertyInfos = GetType().GetProperties();
             }
 
             var sb = new StringBuilder();
 
-            foreach (var info in _PropertyInfos)
+            foreach (var info in _propertyInfos)
             {
                 var value = info.GetValue(this, null) ?? "(null)";
                 sb.AppendLine(info.Name + ": " + value);
@@ -86,27 +86,27 @@ namespace Relisten.Api.Models
 
     public class SlimArtist : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [Required] public string musicbrainz_id { get; set; }
+        [Required] public string musicbrainz_id { get; set; } = null!;
 
-        [Required] public string name { get; set; }
+        [Required] public string name { get; set; } = null!;
 
         [Required] public int featured { get; set; }
 
-        [Required] public string slug { get; set; }
+        [Required] public string slug { get; set; } = null!;
 
-        [Required] public string sort_name { get; set; }
+        [Required] public string sort_name { get; set; } = null!;
 
         [Required] public Guid uuid { get; set; }
     }
 
     public class SlimArtistWithFeatures : SlimArtist
     {
-        [Required] public Features features { get; set; }
+        [Required] public Features features { get; set; } = null!;
     }
 
     public class Artist : SlimArtistWithFeatures
     {
-        [Required] public IEnumerable<ArtistUpstreamSource> upstream_sources { get; set; }
+        [Required] public IEnumerable<ArtistUpstreamSource> upstream_sources { get; set; } = null!;
     }
 
     public class ArtistWithCounts : Artist
@@ -118,12 +118,12 @@ namespace Relisten.Api.Models
 
     public class FullArtist
     {
-        [Required] public ArtistWithCounts artist { get; set; }
-        [Required] public List<VenueWithShowCount> venues { get; set; }
-        [Required] public List<SetlistSongWithPlayCount> songs { get; set; }
-        [Required] public List<TourWithShowCount> tours { get; set; }
-        [Required] public List<Year> years { get; set; }
-        [Required] public List<Show> shows { get; set; }
+        [Required] public ArtistWithCounts artist { get; set; } = null!;
+        [Required] public List<VenueWithShowCount> venues { get; set; } = null!;
+        [Required] public List<SetlistSongWithPlayCount> songs { get; set; } = null!;
+        [Required] public List<TourWithShowCount> tours { get; set; } = null!;
+        [Required] public List<Year> years { get; set; } = null!;
+        [Required] public List<Show> shows { get; set; } = null!;
     }
 
     public class Features
@@ -184,22 +184,22 @@ namespace Relisten.Api.Models
     {
         [V2JsonOnly] [Required] public int id { get; set; }
 
-        [Required] public string name { get; set; }
+        [Required] public string name { get; set; } = null!;
 
-        [Required] public string url { get; set; }
+        [Required] public string url { get; set; } = null!;
 
-        [Required] public string description { get; set; }
+        [Required] public string description { get; set; } = null!;
 
-        [Required] public string credit_line { get; set; }
+        [Required] public string credit_line { get; set; } = null!;
 
-        [JsonIgnore] public ImporterBase importer { get; set; }
+        [JsonIgnore] public ImporterBase? importer { get; set; }
     }
 
     public class SlimArtistUpstreamSource
     {
         [Required] public int upstream_source_id { get; set; }
 
-        public string upstream_identifier { get; set; }
+        public string? upstream_identifier { get; set; }
     }
 
     public class ArtistUpstreamSource : SlimArtistUpstreamSource
@@ -207,6 +207,6 @@ namespace Relisten.Api.Models
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
 
-        public UpstreamSource upstream_source { get; set; }
+        public UpstreamSource upstream_source { get; set; } = null!;
     }
 }

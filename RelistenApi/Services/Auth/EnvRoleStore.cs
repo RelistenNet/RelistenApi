@@ -49,14 +49,14 @@ namespace Relisten.Services.Auth
             return Task.FromResult(IdentityResult.Failed());
         }
 
-        public Task<ApplicationRole> FindByIdAsync(string roleId, CancellationToken cancellationToken)
+        public Task<ApplicationRole?> FindByIdAsync(string roleId, CancellationToken cancellationToken)
         {
             var role = _roles.FirstOrDefault(r => r.RoleId == roleId);
 
             return Task.FromResult(role);
         }
 
-        public Task<ApplicationRole> FindByNameAsync(string normalizedRoleName, CancellationToken cancellationToken)
+        public Task<ApplicationRole?> FindByNameAsync(string normalizedRoleName, CancellationToken cancellationToken)
         {
             var role = _roles.FirstOrDefault(r =>
                 string.Equals(r.RoleNameNormalized, normalizedRoleName, StringComparison.OrdinalIgnoreCase));
@@ -69,28 +69,28 @@ namespace Relisten.Services.Auth
             return Task.FromResult(role.RoleId);
         }
 
-        public Task<string> GetRoleNameAsync(ApplicationRole role, CancellationToken cancellationToken)
+        public Task<string?> GetRoleNameAsync(ApplicationRole role, CancellationToken cancellationToken)
         {
-            return Task.FromResult(role.RoleName);
+            return Task.FromResult<string?>(role.RoleName);
         }
 
-        public Task<string> GetNormalizedRoleNameAsync(ApplicationRole role, CancellationToken cancellationToken)
+        public Task<string?> GetNormalizedRoleNameAsync(ApplicationRole role, CancellationToken cancellationToken)
         {
-            return Task.FromResult(role.RoleNameNormalized);
+            return Task.FromResult<string?>(role.RoleNameNormalized);
         }
 
-        public Task SetRoleNameAsync(ApplicationRole role, string roleName, CancellationToken cancellationToken)
+        public Task SetRoleNameAsync(ApplicationRole role, string? roleName, CancellationToken cancellationToken)
         {
             role.RoleName = roleName;
 
-            return Task.FromResult(true);
+            return Task.CompletedTask;
         }
 
-        public Task SetNormalizedRoleNameAsync(ApplicationRole role, string normalizedName,
+        public Task SetNormalizedRoleNameAsync(ApplicationRole role, string? normalizedName,
             CancellationToken cancellationToken)
         {
             // Do nothing. In this simple example, the normalized name is generated from the role name.
-            return Task.FromResult(true);
+            return Task.CompletedTask;
         }
 
         public void Dispose() { }

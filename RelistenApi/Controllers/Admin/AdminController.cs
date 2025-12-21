@@ -42,7 +42,7 @@ namespace Relisten.Controllers.Admin
 
         [HttpGet("/relisten-admin/login")]
         [AllowAnonymous]
-        public async Task<IActionResult> Login(string returnUrl = null)
+        public async Task<IActionResult> Login(string? returnUrl = null)
         {
             // Clear the existing external cookie to ensure a clean login process
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
@@ -54,7 +54,7 @@ namespace Relisten.Controllers.Admin
         [HttpPost("/relisten-admin/login")]
         [AllowAnonymous]
         //[ValidateAntiForgeryToken]
-        public async Task<IActionResult> Login(LoginViewModel model, string returnUrl = null)
+        public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
             if (ModelState.IsValid)
@@ -120,7 +120,7 @@ namespace Relisten.Controllers.Admin
             return Json(new {message = $"Queued as job {jobId}!"});
         }
 
-        private IActionResult RedirectToLocal(string returnUrl)
+        private IActionResult RedirectToLocal(string? returnUrl)
         {
             if (Url.IsLocalUrl(returnUrl))
             {
@@ -133,18 +133,18 @@ namespace Relisten.Controllers.Admin
 
     public class LoginViewModel
     {
-        [Required] public string Username { get; set; }
+        [Required] public string Username { get; set; } = null!;
 
         [Required]
         [DataType(DataType.Password)]
-        public string Password { get; set; }
+        public string Password { get; set; } = null!;
 
         [Display(Name = "Remember me?")] public bool RememberMe { get; set; }
     }
 
     public class AdminViewModel
     {
-        public IEnumerable<Artist> Artists { get; set; }
-        public IEnumerable<UpstreamSource> UpstreamSources { get; set; }
+        public IEnumerable<Artist> Artists { get; set; } = null!;
+        public IEnumerable<UpstreamSource> UpstreamSources { get; set; } = null!;
     }
 }

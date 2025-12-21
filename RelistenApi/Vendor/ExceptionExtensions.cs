@@ -28,7 +28,7 @@ namespace Relisten.Import
                 }
                 catch (JsonSerializationException)
                 {
-                    val = kvp.Value.ToString();
+                    val = kvp.Value?.ToString() ?? "";
                 }
 
                 ctx.WriteLine($"\t{kvp.Key}: {val}");

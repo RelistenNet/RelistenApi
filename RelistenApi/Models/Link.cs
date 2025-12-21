@@ -14,8 +14,8 @@ namespace Relisten.Api.Models
 
         [Required] public bool for_source { get; set; }
 
-        [Required] public string url { get; set; }
+        [Required] public string url { get; set; } = null!;
 
-        [Required] public string label { get; set; }
+        [Required] public string label { get; set; } = null!;
     }
 }

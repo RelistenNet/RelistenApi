@@ -11,7 +11,7 @@ namespace Relisten.Data
     {
         public SourceTrackService(DbService db) : base(db) { }
 
-        public async Task<SourceTrack> ForId(int id)
+        public async Task<SourceTrack?> ForId(int id)
         {
             return (await ForIds(new[] {id})).FirstOrDefault();
         }
@@ -28,7 +28,7 @@ namespace Relisten.Data
             ", new {trackIds = ids}));
         }
 
-        public async Task<SourceTrack> ForUUID(Guid uuid)
+        public async Task<SourceTrack?> ForUUID(Guid uuid)
         {
             return (await ForUUIDs(new[] {uuid})).FirstOrDefault();
         }

@@ -63,7 +63,7 @@ namespace Relisten.Data
         }
 
         public int? Id { get; set; }
-        public string Slug { get; set; }
+        public string? Slug { get; set; }
         public Guid? Guid { get; set; }
     }
 
@@ -76,7 +76,7 @@ namespace Relisten.Data
 
         private ShowService _showService { get; }
 
-        public async Task<Venue> ForGlobalUpstreamIdentifier(string upstreamId)
+        public async Task<Venue?> ForGlobalUpstreamIdentifier(string upstreamId)
         {
             return await ForUpstreamIdentifier(null, upstreamId);
         }
@@ -137,7 +137,7 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<Venue> ForUpstreamIdentifier(Artist artist, string upstreamId)
+        public async Task<Venue?> ForUpstreamIdentifier(Artist? artist, string upstreamId)
         {
             if (artist != null)
             {
@@ -162,7 +162,7 @@ namespace Relisten.Data
                 ", new {upstreamId}));
         }
 
-        public async Task<T> ForId<T>(int? id = null, Guid? uuid = null) where T : Venue
+        public async Task<T?> ForId<T>(int? id = null, Guid? uuid = null) where T : Venue
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
                 SELECT
@@ -192,12 +192,12 @@ namespace Relisten.Data
             ", new {id, uuid}));
         }
 
-        public async Task<VenueWithShowCount> ForId(int id)
+        public async Task<VenueWithShowCount?> ForId(int id)
         {
             return await ForId<VenueWithShowCount>(id);
         }
 
-        public async Task<VenueWithShows> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
+        public async Task<VenueWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
         {
             var venue = await ForId<VenueWithShows>(id, uuid);
 

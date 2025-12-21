@@ -46,7 +46,7 @@ namespace Relisten.Controllers
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
             {
-                return _setlistSongService.ForIdWithShows(artist, id.Id.Value);
+                return _setlistSongService.ForIdWithShows(artist, id.Id!.Value);
             });
         }
 

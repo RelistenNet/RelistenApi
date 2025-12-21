@@ -51,7 +51,7 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -63,10 +63,20 @@ namespace Relisten.Import
 
             var phishNetApiShows = await phishNetApiClient.Shows(ctx);
 
-            await shows.ForEachAsync(async dbSource =>
+            if (prog == null)
             {
-                stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
-            }, prog, 10);
+                foreach (var dbSource in shows)
+                {
+                    stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
+                }
+            }
+            else
+            {
+                await shows.ForEachAsync(async dbSource =>
+                {
+                    stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
+                }, prog, 10);
+            }
 
             ctx?.WriteLine("Rebuilding...");
 
@@ -77,12 +87,12 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
 
-        private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext ctx)
+        private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext? ctx)
         {
             var ratingScraper = new PhishNetRatingsScraper(http, dbSource.display_date);
             ctx?.WriteLine($"Requesting {PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date)}");
@@ -92,7 +102,7 @@ namespace Relisten.Import
 
         private async Task<ImportStats> ProcessSource(Artist artist, ArtistUpstreamSource src, Source dbSource,
             IList<PhishNetApiShow> phishNetApiShows,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -109,7 +119,7 @@ namespace Relisten.Import
 
             var phishNetApiShow = phishNetApiShows.FirstOrDefault(pnetShow => pnetShow.showdate == dbSource.display_date);
 
-            if (!dbSource.description.Contains(phishNetApiShow.setlist_notes))
+            if (!dbSource.description.Contains(phishNetApiShow!.setlist_notes))
             {
                 dbSource.description = phishNetApiShow.setlist_notes;
 

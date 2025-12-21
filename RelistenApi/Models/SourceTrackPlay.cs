@@ -50,7 +50,7 @@ namespace Relisten.Api.Models
         public Guid source_track_uuid { get; set; }
 
         [Required]
-        public Guid? user_uuid { get; set; } = null;
+        public Guid? user_uuid { get; set; }
 
         [Required]
         public SourceTrackPlayAppType app_type { get; set; }
@@ -59,6 +59,6 @@ namespace Relisten.Api.Models
         [JsonConverter(typeof(StringEnumConverter))]
         public SourceTrackPlayAppType app_type_description => app_type;
 
-        public PlayedSourceTrack track { get; set; } = null;
+        public PlayedSourceTrack? track { get; set; }
     }
 }

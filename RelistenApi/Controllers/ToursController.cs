@@ -43,7 +43,7 @@ namespace Relisten.Controllers
         {
             return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
             {
-                return _tourService.ForIdWithShows(artist, id.Id.Value);
+                return _tourService.ForIdWithShows(artist, id.Id!.Value);
             });
         }
 

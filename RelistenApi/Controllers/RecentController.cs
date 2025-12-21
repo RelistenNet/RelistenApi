@@ -24,8 +24,8 @@ namespace Relisten.Controllers
             _showService = showService;
         }
 
-        public SourceService _sourceService { get; set; }
-        public ShowService _showService { get; set; }
+        private readonly SourceService _sourceService;
+        private readonly ShowService _showService;
 
         [HttpGet("artists/{artistIdOrSlug}/shows/recently-added")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]

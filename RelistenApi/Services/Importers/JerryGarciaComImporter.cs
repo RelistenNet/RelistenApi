@@ -19,11 +19,11 @@ namespace Relisten.Import
     public class JerryGarciaComImporter : ImporterBase
     {
         public const string DataSourceName = "jerrygarcia.com";
-        private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
-        private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
-        private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
+        private IDictionary<string, SetlistShow?> existingSetlistShows = new Dictionary<string, SetlistShow?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
+        private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
 
-        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
+        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
@@ -74,7 +74,7 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -82,14 +82,14 @@ namespace Relisten.Import
 
             var resp = await http.GetAsync(ShowPagesListingUrl(src));
             var showFilesResponse = await resp.Content.ReadAsStringAsync();
-            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
+            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse) ?? new List<string>();
 
             var files = BuildFileMetaObjects(showFiles);
 
             ctx?.WriteLine($"Checking {files.Count} html files");
             var prog = ctx?.WriteProgressBar();
 
-            await files.AsyncForEachWithProgress(prog, async f =>
+            Func<FileMetaObject, Task> processFile = async f =>
             {
                 if (existingSetlistShows.ContainsKey(f.Identifier))
                 {
@@ -102,14 +102,26 @@ namespace Relisten.Import
 
                 await ProcessPage(stats, artist, f, pageContents,
                     pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow, ctx);
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var file in files)
+                {
+                    await processFile(file);
+                }
+            }
+            else
+            {
+                await files.AsyncForEachWithProgress(prog, processFile);
+            }
 
             if (artist.features.tours)
             {
                 await UpdateTourStartEndDates(artist);
             }
 
-            ctx.WriteLine("Rebuilding shows and years");
+            ctx?.WriteLine("Rebuilding shows and years");
 
             // update shows
             await RebuildShows(artist);
@@ -121,7 +133,7 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
@@ -129,29 +141,32 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(venue => venue.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
             existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
-                .GroupBy(show => show.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(show => show.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistShow?)grp.First());
 
             existingSetlistSongs = (await _setlistSongService.AllForArtist(artist))
-                .GroupBy(song => song.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(song => song.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
         }
 
         private async Task ProcessPage(ImportStats stats, Artist artist, FileMetaObject meta, string pageContents,
-            DateTime updated_at, PerformContext ctx)
+            DateTime updated_at, PerformContext? ctx)
         {
-            var dbShow = existingSetlistShows.GetValue(meta.Identifier);
+            SetlistShow? dbShow = existingSetlistShows.GetValue(meta.Identifier);
 
             if (dbShow != null)
             {
                 return;
             }
 
-            ctx.WriteLine($"Processing: {meta.FilePath}");
+            ctx?.WriteLine($"Processing: {meta.FilePath}");
 
             var parsedPage = ParseShowPage(pageContents);
             if (parsedPage == null)
@@ -163,7 +178,7 @@ namespace Relisten.Import
             var dbVenue = venueResult.venue;
             stats.Created += venueResult.created ? 1 : 0;
 
-            var dbTour = existingTours.GetValue(parsedPage.tourName);
+            Tour? dbTour = existingTours.GetValue(parsedPage.tourName);
 
             if (dbTour == null && artist.features.tours)
             {
@@ -176,7 +191,7 @@ namespace Relisten.Import
                     updated_at = updated_at
                 });
 
-                existingTours[dbTour.upstream_identifier] = dbTour;
+                existingTours[dbTour.upstream_identifier] = dbTour!;
 
                 stats.Created++;
             }
@@ -191,7 +206,7 @@ namespace Relisten.Import
                 updated_at = updated_at
             });
 
-            existingSetlistShows[dbShow.upstream_identifier] = dbShow;
+            existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
             stats.Created++;
 
@@ -221,7 +236,7 @@ namespace Relisten.Import
             var dbSongsToAdd = dbSongs.Where(song => !existingSetlistSongs.ContainsKey(song.upstream_identifier));
 
             dbSongs = dbSongs.Where(song => existingSetlistSongs.ContainsKey(song.upstream_identifier))
-                    .Select(song => existingSetlistSongs[song.upstream_identifier])
+                    .Select(song => existingSetlistSongs[song.upstream_identifier]!)
                     .ToList()
                 ;
 
@@ -236,7 +251,7 @@ namespace Relisten.Import
             dbSongs.AddRange(added);
 
             if (artist.features.tours &&
-                (dbTour.start_date == null
+                (dbTour!.start_date == null
                  || dbTour.end_date == null
                  || dbShow.date < dbTour.start_date
                  || dbShow.date > dbTour.end_date))
@@ -258,7 +273,7 @@ namespace Relisten.Import
         }
 
         public async Task<ImportStats> BackfillVenuesForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -266,16 +281,16 @@ namespace Relisten.Import
 
             var resp = await http.GetAsync(ShowPagesListingUrl(src));
             var showFilesResponse = await resp.Content.ReadAsStringAsync();
-            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse);
+            var showFiles = JsonConvert.DeserializeObject<List<string>>(showFilesResponse) ?? new List<string>();
 
             var files = BuildFileMetaObjects(showFiles);
 
             ctx?.WriteLine($"Checking {files.Count} html files for venue backfill");
             var prog = ctx?.WriteProgressBar();
 
-            await files.AsyncForEachWithProgress(prog, async f =>
+            Func<FileMetaObject, Task> processBackfill = async f =>
             {
-                if (!existingSetlistShows.TryGetValue(f.Identifier, out var dbShow))
+                if (!existingSetlistShows.TryGetValue(f.Identifier, out var dbShow) || dbShow == null)
                 {
                     return;
                 }
@@ -302,7 +317,19 @@ namespace Relisten.Import
                     await _setlistShowService.Save(dbShow);
                     stats.Updated++;
                 }
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var file in files)
+                {
+                    await processBackfill(file);
+                }
+            }
+            else
+            {
+                await files.AsyncForEachWithProgress(prog, processBackfill);
+            }
 
             ctx?.WriteLine("Rebuilding shows and years");
             await RebuildShows(artist);
@@ -366,7 +393,8 @@ namespace Relisten.Import
         private async Task<(Venue venue, bool created)> EnsureVenue(Artist artist, ParsedShowPage parsedPage,
             DateTime updatedAt)
         {
-            if (existingVenues.TryGetValue(parsedPage.venueUpstreamId, out var existingVenue))
+            if (existingVenues.TryGetValue(parsedPage.venueUpstreamId, out var existingVenue)
+                && existingVenue != null)
             {
                 return (existingVenue, false);
             }
@@ -395,7 +423,7 @@ namespace Relisten.Import
             return (dbVenue, true);
         }
 
-        private ParsedShowPage ParseShowPage(string pageContents)
+        private ParsedShowPage? ParseShowPage(string pageContents)
         {
             var html = new HtmlDocument();
             html.LoadHtml(pageContents);
@@ -454,19 +482,19 @@ namespace Relisten.Import
 
         private class FileMetaObject
         {
-            public string DisplayDate { get; set; }
+            public string DisplayDate { get; set; } = null!;
             public DateTime Date { get; set; }
-            public string FilePath { get; set; }
-            public string Identifier { get; set; }
+            public string FilePath { get; set; } = null!;
+            public string Identifier { get; set; } = null!;
         }
 
         private class ParsedShowPage
         {
-            public HtmlNode root { get; set; }
-            public string venueName { get; set; }
-            public string venueLocation { get; set; }
-            public string venueUpstreamId { get; set; }
-            public string tourName { get; set; }
+            public HtmlNode root { get; set; } = null!;
+            public string venueName { get; set; } = null!;
+            public string venueLocation { get; set; } = null!;
+            public string venueUpstreamId { get; set; } = null!;
+            public string tourName { get; set; } = null!;
         }
     }
 

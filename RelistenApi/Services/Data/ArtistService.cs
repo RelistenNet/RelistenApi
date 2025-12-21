@@ -17,14 +17,14 @@ namespace Relisten.Data
             return artist;
         };
 
+        private readonly ImporterService _importService;
+
         public ArtistService(DbService db, ImporterService importService) : base(db)
         {
             _importService = importService;
         }
 
-        public ImporterService _importService { get; set; }
-
-        public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string> idsOrSlugs = null,
+        public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string>? idsOrSlugs = null,
             bool includeAutoCreated = true)
             where T : ArtistWithCounts
         {
@@ -131,7 +131,7 @@ namespace Relisten.Data
             ", joiner, new {autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated})));
         }
 
-        public async Task<Artist> FindArtistById(int id)
+        public async Task<Artist?> FindArtistById(int id)
         {
             var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
@@ -146,7 +146,7 @@ namespace Relisten.Data
             return await FillInUpstreamSources(a.SingleOrDefault());
         }
 
-        public async Task<Artist> FindArtistByUuid(Guid uuid)
+        public async Task<Artist?> FindArtistByUuid(Guid uuid)
         {
             var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
@@ -161,7 +161,7 @@ namespace Relisten.Data
             return await FillInUpstreamSources(a.SingleOrDefault());
         }
 
-        public async Task<Artist> FindArtistByShowUuid(Guid uuid)
+        public async Task<Artist?> FindArtistByShowUuid(Guid uuid)
         {
             var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
@@ -178,7 +178,7 @@ namespace Relisten.Data
             return await FillInUpstreamSources(a.SingleOrDefault());
         }
 
-        public async Task<Artist> FindArtistBySourceUuid(Guid uuid)
+        public async Task<Artist?> FindArtistBySourceUuid(Guid uuid)
         {
             var a = await db.WithConnection(con => con.QueryAsync(@"
                 SELECT
@@ -195,7 +195,7 @@ namespace Relisten.Data
             return await FillInUpstreamSources(a.SingleOrDefault());
         }
 
-        async Task<T> FillInUpstreamSources<T>(T art) where T : Artist
+        async Task<T?> FillInUpstreamSources<T>(T? art) where T : Artist
         {
             if (art == null)
             {
@@ -206,11 +206,11 @@ namespace Relisten.Data
             return filled?.FirstOrDefault();
         }
 
-        async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T> art) where T : Artist
+        async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T>? art) where T : Artist
         {
             if (art == null)
             {
-                return null;
+                return Array.Empty<T>();
             }
 
             var srcs = await db.WithConnection(con => con.QueryAsync(@"
@@ -240,20 +240,18 @@ namespace Relisten.Data
 
             foreach (var a in art)
             {
-                IEnumerable<ArtistUpstreamSource> s;
-
-                if (!gsrcs.TryGetValue(a.id, out s))
+                if (!gsrcs.TryGetValue(a.id, out var sources))
                 {
-                    s = new List<ArtistUpstreamSource>();
+                    sources = Array.Empty<ArtistUpstreamSource>();
                 }
 
-                a.upstream_sources = s;
+                a.upstream_sources = sources;
             }
 
             return art;
         }
 
-        public async Task<Artist> FindArtistWithIdOrSlug(string idOrSlug)
+        public async Task<Artist?> FindArtistWithIdOrSlug(string idOrSlug)
         {
             return (await FindArtistsWithIdsOrSlugs(new[] {idOrSlug})).FirstOrDefault();
         }
@@ -311,7 +309,7 @@ namespace Relisten.Data
                 return;
             }
 
-            if (idOrSlug?.Length == 36 && Guid.TryParse(idOrSlug, out var guid))
+            if (idOrSlug.Length == 36 && Guid.TryParse(idOrSlug, out var guid))
             {
                 guids.Add(guid);
                 return;
@@ -320,7 +318,7 @@ namespace Relisten.Data
             slugs.Add(idOrSlug);
         }
 
-        public async Task<Artist> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier)
+        public async Task<Artist?> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier)
         {
             return await db.WithConnection(async con =>
             {

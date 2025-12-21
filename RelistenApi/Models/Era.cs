@@ -11,6 +11,6 @@ namespace Relisten.Api.Models
 
         [Required] public int order { get; set; }
 
-        [Required] public string name { get; set; }
+        [Required] public string name { get; set; } = null!;
     }
 }

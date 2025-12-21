@@ -156,11 +156,11 @@ namespace Relisten
                 ? Configuration["PGBOUNCER_DATABASE_URL"]
                 : Configuration["DATABASE_URL"];
 
-            var db = new DbService(dbUrl, HostEnvironment);
+            var db = new DbService(dbUrl!, HostEnvironment);
             RunMigrations(db);
             services.AddSingleton(db);
 
-            var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]);
+            var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]!);
 
             // use the static property because it is formatted correctly for NpgSQL
             services.AddHangfire(hangfire =>
@@ -173,6 +173,26 @@ namespace Relisten
                 hangfire.UseConsole();
                 hangfire.UseRecurringJob(typeof(ScheduledService));
             });
+
+            if (!HostEnvironment.IsDevelopment())
+            {
+                if (!string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"]) &&
+                    Configuration["ENABLE_HANGFIRE_SERVER"] != "false")
+                {
+                    services.AddHangfireServer(options =>
+                    {
+                        options.Queues = ["artist_import"];
+                        options.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
+                        options.WorkerCount = 6;
+                    });
+
+                    services.AddHangfireServer(options =>
+                    {
+                        options.Queues = ["default"];
+                        options.ServerName = $"relistenapi:default ({Environment.MachineName})";
+                    });
+                }
+            }
 
             var redis = new RedisService(configurationOptions);
             services.AddSingleton(redis);
@@ -235,23 +255,6 @@ namespace Relisten
 
             if (!env.IsDevelopment())
             {
-                if (!string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"]) &&
-                    Configuration["ENABLE_HANGFIRE_SERVER"] != "false")
-                {
-                    app.UseHangfireServer(new BackgroundJobServerOptions
-                    {
-                        Queues = ["artist_import"],
-                        ServerName = $"relistenapi:artist_import ({Environment.MachineName})",
-                        WorkerCount = 6
-                    });
-
-                    app.UseHangfireServer(new BackgroundJobServerOptions
-                    {
-                        Queues = ["default"],
-                        ServerName = $"relistenapi:default ({Environment.MachineName})"
-                    });
-                }
-
                 app.UseHangfireDashboard("/relisten-admin/hangfire",
                     new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
             }
@@ -291,12 +294,12 @@ namespace Relisten
                     migrator.Baseline(2);
                 }
 
-                migrator.MigrateTo(7);
+                migrator.MigrateTo(8);
 
-                if (migrator.LatestMigration.Version != migrator.CurrentMigration.Version)
+                if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
                 {
                     throw new Exception(
-                        $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration.Version}). You probably need to add a call to run the migration.");
+                        $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.");
                 }
             }
         }

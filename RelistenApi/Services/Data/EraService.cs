@@ -14,7 +14,7 @@ namespace Relisten.Data
 
         private ShowService _showService { get; }
 
-        public async Task<Era> ForName(Artist artist, string name)
+        public async Task<Era?> ForName(Artist artist, string name)
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Era>(@"
                 SELECT

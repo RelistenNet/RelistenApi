@@ -29,7 +29,7 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
     {
         var safeCount = Math.Max(100, count);
         var items = new List<ArchiveOrgCollectionIndexItem>();
-        string cursor = null;
+        string? cursor = null;
         var seenCursors = new HashSet<string>(StringComparer.Ordinal);
 
         while (true)
@@ -98,22 +98,22 @@ public static class ArchiveOrgCollectionIndexParser
 {
     public static ArchiveOrgCollectionIndexResponse Parse(string json)
     {
-        return JsonConvert.DeserializeObject<ArchiveOrgCollectionIndexResponse>(json);
+        return JsonConvert.DeserializeObject<ArchiveOrgCollectionIndexResponse>(json)!;
     }
 }
 
 public class ArchiveOrgCollectionIndexResponse
 {
-    public List<ArchiveOrgCollectionIndexItem> items { get; set; }
+    public List<ArchiveOrgCollectionIndexItem> items { get; set; } = null!;
     public int count { get; set; }
-    public string cursor { get; set; }
+    public string cursor { get; set; } = null!;
     public int total { get; set; }
 }
 
 public class ArchiveOrgCollectionIndexItem
 {
-    public string identifier { get; set; }
-    public string title { get; set; }
+    public string identifier { get; set; } = null!;
+    public string title { get; set; } = null!;
     public int item_count { get; set; }
     public int month { get; set; }
 }

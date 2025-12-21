@@ -116,7 +116,7 @@ public class ArchiveOrgArtistIndexer
         this.upstreamSourceLookup = upstreamSourceLookup;
     }
 
-    public async Task<ArchiveOrgArtistIndexResult> IndexArtists(PerformContext context = null,
+    public async Task<ArchiveOrgArtistIndexResult> IndexArtists(PerformContext? context = null,
         int minItemCount = DefaultItemCountThreshold, CancellationToken cancellationToken = default)
     {
         var upstreamSource = await upstreamSourceLookup.FindUpstreamSourceByName(ArchiveOrgImporter.DataSourceName);
@@ -193,7 +193,7 @@ public class ArchiveOrgArtistIndexer
     }
 
     private static string? BuildUniqueSlug(ArchiveOrgCollectionIndexItem item, HashSet<string> existingSlugs,
-        PerformContext context)
+        PerformContext? context)
     {
         var baseSlug = SlugUtils.Slugify(item.title);
         if (string.IsNullOrWhiteSpace(baseSlug))

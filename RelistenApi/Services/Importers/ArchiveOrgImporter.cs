@@ -24,10 +24,10 @@ namespace Relisten.Import
 
         private readonly LinkService linkService;
 
-        private IDictionary<string, SourceReviewInformation> existingSourceReviewInformation =
-            new Dictionary<string, SourceReviewInformation>();
+        private IDictionary<string, SourceReviewInformation?> existingSourceReviewInformation =
+            new Dictionary<string, SourceReviewInformation?>();
 
-        private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
+        private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
 
         public ArchiveOrgImporter(
             DbService db,
@@ -73,13 +73,13 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             return await ImportSpecificShowDataForArtist(artist, src, null, ctx);
         }
 
         public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             await PreloadData(artist);
 
@@ -101,7 +101,7 @@ namespace Relisten.Import
         }
 
         private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res,
-            ArtistUpstreamSource src, string showIdentifier, PerformContext ctx)
+            ArtistUpstreamSource src, string? showIdentifier, PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -123,7 +123,7 @@ namespace Relisten.Import
 
             var identifiersWithoutMP3s = new HashSet<string>();
 
-            await root.response.docs.AsyncForEachWithProgress(prog, async doc =>
+            Func<SearchDoc, Task> processDoc = async doc =>
             {
                 try
                 {
@@ -153,7 +153,7 @@ namespace Relisten.Import
                             new TolerantStringConverter()
                         );
 
-                        if (detailsRoot.is_dark ?? false)
+                        if (detailsRoot!.is_dark ?? false)
                         {
                             ctx?.WriteLine("\tis_dark == true, skipping...");
                             return;
@@ -229,7 +229,19 @@ namespace Relisten.Import
 
                     SentrySdk.CaptureException(e);
                 }
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var doc in root.response.docs)
+                {
+                    await processDoc(doc);
+                }
+            }
+            else
+            {
+                await root.response.docs.AsyncForEachWithProgress(prog, processDoc);
+            }
 
             // we want to keep all the shows from this import--aside from ones that no longer have MP3s
             var showsToKeep = root.response.docs
@@ -267,12 +279,12 @@ namespace Relisten.Import
 
         private async Task<ImportStats> ImportSingleIdentifier(
             Artist artist,
-            Source dbSource,
+            Source? dbSource,
             SearchDoc searchDoc,
             RootObject detailsRoot,
             ArtistUpstreamSource upstreamSrc,
             string properDisplayDate,
-            PerformContext ctx
+            PerformContext? ctx
         )
         {
             var stats = new ImportStats();
@@ -280,12 +292,13 @@ namespace Relisten.Import
             var upstream_identifier = searchDoc.identifier;
             var isUpdate = dbSource != null;
 
-            var meta = detailsRoot.metadata;
+            var meta = detailsRoot.metadata!;
 
-            var mp3Files = detailsRoot.files?.Where(file => file?.format == "VBR MP3");
-            var flacFiles = detailsRoot.files?.Where(file => file?.format == "Flac" || file?.format == "24bit Flac");
+            var mp3Files = detailsRoot.files?.Where(file => file?.format == "VBR MP3") ?? Enumerable.Empty<File>();
+            var flacFiles = detailsRoot.files?.Where(file => file?.format == "Flac" || file?.format == "24bit Flac")
+                            ?? Enumerable.Empty<File>();
 
-            if (mp3Files == null || mp3Files.Count() == 0)
+            if (!mp3Files.Any())
             {
                 ctx?.WriteLine("\tNo VBR MP3 files found for {0}", searchDoc.identifier);
 
@@ -306,7 +319,7 @@ namespace Relisten.Import
                     };
                 }).ToList();
 
-            Venue dbVenue = null;
+            Venue? dbVenue = null;
             if (artist.features.per_source_venues)
             {
                 var venueName = string.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
@@ -337,8 +350,8 @@ namespace Relisten.Import
             if (isUpdate)
             {
                 var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc, properDisplayDate);
-                src.id = dbSource.id;
-                src.venue_id = dbVenue.id;
+                src.id = dbSource!.id;
+                src.venue_id = dbVenue!.id;
 
                 dbSource = await _sourceService.Save(src);
                 dbSource.venue = dbVenue;
@@ -365,9 +378,12 @@ namespace Relisten.Import
                 .First();
             stats.Created++;
 
-            var flacTracksByName = flacFiles.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
+            var flacTracksByName = flacFiles.GroupBy(f => f.name)
+                .ToDictionary(g => g.Key, g => (File?)g.First());
 
-            var allFilesByName = detailsRoot.files?.GroupBy(f => f.name).ToDictionary(g => g.Key, g => g.First());
+            var allFilesByName = detailsRoot.files?.GroupBy(f => f.name)
+                                    .ToDictionary(g => g.Key, g => (File?)g.First())
+                                ?? new Dictionary<string, File?>();
 
             var dbTracks = CreateSourceTracksForFiles(artist, dbSource, meta, mp3Files, flacTracksByName, dbSet,
                 allFilesByName);
@@ -442,7 +458,7 @@ namespace Relisten.Import
             RootObject detailsRoot,
             SearchDoc searchDoc,
             string properDisplayDate,
-            Venue dbVenue = null
+            Venue? dbVenue = null
         )
         {
             var meta = detailsRoot.metadata;
@@ -461,11 +477,11 @@ namespace Relisten.Import
 
             var flac_type = FlacType.NoFlac;
 
-            if (detailsRoot.files.Any(f => f.format == "24bit Flac"))
+            if (detailsRoot.files?.Any(f => f.format == "24bit Flac") ?? false)
             {
                 flac_type = FlacType.Flac24Bit;
             }
-            else if (detailsRoot.files.Any(f => f.format == "Flac"))
+            else if (detailsRoot.files?.Any(f => f.format == "Flac") ?? false)
             {
                 flac_type = FlacType.Flac16Bit;
             }
@@ -498,9 +514,9 @@ namespace Relisten.Import
             Source dbSource,
             Metadata meta,
             IEnumerable<File> mp3Files,
-            IDictionary<string, File> flacFiles,
+            IDictionary<string, File?> flacFiles,
             SourceSet set,
-            IDictionary<string, File> allFilesByName)
+            IDictionary<string, File?> allFilesByName)
         {
             var trackNum = 0;
 
@@ -528,9 +544,9 @@ namespace Relisten.Import
             Metadata meta,
             File file,
             int previousTrackNumber,
-            IDictionary<string, File> flacFiles,
+            IDictionary<string, File?> flacFiles,
             SourceSet set,
-            IDictionary<string, File> allFilesByName)
+            IDictionary<string, File?> allFilesByName)
         {
             var trackNum = previousTrackNumber + 1;
 
@@ -543,6 +559,7 @@ namespace Relisten.Import
             else if (
                 !string.IsNullOrEmpty(file.original)
                 && allFilesByName.TryGetValue(file.original, out var original)
+                && original != null
                 && !string.IsNullOrWhiteSpace(original.title)
             )
             {
@@ -559,7 +576,7 @@ namespace Relisten.Import
                 source_set_id = set?.id ?? -1,
                 source_id = dbSource.id,
                 duration =
-                    file.length.Split(':').Reverse().Select((v, k) =>
+                    file.length!.Split(':').Reverse().Select((v, k) =>
                         (int)Math.Round(Math.Max(1, 60 * k) * double.Parse(v, NumberStyles.Any))).Sum(),
                 slug = SlugifyTrack(title),
                 mp3_url = $"https://archive.org/download/{meta.identifier}/{file.name}",
@@ -574,11 +591,13 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingSources = (await _sourceService.AllForArtist(artist))
-                .GroupBy(source => source.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(source => source.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 
             existingSourceReviewInformation =
                 (await _sourceService.AllSourceReviewInformationForArtist(artist))
-                .GroupBy(source => source.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(source => source.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SourceReviewInformation?)grp.First());
         }
 
         private class NoVBRMp3FilesException : Exception

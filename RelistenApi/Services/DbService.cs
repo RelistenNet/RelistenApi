@@ -1,5 +1,6 @@
 using System;
 using System.Data;
+using System.Globalization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ namespace Relisten
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             ConnStr =
-                $"Host={uri.Host};Port={uri.Port.ToString()};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Include Error Detail=true";
+                $"Host={uri.Host};Port={uri.Port.ToString(CultureInfo.InvariantCulture)};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Include Error Detail=true";
 
             // A bit of a hack, but it'll work well enough in prod and locally we don't need multiple dbs
             ReadOnlyConnStr = ConnStr.Replace("relisten-db-rw.default", "relisten-db-ro.default");
@@ -33,8 +34,8 @@ namespace Relisten
             }
         }
 
-        public static string ConnStr { get; set; }
-        public static string ReadOnlyConnStr { get; set; }
+        public static string ConnStr { get; set; } = null!;
+        public static string ReadOnlyConnStr { get; set; } = null!;
 
         public NpgsqlConnection CreateConnection(bool longTimeout, bool readOnly)
         {

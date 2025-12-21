@@ -9,9 +9,9 @@ namespace Relisten.Api.Models
     {
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
-        [Required] public string name { get; set; }
-        [Required] public string slug { get; set; }
-        [Required] public string upstream_identifier { get; set; }
+        [Required] public string name { get; set; } = null!;
+        [Required] public string slug { get; set; } = null!;
+        [Required] public string upstream_identifier { get; set; } = null!;
 
         [Required]
         public string sortName
@@ -37,7 +37,7 @@ namespace Relisten.Api.Models
 
     public class SetlistSongWithShows : SetlistSong
     {
-        [Required] public IList<Show> shows { get; set; }
+        [Required] public IList<Show> shows { get; set; } = null!;
     }
 
     public class SetlistShowSongJoin

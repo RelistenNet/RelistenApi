@@ -12,7 +12,7 @@ namespace Relisten.Api.Models
         public int? duration { get; set; }
         public float? avg_duration { get; set; }
         [Required] public float avg_rating { get; set; }
-        [Required] public string year { get; set; }
+        [Required] public string year { get; set; } = null!;
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
         [Required] public Guid uuid { get; set; }
@@ -20,6 +20,6 @@ namespace Relisten.Api.Models
 
     public class YearWithShows : Year
     {
-        [Required] public List<Show> shows { get; set; }
+        [Required] public List<Show> shows { get; set; } = null!;
     }
 }

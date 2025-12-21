@@ -9,11 +9,11 @@ namespace Relisten.Api.Models
 
         public int? rating { get; set; }
 
-        public string title { get; set; }
+        public string? title { get; set; }
 
-        [Required] public string review { get; set; }
+        [Required] public string review { get; set; } = null!;
 
-        public string author { get; set; }
+        public string? author { get; set; }
 
         [Required] public Guid uuid { get; set; }
     }

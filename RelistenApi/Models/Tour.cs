@@ -11,9 +11,9 @@ namespace Relisten.Api.Models
         [Required] public Guid artist_uuid { get; set; }
         [Required] public DateTime? start_date { get; set; }
         [Required] public DateTime? end_date { get; set; }
-        [Required] public string name { get; set; }
-        [Required] public string slug { get; set; }
-        [Required] public string upstream_identifier { get; set; }
+        [Required] public string name { get; set; } = null!;
+        [Required] public string slug { get; set; } = null!;
+        [Required] public string upstream_identifier { get; set; } = null!;
         [Required] public Guid uuid { get; set; }
     }
 
@@ -24,6 +24,6 @@ namespace Relisten.Api.Models
 
     public class TourWithShows : Tour
     {
-        [Required] public IEnumerable<Show> shows { get; set; }
+        [Required] public IEnumerable<Show> shows { get; set; } = null!;
     }
 }

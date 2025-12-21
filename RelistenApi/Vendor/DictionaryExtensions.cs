@@ -1,13 +1,14 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Relisten.Vendor
 {
     public static class DictionaryExtensions
     {
-        public static TV GetValue<TK, TV>(this IDictionary<TK, TV> dict, TK key, TV defaultValue = default)
+        [return: MaybeNull]
+        public static TV GetValue<TK, TV>(this IDictionary<TK, TV> dict, TK key, [AllowNull] TV defaultValue = default!)
         {
-            TV value;
-            return dict.TryGetValue(key, out value) ? value : defaultValue;
+            return dict.TryGetValue(key, out var value) ? value : defaultValue;
         }
     }
 }

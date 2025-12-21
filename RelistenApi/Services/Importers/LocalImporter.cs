@@ -23,14 +23,14 @@ namespace Relisten.Import
 
         private readonly LinkService linkService;
 
-        private readonly IDictionary<string, Era> yearToEraMapping = new Dictionary<string, Era>();
-        private IDictionary<string, Era> existingEras = new Dictionary<string, Era>();
-        private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
-        private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
+        private readonly IDictionary<string, Era?> yearToEraMapping = new Dictionary<string, Era?>();
+        private IDictionary<string, Era?> existingEras = new Dictionary<string, Era?>();
+        private IDictionary<string, SetlistShow?> existingSetlistShows = new Dictionary<string, SetlistShow?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
 
-        private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
-        private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
-        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
+        private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
+        private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
+        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
 
         public LocalImporter(
             DbService db,
@@ -89,7 +89,7 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             await PreloadData(artist);
 
@@ -110,7 +110,7 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
@@ -118,22 +118,26 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingSources = (await _sourceService.AllForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(venue => venue.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 
             existingEras = (await _eraService.AllForArtist(artist)).GroupBy(era => era.name)
-                .ToDictionary(grp => grp.Key, grp => grp.First());
+                .ToDictionary(grp => grp.Key, grp => (Era?)grp.First());
 
             existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(venue => venue.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
             existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
-                .GroupBy(show => show.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(show => show.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistShow?)grp.First());
 
             existingSetlistSongs = (await _setlistSongService.AllForArtist(artist))
-                .GroupBy(song => song.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(song => song.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
         }
 
         private string LocalApiUrl(string api)
@@ -142,23 +146,23 @@ namespace Relisten.Import
                 $"https://audio.relisten.net/{api}.json";
         }
 
-        private async Task<LocalRootObject<T>> LocalApiRequest<T>(string apiRoute, PerformContext ctx)
+        private async Task<LocalRootObject<T>> LocalApiRequest<T>(string apiRoute, PerformContext? ctx)
         {
             var url = LocalApiUrl(apiRoute);
             ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
-            return JsonConvert.DeserializeObject<LocalRootObject<T>>(await resp.Content.ReadAsStringAsync());
+            return JsonConvert.DeserializeObject<LocalRootObject<T>>(await resp.Content.ReadAsStringAsync())!;
         }
 
-        private async Task<LocalShowObject> LocalShowRequest(string apiRoute, PerformContext ctx)
+        private async Task<LocalShowObject> LocalShowRequest(string apiRoute, PerformContext? ctx)
         {
             var url = LocalApiUrl(apiRoute);
             ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
-            return JsonConvert.DeserializeObject<LocalShowObject>(await resp.Content.ReadAsStringAsync());
+            return JsonConvert.DeserializeObject<LocalShowObject>(await resp.Content.ReadAsStringAsync())!;
         }
 
-        public async Task<ImportStats> ProcessVenues(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
+        public async Task<ImportStats> ProcessVenues(Artist artist, ArtistUpstreamSource src, PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -167,7 +171,7 @@ namespace Relisten.Import
                 foreach (LocalShow show in day)
                 {
                     var upstreamId = $"{show.venue} {show.city}, {show.state}";
-                    var dbVenue = existingVenues.GetValue(upstreamId);
+                    VenueWithShowCount? dbVenue = existingVenues.GetValue(upstreamId);
 
                     if (dbVenue == null)
                     {
@@ -198,7 +202,7 @@ namespace Relisten.Import
 
                         await _venueService.Save(dbVenue);
 
-                        existingVenues[dbVenue.upstream_identifier] = dbVenue;
+                        existingVenues[dbVenue.upstream_identifier] = dbVenue!;
 
                         stats.Updated++;
                     }
@@ -232,10 +236,8 @@ namespace Relisten.Import
         private async Task ProcessSetlistShow(ImportStats stats, LocalShow show, Artist artist,
             ArtistUpstreamSource src, Source dbSource, IDictionary<string, SourceSet> sets)
         {
-            var dbShow = existingSetlistShows.GetValue(show.date);
+            SetlistShow? dbShow = existingSetlistShows.GetValue(show.date);
             var venueUpstreamId = $"{show.venue} {show.city}, {show.state}";
-
-            var addSongs = false;
 
             if (dbShow == null)
             {
@@ -244,7 +246,7 @@ namespace Relisten.Import
                     artist_id = artist.id,
                     upstream_identifier = show.date,
                     date = DateTime.Parse(show.date),
-                    venue_id = existingVenues[venueUpstreamId].id,
+                    venue_id = existingVenues[venueUpstreamId]!.id,
                     // tour_id = existingTours[show.tour_id.ToString()].id,
                     // era_id = yearToEraMapping
                     //     .GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]).id,
@@ -253,12 +255,11 @@ namespace Relisten.Import
 
                 stats.Created++;
 
-                addSongs = true;
             }
             else if (show.updated_at > dbShow.updated_at)
             {
                 dbShow.date = DateTime.Parse(show.date);
-                dbShow.venue_id = existingVenues[venueUpstreamId].id;
+                dbShow.venue_id = existingVenues[venueUpstreamId]!.id;
                 // dbShow.tour_id = existingTours[show.tour_id.ToString()].id;
                 // dbShow.era_id = yearToEraMapping
                 //     .GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]).id;
@@ -268,7 +269,6 @@ namespace Relisten.Import
 
                 stats.Updated++;
 
-                addSongs = true;
             }
 
             // if (addSongs)
@@ -285,7 +285,7 @@ namespace Relisten.Import
         }
 
         private async Task<Source> ProcessShow(ImportStats stats, Artist artist, string date, IList<LocalShow> fullShows,
-            ArtistUpstreamSource src, Source dbSource, PerformContext ctx)
+            ArtistUpstreamSource src, Source dbSource, PerformContext? ctx)
         {
 
             var sets = new Dictionary<string, SourceSet>();
@@ -365,7 +365,7 @@ namespace Relisten.Import
             return dbSource;
         }
 
-        public async Task<ImportStats> ProcessShows(Artist artist, ArtistUpstreamSource src, PerformContext ctx)
+        public async Task<ImportStats> ProcessShows(Artist artist, ArtistUpstreamSource src, PerformContext? ctx)
         {
             var stats = new ImportStats();
 
@@ -403,7 +403,7 @@ namespace Relisten.Import
                     TransactionScopeAsyncFlowOption.Enabled);
 
                 var firstShow = shows.First();
-                var dbSource = existingSources.GetValue(date);
+                Source? dbSource = existingSources.GetValue(date);
                 var venueUpstreamId = $"{firstShow.venue} {firstShow.city}, {firstShow.state}";
 
                 if (dbSource == null)
@@ -413,7 +413,7 @@ namespace Relisten.Import
                         {
                             updated_at = firstShow.updated_at,
                             artist_id = artist.id,
-                            venue_id = existingVenues[venueUpstreamId].id,
+                            venue_id = existingVenues[venueUpstreamId]!.id,
                             display_date = date,
                             upstream_identifier = date,
                             is_soundboard = false,
@@ -422,7 +422,7 @@ namespace Relisten.Import
                             taper_notes = ""
                         }, ctx);
 
-                    existingSources[dbSource.upstream_identifier] = dbSource;
+                    existingSources[dbSource.upstream_identifier] = dbSource!;
 
                     stats.Created++;
 
@@ -444,7 +444,7 @@ namespace Relisten.Import
                 else if (firstShow.updated_at > dbSource.updated_at)
                 {
                     dbSource.updated_at = firstShow.updated_at;
-                    dbSource.venue_id = existingVenues[venueUpstreamId].id;
+                    dbSource.venue_id = existingVenues[venueUpstreamId]!.id;
                     dbSource.display_date = date;
                     dbSource.upstream_identifier = date;
                     dbSource.is_soundboard = firstShow.sbd;
@@ -454,7 +454,7 @@ namespace Relisten.Import
 
                     dbSource = await ProcessShow(stats, artist, date, shows, src, dbSource, ctx);
 
-                    existingSources[dbSource.upstream_identifier] = dbSource;
+                    existingSources[dbSource.upstream_identifier] = dbSource!;
 
                     stats.Updated++;
                 }

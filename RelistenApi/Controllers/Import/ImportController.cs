@@ -27,9 +27,9 @@ namespace Relisten.Controllers
             _importer = importer;
         }
 
-        protected ImporterService _importer { get; set; }
-        protected ScheduledService _scheduledService { get; set; }
-        protected IConfiguration _configuration { get; }
+        private readonly ImporterService _importer;
+        private readonly ScheduledService _scheduledService;
+        private readonly IConfiguration _configuration;
 
         [HttpGet("{idOrSlug}")]
         [Authorize]

@@ -50,11 +50,11 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         [Queue("artist_import")]
         [DisplayName("Index archive.org Artists")]
-        public async Task IndexArchiveOrgArtists(PerformContext context, bool allowedInDev = false)
+        public async Task IndexArchiveOrgArtists(PerformContext? context, bool allowedInDev = false)
         {
             if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
-                context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
                 return;
             }
 
@@ -66,82 +66,103 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         [Queue("artist_import")]
         [DisplayName("Refresh All Artists")]
-        public async Task RefreshAllArtists(PerformContext context, bool allowedInDev = false)
+        public async Task RefreshAllArtists(PerformContext? context, bool allowedInDev = false)
         {
             if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
-                context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
                 return;
             }
 
             var artists = (await _artistService.All()).ToList();
 
-            context.WriteLine($"--> Updating all {artists.Count} artists");
+            context?.WriteLine($"--> Updating all {artists.Count} artists");
 
             foreach (var artist in artists)
             {
-                context.WriteLine($"--> Queueing {artist.name} ({artist.slug})");
+                context?.WriteLine($"--> Queueing {artist.name} ({artist.slug})");
                 BackgroundJob.Enqueue(() => RefreshArtist(artist.slug, false, null));
             }
 
-            context.WriteLine("--> Queued updates for all artists! ");
+            context?.WriteLine("--> Queued updates for all artists! ");
         }
 
         [AutomaticRetry(Attempts = 0)]
         [Queue("artist_import")]
         [DisplayName("Rebuild All Artists Shows/Years")]
-        public async Task RebuildAllArtists(PerformContext context)
+        public async Task RebuildAllArtists(PerformContext? context)
         {
             if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
-                context.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
                 return;
             }
 
             var artists = (await _artistService.All()).ToList();
 
-            context.WriteLine($"--> Rebuilding all {artists.Count} artists");
-            var bar = context.WriteProgressBar();
+            context?.WriteLine($"--> Rebuilding all {artists.Count} artists");
+            var bar = context?.WriteProgressBar();
 
-            await artists.AsyncForEachWithProgress(bar, async artist =>
+            Func<Artist, Task> rebuildArtist = async artist => { await _importerService.Rebuild(artist, context); };
+
+            if (bar == null)
             {
-                await _importerService.Rebuild(artist, context);
-            });
+                foreach (var artist in artists)
+                {
+                    await rebuildArtist(artist);
+                }
+            }
+            else
+            {
+                await artists.AsyncForEachWithProgress(bar, rebuildArtist);
+            }
 
-            context.WriteLine("--> Rebuilt all artists! ");
+            context?.WriteLine("--> Rebuilt all artists! ");
         }
 
         // this actually runs all of them without enqueing anything else
         [Queue("artist_import")]
         [AutomaticRetry(Attempts = 0)]
-        private async Task __old(PerformContext context)
+        private async Task __old(PerformContext? context)
         {
             var artists = (await _artistService.All()).ToList();
 
-            context.WriteLine($"--> Updating all {artists.Count} artists");
+            context?.WriteLine($"--> Updating all {artists.Count} artists");
 
-            var progress = context.WriteProgressBar();
+            var progress = context?.WriteProgressBar();
 
             var stats = new ImportStats();
 
-            await artists.AsyncForEachWithProgress(progress, async artist =>
+            Func<Artist, Task> importArtist = async artist =>
             {
-                context.WriteLine($"--> Importing {artist.name}");
+                context?.WriteLine($"--> Importing {artist.name}");
 
                 var artistStats = await _importerService.Import(artist, null, context);
 
-                context.WriteLine($"--> Imported {artist.name}! " + artistStats);
+                context?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 
                 stats += artistStats;
-            });
+            };
 
-            context.WriteLine("--> Imported all artists! " + stats);
+            if (progress == null)
+            {
+                foreach (var artist in artists)
+                {
+                    await importArtist(artist);
+                }
+            }
+            else
+            {
+                await artists.AsyncForEachWithProgress(progress, importArtist);
+            }
+
+            context?.WriteLine("--> Imported all artists! " + stats);
         }
 
         [Queue("artist_import")]
         [DisplayName("Refresh Artist: {0}")]
         [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext ctx)
+        public async Task RefreshArtist(string idOrSlug, bool deleteOldContent, PerformContext? ctx)
         {
             await RefreshArtist(idOrSlug, null, deleteOldContent, null, ctx);
         }
@@ -149,7 +170,7 @@ namespace Relisten
         [Queue("artist_import")]
         [DisplayName("Refresh from Phish.in")]
         [AutomaticRetry(Attempts = 0)]
-        public async Task RefreshPhishFromPhishinOnly(PerformContext ctx)
+        public async Task RefreshPhishFromPhishinOnly(PerformContext? ctx)
         {
             await RefreshArtist("phish", null,
                 false, u => u.upstream_source_id == 3 /* phish.in */, ctx);
@@ -160,9 +181,9 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         public async Task RefreshArtist(
             string idOrSlug,
-            string specificShowId,
+            string? specificShowId,
             bool deleteOldContent,
-            PerformContext ctx
+            PerformContext? ctx
         )
         {
             await RefreshArtist(idOrSlug, specificShowId, deleteOldContent, null, ctx);
@@ -173,13 +194,19 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         public async Task RefreshArtist(
             string idOrSlug,
-            string specificShowId,
+            string? specificShowId,
             bool deleteOldContent,
-            Func<ArtistUpstreamSource, bool> filterUpstreamSources,
-            PerformContext ctx
+            Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+            PerformContext? ctx
         )
         {
             var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+
+            if (artist == null)
+            {
+                ctx?.WriteLine($"No artist found for {idOrSlug}");
+                return;
+            }
 
             if (artistsCurrentlySyncing.ContainsKey(artist.id))
             {
@@ -234,7 +261,7 @@ namespace Relisten
         [Queue("artist_import")]
         [DisplayName("Backfill JerryGarcia Venues: {0}")]
         [AutomaticRetry(Attempts = 0)]
-        public async Task BackfillJerryGarciaVenues(string artistSlug, PerformContext ctx)
+        public async Task BackfillJerryGarciaVenues(string artistSlug, PerformContext? ctx)
         {
             var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
 

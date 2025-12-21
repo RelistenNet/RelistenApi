@@ -24,9 +24,9 @@ namespace Relisten.Api.Models
         [V2JsonOnly] [Required] public int? venue_id { get; set; }
 
         [Required] public Guid? venue_uuid { get; set; }
-        public Venue venue { get; set; }
+        public Venue venue { get; set; } = null!;
 
-        [Required] public string display_date { get; set; }
+        [Required] public string display_date { get; set; } = null!;
 
         [Required] public bool is_soundboard { get; set; }
 
@@ -44,7 +44,7 @@ namespace Relisten.Api.Models
 
         public double duration { get; set; }
 
-        [Required] public string upstream_identifier { get; set; }
+        [Required] public string upstream_identifier { get; set; } = null!;
 
         [Required] public Guid uuid { get; set; }
     }
@@ -55,9 +55,9 @@ namespace Relisten.Api.Models
 
         [Required] public Guid? show_uuid { get; set; }
 
-        public Show show { get; set; }
+        public Show show { get; set; } = null!;
 
-        [Required] public SlimArtistWithFeatures artist { get; set; }
+        [Required] public SlimArtistWithFeatures artist { get; set; } = null!;
     }
 
     public class Source : SlimSource
@@ -65,14 +65,14 @@ namespace Relisten.Api.Models
         [V2JsonOnly] [Required] public int? show_id { get; set; }
 
         [Required] public Guid show_uuid { get; set; }
-        public Show show { get; set; }
+        public Show show { get; set; } = null!;
 
-        [Required] public string description { get; set; }
-        [Required] public string taper_notes { get; set; }
-        [Required] public string source { get; set; }
-        [Required] public string taper { get; set; }
-        [Required] public string transferrer { get; set; }
-        [Required] public string lineage { get; set; }
+        [Required] public string description { get; set; } = null!;
+        [Required] public string taper_notes { get; set; } = null!;
+        [Required] public string source { get; set; } = null!;
+        [Required] public string taper { get; set; } = null!;
+        [Required] public string transferrer { get; set; } = null!;
+        [Required] public string lineage { get; set; } = null!;
 
         [Required]
         [JsonConverter(typeof(StringEnumConverter))]
@@ -83,7 +83,7 @@ namespace Relisten.Api.Models
     {
         [V2JsonOnly] [Required] public int source_id { get; set; }
 
-        [Required] public string upstream_identifier { get; set; }
+        [Required] public string upstream_identifier { get; set; } = null!;
 
         [Required] public int review_count { get; set; }
 
@@ -96,8 +96,8 @@ namespace Relisten.Api.Models
 
         [Required] public int review_count { get; set; }
 
-        [Required] public IList<SourceSet> sets { get; set; }
+        [Required] public IList<SourceSet> sets { get; set; } = null!;
 
-        [Required] public IList<Link> links { get; set; }
+        [Required] public IList<Link> links { get; set; } = null!;
     }
 }

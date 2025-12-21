@@ -10,7 +10,7 @@ public static class ArchiveOrgImporterUtils
     private static readonly Regex ExtractDateFromIdentifier = new(@"(\d{4}-\d{2}-\d{2})");
 
     // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
-    public static string FixDisplayDate(Metadata meta)
+    public static string? FixDisplayDate(Metadata? meta)
     {
         if (meta == null || string.IsNullOrEmpty(meta.date))
         {
@@ -100,7 +100,7 @@ public static class ArchiveOrgImporterUtils
             DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out _);
     }
 
-    private static string TryFlippingMonthAndDate(string date)
+    private static string? TryFlippingMonthAndDate(string date)
     {
         // not a valid date
         var parts = date.Split('-');

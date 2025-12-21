@@ -13,11 +13,11 @@ namespace Relisten.Api.Models
         public double? latitude { get; set; }
         public double? longitude { get; set; }
 
-        [Required] public string name { get; set; }
-        [Required] public string location { get; set; }
-        [Required] public string upstream_identifier { get; set; }
-        [Required] public string slug { get; set; }
-        public string past_names { get; set; }
+        [Required] public string name { get; set; } = null!;
+        [Required] public string location { get; set; } = null!;
+        [Required] public string upstream_identifier { get; set; } = null!;
+        [Required] public string slug { get; set; } = null!;
+        public string? past_names { get; set; }
 
         [Required]
         public string sortName
@@ -43,6 +43,6 @@ namespace Relisten.Api.Models
 
     public class VenueWithShows : VenueWithShowCount
     {
-        [Required] public List<Show> shows { get; set; }
+        [Required] public List<Show> shows { get; set; } = null!;
     }
 }

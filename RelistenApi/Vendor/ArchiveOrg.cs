@@ -14,7 +14,7 @@ namespace Relisten.Vendor.ArchiveOrg
             return "";
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
             // Load JObject from stream 
@@ -47,7 +47,7 @@ namespace Relisten.Vendor.ArchiveOrg
             return objectType == typeof(List<T>);
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
             var token = JToken.Load(reader);
@@ -56,12 +56,12 @@ namespace Relisten.Vendor.ArchiveOrg
                 return token.ToObject<List<T>>();
             }
 
-            return new List<T> {token.ToObject<T>()};
+            return new List<T> {token.ToObject<T>()!};
         }
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
         {
-            var list = (List<T>)value;
+            var list = (List<T>)value!;
             if (list.Count == 1)
             {
                 value = list[0];
@@ -90,18 +90,21 @@ namespace Relisten.Vendor.ArchiveOrg
             return min;
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue,
+        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
             // Load JObject from stream 
             if (reader.TokenType == JsonToken.String)
             {
-                var s = reader
-                    .Value
-                    .ToString()
+                var s = reader.Value?.ToString();
 
-                    // wtf is this archive.org??
-                    .Replace("T::Z", "T00:00:00Z");
+                if (string.IsNullOrEmpty(s))
+                {
+                    return reader.Value;
+                }
+
+                // wtf is this archive.org??
+                s = s.Replace("T::Z", "T00:00:00Z");
 
                 // really. what the hell are you doing archive.org?!
                 if (s == "0000-01-01T00:00:00Z")
@@ -127,12 +130,12 @@ namespace Relisten.Vendor.ArchiveOrg
 
     public class SearchParams
     {
-        public string q { get; set; }
-        public string qin { get; set; }
-        public string fl { get; set; }
-        public string wt { get; set; }
-        public string sort { get; set; }
-        public string rows { get; set; }
+        public string q { get; set; } = null!;
+        public string qin { get; set; } = null!;
+        public string fl { get; set; } = null!;
+        public string wt { get; set; } = null!;
+        public string sort { get; set; } = null!;
+        public string rows { get; set; } = null!;
         public int start { get; set; }
     }
 
@@ -141,19 +144,19 @@ namespace Relisten.Vendor.ArchiveOrg
         public int status { get; set; }
         public int QTime { get; set; }
 
-        [JsonProperty("@params")] public SearchParams parameters { get; set; }
+        [JsonProperty("@params")] public SearchParams parameters { get; set; } = null!;
     }
 
     public class SearchDoc
     {
         private DateTime? _max;
         public DateTime date { get; set; }
-        public string identifier { get; set; }
+        public string identifier { get; set; } = null!;
         public DateTime? addeddate { get; set; }
         public DateTime? publicdate { get; set; }
 
         [JsonConverter(typeof(SingleOrArrayConverter<DateTime>))]
-        public List<DateTime> updatedate { get; set; }
+        public List<DateTime> updatedate { get; set; } = null!;
 
         public DateTime? reviewdate { get; set; }
         public DateTime? indexdate { get; set; }
@@ -165,7 +168,7 @@ namespace Relisten.Vendor.ArchiveOrg
                 if (_max == null)
                 {
                     _max = new[] {addeddate, publicdate, reviewdate /*, indexdate*/}
-                        .Where(d => d.HasValue).Max().Value;
+                        .Where(d => d.HasValue).Max()!.Value;
                 }
 
                 return _max.Value;
@@ -187,7 +190,7 @@ namespace Relisten.Vendor.ArchiveOrg
                         $"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible...");
                 }
 
-                return dates.Max().Value;
+                return dates.Max()!.Value;
             }
         }
     }
@@ -196,13 +199,13 @@ namespace Relisten.Vendor.ArchiveOrg
     {
         public int numFound { get; set; }
         public int start { get; set; }
-        public IList<SearchDoc> docs { get; set; }
+        public IList<SearchDoc> docs { get; set; } = null!;
     }
 
     public class SearchRootObject
     {
-        public SearchResponseHeader responseHeader { get; set; }
-        public SearchResponse response { get; set; }
+        public SearchResponseHeader responseHeader { get; set; } = null!;
+        public SearchResponse response { get; set; } = null!;
     }
 }
 
@@ -210,36 +213,36 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
 {
     public class File
     {
-        public string name { get; set; }
-        public string format { get; set; }
-        public string size { get; set; }
-        public string md5 { get; set; }
-        public string length { get; set; }
-        public string title { get; set; }
-        public string track { get; set; }
-        public string original { get; set; }
+        public string name { get; set; } = null!;
+        public string format { get; set; } = null!;
+        public string size { get; set; } = null!;
+        public string md5 { get; set; } = null!;
+        public string length { get; set; } = null!;
+        public string title { get; set; } = null!;
+        public string track { get; set; } = null!;
+        public string original { get; set; } = null!;
     }
 
     public class Metadata
     {
-        public string identifier { get; set; }
-        public string date { get; set; }
-        public string title { get; set; }
-        public string description { get; set; }
-        public string venue { get; set; }
-        public string coverage { get; set; }
-        public string source { get; set; }
-        public string lineage { get; set; }
-        public string taper { get; set; }
-        public string transferer { get; set; }
-        public string notes { get; set; }
+        public string identifier { get; set; } = null!;
+        public string date { get; set; } = null!;
+        public string title { get; set; } = null!;
+        public string description { get; set; } = null!;
+        public string venue { get; set; } = null!;
+        public string coverage { get; set; } = null!;
+        public string source { get; set; } = null!;
+        public string lineage { get; set; } = null!;
+        public string taper { get; set; } = null!;
+        public string transferer { get; set; } = null!;
+        public string notes { get; set; } = null!;
     }
 
     public class Review
     {
-        public string reviewbody { get; set; }
-        public string reviewtitle { get; set; }
-        public string reviewer { get; set; }
+        public string reviewbody { get; set; } = null!;
+        public string reviewtitle { get; set; } = null!;
+        public string reviewer { get; set; } = null!;
         public DateTime reviewdate { get; set; }
         public DateTime createdate { get; set; }
         public int stars { get; set; }
@@ -249,17 +252,17 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
     {
         public int created { get; set; }
         public bool? is_dark { get; set; }
-        public string d1 { get; set; }
-        public string d2 { get; set; }
-        public string dir { get; set; }
-        public List<File> files { get; set; }
+        public string d1 { get; set; } = null!;
+        public string d2 { get; set; } = null!;
+        public string dir { get; set; } = null!;
+        public List<File> files { get; set; } = null!;
         public int files_count { get; set; }
         public long item_size { get; set; }
-        public Metadata metadata { get; set; }
-        public List<Review> reviews { get; set; }
-        public string server { get; set; }
+        public Metadata metadata { get; set; } = null!;
+        public List<Review> reviews { get; set; } = null!;
+        public string server { get; set; } = null!;
         public int uniq { get; set; }
         public int updated { get; set; }
-        public List<string> workable_servers { get; set; }
+        public List<string> workable_servers { get; set; } = null!;
     }
 }

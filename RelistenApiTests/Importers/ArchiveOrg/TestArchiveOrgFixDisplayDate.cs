@@ -11,7 +11,7 @@ public class TestArchiveOrgFixDisplayDate
     private static string InvokeFixDisplayDate(string date)
     {
         var meta = new Metadata { date = date, identifier = "id" };
-        return ArchiveOrgImporterUtils.FixDisplayDate(meta);
+        return ArchiveOrgImporterUtils.FixDisplayDate(meta)!;
     }
 
     [Test]

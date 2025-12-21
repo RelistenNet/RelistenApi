@@ -19,9 +19,9 @@ namespace Relisten.Api.Models
         [Required] public bool is_encore { get; set; }
 
 
-        [Required] public string name { get; set; }
+        [Required] public string name { get; set; } = null!;
 
 
-        [Required] public IList<SourceTrack> tracks { get; set; }
+        [Required] public IList<SourceTrack> tracks { get; set; } = null!;
     }
 }

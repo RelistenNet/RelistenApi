@@ -41,9 +41,9 @@ namespace Relisten.Data
             ", new {artistId = artist.id}));
         }
 
-        public async Task<SetlistSongWithShows> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
+        public async Task<SetlistSongWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
         {
-            SetlistSongWithShows bigSong = null;
+            SetlistSongWithShows? bigSong = null;
             await db.WithConnection(con =>
                 con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
                 SELECT
@@ -107,10 +107,10 @@ namespace Relisten.Data
 
                         year.artist_uuid = artist.uuid;
 
-                        show.venue = venue;
-                        show.tour = tour;
-                        show.era = era;
-                        show.year = year;
+                        show.venue = venue!;
+                        show.tour = tour!;
+                        show.era = era!;
+                        show.year = year!;
 
                         show.venue_uuid = venue?.uuid;
                         show.tour_uuid = tour?.uuid;

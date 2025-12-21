@@ -45,8 +45,8 @@ namespace Relisten.Controllers
         public async Task<IActionResult> PlayedTrack(
             [FromQuery] string app_type,
             [FromQuery] int? track_id = null,
-            [FromQuery] string track_uuid = null,
-            [FromQuery] string user_uuid = null
+            [FromQuery] string? track_uuid = null,
+            [FromQuery] string? user_uuid = null
         )
         {
             if (app_type != "ios" && app_type != "web" && app_type != "sonos" && app_type != "android")
@@ -65,7 +65,7 @@ namespace Relisten.Controllers
                 return BadRequest("Invalid track_uuid format");
             }
 
-            SourceTrack track = null;
+            SourceTrack? track = null;
 
             if (track_uuid != null && track_guid != Guid.Empty)
             {

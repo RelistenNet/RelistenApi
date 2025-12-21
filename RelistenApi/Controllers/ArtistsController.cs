@@ -94,7 +94,7 @@ namespace Relisten.Controllers
 
             if (cacheResult.HasValue && !cacheResult.IsNullOrEmpty)
             {
-                return Content(cacheResult, "application/json");
+                return Content(cacheResult.ToString(), "application/json");
             }
 
             var yearsTask = yearService.AllForArtist(art);
@@ -151,7 +151,7 @@ namespace Relisten.Controllers
 
     public class CreateUpdateArtistDto
     {
-        public SlimArtistWithFeatures SlimArtist { get; set; }
-        public IEnumerable<SlimArtistUpstreamSource> SlimUpstreamSources { get; set; }
+        public SlimArtistWithFeatures SlimArtist { get; set; } = null!;
+        public IEnumerable<SlimArtistUpstreamSource> SlimUpstreamSources { get; set; } = null!;
     }
 }

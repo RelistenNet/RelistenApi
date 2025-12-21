@@ -14,9 +14,9 @@ namespace Relisten.Api.Models.Api
 
         [Required] public ApiErrorCode error_code { get; set; }
 
-        [Required] public T data { get; set; }
+        [Required] public T? data { get; set; }
 
-        public static ResponseEnvelope<T> Success(T data = default)
+        public static ResponseEnvelope<T> Success(T? data = default)
         {
             var r = new ResponseEnvelope<T>();
             r.success = true;
@@ -25,7 +25,7 @@ namespace Relisten.Api.Models.Api
             return r;
         }
 
-        public static ResponseEnvelope<T> Error(ApiErrorCode code, T data = default)
+        public static ResponseEnvelope<T> Error(ApiErrorCode code, T? data = default)
         {
             var r = new ResponseEnvelope<T>();
             r.success = false;

@@ -22,7 +22,7 @@ namespace Relisten.Data
             ", new {source_ids}));
         }
 
-        public async Task<SourceSet> Update(Source source, SourceSet set)
+        public async Task<SourceSet?> Update(Source source, SourceSet set)
         {
             var l = new List<SourceSet>();
             l.Add(set);

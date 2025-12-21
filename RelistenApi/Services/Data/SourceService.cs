@@ -7,22 +7,21 @@ using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
-    public class EntityOneToManyMapper<TP, TC, TPk>
+    public class EntityOneToManyMapper<TP, TC, TPk> where TPk : notnull
     {
         private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
 
-        public Action<TP, TC> AddChildAction { get; set; }
+        public Action<TP, TC> AddChildAction { get; set; } = null!;
 
-        public Func<TP, TPk> ParentKey { get; set; }
+        public Func<TP, TPk> ParentKey { get; set; } = null!;
 
 
         public virtual TP Map(TP parent, TC child)
         {
-            TP entity;
             var found = true;
             var primaryKey = ParentKey(parent);
 
-            if (!_lookup.TryGetValue(primaryKey, out entity))
+            if (!_lookup.TryGetValue(primaryKey, out var entity))
             {
                 _lookup.Add(primaryKey, parent);
                 entity = parent;
@@ -31,7 +30,7 @@ namespace Relisten.Data
 
             AddChildAction(entity, child);
 
-            return !found ? entity : default;
+            return !found ? entity : default!;
         }
     }
 
@@ -47,7 +46,7 @@ namespace Relisten.Data
 
         private SourceSetService _sourceSetService { get; }
 
-        public async Task<Source> ForUpstreamIdentifier(Artist artist, string upstreamId)
+        public async Task<Source?> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Source>(@"
                 SELECT

@@ -33,7 +33,19 @@ namespace Relisten.Import
 
         private readonly LinkService linkService;
 
-        private IDictionary<string, Source> existingSources = new Dictionary<string, Source>();
+        private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
+
+        private class PanicStreamSourceGroup
+        {
+            public string SourceName { get; init; } = null!;
+            public IList<PanicStreamTrack> Tracks { get; init; } = null!;
+        }
+
+        private class PanicStreamShowGroup
+        {
+            public string ShowDate { get; init; } = null!;
+            public IEnumerable<PanicStreamSourceGroup> Sources { get; init; } = null!;
+        }
 
         public PanicStreamComImporter(
             DbService db,
@@ -76,7 +88,7 @@ namespace Relisten.Import
             return ImportableData.Sources;
         }
 
-        private async Task<string> FetchUrl(string url, PerformContext ctx)
+        private async Task<string> FetchUrl(string url, PerformContext? ctx)
         {
             url = url.Replace("&amp;", "&");
             ctx?.WriteLine("Fetching URL: " + url);
@@ -110,14 +122,14 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var stats = new ImportStats();
 
             await PreloadData(artist);
 
             var contents = await FetchUrl(PanicIndexUrl(), ctx);
-            var tracks = JsonConvert.DeserializeObject<List<PanicStreamTrack>>(contents);
+            var tracks = JsonConvert.DeserializeObject<List<PanicStreamTrack>>(contents) ?? new List<PanicStreamTrack>();
 
             var tracksByShow = tracks
                 .Where(t => t.SourceName != null)
@@ -127,7 +139,16 @@ namespace Relisten.Import
                     ShowDate = g.Key,
                     Sources = g
                         .GroupBy(subg => subg.SourceName)
-                        .Select(subg => new {SourceName = subg.Key, Tracks = subg.ToList()})
+                        .Select(subg => new PanicStreamSourceGroup
+                        {
+                            SourceName = subg.Key!,
+                            Tracks = subg.ToList()
+                        })
+                })
+                .Select(g => new PanicStreamShowGroup
+                {
+                    ShowDate = g.ShowDate!,
+                    Sources = g.Sources
                 })
                 .ToList();
 
@@ -135,7 +156,7 @@ namespace Relisten.Import
 
             var prog = ctx?.WriteProgressBar();
 
-            await tracksByShow.AsyncForEachWithProgress(prog, async grp =>
+            Func<PanicStreamShowGroup, Task> processGroup = async grp =>
             {
                 foreach (var source in grp.Sources)
                 {
@@ -151,7 +172,19 @@ namespace Relisten.Import
                         ctx?.WriteLine(JsonConvert.SerializeObject(source));
                     }
                 }
-            });
+            };
+
+            if (prog == null)
+            {
+                foreach (var grp in tracksByShow)
+                {
+                    await processGroup(grp);
+                }
+            }
+            else
+            {
+                await tracksByShow.AsyncForEachWithProgress(prog, processGroup);
+            }
 
             ctx?.WriteLine("Rebuilding shows...");
             await RebuildShows(artist);
@@ -163,7 +196,7 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
@@ -171,18 +204,19 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingSources = (await _sourceService.AllForArtist(artist))
-                .GroupBy(src => src.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(src => src.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
         }
 
         private async Task ProcessShow(ImportStats stats, Artist artist, ArtistUpstreamSource upstreamSrc,
-            string showDate, string sourceName, IList<PanicStreamTrack> sourceTracks, PerformContext ctx)
+            string showDate, string sourceName, IList<PanicStreamTrack> sourceTracks, PerformContext? ctx)
         {
             var upstreamId = sourceName;
-            var dbSource = existingSources.GetValue(upstreamId);
+            Source? dbSource = existingSources.GetValue(upstreamId);
 
             var panicUpdatedAt = sourceTracks
-                .Where(t => t.System.ParsedModificationTime.HasValue)
-                .Max(t => t.System.ParsedModificationTime.Value);
+                .Where(t => t.System!.ParsedModificationTime.HasValue)
+                .Max(t => t.System!.ParsedModificationTime!.Value);
 
             if (dbSource != null && dbSource.updated_at <= panicUpdatedAt)
             {
@@ -208,12 +242,12 @@ namespace Relisten.Import
 
             if (isUpdate)
             {
-                src.id = dbSource.id;
+                src.id = dbSource!.id;
             }
 
             dbSource = await _sourceService.Save(src);
 
-            existingSources[dbSource.upstream_identifier] = dbSource;
+            existingSources[dbSource.upstream_identifier] = dbSource!;
 
             if (isUpdate)
             {
@@ -255,7 +289,7 @@ namespace Relisten.Import
                 .OrderBy(t => t.FileName)
                 .Select(t =>
                 {
-                    var trackName = t.FileName
+                    var trackName = t.FileName!
                         .Replace(".mp3", "")
                         .Replace(".MP3", "")
                         .Replace(".M4A", "")
@@ -274,12 +308,12 @@ namespace Relisten.Import
                     return new SourceTrack
                     {
                         source_id = dbSource.id,
-                        source_set_id = dbSet.id,
+                        source_set_id = dbSet!.id,
                         track_position = trackIndex,
                         duration = ((int?)t.Composite?.CalculatedDuration.TotalSeconds ?? (int?)0).Value,
                         title = trackName,
                         slug = SlugifyTrack(trackName),
-                        mp3_url = t.AbsoluteUrl(_configuration["PANIC_KEY"]),
+                        mp3_url = t.AbsoluteUrl(_configuration["PANIC_KEY"]!),
                         updated_at = panicUpdatedAt,
                         artist_id = artist.id
                     };
@@ -297,7 +331,7 @@ namespace Relisten.Import.PanicStream
 {
     public class PanicStreamShowSystem
     {
-        public string FileModifyDate { get; set; }
+        public string FileModifyDate { get; set; } = null!;
 
         public DateTime? ParsedModificationTime
         {
@@ -317,7 +351,7 @@ namespace Relisten.Import.PanicStream
     public class PanicStreamShowComposite
     {
         private TimeSpan? _calculatedDuration;
-        public string Duration { get; set; }
+        public string Duration { get; set; } = null!;
 
         public TimeSpan CalculatedDuration
         {
@@ -352,16 +386,16 @@ namespace Relisten.Import.PanicStream
 
     public class PanicStreamTrack
     {
-        private string _fileName;
+        private string? _fileName;
 
-        private string _showDate;
+        private string? _showDate;
 
-        private string _sourceName;
-        public string SourceFile { get; set; }
+        private string? _sourceName;
+        public string SourceFile { get; set; } = null!;
 
-        public string FileName => SourceName != null ? _fileName : null;
+        public string? FileName => SourceName != null ? _fileName : null;
 
-        public string SourceName
+        public string? SourceName
         {
             get
             {
@@ -384,7 +418,7 @@ namespace Relisten.Import.PanicStream
             }
         }
 
-        public string ShowDate
+        public string? ShowDate
         {
             get
             {
@@ -397,8 +431,8 @@ namespace Relisten.Import.PanicStream
             }
         }
 
-        public PanicStreamShowSystem System { get; set; }
-        public PanicStreamShowComposite Composite { get; set; }
+        public PanicStreamShowSystem? System { get; set; }
+        public PanicStreamShowComposite? Composite { get; set; }
 
         public string AbsoluteUrl(string key)
         {

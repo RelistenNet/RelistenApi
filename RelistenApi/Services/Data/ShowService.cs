@@ -20,11 +20,11 @@ namespace Relisten.Data
         private SourceService _sourceService { get; }
 
         public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(
-            Artist artist,
+            Artist? artist,
             string where,
-            object parms,
+            object? parms,
             int? limit = null,
-            string orderBy = null,
+            string? orderBy = null,
             bool includeNestedObject = true
         ) where T : Show
         {
@@ -96,18 +96,18 @@ namespace Relisten.Data
         }
 
         public async Task<IEnumerable<Show>> ShowsForCriteria(
-            Artist artist,
+            Artist? artist,
             string where,
-            object parms,
+            object? parms,
             int? limit = null,
-            string orderBy = null,
+            string? orderBy = null,
             bool includeNestedObject = true)
         {
             return await ShowsForCriteriaGeneric<Show>(artist, where, parms, limit, orderBy, includeNestedObject);
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object parms,
-            int? limit = null, string orderBy = null)
+        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object? parms,
+            int? limit = null, string? orderBy = null)
         {
             orderBy = orderBy == null ? "display_date ASC" : orderBy;
             var limitClause = limit == null ? "" : "LIMIT " + limit;
@@ -176,7 +176,7 @@ namespace Relisten.Data
                 }, parms));
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(IReadOnlyList<Artist> artists = null,
+        public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(IReadOnlyList<Artist>? artists = null,
             int? shows = null, int? days = null)
         {
             if (shows == null && days == null)
@@ -220,7 +220,7 @@ namespace Relisten.Data
             ", new { }, shows, "s.display_date DESC");
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(IReadOnlyList<Artist> artists = null,
+        public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(IReadOnlyList<Artist>? artists = null,
             int? shows = null, int? days = null)
         {
             if (shows == null && days == null)
@@ -264,7 +264,7 @@ namespace Relisten.Data
             ", new { }, shows, "s.updated_at DESC");
         }
 
-        public Task<ShowWithSources> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
+        public Task<ShowWithSources?> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
         {
             return ShowWithSourcesForGeneric(
                 artist,
@@ -273,7 +273,7 @@ namespace Relisten.Data
             );
         }
 
-        public Task<ShowWithSources> ShowWithSourcesForUuid(Artist artist, Guid uuid)
+        public Task<ShowWithSources?> ShowWithSourcesForUuid(Artist artist, Guid uuid)
         {
             return ShowWithSourcesForGeneric(
                 artist,
@@ -282,7 +282,7 @@ namespace Relisten.Data
             );
         }
 
-        public async Task<ShowWithSources> ShowWithSourcesForGeneric(Artist artist, string where, object param)
+        public async Task<ShowWithSources?> ShowWithSourcesForGeneric(Artist artist, string where, object param)
         {
             var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist, where, param);
             var show = shows.FirstOrDefault();

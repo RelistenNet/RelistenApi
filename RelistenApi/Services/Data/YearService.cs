@@ -30,7 +30,7 @@ namespace Relisten.Data
             ", new {artistId = artist.id}));
         }
 
-        public async Task<YearWithShows> ForIdentifierWithShows(Artist artist, Identifier id)
+        public async Task<YearWithShows?> ForIdentifierWithShows(Artist artist, Identifier id)
         {
             var where = "";
 

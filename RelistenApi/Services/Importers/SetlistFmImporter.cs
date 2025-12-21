@@ -35,11 +35,11 @@ namespace Relisten.Import
             //.HandleResult<HttpResponseMessage>(r => r.StatusCode == HttpStatusCode.ServiceUnavailable)
             .WaitAndRetryAsync(7, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)));
 
-        private IDictionary<string, SetlistShow> existingSetlistShows = new Dictionary<string, SetlistShow>();
-        private IDictionary<string, SetlistSong> existingSetlistSongs = new Dictionary<string, SetlistSong>();
-        private IDictionary<string, Tour> existingTours = new Dictionary<string, Tour>();
+        private IDictionary<string, SetlistShow?> existingSetlistShows = new Dictionary<string, SetlistShow?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
+        private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
 
-        private IDictionary<string, VenueWithShowCount> existingVenues = new Dictionary<string, VenueWithShowCount>();
+        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
 
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
@@ -85,10 +85,10 @@ namespace Relisten.Import
         }
 
         public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext ctx)
+            PerformContext? ctx)
         {
             var page = 1;
-            Tuple<bool, ImportStats> result = null;
+            Tuple<bool, ImportStats>? result = null;
             var stats = ImportStats.None;
 
             await PreloadData(artist);
@@ -126,7 +126,7 @@ namespace Relisten.Import
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string showIdentifier, PerformContext ctx)
+            string? showIdentifier, PerformContext? ctx)
         {
             return Task.FromResult(new ImportStats());
         }
@@ -139,16 +139,19 @@ namespace Relisten.Import
         private async Task PreloadData(Artist artist)
         {
             existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(venue => venue.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
             existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
-                .GroupBy(show => show.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(show => show.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistShow?)grp.First());
 
             existingSetlistSongs = (await _setlistSongService.AllForArtist(artist))
-                .GroupBy(song => song.upstream_identifier).ToDictionary(grp => grp.Key, grp => grp.First());
+                .GroupBy(song => song.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
         }
 
         private async Task<ImportStats> ProcessSetlist(Artist artist, Setlist setlist)
@@ -157,7 +160,7 @@ namespace Relisten.Import
             var now = DateTime.UtcNow;
 
             // venue
-            Venue dbVenue = existingVenues.GetValue(setlist.venue._iguanaUpstreamId);
+            Venue? dbVenue = existingVenues.GetValue(setlist.venue._iguanaUpstreamId);
             if (dbVenue == null)
             {
                 var sc = new VenueWithShowCount
@@ -182,7 +185,7 @@ namespace Relisten.Import
             }
 
             // tour
-            Tour dbTour = null;
+            Tour? dbTour = null;
             if (artist.features.tours)
             {
                 var tour_upstream = setlist.tour?.name ?? "Not Part of a Tour";
@@ -200,7 +203,7 @@ namespace Relisten.Import
                         upstream_identifier = tour_upstream
                     });
 
-                    existingTours[dbTour.upstream_identifier] = dbTour;
+                    existingTours[dbTour.upstream_identifier] = dbTour!;
 
                     stats.Created++;
                 }
@@ -221,11 +224,11 @@ namespace Relisten.Import
                     updated_at = setlistLastUpdated,
                     date = date,
                     upstream_identifier = setlist.id,
-                    venue_id = dbVenue.id,
+                    venue_id = dbVenue!.id,
                     tour_id = artist.features.tours ? dbTour?.id : null
                 });
 
-                existingSetlistShows[dbShow.upstream_identifier] = dbShow;
+                existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
                 stats.Created++;
 
@@ -236,12 +239,12 @@ namespace Relisten.Import
                 dbShow.artist_id = artist.id;
                 dbShow.updated_at = setlistLastUpdated;
                 dbShow.date = date;
-                dbShow.venue_id = dbVenue.id;
+                dbShow.venue_id = dbVenue!.id;
                 dbShow.tour_id = dbTour?.id;
 
                 dbShow = await _setlistShowService.Save(dbShow);
 
-                existingSetlistShows[dbShow.upstream_identifier] = dbShow;
+                existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
                 stats.Updated++;
 
@@ -251,7 +254,7 @@ namespace Relisten.Import
             // setlist.fm doesn't provide much info about tours so we need to find the start
             // and end date ourselves.
             if (artist.features.tours &&
-                (dbTour.start_date == null
+                (dbTour!.start_date == null
                  || dbTour.end_date == null
                  || dbShow.date < dbTour.start_date
                  || dbShow.date > dbTour.end_date))
@@ -276,7 +279,10 @@ namespace Relisten.Import
                     .Select(grp => grp.First()).ToList();
 
                 var dbSongs = existingSetlistSongs.Where(kvp => songs.Select(song => song.Slug).Contains(kvp.Key))
-                    .Select(kvp => kvp.Value).ToList();
+                    .Select(kvp => kvp.Value)
+                    .Where(song => song != null)
+                    .Select(song => song!)
+                    .ToList();
 
                 if (songs.Count != dbSongs.Count)
                 {
@@ -300,17 +306,17 @@ namespace Relisten.Import
                     }
                 }
 
-                stats += await _setlistShowService.UpdateSongPlays(dbShow, dbSongs);
+                stats += await _setlistShowService.UpdateSongPlays(dbShow!, dbSongs);
             }
 
             return stats;
         }
 
         private async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(Artist artist, HttpResponseMessage res,
-            PerformContext ctx, IProgressBar prog)
+            PerformContext? ctx, IProgressBar? prog)
         {
             var body = await res.Content.ReadAsStringAsync();
-            SetlistsRootObject root = null;
+            SetlistsRootObject? root = null;
             try
             {
                 root = JsonConvert.DeserializeObject<SetlistsRootObject>(
@@ -323,14 +329,15 @@ namespace Relisten.Import
             }
             catch (JsonReaderException)
             {
-                ctx?.WriteLine("Failed to parse {0}:\n{1}", res.RequestMessage.RequestUri.ToString(), body);
+                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
+                ctx?.WriteLine("Failed to parse {0}:\n{1}", requestUri, body);
                 throw;
             }
 
             var stats = new ImportStats();
 
             var count = 1;
-            foreach (var setlist in root.setlist)
+            foreach (var setlist in root!.setlist)
             {
                 if (setlist.sets.set.Count > 0)
                 {
@@ -363,7 +370,7 @@ namespace Relisten.Import
                 }
             }
 
-            var hasMorePages = root.page < Math.Ceiling(1.0 * root.total / root.itemsPerPage);
+            var hasMorePages = root!.page < Math.Ceiling(1.0 * root.total / root.itemsPerPage);
 
             return new Tuple<bool, ImportStats>(hasMorePages, stats);
         }

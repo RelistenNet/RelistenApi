@@ -26,8 +26,8 @@ namespace Relisten.Controllers
             _sourceService = sourceService;
         }
 
-        public ShowService _showService { get; set; }
-        public SourceService _sourceService { get; set; }
+        private readonly ShowService _showService;
+        private readonly SourceService _sourceService;
 
         [HttpGet("v2/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
@@ -51,7 +51,7 @@ namespace Relisten.Controllers
 
         [HttpGet("v2/shows/recently-performed")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-        public async Task<IActionResult> RecentlyPerformed([FromQuery] string[] artistIds = null,
+        public async Task<IActionResult> RecentlyPerformed([FromQuery] string[]? artistIds = null,
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
             return await ApiRequest(artistIds ?? [],
@@ -60,7 +60,7 @@ namespace Relisten.Controllers
 
         [HttpGet("v2/shows/recently-updated")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
-        public async Task<IActionResult> RecentlyUpdated([FromQuery] string[] artistIds = null,
+        public async Task<IActionResult> RecentlyUpdated([FromQuery] string[]? artistIds = null,
             [FromQuery] int? shows = null, [FromQuery] int? days = null)
         {
             return await ApiRequest(artistIds ?? [],
