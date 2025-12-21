@@ -39,6 +39,11 @@ jobs:
         platforms: linux/amd64          # x86_64
         tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
         push: true
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_started_at }}
+          VCS_REF=${{ github.sha }}
+          VERSION=${{ env.TAG }}
+          SOURCE=${{ github.server_url }}/${{ github.repository }}
 
     - uses: actions-hub/kubectl@master
       env:
@@ -51,4 +56,3 @@ jobs:
         KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
       with:
         args: rollout restart deployment relistenapi-worker
-

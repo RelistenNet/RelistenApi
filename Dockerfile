@@ -1,17 +1,37 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
-WORKDIR /dotnetapp
+WORKDIR /src
 
-COPY RelistenApi/RelistenApi.csproj .
+COPY RelistenApi/RelistenApi.csproj RelistenApi/
+RUN dotnet restore RelistenApi/RelistenApi.csproj
 
-RUN dotnet restore
+COPY RelistenApi/ RelistenApi/
+RUN dotnet publish RelistenApi/RelistenApi.csproj -c Release -o /app/publish --no-restore
 
-COPY RelistenApi/ .
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 
-RUN dotnet publish /p:Configuration=Release
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+ARG SOURCE
 
-RUN test -f bin/net10.0/publish/RelistenApi.dll
+LABEL org.opencontainers.image.created=$BUILD_DATE \
+      org.opencontainers.image.revision=$VCS_REF \
+      org.opencontainers.image.version=$VERSION \
+      org.opencontainers.image.source=$SOURCE
+
+WORKDIR /app
+
+ENV ASPNETCORE_URLS=http://+:3823 \
+    DOTNET_EnableDiagnostics=0
+
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin appuser
+
+COPY --from=build /app/publish/ ./
+RUN test -f /app/RelistenApi.dll
 
 EXPOSE 3823
 
-ENTRYPOINT ["dotnet", "bin/net10.0/publish/RelistenApi.dll"]
+USER appuser
+
+ENTRYPOINT ["dotnet", "RelistenApi.dll"]
