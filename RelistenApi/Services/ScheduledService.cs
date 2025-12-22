@@ -25,6 +25,7 @@ namespace Relisten
         private readonly ConcurrentDictionary<int, bool> artistsCurrentlySyncing = new();
 
         public ScheduledService(
+            DbService db,
             ImporterService importerService,
             ArtistService artistService,
             ArchiveOrgArtistIndexer archiveOrgArtistIndexer,
@@ -34,6 +35,7 @@ namespace Relisten
             IConfiguration config
         )
         {
+            _db = db;
             _importerService = importerService;
             _artistService = artistService;
             _archiveOrgArtistIndexer = archiveOrgArtistIndexer;
@@ -43,6 +45,7 @@ namespace Relisten
             _jerryGarciaComImporter = jerryGarciaComImporter;
         }
 
+        private DbService _db { get; }
         private ImporterService _importerService { get; }
         private ArtistService _artistService { get; }
         private ArchiveOrgArtistIndexer _archiveOrgArtistIndexer { get; }
@@ -81,7 +84,7 @@ namespace Relisten
             }
 
             var stopwatch = Stopwatch.StartNew();
-            await db.WithWriteConnection(con =>
+            await _db.WithWriteConnection(con =>
                 con.ExecuteAsync("REFRESH MATERIALIZED VIEW CONCURRENTLY source_track_plays_by_hour_48h",
                     commandTimeout: 900),
                 longTimeout: true);
@@ -105,7 +108,7 @@ namespace Relisten
             }
 
             var stopwatch = Stopwatch.StartNew();
-            await db.WithWriteConnection(con =>
+            await _db.WithWriteConnection(con =>
                 con.ExecuteAsync("REFRESH MATERIALIZED VIEW CONCURRENTLY source_track_plays_by_day_6mo",
                     commandTimeout: 900),
                 longTimeout: true);
