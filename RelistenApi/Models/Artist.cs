@@ -107,6 +107,7 @@ namespace Relisten.Api.Models
     public class Artist : SlimArtistWithFeatures
     {
         [Required] public IEnumerable<ArtistUpstreamSource> upstream_sources { get; set; } = null!;
+        [V3JsonOnly] public PopularityMetrics? popularity { get; set; }
     }
 
     public class ArtistWithCounts : Artist

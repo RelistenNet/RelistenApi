@@ -16,6 +16,7 @@ namespace Relisten.Api.Models
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
         [Required] public Guid uuid { get; set; }
+        [V3JsonOnly] public PopularityMetrics? popularity { get; set; }
     }
 
     public class YearWithShows : Year

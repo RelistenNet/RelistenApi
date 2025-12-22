@@ -1,0 +1,117 @@
+@model Relisten.Controllers.Admin.PopularityAdminViewModel
+@{
+    ViewData["Title"] = "Popularity Admin";
+}
+
+<h2>Popularity Admin</h2>
+
+@if (ViewBag.Message != null)
+{
+    <p><strong>@ViewBag.Message</strong></p>
+}
+
+<section>
+    <h3>Maps</h3>
+    <form method="post" action="/relisten-admin/popularity/refresh-all">
+        <label for="refreshAllLimit">Limit</label>
+        <input id="refreshAllLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-primary" type="submit">Refresh All Global Popularity Caches</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-artists-map">
+        <button class="btn btn-warning" type="submit">Refresh Artist Popularity Map</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-shows-map">
+        <label for="artistUuidShows">Artist UUID</label>
+        <input id="artistUuidShows" name="artistUuid" type="text" class="form-control" placeholder="artist uuid"/>
+        <button class="btn btn-warning" type="submit">Refresh Artist Show Popularity Map</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-years-map">
+        <label for="artistUuidYears">Artist UUID</label>
+        <input id="artistUuidYears" name="artistUuid" type="text" class="form-control" placeholder="artist uuid"/>
+        <button class="btn btn-warning" type="submit">Refresh Artist Year Popularity Map</button>
+    </form>
+</section>
+
+<br/>
+
+<section>
+    <h3>Global Lists</h3>
+    <form method="post" action="/relisten-admin/popularity/refresh-popular-artists">
+        <label for="popularArtistsLimit">Limit</label>
+        <input id="popularArtistsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Popular Artists</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-trending-artists">
+        <label for="trendingArtistsLimit">Limit</label>
+        <input id="trendingArtistsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Trending Artists</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-popular-shows">
+        <label for="popularShowsLimit">Limit</label>
+        <input id="popularShowsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Popular Shows</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-trending-shows">
+        <label for="trendingShowsLimit">Limit</label>
+        <input id="trendingShowsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Trending Shows</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-popular-years">
+        <label for="popularYearsLimit">Limit</label>
+        <input id="popularYearsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Popular Years</button>
+    </form>
+    <br/>
+    <form method="post" action="/relisten-admin/popularity/refresh-trending-years">
+        <label for="trendingYearsLimit">Limit</label>
+        <input id="trendingYearsLimit" name="limit" type="number" class="form-control" value="50"/>
+        <button class="btn btn-warning" type="submit">Refresh Trending Years</button>
+    </form>
+</section>
+
+<br/>
+
+<section>
+    <h3>Cache Status</h3>
+    <table class="table table-striped">
+        <thead>
+        <tr>
+            <th>Key</th>
+            <th>Status</th>
+            <th>Generated At (UTC)</th>
+            <th>Stale After (seconds)</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var entry in Model.CacheEntries)
+        {
+            <tr>
+                <td>@entry.Key</td>
+                <td>
+                    @if (!entry.Status.HasValue)
+                    {
+                        <span>missing</span>
+                    }
+                    else if (entry.Status.IsStale)
+                    {
+                        <span>stale</span>
+                    }
+                    else
+                    {
+                        <span>fresh</span>
+                    }
+                </td>
+                <td>@(entry.Status.Header?.generated_at.ToString("u") ?? "-")</td>
+                <td>@(entry.Status.Header?.stale_after_seconds.ToString() ?? "-")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>

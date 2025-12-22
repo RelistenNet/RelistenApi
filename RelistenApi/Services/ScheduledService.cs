@@ -2,8 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Hangfire;
 using Hangfire.Console;
 using Hangfire.RecurringJobExtensions;
@@ -13,6 +15,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Indexing;
+using Relisten.Services.Popularity;
 using Sentry;
 
 namespace Relisten
@@ -25,6 +28,7 @@ namespace Relisten
             ImporterService importerService,
             ArtistService artistService,
             ArchiveOrgArtistIndexer archiveOrgArtistIndexer,
+            PopularityJobs popularityJobs,
             RedisService redisService,
             JerryGarciaComImporter jerryGarciaComImporter,
             IConfiguration config
@@ -33,6 +37,7 @@ namespace Relisten
             _importerService = importerService;
             _artistService = artistService;
             _archiveOrgArtistIndexer = archiveOrgArtistIndexer;
+            _popularityJobs = popularityJobs;
             _config = config;
             _redisService = redisService;
             _jerryGarciaComImporter = jerryGarciaComImporter;
@@ -41,6 +46,7 @@ namespace Relisten
         private ImporterService _importerService { get; }
         private ArtistService _artistService { get; }
         private ArchiveOrgArtistIndexer _archiveOrgArtistIndexer { get; }
+        private PopularityJobs _popularityJobs { get; }
         private IConfiguration _config { get; }
         private RedisService _redisService { get; }
         private JerryGarciaComImporter _jerryGarciaComImporter { get; }
@@ -59,6 +65,65 @@ namespace Relisten
             }
 
             await _archiveOrgArtistIndexer.IndexArtists(context);
+        }
+
+        // refresh 48h materialized view every hour
+        [RecurringJob("15 * * * *", Enabled = true)]
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("default")]
+        [DisplayName("Refresh Materialized View: source_track_plays_by_hour_48h")]
+        public async Task RefreshSourceTrackPlaysByHour48h(PerformContext? context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            var stopwatch = Stopwatch.StartNew();
+            await db.WithWriteConnection(con =>
+                con.ExecuteAsync("REFRESH MATERIALIZED VIEW CONCURRENTLY source_track_plays_by_hour_48h",
+                    commandTimeout: 900),
+                longTimeout: true);
+            stopwatch.Stop();
+            context?.WriteLine($"Refreshed source_track_plays_by_hour_48h in {stopwatch.Elapsed.TotalSeconds:0.##}s");
+
+            EnqueuePopularityRefreshes();
+        }
+
+        // refresh daily aggregates overnight
+        [RecurringJob("10 5 * * *", Enabled = true)]
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("default")]
+        [DisplayName("Refresh Materialized View: source_track_plays_by_day_6mo")]
+        public async Task RefreshSourceTrackPlaysByDay6mo(PerformContext? context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            var stopwatch = Stopwatch.StartNew();
+            await db.WithWriteConnection(con =>
+                con.ExecuteAsync("REFRESH MATERIALIZED VIEW CONCURRENTLY source_track_plays_by_day_6mo",
+                    commandTimeout: 900),
+                longTimeout: true);
+            stopwatch.Stop();
+            context?.WriteLine($"Refreshed source_track_plays_by_day_6mo in {stopwatch.Elapsed.TotalSeconds:0.##}s");
+
+            EnqueuePopularityRefreshes();
+        }
+
+        private void EnqueuePopularityRefreshes(int limit = 50)
+        {
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshArtistPopularityMap());
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularArtists(limit));
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingArtists(limit));
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularShows(limit));
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingShows(limit));
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularYears(limit));
+            BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingYears(limit));
         }
 
         // run every day at 3 AM EST, midnight PST, 7 AM UTC

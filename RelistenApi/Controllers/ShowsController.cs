@@ -7,6 +7,7 @@ using Relisten.Api;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers
 {
@@ -19,15 +20,18 @@ namespace Relisten.Controllers
             DbService db,
             ArtistService artistService,
             ShowService showService,
-            SourceService sourceService
+            SourceService sourceService,
+            PopularityService popularityService
         ) : base(redis, db, artistService)
         {
             _showService = showService;
             _sourceService = sourceService;
+            this.popularityService = popularityService;
         }
 
         private readonly ShowService _showService;
         private readonly SourceService _sourceService;
+        private readonly PopularityService popularityService;
 
         [HttpGet("v2/shows/today")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
@@ -162,7 +166,17 @@ namespace Relisten.Controllers
         {
             return await ApiRequest(
                 await _artistService.FindArtistByShowUuid(showUuid),
-                art => _showService.ShowWithSourcesForUuid(art, showUuid));
+                async art =>
+                {
+                    var show = await _showService.ShowWithSourcesForUuid(art, showUuid);
+                    if (show != null && IsV3Request)
+                    {
+                        var popularity = await popularityService.GetShowPopularityMapForArtist(art.uuid);
+                        popularityService.ApplyShowPopularity(new List<Show> {show}, popularity);
+                    }
+
+                    return show;
+                });
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/sources/{sourceId}/reviews")]

@@ -1,10 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers
 {
@@ -15,6 +17,7 @@ namespace Relisten.Controllers
         protected ShowService _showService;
         protected SourceService _sourceService;
         protected YearService _yearService;
+        private readonly PopularityService popularityService;
 
         public YearsController(
             RedisService redis,
@@ -22,12 +25,14 @@ namespace Relisten.Controllers
             ArtistService artistService,
             ShowService showService,
             SourceService sourceService,
-            YearService yearService
+            YearService yearService,
+            PopularityService popularityService
         ) : base(redis, db, artistService)
         {
             _showService = showService;
             _yearService = yearService;
             _sourceService = sourceService;
+            this.popularityService = popularityService;
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/years")]
@@ -36,9 +41,17 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> years(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, art =>
+            return await ApiRequest(artistIdOrSlug, async art =>
             {
-                return _yearService.AllForArtist(art);
+                var years = (await _yearService.AllForArtist(art)).ToList();
+
+                if (IsV3Request)
+                {
+                    var popularity = await popularityService.GetYearPopularityMapForArtist(art.uuid);
+                    popularityService.ApplyYearPopularity(years, popularity);
+                }
+
+                return years;
             });
         }
 
@@ -58,9 +71,16 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> yearByUuid(string artistIdOrSlug, string yearUuid)
         {
-            return await ApiRequestWithIdentifier(artistIdOrSlug, yearUuid, (art, id) =>
+            return await ApiRequestWithIdentifier(artistIdOrSlug, yearUuid, async (art, id) =>
             {
-                return _yearService.ForIdentifierWithShows(art, id);
+                var year = await _yearService.ForIdentifierWithShows(art, id);
+                if (year != null && IsV3Request)
+                {
+                    var popularity = await popularityService.GetYearPopularityMapForArtist(art.uuid);
+                    popularityService.ApplyYearPopularity(new List<Year> {year}, popularity);
+                }
+
+                return year;
             }, true, false);
         }
 

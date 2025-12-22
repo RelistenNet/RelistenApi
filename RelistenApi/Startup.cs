@@ -29,6 +29,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
+using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
@@ -228,6 +229,9 @@ namespace Relisten
             services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();
             services.AddScoped<IArchiveOrgArtistIndexRepository, ArchiveOrgArtistIndexRepository>();
             services.AddScoped<ArchiveOrgArtistIndexer, ArchiveOrgArtistIndexer>();
+            services.AddScoped<PopularityCacheService, PopularityCacheService>();
+            services.AddScoped<PopularityService, PopularityService>();
+            services.AddScoped<PopularityJobs, PopularityJobs>();
             services.AddScoped<ScheduledService, ScheduledService>();
             services.AddScoped<SearchService, SearchService>();
             services.AddScoped<LinkService, LinkService>();

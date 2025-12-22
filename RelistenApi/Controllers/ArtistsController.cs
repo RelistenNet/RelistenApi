@@ -9,6 +9,7 @@ using Relisten.Api;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers
 {
@@ -23,6 +24,7 @@ namespace Relisten.Controllers
         private readonly UpstreamSourceService upstreamSourceService;
         private readonly VenueService venueService;
         private readonly YearService yearService;
+        private readonly PopularityService popularityService;
 
         public ArtistsController(
             RedisService redis,
@@ -35,7 +37,8 @@ namespace Relisten.Controllers
             UpstreamSourceService upstreamSourceService,
             ShowService showService,
             SourceService sourceService,
-            RedisService redisService
+            RedisService redisService,
+            PopularityService popularityService
         ) : base(redis, db, artistService)
         {
             this.yearService = yearService;
@@ -45,6 +48,7 @@ namespace Relisten.Controllers
             this.upstreamSourceService = upstreamSourceService;
             this.showService = showService;
             this.sourceService = sourceService;
+            this.popularityService = popularityService;
         }
 
         [HttpGet("v2/artists")]
@@ -52,7 +56,16 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
         public async Task<IActionResult> Get([FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false)
         {
-            return JsonSuccess(await _artistService.AllWithCounts<ArtistWithCounts>(includeAutoCreated: includeAutoCreated));
+            var artists = (await _artistService.AllWithCounts<ArtistWithCounts>(
+                includeAutoCreated: includeAutoCreated)).ToList();
+
+            if (IsV3Request)
+            {
+                var popularity = await popularityService.GetArtistPopularityMap();
+                popularityService.ApplyArtistPopularity(artists, popularity);
+            }
+
+            return JsonSuccess(artists);
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}")]
@@ -65,6 +78,12 @@ namespace Relisten.Controllers
                 .FirstOrDefault();
             if (art != null)
             {
+                if (IsV3Request)
+                {
+                    var popularity = await popularityService.GetArtistPopularityMap();
+                    popularityService.ApplyArtistPopularity(new List<ArtistWithCounts> {art}, popularity);
+                }
+
                 return JsonSuccess(art);
             }
 
@@ -115,6 +134,15 @@ namespace Relisten.Controllers
                 tours = toursTask.Result.ToList(),
                 shows = showsTask.Result.ToList(),
             };
+
+            var artistPopularity = await popularityService.GetArtistPopularityMap();
+            popularityService.ApplyArtistPopularity(new List<ArtistWithCounts> {resp.artist}, artistPopularity);
+
+            var yearPopularity = await popularityService.GetYearPopularityMapForArtist(art.uuid);
+            popularityService.ApplyYearPopularity(resp.years, yearPopularity);
+
+            var showPopularity = await popularityService.GetShowPopularityMapForArtist(art.uuid);
+            popularityService.ApplyShowPopularity(resp.shows, showPopularity);
 
             var json = JsonConvert.SerializeObject(
                 resp, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);

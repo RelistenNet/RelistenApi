@@ -24,6 +24,7 @@ namespace Relisten.Api
         protected RedisService redis { get; set; }
         protected DbService db { get; set; }
         protected ArtistService _artistService { get; set; }
+        protected bool IsV3Request => HttpContext?.Request?.Path.StartsWithSegments("/api/v3") ?? false;
 
         protected IActionResult JsonSuccess<T>(T anything)
         {
