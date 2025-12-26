@@ -10,14 +10,19 @@ services:
       - 16379:6379
 
   relisten-db:
-    image: postgres:17.4
+    image: timescale/timescaledb:latest-pg17
     restart: always
+    command:
+      - postgres
+      - -c
+      - max_locks_per_transaction=5000
     volumes:
-      - ./postgres-data/pgdata:/var/lib/postgresql/data
+      - ./postgres-data/pgdata:/pgdata
     environment:
       POSTGRES_PASSWORD: local_dev_password
       POSTGRES_USER: relisten
       POSTGRES_DB: relisten_db
+      PGDATA: /pgdata
     ports:
       - 15432:5432
     shm_size: 1g
