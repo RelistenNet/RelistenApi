@@ -71,7 +71,7 @@ namespace Relisten
         }
 
         // refresh 48h materialized view every hour
-        [RecurringJob("15 * * * *", Enabled = true)]
+        // [RecurringJob("15 * * * *", Enabled = true)]
         [AutomaticRetry(Attempts = 0)]
         [Queue("default")]
         [DisplayName("Refresh Materialized View: source_track_plays_by_hour_48h")]
@@ -95,7 +95,7 @@ namespace Relisten
         }
 
         // refresh daily aggregates overnight
-        [RecurringJob("10 5 * * *", Enabled = true)]
+        // [RecurringJob("10 5 * * *", Enabled = true)]
         [AutomaticRetry(Attempts = 0)]
         [Queue("default")]
         [DisplayName("Refresh Materialized View: source_track_plays_by_day_6mo")]
