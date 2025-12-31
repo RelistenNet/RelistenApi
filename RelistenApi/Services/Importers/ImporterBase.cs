@@ -176,6 +176,82 @@ namespace Relisten.Import
 
         private IDictionary<string, int> trackSlugCounts { get; } = new Dictionary<string, int>();
 
+        private const string IncrementalShowVenueRefreshSql = @"
+-- Incremental refresh of show source info for this artist
+INSERT INTO
+	show_source_information
+	(show_id, max_updated_at, source_count, artist_id, max_avg_rating_weighted, has_soundboard_source, has_flac)
+SELECT
+	src.show_id,
+	max(src.updated_at) AS max_updated_at,
+	count(*) AS source_count,
+	src.artist_id,
+	max(src.avg_rating_weighted) AS max_avg_rating_weighted,
+	bool_or(src.is_soundboard) AS has_soundboard_source,
+	bool_or((src.flac_type = 1) OR (src.flac_type = 2)) AS has_flac
+FROM sources src
+WHERE src.artist_id = @id
+GROUP BY src.show_id, src.artist_id
+ON CONFLICT (show_id) DO UPDATE SET
+	max_updated_at = EXCLUDED.max_updated_at,
+	source_count = EXCLUDED.source_count,
+	max_avg_rating_weighted = EXCLUDED.max_avg_rating_weighted,
+	has_soundboard_source = EXCLUDED.has_soundboard_source,
+	has_flac = EXCLUDED.has_flac
+;
+
+-- Incremental refresh of venue show counts for this artist
+WITH source_shows AS (
+	SELECT
+		venue_id,
+		count(DISTINCT show_id) AS source_show_count
+	FROM sources
+	WHERE artist_id = @id
+	GROUP BY venue_id
+), show_counts AS (
+	SELECT
+		venue_id,
+		count(*) AS show_count
+	FROM shows
+	WHERE artist_id = @id
+	GROUP BY venue_id
+)
+INSERT INTO venue_show_counts
+	(id, shows_at_venue)
+SELECT
+	v.id,
+	CASE
+		WHEN coalesce(ss.source_show_count, 0) = 0 THEN coalesce(sc.show_count, 0)
+		ELSE ss.source_show_count
+	END AS shows_at_venue
+FROM venues v
+LEFT JOIN source_shows ss ON ss.venue_id = v.id
+LEFT JOIN show_counts sc ON sc.venue_id = v.id
+WHERE v.artist_id = @id OR v.artist_id IS NULL
+ON CONFLICT (id) DO UPDATE SET
+	shows_at_venue = EXCLUDED.shows_at_venue
+;
+";
+
+        private const string IncrementalSourceReviewRefreshSql = @"
+-- Incremental refresh of source review counts for this artist
+INSERT INTO
+	source_review_counts
+	(source_id, source_review_max_updated_at, source_review_count)
+SELECT
+	r.source_id,
+	max(r.updated_at) AS source_review_max_updated_at,
+	count(r.id) AS source_review_count
+FROM source_reviews r
+JOIN sources s ON s.id = r.source_id
+WHERE s.artist_id = @id
+GROUP BY r.source_id
+ON CONFLICT (source_id) DO UPDATE SET
+	source_review_max_updated_at = EXCLUDED.source_review_max_updated_at,
+	source_review_count = EXCLUDED.source_review_count
+;
+";
+
         public void Dispose()
         {
             http.Dispose();
@@ -298,10 +374,7 @@ WHERE
 	AND y.artist_id = @id
 ;
 
-REFRESH MATERIALIZED VIEW show_source_information;
-REFRESH MATERIALIZED VIEW venue_show_counts;
-
-            ", new {artist.id}));
+" + IncrementalShowVenueRefreshSql, new {artist.id}));
 
             await redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
 
@@ -606,12 +679,9 @@ USING shows_with_zero_sources
 WHERE shows.id = shows_with_zero_sources.show_id;
 
 COMMIT;
+";
 
-REFRESH MATERIALIZED VIEW show_source_information;
-REFRESH MATERIALIZED VIEW venue_show_counts;
-REFRESH MATERIALIZED VIEW source_review_counts;
-
-            ";
+            sql += IncrementalShowVenueRefreshSql + IncrementalSourceReviewRefreshSql;
 
             await db.WithWriteConnection(con => con.ExecuteAsync(sql, new {artist.id}));
             return ImportStats.None;
