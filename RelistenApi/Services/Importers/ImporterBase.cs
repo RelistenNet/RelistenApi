@@ -359,6 +359,16 @@ DO
 		avg_rating = EXCLUDED.avg_rating,
 		updated_at = EXCLUDED.updated_at
 ;
+
+-- remove years that no longer have shows (e.g., deleted/removed sources)
+DELETE FROM years y
+WHERE
+	y.artist_id = @id
+	AND NOT EXISTS (
+		SELECT 1
+		FROM shows s
+		WHERE s.year_id = y.id
+	);
 COMMIT;
 
 -- Associate shows with years
@@ -676,6 +686,25 @@ WITH shows_with_zero_sources AS (
 DELETE FROM shows
 USING shows_with_zero_sources
 WHERE shows.id = shows_with_zero_sources.show_id;
+
+-- remove show_source_information rows for deleted shows
+DELETE FROM show_source_information ssi
+WHERE
+	ssi.artist_id = @id
+	AND NOT EXISTS (
+		SELECT 1
+		FROM shows s
+		WHERE s.id = ssi.show_id
+	);
+
+-- remove source_review_counts rows for deleted sources
+DELETE FROM source_review_counts src
+WHERE
+	NOT EXISTS (
+		SELECT 1
+		FROM sources s
+		WHERE s.id = src.source_id
+	);
 
 COMMIT;
 ";
