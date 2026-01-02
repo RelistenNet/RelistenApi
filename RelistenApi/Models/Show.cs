@@ -46,7 +46,7 @@ namespace Relisten.Api.Models
         [Required] public bool has_streamable_flac_source { get; set; }
         [Required] public int source_count { get; set; }
         [Required] public Guid uuid { get; set; }
-        [V3JsonOnly] public PopularityMetrics? popularity { get; set; }
+        public PopularityMetrics? popularity { get; set; }
     }
 
     public class ShowWithArtist : Show

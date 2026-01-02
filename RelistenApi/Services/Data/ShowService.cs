@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
+using Relisten.Services.Popularity;
 
 namespace Relisten.Data
 {
@@ -11,13 +12,16 @@ namespace Relisten.Data
     {
         public ShowService(
             DbService db,
-            SourceService sourceService
+            SourceService sourceService,
+            PopularityService popularityService
         ) : base(db)
         {
             _sourceService = sourceService;
+            this.popularityService = popularityService;
         }
 
         private SourceService _sourceService { get; }
+        private readonly PopularityService popularityService;
 
         public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(
             Artist? artist,
@@ -31,7 +35,7 @@ namespace Relisten.Data
             orderBy ??= "display_date ASC";
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            return await db.WithConnection(con => con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(@"
+            var shows = (await db.WithConnection(con => con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(@"
                 SELECT
                     s.*,
                     a.uuid as artist_uuid,
@@ -92,7 +96,10 @@ namespace Relisten.Data
                 }
 
                 return show;
-            }, parms));
+            }, parms))).ToList();
+
+            await ApplyShowPopularity(shows, artist);
+            return shows;
         }
 
         public async Task<IEnumerable<Show>> ShowsForCriteria(
@@ -112,7 +119,7 @@ namespace Relisten.Data
             orderBy = orderBy == null ? "display_date ASC" : orderBy;
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            return await db.WithConnection(con =>
+            var shows = (await db.WithConnection(con =>
                 con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, Year, ShowWithArtist>(@"
                     SELECT
                         s.*,
@@ -173,7 +180,10 @@ namespace Relisten.Data
                     }
 
                     return show;
-                }, parms));
+                }, parms))).ToList();
+
+            await ApplyShowPopularity(shows, null);
+            return shows;
         }
 
         public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(IReadOnlyList<Artist>? artists = null,
@@ -295,6 +305,27 @@ namespace Relisten.Data
             show.sources = await _sourceService.FullSourcesForShow(artist, show);
 
             return show;
+        }
+
+        private async Task ApplyShowPopularity<T>(IReadOnlyList<T> shows, Artist? artist) where T : Show
+        {
+            if (shows.Count == 0)
+            {
+                return;
+            }
+
+            if (artist != null)
+            {
+                var showPopularity = await popularityService.GetShowPopularityMapForArtist(artist.uuid);
+                popularityService.ApplyShowPopularity(shows, showPopularity);
+                return;
+            }
+
+            foreach (var group in shows.GroupBy(show => show.artist_uuid))
+            {
+                var showPopularity = await popularityService.GetShowPopularityMapForArtist(group.Key);
+                popularityService.ApplyShowPopularity(group.ToList(), showPopularity);
+            }
         }
 
         public async Task<IEnumerable<Show>> AllSimpleForArtist(Artist artist)

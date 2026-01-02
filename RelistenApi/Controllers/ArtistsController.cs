@@ -141,9 +141,6 @@ namespace Relisten.Controllers
             var yearPopularity = await popularityService.GetYearPopularityMapForArtist(art.uuid);
             popularityService.ApplyYearPopularity(resp.years, yearPopularity);
 
-            var showPopularity = await popularityService.GetShowPopularityMapForArtist(art.uuid);
-            popularityService.ApplyShowPopularity(resp.shows, showPopularity);
-
             var json = JsonConvert.SerializeObject(
                 resp, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
 
