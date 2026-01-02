@@ -33,7 +33,7 @@ namespace Relisten.Data
             {
                 if (includeAutoCreated)
                 {
-                    where = "1=1";
+                    where = "1=1 AND (COALESCE(sh.show_count, 0) > 0 OR COALESCE(src.source_count, 0) > 0)";
                 }
                 else
                 {
