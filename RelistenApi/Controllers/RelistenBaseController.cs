@@ -167,9 +167,10 @@ namespace Relisten.Api
                 return;
             }
 
-            var cacheControl = request.Path.Value?.IndexOf("/random", StringComparison.OrdinalIgnoreCase) >= 0
-                ? RandomCacheControl
-                : DefaultCacheControl;
+            var path = request.Path.Value ?? string.Empty;
+            var isRandom = path.IndexOf("/random", StringComparison.OrdinalIgnoreCase) >= 0;
+            var isLive = path.IndexOf("/live", StringComparison.OrdinalIgnoreCase) >= 0;
+            var cacheControl = (isRandom || isLive) ? RandomCacheControl : DefaultCacheControl;
 
             ctx.HttpContext.Response.Headers["Cache-Control"] = cacheControl;
         }
