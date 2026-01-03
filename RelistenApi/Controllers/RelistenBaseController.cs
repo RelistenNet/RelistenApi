@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Newtonsoft.Json;
@@ -12,6 +13,7 @@ using Relisten.Data;
 namespace Relisten.Api
 {
     [ApiV3Formatting]
+    [ApiCacheControl]
     public class RelistenBaseController : Controller
     {
         public RelistenBaseController(RedisService redis, DbService db, ArtistService artistService)
@@ -144,6 +146,32 @@ namespace Relisten.Api
             objectResult.SerializerSettings = isV3
                 ? RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
                 : RelistenApiJsonOptionsWrapper.DefaultSerializerSettings;
+        }
+    }
+
+    public class ApiCacheControlAttribute : ActionFilterAttribute
+    {
+        private const string DefaultCacheControl = "public, max-age=1800, immutable, stale-while-revalidate=60";
+        private const string RandomCacheControl = "no-cache";
+
+        public override void OnResultExecuting(ResultExecutingContext ctx)
+        {
+            var request = ctx.HttpContext.Request;
+            if (!HttpMethods.IsGet(request.Method))
+            {
+                return;
+            }
+
+            if (!request.Path.StartsWithSegments("/api"))
+            {
+                return;
+            }
+
+            var cacheControl = request.Path.Value?.IndexOf("/random", StringComparison.OrdinalIgnoreCase) >= 0
+                ? RandomCacheControl
+                : DefaultCacheControl;
+
+            ctx.HttpContext.Response.Headers["Cache-Control"] = cacheControl;
         }
     }
 }
