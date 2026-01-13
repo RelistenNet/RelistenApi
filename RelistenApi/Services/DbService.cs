@@ -11,9 +11,11 @@ namespace Relisten
     public class DbService
     {
         private const int MaxSerializationRetries = 3;
+        private readonly ILogger<DbService> _logger;
 
-        public DbService(string url, IHostEnvironment hostEnvironment)
+        public DbService(string url, IHostEnvironment hostEnvironment, ILogger<DbService> logger)
         {
+            _logger = logger;
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             ConnStr =
@@ -22,15 +24,20 @@ namespace Relisten
             // A bit of a hack, but it'll work well enough in prod and locally we don't need multiple dbs
             ReadOnlyConnStr = ConnStr.Replace("relisten-db-rw.default", "relisten-db-ro.default");
 
-            Console.WriteLine("Attempting to connect to {0}", url.Replace(parts[1], "********"));
-            Console.WriteLine($"DB Connection: {ConnStr.Replace(parts[1], "********")}");
-            Console.WriteLine($"DB Connection (read-only): {ReadOnlyConnStr.Replace(parts[1], "********")}");
+            var maskedUrl = url.Replace(parts[1], "********");
+            var maskedConnStr = ConnStr.Replace(parts[1], "********");
+            var maskedReadOnlyConnStr = ReadOnlyConnStr.Replace(parts[1], "********");
+
+            _logger.LogInformation("Database connection initialized from {DatabaseUrl}", maskedUrl);
+            _logger.LogInformation("Primary connection string: {ConnectionString}", maskedConnStr);
+            _logger.LogInformation("Read-only connection string: {ReadOnlyConnectionString}", maskedReadOnlyConnStr);
 
             if (hostEnvironment.IsDevelopment())
             {
                 var loggerFactory =
                     LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
                 NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory, parameterLoggingEnabled: true);
+                _logger.LogDebug("Npgsql parameter logging enabled for development environment");
             }
         }
 
