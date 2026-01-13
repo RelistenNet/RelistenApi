@@ -20,7 +20,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Newtonsoft.Json;
+using Npgsql;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Relisten.Api.Models;
@@ -106,7 +108,7 @@ namespace Relisten
                         }))
                     .WithMetrics(metrics => metrics
                         .AddAspNetCoreInstrumentation()
-                        .AddNpgsql()
+                        .AddMeter("Npgsql")
                         .AddOtlpExporter(otlpOptions =>
                         {
                             otlpOptions.Endpoint = new Uri(otlpEndpoint);
