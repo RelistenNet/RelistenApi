@@ -64,14 +64,6 @@ namespace Relisten
                 mvcOptions.EnableEndpointRouting = false;
             }).AddNewtonsoftJson();
 
-            services.AddLogging(loggingBuilder =>
-            {
-                loggingBuilder.AddConfiguration(Configuration.GetSection("Logging"));
-                loggingBuilder.SetMinimumLevel(LogLevel.Information);
-                loggingBuilder.AddConsole();
-                loggingBuilder.AddDebug();
-            });
-
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
             if (otlpEndpoint != null)
             {
@@ -105,10 +97,19 @@ namespace Relisten
                                 }
                             };
                         })
+                        .AddNpgsql()
                         .AddOtlpExporter(otlpOptions =>
                         {
                             otlpOptions.Endpoint = new Uri(otlpEndpoint);
 
+                            otlpOptions.Protocol = OtlpExportProtocol.Grpc;
+                        }))
+                    .WithMetrics(metrics => metrics
+                        .AddAspNetCoreInstrumentation()
+                        .AddNpgsql()
+                        .AddOtlpExporter(otlpOptions =>
+                        {
+                            otlpOptions.Endpoint = new Uri(otlpEndpoint);
                             otlpOptions.Protocol = OtlpExportProtocol.Grpc;
                         }));
             }
@@ -153,13 +154,39 @@ namespace Relisten
                 DateTimeZoneHandling = DateTimeZoneHandling.Utc
             };
 
-            var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
-                ? Configuration["PGBOUNCER_DATABASE_URL"]
-                : Configuration["DATABASE_URL"];
+            services.AddSingleton<DbService>(serviceProvider =>
+            {
+                var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
+                    ? Configuration["PGBOUNCER_DATABASE_URL"]
+                    : Configuration["DATABASE_URL"];
 
-            var db = new DbService(dbUrl!, HostEnvironment);
-            RunMigrations(db);
-            services.AddSingleton(db);
+                var logger = serviceProvider.GetRequiredService<ILogger<DbService>>();
+                var db = new DbService(dbUrl!, HostEnvironment, logger);
+
+                // Run migrations immediately after construction
+                using (var pg = db.CreateConnection(longTimeout: true, readOnly: false))
+                {
+                    var migrationsAssembly = typeof(Startup).Assembly;
+                    var databaseProvider = new PostgresqlDatabaseProvider(pg);
+                    var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
+                    migrator.Load();
+
+                    if (migrator.CurrentMigration == null || migrator.CurrentMigration.Version == 0)
+                    {
+                        migrator.Baseline(2);
+                    }
+
+                    migrator.MigrateTo(8);
+
+                    if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
+                    {
+                        throw new Exception(
+                            $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.");
+                    }
+                }
+
+                return db;
+            });
 
             var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]!);
 
@@ -239,7 +266,7 @@ namespace Relisten
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IWebHostEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             if (env.IsDevelopment())
             {
@@ -282,30 +309,6 @@ namespace Relisten
 
             app.UseCors(builder =>
                 builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
-        }
-
-        public void RunMigrations(DbService db)
-        {
-            var migrationsAssembly = typeof(Startup).Assembly;
-            using (var pg = db.CreateConnection(longTimeout: true, readOnly: false))
-            {
-                var databaseProvider = new PostgresqlDatabaseProvider(pg);
-                var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
-                migrator.Load();
-
-                if (migrator.CurrentMigration == null || migrator.CurrentMigration.Version == 0)
-                {
-                    migrator.Baseline(2);
-                }
-
-                migrator.MigrateTo(8);
-
-                if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
-                {
-                    throw new Exception(
-                        $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.");
-                }
-            }
         }
 
         public void SetupAuthentication(IServiceCollection services)
