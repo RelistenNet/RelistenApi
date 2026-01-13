@@ -33,6 +33,7 @@ using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
+using Serilog;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
 using StackExchange.Redis;
@@ -276,6 +277,16 @@ namespace Relisten
             }
 
             app.UseResponseCompression();
+
+            app.UseSerilogRequestLogging(options =>
+            {
+                options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+                {
+                    diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+                    diagnosticContext.Set("RemoteIP", httpContext.Connection.RemoteIpAddress);
+                };
+            });
+
             app.UseCors(builder => builder
                 .WithMethods("GET", "POST", "OPTIONS", "HEAD")
                 .WithOrigins("*")
