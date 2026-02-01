@@ -214,7 +214,7 @@ namespace Relisten
                     {
                         options.Queues = ["artist_import"];
                         options.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
-                        options.WorkerCount = 6;
+                        options.WorkerCount = 10;
                     });
 
                     services.AddHangfireServer(options =>

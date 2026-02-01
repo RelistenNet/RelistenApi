@@ -18,11 +18,17 @@ namespace Relisten
             _logger = logger;
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
-            ConnStr =
-                $"Host={uri.Host};Port={uri.Port.ToString(CultureInfo.InvariantCulture)};Username={parts[0]};Password={parts[1]};Database={uri.AbsolutePath.Substring(1)};Include Error Detail=true";
+            var port = uri.Port.ToString(CultureInfo.InvariantCulture);
+            var database = uri.AbsolutePath.Substring(1);
 
-            // A bit of a hack, but it'll work well enough in prod and locally we don't need multiple dbs
-            ReadOnlyConnStr = ConnStr.Replace("relisten-db-rw.default", "relisten-db-ro.default");
+            ConnStr =
+                $"Host={uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true";
+
+            // For read-only connections: try RO first, fall back to RW if unavailable
+            // Npgsql handles multi-host failover automatically
+            var roHost = uri.Host.Replace("relisten-db-rw.default", "relisten-db-ro.default");
+            ReadOnlyConnStr =
+                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attrs=prefer-standby";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");
@@ -30,7 +36,7 @@ namespace Relisten
 
             _logger.LogInformation("Database connection initialized from {DatabaseUrl}", maskedUrl);
             _logger.LogInformation("Primary connection string: {ConnectionString}", maskedConnStr);
-            _logger.LogInformation("Read-only connection string: {ReadOnlyConnectionString}", maskedReadOnlyConnStr);
+            _logger.LogInformation("Read-only connection string (with fallback): {ReadOnlyConnectionString}", maskedReadOnlyConnStr);
 
             if (hostEnvironment.IsDevelopment())
             {
