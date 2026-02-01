@@ -31,9 +31,9 @@ namespace Relisten.Controllers
         private readonly ScheduledService _scheduledService;
         private readonly IConfiguration _configuration;
 
-        [HttpGet("{idOrSlug}")]
+        [HttpPost("{idOrSlug}")]
         [Authorize]
-        public async Task<IActionResult> Get(string idOrSlug, [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> Post(string idOrSlug, [FromQuery] bool deleteOldContent = false)
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
@@ -47,9 +47,9 @@ namespace Relisten.Controllers
             return JsonNotFound(false);
         }
 
-        [HttpGet("{idOrSlug}/debug")]
+        [HttpPost("{idOrSlug}/debug")]
         [Authorize]
-        public async Task<IActionResult> GetDebug(string idOrSlug, [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> PostDebug(string idOrSlug, [FromQuery] bool deleteOldContent = false)
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
@@ -75,16 +75,16 @@ namespace Relisten.Controllers
                 BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null)));
         }
 
-        [HttpGet("all-years-and-shows")]
+        [HttpPost("all-years-and-shows")]
         [Authorize]
         public IActionResult AllYearsAndShows()
         {
             return StatusCode(201, BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
         }
 
-        [HttpGet("{idOrSlug}/{showIdentifier}")]
+        [HttpPost("{idOrSlug}/{showIdentifier}")]
         [Authorize]
-        public async Task<IActionResult> GetDebug(string idOrSlug, string showIdentifier,
+        public async Task<IActionResult> PostShow(string idOrSlug, string showIdentifier,
             [FromQuery] bool deleteOldContent = false)
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
@@ -99,9 +99,9 @@ namespace Relisten.Controllers
             return JsonNotFound(false);
         }
 
-        [HttpGet("{idOrSlug}/{showIdentifier}/debug")]
+        [HttpPost("{idOrSlug}/{showIdentifier}/debug")]
         [Authorize]
-        public async Task<IActionResult> GetSingleDebug(string idOrSlug, string showIdentifier,
+        public async Task<IActionResult> PostShowDebug(string idOrSlug, string showIdentifier,
             [FromQuery] bool deleteOldContent = false)
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);

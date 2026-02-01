@@ -157,6 +157,7 @@ var refresh = new Vue({
       var specificShow = this.$data.selected.upstream_identifier.length > 0 ? "/" + this.$data.selected.upstream_identifier : "";
 
       fetch("/api/v2/import/" + this.$data.selected.artist + specificShow + "?deleteOldContent=" + this.$data.selected.delete_existing, {
+        method: 'POST',
         credentials: 'include'
       })
         .then((res) => {
