@@ -102,9 +102,13 @@ namespace Relisten.Data
 
         public Task<int> RemoveAllContentForArtist(Artist art)
         {
+            // Order matters: delete child tables before parent tables due to FK constraints
             return db.WithWriteConnection(con => con.ExecuteAsync(@"
 				delete from setlist_songs where artist_id = @ArtistId;
 				delete from setlist_shows where artist_id = @ArtistId;
+				delete from source_tracks where artist_id = @ArtistId;
+				delete from source_sets where source_id in (select id from sources where artist_id = @ArtistId);
+				delete from source_reviews where source_id in (select id from sources where artist_id = @ArtistId);
 				delete from shows where artist_id = @ArtistId;
 				delete from sources where artist_id = @ArtistId;
 				delete from tours where artist_id = @ArtistId;
