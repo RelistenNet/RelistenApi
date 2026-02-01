@@ -360,18 +360,7 @@ DO
 		updated_at = EXCLUDED.updated_at
 ;
 
--- remove years that no longer have shows (e.g., deleted/removed sources)
-DELETE FROM years y
-WHERE
-	y.artist_id = @id
-	AND NOT EXISTS (
-		SELECT 1
-		FROM shows s
-		WHERE s.year_id = y.id
-	);
-COMMIT;
-
--- Associate shows with years
+-- Associate shows with years (must happen before the DELETE below)
 UPDATE
 	shows s
 SET
@@ -383,6 +372,17 @@ WHERE
     AND s.artist_id = @id
 	AND y.artist_id = @id
 ;
+
+-- remove years that no longer have shows (e.g., deleted/removed sources)
+DELETE FROM years y
+WHERE
+	y.artist_id = @id
+	AND NOT EXISTS (
+		SELECT 1
+		FROM shows s
+		WHERE s.year_id = y.id
+	);
+COMMIT;
 
 " + IncrementalShowVenueRefreshSql, new {artist.id}));
 

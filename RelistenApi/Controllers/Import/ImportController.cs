@@ -41,7 +41,7 @@ namespace Relisten.Controllers
                 var jobId = BackgroundJob.Enqueue(() =>
                     _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null));
 
-                return JsonSuccess($"Queued as job {jobId}!");
+                return StatusCode(201, $"Queued as job {jobId}!");
             }
 
             return JsonNotFound(false);
@@ -56,7 +56,7 @@ namespace Relisten.Controllers
             {
                 await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
 
-                return JsonSuccess("done!");
+                return StatusCode(201, "done!");
             }
 
             return JsonNotFound(false);
@@ -71,7 +71,7 @@ namespace Relisten.Controllers
                 return Unauthorized();
             }
 
-            return JsonSuccess(
+            return StatusCode(201,
                 BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null)));
         }
 
@@ -79,7 +79,7 @@ namespace Relisten.Controllers
         [Authorize]
         public IActionResult AllYearsAndShows()
         {
-            return JsonSuccess(BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
+            return StatusCode(201, BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
         }
 
         [HttpGet("{idOrSlug}/{showIdentifier}")]
@@ -93,7 +93,7 @@ namespace Relisten.Controllers
                 var jobId = BackgroundJob.Enqueue(() =>
                     _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null));
 
-                return JsonSuccess($"Queued as job {jobId}!");
+                return StatusCode(201, $"Queued as job {jobId}!");
             }
 
             return JsonNotFound(false);
@@ -109,7 +109,7 @@ namespace Relisten.Controllers
             {
                 await _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null, null);
 
-                return JsonSuccess("done!");
+                return StatusCode(201, "done!");
             }
 
             return JsonNotFound(false);

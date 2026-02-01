@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
@@ -165,6 +166,16 @@ namespace Relisten.Api
             if (!request.Path.StartsWithSegments("/api"))
             {
                 return;
+            }
+
+            // Only cache 200 OK responses
+            if (ctx.Result is IStatusCodeActionResult statusCodeResult)
+            {
+                var statusCode = statusCodeResult.StatusCode;
+                if (statusCode.HasValue && statusCode.Value != 200)
+                {
+                    return;
+                }
             }
 
             var path = request.Path.Value ?? string.Empty;
