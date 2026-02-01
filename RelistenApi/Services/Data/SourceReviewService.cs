@@ -27,29 +27,18 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SourceReview>> UpdateAll(Source source, IEnumerable<SourceReview> reviews)
         {
-            const string guidSnippet =
-                @"md5(@source_id || '::review::' || COALESCE('' || @rating, 'NULL') || COALESCE('' || @title, 'NULL') || COALESCE('' || @author, 'NULL') || @updated_at)::uuid";
+            var reviewList = reviews.ToList();
+            if (reviewList.Count == 0)
+            {
+                return Enumerable.Empty<SourceReview>();
+            }
+
             return await db.WithWriteConnection(async con =>
             {
-                var inserted = new List<SourceReview>();
-
-                foreach (var review in reviews)
-                {
-                    var p = new
-                    {
-                        review.id,
-                        review.source_id,
-                        review.rating,
-                        review.title,
-                        review.review,
-                        review.author,
-                        review.updated_at
-                    };
-
-                    inserted.Add(await con.QuerySingleAsync<SourceReview>($@"
+                // Batch insert using UNNEST for all reviews at once
+                var inserted = (await con.QueryAsync<SourceReview>(@"
                     INSERT INTO
                         source_reviews
-
                         (
                             source_id,
                             rating,
@@ -59,24 +48,36 @@ namespace Relisten.Data
                             updated_at,
                             uuid
                         )
-                    VALUES
-                        (
-                            @source_id,
-                            @rating,
-                            @title,
-                            COALESCE(@review, ''),
-                            @author,
-                            @updated_at,
-                            {guidSnippet}
-                        )
+                    SELECT
+                        source_id,
+                        rating,
+                        title,
+                        COALESCE(review, ''),
+                        author,
+                        updated_at,
+                        md5(source_id || '::review::' || COALESCE('' || rating, 'NULL') || COALESCE('' || title, 'NULL') || COALESCE('' || author, 'NULL') || updated_at)::uuid
+                    FROM UNNEST(
+                        @source_ids::int[],
+                        @ratings::decimal[],
+                        @titles::text[],
+                        @reviews::text[],
+                        @authors::text[],
+                        @updated_ats::timestamp with time zone[]
+                    ) AS t(source_id, rating, title, review, author, updated_at)
                     ON CONFLICT ON CONSTRAINT source_reviews_uuid
                     DO
                         UPDATE SET
                             review = EXCLUDED.review
-
                     RETURNING *
-                    ", p));
-                }
+                ", new
+                {
+                    source_ids = reviewList.Select(r => r.source_id).ToArray(),
+                    ratings = reviewList.Select(r => r.rating).ToArray(),
+                    titles = reviewList.Select(r => r.title).ToArray(),
+                    reviews = reviewList.Select(r => r.review).ToArray(),
+                    authors = reviewList.Select(r => r.author).ToArray(),
+                    updated_ats = reviewList.Select(r => r.updated_at).ToArray()
+                })).ToList();
 
                 await con.ExecuteAsync(@"
                     DELETE
