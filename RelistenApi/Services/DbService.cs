@@ -28,7 +28,7 @@ namespace Relisten
             // Npgsql handles multi-host failover automatically
             var roHost = uri.Host.Replace("relisten-db-rw.default", "relisten-db-ro.default");
             ReadOnlyConnStr =
-                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attrs=prefer-standby";
+                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attributes=prefer-standby";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");
