@@ -227,6 +227,41 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
+        /// <summary>
+        /// Same as AllForArtist but reads from the primary database to ensure read-after-write consistency.
+        /// Use this during imports after content has been deleted to avoid read replica lag.
+        /// </summary>
+        public async Task<IEnumerable<Source>> AllForArtistFromPrimary(Artist artist)
+        {
+            return await db.WithWriteConnection(con => con.QueryAsync<Source>(@"
+                SELECT
+                    s.*
+                FROM
+                    sources s
+                WHERE
+                    s.artist_id = @id
+            ", new {artist.id}));
+        }
+
+        /// <summary>
+        /// Same as AllSourceReviewInformationForArtist but reads from the primary database.
+        /// </summary>
+        public async Task<IEnumerable<SourceReviewInformation>> AllSourceReviewInformationForArtistFromPrimary(Artist artist)
+        {
+            return await db.WithWriteConnection(con => con.QueryAsync<SourceReviewInformation>(@"
+                SELECT
+                    r.source_id
+                    , s.upstream_identifier
+                    , r.source_review_max_updated_at as review_max_updated_at
+                    , r.source_review_count as review_count
+                FROM
+                    sources s
+                    JOIN source_review_counts r ON s.id = r.source_id
+                WHERE
+                    s.artist_id = @id
+            ", new {artist.id}));
+        }
+
         public async Task<IEnumerable<SourceReviewInformation>> AllSourceReviewInformationForArtist(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<SourceReviewInformation>(@"

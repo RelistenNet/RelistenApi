@@ -117,7 +117,8 @@ namespace Relisten.Import
 
         private async Task PreloadData(Artist artist)
         {
-            existingSources = (await _sourceService.AllForArtist(artist))
+            // Use primary database to ensure read-after-write consistency during full refresh
+            existingSources = (await _sourceService.AllForArtistFromPrimary(artist))
                 .GroupBy(venue => venue.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 

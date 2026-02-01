@@ -142,8 +142,8 @@ namespace Relisten.Import
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
                     var searchDateStr = doc.date.ToString("yyyy-MM-dd");
                     var needsDateUpdate = dbShow != null && (
-                        dbShow.display_date.Contains("XX") ||
-                        !dbShow.display_date.StartsWith(searchDateStr)
+                        dbShow.display_date?.Contains("XX") == true ||
+                        dbShow.display_date?.StartsWith(searchDateStr) != true
                     );
 
                     if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
@@ -594,12 +594,15 @@ namespace Relisten.Import
 
         private async Task PreloadData(Artist artist)
         {
-            existingSources = (await _sourceService.AllForArtist(artist))
+            // Use primary database methods to ensure read-after-write consistency.
+            // This is important when content has been deleted before import (full refresh),
+            // as the read replica may have replication lag.
+            existingSources = (await _sourceService.AllForArtistFromPrimary(artist))
                 .GroupBy(source => source.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 
             existingSourceReviewInformation =
-                (await _sourceService.AllSourceReviewInformationForArtist(artist))
+                (await _sourceService.AllSourceReviewInformationForArtistFromPrimary(artist))
                 .GroupBy(source => source.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (SourceReviewInformation?)grp.First());
         }
