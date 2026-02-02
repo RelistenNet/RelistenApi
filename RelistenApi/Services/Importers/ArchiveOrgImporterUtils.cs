@@ -26,29 +26,51 @@ public static class ArchiveOrgImporterUtils
             var month = parts[1];
             var day = parts[2];
 
-            var changed = false;
-
-            // Remap invalid months: "00" or month > 12 → "XX"
-            if (month == "00" || (int.TryParse(month, out var m) && m > 12))
+            // Handle "00" values first
+            if (month == "00")
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid month '{Month}' in date '{Date}', remapping to XX",
+                Log.Warning("[WEIRD_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
+                month = "XX";
+            }
+            if (day == "00")
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
+                day = "XX";
+            }
+
+            // Try flipping if month looks like a day (> 12 but ≤ 31)
+            if (int.TryParse(month, out var monthNum) && monthNum > 12 && monthNum <= 31 &&
+                int.TryParse(day, out var dayNum) && dayNum <= 12)
+            {
+                var flipped = $"{year}-{day}-{month}";
+                if (TestDate(flipped))
+                {
+                    Log.Warning("[WEIRD_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
+                        meta.identifier, meta.date, flipped);
+                    return flipped;
+                }
+            }
+
+            // If month still invalid (> 12), convert to XX
+            if (int.TryParse(month, out var monthVal) && monthVal > 12)
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
                     meta.identifier, month, meta.date);
                 month = "XX";
-                changed = true;
             }
 
-            // Remap invalid days: "00" or day > 31 → "XX"
-            if (day == "00" || (int.TryParse(day, out var dayNum) && dayNum > 31))
+            // If day invalid (> 31), convert to XX
+            if (int.TryParse(day, out var dayVal) && dayVal > 31)
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid day '{Day}' in date '{Date}', remapping to XX",
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
                     meta.identifier, day, meta.date);
                 day = "XX";
-                changed = true;
             }
 
-            if (changed)
+            // Return if any changes were made
+            var result = $"{year}-{month}-{day}";
+            if (result != meta.date)
             {
-                var result = string.Join('-', year, month, day);
                 Log.Warning("[WEIRD_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
                     meta.identifier, meta.date, result);
                 return result;

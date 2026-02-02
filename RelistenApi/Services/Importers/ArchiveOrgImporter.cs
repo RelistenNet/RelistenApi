@@ -127,13 +127,6 @@ namespace Relisten.Import
             {
                 try
                 {
-                    // Skip docs with invalid/unparseable dates (sentinel from TolerantArchiveDateTimeConverter)
-                    if (doc.date == DateTime.MinValue)
-                    {
-                        ctx?.WriteLine($"[INVALID_DATE] Skipping {doc.identifier} - could not parse date from array or invalid format");
-                        return;
-                    }
-
                     var currentIsTargetedShow = doc.identifier == showIdentifier;
 
                     if (showIdentifier != null && !currentIsTargetedShow)
