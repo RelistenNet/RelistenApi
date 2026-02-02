@@ -61,15 +61,6 @@ public static class ArchiveOrgImporterUtils
             return meta.date;
         }
 
-        if (meta.date == "2013-14-02")
-        {
-            // this date from The Werks always gives us issues and TryFlippingMonthAndDate doesn't work...I suspect
-            // some sort cultural issue because I cannot reproduce this locally
-            Log.Warning("[WEIRD_DATE] {Identifier}: Hardcoded fix for known bad date '2013-14-02' → '2013-02-14'",
-                meta.identifier);
-            return "2013-02-14";
-        }
-
         // happy case
         if (TestDate(meta.date))
         {
