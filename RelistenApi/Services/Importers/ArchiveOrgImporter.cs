@@ -127,6 +127,13 @@ namespace Relisten.Import
             {
                 try
                 {
+                    // Skip docs with invalid/unparseable dates (sentinel from TolerantArchiveDateTimeConverter)
+                    if (doc.date == DateTime.MinValue)
+                    {
+                        ctx?.WriteLine($"[INVALID_DATE] Skipping {doc.identifier} - could not parse date from array or invalid format");
+                        return;
+                    }
+
                     var currentIsTargetedShow = doc.identifier == showIdentifier;
 
                     if (showIdentifier != null && !currentIsTargetedShow)
@@ -185,6 +192,13 @@ namespace Relisten.Import
                         }
 
                         var properDate = ArchiveOrgImporterUtils.FixDisplayDate(detailsRoot.metadata);
+
+                        // Log if date was remapped (invalid month/day converted to XX)
+                        var originalDate = detailsRoot.metadata?.date;
+                        if (properDate != null && originalDate != null && properDate != originalDate)
+                        {
+                            ctx?.WriteLine($"[REMAP_DATE] {doc.identifier}: '{originalDate}' → '{properDate}'");
+                        }
 
                         if (properDate == null)
                         {

@@ -27,13 +27,15 @@ public static class ArchiveOrgImporterUtils
 
             var changed = false;
 
-            if (month == "00")
+            // Remap invalid months: "00" or month > 12 → "XX"
+            if (month == "00" || (int.TryParse(month, out var m) && m > 12))
             {
                 month = "XX";
                 changed = true;
             }
 
-            if (day == "00")
+            // Remap invalid days: "00" or day > 31 → "XX"
+            if (day == "00" || (int.TryParse(day, out var dayNum) && dayNum > 31))
             {
                 day = "XX";
                 changed = true;

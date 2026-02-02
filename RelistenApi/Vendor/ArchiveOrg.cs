@@ -90,38 +90,70 @@ namespace Relisten.Vendor.ArchiveOrg
             return min;
         }
 
+        private DateTime? TryParseDate(string? s)
+        {
+            if (string.IsNullOrEmpty(s))
+            {
+                return null;
+            }
+
+            // wtf is this archive.org??
+            s = s.Replace("T::Z", "T00:00:00Z");
+
+            // really. what the hell are you doing archive.org?!
+            if (s == "0000-01-01T00:00:00Z")
+            {
+                return null;
+            }
+
+            if (s.Length == 20)
+            {
+                return new DateTime(BoundedInt(s, 0, 4, 1, 9999), BoundedInt(s, 5, 2, 1, 12),
+                    BoundedInt(s, 8, 2, 1, 30), BoundedInt(s, 11, 2, 0, 23),
+                    BoundedInt(s, 14, 2, 0, 59), BoundedInt(s, 17, 2, 0, 59),
+                    DateTimeKind.Utc
+                );
+            }
+
+            if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.None, out var result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
         public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
-            // Load JObject from stream 
+            // Handle array of dates - return first valid date or sentinel
+            if (reader.TokenType == JsonToken.StartArray)
+            {
+                var array = JArray.Load(reader);
+                foreach (var item in array)
+                {
+                    if (item.Type == JTokenType.String)
+                    {
+                        var parsed = TryParseDate(item.ToString());
+                        if (parsed.HasValue)
+                        {
+                            return parsed.Value;
+                        }
+                    }
+                }
+                // Return sentinel value - will be caught in processDoc
+                return DateTime.MinValue;
+            }
+
             if (reader.TokenType == JsonToken.String)
             {
                 var s = reader.Value?.ToString();
-
-                if (string.IsNullOrEmpty(s))
+                var parsed = TryParseDate(s);
+                if (parsed.HasValue)
                 {
-                    return reader.Value;
+                    return parsed.Value;
                 }
-
-                // wtf is this archive.org??
-                s = s.Replace("T::Z", "T00:00:00Z");
-
-                // really. what the hell are you doing archive.org?!
-                if (s == "0000-01-01T00:00:00Z")
-                {
-                    return null;
-                }
-
-                if (s.Length == 20)
-                {
-                    return new DateTime(BoundedInt(s, 0, 4, 1, 9999), BoundedInt(s, 5, 2, 1, 12),
-                        BoundedInt(s, 8, 2, 1, 30), BoundedInt(s, 11, 2, 0, 23),
-                        BoundedInt(s, 14, 2, 0, 59), BoundedInt(s, 17, 2, 0, 59),
-                        DateTimeKind.Utc
-                    );
-                }
-
-                return DateTime.Parse(s, null);
+                return reader.Value;
             }
 
             return reader.Value;
