@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Relisten.Vendor.ArchiveOrg.Metadata;
+using Serilog;
 
 namespace Relisten.Import;
 
@@ -30,6 +31,8 @@ public static class ArchiveOrgImporterUtils
             // Remap invalid months: "00" or month > 12 → "XX"
             if (month == "00" || (int.TryParse(month, out var m) && m > 12))
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid month '{Month}' in date '{Date}', remapping to XX",
+                    meta.identifier, month, meta.date);
                 month = "XX";
                 changed = true;
             }
@@ -37,13 +40,18 @@ public static class ArchiveOrgImporterUtils
             // Remap invalid days: "00" or day > 31 → "XX"
             if (day == "00" || (int.TryParse(day, out var dayNum) && dayNum > 31))
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid day '{Day}' in date '{Date}', remapping to XX",
+                    meta.identifier, day, meta.date);
                 day = "XX";
                 changed = true;
             }
 
             if (changed)
             {
-                return string.Join('-', year, month, day);
+                var result = string.Join('-', year, month, day);
+                Log.Warning("[WEIRD_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
+                    meta.identifier, meta.date, result);
+                return result;
             }
         }
 
@@ -57,6 +65,8 @@ public static class ArchiveOrgImporterUtils
         {
             // this date from The Werks always gives us issues and TryFlippingMonthAndDate doesn't work...I suspect
             // some sort cultural issue because I cannot reproduce this locally
+            Log.Warning("[WEIRD_DATE] {Identifier}: Hardcoded fix for known bad date '2013-14-02' → '2013-02-14'",
+                meta.identifier);
             return "2013-02-14";
         }
 
@@ -70,6 +80,8 @@ public static class ArchiveOrgImporterUtils
 
         if (d != null)
         {
+            Log.Warning("[WEIRD_DATE] {Identifier}: Flipped month/day '{Original}' → '{Result}'",
+                meta.identifier, meta.date, d);
             return d;
         }
 
@@ -82,6 +94,8 @@ public static class ArchiveOrgImporterUtils
 
             if (TestDate(tdate))
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                    meta.identifier, meta.date, tdate);
                 return tdate;
             }
 
@@ -89,10 +103,14 @@ public static class ArchiveOrgImporterUtils
 
             if (flipped != null)
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                    meta.identifier, meta.date, flipped);
                 return flipped;
             }
         }
 
+        Log.Error("[WEIRD_DATE] {Identifier}: Unrecoverable date '{Date}' - all parsing strategies failed",
+            meta.identifier, meta.date);
         return null;
     }
 
