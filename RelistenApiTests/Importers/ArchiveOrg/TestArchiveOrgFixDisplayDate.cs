@@ -64,4 +64,23 @@ public class TestArchiveOrgFixDisplayDate
         InvokeFixDisplayDate("1997-05-XX").Should().Be("1997-05-XX");
         InvokeFixDisplayDate("1997-XX-XX").Should().Be("1997-XX-XX");
     }
+
+    [Test]
+    public void FixDisplayDate_ShouldReturnNullForInvalidCalendarDates()
+    {
+        // Feb 29 in non-leap year - can't be fixed, returns null
+        var meta = new Metadata { date = "1991-02-29", identifier = "test-id" };
+        ArchiveOrgImporterUtils.FixDisplayDate(meta).Should().BeNull();
+
+        // Feb 29 in leap year - valid, passes through
+        InvokeFixDisplayDate("1992-02-29").Should().Be("1992-02-29");
+
+        // April 31 doesn't exist - can't be fixed, returns null
+        var meta2 = new Metadata { date = "1997-04-31", identifier = "test-id" };
+        ArchiveOrgImporterUtils.FixDisplayDate(meta2).Should().BeNull();
+
+        // November 31 doesn't exist - can't be fixed, returns null
+        var meta3 = new Metadata { date = "1997-11-31", identifier = "test-id" };
+        ArchiveOrgImporterUtils.FixDisplayDate(meta3).Should().BeNull();
+    }
 }
