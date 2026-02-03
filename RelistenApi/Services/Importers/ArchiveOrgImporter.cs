@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -21,6 +22,7 @@ namespace Relisten.Import
     {
         public const string DataSourceName = "archive.org";
 
+        private static readonly ActivitySource ActivitySource = new("Relisten.Import");
 
         private readonly LinkService linkService;
 
@@ -103,6 +105,10 @@ namespace Relisten.Import
         private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res,
             ArtistUpstreamSource src, string? showIdentifier, PerformContext? ctx)
         {
+            using var artistActivity = ActivitySource.StartActivity($"import-artist:{artist.slug}");
+            artistActivity?.SetTag("artist.id", artist.id);
+            artistActivity?.SetTag("artist.name", artist.name);
+
             var stats = new ImportStats();
 
             var json = await res.Content.ReadAsStringAsync();
@@ -117,6 +123,7 @@ namespace Relisten.Import
                 return stats;
             }
 
+            artistActivity?.SetTag("source_count", root.response.docs.Count);
             ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
 
             var prog = ctx?.WriteProgressBar();
@@ -148,6 +155,15 @@ namespace Relisten.Import
 
                     if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
                     {
+                        var reason = isNew ? "new_source"
+                            : needsToUpdateReviews ? "reviews_updated"
+                            : needsDateUpdate ? "date_update"
+                            : "targeted_show";
+
+                        using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
+                        sourceActivity?.SetTag("import.reason", reason);
+                        sourceActivity?.SetTag("archive.identifier", doc.identifier);
+
                         ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
 
                         var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));

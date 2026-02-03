@@ -101,6 +101,9 @@ namespace Relisten
                             };
                         })
                         .AddNpgsql()
+                        .AddHttpClientInstrumentation()
+                        .AddHangfireInstrumentation()
+                        .AddSource("Relisten.Import")
                         .AddOtlpExporter(otlpOptions =>
                         {
                             otlpOptions.Endpoint = new Uri(otlpEndpoint);
