@@ -4,6 +4,7 @@ using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
+using Serilog;
 
 namespace Relisten.Vendor.ArchiveOrg
 {
@@ -90,38 +91,104 @@ namespace Relisten.Vendor.ArchiveOrg
             return min;
         }
 
+        private DateTime? TryParseDate(string? s, string? identifier = null)
+        {
+            if (string.IsNullOrEmpty(s))
+            {
+                return null;
+            }
+
+            var original = s;
+
+            // wtf is this archive.org??
+            if (s.Contains("T::Z"))
+            {
+                s = s.Replace("T::Z", "T00:00:00Z");
+                Log.Warning("[WEIRD_DATE] {Identifier}: Empty time component 'T::Z' in date '{Original}'", identifier, original);
+            }
+
+            // really. what the hell are you doing archive.org?!
+            if (s == "0000-01-01T00:00:00Z")
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Null/epoch date '0000-01-01T00:00:00Z'", identifier);
+                return null;
+            }
+
+            if (s.Length == 20)
+            {
+                // This is the bounded parsing path for ISO format dates with potentially invalid components
+                var year = BoundedInt(s, 0, 4, 1, 9999);
+                var month = BoundedInt(s, 5, 2, 1, 12);
+                var day = BoundedInt(s, 8, 2, 1, 30);
+                var hour = BoundedInt(s, 11, 2, 0, 23);
+                var minute = BoundedInt(s, 14, 2, 0, 59);
+                var second = BoundedInt(s, 17, 2, 0, 59);
+
+                // Check if any values were clamped
+                var expectedYear = int.TryParse(s.Substring(0, 4), out var ey) ? ey : -1;
+                var expectedMonth = int.TryParse(s.Substring(5, 2), out var em) ? em : -1;
+                var expectedDay = int.TryParse(s.Substring(8, 2), out var ed) ? ed : -1;
+
+                if (year != expectedYear || month != expectedMonth || day != expectedDay)
+                {
+                    Log.Warning("[WEIRD_DATE] {Identifier}: Clamped invalid date components '{Original}' → {Year}-{Month:D2}-{Day:D2}",
+                        identifier, original, year, month, day);
+                }
+
+                return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
+            }
+
+            if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.None, out var result))
+            {
+                return result;
+            }
+
+            Log.Warning("[WEIRD_DATE] {Identifier}: Failed to parse date '{Original}'", identifier, original);
+            return null;
+        }
+
         public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
-            // Load JObject from stream 
+            // Handle array of dates - return first valid date or sentinel
+            if (reader.TokenType == JsonToken.StartArray)
+            {
+                var array = JArray.Load(reader);
+                var arrayStr = string.Join(", ", array.Select(i => i.ToString()));
+                Log.Warning("[WEIRD_DATE] Date field is an array instead of string: [{ArrayValues}]", arrayStr);
+
+                foreach (var item in array)
+                {
+                    if (item.Type == JTokenType.String)
+                    {
+                        var parsed = TryParseDate(item.ToString());
+                        if (parsed.HasValue)
+                        {
+                            Log.Information("[WEIRD_DATE] Using first valid date from array: {Date}", parsed.Value);
+                            return parsed.Value;
+                        }
+                    }
+                }
+                // Return sentinel value - will be caught in processDoc
+                Log.Warning("[WEIRD_DATE] No valid dates found in array, returning sentinel");
+                return DateTime.MinValue;
+            }
+
             if (reader.TokenType == JsonToken.String)
             {
                 var s = reader.Value?.ToString();
-
-                if (string.IsNullOrEmpty(s))
+                var parsed = TryParseDate(s);
+                if (parsed.HasValue)
                 {
-                    return reader.Value;
+                    return parsed.Value;
                 }
+                return reader.Value;
+            }
 
-                // wtf is this archive.org??
-                s = s.Replace("T::Z", "T00:00:00Z");
-
-                // really. what the hell are you doing archive.org?!
-                if (s == "0000-01-01T00:00:00Z")
-                {
-                    return null;
-                }
-
-                if (s.Length == 20)
-                {
-                    return new DateTime(BoundedInt(s, 0, 4, 1, 9999), BoundedInt(s, 5, 2, 1, 12),
-                        BoundedInt(s, 8, 2, 1, 30), BoundedInt(s, 11, 2, 0, 23),
-                        BoundedInt(s, 14, 2, 0, 59), BoundedInt(s, 17, 2, 0, 59),
-                        DateTimeKind.Utc
-                    );
-                }
-
-                return DateTime.Parse(s, null);
+            if (reader.TokenType != JsonToken.Null)
+            {
+                Log.Warning("[WEIRD_DATE] Unexpected token type for date field: {TokenType}, value: {Value}",
+                    reader.TokenType, reader.Value);
             }
 
             return reader.Value;

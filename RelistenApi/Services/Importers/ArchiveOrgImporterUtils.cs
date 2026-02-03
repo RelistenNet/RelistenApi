@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Relisten.Vendor.ArchiveOrg.Metadata;
+using Serilog;
 
 namespace Relisten.Import;
 
@@ -25,23 +26,54 @@ public static class ArchiveOrgImporterUtils
             var month = parts[1];
             var day = parts[2];
 
-            var changed = false;
-
+            // Handle "00" values first
             if (month == "00")
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
                 month = "XX";
-                changed = true;
             }
-
             if (day == "00")
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
                 day = "XX";
-                changed = true;
             }
 
-            if (changed)
+            // Try flipping if month looks like a day (> 12 but ≤ 31)
+            if (int.TryParse(month, out var monthNum) && monthNum > 12 && monthNum <= 31 &&
+                int.TryParse(day, out var dayNum) && dayNum <= 12)
             {
-                return string.Join('-', year, month, day);
+                var flipped = $"{year}-{day}-{month}";
+                if (TestDate(flipped))
+                {
+                    Log.Warning("[WEIRD_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
+                        meta.identifier, meta.date, flipped);
+                    return flipped;
+                }
+            }
+
+            // If month still invalid (> 12), convert to XX
+            if (int.TryParse(month, out var monthVal) && monthVal > 12)
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
+                    meta.identifier, month, meta.date);
+                month = "XX";
+            }
+
+            // If day invalid (> 31), convert to XX
+            if (int.TryParse(day, out var dayVal) && dayVal > 31)
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
+                    meta.identifier, day, meta.date);
+                day = "XX";
+            }
+
+            // Return if any changes were made
+            var result = $"{year}-{month}-{day}";
+            if (result != meta.date)
+            {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
+                    meta.identifier, meta.date, result);
+                return result;
             }
         }
 
@@ -49,13 +81,6 @@ public static class ArchiveOrgImporterUtils
         if (meta.date.Contains('X'))
         {
             return meta.date;
-        }
-
-        if (meta.date == "2013-14-02")
-        {
-            // this date from The Werks always gives us issues and TryFlippingMonthAndDate doesn't work...I suspect
-            // some sort cultural issue because I cannot reproduce this locally
-            return "2013-02-14";
         }
 
         // happy case
@@ -68,6 +93,8 @@ public static class ArchiveOrgImporterUtils
 
         if (d != null)
         {
+            Log.Warning("[WEIRD_DATE] {Identifier}: Flipped month/day '{Original}' → '{Result}'",
+                meta.identifier, meta.date, d);
             return d;
         }
 
@@ -80,6 +107,8 @@ public static class ArchiveOrgImporterUtils
 
             if (TestDate(tdate))
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                    meta.identifier, meta.date, tdate);
                 return tdate;
             }
 
@@ -87,10 +116,14 @@ public static class ArchiveOrgImporterUtils
 
             if (flipped != null)
             {
+                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                    meta.identifier, meta.date, flipped);
                 return flipped;
             }
         }
 
+        Log.Error("[WEIRD_DATE] {Identifier}: Unrecoverable date '{Date}' - all parsing strategies failed",
+            meta.identifier, meta.date);
         return null;
     }
 

@@ -186,6 +186,13 @@ namespace Relisten.Import
 
                         var properDate = ArchiveOrgImporterUtils.FixDisplayDate(detailsRoot.metadata);
 
+                        // Log if date was remapped (invalid month/day converted to XX)
+                        var originalDate = detailsRoot.metadata?.date;
+                        if (properDate != null && originalDate != null && properDate != originalDate)
+                        {
+                            ctx?.WriteLine($"[REMAP_DATE] {doc.identifier}: '{originalDate}' → '{properDate}'");
+                        }
+
                         if (properDate == null)
                         {
                             ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
