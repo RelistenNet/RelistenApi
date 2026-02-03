@@ -153,62 +153,49 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<SetlistSong>> InsertAll(Artist artist, IEnumerable<SetlistSong> songs)
         {
-            /*if (song.id != 0)
+            var songList = songs.ToList();
+            if (songList.Count == 0)
             {
-                return await db.WithConnection(con => con.QuerySingleAsync<SetlistSong>(@"
-                    UPDATE
-                        setlist_songs
-                    SET
-                        artist_id = @artist_id,
-                        name = @name,
-                        slug = @slug,
-                        upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at
-                    WHERE
-                        id = @id
-                    RETURNING *
-                ", song));
-            }*/
+                return Enumerable.Empty<SetlistSong>();
+            }
+
             return await db.WithWriteConnection(async con =>
             {
-                var inserted = new List<SetlistSong>();
-
-                foreach (var song in songs)
+                // Batch insert using UNNEST for all songs at once
+                var inserted = await con.QueryAsync<SetlistSong>(@"
+                    INSERT INTO
+                        setlist_songs
+                        (
+                            artist_id,
+                            name,
+                            slug,
+                            upstream_identifier,
+                            updated_at,
+                            uuid
+                        )
+                    SELECT
+                        artist_id,
+                        name,
+                        slug,
+                        upstream_identifier,
+                        updated_at,
+                        md5(artist_id || '::setlist_song::' || upstream_identifier)::uuid
+                    FROM UNNEST(
+                        @artist_ids::int[],
+                        @names::text[],
+                        @slugs::text[],
+                        @upstream_identifiers::text[],
+                        @updated_ats::timestamp with time zone[]
+                    ) AS t(artist_id, name, slug, upstream_identifier, updated_at)
+                    RETURNING *
+                ", new
                 {
-                    var p = new
-                    {
-                        song.id,
-                        song.artist_id,
-                        song.name,
-                        song.slug,
-                        song.upstream_identifier,
-                        song.updated_at
-                    };
-
-                    inserted.Add(await con.QuerySingleAsync<SetlistSong>(@"
-                        INSERT INTO
-                            setlist_songs
-
-                            (
-                                artist_id,
-                                name,
-                                slug,
-                                upstream_identifier,
-                                updated_at,
-                                uuid
-                            )
-                        VALUES
-                            (
-                                @artist_id,
-                                @name,
-                                @slug,
-                                @upstream_identifier,
-                                @updated_at,
-                                md5(@artist_id || '::setlist_song::' || @upstream_identifier)::uuid
-                            )
-                        RETURNING *
-                    ", p));
-                }
+                    artist_ids = songList.Select(s => s.artist_id).ToArray(),
+                    names = songList.Select(s => s.name).ToArray(),
+                    slugs = songList.Select(s => s.slug).ToArray(),
+                    upstream_identifiers = songList.Select(s => s.upstream_identifier).ToArray(),
+                    updated_ats = songList.Select(s => s.updated_at).ToArray()
+                });
 
                 return inserted;
             });
