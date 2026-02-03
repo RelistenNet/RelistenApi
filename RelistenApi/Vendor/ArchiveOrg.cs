@@ -18,7 +18,7 @@ namespace Relisten.Vendor.ArchiveOrg
         public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
             JsonSerializer serializer)
         {
-            // Load JObject from stream 
+            // Load JObject from stream
             if (reader.TokenType == JsonToken.StartArray)
             {
                 var l = new List<string>();
@@ -182,6 +182,11 @@ namespace Relisten.Vendor.ArchiveOrg
                 {
                     return parsed.Value;
                 }
+                return reader.Value;
+            }
+
+            if (reader.TokenType == JsonToken.Date)
+            {
                 return reader.Value;
             }
 
