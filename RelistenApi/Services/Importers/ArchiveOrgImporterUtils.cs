@@ -29,12 +29,12 @@ public static class ArchiveOrgImporterUtils
             // Handle "00" values first
             if (month == "00")
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
+                Log.Warning("[REMAP_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
                 month = "XX";
             }
             if (day == "00")
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
+                Log.Warning("[REMAP_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
                 day = "XX";
             }
 
@@ -45,7 +45,7 @@ public static class ArchiveOrgImporterUtils
                 var flipped = $"{year}-{day}-{month}";
                 if (TestDate(flipped))
                 {
-                    Log.Warning("[WEIRD_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
+                    Log.Warning("[FLIP_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
                         meta.identifier, meta.date, flipped);
                     return flipped;
                 }
@@ -54,7 +54,7 @@ public static class ArchiveOrgImporterUtils
             // If month still invalid (> 12), convert to XX
             if (int.TryParse(month, out var monthVal) && monthVal > 12)
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
+                Log.Warning("[INVALID_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
                     meta.identifier, month, meta.date);
                 month = "XX";
             }
@@ -62,7 +62,7 @@ public static class ArchiveOrgImporterUtils
             // If day invalid (> 31), convert to XX
             if (int.TryParse(day, out var dayVal) && dayVal > 31)
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
+                Log.Warning("[INVALID_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
                     meta.identifier, day, meta.date);
                 day = "XX";
             }
@@ -71,7 +71,7 @@ public static class ArchiveOrgImporterUtils
             var result = $"{year}-{month}-{day}";
             if (result != meta.date)
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
+                Log.Warning("[REMAP_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
                     meta.identifier, meta.date, result);
                 return result;
             }
