@@ -29,12 +29,12 @@ public static class ArchiveOrgImporterUtils
             // Handle "00" values first
             if (month == "00")
             {
-                Log.Warning("[REMAP_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
+                // Log.Warning("[REMAP_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
                 month = "XX";
             }
             if (day == "00")
             {
-                Log.Warning("[REMAP_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
+                // Log.Warning("[REMAP_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
                 day = "XX";
             }
 
