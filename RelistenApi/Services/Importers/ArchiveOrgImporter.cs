@@ -147,24 +147,18 @@ namespace Relisten.Import
                     var isNew = dbShow == null;
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
-                    var searchDateStr = doc.date.ToString("yyyy-MM-dd");
-                    var needsDateUpdate = dbShow != null && (
-                        dbShow.display_date?.Contains("XX") == true ||
-                        dbShow.display_date?.StartsWith(searchDateStr) != true
-                    );
 
-                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews)
                     {
                         var reason = isNew ? "new_source"
                             : needsToUpdateReviews ? "reviews_updated"
-                            : needsDateUpdate ? "date_update"
                             : "targeted_show";
 
                         using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
                         sourceActivity?.SetTag("import.reason", reason);
-                        sourceActivity?.SetTag("archive.identifier", doc.identifier);
+                        sourceActivity?.SetTag("archive.identifier because", doc.identifier);
 
-                        ctx?.WriteLine("Pulling https://archive.org/metadata/{0}", doc.identifier);
+                        ctx?.WriteLine("Pulling https://archive.org/metadata/{0} because '{1}'", doc.identifier, reason);
 
                         var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
                         var detailsJson = await detailRes.Content.ReadAsStringAsync();
