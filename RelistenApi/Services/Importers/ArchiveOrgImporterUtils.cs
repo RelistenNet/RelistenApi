@@ -24,6 +24,22 @@ public static class ArchiveOrgImporterUtils
             return null;
         }
 
+        // Try parsing as a valid DateTime first (handles ISO 8601 like "2011-03-30T00:00:00Z")
+        // If successful, it's a valid date - just format it as yyyy-MM-dd
+        // Use RoundtripKind to preserve the original date without timezone conversion
+        if (DateTime.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            return parsed.ToString("yyyy-MM-dd");
+        }
+
+        // DateTime.TryParse failed - date has invalid components (00, XX, >12 month, etc.)
+        // Strip time component if present before proceeding with custom fixing logic
+        var tIndex = date.IndexOf('T');
+        if (tIndex > 0)
+        {
+            date = date.Substring(0, tIndex);
+        }
+
         var parts = date.Split('-');
 
         if (parts.Length == 3)

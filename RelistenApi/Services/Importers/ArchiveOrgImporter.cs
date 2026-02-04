@@ -148,7 +148,7 @@ namespace Relisten.Import
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
 
-                    var cleanedApiDate = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date);
+                    var cleanedApiDate = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date, doc.identifier);
                     var needsDateUpdate = dbShow != null &&
                         cleanedApiDate != null &&
                         dbShow.display_date != cleanedApiDate;
@@ -159,8 +159,6 @@ namespace Relisten.Import
                             : needsToUpdateReviews ? "reviews_updated"
                             : needsDateUpdate ? "date_updated"
                             : "targeted_show";
-
-                        ctx?.WriteLine("Refetching {0}: {1}", doc.identifier, reason);
 
                         using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
                         sourceActivity?.SetTag("import.reason", reason);

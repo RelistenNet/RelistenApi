@@ -65,6 +65,18 @@ public class TestArchiveOrgFixDisplayDate
     }
 
     [Test]
+    public void FixDisplayDate_ShouldStripTimeComponentFromIso8601Dates()
+    {
+        // Standard ISO 8601 with UTC timezone
+        InvokeFixDisplayDate("2011-03-30T00:00:00Z").Should().Be("2011-03-30");
+        InvokeFixDisplayDate("1997-05-20T12:34:56Z").Should().Be("1997-05-20");
+
+        // With invalid month/day that needs fixing after stripping time
+        InvokeFixDisplayDate("2010-00-00T00:00:00Z").Should().Be("2010-XX-XX");
+        InvokeFixDisplayDate("1997-20-05T00:00:00Z").Should().Be("1997-05-20");
+    }
+
+    [Test]
     public void FixDisplayDate_ShouldReturnNullForInvalidCalendarDates()
     {
         // Feb 29 in non-leap year - can't be fixed, returns null
@@ -81,5 +93,9 @@ public class TestArchiveOrgFixDisplayDate
         // November 31 doesn't exist - can't be fixed, returns null
         var meta3 = new Metadata { date = "1997-11-31", identifier = "test-id" };
         ArchiveOrgImporterUtils.FixDisplayDate(meta3).Should().BeNull();
+
+        // September 31 doesn't exist - can't be fixed, returns null (even with ISO 8601 format)
+        ArchiveOrgImporterUtils.FixDisplayDate("2009-09-31", "test-id").Should().BeNull();
+        ArchiveOrgImporterUtils.FixDisplayDate("2009-09-31T00:00:00Z", "test-id").Should().BeNull();
     }
 }
