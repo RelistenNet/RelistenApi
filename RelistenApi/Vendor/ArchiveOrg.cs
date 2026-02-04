@@ -224,7 +224,12 @@ namespace Relisten.Vendor.ArchiveOrg
     public class SearchDoc
     {
         private DateTime? _max;
-        public DateTime date { get; set; }
+
+        [JsonProperty("date")]
+        public string raw_display_date { get; set; } = null!;
+
+        [JsonIgnore]
+        public DateTime date => DateTime.TryParse(raw_display_date, out var d) ? d : DateTime.MinValue;
         public string identifier { get; set; } = null!;
         public DateTime? addeddate { get; set; }
         public DateTime? publicdate { get; set; }

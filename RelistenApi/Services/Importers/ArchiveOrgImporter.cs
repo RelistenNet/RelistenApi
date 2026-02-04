@@ -148,11 +148,19 @@ namespace Relisten.Import
                     var needsToUpdateReviews = maxSourceInformation != null &&
                                                doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
 
-                    if (currentIsTargetedShow || isNew || needsToUpdateReviews)
+                    var cleanedApiDate = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date);
+                    var needsDateUpdate = dbShow != null &&
+                        cleanedApiDate != null &&
+                        dbShow.display_date != cleanedApiDate;
+
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
                     {
                         var reason = isNew ? "new_source"
                             : needsToUpdateReviews ? "reviews_updated"
+                            : needsDateUpdate ? "date_updated"
                             : "targeted_show";
+
+                        ctx?.WriteLine("Refetching {0}: {1}", doc.identifier, reason);
 
                         using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
                         sourceActivity?.SetTag("import.reason", reason);
@@ -206,7 +214,7 @@ namespace Relisten.Import
                         if (properDate == null)
                         {
                             ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
-                                doc.identifier, detailsRoot.metadata.date);
+                                doc.identifier, detailsRoot.metadata?.date);
 
                             var e = new ArgumentException("Skipping doc because it has an invalid, unrecoverable date")
                             {
@@ -214,7 +222,7 @@ namespace Relisten.Import
                                 {
                                     ["artist"] = artist.name,
                                     ["archive_identifier"] = doc.identifier,
-                                    ["date"] = detailsRoot.metadata.date
+                                    ["date"] = detailsRoot.metadata?.date
                                 }
                             };
 

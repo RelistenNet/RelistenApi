@@ -13,12 +13,18 @@ public static class ArchiveOrgImporterUtils
     // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
     public static string? FixDisplayDate(Metadata? meta)
     {
-        if (meta == null || string.IsNullOrEmpty(meta.date))
+        if (meta == null) return null;
+        return FixDisplayDate(meta.date, meta.identifier);
+    }
+
+    public static string? FixDisplayDate(string? date, string? identifier = null)
+    {
+        if (string.IsNullOrEmpty(date))
         {
             return null;
         }
 
-        var parts = meta.date.Split('-');
+        var parts = date.Split('-');
 
         if (parts.Length == 3)
         {
@@ -29,12 +35,12 @@ public static class ArchiveOrgImporterUtils
             // Handle "00" values first
             if (month == "00")
             {
-                // Log.Warning("[REMAP_DATE] {Identifier}: Zero month in '{Date}', converting to XX", meta.identifier, meta.date);
+                // Log.Warning("[REMAP_DATE] {Identifier}: Zero month in '{Date}', converting to XX", identifier, date);
                 month = "XX";
             }
             if (day == "00")
             {
-                // Log.Warning("[REMAP_DATE] {Identifier}: Zero day in '{Date}', converting to XX", meta.identifier, meta.date);
+                // Log.Warning("[REMAP_DATE] {Identifier}: Zero day in '{Date}', converting to XX", identifier, date);
                 day = "XX";
             }
 
@@ -46,7 +52,7 @@ public static class ArchiveOrgImporterUtils
                 if (TestDate(flipped))
                 {
                     Log.Warning("[FLIP_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
-                        meta.identifier, meta.date, flipped);
+                        identifier, date, flipped);
                     return flipped;
                 }
             }
@@ -55,7 +61,7 @@ public static class ArchiveOrgImporterUtils
             if (int.TryParse(month, out var monthVal) && monthVal > 12)
             {
                 Log.Warning("[INVALID_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
-                    meta.identifier, month, meta.date);
+                    identifier, month, date);
                 month = "XX";
             }
 
@@ -63,67 +69,70 @@ public static class ArchiveOrgImporterUtils
             if (int.TryParse(day, out var dayVal) && dayVal > 31)
             {
                 Log.Warning("[INVALID_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
-                    meta.identifier, day, meta.date);
+                    identifier, day, date);
                 day = "XX";
             }
 
             // Return if any changes were made
             var result = $"{year}-{month}-{day}";
-            if (result != meta.date)
+            if (result != date)
             {
                 Log.Warning("[REMAP_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
-                    meta.identifier, meta.date, result);
+                    identifier, date, result);
                 return result;
             }
         }
 
         // 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
-        if (meta.date.Contains('X'))
+        if (date.Contains('X'))
         {
-            return meta.date;
+            return date;
         }
 
         // happy case
-        if (TestDate(meta.date))
+        if (TestDate(date))
         {
-            return meta.date;
+            return date;
         }
 
-        var d = TryFlippingMonthAndDate(meta.date);
+        var d = TryFlippingMonthAndDate(date);
 
         if (d != null)
         {
             Log.Warning("[WEIRD_DATE] {Identifier}: Flipped month/day '{Original}' → '{Result}'",
-                meta.identifier, meta.date, d);
+                identifier, date, d);
             return d;
         }
 
         // try to parse it out of the identifier
-        var matches = ExtractDateFromIdentifier.Match(meta.identifier);
-
-        if (matches.Success)
+        if (identifier != null)
         {
-            var tdate = matches.Groups[1].Value;
+            var matches = ExtractDateFromIdentifier.Match(identifier);
 
-            if (TestDate(tdate))
+            if (matches.Success)
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
-                    meta.identifier, meta.date, tdate);
-                return tdate;
-            }
+                var tdate = matches.Groups[1].Value;
 
-            var flipped = TryFlippingMonthAndDate(tdate);
+                if (TestDate(tdate))
+                {
+                    Log.Warning("[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                        identifier, date, tdate);
+                    return tdate;
+                }
 
-            if (flipped != null)
-            {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
-                    meta.identifier, meta.date, flipped);
-                return flipped;
+                var flipped = TryFlippingMonthAndDate(tdate);
+
+                if (flipped != null)
+                {
+                    Log.Warning("[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                        identifier, date, flipped);
+                    return flipped;
+                }
             }
         }
 
         Log.Error("[WEIRD_DATE] {Identifier}: Unrecoverable date '{Date}' - all parsing strategies failed",
-            meta.identifier, meta.date);
+            identifier, date);
         return null;
     }
 
