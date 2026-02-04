@@ -131,8 +131,10 @@ namespace Relisten.Vendor.ArchiveOrg
 
                 if (year != expectedYear || month != expectedMonth || day != expectedDay)
                 {
-                    Log.Warning("[WEIRD_DATE] {Identifier}: Clamped invalid date components '{Original}' → {Year}-{Month:D2}-{Day:D2}",
+                    Log.Error("[INVALID_DATE] {Identifier}: Could clamp invalid date components but moved on (report to archive) '{Original}' → {Year}-{Month:D2}-{Day:D2}",
                         identifier, original, year, month, day);
+                    // don't send clamped dates – we should surface them for errors and report to archive.org team for fixing
+                    return null;
                 }
 
                 return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
