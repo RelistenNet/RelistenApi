@@ -32,6 +32,7 @@ using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
 using Relisten.Services.Popularity;
+using Relisten.Services.Search;
 using Relisten.Vendor.ArchiveOrg;
 using Serilog;
 using SimpleMigrations;
@@ -267,6 +268,20 @@ namespace Relisten
             services.AddScoped<PopularityJobs, PopularityJobs>();
             services.AddScoped<ScheduledService, ScheduledService>();
             services.AddScoped<SearchService, SearchService>();
+
+            // Hybrid search services
+            services.AddHttpClient<EmbeddingService>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.openai.com/v1/");
+                var apiKey = Configuration["OPENAI_API_KEY"];
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                }
+            });
+            services.AddScoped<HybridSearchService>();
+            services.AddScoped<SearchIndexingService>();
+
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
         }

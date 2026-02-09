@@ -16,6 +16,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Popularity;
+using Relisten.Services.Search;
 using Sentry;
 
 namespace Relisten
@@ -32,6 +33,7 @@ namespace Relisten
             PopularityJobs popularityJobs,
             RedisService redisService,
             JerryGarciaComImporter jerryGarciaComImporter,
+            SearchIndexingService searchIndexingService,
             IConfiguration config
         )
         {
@@ -43,6 +45,7 @@ namespace Relisten
             _config = config;
             _redisService = redisService;
             _jerryGarciaComImporter = jerryGarciaComImporter;
+            _searchIndexingService = searchIndexingService;
         }
 
         private DbService _db { get; }
@@ -53,6 +56,7 @@ namespace Relisten
         private IConfiguration _config { get; }
         private RedisService _redisService { get; }
         private JerryGarciaComImporter _jerryGarciaComImporter { get; }
+        private SearchIndexingService _searchIndexingService { get; }
 
         // run every day at 6:30 AM UTC to seed artists before the refresh
         [RecurringJob("30 6 * * *", Enabled = true)]
@@ -324,6 +328,30 @@ namespace Relisten
             {
                 artistsCurrentlySyncing.TryRemove(artist.id, out var _);
             }
+        }
+
+        // Run every 15 minutes to index new/updated sources for search
+        [RecurringJob("*/15 * * * *", Enabled = true)]
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("default")]
+        [DisplayName("Index Search: Stale Sources")]
+        public async Task IndexSearchStaleSources(PerformContext? context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            await _searchIndexingService.IndexStaleSourcesAsync(context);
+        }
+
+        [Queue("default")]
+        [DisplayName("Index Search: Full Rebuild")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task IndexSearchFullRebuild(PerformContext? context)
+        {
+            await _searchIndexingService.IndexStaleSourcesAsync(context);
         }
 
         [Queue("artist_import")]
