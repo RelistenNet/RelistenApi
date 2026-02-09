@@ -180,10 +180,11 @@ namespace Relisten.Import
 -- Incremental refresh of show source info for this artist
 INSERT INTO
 	show_source_information
-	(show_id, max_updated_at, source_count, artist_id, max_avg_rating_weighted, has_soundboard_source, has_flac)
+	(show_id, max_updated_at, max_created_at, source_count, artist_id, max_avg_rating_weighted, has_soundboard_source, has_flac)
 SELECT
 	src.show_id,
 	max(src.updated_at) AS max_updated_at,
+	max(src.created_at) AS max_created_at,
 	count(*) AS source_count,
 	src.artist_id,
 	max(src.avg_rating_weighted) AS max_avg_rating_weighted,
@@ -194,6 +195,7 @@ WHERE src.artist_id = @id
 GROUP BY src.show_id, src.artist_id
 ON CONFLICT (show_id) DO UPDATE SET
 	max_updated_at = EXCLUDED.max_updated_at,
+	max_created_at = EXCLUDED.max_created_at,
 	source_count = EXCLUDED.source_count,
 	max_avg_rating_weighted = EXCLUDED.max_avg_rating_weighted,
 	has_soundboard_source = EXCLUDED.has_soundboard_source,
