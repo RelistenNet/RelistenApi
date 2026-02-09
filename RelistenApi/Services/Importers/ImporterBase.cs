@@ -538,7 +538,7 @@ WHERE
 	), show_info AS (
 		SELECT
 			s.show_id,
-			SUM(s.num_reviews) as num_reviews,
+			SUM(LN(s.num_reviews + 1)) as num_reviews,
 			AVG(s.avg_rating) as avg
 		FROM
 			sources s
@@ -554,7 +554,7 @@ WHERE
 	        i.avg,
 	        i_show.num_reviews,
 	        i_show.avg,
-	        (i_show.num_reviews * i_show.avg) + (i.num_reviews * i.avg) / (i_show.num_reviews + i.num_reviews + 1) as avg_rating_weighted
+	        (i_show.num_reviews * i_show.avg + LN(i.num_reviews + 1) * i.avg) / (i_show.num_reviews + LN(i.num_reviews + 1) + 1) as avg_rating_weighted
 	    FROM
 	        sources s
 			LEFT JOIN review_info i ON i.id = s.id
@@ -587,7 +587,7 @@ WHERE
 	WITH show_info AS (
 		SELECT
 			s.show_id,
-			SUM(s.num_ratings) as num_reviews,
+			SUM(LN(s.num_ratings + 1)) as num_reviews,
 			AVG(s.avg_rating) as avg
 		FROM
 			sources s
@@ -603,7 +603,7 @@ WHERE
 	        s.avg_rating,
 	        i_show.num_reviews,
 	        i_show.avg,
-	        (i_show.num_reviews * i_show.avg) + (s.num_ratings * s.avg_rating) / (i_show.num_reviews + s.num_ratings + 1) as avg_rating_weighted
+	        (i_show.num_reviews * i_show.avg + LN(s.num_ratings + 1) * s.avg_rating) / (i_show.num_reviews + LN(s.num_ratings + 1) + 1) as avg_rating_weighted
 	    FROM
 	        sources s
 			LEFT JOIN show_info i_show ON i_show.show_id = s.show_id
