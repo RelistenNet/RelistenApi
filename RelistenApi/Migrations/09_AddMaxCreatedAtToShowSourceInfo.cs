@@ -15,6 +15,10 @@ public class AddMaxCreatedAtToShowSourceInfo : Migration
                 SELECT MAX(created_at) FROM sources WHERE show_id = ssi.show_id
             );
 
+            -- Delete orphaned rows that have no matching sources (stale data)
+            DELETE FROM show_source_information
+            WHERE max_created_at IS NULL;
+
             ALTER TABLE show_source_information ALTER COLUMN max_created_at SET NOT NULL;
         ");
     }
