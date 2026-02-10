@@ -45,7 +45,7 @@ namespace Relisten.Data
 					1=1
 					{(lastSeenId != null ? "AND t.id > @lastSeenId" : "")}
 				ORDER BY
-					t.id {(lastSeenId != null ? "" : "DESC")}
+					t.created_at {(lastSeenId != null ? "" : "DESC")}, t.id {(lastSeenId != null ? "" : "DESC")}
 				LIMIT
 					@limit
 			", new {lastSeenId, limit}));
