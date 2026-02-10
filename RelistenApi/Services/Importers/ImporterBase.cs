@@ -433,9 +433,10 @@ INSERT INTO
 		--array_agg(setlist_show.date),
 		source.artist_id,
 		COALESCE(setlist_show.date, CASE
-			WHEN MIN(source.display_date) LIKE '%-XX-XX%' THEN to_date(LEFT(MIN(source.display_date), 10), 'YYYY')
-			WHEN MIN(source.display_date) LIKE '%-XX%' THEN to_date(LEFT(MIN(source.display_date), 10), 'YYYY-MM')
-			WHEN MIN(source.display_date) LIKE '%X%' THEN to_date(LEFT(MIN(source.display_date), 10), 'YYYY')
+			WHEN MIN(source.display_date) LIKE '____-XX-XX%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
+			WHEN MIN(source.display_date) LIKE '____-XX-%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
+			WHEN MIN(source.display_date) LIKE '____-__-XX%' THEN to_date(LEFT(MIN(source.display_date), 7), 'YYYY-MM')
+			WHEN MIN(source.display_date) LIKE '%X%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
 			ELSE to_date(LEFT(MIN(source.display_date), 10), 'YYYY-MM-DD')
 		END) as date,
 		MIN(source.display_date) as display_date,
