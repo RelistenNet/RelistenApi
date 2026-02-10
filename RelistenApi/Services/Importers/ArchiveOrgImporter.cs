@@ -14,6 +14,7 @@ using Relisten.Data;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
+using Serilog;
 using Sentry;
 
 namespace Relisten.Import
@@ -182,8 +183,11 @@ namespace Relisten.Import
                         // in the future it might be better to retry intead of skipping
                         if (detailsRoot.metadata?.date == null)
                         {
-                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata: {1}",
+                            Log.Warning("[MISSING_DATE]: {Identifier}: Skipping because metadata date is null, Artist={Artist}",
+                                doc.identifier, artist.name);
+                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata (e.g. date missing): {1}",
                                 doc.identifier, detailsRoot.metadata);
+
 
                             var e = new ArgumentException("Invalid, unrecoverable metadata")
                             {
