@@ -168,12 +168,13 @@ namespace Relisten.Api
                 return;
             }
 
-            // Only cache 200 OK responses
+            // Explicitly prevent caching of non-200 responses
             if (ctx.Result is IStatusCodeActionResult statusCodeResult)
             {
                 var statusCode = statusCodeResult.StatusCode;
                 if (statusCode.HasValue && statusCode.Value != 200)
                 {
+                    ctx.HttpContext.Response.Headers["Cache-Control"] = "no-store";
                     return;
                 }
             }
