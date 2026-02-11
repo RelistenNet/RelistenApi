@@ -109,10 +109,13 @@ namespace Relisten.Import
             var ratings = await ScrapePhishNetForSource(dbSource, ctx);
             var dirty = false;
 
-            if (dbSource.num_ratings != ratings.RatingVotesCast)
+            var newAvgRating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
+
+            if (dbSource.num_ratings != ratings.RatingVotesCast
+                || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001)
             {
                 dbSource.num_ratings = ratings.RatingVotesCast;
-                dbSource.avg_rating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
+                dbSource.avg_rating = newAvgRating;
 
                 dirty = true;
             }
