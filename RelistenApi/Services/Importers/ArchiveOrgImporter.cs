@@ -11,6 +11,7 @@ using Hangfire.Server;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Services.Classification;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
@@ -41,7 +42,8 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            RedisService redisService
+            RedisService redisService,
+            RecordingTypeClassifier recordingTypeClassifier
         ) : base(db, redisService)
         {
             this.linkService = linkService;
@@ -52,6 +54,7 @@ namespace Relisten.Import
             _sourceReviewService = sourceReviewService;
             _sourceTrackService = sourceTrackService;
             _sourceSetService = sourceSetService;
+            _recordingTypeClassifier = recordingTypeClassifier;
         }
 
         protected SourceService _sourceService { get; set; }
@@ -60,6 +63,7 @@ namespace Relisten.Import
         protected SourceTrackService _sourceTrackService { get; set; }
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
+        protected RecordingTypeClassifier _recordingTypeClassifier { get; set; }
 
         public override string ImporterName => "archive.org";
 
@@ -494,11 +498,21 @@ namespace Relisten.Import
         {
             var meta = detailsRoot.metadata;
 
-            var sbd = meta.identifier.EmptyIfNull().ContainsInsensitive("sbd")
-                      || meta.title.EmptyIfNull().ContainsInsensitive("sbd")
-                      || meta.source.EmptyIfNull().ContainsInsensitive("sbd")
-                      || meta.lineage.EmptyIfNull().ContainsInsensitive("sbd")
-                ;
+            // Classify recording type using rule-based layer (synchronous, no API cost).
+            // LLM classification happens asynchronously in the backfill job for ambiguous cases.
+            var classificationMeta = new SourceMetadataForClassification
+            {
+                Identifier = meta.identifier,
+                Title = meta.title,
+                Source = meta.source,
+                Lineage = meta.lineage,
+                TaperNotes = meta.notes,
+                Description = meta.description
+            };
+            var classification = _recordingTypeClassifier.ClassifyWithRules(classificationMeta);
+
+            // Derive is_soundboard from recording_type for backward compatibility
+            var isSbd = classification.RecordingType == RecordingType.Soundboard;
 
             var remaster = meta.identifier.EmptyIfNull().ContainsInsensitive("remast")
                            || meta.title.EmptyIfNull().ContainsInsensitive("remast")
@@ -520,7 +534,10 @@ namespace Relisten.Import
             return new Source
             {
                 artist_id = artist.id,
-                is_soundboard = sbd,
+                is_soundboard = isSbd,
+                recording_type = classification.RecordingType,
+                recording_type_confidence = classification.Confidence,
+                recording_type_method = classification.Method,
                 is_remaster = remaster,
                 has_jamcharts = false,
                 avg_rating = 0, // dbReviews.Average(rev => 1.0 * rev.rating),

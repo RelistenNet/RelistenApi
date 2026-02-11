@@ -30,6 +30,14 @@ namespace Relisten.Api.Models
 
         [Required] public bool is_soundboard { get; set; }
 
+        [Required]
+        [JsonConverter(typeof(StringEnumConverter))]
+        public RecordingType recording_type { get; set; } = RecordingType.Unknown;
+
+        public float? recording_type_confidence { get; set; }
+        public string? recording_type_method { get; set; }
+        public bool recording_type_verified { get; set; }
+
         [Required] public bool is_remaster { get; set; }
 
         [Required] public bool has_jamcharts { get; set; }
