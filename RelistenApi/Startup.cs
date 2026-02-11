@@ -186,8 +186,15 @@ namespace Relisten
 
                     if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
                     {
-                        throw new Exception(
-                            $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.");
+                        var msg = $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.";
+                        if (HostEnvironment.IsDevelopment())
+                        {
+                            Log.Warning(msg);
+                        }
+                        else
+                        {
+                            throw new Exception(msg);
+                        }
                     }
                 }
 

@@ -50,14 +50,14 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("v3/artists/{artistUuid}/venues/{venueUuid}")]
+        [HttpGet("v3/artists/{artistIdOrSlug}/venues/{venueIdOrSlug}")]
         [ProducesResponseType(typeof(VenueWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> VenuesWithShows([FromRoute] Guid artistUuid, [FromRoute] Guid venueUuid)
+        public async Task<IActionResult> VenuesWithShowsV3(string artistIdOrSlug, string venueIdOrSlug)
         {
-            return await ApiRequest(
-                await _artistService.FindArtistByUuid(artistUuid),
-                art => _venueService.ForIdWithShows(art, null, venueUuid));
+            var id = new Identifier(venueIdOrSlug);
+            return await ApiRequest(artistIdOrSlug,
+                art => _venueService.ForIdWithShows(art, id.Id, id.Guid, id.Slug));
         }
     }
 }

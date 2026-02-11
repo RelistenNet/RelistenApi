@@ -47,14 +47,14 @@ namespace Relisten.Controllers
             });
         }
 
-        [HttpGet("v3/artists/{artistUuid}/tours/{tourUuid}")]
+        [HttpGet("v3/artists/{artistIdOrSlug}/tours/{tourIdOrSlug}")]
         [ProducesResponseType(typeof(TourWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> ToursWithShows([FromRoute] Guid artistUuid, [FromRoute] Guid tourUuid)
+        public async Task<IActionResult> ToursWithShowsV3(string artistIdOrSlug, string tourIdOrSlug)
         {
-            return await ApiRequest(
-                await _artistService.FindArtistByUuid(artistUuid),
-                art => _tourService.ForIdWithShows(art, null, tourUuid));
+            var id = new Identifier(tourIdOrSlug);
+            return await ApiRequest(artistIdOrSlug,
+                art => _tourService.ForIdWithShows(art, id.Id, id.Guid, id.Slug));
         }
     }
 }

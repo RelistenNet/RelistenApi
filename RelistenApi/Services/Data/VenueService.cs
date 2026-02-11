@@ -162,7 +162,7 @@ namespace Relisten.Data
                 ", new {upstreamId}));
         }
 
-        public async Task<T?> ForId<T>(int? id = null, Guid? uuid = null) where T : Venue
+        public async Task<T?> ForId<T>(int? id = null, Guid? uuid = null, string? slug = null, int? artist_id = null) where T : Venue
         {
             return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
                 SELECT
@@ -188,8 +188,9 @@ namespace Relisten.Data
                     ) src ON src.venue_id = v.id
                     JOIN artists a ON a.id = v.artist_id
                 WHERE
-                    (v.id = @id OR v.uuid = @uuid)
-            ", new {id, uuid}));
+                    (v.id = @id OR v.uuid = @uuid OR v.slug = @slug)
+                    AND (@artist_id IS NULL OR v.artist_id = @artist_id)
+            ", new {id, uuid, slug, artist_id}));
         }
 
         public async Task<VenueWithShowCount?> ForId(int id)
@@ -197,9 +198,9 @@ namespace Relisten.Data
             return await ForId<VenueWithShowCount>(id);
         }
 
-        public async Task<VenueWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
+        public async Task<VenueWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null, string? slug = null)
         {
-            var venue = await ForId<VenueWithShows>(id, uuid);
+            var venue = await ForId<VenueWithShows>(id, uuid, slug, artist.id);
 
             if (venue == null)
             {

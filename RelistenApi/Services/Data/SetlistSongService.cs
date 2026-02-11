@@ -41,7 +41,7 @@ namespace Relisten.Data
             ", new {artistId = artist.id}));
         }
 
-        public async Task<SetlistSongWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null)
+        public async Task<SetlistSongWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null, string? slug = null)
         {
             SetlistSongWithShows? bigSong = null;
             await db.WithConnection(con =>
@@ -79,7 +79,7 @@ namespace Relisten.Data
                     ) cnt ON cnt.show_id = shows.id
                 WHERE
                     s.artist_id = @artistId
-                    AND (s.id = @songId OR s.uuid = @songUuid)
+                    AND (s.id = @songId OR s.uuid = @songUuid OR s.slug = @songSlug)
                 ORDER BY shows.date
                 ",
                     (song, show, venue, tour, era, year) =>
@@ -120,7 +120,7 @@ namespace Relisten.Data
 
                         return song;
                     },
-                    new {artistId = artist.id, songId = id, songUuid = uuid}));
+                    new {artistId = artist.id, songId = id, songUuid = uuid, songSlug = slug}));
 
             return bigSong;
         }

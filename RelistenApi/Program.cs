@@ -14,11 +14,17 @@ namespace Relisten
         public static int Main(string[] args)
         {
             // Two-stage initialization: bootstrap logger before anything else
-            Log.Logger = new LoggerConfiguration()
+            var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+            var bootstrapConfig = new LoggerConfiguration()
                 .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
-                .Enrich.FromLogContext()
-                .WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter())
-                .CreateBootstrapLogger();
+                .Enrich.FromLogContext();
+
+            if (isDevelopment)
+                bootstrapConfig.WriteTo.Console();
+            else
+                bootstrapConfig.WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter());
+
+            Log.Logger = bootstrapConfig.CreateBootstrapLogger();
 
             try
             {
