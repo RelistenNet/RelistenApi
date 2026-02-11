@@ -311,7 +311,11 @@ namespace Relisten.Data
                 source.display_date,
                 source.venue_id,
                 source.num_ratings,
-                source.flac_type
+                source.flac_type,
+                recording_type = source.recording_type.ToDbString(),
+                source.recording_type_confidence,
+                source.recording_type_method,
+                source.recording_type_verified
             };
 
             return await db.WithWriteConnection(con => con.QuerySingleAsync<Source>(@"
@@ -337,6 +341,10 @@ namespace Relisten.Data
                         venue_id,
                         num_ratings,
                         flac_type,
+                        recording_type,
+                        recording_type_confidence,
+                        recording_type_method,
+                        recording_type_verified,
                         uuid
                     )
                 VALUES
@@ -360,6 +368,10 @@ namespace Relisten.Data
                         @venue_id,
                         @num_ratings,
                         @flac_type,
+                        @recording_type,
+                        @recording_type_confidence,
+                        @recording_type_method,
+                        @recording_type_verified,
                         md5(@artist_id || '::source::' || @upstream_identifier)::uuid
                     )
                 ON CONFLICT ON CONSTRAINT sources_uuid_key
@@ -383,7 +395,11 @@ namespace Relisten.Data
                         display_date = EXCLUDED.display_date,
                         venue_id = EXCLUDED.venue_id,
                         num_ratings = EXCLUDED.num_ratings,
-                        flac_type = EXCLUDED.flac_type
+                        flac_type = EXCLUDED.flac_type,
+                        recording_type = EXCLUDED.recording_type,
+                        recording_type_confidence = EXCLUDED.recording_type_confidence,
+                        recording_type_method = EXCLUDED.recording_type_method,
+                        recording_type_verified = EXCLUDED.recording_type_verified
 
                 RETURNING *
             ", p));

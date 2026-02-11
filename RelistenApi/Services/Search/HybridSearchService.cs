@@ -95,6 +95,7 @@ namespace Relisten.Services.Search
                     filter_artist_id = req.ArtistId,
                     filter_year = req.Year,
                     filter_soundboard = req.Soundboard,
+                    filter_recording_type = req.RecordingType,
                     result_limit = req.Limit,
                     result_offset = req.Offset,
                 }, transaction: tx);
@@ -123,6 +124,7 @@ namespace Relisten.Services.Search
                 WHERE (@filter_artist_id::int IS NULL OR si.artist_id = @filter_artist_id)
                   AND (@filter_year::smallint IS NULL OR si.show_year = @filter_year)
                   AND (@filter_soundboard::boolean IS NULL OR si.is_soundboard = @filter_soundboard)
+                  AND (@filter_recording_type::text IS NULL OR si.recording_type = @filter_recording_type)
                   AND si.embedding IS NOT NULL
                 ORDER BY si.embedding <=> @query_embedding::halfvec(1536)
                 LIMIT 200
@@ -163,6 +165,7 @@ namespace Relisten.Services.Search
                   AND (@filter_artist_id::int IS NULL OR si.artist_id = @filter_artist_id)
                   AND (@filter_year::smallint IS NULL OR si.show_year = @filter_year)
                   AND (@filter_soundboard::boolean IS NULL OR si.is_soundboard = @filter_soundboard)
+                  AND (@filter_recording_type::text IS NULL OR si.recording_type = @filter_recording_type)
                 ORDER BY ts_rank_cd(si.search_tsv, websearch_to_tsquery('english', @query_text), 32) DESC
                 LIMIT 200
             ),
@@ -193,6 +196,7 @@ namespace Relisten.Services.Search
                 si.venue_location,
                 si.tour_name,
                 si.is_soundboard,
+                si.recording_type,
                 si.avg_rating,
                 si.num_reviews,
                 si.taper,

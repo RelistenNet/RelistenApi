@@ -32,6 +32,7 @@ using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
 using Relisten.Services.Popularity;
+using Relisten.Services.Classification;
 using Relisten.Services.Search;
 using Relisten.Vendor.ArchiveOrg;
 using Serilog;
@@ -155,6 +156,7 @@ namespace Relisten
 
             SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
             SqlMapper.AddTypeHandler(new DateTimeHandler());
+            SqlMapper.AddTypeHandler(new RecordingTypeHandler());
 
             JsonConvert.DefaultSettings = () => new JsonSerializerSettings
             {
@@ -183,7 +185,7 @@ namespace Relisten
                         migrator.Baseline(2);
                     }
 
-                    migrator.MigrateTo(9);
+                    migrator.MigrateTo(12);
 
                     if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
                     {
@@ -209,25 +211,18 @@ namespace Relisten
                 hangfire.UseRecurringJob(typeof(ScheduledService));
             });
 
-            if (!HostEnvironment.IsDevelopment())
+            services.AddHangfireServer(options =>
             {
-                if (!string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"]) &&
-                    Configuration["ENABLE_HANGFIRE_SERVER"] != "false")
-                {
-                    services.AddHangfireServer(options =>
-                    {
-                        options.Queues = ["artist_import"];
-                        options.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
-                        options.WorkerCount = 10;
-                    });
+                options.Queues = ["artist_import"];
+                options.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
+                options.WorkerCount = 2;
+            });
 
-                    services.AddHangfireServer(options =>
-                    {
-                        options.Queues = ["default"];
-                        options.ServerName = $"relistenapi:default ({Environment.MachineName})";
-                    });
-                }
-            }
+            services.AddHangfireServer(options =>
+            {
+                options.Queues = ["default"];
+                options.ServerName = $"relistenapi:default ({Environment.MachineName})";
+            });
 
             var redis = new RedisService(configurationOptions);
             services.AddSingleton(redis);
@@ -279,8 +274,20 @@ namespace Relisten
                     client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
                 }
             });
+            services.AddHttpClient<LlmClassificationService>(client =>
+            {
+                client.BaseAddress = new Uri("https://api.openai.com/v1/");
+                var apiKey = Configuration["OPENAI_API_KEY"];
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                }
+            });
             services.AddScoped<HybridSearchService>();
             services.AddScoped<SearchIndexingService>();
+            services.AddScoped<RecordingTypeClassifier>();
+            services.AddScoped<TrackSongMatcher>();
+            services.AddScoped<VenueCanonicalizer>();
 
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
@@ -315,11 +322,8 @@ namespace Relisten
 
             app.UseMvc();
 
-            if (!env.IsDevelopment())
-            {
-                app.UseHangfireDashboard("/relisten-admin/hangfire",
-                    new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
-            }
+            app.UseHangfireDashboard("/relisten-admin/hangfire",
+                new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
 
             app.UseSwagger(c =>
             {

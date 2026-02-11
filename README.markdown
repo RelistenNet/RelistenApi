@@ -10,6 +10,8 @@ For local development you need redis and postgres. To make things easier there i
 
 ## Database Setup
 
+Install pv (`brew install pv`).
+
 Run `./start-local-databases.sh`. This will check if you have the latest development backup of the database. This won't change all the time be prepared to have your database blown away and recreated when running this command in the future.
 
 If you don't have the latest version, it will download a database backup and restore it to your docker container. This docker container is persisted to `local-dev/postgers-data/pgdata` so it will persist between docker launches.
@@ -23,7 +25,7 @@ docker-compose -f local-dev/docker-compose.yml up -d # the -d is optional to sen
 Both commands will start an Adminer server at [http://localhost:18080](http://localhost:18080) so that you can view the tables in the Postgres database. Here are the various connection infos to use Adminer or any other GUI tool (all hosts are `127.0.0.1` or `localhost`):
 
 |  service  | port  | database name | username | password           | url |
-| ----------- | ----- | ------------- | -------- | ------------------ | --- | 
+| ----------- | ----- | ------------- | -------- | ------------------ | --- |
 | redis     | 16379 |               | -        | -                  | - |
 | postgres  | 15432 | relisten_db   | relisten | local_dev_password | - |
 | adminer   | 18080 | relisten_db   | relisten | local_dev_password | [http://localhost:18080](http://localhost:18080) |

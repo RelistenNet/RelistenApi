@@ -19,6 +19,9 @@ namespace Relisten.Api.Models
         [Required] public string slug { get; set; } = null!;
         public string? past_names { get; set; }
 
+        /// <summary>FK to canonical_venues table for cross-artist deduplication.</summary>
+        public int? canonical_venue_id { get; set; }
+
         [Required]
         public string sortName
         {

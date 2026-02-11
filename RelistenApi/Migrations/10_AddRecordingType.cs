@@ -2,8 +2,8 @@ using SimpleMigrations;
 
 namespace Migrations;
 
-[Migration(9, "Add search_index table for hybrid full-text and semantic search")]
-public class AddSearchIndex : Migration
+[Migration(10, "Add search_index table for hybrid search and recording type classification")]
+public class AddSearchIndexAndRecordingType : Migration
 {
     protected override void Up()
     {
@@ -27,6 +27,7 @@ public class AddSearchIndex : Migration
 
                 -- Source metadata
                 is_soundboard   BOOLEAN DEFAULT FALSE,
+                recording_type  TEXT DEFAULT 'unknown',
                 avg_rating      REAL,
                 num_reviews     INTEGER DEFAULT 0,
                 taper           TEXT,
@@ -72,6 +73,7 @@ public class AddSearchIndex : Migration
             CREATE INDEX idx_search_date ON search_index (show_date);
             CREATE INDEX idx_search_rating ON search_index (avg_rating DESC NULLS LAST);
             CREATE INDEX idx_search_soundboard ON search_index (is_soundboard) WHERE is_soundboard = TRUE;
+            CREATE INDEX idx_search_recording_type ON search_index (recording_type);
 
             -- Extend source_reviews to support jam charts, HeadyVersion comments, etc.
             -- Existing rows are implicitly review_type='review', review_source='archive.org'
@@ -86,12 +88,28 @@ public class AddSearchIndex : Migration
                 WHERE source_track_id IS NOT NULL;
             CREATE INDEX idx_source_reviews_type ON source_reviews (review_type);
             CREATE INDEX idx_source_reviews_source ON source_reviews (review_source);
+
+            -- Add recording type classification columns to sources
+            ALTER TABLE sources
+                ADD COLUMN recording_type TEXT NOT NULL DEFAULT 'unknown',
+                ADD COLUMN recording_type_confidence REAL,
+                ADD COLUMN recording_type_method TEXT,
+                ADD COLUMN recording_type_verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+            CREATE INDEX idx_sources_recording_type ON sources (recording_type);
         ");
     }
 
     protected override void Down()
     {
         Execute(@"
+            DROP INDEX IF EXISTS idx_sources_recording_type;
+            ALTER TABLE sources
+                DROP COLUMN IF EXISTS recording_type,
+                DROP COLUMN IF EXISTS recording_type_confidence,
+                DROP COLUMN IF EXISTS recording_type_method,
+                DROP COLUMN IF EXISTS recording_type_verified;
+
             DROP TABLE IF EXISTS search_index;
 
             DROP INDEX IF EXISTS idx_source_reviews_track;

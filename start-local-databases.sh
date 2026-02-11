@@ -42,7 +42,7 @@ launch() {
     echo "Databases running :) Happy development!"
 }
 
-if [ "$DB_VERSION" = "$(cat $DB_VERSION_FILE)" ]; then
+if [ -f "$DB_VERSION_FILE" ] && [ "$DB_VERSION" = "$(cat $DB_VERSION_FILE)" ]; then
     launch
     exit
 fi
@@ -51,31 +51,28 @@ echo "[db-update] Ensuring database is running before updating: "
 echo "> docker-compose up"
 docker-compose up -d
 
-TMPFILE="relisten.tgz"
-TMPFILETAR="relisten.tar"
+TMPFILE="relisten.pgdump"
 URL="https://s3.us-east-2.amazonaws.com/relistenapi-db/${DB_VERSION}"
 
-echo "Downloading $URL to $TMPFILE"
+if [ -f "$TMPFILE" ]; then
+    echo "Using existing $TMPFILE (delete it to re-download)"
+else
+    echo "Downloading $URL to $TMPFILE"
+    curl --fail "$URL" > "$TMPFILE"
 
-curl --fail "$URL" > $TMPFILE
-
-res=$?
-if test "$res" != "0"; then
-   echo "the curl command failed with: $res"
+    res=$?
+    if test "$res" != "0"; then
+        echo "the curl command failed with: $res"
+        exit 1
+    fi
 fi
-
-gunzip "$TMPFILE"
-tar xvf "$TMPFILETAR"
 
 echo "Recreating databases...ignore errors about a relisten_db not existing. This could take 2-10 minutes depending on your machine."
 
 DOCKER_DB_NAME="$(docker-compose ps -q relisten-db)"
 docker exec -i "$DOCKER_DB_NAME" psql -U relisten -d postgres -c "DROP DATABASE relisten_db"
 docker exec -i "$DOCKER_DB_NAME" psql -U relisten -d postgres -c "CREATE DATABASE relisten_db"
-pv backup/export | docker exec -i "$DOCKER_DB_NAME" pg_restore --dbname=relisten_db --no-acl --no-owner -U relisten -d relisten_db -vv
-
-#rm "$TMPFILETAR"
-#rm -rf backup/
+pv "$TMPFILE" | docker exec -i "$DOCKER_DB_NAME" pg_restore --no-acl --no-owner -U relisten -d relisten_db -vv
 
 printf "%s" "${DB_VERSION}" > "$DB_VERSION_FILE"
 

@@ -54,6 +54,9 @@ namespace Relisten.Services.Search.Models
         [JsonProperty("is_soundboard")]
         public bool is_soundboard { get; set; }
 
+        [JsonProperty("recording_type")]
+        public string recording_type { get; set; } = "unknown";
+
         [JsonProperty("avg_rating")]
         public float? avg_rating { get; set; }
 

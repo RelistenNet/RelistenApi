@@ -112,6 +112,7 @@ namespace Relisten.Services.Search
                     venue_location = src.venue_location,
                     tour_name = src.tour_name,
                     is_soundboard = src.is_soundboard,
+                    recording_type = src.recording_type ?? "unknown",
                     avg_rating = src.avg_rating,
                     num_reviews = src.num_reviews,
                     taper = src.taper,
@@ -166,6 +167,7 @@ namespace Relisten.Services.Search
                         doc.venue_location,
                         doc.tour_name,
                         doc.is_soundboard,
+                        doc.recording_type,
                         doc.avg_rating,
                         doc.num_reviews,
                         doc.taper,
@@ -193,14 +195,14 @@ namespace Relisten.Services.Search
             INSERT INTO search_index (
                 source_id, show_id, artist_id, artist_name,
                 show_date, show_year, venue_name, venue_location, tour_name,
-                is_soundboard, avg_rating, num_reviews, taper,
+                is_soundboard, recording_type, avg_rating, num_reviews, taper,
                 track_titles, search_text,
                 embedding,
                 indexed_at, embedding_model
             ) VALUES (
                 @source_id, @show_id, @artist_id, @artist_name,
                 @show_date, @show_year, @venue_name, @venue_location, @tour_name,
-                @is_soundboard, @avg_rating, @num_reviews, @taper,
+                @is_soundboard, @recording_type, @avg_rating, @num_reviews, @taper,
                 @track_titles, @search_text,
                 CASE WHEN @embedding IS NULL THEN NULL ELSE @embedding::halfvec(1536) END,
                 @indexed_at, @embedding_model
@@ -215,6 +217,7 @@ namespace Relisten.Services.Search
                 venue_location = EXCLUDED.venue_location,
                 tour_name = EXCLUDED.tour_name,
                 is_soundboard = EXCLUDED.is_soundboard,
+                recording_type = EXCLUDED.recording_type,
                 avg_rating = EXCLUDED.avg_rating,
                 num_reviews = EXCLUDED.num_reviews,
                 taper = EXCLUDED.taper,
@@ -236,6 +239,7 @@ namespace Relisten.Services.Search
                 v.location AS venue_location,
                 t.name AS tour_name,
                 src.is_soundboard,
+                src.recording_type,
                 src.avg_rating,
                 src.num_reviews,
                 src.taper,
@@ -280,6 +284,7 @@ namespace Relisten.Services.Search
             public string? venue_location { get; set; }
             public string? tour_name { get; set; }
             public bool is_soundboard { get; set; }
+            public string? recording_type { get; set; }
             public double avg_rating { get; set; }
             public int num_reviews { get; set; }
             public string? taper { get; set; }
@@ -304,6 +309,7 @@ namespace Relisten.Services.Search
             public string? venue_location { get; set; }
             public string? tour_name { get; set; }
             public bool is_soundboard { get; set; }
+            public string recording_type { get; set; } = "unknown";
             public double avg_rating { get; set; }
             public int num_reviews { get; set; }
             public string? taper { get; set; }
