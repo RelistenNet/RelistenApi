@@ -96,6 +96,30 @@ namespace Relisten.Services.Popularity
                 allowStale);
         }
 
+        public async Task<ArtistPopularTrendingShowsResponse> GetArtistPopularTrendingShows(Artist artist, int limit,
+            bool allowStale = true)
+        {
+            var candidateShows = await BuildArtistShowCandidates(artist, allowStale);
+            return CreateArtistPopularTrendingShowsResponse(artist, candidateShows, limit);
+        }
+
+        public async Task<MultiArtistPopularTrendingShowsResponse> GetArtistsPopularTrendingShows(
+            IReadOnlyList<Artist>? artists, int limit, bool allowStale = true)
+        {
+            if (artists == null || artists.Count == 0)
+            {
+                return new MultiArtistPopularTrendingShowsResponse();
+            }
+
+            var artistResults = await Task.WhenAll(artists
+                .Select(artist => GetArtistPopularTrendingShows(artist, limit, allowStale)));
+
+            return new MultiArtistPopularTrendingShowsResponse
+            {
+                artists = artistResults
+            };
+        }
+
         public async Task<IReadOnlyList<PopularYearListItem>> GetPopularYears(int limit, bool allowStale = true)
         {
             var key = $"popularity:years:hot:30d:{limit}";
@@ -616,6 +640,119 @@ namespace Relisten.Services.Popularity
             return filtered;
         }
 
+        private async Task<IReadOnlyList<PopularShowListItem>> BuildArtistShowCandidates(Artist artist,
+            bool allowStale)
+        {
+            var showPopularity = await GetShowPopularityMapForArtist(artist.uuid, allowStale);
+            if (showPopularity.Count == 0)
+            {
+                return Array.Empty<PopularShowListItem>();
+            }
+
+            var showRows = (await db.WithConnection(con => con.QueryAsync<PopularityArtistShowRow>(@"
+                SELECT
+                    s.uuid AS show_uuid,
+                    s.display_date
+                FROM shows s
+                JOIN artists a ON a.id = s.artist_id
+                WHERE a.uuid = @artistUuid
+                  AND s.uuid = ANY(@showUuids)
+            ", new { artistUuid = artist.uuid, showUuids = showPopularity.Keys.ToArray() }))).ToList();
+
+            if (showRows.Count == 0)
+            {
+                return Array.Empty<PopularShowListItem>();
+            }
+
+            var items = new List<PopularShowListItem>(showRows.Count);
+            foreach (var show in showRows)
+            {
+                if (!showPopularity.TryGetValue(show.show_uuid, out var metrics))
+                {
+                    continue;
+                }
+
+                items.Add(new PopularShowListItem
+                {
+                    show_uuid = show.show_uuid,
+                    display_date = show.display_date,
+                    artist_uuid = artist.uuid,
+                    artist_name = artist.name,
+                    plays_30d = metrics.windows.days_30d.plays,
+                    plays_48h = metrics.windows.hours_48h.plays,
+                    trend_ratio = metrics.trend_ratio,
+                    popularity = metrics
+                });
+            }
+
+            return items;
+        }
+
+        internal static ArtistPopularTrendingShowsResponse CreateArtistPopularTrendingShowsResponse(Artist artist,
+            IReadOnlyList<PopularShowListItem> candidateShows, int limit)
+        {
+            return new ArtistPopularTrendingShowsResponse
+            {
+                artist_uuid = artist.uuid,
+                artist_name = artist.name,
+                popular_shows = RankPopularArtistShows(candidateShows, limit).ToArray(),
+                trending_shows = RankTrendingArtistShows(candidateShows, limit).ToArray()
+            };
+        }
+
+        internal static IReadOnlyList<PopularShowListItem> RankPopularArtistShows(
+            IReadOnlyList<PopularShowListItem> candidateShows, int limit)
+        {
+            var ordered = candidateShows
+                .OrderByDescending(item => item.popularity.windows.days_30d.hot_score)
+                .ThenByDescending(item => item.plays_30d)
+                .Take(limit)
+                .Select(CloneShowListItem)
+                .ToList();
+
+            AssignShowRanks(ordered);
+            return ordered;
+        }
+
+        internal static IReadOnlyList<PopularShowListItem> RankTrendingArtistShows(
+            IReadOnlyList<PopularShowListItem> candidateShows, int limit)
+        {
+            var filtered = candidateShows
+                .Where(item => item.plays_48h >= ShowTrendingPlays48hFloor &&
+                               item.plays_30d >= ShowTrendingPlays30dFloor)
+                .OrderByDescending(item => item.trend_ratio)
+                .ThenByDescending(item => item.popularity.windows.days_30d.hot_score)
+                .Take(limit)
+                .Select(CloneShowListItem)
+                .ToList();
+
+            AssignShowRanks(filtered);
+            return filtered;
+        }
+
+        private static PopularShowListItem CloneShowListItem(PopularShowListItem show)
+        {
+            return new PopularShowListItem
+            {
+                show_uuid = show.show_uuid,
+                display_date = show.display_date,
+                artist_uuid = show.artist_uuid,
+                artist_name = show.artist_name,
+                plays_30d = show.plays_30d,
+                plays_48h = show.plays_48h,
+                trend_ratio = show.trend_ratio,
+                popularity = show.popularity
+            };
+        }
+
+        private static void AssignShowRanks(IReadOnlyList<PopularShowListItem> items)
+        {
+            for (var i = 0; i < items.Count; i++)
+            {
+                items[i].rank = i + 1;
+            }
+        }
+
         private async Task<IReadOnlyList<PopularYearListItem>> ComputePopularYears(int limit)
         {
             var rows = await db.WithConnection(con => con.QueryAsync<PopularityYearRow>(@"
@@ -910,6 +1047,12 @@ namespace Relisten.Services.Popularity
             public long seconds_30d { get; set; }
             public long seconds_7d { get; set; }
             public long seconds_48h { get; set; }
+        }
+
+        private class PopularityArtistShowRow
+        {
+            public Guid show_uuid { get; set; }
+            public string display_date { get; set; } = string.Empty;
         }
 
         private class PopularityYearRow

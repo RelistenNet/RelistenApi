@@ -1,0 +1,177 @@
+{
+  "version": 1,
+  "project": "V3 Artist Trending Show APIs",
+  "overview": "Add new /api/v3 endpoints to return popular and trending shows for one artist and for multiple artists, reusing existing popularity models/services and returning a typed array-based multi-artist response.",
+  "goals": [
+    "Expose a v3 endpoint that returns popular and trending shows for a single artist.",
+    "Expose a v3 endpoint that returns popular and trending shows for multiple artists in an array of artist result objects (not key-value maps).",
+    "Reuse existing popularity scoring, thresholds, models, and query patterns to keep implementation DRY and low risk."
+  ],
+  "nonGoals": [
+    "Do not change popularity/trending formulas or thresholds.",
+    "Do not add new database tables, migrations, or materialized views.",
+    "Do not add pagination, ad-hoc time-range filters, or custom sort toggles in this scope.",
+    "Do not modify frontend/UI behavior."
+  ],
+  "successMetrics": [
+    "Single-artist endpoint returns 200 with both popular and trending show lists populated from existing popularity metrics when the artist exists.",
+    "Multi-artist endpoint returns 200 with a typed array of per-artist result objects in requested order for valid artist inputs.",
+    "Both endpoints return v3-compatible popularity windows in response payloads and pass existing build/test quality gates."
+  ],
+  "openQuestions": [
+    "Should unresolved artist identifiers in the multi-artist request be omitted, or should the endpoint fail with a 404/400 response?",
+    "Should endpoint-level limits be fixed (for example top 50) or configurable in a future iteration?"
+  ],
+  "stack": {
+    "framework": "ASP.NET Core (existing RelistenApi)",
+    "hosting": "Existing Relisten API deployment pipeline (Docker/Jenkins)",
+    "database": "PostgreSQL",
+    "auth": "No new auth; reuse existing public API access behavior for GET endpoints"
+  },
+  "routes": [
+    {
+      "path": "/api/v3/artists/{artistIdOrSlug}/shows/popular-trending",
+      "name": "Artist Popular Trending Shows",
+      "purpose": "Return one artist plus ranked popular and trending show lists using existing popularity logic."
+    },
+    {
+      "path": "/api/v3/artists/shows/popular-trending",
+      "name": "Multi-Artist Popular Trending Shows",
+      "purpose": "Return an array of per-artist popular/trending show results for multiple requested artists."
+    }
+  ],
+  "uiNotes": [
+    "No UI screens are in scope.",
+    "API responses must remain cleanly typed for clients: multi-artist output must be an array of artist result objects."
+  ],
+  "dataModel": [
+    {
+      "entity": "PopularShowListItem",
+      "fields": [
+        "rank",
+        "show_uuid",
+        "display_date",
+        "artist_uuid",
+        "artist_name",
+        "plays_30d",
+        "plays_48h",
+        "trend_ratio",
+        "popularity"
+      ]
+    },
+    {
+      "entity": "ArtistPopularTrendingShowsResponse",
+      "fields": [
+        "artist_uuid",
+        "artist_name",
+        "popular_shows",
+        "trending_shows"
+      ]
+    },
+    {
+      "entity": "MultiArtistPopularTrendingShowsResponse",
+      "fields": [
+        "artists (array of ArtistPopularTrendingShowsResponse)"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Not applicable (read-only API endpoints).",
+    "example": {}
+  },
+  "rules": [
+    "Reuse existing popularity/trending definitions from PopularityService; no new scoring formulas.",
+    "Include existing v3 popularity windows (48h, 7d, 30d) in each show item via existing popularity models.",
+    "Multi-artist request must accept an artist ID/slug array pattern consistent with existing API conventions.",
+    "Keep code DRY by centralizing shared per-artist show ranking/filtering logic in service methods reused by both routes.",
+    "No extra filter parameters are required in this iteration; clients consume multiple windows from the response payload."
+  ],
+  "qualityGates": [
+    "dotnet build RelistenApi.sln",
+    "dotnet test RelistenApiTests/RelistenApiTests.csproj"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Define DTO contracts for single and multi-artist popular/trending show responses",
+      "status": "done",
+      "dependsOn": [],
+      "description": "As an API consumer, I want consistent typed response contracts so I can reliably parse popular and trending shows for one or more artists.",
+      "acceptanceCriteria": [
+        "Add or extend API DTOs to represent a single artist result object containing `popular_shows` and `trending_shows` lists of `PopularShowListItem`.",
+        "Define multi-artist response as an array-based structure (for example `artists: []`) instead of dynamic key-value objects.",
+        "Example: response includes `artists: [{ artist_uuid: '...', artist_name: 'Phish', popular_shows: [...], trending_shows: [...] }]`.",
+        "Negative case: response shape using dynamic object keys by artist slug/uuid is rejected as out of contract."
+      ],
+      "startedAt": "2026-02-14T01:51:45.549651+00:00",
+      "completedAt": "2026-02-14T01:55:55.984576+00:00",
+      "updatedAt": "2026-02-14T01:55:55.984448+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Add reusable service logic for artist-scoped popular and trending show ranking",
+      "status": "in_progress",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a developer, I want shared service methods for per-artist popular/trending show computation so both endpoints stay DRY and aligned with existing scoring behavior.",
+      "acceptanceCriteria": [
+        "Implement service-level methods that compute artist-scoped popular and trending shows by reusing existing popularity metrics and filtering thresholds where applicable.",
+        "Shared logic is centralized and called by both single-artist and multi-artist routes (no duplicated ranking/filter code in controllers).",
+        "Example: for an artist with sufficient play volume, popular list sorts by existing hot score and trending list sorts by existing trend ratio with current floors.",
+        "Negative case: an artist with no qualifying plays returns empty `popular_shows`/`trending_shows` arrays without throwing exceptions."
+      ],
+      "startedAt": "2026-02-14T01:55:58.068239+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-14T01:55:58.068401+00:00"
+    },
+    {
+      "id": "US-003",
+      "title": "Implement v3 single-artist endpoint for popular and trending shows",
+      "status": "open",
+      "dependsOn": [
+        "US-001",
+        "US-002"
+      ],
+      "description": "As a user, I want one endpoint to fetch popular and trending shows for an artist so I can display both rankings without multiple client-side merges.",
+      "acceptanceCriteria": [
+        "Add `GET /api/v3/artists/{artistIdOrSlug}/shows/popular-trending` returning one artist result object with `popular_shows` and `trending_shows`.",
+        "Endpoint resolves artist by existing ID/slug lookup behavior and uses shared service logic.",
+        "Example: requesting a known artist slug returns 200 and includes both lists, each show containing v3 popularity windows.",
+        "Negative case: requesting an unknown artist returns existing not-found behavior (404 envelope) rather than 200 with invalid artist metadata."
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Implement v3 multi-artist endpoint with typed array response",
+      "status": "open",
+      "dependsOn": [
+        "US-001",
+        "US-002"
+      ],
+      "description": "As a user with several favorite artists, I want one call to get popular/trending shows for all of them in a typed array so my client remains simple and strongly typed.",
+      "acceptanceCriteria": [
+        "Add `GET /api/v3/artists/shows/popular-trending` accepting an artist identifier array query pattern consistent with existing controllers.",
+        "Endpoint returns an array of per-artist result objects (not a dictionary/map keyed by artist).",
+        "Example: request with 3 valid artists returns exactly 3 artist result objects, each with `popular_shows` and `trending_shows` arrays.",
+        "Negative case: malformed artist array input is handled gracefully using existing API validation/error behavior and does not produce a server error."
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Add endpoint and service tests for contract and ranking behavior",
+      "status": "open",
+      "dependsOn": [
+        "US-003",
+        "US-004"
+      ],
+      "description": "As a maintainer, I want tests covering response shape and ranking edge cases so future changes do not regress popular/trending API behavior.",
+      "acceptanceCriteria": [
+        "Add or extend tests validating the single-artist and multi-artist endpoint response contracts, including array-based multi-artist typing.",
+        "Add tests for service logic covering both popular ordering and trending filtering with current thresholds.",
+        "Example: a fixture with known play metrics produces deterministic top-ranked show ordering in popular and trending outputs.",
+        "Negative case: fixtures with zero/low play data produce empty trending lists and no runtime exceptions."
+      ]
+    }
+  ]
+}
