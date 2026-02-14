@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
+using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Relisten.Services.Popularity;
@@ -11,6 +12,7 @@ namespace Relisten.Controllers
     [Produces("application/json")]
     public class PopularityController : RelistenBaseController
     {
+        private const int MaxShowLimit = 25;
         private readonly PopularityService popularityService;
 
         public PopularityController(
@@ -38,35 +40,46 @@ namespace Relisten.Controllers
         }
 
         [HttpGet("v3/popular/shows")]
-        [ProducesResponseType(typeof(PopularShowListItem[]), 200)]
-        public async Task<IActionResult> PopularShows([FromQuery] int limit = 50)
+        [ProducesResponseType(typeof(Show[]), 200)]
+        public async Task<IActionResult> PopularShows([FromQuery] int limit = MaxShowLimit)
         {
-            return JsonSuccess(await popularityService.GetPopularShows(limit));
+            return JsonSuccess(await popularityService.GetPopularShows(NormalizeShowLimit(limit)));
         }
 
         [HttpGet("v3/trending/shows")]
-        [ProducesResponseType(typeof(PopularShowListItem[]), 200)]
-        public async Task<IActionResult> TrendingShows([FromQuery] int limit = 50)
+        [ProducesResponseType(typeof(Show[]), 200)]
+        public async Task<IActionResult> TrendingShows([FromQuery] int limit = MaxShowLimit)
         {
-            return JsonSuccess(await popularityService.GetTrendingShows(limit));
+            return JsonSuccess(await popularityService.GetTrendingShows(NormalizeShowLimit(limit)));
         }
 
         [HttpGet("v3/artists/{artistIdOrSlug}/shows/popular-trending")]
         [ProducesResponseType(typeof(ArtistPopularTrendingShowsResponse), 200)]
         public async Task<IActionResult> ArtistPopularTrendingShows([FromRoute] string artistIdOrSlug,
-            [FromQuery] int limit = 50)
+            [FromQuery] int limit = MaxShowLimit)
         {
-            return await ApiRequest(artistIdOrSlug, art => popularityService.GetArtistPopularTrendingShows(art, limit));
+            return await ApiRequest(artistIdOrSlug,
+                art => popularityService.GetArtistPopularTrendingShows(art, NormalizeShowLimit(limit)));
         }
 
         [HttpGet("v3/artists/shows/popular-trending")]
         [ProducesResponseType(typeof(MultiArtistPopularTrendingShowsResponse), 200)]
         public async Task<IActionResult> ArtistsPopularTrendingShows([FromQuery] string[]? artistIds = null,
-            [FromQuery] int limit = 50)
+            [FromQuery] int limit = MaxShowLimit)
         {
             return await ApiRequest(artistIds ?? [],
-                arts => popularityService.GetArtistsPopularTrendingShows(arts, limit),
+                arts => popularityService.GetArtistsPopularTrendingShows(arts, NormalizeShowLimit(limit)),
                 queryAllWhenEmpty: false);
+        }
+
+        private static int NormalizeShowLimit(int limit)
+        {
+            if (limit <= 0)
+            {
+                return MaxShowLimit;
+            }
+
+            return limit > MaxShowLimit ? MaxShowLimit : limit;
         }
 
         [HttpGet("v3/popular/years")]

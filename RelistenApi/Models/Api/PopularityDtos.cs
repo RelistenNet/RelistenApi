@@ -15,25 +15,12 @@ namespace Relisten.Api.Models.Api
         public PopularityMetrics popularity { get; set; } = new();
     }
 
-    public class PopularShowListItem
-    {
-        public int rank { get; set; }
-        public Guid show_uuid { get; set; }
-        public string display_date { get; set; } = string.Empty;
-        public Guid artist_uuid { get; set; }
-        public string artist_name { get; set; } = string.Empty;
-        public long plays_30d { get; set; }
-        public long plays_48h { get; set; }
-        public double trend_ratio { get; set; }
-        public PopularityMetrics popularity { get; set; } = new();
-    }
-
     public class ArtistPopularTrendingShowsResponse
     {
         public Guid artist_uuid { get; set; }
         public string artist_name { get; set; } = string.Empty;
-        public IReadOnlyList<PopularShowListItem> popular_shows { get; set; } = new List<PopularShowListItem>();
-        public IReadOnlyList<PopularShowListItem> trending_shows { get; set; } = new List<PopularShowListItem>();
+        public IReadOnlyList<Show> popular_shows { get; set; } = new List<Show>();
+        public IReadOnlyList<Show> trending_shows { get; set; } = new List<Show>();
     }
 
     public class MultiArtistPopularTrendingShowsResponse

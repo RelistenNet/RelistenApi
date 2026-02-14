@@ -31,9 +31,9 @@ public class TestPopularityEndpointContracts
         produces.Type.Should().Be(typeof(ArtistPopularTrendingShowsResponse));
 
         typeof(ArtistPopularTrendingShowsResponse).GetProperty(nameof(ArtistPopularTrendingShowsResponse.popular_shows))!
-            .PropertyType.Should().Be(typeof(IReadOnlyList<PopularShowListItem>));
+            .PropertyType.Should().Be(typeof(IReadOnlyList<Show>));
         typeof(ArtistPopularTrendingShowsResponse).GetProperty(nameof(ArtistPopularTrendingShowsResponse.trending_shows))!
-            .PropertyType.Should().Be(typeof(IReadOnlyList<PopularShowListItem>));
+            .PropertyType.Should().Be(typeof(IReadOnlyList<Show>));
     }
 
     [Test]
@@ -64,15 +64,15 @@ public class TestPopularityEndpointContracts
                 {
                     artist_uuid = Guid.Parse("10000000-0000-0000-0000-000000000001"),
                     artist_name = "Artist One",
-                    popular_shows = new List<PopularShowListItem> { NewShow(1) },
-                    trending_shows = new List<PopularShowListItem> { NewShow(2) }
+                    popular_shows = new List<Show> { NewShow(1) },
+                    trending_shows = new List<Show> { NewShow(2) }
                 },
                 new ArtistPopularTrendingShowsResponse
                 {
                     artist_uuid = Guid.Parse("20000000-0000-0000-0000-000000000002"),
                     artist_name = "Artist Two",
-                    popular_shows = new List<PopularShowListItem>(),
-                    trending_shows = new List<PopularShowListItem>()
+                    popular_shows = new List<Show>(),
+                    trending_shows = new List<Show>()
                 }
             }
         };
@@ -87,17 +87,75 @@ public class TestPopularityEndpointContracts
         artists[0]!["trending_shows"]!.Type.Should().Be(JTokenType.Array);
     }
 
-    private static PopularShowListItem NewShow(int seed)
+    [Test]
+    public void ShowPopularityEndpoints_ShouldDefaultToTop25()
     {
-        return new PopularShowListItem
+        typeof(PopularityController).GetMethod(nameof(PopularityController.PopularShows))!
+            .GetParameters()
+            .Single(parameter => parameter.Name == "limit")
+            .DefaultValue
+            .Should()
+            .Be(25);
+
+        typeof(PopularityController).GetMethod(nameof(PopularityController.TrendingShows))!
+            .GetParameters()
+            .Single(parameter => parameter.Name == "limit")
+            .DefaultValue
+            .Should()
+            .Be(25);
+
+        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistPopularTrendingShows))!
+            .GetParameters()
+            .Single(parameter => parameter.Name == "limit")
+            .DefaultValue
+            .Should()
+            .Be(25);
+
+        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsPopularTrendingShows))!
+            .GetParameters()
+            .Single(parameter => parameter.Name == "limit")
+            .DefaultValue
+            .Should()
+            .Be(25);
+    }
+
+    [Test]
+    public void NormalizeShowLimit_ShouldClampAt25()
+    {
+        var normalize = typeof(PopularityController).GetMethod("NormalizeShowLimit",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        normalize.Should().NotBeNull();
+        normalize!.Invoke(null, new object[] { 50 }).Should().Be(25);
+        normalize.Invoke(null, new object[] { 20 }).Should().Be(20);
+        normalize.Invoke(null, new object[] { 0 }).Should().Be(25);
+    }
+
+    [Test]
+    public void ShowPopularityEndpoints_ShouldReturnShowContract()
+    {
+        typeof(PopularityController).GetMethod(nameof(PopularityController.PopularShows))!
+            .GetCustomAttributes<ProducesResponseTypeAttribute>()
+            .Single()
+            .Type
+            .Should()
+            .Be(typeof(Show[]));
+
+        typeof(PopularityController).GetMethod(nameof(PopularityController.TrendingShows))!
+            .GetCustomAttributes<ProducesResponseTypeAttribute>()
+            .Single()
+            .Type
+            .Should()
+            .Be(typeof(Show[]));
+    }
+
+    private static Show NewShow(int seed)
+    {
+        return new Show
         {
-            show_uuid = Guid.Parse($"00000000-0000-0000-0000-{seed.ToString().PadLeft(12, '0')}"),
+            uuid = Guid.Parse($"00000000-0000-0000-0000-{seed.ToString().PadLeft(12, '0')}"),
             artist_uuid = Guid.Parse("10000000-0000-0000-0000-000000000001"),
-            artist_name = "Artist One",
             display_date = "2025-01-01",
-            plays_30d = 10,
-            plays_48h = 9,
-            trend_ratio = 1.0,
             popularity = new PopularityMetrics
             {
                 windows = new PopularityWindows
