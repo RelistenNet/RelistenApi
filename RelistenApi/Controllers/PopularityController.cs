@@ -41,34 +41,46 @@ namespace Relisten.Controllers
 
         [HttpGet("v3/popular/shows")]
         [ProducesResponseType(typeof(Show[]), 200)]
-        public async Task<IActionResult> PopularShows([FromQuery] int limit = MaxShowLimit)
+        public async Task<IActionResult> PopularShows([FromQuery] int limit = MaxShowLimit,
+            [ModelBinder(BinderType = typeof(PopularitySortWindowModelBinder))]
+            [FromQuery] PopularitySortWindow window = PopularitySortWindow.Days30)
         {
-            return JsonSuccess(await popularityService.GetPopularShows(NormalizeShowLimit(limit)));
+            return JsonSuccess(await popularityService.GetPopularShows(NormalizeShowLimit(limit),
+                sortWindow: window));
         }
 
         [HttpGet("v3/trending/shows")]
         [ProducesResponseType(typeof(Show[]), 200)]
-        public async Task<IActionResult> TrendingShows([FromQuery] int limit = MaxShowLimit)
+        public async Task<IActionResult> TrendingShows([FromQuery] int limit = MaxShowLimit,
+            [ModelBinder(BinderType = typeof(PopularitySortWindowModelBinder))]
+            [FromQuery] PopularitySortWindow window = PopularitySortWindow.Days30)
         {
-            return JsonSuccess(await popularityService.GetTrendingShows(NormalizeShowLimit(limit)));
+            return JsonSuccess(await popularityService.GetTrendingShows(NormalizeShowLimit(limit),
+                sortWindow: window));
         }
 
         [HttpGet("v3/artists/{artistIdOrSlug}/shows/popular-trending")]
         [ProducesResponseType(typeof(ArtistPopularTrendingShowsResponse), 200)]
         public async Task<IActionResult> ArtistPopularTrendingShows([FromRoute] string artistIdOrSlug,
-            [FromQuery] int limit = MaxShowLimit)
+            [FromQuery] int limit = MaxShowLimit,
+            [ModelBinder(BinderType = typeof(PopularitySortWindowModelBinder))]
+            [FromQuery] PopularitySortWindow window = PopularitySortWindow.Days30)
         {
             return await ApiRequest(artistIdOrSlug,
-                art => popularityService.GetArtistPopularTrendingShows(art, NormalizeShowLimit(limit)));
+                art => popularityService.GetArtistPopularTrendingShows(art, NormalizeShowLimit(limit),
+                    sortWindow: window));
         }
 
         [HttpGet("v3/artists/shows/popular-trending")]
         [ProducesResponseType(typeof(MultiArtistPopularTrendingShowsResponse), 200)]
         public async Task<IActionResult> ArtistsPopularTrendingShows([FromQuery] string[]? artistIds = null,
-            [FromQuery] int limit = MaxShowLimit)
+            [FromQuery] int limit = MaxShowLimit,
+            [ModelBinder(BinderType = typeof(PopularitySortWindowModelBinder))]
+            [FromQuery] PopularitySortWindow window = PopularitySortWindow.Days30)
         {
             return await ApiRequest(artistIds ?? [],
-                arts => popularityService.GetArtistsPopularTrendingShows(arts, NormalizeShowLimit(limit)),
+                arts => popularityService.GetArtistsPopularTrendingShows(arts, NormalizeShowLimit(limit),
+                    sortWindow: window),
                 queryAllWhenEmpty: false);
         }
 

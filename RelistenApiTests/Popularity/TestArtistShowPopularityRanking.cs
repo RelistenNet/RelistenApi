@@ -26,7 +26,7 @@ public class TestArtistShowPopularityRanking
     }
 
     [Test]
-    public void RankTrendingArtistShows_ShouldFilterByFloorsAndSortByTrendRatio()
+    public void RankTrendingArtistShows_ShouldFilterByFloorsAndSortBySelectedWindow()
     {
         var below48hFloor = NewShow(1, hotScore: 8, plays30d: 100, plays48h: 8, trendRatio: 10.0);
         var below30dFloor = NewShow(2, hotScore: 8, plays30d: 6, plays48h: 20, trendRatio: 9.0);
@@ -42,8 +42,30 @@ public class TestArtistShowPopularityRanking
         }, 10);
 
         ranked.Should().HaveCount(2);
-        ranked[0].uuid.Should().Be(qualifyingHighTrend.uuid);
-        ranked[1].uuid.Should().Be(qualifyingLowTrend.uuid);
+        ranked[0].uuid.Should().Be(qualifyingLowTrend.uuid);
+        ranked[1].uuid.Should().Be(qualifyingHighTrend.uuid);
+    }
+
+    [Test]
+    public void RankPopularArtistShows_ShouldSortBySelectedWindow()
+    {
+        var strong30d = NewShow(10, hotScore: 20, plays30d: 500, plays48h: 10, trendRatio: 1.0,
+            hotScore48h: 2, hotScore7d: 4);
+        var strong48h = NewShow(11, hotScore: 6, plays30d: 120, plays48h: 60, trendRatio: 1.0,
+            hotScore48h: 12, hotScore7d: 3);
+        var strong7d = NewShow(12, hotScore: 8, plays30d: 150, plays48h: 15, trendRatio: 1.0,
+            hotScore48h: 5, hotScore7d: 14);
+
+        var by48h = PopularityService.RankPopularArtistShows(
+            new List<Show> { strong30d, strong48h, strong7d }, 3, PopularitySortWindow.Hours48);
+        var by7d = PopularityService.RankPopularArtistShows(
+            new List<Show> { strong30d, strong48h, strong7d }, 3, PopularitySortWindow.Days7);
+        var by30d = PopularityService.RankPopularArtistShows(
+            new List<Show> { strong30d, strong48h, strong7d }, 3, PopularitySortWindow.Days30);
+
+        by48h[0].uuid.Should().Be(strong48h.uuid);
+        by7d[0].uuid.Should().Be(strong7d.uuid);
+        by30d[0].uuid.Should().Be(strong30d.uuid);
     }
 
     [Test]
@@ -118,7 +140,8 @@ public class TestArtistShowPopularityRanking
         response.trending_shows.Should().BeEmpty();
     }
 
-    private static Show NewShow(int seed, double hotScore, long plays30d, long plays48h, double trendRatio)
+    private static Show NewShow(int seed, double hotScore, long plays30d, long plays48h, double trendRatio,
+        double? hotScore48h = null, double? hotScore7d = null)
     {
         return new Show
         {
@@ -131,7 +154,8 @@ public class TestArtistShowPopularityRanking
                 windows = new PopularityWindows
                 {
                     days_30d = new PopularityWindowMetrics { hot_score = hotScore, plays = plays30d },
-                    hours_48h = new PopularityWindowMetrics { plays = plays48h }
+                    days_7d = new PopularityWindowMetrics { hot_score = hotScore7d ?? hotScore, plays = plays48h },
+                    hours_48h = new PopularityWindowMetrics { hot_score = hotScore48h ?? hotScore, plays = plays48h }
                 }
             }
         };

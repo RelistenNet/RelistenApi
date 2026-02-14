@@ -44,15 +44,15 @@ namespace Relisten.Services.Popularity
         }
 
         [Queue("default")]
-        public Task RefreshPopularShows(int limit)
+        public Task RefreshPopularShows(int limit, PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            return popularityService.RefreshPopularShows(limit);
+            return popularityService.RefreshPopularShows(limit, sortWindow);
         }
 
         [Queue("default")]
-        public Task RefreshTrendingShows(int limit)
+        public Task RefreshTrendingShows(int limit, PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            return popularityService.RefreshTrendingShows(limit);
+            return popularityService.RefreshTrendingShows(limit, sortWindow);
         }
 
         [Queue("default")]

@@ -8,9 +8,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Relisten;
+using Relisten.Api;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Controllers;
+using Relisten.Services.Popularity;
 
 namespace RelistenApiTests.Popularity;
 
@@ -90,33 +92,10 @@ public class TestPopularityEndpointContracts
     [Test]
     public void ShowPopularityEndpoints_ShouldDefaultToTop25()
     {
-        typeof(PopularityController).GetMethod(nameof(PopularityController.PopularShows))!
-            .GetParameters()
-            .Single(parameter => parameter.Name == "limit")
-            .DefaultValue
-            .Should()
-            .Be(25);
-
-        typeof(PopularityController).GetMethod(nameof(PopularityController.TrendingShows))!
-            .GetParameters()
-            .Single(parameter => parameter.Name == "limit")
-            .DefaultValue
-            .Should()
-            .Be(25);
-
-        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistPopularTrendingShows))!
-            .GetParameters()
-            .Single(parameter => parameter.Name == "limit")
-            .DefaultValue
-            .Should()
-            .Be(25);
-
-        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsPopularTrendingShows))!
-            .GetParameters()
-            .Single(parameter => parameter.Name == "limit")
-            .DefaultValue
-            .Should()
-            .Be(25);
+        AssertShowQueryDefaults(nameof(PopularityController.PopularShows));
+        AssertShowQueryDefaults(nameof(PopularityController.TrendingShows));
+        AssertShowQueryDefaults(nameof(PopularityController.ArtistPopularTrendingShows));
+        AssertShowQueryDefaults(nameof(PopularityController.ArtistsPopularTrendingShows));
     }
 
     [Test]
@@ -149,6 +128,15 @@ public class TestPopularityEndpointContracts
             .Be(typeof(Show[]));
     }
 
+    [Test]
+    public void ShowPopularityEndpoints_ShouldUseCustomWindowBinder()
+    {
+        AssertShowWindowBinder(nameof(PopularityController.PopularShows));
+        AssertShowWindowBinder(nameof(PopularityController.TrendingShows));
+        AssertShowWindowBinder(nameof(PopularityController.ArtistPopularTrendingShows));
+        AssertShowWindowBinder(nameof(PopularityController.ArtistsPopularTrendingShows));
+    }
+
     private static Show NewShow(int seed)
     {
         return new Show
@@ -165,5 +153,33 @@ public class TestPopularityEndpointContracts
                 }
             }
         };
+    }
+
+    private static void AssertShowQueryDefaults(string methodName)
+    {
+        var parameters = typeof(PopularityController).GetMethod(methodName)!
+            .GetParameters();
+
+        parameters.Single(parameter => parameter.Name == "limit")
+            .DefaultValue
+            .Should()
+            .Be(25);
+
+        parameters.Single(parameter => parameter.Name == "window")
+            .DefaultValue
+            .Should()
+            .Be(PopularitySortWindow.Days30);
+    }
+
+    private static void AssertShowWindowBinder(string methodName)
+    {
+        var windowParameter = typeof(PopularityController).GetMethod(methodName)!
+            .GetParameters()
+            .Single(parameter => parameter.Name == "window");
+
+        windowParameter.GetCustomAttribute<ModelBinderAttribute>()!
+            .BinderType
+            .Should()
+            .Be(typeof(PopularitySortWindowModelBinder));
     }
 }

@@ -11,6 +11,13 @@ using Relisten.Data;
 
 namespace Relisten.Services.Popularity
 {
+    public enum PopularitySortWindow
+    {
+        Hours48,
+        Days7,
+        Days30
+    }
+
     public class PopularityService
     {
         private const int DefaultStaleAfterSeconds = 60 * 60;
@@ -78,33 +85,36 @@ namespace Relisten.Services.Popularity
                 allowStale);
         }
 
-        public async Task<IReadOnlyList<Show>> GetPopularShows(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<Show>> GetPopularShows(int limit, bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            var key = $"popularity:shows:hot:30d:{limit}";
+            var key = GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow);
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
-                () => ComputePopularShows(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshPopularShows(limit)),
+                () => ComputePopularShows(limit, sortWindow),
+                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshPopularShows(limit, sortWindow)),
                 allowStale);
         }
 
-        public async Task<IReadOnlyList<Show>> GetTrendingShows(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<Show>> GetTrendingShows(int limit, bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            var key = $"popularity:shows:trending:48h:{limit}";
+            var key = GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow);
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
-                () => ComputeTrendingShows(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshTrendingShows(limit)),
+                () => ComputeTrendingShows(limit, sortWindow),
+                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshTrendingShows(limit, sortWindow)),
                 allowStale);
         }
 
         public async Task<ArtistPopularTrendingShowsResponse> GetArtistPopularTrendingShows(Artist artist, int limit,
-            bool allowStale = true)
+            bool allowStale = true, PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
             var candidateShows = await BuildArtistShowCandidates(artist, allowStale);
-            return CreateArtistPopularTrendingShowsResponse(artist, candidateShows, limit);
+            return CreateArtistPopularTrendingShowsResponse(artist, candidateShows, limit, sortWindow);
         }
 
         public async Task<MultiArtistPopularTrendingShowsResponse> GetArtistsPopularTrendingShows(
-            IReadOnlyList<Artist>? artists, int limit, bool allowStale = true)
+            IReadOnlyList<Artist>? artists, int limit, bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
             if (artists == null || artists.Count == 0)
             {
@@ -112,7 +122,7 @@ namespace Relisten.Services.Popularity
             }
 
             var artistResults = await Task.WhenAll(artists
-                .Select(artist => GetArtistPopularTrendingShows(artist, limit, allowStale)));
+                .Select(artist => GetArtistPopularTrendingShows(artist, limit, allowStale, sortWindow)));
 
             return new MultiArtistPopularTrendingShowsResponse
             {
@@ -168,16 +178,20 @@ namespace Relisten.Services.Popularity
             await cache.SetAsync($"popularity:artists:trending:48h:{limit}", NewCacheEntry(list));
         }
 
-        public async Task RefreshPopularShows(int limit)
+        public async Task RefreshPopularShows(int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            var list = await ComputePopularShows(limit);
-            await cache.SetAsync($"popularity:shows:hot:30d:{limit}", NewCacheEntry(list));
+            var list = await ComputePopularShows(limit, sortWindow);
+            await cache.SetAsync(GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow),
+                NewCacheEntry(list));
         }
 
-        public async Task RefreshTrendingShows(int limit)
+        public async Task RefreshTrendingShows(int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
-            var list = await ComputeTrendingShows(limit);
-            await cache.SetAsync($"popularity:shows:trending:48h:{limit}", NewCacheEntry(list));
+            var list = await ComputeTrendingShows(limit, sortWindow);
+            await cache.SetAsync(GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow),
+                NewCacheEntry(list));
         }
 
         public async Task RefreshPopularYears(int limit)
@@ -541,7 +555,7 @@ namespace Relisten.Services.Popularity
             return filtered;
         }
 
-        private async Task<IReadOnlyList<Show>> ComputePopularShows(int limit)
+        private async Task<IReadOnlyList<Show>> ComputePopularShows(int limit, PopularitySortWindow sortWindow)
         {
             var rows = await db.WithConnection(con => con.QueryAsync<PopularityShowRow>(@"
                 WITH plays_90d AS (
@@ -618,22 +632,23 @@ namespace Relisten.Services.Popularity
                 .ToList());
 
             var ordered = items
-                .OrderByDescending(item => item.popularity?.windows.days_30d.hot_score ?? 0)
-                .ThenByDescending(item => item.popularity?.windows.days_30d.plays ?? 0)
+                .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
+                .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
                 .Take(limit)
                 .ToList();
 
             return ordered;
         }
 
-        private async Task<IReadOnlyList<Show>> ComputeTrendingShows(int limit)
+        private async Task<IReadOnlyList<Show>> ComputeTrendingShows(int limit, PopularitySortWindow sortWindow)
         {
-            var items = await ComputePopularShows(int.MaxValue);
+            var items = await ComputePopularShows(int.MaxValue, sortWindow);
             var filtered = items
                 .Where(item => (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
                                (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor)
-                .OrderByDescending(item => item.popularity?.trend_ratio ?? 0)
-                .ThenByDescending(item => item.popularity?.windows.days_30d.hot_score ?? 0)
+                .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
+                .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
+                .ThenByDescending(item => item.popularity?.trend_ratio ?? 0)
                 .Take(limit)
                 .ToList();
 
@@ -671,23 +686,25 @@ namespace Relisten.Services.Popularity
         }
 
         internal static ArtistPopularTrendingShowsResponse CreateArtistPopularTrendingShowsResponse(Artist artist,
-            IReadOnlyList<Show> candidateShows, int limit)
+            IReadOnlyList<Show> candidateShows, int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
             return new ArtistPopularTrendingShowsResponse
             {
                 artist_uuid = artist.uuid,
                 artist_name = artist.name,
-                popular_shows = RankPopularArtistShows(candidateShows, limit),
-                trending_shows = RankTrendingArtistShows(candidateShows, limit)
+                popular_shows = RankPopularArtistShows(candidateShows, limit, sortWindow),
+                trending_shows = RankTrendingArtistShows(candidateShows, limit, sortWindow)
             };
         }
 
         internal static IReadOnlyList<Show> RankPopularArtistShows(
-            IReadOnlyList<Show> candidateShows, int limit)
+            IReadOnlyList<Show> candidateShows, int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
             var ordered = candidateShows
-                .OrderByDescending(item => item.popularity?.windows.days_30d.hot_score ?? 0)
-                .ThenByDescending(item => item.popularity?.windows.days_30d.plays ?? 0)
+                .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
+                .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
                 .Take(limit)
                 .ToList();
 
@@ -695,17 +712,71 @@ namespace Relisten.Services.Popularity
         }
 
         internal static IReadOnlyList<Show> RankTrendingArtistShows(
-            IReadOnlyList<Show> candidateShows, int limit)
+            IReadOnlyList<Show> candidateShows, int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
             var filtered = candidateShows
                 .Where(item => (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
                                (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor)
-                .OrderByDescending(item => item.popularity?.trend_ratio ?? 0)
-                .ThenByDescending(item => item.popularity?.windows.days_30d.hot_score ?? 0)
+                .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
+                .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
+                .ThenByDescending(item => item.popularity?.trend_ratio ?? 0)
                 .Take(limit)
                 .ToList();
 
             return filtered;
+        }
+
+        private static double GetSortWindowHotScore(Show show, PopularitySortWindow sortWindow)
+        {
+            var windows = show.popularity?.windows;
+            if (windows == null)
+            {
+                return 0;
+            }
+
+            return sortWindow switch
+            {
+                PopularitySortWindow.Hours48 => windows.hours_48h.hot_score,
+                PopularitySortWindow.Days7 => windows.days_7d.hot_score,
+                _ => windows.days_30d.hot_score
+            };
+        }
+
+        private static long GetSortWindowPlays(Show show, PopularitySortWindow sortWindow)
+        {
+            var windows = show.popularity?.windows;
+            if (windows == null)
+            {
+                return 0;
+            }
+
+            return sortWindow switch
+            {
+                PopularitySortWindow.Hours48 => windows.hours_48h.plays,
+                PopularitySortWindow.Days7 => windows.days_7d.plays,
+                _ => windows.days_30d.plays
+            };
+        }
+
+        private static string GetShowPopularityCacheKey(string baseKey, int limit, PopularitySortWindow sortWindow)
+        {
+            if (sortWindow == PopularitySortWindow.Days30)
+            {
+                return $"{baseKey}:{limit}";
+            }
+
+            return $"{baseKey}:{limit}:sort:{ToSortWindowToken(sortWindow)}";
+        }
+
+        private static string ToSortWindowToken(PopularitySortWindow sortWindow)
+        {
+            return sortWindow switch
+            {
+                PopularitySortWindow.Hours48 => "48h",
+                PopularitySortWindow.Days7 => "7d",
+                _ => "30d"
+            };
         }
 
         private async Task<Dictionary<Guid, Show>> LoadShowDetailsByUuid(IEnumerable<Guid> showUuids, Artist? artist)
