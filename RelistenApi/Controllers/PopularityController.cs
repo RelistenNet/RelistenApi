@@ -59,6 +59,15 @@ namespace Relisten.Controllers
             return await ApiRequest(artistIdOrSlug, art => popularityService.GetArtistPopularTrendingShows(art, limit));
         }
 
+        [HttpGet("v3/artists/shows/popular-trending")]
+        [ProducesResponseType(typeof(MultiArtistPopularTrendingShowsResponse), 200)]
+        public async Task<IActionResult> ArtistsPopularTrendingShows([FromQuery] string[]? artistIds = null,
+            [FromQuery] int limit = 50)
+        {
+            return await ApiRequest(artistIds ?? [],
+                arts => popularityService.GetArtistsPopularTrendingShows(arts, limit));
+        }
+
         [HttpGet("v3/popular/years")]
         [ProducesResponseType(typeof(PopularYearListItem[]), 200)]
         public async Task<IActionResult> PopularYears([FromQuery] int limit = 50)

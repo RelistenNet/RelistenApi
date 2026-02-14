@@ -110,10 +110,21 @@ namespace Relisten.Api
         )
         {
             var artistIdsSlugsOrUUIDs = artistIdsOrSlugs;
-            if (artistIdsOrSlugs.Count == 1 && artistIdsOrSlugs[0][0] == '[')
+            if (artistIdsOrSlugs.Count == 1)
             {
-                artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(artistIdsOrSlugs[0])
-                                         ?? new List<string>();
+                var serializedArray = artistIdsOrSlugs[0];
+                if (!string.IsNullOrEmpty(serializedArray) && serializedArray[0] == '[')
+                {
+                    try
+                    {
+                        artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(serializedArray)
+                                                ?? new List<string>();
+                    }
+                    catch (JsonException)
+                    {
+                        // Keep raw artistIds input to preserve existing empty-result behavior.
+                    }
+                }
             }
 
             var art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsSlugsOrUUIDs);
