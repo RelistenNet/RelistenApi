@@ -27,6 +27,19 @@ namespace Relisten.Api.Models.Api
         public PopularityMetrics popularity { get; set; } = new();
     }
 
+    public class ArtistPopularTrendingShowsResponse
+    {
+        public Guid artist_uuid { get; set; }
+        public string artist_name { get; set; } = string.Empty;
+        public PopularShowListItem[] popular_shows { get; set; } = Array.Empty<PopularShowListItem>();
+        public PopularShowListItem[] trending_shows { get; set; } = Array.Empty<PopularShowListItem>();
+    }
+
+    public class MultiArtistPopularTrendingShowsResponse
+    {
+        public ArtistPopularTrendingShowsResponse[] artists { get; set; } = Array.Empty<ArtistPopularTrendingShowsResponse>();
+    }
+
     public class PopularYearListItem
     {
         public int rank { get; set; }
