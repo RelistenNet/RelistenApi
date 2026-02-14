@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Relisten.Api.Models;
 
 namespace Relisten.Api.Models.Api
@@ -31,13 +32,14 @@ namespace Relisten.Api.Models.Api
     {
         public Guid artist_uuid { get; set; }
         public string artist_name { get; set; } = string.Empty;
-        public PopularShowListItem[] popular_shows { get; set; } = Array.Empty<PopularShowListItem>();
-        public PopularShowListItem[] trending_shows { get; set; } = Array.Empty<PopularShowListItem>();
+        public IReadOnlyList<PopularShowListItem> popular_shows { get; set; } = new List<PopularShowListItem>();
+        public IReadOnlyList<PopularShowListItem> trending_shows { get; set; } = new List<PopularShowListItem>();
     }
 
     public class MultiArtistPopularTrendingShowsResponse
     {
-        public ArtistPopularTrendingShowsResponse[] artists { get; set; } = Array.Empty<ArtistPopularTrendingShowsResponse>();
+        public IReadOnlyList<ArtistPopularTrendingShowsResponse> artists { get; set; } =
+            new List<ArtistPopularTrendingShowsResponse>();
     }
 
     public class PopularYearListItem

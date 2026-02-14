@@ -65,7 +65,8 @@ namespace Relisten.Controllers
             [FromQuery] int limit = 50)
         {
             return await ApiRequest(artistIds ?? [],
-                arts => popularityService.GetArtistsPopularTrendingShows(arts, limit));
+                arts => popularityService.GetArtistsPopularTrendingShows(arts, limit),
+                queryAllWhenEmpty: false);
         }
 
         [HttpGet("v3/popular/years")]

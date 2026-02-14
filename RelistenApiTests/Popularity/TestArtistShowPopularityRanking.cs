@@ -53,7 +53,7 @@ public class TestArtistShowPopularityRanking
     }
 
     [Test]
-    public void CreateArtistPopularTrendingShowsResponse_ShouldReturnEmptyArraysWhenNoCandidates()
+    public void CreateArtistPopularTrendingShowsResponse_ShouldReturnEmptyListsWhenNoCandidates()
     {
         var artist = new Artist
         {
@@ -67,7 +67,7 @@ public class TestArtistShowPopularityRanking
         };
 
         var response =
-            PopularityService.CreateArtistPopularTrendingShowsResponse(artist, Array.Empty<PopularShowListItem>(), 50);
+            PopularityService.CreateArtistPopularTrendingShowsResponse(artist, new List<PopularShowListItem>(), 50);
 
         response.artist_uuid.Should().Be(artist.uuid);
         response.artist_name.Should().Be(artist.name);

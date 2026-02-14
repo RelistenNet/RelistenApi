@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
@@ -106,28 +105,22 @@ namespace Relisten.Api
 
         protected async Task<IActionResult> ApiRequest<T>(
             IReadOnlyList<string> artistIdsOrSlugs,
-            Func<IReadOnlyList<Artist>, Task<T>> cb
+            Func<IReadOnlyList<Artist>, Task<T>> cb,
+            bool queryAllWhenEmpty = true
         )
         {
-            var artistIdsSlugsOrUUIDs = artistIdsOrSlugs;
-            if (artistIdsOrSlugs.Count == 1)
+            if (!queryAllWhenEmpty && artistIdsOrSlugs.Count == 0)
             {
-                var serializedArray = artistIdsOrSlugs[0];
-                if (!string.IsNullOrEmpty(serializedArray) && serializedArray[0] == '[')
+                var emptyData = await cb(new List<Artist>());
+                if (emptyData == null)
                 {
-                    try
-                    {
-                        artistIdsSlugsOrUUIDs = JsonConvert.DeserializeObject<List<string>>(serializedArray)
-                                                ?? new List<string>();
-                    }
-                    catch (JsonException)
-                    {
-                        // Keep raw artistIds input to preserve existing empty-result behavior.
-                    }
+                    return JsonNotFound(false);
                 }
+
+                return JsonSuccess(emptyData);
             }
 
-            var art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsSlugsOrUUIDs);
+            var art = await _artistService.FindArtistsWithIdsOrSlugs(artistIdsOrSlugs);
             if (art != null)
             {
                 var data = await cb(art.ToList());

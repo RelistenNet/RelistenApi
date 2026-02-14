@@ -116,7 +116,7 @@ namespace Relisten.Services.Popularity
 
             return new MultiArtistPopularTrendingShowsResponse
             {
-                artists = artistResults
+                artists = artistResults.ToList()
             };
         }
 
@@ -695,8 +695,8 @@ namespace Relisten.Services.Popularity
             {
                 artist_uuid = artist.uuid,
                 artist_name = artist.name,
-                popular_shows = RankPopularArtistShows(candidateShows, limit).ToArray(),
-                trending_shows = RankTrendingArtistShows(candidateShows, limit).ToArray()
+                popular_shows = RankPopularArtistShows(candidateShows, limit),
+                trending_shows = RankTrendingArtistShows(candidateShows, limit)
             };
         }
 
