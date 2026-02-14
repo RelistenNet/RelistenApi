@@ -147,7 +147,7 @@
     {
       "id": "US-004",
       "title": "Implement v3 multi-artist endpoint with typed array response",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001",
         "US-002"
@@ -160,13 +160,13 @@
         "Negative case: malformed artist array input is handled gracefully using existing API validation/error behavior and does not produce a server error."
       ],
       "startedAt": "2026-02-14T02:04:47.405646+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-14T02:04:47.405803+00:00"
+      "completedAt": "2026-02-14T02:09:09.944179+00:00",
+      "updatedAt": "2026-02-14T02:09:09.944041+00:00"
     },
     {
       "id": "US-005",
       "title": "Add endpoint and service tests for contract and ranking behavior",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-003",
         "US-004"
@@ -177,7 +177,10 @@
         "Add tests for service logic covering both popular ordering and trending filtering with current thresholds.",
         "Example: a fixture with known play metrics produces deterministic top-ranked show ordering in popular and trending outputs.",
         "Negative case: fixtures with zero/low play data produce empty trending lists and no runtime exceptions."
-      ]
+      ],
+      "startedAt": "2026-02-14T02:09:12.016252+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-14T02:09:12.016398+00:00"
     }
   ]
 }

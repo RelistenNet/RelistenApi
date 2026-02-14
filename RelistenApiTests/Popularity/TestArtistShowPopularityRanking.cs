@@ -75,6 +75,59 @@ public class TestArtistShowPopularityRanking
         response.trending_shows.Should().BeEmpty();
     }
 
+    [Test]
+    public void CreateArtistPopularTrendingShowsResponse_ShouldReturnDeterministicPopularAndTrendingOrdering()
+    {
+        var artist = NewArtist();
+        var popularOnly = NewShow(1, hotScore: 22, plays30d: 1000, plays48h: 8, trendRatio: 10.0);
+        var popularAndTrendingTop = NewShow(2, hotScore: 18, plays30d: 550, plays48h: 40, trendRatio: 3.5);
+        var popularAndTrendingSecond = NewShow(3, hotScore: 12, plays30d: 450, plays48h: 20, trendRatio: 2.2);
+        var lowPopularity = NewShow(4, hotScore: 6, plays30d: 120, plays48h: 12, trendRatio: 1.1);
+
+        var response = PopularityService.CreateArtistPopularTrendingShowsResponse(artist,
+            new List<PopularShowListItem>
+            {
+                popularOnly,
+                popularAndTrendingTop,
+                popularAndTrendingSecond,
+                lowPopularity
+            }, 10);
+
+        response.popular_shows.Should().HaveCount(4);
+        response.popular_shows[0].show_uuid.Should().Be(popularOnly.show_uuid);
+        response.popular_shows[1].show_uuid.Should().Be(popularAndTrendingTop.show_uuid);
+        response.popular_shows[2].show_uuid.Should().Be(popularAndTrendingSecond.show_uuid);
+        response.popular_shows[3].show_uuid.Should().Be(lowPopularity.show_uuid);
+        response.popular_shows[0].rank.Should().Be(1);
+        response.popular_shows[3].rank.Should().Be(4);
+
+        response.trending_shows.Should().HaveCount(3);
+        response.trending_shows[0].show_uuid.Should().Be(popularAndTrendingTop.show_uuid);
+        response.trending_shows[1].show_uuid.Should().Be(popularAndTrendingSecond.show_uuid);
+        response.trending_shows[2].show_uuid.Should().Be(lowPopularity.show_uuid);
+        response.trending_shows[0].rank.Should().Be(1);
+        response.trending_shows[2].rank.Should().Be(3);
+    }
+
+    [Test]
+    public void CreateArtistPopularTrendingShowsResponse_ShouldReturnEmptyTrendingWhenCandidatesAreLowPlay()
+    {
+        var artist = NewArtist();
+        var lowPlayA = NewShow(5, hotScore: 9, plays30d: 6, plays48h: 30, trendRatio: 4.0);
+        var lowPlayB = NewShow(6, hotScore: 8, plays30d: 300, plays48h: 8, trendRatio: 2.5);
+
+        Action act = () => PopularityService.CreateArtistPopularTrendingShowsResponse(artist,
+            new List<PopularShowListItem> { lowPlayA, lowPlayB }, 10);
+
+        act.Should().NotThrow();
+
+        var response = PopularityService.CreateArtistPopularTrendingShowsResponse(artist,
+            new List<PopularShowListItem> { lowPlayA, lowPlayB }, 10);
+
+        response.popular_shows.Should().HaveCount(2);
+        response.trending_shows.Should().BeEmpty();
+    }
+
     private static PopularShowListItem NewShow(int seed, double hotScore, long plays30d, long plays48h, double trendRatio)
     {
         return new PopularShowListItem
@@ -94,6 +147,20 @@ public class TestArtistShowPopularityRanking
                     hours_48h = new PopularityWindowMetrics { plays = plays48h }
                 }
             }
+        };
+    }
+
+    private static Artist NewArtist()
+    {
+        return new Artist
+        {
+            uuid = Guid.NewGuid(),
+            name = "Fixture Artist",
+            musicbrainz_id = string.Empty,
+            slug = "fixture-artist",
+            sort_name = "Fixture Artist",
+            upstream_sources = Array.Empty<ArtistUpstreamSource>(),
+            features = new Features()
         };
     }
 }
