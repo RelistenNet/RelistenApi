@@ -110,7 +110,7 @@
     {
       "id": "US-002",
       "title": "Add reusable service logic for artist-scoped popular and trending show ranking",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -122,13 +122,13 @@
         "Negative case: an artist with no qualifying plays returns empty `popular_shows`/`trending_shows` arrays without throwing exceptions."
       ],
       "startedAt": "2026-02-14T01:55:58.068239+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-02-14T01:55:58.068401+00:00"
+      "completedAt": "2026-02-14T02:01:43.029119+00:00",
+      "updatedAt": "2026-02-14T02:01:43.028955+00:00"
     },
     {
       "id": "US-003",
       "title": "Implement v3 single-artist endpoint for popular and trending shows",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001",
         "US-002"
@@ -139,7 +139,10 @@
         "Endpoint resolves artist by existing ID/slug lookup behavior and uses shared service logic.",
         "Example: requesting a known artist slug returns 200 and includes both lists, each show containing v3 popularity windows.",
         "Negative case: requesting an unknown artist returns existing not-found behavior (404 envelope) rather than 200 with invalid artist metadata."
-      ]
+      ],
+      "startedAt": "2026-02-14T02:01:45.112705+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-02-14T02:01:45.112875+00:00"
     },
     {
       "id": "US-004",
