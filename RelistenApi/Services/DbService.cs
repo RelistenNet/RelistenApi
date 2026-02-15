@@ -22,13 +22,13 @@ namespace Relisten
             var database = uri.AbsolutePath.Substring(1);
 
             ConnStr =
-                $"Host={uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true";
+                $"Host={uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2";
 
             // For read-only connections: try RO first, fall back to RW if unavailable
             // Npgsql handles multi-host failover automatically
             var roHost = uri.Host.Replace("relisten-db-rw.default", "relisten-db-ro.default");
             ReadOnlyConnStr =
-                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attributes=prefer-standby";
+                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2;Target Session Attributes=prefer-standby";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");
