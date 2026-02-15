@@ -496,14 +496,14 @@ WHERE
             {
                 sql += @"
 	-- Update sources with calculated rating/review information
-	WITH review_info AS (
-	    SELECT
-	        s.id as id,
-	        COALESCE(AVG(rating), 0) as avg,
-	        COUNT(r.rating) as num_reviews
-	    FROM
-	        sources s
-	        LEFT JOIN source_reviews r ON r.source_id = s.id
+		WITH review_info AS (
+		    SELECT
+		        s.id as id,
+		        COALESCE(AVG(NULLIF(r.rating, 0)), 0) as avg,
+		        COUNT(r.rating) as num_reviews
+		    FROM
+		        sources s
+		        LEFT JOIN source_reviews r ON r.source_id = s.id
 		WHERE
 			s.artist_id = @id
 	    GROUP BY
@@ -524,14 +524,14 @@ WHERE
 		;
 
 	-- Calculate weighted averages for sources once we have average data and update sources
-	WITH review_info AS (
-	    SELECT
-	        s.id as id,
-	        COALESCE(AVG(r.rating), 0) as avg,
-	        COUNT(r.rating) as num_reviews
-	    FROM
-	        sources s
-	        LEFT JOIN source_reviews r ON r.source_id = s.id
+		WITH review_info AS (
+		    SELECT
+		        s.id as id,
+		        COALESCE(AVG(NULLIF(r.rating, 0)), 0) as avg,
+		        COUNT(r.rating) as num_reviews
+		    FROM
+		        sources s
+		        LEFT JOIN source_reviews r ON r.source_id = s.id
 		WHERE
 			s.artist_id = @id
 	    GROUP BY
