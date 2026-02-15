@@ -46,7 +46,7 @@ public class TestPopularityEndpointContracts
 
         var route = method!.GetCustomAttribute<HttpGetAttribute>();
         route.Should().NotBeNull();
-        route!.Template.Should().Be("v3/artists/shows/popular-trending");
+        route!.Template.Should().Be("v3/shows/popular-trending");
 
         var produces = method.GetCustomAttributes<ProducesResponseTypeAttribute>().Single();
         produces.Type.Should().Be(typeof(MultiArtistPopularTrendingShowsResponse));
@@ -90,24 +90,26 @@ public class TestPopularityEndpointContracts
     }
 
     [Test]
-    public void ShowPopularityEndpoints_ShouldDefaultToTop25()
+    public void ShowPopularityEndpoints_ShouldDeclareExpectedDefaultLimits()
     {
         AssertShowQueryDefaults(nameof(PopularityController.PopularShows));
         AssertShowQueryDefaults(nameof(PopularityController.TrendingShows));
         AssertShowQueryDefaults(nameof(PopularityController.ArtistPopularTrendingShows));
-        AssertShowQueryDefaults(nameof(PopularityController.ArtistsPopularTrendingShows));
+        AssertShowQueryDefaults(nameof(PopularityController.ArtistsPopularTrendingShows), expectedLimit: 10);
     }
 
     [Test]
-    public void NormalizeShowLimit_ShouldClampAt25()
+    public void NormalizeShowLimit_ShouldClampAtRequestedMax()
     {
         var normalize = typeof(PopularityController).GetMethod("NormalizeShowLimit",
             BindingFlags.NonPublic | BindingFlags.Static);
 
         normalize.Should().NotBeNull();
-        normalize!.Invoke(null, new object[] { 50 }).Should().Be(25);
-        normalize.Invoke(null, new object[] { 20 }).Should().Be(20);
-        normalize.Invoke(null, new object[] { 0 }).Should().Be(25);
+        normalize!.Invoke(null, new object[] { 50, 25 }).Should().Be(25);
+        normalize.Invoke(null, new object[] { 20, 25 }).Should().Be(20);
+        normalize.Invoke(null, new object[] { 0, 25 }).Should().Be(25);
+        normalize.Invoke(null, new object[] { 50, 10 }).Should().Be(10);
+        normalize.Invoke(null, new object[] { 0, 10 }).Should().Be(10);
     }
 
     [Test]
@@ -155,7 +157,7 @@ public class TestPopularityEndpointContracts
         };
     }
 
-    private static void AssertShowQueryDefaults(string methodName)
+    private static void AssertShowQueryDefaults(string methodName, int expectedLimit = 25)
     {
         var parameters = typeof(PopularityController).GetMethod(methodName)!
             .GetParameters();
@@ -163,7 +165,7 @@ public class TestPopularityEndpointContracts
         parameters.Single(parameter => parameter.Name == "limit")
             .DefaultValue
             .Should()
-            .Be(25);
+            .Be(expectedLimit);
 
         parameters.Single(parameter => parameter.Name == "window")
             .DefaultValue

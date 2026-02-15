@@ -90,10 +90,10 @@ namespace Relisten.Controllers
         {
             if (limit <= 0)
             {
-                return MaxShowLimit;
+                return maxLimit;
             }
 
-            return limit > MaxShowLimit ? MaxShowLimit : limit;
+            return limit > maxLimit ? maxLimit : limit;
         }
 
         [HttpGet("v3/popular/years")]
