@@ -263,12 +263,11 @@ namespace Relisten.Data
         {
             var baseSql = @"
                 SELECT
-                    a.*, f.*, au.*
+                    a.*, f.*
                 FROM
                     artists a
 
                     LEFT JOIN features f on f.artist_id = a.id
-					LEFT JOIN artists_upstream_sources au ON au.artist_id = a.id
                 WHERE
             ";
 
