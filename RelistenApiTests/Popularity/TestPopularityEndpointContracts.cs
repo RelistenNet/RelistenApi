@@ -90,12 +90,27 @@ public class TestPopularityEndpointContracts
     }
 
     [Test]
+    public void ArtistsMomentumShows_ShouldDeclareMergedMomentumContract()
+    {
+        var method = typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsMomentumShows));
+        method.Should().NotBeNull();
+
+        var route = method!.GetCustomAttribute<HttpGetAttribute>();
+        route.Should().NotBeNull();
+        route!.Template.Should().Be("v3/shows/momentum");
+
+        var produces = method.GetCustomAttributes<ProducesResponseTypeAttribute>().Single();
+        produces.Type.Should().Be(typeof(Show[]));
+    }
+
+    [Test]
     public void ShowPopularityEndpoints_ShouldDeclareExpectedDefaultLimits()
     {
         AssertShowQueryDefaults(nameof(PopularityController.PopularShows));
         AssertShowQueryDefaults(nameof(PopularityController.TrendingShows));
         AssertShowQueryDefaults(nameof(PopularityController.ArtistPopularTrendingShows));
         AssertShowQueryDefaults(nameof(PopularityController.ArtistsPopularTrendingShows), expectedLimit: 10);
+        AssertLimitQueryDefault(nameof(PopularityController.ArtistsMomentumShows), expectedLimit: 25);
     }
 
     [Test]
@@ -123,6 +138,13 @@ public class TestPopularityEndpointContracts
             .Be(typeof(Show[]));
 
         typeof(PopularityController).GetMethod(nameof(PopularityController.TrendingShows))!
+            .GetCustomAttributes<ProducesResponseTypeAttribute>()
+            .Single()
+            .Type
+            .Should()
+            .Be(typeof(Show[]));
+
+        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsMomentumShows))!
             .GetCustomAttributes<ProducesResponseTypeAttribute>()
             .Single()
             .Type
@@ -159,6 +181,19 @@ public class TestPopularityEndpointContracts
 
     private static void AssertShowQueryDefaults(string methodName, int expectedLimit = 25)
     {
+        AssertLimitQueryDefault(methodName, expectedLimit);
+
+        var parameters = typeof(PopularityController).GetMethod(methodName)!
+            .GetParameters();
+
+        parameters.Single(parameter => parameter.Name == "window")
+            .DefaultValue
+            .Should()
+            .Be(PopularitySortWindow.Days30);
+    }
+
+    private static void AssertLimitQueryDefault(string methodName, int expectedLimit)
+    {
         var parameters = typeof(PopularityController).GetMethod(methodName)!
             .GetParameters();
 
@@ -166,11 +201,6 @@ public class TestPopularityEndpointContracts
             .DefaultValue
             .Should()
             .Be(expectedLimit);
-
-        parameters.Single(parameter => parameter.Name == "window")
-            .DefaultValue
-            .Should()
-            .Be(PopularitySortWindow.Days30);
     }
 
     private static void AssertShowWindowBinder(string methodName)

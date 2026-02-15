@@ -130,6 +130,65 @@ namespace Relisten.Services.Popularity
             };
         }
 
+        public async Task<IReadOnlyList<Show>> GetArtistsMomentumShows(IReadOnlyList<Artist>? artists, int limit,
+            bool allowStale = true)
+        {
+            if (artists == null || artists.Count == 0)
+            {
+                return [];
+            }
+
+            var mapsByArtist = await Task.WhenAll(artists.Select(async artist => new
+            {
+                artist,
+                map = await GetShowPopularityMapForArtist(artist.uuid, allowStale)
+            }));
+
+            var topCandidates = mapsByArtist
+                .SelectMany(item => item.map.Select(entry => new
+                {
+                    item.artist,
+                    showUuid = entry.Key,
+                    metrics = entry.Value
+                }))
+                .OrderByDescending(item => item.metrics.momentum_score)
+                .ThenByDescending(item => item.metrics.windows.days_30d.hot_score)
+                .ThenByDescending(item => item.metrics.windows.days_30d.plays)
+                .Take(limit)
+                .ToList();
+
+            if (topCandidates.Count == 0)
+            {
+                return [];
+            }
+
+            var featuresByArtistUuid = artists
+                .GroupBy(artist => artist.uuid)
+                .ToDictionary(group => group.Key, group => group.First().features);
+
+            var showDetailsByUuid = await LoadShowDetailsByUuid(topCandidates.Select(item => item.showUuid),
+                featuresByArtistUuid);
+            
+            if (showDetailsByUuid.Count == 0)
+            {
+                return [];
+            }
+
+            var ordered = new List<Show>(topCandidates.Count);
+            foreach (var candidate in topCandidates)
+            {
+                if (!showDetailsByUuid.TryGetValue(candidate.showUuid, out var show))
+                {
+                    continue;
+                }
+
+                show.popularity = candidate.metrics;
+                ordered.Add(show);
+            }
+
+            return ordered;
+        }
+
         public async Task<IReadOnlyList<PopularYearListItem>> GetPopularYears(int limit, bool allowStale = true)
         {
             var key = $"popularity:years:hot:30d:{limit}";
@@ -661,13 +720,20 @@ namespace Relisten.Services.Popularity
             var showPopularity = await GetShowPopularityMapForArtist(artist.uuid, allowStale);
             if (showPopularity.Count == 0)
             {
-                return Array.Empty<Show>();
+                return [];
             }
 
-            var showDetails = await LoadShowDetailsByUuid(showPopularity.Keys, artist);
+            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid = artist.features == null
+                ? null
+                : new Dictionary<Guid, Features>
+                {
+                    [artist.uuid] = artist.features
+                };
+
+            var showDetails = await LoadShowDetailsByUuid(showPopularity.Keys, featuresByArtistUuid);
             if (showDetails.Count == 0)
             {
-                return Array.Empty<Show>();
+                return [];
             }
 
             var items = new List<Show>(showDetails.Count);
@@ -779,17 +845,14 @@ namespace Relisten.Services.Popularity
             };
         }
 
-        private async Task<Dictionary<Guid, Show>> LoadShowDetailsByUuid(IEnumerable<Guid> showUuids, Artist? artist)
+        private async Task<Dictionary<Guid, Show>> LoadShowDetailsByUuid(IEnumerable<Guid> showUuids,
+            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid)
         {
             var uuids = showUuids.Distinct().ToArray();
             if (uuids.Length == 0)
             {
                 return new Dictionary<Guid, Show>();
             }
-
-            var includeTours = artist?.features?.tours ?? true;
-            var includeEras = artist?.features?.eras ?? true;
-            var includeYears = artist?.features?.years ?? true;
 
             var shows = (await db.WithConnection(con => con.QueryAsync<Show, VenueWithShowCount, Tour, Era, Year, Show>(
                 @"
@@ -827,6 +890,17 @@ namespace Relisten.Services.Popularity
             ", (show, venue, tour, era, year) =>
                 {
                     show.venue = venue;
+
+                    var includeTours = true;
+                    var includeEras = true;
+                    var includeYears = true;
+                    if (featuresByArtistUuid != null &&
+                        featuresByArtistUuid.TryGetValue(show.artist_uuid, out var features))
+                    {
+                        includeTours = features.tours;
+                        includeEras = features.eras;
+                        includeYears = features.years;
+                    }
 
                     if (includeTours)
                     {

@@ -86,6 +86,16 @@ namespace Relisten.Controllers
                 queryAllWhenEmpty: false);
         }
 
+        [HttpGet("v3/shows/momentum")]
+        [ProducesResponseType(typeof(Show[]), 200)]
+        public async Task<IActionResult> ArtistsMomentumShows([FromQuery] string[]? artistUuids = null,
+            [FromQuery] int limit = MaxShowLimit)
+        {
+            return await ApiRequest(artistUuids ?? [],
+                arts => popularityService.GetArtistsMomentumShows(arts, NormalizeShowLimit(limit)),
+                queryAllWhenEmpty: false);
+        }
+
         private static int NormalizeShowLimit(int limit, int maxLimit = MaxShowLimit)
         {
             if (limit <= 0)
