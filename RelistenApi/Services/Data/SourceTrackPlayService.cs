@@ -42,7 +42,7 @@ namespace Relisten.Data
 				FROM
 					source_track_plays t
 				WHERE
-					1=1
+					t.created_at > now() - interval '1 hour'
 					{(lastSeenId != null ? "AND t.id > @lastSeenId" : "")}
 				ORDER BY
 					t.created_at {(lastSeenId != null ? "" : "DESC")}, t.id {(lastSeenId != null ? "" : "DESC")}
