@@ -13,6 +13,7 @@ namespace Relisten.Controllers
     public class PopularityController : RelistenBaseController
     {
         private const int MaxShowLimit = 25;
+        private const int MaxMultiArtistShowLimit = 10;
         private readonly PopularityService popularityService;
 
         public PopularityController(
@@ -71,20 +72,21 @@ namespace Relisten.Controllers
                     sortWindow: window));
         }
 
-        [HttpGet("v3/artists/shows/popular-trending")]
+        [HttpGet("v3/shows/popular-trending")]
         [ProducesResponseType(typeof(MultiArtistPopularTrendingShowsResponse), 200)]
-        public async Task<IActionResult> ArtistsPopularTrendingShows([FromQuery] string[]? artistIds = null,
-            [FromQuery] int limit = MaxShowLimit,
+        public async Task<IActionResult> ArtistsPopularTrendingShows([FromQuery] string[]? artistUuids = null,
+            [FromQuery] int limit = MaxMultiArtistShowLimit,
             [ModelBinder(BinderType = typeof(PopularitySortWindowModelBinder))]
             [FromQuery] PopularitySortWindow window = PopularitySortWindow.Days30)
         {
-            return await ApiRequest(artistIds ?? [],
-                arts => popularityService.GetArtistsPopularTrendingShows(arts, NormalizeShowLimit(limit),
+            return await ApiRequest(artistUuids ?? [],
+                arts => popularityService.GetArtistsPopularTrendingShows(arts,
+                    NormalizeShowLimit(limit, maxLimit: MaxMultiArtistShowLimit),
                     sortWindow: window),
                 queryAllWhenEmpty: false);
         }
 
-        private static int NormalizeShowLimit(int limit)
+        private static int NormalizeShowLimit(int limit, int maxLimit = MaxShowLimit)
         {
             if (limit <= 0)
             {
