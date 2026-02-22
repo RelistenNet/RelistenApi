@@ -50,11 +50,8 @@ namespace Relisten.Services.Popularity
         public async Task<Dictionary<Guid, PopularityMetrics>> GetShowPopularityMapForArtist(Guid artistUuid,
             bool allowStale = true)
         {
-            var key = $"popularity:artist:{artistUuid}:shows:map:30d-48h";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
-                () => ComputeShowPopularityMapForArtist(artistUuid),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshShowPopularityMapForArtist(artistUuid)),
-                allowStale);
+            var cached = await GetShowPopularityCacheMapForArtist(artistUuid, allowStale);
+            return cached.ToDictionary(entry => entry.Key, entry => CachedShowPopularityMapper.ToPopularityMetrics(entry.Value));
         }
 
         public async Task<Dictionary<Guid, PopularityMetrics>> GetYearPopularityMapForArtist(Guid artistUuid,
@@ -141,26 +138,44 @@ namespace Relisten.Services.Popularity
             var mapsByArtist = await Task.WhenAll(artists.Select(async artist => new
             {
                 artist,
-                map = await GetShowPopularityMapForArtist(artist.uuid, allowStale)
+                map = await GetShowPopularityCacheMapForArtist(artist.uuid, allowStale)
             }));
 
-            var topCandidates = mapsByArtist
+            var candidates = mapsByArtist
                 .SelectMany(item => item.map.Select(entry => new
                 {
                     item.artist,
                     showUuid = entry.Key,
-                    metrics = entry.Value
+                    cached = entry.Value
                 }))
-                .OrderByDescending(item => item.metrics.momentum_score)
-                .ThenByDescending(item => item.metrics.windows.days_30d.hot_score)
-                .ThenByDescending(item => item.metrics.windows.days_30d.plays)
-                .Take(limit)
                 .ToList();
 
-            if (topCandidates.Count == 0)
+            if (candidates.Count == 0)
             {
                 return [];
             }
+
+            var topCandidates = candidates
+                .Select(item =>
+                {
+                    var rankingMomentum = CachedShowPopularityMapper.GetRankingMomentumScore(item.cached);
+                    var rawMomentum = CachedShowPopularityMapper.GetRawMomentumScore(item.cached);
+
+                    return new
+                    {
+                        item.artist,
+                        item.showUuid,
+                        item.cached,
+                        rankingMomentum,
+                        rawMomentum
+                    };
+                })
+                .OrderByDescending(item => item.rankingMomentum)
+                .ThenByDescending(item => item.rawMomentum)
+                .ThenByDescending(item => item.cached.windows.days_30d.hot_score)
+                .ThenByDescending(item => item.cached.windows.days_30d.plays)
+                .Take(limit)
+                .ToList();
 
             var featuresByArtistUuid = artists
                 .GroupBy(artist => artist.uuid)
@@ -182,7 +197,9 @@ namespace Relisten.Services.Popularity
                     continue;
                 }
 
-                show.popularity = candidate.metrics;
+                var metrics = CachedShowPopularityMapper.ToPopularityMetrics(candidate.cached);
+                metrics.momentum_score = candidate.rankingMomentum;
+                show.popularity = metrics;
                 ordered.Add(show);
             }
 
@@ -299,6 +316,80 @@ namespace Relisten.Services.Popularity
             }
         }
 
+        private async Task<Dictionary<Guid, CachedShowPopularity>> GetShowPopularityCacheMapForArtist(Guid artistUuid,
+            bool allowStale = true)
+        {
+            var key = $"popularity:artist:{artistUuid}:shows:map:30d-48h";
+            var cached = await TryGetShowPopularityCacheMap(key);
+            if (cached.HasValue && cached.Entry != null)
+            {
+                if (!cached.IsStale)
+                {
+                    return cached.Entry.data;
+                }
+
+                if (allowStale)
+                {
+                    BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshShowPopularityMapForArtist(artistUuid));
+                    return cached.Entry.data;
+                }
+            }
+
+            var fresh = await ComputeShowPopularityMapForArtist(artistUuid);
+            await cache.SetAsync(key, NewCacheEntry(fresh));
+            return fresh;
+        }
+
+        private async Task<PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>> TryGetShowPopularityCacheMap(
+            string key)
+        {
+            try
+            {
+                var cached = await cache.GetAsync<Dictionary<Guid, CachedShowPopularity>>(key);
+                if (cached.HasValue && cached.Entry != null)
+                {
+                    cached.Entry.data = CachedShowPopularityMapper.NormalizeCachedShowPopularityMap(cached.Entry.data);
+                }
+
+                if (cached.HasValue)
+                {
+                    return cached;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex,
+                    "Failed to deserialize cached show popularity map using cache DTO. Falling back to legacy DTO.");
+            }
+
+            try
+            {
+                var legacy = await cache.GetAsync<Dictionary<Guid, PopularityMetrics>>(key);
+                if (!legacy.HasValue || legacy.Entry == null)
+                {
+                    return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>> { HasValue = false };
+                }
+
+                return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>
+                {
+                    HasValue = true,
+                    IsStale = legacy.IsStale,
+                    Entry = new PopularityCacheEntry<Dictionary<Guid, CachedShowPopularity>>
+                    {
+                        generated_at = legacy.Entry.generated_at,
+                        stale_after_seconds = legacy.Entry.stale_after_seconds,
+                        data = CachedShowPopularityMapper.ConvertLegacyShowPopularityMap(
+                            legacy.Entry.data ?? new Dictionary<Guid, PopularityMetrics>())
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to deserialize legacy cached show popularity map.");
+                return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>> { HasValue = false };
+            }
+        }
+
         private async Task<T> GetOrRefresh<T>(string key, int staleAfterSeconds, Func<Task<T>> factory,
             Action refreshAction, bool allowStale)
         {
@@ -388,10 +479,22 @@ namespace Relisten.Services.Popularity
             return BuildMetricsMap(rows);
         }
 
-        private async Task<Dictionary<Guid, PopularityMetrics>> ComputeShowPopularityMapForArtist(Guid artistUuid)
+        private async Task<Dictionary<Guid, CachedShowPopularity>> ComputeShowPopularityMapForArtist(Guid artistUuid)
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityRow>(@"
-                WITH plays_90d AS (
+            var rows = await db.WithConnection(con => con.QueryAsync<PopularityShowCacheRow>(@"
+                WITH artist_ref AS (
+                    SELECT id
+                    FROM artists
+                    WHERE uuid = @artistUuid
+                ),
+                artist_show_dates AS (
+                    SELECT
+                        s.uuid,
+                        s.date::date AS show_date
+                    FROM shows s
+                    JOIN artist_ref ar ON ar.id = s.artist_id
+                ),
+                plays_90d AS (
                     SELECT show_uuid AS uuid, SUM(plays) AS plays_90d
                     FROM source_track_plays_daily
                     WHERE artist_uuid = @artistUuid
@@ -406,12 +509,22 @@ namespace Relisten.Services.Popularity
                       AND play_day >= now() - interval '30 days'
                     GROUP BY 1
                 ),
+                plays_7d_raw AS MATERIALIZED (
+                    SELECT
+                        p.show_uuid AS uuid,
+                        p.plays,
+                        p.total_track_seconds,
+                        p.play_day::date AS play_day
+                    FROM source_track_plays_daily p
+                    WHERE p.artist_uuid = @artistUuid
+                      AND p.play_day >= now() - interval '7 days'
+                ),
                 plays_7d AS (
-                    SELECT show_uuid AS uuid, SUM(plays) AS plays_7d,
+                    SELECT
+                        uuid,
+                        SUM(plays) AS plays_7d,
                         SUM(total_track_seconds)::bigint AS seconds_7d
-                    FROM source_track_plays_daily
-                    WHERE artist_uuid = @artistUuid
-                      AND play_day >= now() - interval '7 days'
+                    FROM plays_7d_raw
                     GROUP BY 1
                 ),
                 plays_6h AS (
@@ -428,6 +541,49 @@ namespace Relisten.Services.Popularity
                     WHERE artist_uuid = @artistUuid
                       AND play_hour >= now() - interval '48 hours'
                     GROUP BY 1
+                ),
+                otd_candidates_7d AS (
+                    SELECT
+                        p.uuid,
+                        p.plays,
+                        p.play_day,
+                        s.show_date,
+                        make_date(
+                            EXTRACT(YEAR FROM p.play_day)::int,
+                            EXTRACT(MONTH FROM s.show_date)::int,
+                            LEAST(
+                                EXTRACT(DAY FROM s.show_date)::int,
+                                EXTRACT(DAY FROM (
+                                    date_trunc('month',
+                                        make_date(
+                                            EXTRACT(YEAR FROM p.play_day)::int,
+                                            EXTRACT(MONTH FROM s.show_date)::int,
+                                            1
+                                        ) + interval '1 month'
+                                    ) - interval '1 day'
+                                ))::int
+                            )
+                        ) AS anniversary_date
+                    FROM plays_7d_raw p
+                    JOIN artist_show_dates s ON s.uuid = p.uuid
+                ),
+                otd_penalty_7d AS (
+                    SELECT
+                        uuid,
+                        SUM(
+                            CASE
+                                WHEN EXTRACT(YEAR FROM play_day)::int > EXTRACT(YEAR FROM show_date)::int
+                                     AND (play_day - anniversary_date) BETWEEN 0 AND @otdPenaltyWindowDays
+                                THEN plays * exp(
+                                    -ln(2.0) * (
+                                        (play_day - anniversary_date)::double precision / @otdPenaltyHalfLifeDays
+                                    )
+                                )
+                                ELSE 0
+                            END
+                        ) AS weighted_penalized_plays_7d
+                    FROM otd_candidates_7d
+                    GROUP BY 1
                 )
                 SELECT
                     COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid, p6.uuid) AS uuid,
@@ -439,14 +595,21 @@ namespace Relisten.Services.Popularity
                     , COALESCE(p30.seconds_30d, 0) AS seconds_30d
                     , COALESCE(p7.seconds_7d, 0) AS seconds_7d
                     , COALESCE(p48.seconds_48h, 0) AS seconds_48h
+                    , COALESCE(otd.weighted_penalized_plays_7d, 0)::double precision AS weighted_penalized_plays_7d
                 FROM plays_30d p30
                 FULL OUTER JOIN plays_48h p48 ON p48.uuid = p30.uuid
                 FULL OUTER JOIN plays_7d p7 ON p7.uuid = COALESCE(p30.uuid, p48.uuid)
                 FULL OUTER JOIN plays_90d p90 ON p90.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid)
                 FULL OUTER JOIN plays_6h p6 ON p6.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid)
-            ", new { artistUuid }));
+                LEFT JOIN otd_penalty_7d otd ON otd.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid, p6.uuid)
+            ", new
+            {
+                artistUuid,
+                otdPenaltyWindowDays = ShowMomentumScoring.HistoricalPenaltyWindowDays,
+                otdPenaltyHalfLifeDays = ShowMomentumScoring.HistoricalPenaltyHalfLifeDays
+            }));
 
-            return BuildMetricsMap(rows);
+            return BuildShowPopularityCacheMap(rows);
         }
 
         private async Task<Dictionary<Guid, PopularityMetrics>> ComputeYearPopularityMapForArtist(Guid artistUuid)
@@ -1041,6 +1204,43 @@ namespace Relisten.Services.Popularity
             return metrics.ToDictionary(item => item.uuid, item => item.metrics);
         }
 
+        private Dictionary<Guid, CachedShowPopularity> BuildShowPopularityCacheMap(
+            IEnumerable<PopularityShowCacheRow> rows)
+        {
+            var metrics = rows.Select(row => new
+            {
+                row.uuid,
+                weighted_penalized_plays_7d = row.weighted_penalized_plays_7d,
+                metrics = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h, row.plays_90d,
+                    row.seconds_30d, row.seconds_7d, row.seconds_48h)
+            }).ToList();
+
+            ApplyMomentumScores(metrics.Select(item => item.metrics).ToList());
+
+            return metrics.ToDictionary(item => item.uuid, item =>
+            {
+                var raw = item.metrics.momentum_score;
+                var ratio = ShowMomentumScoring.ComputeOtdPenaltyRatio(item.weighted_penalized_plays_7d,
+                    item.metrics.windows.days_7d.plays);
+                var organic = ShowMomentumScoring.ComputeOrganicMomentumScore(raw, ratio);
+
+                return new CachedShowPopularity
+                {
+                    windows = item.metrics.windows,
+                    trend_ratio = item.metrics.trend_ratio,
+                    momentum_score = raw,
+                    plays_6h = item.metrics.plays_6h,
+                    plays_90d = item.metrics.plays_90d,
+                    momentum = new CachedShowMomentum
+                    {
+                        raw = raw,
+                        organic = organic,
+                        otd_penalty_ratio_7d = ratio
+                    }
+                };
+            });
+        }
+
         internal static PopularityMetrics CreateMetrics(long plays30d, long plays7d, long plays6h, long plays48h,
             long plays90d, long seconds30d, long seconds7d, long seconds48h)
         {
@@ -1107,16 +1307,16 @@ namespace Relisten.Services.Popularity
                 return;
             }
 
-                var trendRanks = PercentileRanks(metrics.Select(item => item.trend_ratio).ToList());
-                var hotRanks = PercentileRanks(metrics
-                    .Select(item => item.windows.days_30d.hot_score)
-                    .ToList());
-                var shortTrendRanks = PercentileRanks(metrics
-                    .Select(item =>
-                    {
-                        return ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays);
-                    })
-                    .ToList());
+            var trendRanks = PercentileRanks(metrics.Select(item => item.trend_ratio).ToList());
+            var hotRanks = PercentileRanks(metrics
+                .Select(item => item.windows.days_30d.hot_score)
+                .ToList());
+            var shortTrendRanks = PercentileRanks(metrics
+                .Select(item =>
+                {
+                    return ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays);
+                })
+                .ToList());
 
             for (var i = 0; i < metrics.Count; i++)
             {
@@ -1211,6 +1411,20 @@ namespace Relisten.Services.Popularity
             public long seconds_30d { get; set; }
             public long seconds_7d { get; set; }
             public long seconds_48h { get; set; }
+        }
+
+        private class PopularityShowCacheRow
+        {
+            public Guid uuid { get; set; }
+            public long plays_30d { get; set; }
+            public long plays_7d { get; set; }
+            public long plays_48h { get; set; }
+            public long plays_6h { get; set; }
+            public long plays_90d { get; set; }
+            public long seconds_30d { get; set; }
+            public long seconds_7d { get; set; }
+            public long seconds_48h { get; set; }
+            public double weighted_penalized_plays_7d { get; set; }
         }
 
         private class PopularityYearRow

@@ -36,6 +36,10 @@
 ## Database & Postgres Tips
 - Local Postgres runs on `127.0.0.1:15432` with database `relisten_db`, user `relisten`, password `local_dev_password`.
 - Quick connect: `PGPASSWORD=local_dev_password psql -h 127.0.0.1 -p 15432 -U relisten -d relisten_db`.
+- Production read-only Postgres is reachable at `relisten2.tail09dbf.ts.net:32095` with database `app` and user `app`.
+- Use the production read-only connection for `psql` query-performance checks by agents (for example `EXPLAIN (ANALYZE, BUFFERS)` on read queries).
+- Fetch the production read-only password with kubectl: `kubectl -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode`.
+- Quick connect to production read-only Postgres: `PGPASSWORD="$(kubectl -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode)" psql -h relisten2.tail09dbf.ts.net -p 32095 -U app -d app`.
 - Helpful tables: `artists`, `features`, `artists_upstream_sources`, `upstream_sources` (archive.org is `upstream_source_id = 1`).
 - Example query to inspect archive.org artists:\n  `select a.id, a.name, a.slug, a.featured, aus.upstream_identifier from artists a join artists_upstream_sources aus on aus.artist_id=a.id where aus.upstream_source_id=1;`
 - It is MUCH better to inspect the schema using psql than to rely on the migration files to learn about the schema.  
