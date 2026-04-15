@@ -19,11 +19,24 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
     private readonly HttpClient httpClient;
 
     public ArchiveOrgCollectionIndexClient()
+        : this(new HttpClient())
     {
-        httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
-        httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
+    }
+
+    public ArchiveOrgCollectionIndexClient(HttpClient httpClient)
+    {
+        this.httpClient = httpClient;
+
+        if (!this.httpClient.DefaultRequestHeaders.Contains("User-Agent"))
+        {
+            this.httpClient.DefaultRequestHeaders.Add("User-Agent",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
+        }
+
+        if (!this.httpClient.DefaultRequestHeaders.Contains("Accept"))
+        {
+            this.httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
+        }
     }
 
     public async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count,
@@ -71,17 +84,6 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
 
             items.AddRange(pageItems);
 
-            // Cursor behavior appears inconsistent for this endpoint. When we tested live requests, the cursor
-            // repeated and the next page contained the same items (or the cursor was rejected when sorts were used).
-            // Example tests:
-            // - collection:etree AND mediatype:collection with fields=identifier,title,item_count,month, count=100
-            // - collection:nasa with fields=identifier,title, count=100
-            // In both cases, the cursor did not advance and the page results overlapped 100%.
-            if (parsed.total > 0 && items.Count >= parsed.total)
-            {
-                break;
-            }
-
             if (string.IsNullOrWhiteSpace(parsed.cursor))
             {
                 break;
@@ -89,13 +91,8 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
 
             if (!seenCursors.Add(parsed.cursor))
             {
-                if (parsed.total > items.Count)
-                {
-                    throw new InvalidOperationException(
-                        $"archive.org scraping cursor did not advance for query; fetched {items.Count} of {parsed.total} items.");
-                }
-
-                break;
+                throw new InvalidOperationException(
+                    $"archive.org scraping cursor did not advance for query after fetching {items.Count} items.");
             }
 
             cursor = parsed.cursor;
