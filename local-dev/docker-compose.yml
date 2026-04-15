@@ -10,7 +10,7 @@ services:
       - 16379:6379
 
   relisten-db:
-    image: timescale/timescaledb:latest-pg17
+    image: timescale/timescaledb:2.19.3-pg17
     restart: always
     command:
       - postgres
