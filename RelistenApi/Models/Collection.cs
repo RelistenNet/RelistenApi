@@ -120,6 +120,7 @@ namespace Relisten.Api.Models
     public sealed class ArchiveOrgImportContext
     {
         public int upstream_source_id { get; set; } = 1;
+        public bool infer_venue_from_description { get; set; }
     }
 
     public enum ArchiveCollectionArtistResolutionStatus

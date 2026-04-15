@@ -69,6 +69,7 @@ public class TestAadamJacobsCollectionImporter
 
         result.imported_source.Should().Be(1);
         archiveImporter.ImportedIdentifiers.Should().ContainSingle("ajcitem2");
+        archiveImporter.Contexts.Should().ContainSingle(context => context.infer_venue_from_description);
         repository.LinkedItems.Should().ContainSingle(i => i.Status == ArchiveCollectionItemImportStatus.ImportedSource);
         repository.RebuiltArtistIds.Should().Contain(artist.id);
         repository.RebuiltArtistIds.Should().HaveCount(1);
@@ -128,11 +129,13 @@ public class TestAadamJacobsCollectionImporter
     {
         public Dictionary<string, ArchiveItemImportResult> Results { get; } = new();
         public List<string> ImportedIdentifiers { get; } = new();
+        public List<ArchiveOrgImportContext> Contexts { get; } = new();
 
         public Task<ArchiveItemImportResult> ImportSingleArchiveIdentifierForArtist(Artist artist, string identifier,
             ArchiveOrgImportContext archiveContext, PerformContext? ctx)
         {
             ImportedIdentifiers.Add(identifier);
+            Contexts.Add(archiveContext);
             return Task.FromResult(Results[identifier]);
         }
 

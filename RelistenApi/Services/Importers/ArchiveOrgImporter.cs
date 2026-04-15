@@ -479,7 +479,13 @@ namespace Relisten.Import
             Venue? dbVenue = null;
             if (artist.features.per_source_venues)
             {
-                var venueName = string.IsNullOrEmpty(meta.venue) ? meta.coverage : meta.venue;
+                var resolvedVenue = ArchiveOrgVenueInference.ResolveVenue(meta.venue, meta.coverage,
+                    meta.description, meta.creator, meta.title, properDisplayDate,
+                    archiveContext.infer_venue_from_description);
+
+                var venueName = string.IsNullOrEmpty(resolvedVenue.VenueName)
+                    ? resolvedVenue.Coverage
+                    : resolvedVenue.VenueName;
 
                 if (string.IsNullOrEmpty(venueName))
                 {
@@ -487,7 +493,7 @@ namespace Relisten.Import
                 }
 
                 var venueUpstreamId =
-                    venueName + (string.IsNullOrEmpty(meta.coverage) ? "blank coverage" : meta.coverage);
+                    venueName + (string.IsNullOrEmpty(resolvedVenue.Coverage) ? "blank coverage" : resolvedVenue.Coverage);
                 dbVenue = await _venueService.ForUpstreamIdentifier(artist, venueUpstreamId);
 
                 if (dbVenue == null)
@@ -496,7 +502,9 @@ namespace Relisten.Import
                     {
                         artist_id = artist.id,
                         name = venueName,
-                        location = string.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
+                        location = string.IsNullOrEmpty(resolvedVenue.Coverage)
+                            ? "Unknown Location"
+                            : resolvedVenue.Coverage,
                         upstream_identifier = venueUpstreamId,
                         slug = Slugify(venueName),
                         updated_at = searchDoc._iguana_updated_at

@@ -166,7 +166,10 @@ public sealed class AadamJacobsCollectionImporter
                     }
 
                     var importResult = await archiveImporter.ImportSingleArchiveIdentifierForArtist(artist,
-                        item.upstream_identifier, new ArchiveOrgImportContext(), ctx);
+                        item.upstream_identifier, new ArchiveOrgImportContext
+                        {
+                            infer_venue_from_description = true
+                        }, ctx);
 
                     if (metadataDelay > TimeSpan.Zero)
                     {

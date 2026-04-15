@@ -42,6 +42,7 @@ public class TestArchiveOrgItemImporter
         };
 
         context.upstream_source_id.Should().Be(1);
+        context.infer_venue_from_description.Should().BeFalse();
     }
 
     [Test]
