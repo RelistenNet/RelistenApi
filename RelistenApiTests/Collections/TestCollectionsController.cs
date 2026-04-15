@@ -26,6 +26,7 @@ public class TestCollectionsController
         routes.Should().Contain("v3/collections/{collectionUuidOrSlug}/years");
         routes.Should().Contain("v3/collections/{collectionUuidOrSlug}/years/{yearUuidOrYear}");
         routes.Should().Contain("v3/collections/{collectionUuidOrSlug}/shows/popular-trending");
+        routes.Should().Contain("v3/collections/{collectionUuidOrSlug}/shows/recently-added");
         routes.Should().Contain("v3/collections/{collectionUuidOrSlug}/shows/on-this-day");
 
         routes.Should().NotContain(route => route.Contains("/venues"));

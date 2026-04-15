@@ -169,8 +169,12 @@ api_check "collection popular and trending counts" \
     "$BASE_URL/api/v3/collections/aadam-jacobs/shows/popular-trending" \
     '{popular: (.popular_shows | length), trending: (.trending_shows | length)}'
 
+api_check "collection recently added first shows" \
+    "$BASE_URL/api/v3/collections/aadam-jacobs/shows/recently-added?limit=5" \
+    '.[] | {uuid, artist_uuid, display_date, source_count, most_recent_source_updated_at}'
+
 api_check "collection on-this-day first show" \
-    "$BASE_URL/api/v3/collections/aadam-jacobs/shows/on-this-day?month=1&day=1" \
+    "$BASE_URL/api/v3/collections/aadam-jacobs/shows/on-this-day?month=7&day=20" \
     '.[0] | {uuid, artist_uuid, display_date}'
 
 api_check "collection-derived artist delta shape" \

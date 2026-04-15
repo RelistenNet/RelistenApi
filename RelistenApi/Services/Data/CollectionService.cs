@@ -467,6 +467,15 @@ public class CollectionService : RelistenDataServiceBase, IArchiveCollectionReso
         ", new {collectionUuid = collection.uuid, month, day}, "sh.display_date ASC")).ToList();
     }
 
+    public async Task<IReadOnlyList<Show>> RecentlyAddedShowsForCollection(CollectionDetail collection, int limit)
+    {
+        return (await QueryCollectionShows(collection.uuid,
+            "true",
+            new {collectionUuid = collection.uuid},
+            "csi.max_updated_at DESC, sh.display_date DESC",
+            limit)).ToList();
+    }
+
     public async Task<CollectionPopularTrendingShowsResponse> PopularTrendingShowsForCollection(
         CollectionDetail collection, int limit, PopularitySortWindow sortWindow)
     {

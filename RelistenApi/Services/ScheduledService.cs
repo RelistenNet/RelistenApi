@@ -74,6 +74,8 @@ namespace Relisten
             await _archiveOrgArtistIndexer.IndexArtists(context);
         }
 
+        // run daily at 9 AM UTC, after archive.org indexing and the normal artist refresh enqueue
+        [RecurringJob("0 9 * * *", Enabled = true)]
         [Queue("artist_import")]
         [AutomaticRetry(Attempts = 0)]
         [DisableConcurrentExecution(timeoutInSeconds: 6 * 60 * 60)]

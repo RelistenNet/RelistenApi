@@ -80,6 +80,17 @@ namespace Relisten.Controllers
                     NormalizeShowLimit(limit), window));
         }
 
+        [HttpGet("v3/collections/{collectionUuidOrSlug}/shows/recently-added")]
+        [ProducesResponseType(typeof(IEnumerable<Show>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> GetRecentlyAddedShows(string collectionUuidOrSlug,
+            [FromQuery] int limit = MaxShowLimit)
+        {
+            return await CollectionRequest(collectionUuidOrSlug,
+                collection => collectionService.RecentlyAddedShowsForCollection(collection,
+                    NormalizeShowLimit(limit)));
+        }
+
         [HttpGet("v3/collections/{collectionUuidOrSlug}/shows/on-this-day")]
         [ProducesResponseType(typeof(IEnumerable<Show>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
