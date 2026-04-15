@@ -5,6 +5,7 @@ namespace Relisten.Api.Models.Api
     public enum ApiErrorCode
     {
         NoError = 0,
+        BadRequest = 400,
         NotFound = 404
     }
 
