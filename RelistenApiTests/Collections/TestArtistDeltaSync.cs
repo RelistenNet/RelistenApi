@@ -50,4 +50,24 @@ public class TestArtistDeltaSync
         response.server_timestamp.Should().Be(timestamp);
         response.artists.Should().BeSameAs(artists);
     }
+
+    [Test]
+    public void ScheduledRefreshOnlyIncludesArtistsWithUpstreamSources()
+    {
+        var collectionOnlyArtist = new Artist
+        {
+            upstream_sources = Array.Empty<ArtistUpstreamSource>()
+        };
+
+        var archiveArtist = new Artist
+        {
+            upstream_sources =
+            [
+                new ArtistUpstreamSource()
+            ]
+        };
+
+        ArtistService.ShouldIncludeInScheduledRefresh(collectionOnlyArtist).Should().BeFalse();
+        ArtistService.ShouldIncludeInScheduledRefresh(archiveArtist).Should().BeTrue();
+    }
 }

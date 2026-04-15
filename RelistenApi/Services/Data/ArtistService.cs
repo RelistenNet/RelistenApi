@@ -38,6 +38,11 @@ namespace Relisten.Data
             return includeAutoCreated || !isAutoCreated;
         }
 
+        public static bool ShouldIncludeInScheduledRefresh(Artist artist)
+        {
+            return artist.upstream_sources?.Any() == true;
+        }
+
         private static string ArtistVisibilityWhereClause()
         {
             return @"
@@ -197,10 +202,50 @@ namespace Relisten.Data
             };
         }
 
-        public Task<int> RemoveAllContentForArtist(Artist art)
+        public async Task<int> RemoveAllContentForArtist(Artist art)
         {
-            // Order matters: delete child tables before parent tables due to FK constraints
-            return db.WithWriteConnection(con => con.ExecuteAsync(@"
+            return await db.WithWriteConnection(async con =>
+            {
+                var activeCollectionLinks = await con.QuerySingleAsync<int>(@"
+                    SELECT COUNT(*)
+                    FROM collection_items ci
+                    WHERE ci.removed_at IS NULL
+                      AND (
+                          ci.artist_uuid = @ArtistUuid
+                          OR ci.source_uuid IN (SELECT uuid FROM sources WHERE artist_id = @ArtistId)
+                          OR ci.show_uuid IN (SELECT uuid FROM shows WHERE artist_id = @ArtistId)
+                      )
+                ", new {ArtistId = art.id, ArtistUuid = art.uuid});
+
+                if (activeCollectionLinks > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Cannot remove content for {art.name}; {activeCollectionLinks} active_collection_links still reference this artist's playback rows.");
+                }
+
+                await con.ExecuteAsync(@"
+                    UPDATE collection_items ci
+                    SET
+                        artist_uuid = CASE WHEN ci.artist_uuid = @ArtistUuid THEN NULL ELSE ci.artist_uuid END,
+                        source_uuid = CASE
+                            WHEN ci.source_uuid IN (SELECT uuid FROM sources WHERE artist_id = @ArtistId) THEN NULL
+                            ELSE ci.source_uuid
+                        END,
+                        show_uuid = CASE
+                            WHEN ci.show_uuid IN (SELECT uuid FROM shows WHERE artist_id = @ArtistId) THEN NULL
+                            ELSE ci.show_uuid
+                        END,
+                        updated_at = timezone('utc'::text, now())
+                    WHERE ci.removed_at IS NOT NULL
+                      AND (
+                          ci.artist_uuid = @ArtistUuid
+                          OR ci.source_uuid IN (SELECT uuid FROM sources WHERE artist_id = @ArtistId)
+                          OR ci.show_uuid IN (SELECT uuid FROM shows WHERE artist_id = @ArtistId)
+                      )
+                ", new {ArtistId = art.id, ArtistUuid = art.uuid});
+
+                // Order matters: delete child tables before parent tables due to FK constraints
+                return await con.ExecuteAsync(@"
 				delete from setlist_songs where artist_id = @ArtistId;
 				delete from setlist_shows where artist_id = @ArtistId;
 				delete from source_sets where source_id in (select id from sources where artist_id = @ArtistId);
@@ -211,7 +256,8 @@ namespace Relisten.Data
 				delete from venues where artist_id = @ArtistId;
 				delete from years where artist_id = @ArtistId;
 				delete from eras where artist_id = @ArtistId;
-			", new {ArtistId = art.id}));
+			", new {ArtistId = art.id});
+            });
         }
 
         public async Task<IEnumerable<Artist>> All(bool includeAutoCreated = true)

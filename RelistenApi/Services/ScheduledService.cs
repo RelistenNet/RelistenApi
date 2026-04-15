@@ -161,7 +161,9 @@ namespace Relisten
                 return;
             }
 
-            var artists = (await _artistService.All()).ToList();
+            var artists = (await _artistService.All())
+                .Where(ArtistService.ShouldIncludeInScheduledRefresh)
+                .ToList();
 
             context?.WriteLine($"--> Updating all {artists.Count} artists");
 
@@ -185,12 +187,18 @@ namespace Relisten
                 return;
             }
 
-            var artists = (await _artistService.All()).ToList();
+            var artists = (await _artistService.All())
+                .Where(ArtistService.ShouldIncludeInScheduledRefresh)
+                .ToList();
 
             context?.WriteLine($"--> Rebuilding all {artists.Count} artists");
             var bar = context?.WriteProgressBar();
 
-            Func<Artist, Task> rebuildArtist = async artist => { await _importerService.Rebuild(artist, context); };
+            Func<Artist, Task> rebuildArtist = async artist =>
+            {
+                await _importerService.Rebuild(artist, context);
+                await _artistService.TouchApiUpdatedAt(artist.id);
+            };
 
             if (bar == null)
             {
@@ -212,7 +220,9 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         private async Task __old(PerformContext? context)
         {
-            var artists = (await _artistService.All()).ToList();
+            var artists = (await _artistService.All())
+                .Where(ArtistService.ShouldIncludeInScheduledRefresh)
+                .ToList();
 
             context?.WriteLine($"--> Updating all {artists.Count} artists");
 
@@ -225,6 +235,7 @@ namespace Relisten
                 context?.WriteLine($"--> Importing {artist.name}");
 
                 var artistStats = await _importerService.Import(artist, null, context);
+                await _artistService.TouchApiUpdatedAt(artist.id);
 
                 context?.WriteLine($"--> Imported {artist.name}! " + artistStats);
 
@@ -327,6 +338,8 @@ namespace Relisten
                     {
                         artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
                     }
+
+                    await _artistService.TouchApiUpdatedAt(artist.id);
 
                     ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
                 });

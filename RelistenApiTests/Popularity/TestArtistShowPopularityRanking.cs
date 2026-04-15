@@ -47,6 +47,23 @@ public class TestArtistShowPopularityRanking
     }
 
     [Test]
+    public void RankTrendingShows_ShouldAllowLowerVolumeCollectionCandidatesWhenFloorsAreDisabled()
+    {
+        var lowVolumeStrong = NewShow(1, hotScore: 12, plays30d: 6, plays48h: 3, trendRatio: 2.0);
+        var lowVolumeWeaker = NewShow(2, hotScore: 5, plays30d: 4, plays48h: 2, trendRatio: 4.0);
+
+        var ranked = PopularityService.RankTrendingShows(new List<Show>
+        {
+            lowVolumeWeaker,
+            lowVolumeStrong
+        }, 10, enforceGlobalFloors: false);
+
+        ranked.Should().HaveCount(2);
+        ranked[0].uuid.Should().Be(lowVolumeStrong.uuid);
+        ranked[1].uuid.Should().Be(lowVolumeWeaker.uuid);
+    }
+
+    [Test]
     public void RankPopularArtistShows_ShouldSortBySelectedWindow()
     {
         var strong30d = NewShow(10, hotScore: 20, plays30d: 500, plays48h: 10, trendRatio: 1.0,

@@ -236,8 +236,12 @@ public class CollectionService : RelistenDataServiceBase, IArchiveCollectionReso
         return db.WithWriteConnection(con => con.ExecuteAsync(@"
             UPDATE collection_items
             SET
+                artist_uuid = NULL,
+                source_uuid = NULL,
+                show_uuid = NULL,
                 import_status = @status,
                 import_error = @message,
+                last_imported_at = NULL,
                 updated_at = timezone('utc'::text, now())
             WHERE collection_uuid = @collectionUuid
               AND upstream_identifier = @upstreamIdentifier
@@ -267,7 +271,16 @@ public class CollectionService : RelistenDataServiceBase, IArchiveCollectionReso
               AND ci.removed_at IS NULL
               AND ci.upstream_identifier = s.upstream_identifier
               AND s.artist_id = @artistId
-        ", new {collectionUuid = collection.uuid, artistId}));
+              AND (ci.artist_uuid IS NULL OR ci.artist_uuid = a.uuid)
+              AND ci.import_status IN (@pendingStatus, @linkedStatus, @importedStatus)
+        ", new
+        {
+            collectionUuid = collection.uuid,
+            artistId,
+            pendingStatus = (int)ArchiveCollectionItemImportStatus.Pending,
+            linkedStatus = (int)ArchiveCollectionItemImportStatus.LinkedExistingSource,
+            importedStatus = (int)ArchiveCollectionItemImportStatus.ImportedSource
+        }));
 
         await artistService.TouchApiUpdatedAt(artistId);
     }
@@ -541,16 +554,9 @@ public class CollectionService : RelistenDataServiceBase, IArchiveCollectionReso
             collection_uuid = collection.uuid,
             collection_slug = collection.slug,
             collection_name = collection.name,
-            popular_shows = candidates
-                .OrderByDescending(show => GetSortWindowHotScore(show, sortWindow))
-                .ThenByDescending(show => GetSortWindowPlays(show, sortWindow))
-                .Take(limit)
-                .ToList(),
-            trending_shows = candidates
-                .OrderByDescending(show => show.popularity?.trend_ratio ?? 0)
-                .ThenByDescending(show => show.popularity?.windows.hours_48h.plays ?? 0)
-                .Take(limit)
-                .ToList()
+            popular_shows = PopularityService.RankPopularShows(candidates, limit, sortWindow),
+            trending_shows = PopularityService.RankTrendingShows(candidates, limit, sortWindow,
+                enforceGlobalFloors: false)
         };
     }
 
@@ -614,38 +620,6 @@ public class CollectionService : RelistenDataServiceBase, IArchiveCollectionReso
         }, parameters));
 
         return shows;
-    }
-
-    private static double GetSortWindowHotScore(Show show, PopularitySortWindow sortWindow)
-    {
-        var windows = show.popularity?.windows;
-        if (windows == null)
-        {
-            return 0;
-        }
-
-        return sortWindow switch
-        {
-            PopularitySortWindow.Hours48 => windows.hours_48h.hot_score,
-            PopularitySortWindow.Days7 => windows.days_7d.hot_score,
-            _ => windows.days_30d.hot_score
-        };
-    }
-
-    private static long GetSortWindowPlays(Show show, PopularitySortWindow sortWindow)
-    {
-        var windows = show.popularity?.windows;
-        if (windows == null)
-        {
-            return 0;
-        }
-
-        return sortWindow switch
-        {
-            PopularitySortWindow.Hours48 => windows.hours_48h.plays,
-            PopularitySortWindow.Days7 => windows.days_7d.plays,
-            _ => windows.days_30d.plays
-        };
     }
 
     private sealed class CollectionShowPopularityRow

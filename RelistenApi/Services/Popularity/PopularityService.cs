@@ -931,6 +931,13 @@ namespace Relisten.Services.Popularity
             IReadOnlyList<Show> candidateShows, int limit,
             PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
+            return RankPopularShows(candidateShows, limit, sortWindow);
+        }
+
+        internal static IReadOnlyList<Show> RankPopularShows(
+            IReadOnlyList<Show> candidateShows, int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        {
             var ordered = candidateShows
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
                 .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
@@ -944,9 +951,18 @@ namespace Relisten.Services.Popularity
             IReadOnlyList<Show> candidateShows, int limit,
             PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
         {
+            return RankTrendingShows(candidateShows, limit, sortWindow);
+        }
+
+        internal static IReadOnlyList<Show> RankTrendingShows(
+            IReadOnlyList<Show> candidateShows, int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30,
+            bool enforceGlobalFloors = true)
+        {
             var filtered = candidateShows
-                .Where(item => (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
-                               (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor)
+                .Where(item => !enforceGlobalFloors ||
+                               ((item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
+                                (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor))
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
                 .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
                 .ThenByDescending(item => item.popularity?.trend_ratio ?? 0)
