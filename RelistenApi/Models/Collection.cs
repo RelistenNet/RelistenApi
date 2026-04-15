@@ -114,4 +114,9 @@ namespace Relisten.Api.Models
         public string? skip_reason { get; set; }
         public string? error_message { get; set; }
     }
+
+    public sealed class ArchiveOrgImportContext
+    {
+        public int upstream_source_id { get; set; } = 1;
+    }
 }

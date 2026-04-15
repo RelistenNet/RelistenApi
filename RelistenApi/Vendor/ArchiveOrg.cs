@@ -307,6 +307,7 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
         public string identifier { get; set; } = null!;
         public string date { get; set; } = null!;
         public string title { get; set; } = null!;
+        public string creator { get; set; } = null!;
         public string description { get; set; } = null!;
         public string venue { get; set; } = null!;
         public string coverage { get; set; } = null!;

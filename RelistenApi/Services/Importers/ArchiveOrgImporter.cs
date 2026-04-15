@@ -103,6 +103,77 @@ namespace Relisten.Import
             return $"http://archive.org/metadata/{identifier}";
         }
 
+        public async Task<ArchiveItemImportResult> ImportSingleArchiveIdentifierForArtist(
+            Artist artist,
+            string identifier,
+            ArchiveOrgImportContext archiveContext,
+            PerformContext? ctx)
+        {
+            await PreloadData(artist);
+
+            try
+            {
+                var detailsRoot = await FetchMetadataRoot(identifier);
+                var properDate = ValidateDetailsRootForImport(artist, identifier, detailsRoot, ctx);
+
+                if (properDate == null)
+                {
+                    return new ArchiveItemImportResult
+                    {
+                        status = ArchiveCollectionItemImportStatus.Skipped,
+                        skip_reason = LastSkipReasonForMetadata(detailsRoot)
+                    };
+                }
+
+                var dbSource = existingSources.GetValue(identifier);
+                var searchDoc = SearchDocForMetadataRoot(identifier, detailsRoot);
+
+                using var scope = new TransactionScope(TransactionScopeOption.Required,
+                    new TransactionOptions { IsolationLevel = IsolationLevel.RepeatableRead },
+                    TransactionScopeAsyncFlowOption.Enabled);
+
+                try
+                {
+                    var result = await ImportSingleIdentifier(artist, dbSource, searchDoc, detailsRoot,
+                        archiveContext, properDate, ctx);
+
+                    scope.Complete();
+
+                    return new ArchiveItemImportResult
+                    {
+                        status = dbSource == null
+                            ? ArchiveCollectionItemImportStatus.ImportedSource
+                            : ArchiveCollectionItemImportStatus.LinkedExistingSource,
+                        source_uuid = result.Source.uuid
+                    };
+                }
+                catch (NoVBRMp3FilesException)
+                {
+                    return new ArchiveItemImportResult
+                    {
+                        status = ArchiveCollectionItemImportStatus.Skipped,
+                        skip_reason = "no_vbr_mp3"
+                    };
+                }
+            }
+            catch (Exception e)
+            {
+                ctx?.WriteLine($"Error processing {identifier}:");
+                ctx?.LogException(e);
+
+                e.Data["artist"] = artist.name;
+                e.Data["archive_org_identifier"] = identifier;
+
+                SentrySdk.CaptureException(e);
+
+                return new ArchiveItemImportResult
+                {
+                    status = ArchiveCollectionItemImportStatus.ImportError,
+                    error_message = e.Message
+                };
+            }
+        }
+
         private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res,
             ArtistUpstreamSource src, string? showIdentifier, PerformContext? ctx)
         {
@@ -167,69 +238,11 @@ namespace Relisten.Import
 
                         ctx?.WriteLine("Pulling https://archive.org/metadata/{0} because '{1}'", doc.identifier, reason);
 
-                        var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
-                        var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                        var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
-                            detailsJson,
-                            new TolerantStringConverter()
-                        );
-
-                        if (detailsRoot!.is_dark ?? false)
-                        {
-                            ctx?.WriteLine("\tis_dark == true, skipping...");
-                            return;
-                        }
-
-                        // in the future it might be better to retry intead of skipping
-                        if (detailsRoot.metadata?.date == null)
-                        {
-                            Log.Warning("[MISSING_DATE]: {Identifier}: Skipping because metadata date is null, Artist={Artist}",
-                                doc.identifier, artist.name);
-                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata (e.g. date missing): {1}",
-                                doc.identifier, detailsRoot.metadata);
-
-
-                            var e = new ArgumentException("Invalid, unrecoverable metadata")
-                            {
-                                Data =
-                                {
-                                    ["artist"] = artist.name,
-                                    ["archive_identifier"] = doc.identifier,
-                                    ["background_job_id"] = ctx?.BackgroundJob.Id
-                                }
-                            };
-
-                            SentrySdk.CaptureException(e);
-
-                            return;
-                        }
-
-                        var properDate = ArchiveOrgImporterUtils.FixDisplayDate(detailsRoot.metadata);
-
-                        // Log if date was remapped (invalid month/day converted to XX)
-                        var originalDate = detailsRoot.metadata?.date;
-                        if (properDate != null && originalDate != null && properDate != originalDate)
-                        {
-                            ctx?.WriteLine($"[REMAP_DATE] {doc.identifier}: '{originalDate}' → '{properDate}'");
-                        }
+                        var detailsRoot = await FetchMetadataRoot(doc.identifier);
+                        var properDate = ValidateDetailsRootForImport(artist, doc.identifier, detailsRoot, ctx);
 
                         if (properDate == null)
                         {
-                            ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
-                                doc.identifier, detailsRoot.metadata?.date);
-
-                            var e = new ArgumentException("Skipping doc because it has an invalid, unrecoverable date")
-                            {
-                                Data =
-                                {
-                                    ["artist"] = artist.name,
-                                    ["archive_identifier"] = doc.identifier,
-                                    ["date"] = detailsRoot.metadata?.date
-                                }
-                            };
-
-                            SentrySdk.CaptureException(e);
-
                             return;
                         }
 
@@ -239,8 +252,10 @@ namespace Relisten.Import
 
                         try
                         {
-                            stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                            var result = await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot,
+                                new ArchiveOrgImportContext { upstream_source_id = src.upstream_source_id },
                                 properDate, ctx);
+                            stats += result.Stats;
                         }
                         catch (NoVBRMp3FilesException)
                         {
@@ -290,7 +305,7 @@ namespace Relisten.Import
             ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
                            $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
             stats.Removed +=
-                await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+                await _sourceService.RemoveSourcesWithUpstreamIdentifiers(artist, deletedSourceUpstreamIdentifiers);
 
             ctx?.WriteLine("Rebuilding shows...");
 
@@ -308,12 +323,123 @@ namespace Relisten.Import
             return stats;
         }
 
-        private async Task<ImportStats> ImportSingleIdentifier(
+        private async Task<RootObject> FetchMetadataRoot(string identifier)
+        {
+            var detailRes = await http.GetAsync(DetailsUrlForIdentifier(identifier));
+            var detailsJson = await detailRes.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<RootObject>(
+                detailsJson,
+                new TolerantStringConverter()
+            )!;
+        }
+
+        private static SearchDoc SearchDocForMetadataRoot(string identifier, RootObject detailsRoot)
+        {
+            var updatedAt = detailsRoot.updated > 0
+                ? DateTimeOffset.FromUnixTimeSeconds(detailsRoot.updated).UtcDateTime
+                : DateTime.UtcNow;
+
+            return new SearchDoc
+            {
+                identifier = identifier,
+                raw_display_date = detailsRoot.metadata?.date ?? "",
+                updatedate = new List<DateTime> { updatedAt },
+                addeddate = updatedAt,
+                publicdate = updatedAt
+            };
+        }
+
+        private static string? ValidateDetailsRootForImport(Artist artist, string identifier, RootObject detailsRoot,
+            PerformContext? ctx)
+        {
+            if (detailsRoot.is_dark ?? false)
+            {
+                ctx?.WriteLine("\tis_dark == true, skipping...");
+                return null;
+            }
+
+            // in the future it might be better to retry instead of skipping
+            if (detailsRoot.metadata?.date == null)
+            {
+                Log.Warning("[MISSING_DATE]: {Identifier}: Skipping because metadata date is null, Artist={Artist}",
+                    identifier, artist.name);
+                ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable metadata (e.g. date missing): {1}",
+                    identifier, detailsRoot.metadata);
+
+                var e = new ArgumentException("Invalid, unrecoverable metadata")
+                {
+                    Data =
+                    {
+                        ["artist"] = artist.name,
+                        ["archive_identifier"] = identifier,
+                        ["background_job_id"] = ctx?.BackgroundJob.Id
+                    }
+                };
+
+                SentrySdk.CaptureException(e);
+
+                return null;
+            }
+
+            var properDate = ArchiveOrgImporterUtils.FixDisplayDate(detailsRoot.metadata);
+
+            // Log if date was remapped (invalid month/day converted to XX)
+            var originalDate = detailsRoot.metadata?.date;
+            if (properDate != null && originalDate != null && properDate != originalDate)
+            {
+                ctx?.WriteLine($"[REMAP_DATE] {identifier}: '{originalDate}' → '{properDate}'");
+            }
+
+            if (properDate == null)
+            {
+                ctx?.WriteLine("\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
+                    identifier, detailsRoot.metadata?.date);
+
+                var e = new ArgumentException("Skipping doc because it has an invalid, unrecoverable date")
+                {
+                    Data =
+                    {
+                        ["artist"] = artist.name,
+                        ["archive_identifier"] = identifier,
+                        ["date"] = detailsRoot.metadata?.date
+                    }
+                };
+
+                SentrySdk.CaptureException(e);
+
+                return null;
+            }
+
+            return properDate;
+        }
+
+        private static string LastSkipReasonForMetadata(RootObject detailsRoot)
+        {
+            if (detailsRoot.is_dark ?? false)
+            {
+                return "is_dark";
+            }
+
+            if (detailsRoot.metadata?.date == null)
+            {
+                return "missing_date";
+            }
+
+            return "invalid_date";
+        }
+
+        private sealed class ArchiveOrgSingleImportWriteResult
+        {
+            public ImportStats Stats { get; set; } = ImportStats.None;
+            public Source Source { get; set; } = null!;
+        }
+
+        private async Task<ArchiveOrgSingleImportWriteResult> ImportSingleIdentifier(
             Artist artist,
             Source? dbSource,
             SearchDoc searchDoc,
             RootObject detailsRoot,
-            ArtistUpstreamSource upstreamSrc,
+            ArchiveOrgImportContext archiveContext,
             string properDisplayDate,
             PerformContext? ctx
         )
@@ -382,10 +508,13 @@ namespace Relisten.Import
             {
                 var src = CreateSourceForMetadata(artist, detailsRoot, searchDoc, properDisplayDate);
                 src.id = dbSource!.id;
-                src.venue_id = dbVenue!.id;
+                src.venue_id = dbVenue?.id;
 
                 dbSource = await _sourceService.Save(src);
-                dbSource.venue = dbVenue;
+                if (dbVenue != null)
+                {
+                    dbSource.venue = dbVenue;
+                }
 
                 stats.Updated++;
                 stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
@@ -402,7 +531,7 @@ namespace Relisten.Import
             }
 
             stats.Created +=
-                (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
+                (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, archiveContext)))
                 .Count();
 
             var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] { CreateSetForSource(dbSource) }))
@@ -423,10 +552,14 @@ namespace Relisten.Import
 
             ResetTrackSlugCounts();
 
-            return stats;
+            return new ArchiveOrgSingleImportWriteResult
+            {
+                Stats = stats,
+                Source = dbSource
+            };
         }
 
-        private IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
+        private IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArchiveOrgImportContext archiveContext)
         {
             var links = new List<Link>
             {
@@ -436,13 +569,13 @@ namespace Relisten.Import
                     for_ratings = true,
                     for_source = true,
                     for_reviews = true,
-                    upstream_source_id = src.upstream_source_id,
+                    upstream_source_id = archiveContext.upstream_source_id,
                     url = "https://archive.org/details/" + dbSource.upstream_identifier,
                     label = "View on archive.org"
                 }
             };
 
-            if (artist.upstream_sources.Any(s => s.upstream_source_id == 6 /* setlist.fm */))
+            if (artist.upstream_sources?.Any(s => s.upstream_source_id == 6 /* setlist.fm */) == true)
             {
                 links.Add(new Link
                 {

@@ -278,14 +278,45 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers)
+        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(Artist artist,
+            IEnumerable<string> upstreamIdentifiers)
         {
-            return await db.WithWriteConnection(con => con.ExecuteAsync(@"
-                DELETE FROM
-                    sources
+            var identifiers = upstreamIdentifiers.ToList();
+            if (identifiers.Count == 0)
+            {
+                return 0;
+            }
+
+            return await db.WithWriteConnection(async con =>
+            {
+                await con.ExecuteAsync(@"
+                UPDATE collection_items ci
+                SET
+                    source_uuid = NULL,
+                    show_uuid = NULL,
+                    updated_at = timezone('utc'::text, now())
+                FROM sources s
                 WHERE
-                    upstream_identifier = ANY(@upstreamIdentifiers)
-            ", new {upstreamIdentifiers = upstreamIdentifiers.ToList()}));
+                    ci.source_uuid = s.uuid
+                    AND ci.removed_at IS NOT NULL
+                    AND s.artist_id = @artistId
+                    AND s.upstream_identifier = ANY(@upstreamIdentifiers)
+            ", new {artistId = artist.id, upstreamIdentifiers = identifiers});
+
+                return await con.ExecuteAsync(@"
+                DELETE FROM
+                    sources s
+                WHERE
+                    s.artist_id = @artistId
+                    AND s.upstream_identifier = ANY(@upstreamIdentifiers)
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM collection_items ci
+                        WHERE ci.source_uuid = s.uuid
+                          AND ci.removed_at IS NULL
+                    )
+            ", new {artistId = artist.id, upstreamIdentifiers = identifiers});
+            });
         }
 
         public async Task<Source> Save(Source source)
