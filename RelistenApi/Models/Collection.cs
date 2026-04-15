@@ -13,7 +13,7 @@ namespace Relisten.Api.Models
         ImportError = 4
     }
 
-    public sealed class ArchiveCollection : BaseRelistenModel, IHasPersistentIdentifier
+    public sealed class ArchiveCollection : IHasPersistentIdentifier
     {
         public Guid uuid { get; set; }
         public string slug { get; set; } = null!;
@@ -25,6 +25,8 @@ namespace Relisten.Api.Models
         public int item_count { get; set; }
         public DateTime? indexed_at { get; set; }
         public DateTime? last_imported_at { get; set; }
+        public DateTime created_at { get; set; }
+        public DateTime updated_at { get; set; }
     }
 
     public sealed class CollectionItem
@@ -118,5 +120,21 @@ namespace Relisten.Api.Models
     public sealed class ArchiveOrgImportContext
     {
         public int upstream_source_id { get; set; } = 1;
+    }
+
+    public enum ArchiveCollectionArtistResolutionStatus
+    {
+        Resolved,
+        Skipped,
+        ImportError
+    }
+
+    public sealed class ArchiveCollectionArtistResolution
+    {
+        public ArchiveCollectionArtistResolutionStatus status { get; set; }
+        public Artist? artist { get; set; }
+        public string? skip_reason { get; set; }
+        public string? error_message { get; set; }
+        public string? decision_source { get; set; }
     }
 }

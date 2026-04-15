@@ -31,6 +31,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
+using Relisten.Services.Collections;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
 using Serilog;
@@ -264,6 +265,9 @@ namespace Relisten
             services.AddScoped<JerryGarciaComImporter, JerryGarciaComImporter>();
             services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
             services.AddScoped<ArtistService, ArtistService>();
+            services.AddScoped<CollectionService, CollectionService>();
+            services.AddScoped<IArchiveCollectionResolverRepository>(sp => sp.GetRequiredService<CollectionService>());
+            services.AddScoped<ArchiveCollectionResolver, ArchiveCollectionResolver>();
             services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
             services.AddScoped<IUpstreamSourceLookup>(sp => sp.GetRequiredService<UpstreamSourceService>());
             services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();
