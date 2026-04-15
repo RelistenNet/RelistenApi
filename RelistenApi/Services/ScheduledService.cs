@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Services.Collections;
 using Relisten.Services.Indexing;
 using Relisten.Services.Popularity;
 using Sentry;
@@ -32,6 +33,7 @@ namespace Relisten
             PopularityJobs popularityJobs,
             RedisService redisService,
             JerryGarciaComImporter jerryGarciaComImporter,
+            AadamJacobsCollectionImporter aadamJacobsCollectionImporter,
             IConfiguration config
         )
         {
@@ -43,6 +45,7 @@ namespace Relisten
             _config = config;
             _redisService = redisService;
             _jerryGarciaComImporter = jerryGarciaComImporter;
+            _aadamJacobsCollectionImporter = aadamJacobsCollectionImporter;
         }
 
         private DbService _db { get; }
@@ -53,6 +56,7 @@ namespace Relisten
         private IConfiguration _config { get; }
         private RedisService _redisService { get; }
         private JerryGarciaComImporter _jerryGarciaComImporter { get; }
+        private AadamJacobsCollectionImporter _aadamJacobsCollectionImporter { get; }
 
         // run every day at 6:30 AM UTC to seed artists before the refresh
         [RecurringJob("30 6 * * *", Enabled = true)]
@@ -68,6 +72,21 @@ namespace Relisten
             }
 
             await _archiveOrgArtistIndexer.IndexArtists(context);
+        }
+
+        [Queue("artist_import")]
+        [AutomaticRetry(Attempts = 0)]
+        [DisableConcurrentExecution(timeoutInSeconds: 6 * 60 * 60)]
+        [DisplayName("Import Aadam Jacobs Collection")]
+        public async Task ImportAadamJacobsCollection(PerformContext? context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            await _aadamJacobsCollectionImporter.ImportAadamJacobsCollection(context);
         }
 
         // refresh 48h materialized view every hour
@@ -286,28 +305,31 @@ namespace Relisten
             {
                 artistsCurrentlySyncing[artist.id] = true;
 
-                if (deleteOldContent)
+                await _db.WithAdvisoryLock(DbService.ArtistImportLockKey(artist.id), async () =>
                 {
-                    ctx?.WriteLine("Removing content for " + artist.name);
+                    if (deleteOldContent)
+                    {
+                        ctx?.WriteLine("Removing content for " + artist.name);
 
-                    var rows = await _artistService.RemoveAllContentForArtist(artist);
+                        var rows = await _artistService.RemoveAllContentForArtist(artist);
 
-                    ctx?.WriteLine($"Removed {rows} rows!");
-                }
+                        ctx?.WriteLine($"Removed {rows} rows!");
+                    }
 
-                ImportStats artistStats;
+                    ImportStats artistStats;
 
-                if (specificShowId != null)
-                {
-                    artistStats =
-                        await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
-                }
-                else
-                {
-                    artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
-                }
+                    if (specificShowId != null)
+                    {
+                        artistStats =
+                            await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
+                    }
+                    else
+                    {
+                        artistStats = await _importerService.Import(artist, filterUpstreamSources, ctx);
+                    }
 
-                ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
+                    ctx?.WriteLine($"--> Imported {artist.name}! " + artistStats);
+                });
             }
             catch (Exception e)
             {

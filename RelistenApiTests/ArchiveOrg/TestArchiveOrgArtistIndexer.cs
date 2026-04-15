@@ -142,6 +142,12 @@ public class TestArchiveOrgArtistIndexer
         {
             return Task.FromResult(items);
         }
+
+        public Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionItemsAsync(string collectionIdentifier,
+            int count, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<ArchiveOrgCollectionIndexItem>>([]);
+        }
     }
 
     private sealed class FakeUpstreamSourceLookup : IUpstreamSourceLookup

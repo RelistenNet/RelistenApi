@@ -50,6 +50,11 @@ namespace Relisten
         public static string ConnStr { get; set; } = null!;
         public static string ReadOnlyConnStr { get; set; } = null!;
 
+        public static long ArtistImportLockKey(int artistId)
+        {
+            return 5_000_000_000L + artistId;
+        }
+
         public NpgsqlConnection CreateConnection(bool longTimeout, bool readOnly)
         {
             var connectionSuffix = ((!readOnly || longTimeout) ? ";CommandTimeout=300" : "");
@@ -110,6 +115,27 @@ namespace Relisten
                         string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
                             GetType().FullName), ex);
                 }
+            }
+        }
+
+        public async Task WithAdvisoryLock(long key, Func<Task> action)
+        {
+            await using var connection = CreateConnection(longTimeout: true, readOnly: false);
+            await connection.OpenAsync();
+
+            await using var lockCommand = new NpgsqlCommand("SELECT pg_advisory_lock(@key)", connection);
+            lockCommand.Parameters.AddWithValue("key", key);
+            await lockCommand.ExecuteNonQueryAsync();
+
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                await using var unlockCommand = new NpgsqlCommand("SELECT pg_advisory_unlock(@key)", connection);
+                unlockCommand.Parameters.AddWithValue("key", key);
+                await unlockCommand.ExecuteNonQueryAsync();
             }
         }
 

@@ -137,4 +137,15 @@ namespace Relisten.Api.Models
         public string? error_message { get; set; }
         public string? decision_source { get; set; }
     }
+
+    public sealed class AadamJacobsCollectionImportResult
+    {
+        public int indexed_items { get; set; }
+        public int removed_items { get; set; }
+        public int linked_existing_source { get; set; }
+        public int imported_source { get; set; }
+        public int skipped { get; set; }
+        public int import_error { get; set; }
+        public int affected_artists { get; set; }
+    }
 }

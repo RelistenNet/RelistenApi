@@ -267,7 +267,10 @@ namespace Relisten
             services.AddScoped<ArtistService, ArtistService>();
             services.AddScoped<CollectionService, CollectionService>();
             services.AddScoped<IArchiveCollectionResolverRepository>(sp => sp.GetRequiredService<CollectionService>());
+            services.AddScoped<IAadamJacobsCollectionRepository>(sp => sp.GetRequiredService<CollectionService>());
             services.AddScoped<ArchiveCollectionResolver, ArchiveCollectionResolver>();
+            services.AddScoped<IAadamJacobsArchiveImporter, AadamJacobsArchiveImporter>();
+            services.AddScoped<AadamJacobsCollectionImporter, AadamJacobsCollectionImporter>();
             services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
             services.AddScoped<IUpstreamSourceLookup>(sp => sp.GetRequiredService<UpstreamSourceService>());
             services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();

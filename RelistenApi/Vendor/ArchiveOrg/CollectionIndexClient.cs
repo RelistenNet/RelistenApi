@@ -10,6 +10,8 @@ namespace Relisten.Vendor.ArchiveOrg;
 public interface IArchiveOrgCollectionIndexClient
 {
     Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionItemsAsync(string collectionIdentifier,
+        int count, CancellationToken cancellationToken);
 }
 
 public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient, IDisposable
@@ -27,6 +29,20 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
     public async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count,
         CancellationToken cancellationToken)
     {
+        return await FetchScrapeItemsAsync("collection:etree AND mediatype:collection",
+            "identifier,title,item_count,month", count, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionItemsAsync(
+        string collectionIdentifier, int count, CancellationToken cancellationToken)
+    {
+        return await FetchScrapeItemsAsync($"collection:{collectionIdentifier}",
+            "identifier,title,creator,date,year", count, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchScrapeItemsAsync(string query,
+        string fields, int count, CancellationToken cancellationToken)
+    {
         var safeCount = Math.Max(100, count);
         var items = new List<ArchiveOrgCollectionIndexItem>();
         string? cursor = null;
@@ -35,7 +51,7 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
         while (true)
         {
             var url =
-                $"https://archive.org/services/search/v1/scrape?q=collection:etree%20AND%20mediatype:collection&fields=identifier,title,item_count,month&count={safeCount}";
+                $"https://archive.org/services/search/v1/scrape?q={Uri.EscapeDataString(query)}&fields={Uri.EscapeDataString(fields)}&count={safeCount}";
             if (!string.IsNullOrWhiteSpace(cursor))
             {
                 url += $"&cursor={Uri.EscapeDataString(cursor)}";
@@ -114,6 +130,9 @@ public class ArchiveOrgCollectionIndexItem
 {
     public string identifier { get; set; } = null!;
     public string title { get; set; } = null!;
+    public string creator { get; set; } = null!;
+    public string date { get; set; } = null!;
+    public int? year { get; set; }
     public int item_count { get; set; }
     public int month { get; set; }
 }
