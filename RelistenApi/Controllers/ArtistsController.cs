@@ -54,10 +54,12 @@ namespace Relisten.Controllers
         [HttpGet("v2/artists")]
         [HttpGet("v3/artists")]
         [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
-        public async Task<IActionResult> Get([FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false)
+        public async Task<IActionResult> Get([FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false,
+            [FromQuery(Name = "include_collection_derived")] bool includeCollectionDerived = false)
         {
             var artists = (await _artistService.AllWithCounts<ArtistWithCounts>(
-                includeAutoCreated: includeAutoCreated)).ToList();
+                includeAutoCreated: includeAutoCreated,
+                includeCollectionDerived: includeCollectionDerived)).ToList();
 
             if (IsV3Request)
             {
@@ -66,6 +68,22 @@ namespace Relisten.Controllers
             }
 
             return JsonSuccess(artists);
+        }
+
+        [HttpGet("v3/artists/delta")]
+        [ProducesResponseType(typeof(ArtistDeltaResponse), 200)]
+        public async Task<IActionResult> Delta([FromQuery] DateTime since,
+            [FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false,
+            [FromQuery(Name = "include_collection_derived")] bool includeCollectionDerived = false)
+        {
+            var response = await _artistService.DeltaSince(since,
+                includeAutoCreated: includeAutoCreated,
+                includeCollectionDerived: includeCollectionDerived);
+
+            var popularity = await popularityService.GetArtistPopularityMap();
+            popularityService.ApplyArtistPopularity(response.artists, popularity);
+
+            return JsonSuccess(response);
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}")]

@@ -24,20 +24,54 @@ namespace Relisten.Data
             _importService = importService;
         }
 
+        public static bool IsArtistVisibleForList(int featured, bool includeAutoCreated,
+            bool includeCollectionDerived)
+        {
+            var isAutoCreated = (featured & (int)ArtistFeaturedFlags.AutoCreated) != 0;
+            var isCollectionDerived = (featured & (int)ArtistFeaturedFlags.CollectionDerived) != 0;
+
+            if (isCollectionDerived)
+            {
+                return includeCollectionDerived;
+            }
+
+            return includeAutoCreated || !isAutoCreated;
+        }
+
+        private static string ArtistVisibilityWhereClause()
+        {
+            return @"
+                (
+                    @includeAutoCreated = true
+                    OR (a.featured & @autoCreatedFlag) = 0
+                    OR (
+                        @includeCollectionDerived = true
+                        AND (a.featured & @collectionDerivedFlag) <> 0
+                    )
+                )
+                AND (
+                    @includeCollectionDerived = true
+                    OR (a.featured & @collectionDerivedFlag) = 0
+                )
+            ";
+        }
+
         public async Task<IEnumerable<T>> AllWithCounts<T>(IReadOnlyList<string>? idsOrSlugs = null,
-            bool includeAutoCreated = true)
+            bool includeAutoCreated = true,
+            bool includeCollectionDerived = false)
             where T : ArtistWithCounts
         {
             var where = "";
             if (idsOrSlugs == null || idsOrSlugs.Count == 0)
             {
+                where = ArtistVisibilityWhereClause();
+
                 if (includeAutoCreated)
                 {
-                    where = "1=1 AND (COALESCE(sh.show_count, 0) > 0 OR COALESCE(src.source_count, 0) > 0)";
-                }
-                else
-                {
-                    where = "(a.featured & @autoCreatedFlag) = 0";
+                    where = $@"
+                        {where}
+                        AND (COALESCE(sh.show_count, 0) > 0 OR COALESCE(src.source_count, 0) > 0)
+                    ";
                 }
             }
             else
@@ -96,8 +130,71 @@ namespace Relisten.Data
                 ids,
                 uuids,
                 slugs,
-                autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated
+                includeAutoCreated,
+                includeCollectionDerived,
+                autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated,
+                collectionDerivedFlag = (int)ArtistFeaturedFlags.CollectionDerived
             })));
+        }
+
+        public async Task<ArtistDeltaResponse> DeltaSince(DateTime since, bool includeAutoCreated = false,
+            bool includeCollectionDerived = false)
+        {
+            var serverTimestamp = await db.WithConnection(con => con.QuerySingleAsync<DateTime>(@"
+                SELECT timezone('utc'::text, now())
+            "));
+
+            var artists = (await FillInUpstreamSources(await db.WithConnection(con => con.QueryAsync(@$"
+                WITH show_counts AS (
+                    SELECT
+                        artist_id,
+                        COUNT(*) as show_count
+                    FROM
+                        shows
+                    GROUP BY
+                        artist_id
+                )
+
+                SELECT
+                    a.*, show_count, source_count, f.*
+                FROM
+                    artists a
+                    LEFT JOIN features f on f.artist_id = a.id
+                    LEFT JOIN show_counts sh ON sh.artist_id = a.id
+                    LEFT JOIN (
+                        SELECT
+                            ssi.artist_id
+                            , SUM(ssi.source_count) as source_count
+                        FROM
+                            show_source_information ssi
+                        GROUP BY
+                            ssi.artist_id
+                    ) src ON src.artist_id = a.id
+                WHERE
+                    a.api_updated_at > @since
+                    AND a.api_updated_at <= @serverTimestamp
+                    AND {ArtistVisibilityWhereClause()}
+                ORDER BY
+                    a.api_updated_at ASC, a.name
+            ", (ArtistWithCounts artist, Features features) =>
+            {
+                artist.features = features;
+                return artist;
+            }, new
+            {
+                since,
+                serverTimestamp,
+                includeAutoCreated,
+                includeCollectionDerived,
+                autoCreatedFlag = (int)ArtistFeaturedFlags.AutoCreated,
+                collectionDerivedFlag = (int)ArtistFeaturedFlags.CollectionDerived
+            })))).ToList();
+
+            return new ArtistDeltaResponse
+            {
+                server_timestamp = serverTimestamp,
+                artists = artists
+            };
         }
 
         public Task<int> RemoveAllContentForArtist(Artist art)
@@ -341,6 +438,26 @@ namespace Relisten.Data
             });
         }
 
+        public Task<int> TouchApiUpdatedAt(int artistId)
+        {
+            return TouchApiUpdatedAt(new[] { artistId });
+        }
+
+        public async Task<int> TouchApiUpdatedAt(IEnumerable<int> artistIds)
+        {
+            var ids = artistIds.Distinct().ToList();
+            if (ids.Count == 0)
+            {
+                return 0;
+            }
+
+            return await db.WithWriteConnection(con => con.ExecuteAsync(@"
+                UPDATE artists
+                SET api_updated_at = timezone('utc'::text, now())
+                WHERE id = ANY(@ids)
+            ", new { ids }));
+        }
+
 
         string UpdateFieldsForFeatures(Features features)
         {
@@ -415,6 +532,7 @@ namespace Relisten.Data
 	                        featured = @featured,
 	                        slug = @slug,
 	                        updated_at = timezone('utc'::text, now()),
+	                        api_updated_at = timezone('utc'::text, now()),
 							sort_name = @sort_name,
 							uuid = md5('root::artist::' || @slug)::uuid
 	                    WHERE
@@ -461,6 +579,7 @@ namespace Relisten.Data
 	                            name,
 	                            slug,
 	                            updated_at,
+	                            api_updated_at,
 								sort_name,
 								uuid
 	                        )
@@ -470,6 +589,7 @@ namespace Relisten.Data
 	                            @featured,
 	                            @name,
 	                            @slug,
+	                            timezone('utc'::text, now()),
 	                            timezone('utc'::text, now()),
 								@sort_name,
 								md5('root::artist::' || @slug)::uuid

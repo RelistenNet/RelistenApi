@@ -16,7 +16,8 @@ namespace Relisten.Api.Models
     {
         None = 0,
         Featured = 1 << 0,
-        AutoCreated = 1 << 1
+        AutoCreated = 1 << 1,
+        CollectionDerived = 1 << 2
     }
 
     public interface IHasPersistentIdentifier
@@ -115,6 +116,12 @@ namespace Relisten.Api.Models
         [Required] public int show_count { get; set; }
 
         [Required] public int source_count { get; set; }
+    }
+
+    public sealed class ArtistDeltaResponse
+    {
+        public DateTime server_timestamp { get; set; }
+        public IReadOnlyList<ArtistWithCounts> artists { get; set; } = Array.Empty<ArtistWithCounts>();
     }
 
     public class FullArtist
