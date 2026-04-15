@@ -12,24 +12,28 @@ display metadata.
 ### Initial / Full Artist Load
 
 ```http
-GET /api/v3/artists?include_collection_derived=true
+GET /api/v3/artists?include_autocreated=true&include_collection_derived=true
 ```
 
-Use this when the local artist catalog is empty, stale, or being seeded. The
-response shape is the existing `ArtistWithCounts[]` shape.
+Use this when the local artist catalog is empty, stale, or being seeded and a
+full repair response is required. Normal mobile runtime sync should prefer the
+bundled artist seed followed by delta requests. The response shape is the
+existing `ArtistWithCounts[]` shape.
 
 Important behavior:
 
 - Default `/api/v3/artists` excludes collection-derived artists.
 - `include_collection_derived=true` includes `AutoCreated | CollectionDerived`
   artists without also requiring `include_autocreated=true`.
+- App-wide canonical artist sync should also send `include_autocreated=true` so
+  existing all-artist and direct-artist flows keep their full canonical catalog.
 - Collection-derived artists may have empty `upstream_sources`; that is expected
   because AJC membership is not artist-level Archive.org ownership.
 
 ### Differential Artist Sync
 
 ```http
-GET /api/v3/artists/delta?since={lastServerTimestamp}&include_collection_derived=true
+GET /api/v3/artists/delta?since={lastServerTimestamp}&include_autocreated=true&include_collection_derived=true
 ```
 
 Response:
@@ -46,7 +50,8 @@ Client behavior:
 - Send the last stored `server_timestamp` as `since`.
 - Store the new `server_timestamp` after a successful response.
 - Merge returned artists by `uuid`.
-- Use `include_collection_derived=true` for any sync path that needs AJC artists.
+- Use `include_autocreated=true&include_collection_derived=true` for the normal
+  app-wide canonical artist sync.
 - If the client does not have a previous cursor, use the full artist load or an
   old timestamp such as `1970-01-01T00:00:00Z`.
 
@@ -272,7 +277,7 @@ Invalid on-this-day date:
 ```bash
 BASE_URL=http://localhost:3823
 
-curl -fsS "$BASE_URL/api/v3/artists/delta?since=1970-01-01T00:00:00Z&include_collection_derived=true" \
+curl -fsS "$BASE_URL/api/v3/artists/delta?since=1970-01-01T00:00:00Z&include_autocreated=true&include_collection_derived=true" \
   | jq '{server_timestamp, artist_count: (.artists | length)}'
 
 curl -fsS "$BASE_URL/api/v3/collections/aadam-jacobs" \
