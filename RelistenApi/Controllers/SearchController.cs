@@ -8,7 +8,7 @@ using Relisten.Data;
 
 namespace Relisten.Controllers
 {
-    [Route("api/v2")]
+    [Route("api")]
     [Produces("application/json")]
     public class SearchController : RelistenBaseController
     {
@@ -24,7 +24,8 @@ namespace Relisten.Controllers
             _searchService = searchService;
         }
 
-        [HttpGet("search")]
+        [HttpGet("v2/search")]
+        [HttpGet("v3/search")]
         [ProducesResponseType(typeof(SearchResults), 200)]
         public async Task<IActionResult> Search(
             [FromQuery] string? q,
