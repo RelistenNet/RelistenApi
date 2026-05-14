@@ -175,7 +175,16 @@ namespace Relisten
                     var migrationsAssembly = typeof(Startup).Assembly;
                     var databaseProvider = new PostgresqlDatabaseProvider(pg);
                     var migrator = new SimpleMigrator(migrationsAssembly, databaseProvider);
-                    migrator.Load();
+                    try
+                    {
+                        migrator.Load();
+                    }
+                    catch (MissingMigrationException ex) when (HostEnvironment.IsDevelopment())
+                    {
+                        Log.Warning(ex,
+                            "Skipping migration validation because the local development database is ahead of this checkout.");
+                        return db;
+                    }
 
                     if (migrator.CurrentMigration == null || migrator.CurrentMigration.Version == 0)
                     {
