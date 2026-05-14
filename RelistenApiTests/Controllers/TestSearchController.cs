@@ -31,6 +31,7 @@ public class TestSearchController
     {
         var result = await new SearchController(null!, null!, null!, null!).Search(
             "tweezer",
+            artist_uuid: null,
             artists: false,
             shows: false,
             songs: false,
@@ -40,6 +41,16 @@ public class TestSearchController
 
         var results = ExtractResults(result);
         AssertEmptyResultsAreComplete(results);
+    }
+
+    [Test]
+    public void Search_UsesArtistUuidQueryParameter()
+    {
+        var parameters = typeof(SearchController).GetMethod(nameof(SearchController.Search))!.GetParameters();
+
+        parameters.Select(parameter => parameter.Name).Should().Contain("artist_uuid");
+        parameters.Select(parameter => parameter.Name).Should().NotContain("artist_id");
+        parameters.Single(parameter => parameter.Name == "artist_uuid").ParameterType.Should().Be(typeof(Guid?));
     }
 
     private static SearchResults ExtractResults(IActionResult result)

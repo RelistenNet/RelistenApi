@@ -11,13 +11,13 @@ namespace Relisten.Data
         {
         }
 
-        public async Task<SearchResults> Search(string searchTerm, int? artistId = null, SearchOptions? options = null)
+        public async Task<SearchResults> Search(string searchTerm, Guid? artistUuid = null, SearchOptions? options = null)
         {
             options ??= new SearchOptions();
 
             return await db.WithConnection(async con =>
             {
-                var parms = new {searchTerm, artistId};
+                var parms = new {searchTerm, artistUuid};
 
                 return new SearchResults
                 {
@@ -29,9 +29,9 @@ namespace Relisten.Data
 							LEFT JOIN (
 								SELECT artist_id, COUNT(*) as show_count FROM shows GROUP BY artist_id
 							) show_counts ON show_counts.artist_id = artists.id
-						WHERE
-							name ILIKE '%' || @searchTerm || '%'
-							{(artistId.HasValue ? "AND id = @artistId" : "")}
+							WHERE
+								name ILIKE '%' || @searchTerm || '%'
+								{(artistUuid.HasValue ? "AND artists.uuid = @artistUuid" : "")}
 						ORDER BY
 							COALESCE(show_counts.show_count, 0) DESC, name
 						LIMIT 20;
@@ -57,7 +57,7 @@ namespace Relisten.Data
 								LEFT JOIN years y ON s.year_id = y.id
 						WHERE
 							s.display_date ILIKE '%' || @searchTerm || '%'
-							{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
+							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 						ORDER BY
 							COALESCE(cnt.source_count, 0) DESC, s.display_date DESC
 						LIMIT 20;
@@ -80,7 +80,7 @@ namespace Relisten.Data
 							JOIN artists a ON s.artist_id = a.id
 							WHERE
 								s.name ILIKE '%' || @searchTerm || '%'
-								{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
+								{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 		                GROUP BY
 		                    a.id, s.id
 		                ORDER BY shows_played_at DESC, s.name
@@ -110,7 +110,7 @@ namespace Relisten.Data
 							OR s.taper ILIKE '%' || @searchTerm || '%'
 							OR s.transferrer ILIKE '%' || @searchTerm || '%'
 							OR s.lineage ILIKE '%' || @searchTerm || '%')
-							{(artistId.HasValue ? "AND s.artist_id = @artistId" : "")}
+							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 						ORDER BY
 							s.avg_rating_weighted DESC, s.duration DESC, s.display_date DESC
 						LIMIT 20;
@@ -130,7 +130,7 @@ namespace Relisten.Data
 							LEFT JOIN shows sh ON sh.tour_id = t.id
 						WHERE
 							t.name ILIKE '%' || @searchTerm || '%'
-							{(artistId.HasValue ? "AND t.artist_id = @artistId" : "")}
+							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 						GROUP BY
 							t.id, a.id
 						ORDER BY
@@ -154,7 +154,7 @@ namespace Relisten.Data
 							(v.name ILIKE '%' || @searchTerm || '%'
 							OR v.location ILIKE '%' || @searchTerm || '%'
 					        OR v.past_names ILIKE '%' || @searchTerm || '%')
-							{(artistId.HasValue ? "AND v.artist_id = @artistId" : "")}
+							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 						GROUP BY
 							v.id, a.id
 						ORDER BY

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.Api;
@@ -27,7 +28,7 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(SearchResults), 200)]
         public async Task<IActionResult> Search(
             [FromQuery] string? q,
-            [FromQuery] int? artist_id = null,
+            [FromQuery] Guid? artist_uuid = null,
             [FromQuery] bool artists = true,
             [FromQuery] bool shows = true,
             [FromQuery] bool songs = true,
@@ -51,7 +52,7 @@ namespace Relisten.Controllers
                 return JsonSuccess(SearchResults.Empty());
             }
 
-            return JsonSuccess(await _searchService.Search(searchTerm, artist_id, options));
+            return JsonSuccess(await _searchService.Search(searchTerm, artist_uuid, options));
         }
     }
 }
