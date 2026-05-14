@@ -11,11 +11,36 @@ namespace Relisten.Api.Models
 
         [Required] public IEnumerable<SetlistSongWithSlimArtist> Songs { get; set; } = null!;
 
-        [Required] public IEnumerable<SourceWithSlimArtist> Source { get; set; } = null!;
+        [Required] public IEnumerable<SourceWithSlimArtist> Sources { get; set; } = null!;
 
         [Required] public IEnumerable<TourWithSlimArtist> Tours { get; set; } = null!;
 
         [Required] public IEnumerable<VenueWithSlimArtist> Venues { get; set; } = null!;
+
+        public static SearchResults Empty()
+        {
+            return new SearchResults
+            {
+                Artists = new List<SlimArtist>(),
+                Shows = new List<ShowWithSlimArtist>(),
+                Songs = new List<SetlistSongWithSlimArtist>(),
+                Sources = new List<SourceWithSlimArtist>(),
+                Tours = new List<TourWithSlimArtist>(),
+                Venues = new List<VenueWithSlimArtist>()
+            };
+        }
+    }
+
+    public class SearchOptions
+    {
+        public bool Artists { get; set; } = true;
+        public bool Shows { get; set; } = true;
+        public bool Songs { get; set; } = true;
+        public bool Sources { get; set; } = true;
+        public bool Tours { get; set; } = true;
+        public bool Venues { get; set; } = true;
+
+        public bool AnyEnabled => Artists || Shows || Songs || Sources || Tours || Venues;
     }
 
     public class ShowWithSlimArtist : Show

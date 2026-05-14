@@ -25,21 +25,33 @@ namespace Relisten.Controllers
 
         [HttpGet("search")]
         [ProducesResponseType(typeof(SearchResults), 200)]
-        public async Task<IActionResult> Search([FromQuery] string q, [FromQuery] int? artist_id = null)
+        public async Task<IActionResult> Search(
+            [FromQuery] string? q,
+            [FromQuery] int? artist_id = null,
+            [FromQuery] bool artists = true,
+            [FromQuery] bool shows = true,
+            [FromQuery] bool songs = true,
+            [FromQuery] bool sources = true,
+            [FromQuery] bool tours = true,
+            [FromQuery] bool venues = true)
         {
-            if (q.Length < 3)
+            var searchTerm = q?.Trim();
+            var options = new SearchOptions
             {
-                return JsonSuccess(new SearchResults
-                {
-                    Artists = new List<SlimArtist>(),
-                    Shows = new List<ShowWithSlimArtist>(),
-                    Source = new List<SourceWithSlimArtist>(),
-                    Tours = new List<TourWithSlimArtist>(),
-                    Venues = new List<VenueWithSlimArtist>()
-                });
+                Artists = artists,
+                Shows = shows,
+                Songs = songs,
+                Sources = sources,
+                Tours = tours,
+                Venues = venues
+            };
+
+            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 3 || !options.AnyEnabled)
+            {
+                return JsonSuccess(SearchResults.Empty());
             }
 
-            return JsonSuccess(await _searchService.Search(q, artist_id));
+            return JsonSuccess(await _searchService.Search(searchTerm, artist_id, options));
         }
     }
 }
