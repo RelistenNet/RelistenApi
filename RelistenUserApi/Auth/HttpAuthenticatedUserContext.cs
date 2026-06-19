@@ -22,8 +22,14 @@ public sealed class HttpAuthenticatedUserContext : IAuthenticatedUserContext
             var displayName = GetRequiredClaim(principal, RelistenUserAuthenticationDefaults.ClaimTypes.DisplayName);
             var username = GetRequiredClaim(principal, RelistenUserAuthenticationDefaults.ClaimTypes.Username);
             var scopeId = GetRequiredClaim(principal, RelistenUserAuthenticationDefaults.ClaimTypes.ScopeId);
+            var sessionUuid = principal.FindFirstValue(RelistenUserAuthenticationDefaults.ClaimTypes.SessionUuid);
 
-            return new AuthenticatedUser(userUuid, displayName, username, scopeId);
+            return new AuthenticatedUser(
+                userUuid,
+                displayName,
+                username,
+                scopeId,
+                string.IsNullOrWhiteSpace(sessionUuid) ? null : Guid.Parse(sessionUuid));
         }
     }
 

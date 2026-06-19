@@ -6,7 +6,9 @@
       "launchBrowser": false,
       "applicationUrl": "http://localhost:5119",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DATABASE_URL": "postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_db",
+        "UserAuth__AccessTokenSigningKey": "development-only-relisten-user-api-signing-key-change-outside-local"
       }
     }
   }

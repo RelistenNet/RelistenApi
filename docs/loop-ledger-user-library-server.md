@@ -45,3 +45,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Code commit: `b7cab47`.
 - Evidence: new user API tests passed (7 tests), existing API tests passed (47 tests), solution build passed, solution list includes the new API/test projects, runtime smoke proved `/health` 200 `OK` and unauthenticated `/api/v3/library/users/me` 401 with `Cache-Control: no-store`.
 - Next Action: done for `user-library-foundation`; promote `auth-and-sessions` when continuing the broader server AutoPlan.
+
+### 2026-06-19T23:24:01Z Coordination Update
+
+- Active workstream: `auth-and-sessions`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-auth`.
+- Action: Promoted auth-and-sessions from backlog to active and claimed preregistered experiment `AUTH-001` before implementation edits.
+- Next Action: continue.
+
+### 2026-06-19T23:53:31Z Coordination Update
+
+- Active workstream: `auth-and-sessions`.
+- Result: completed experiment `AUTH-001`.
+- Branch: `codex/user-library-auth`.
+- Evidence: `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 17 tests, `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained the expected `user_data` auth/session tables and migration markers.
+- Review: First reviewer findings were accepted and fixed; user feedback removed low-signal migration/route reflection tests; second reviewer findings were accepted and fixed; final reviewer reported no findings.
+- Steering incorporated: Mobile local development will use separate catalog/user-library base URLs, so the auth slice added a Development/Test-only token endpoint for the iOS Simulator at `/api/v3/library/auth/development/session`.
+- Next Action: done for `auth-and-sessions`; promote `playlists-and-sharing` next.

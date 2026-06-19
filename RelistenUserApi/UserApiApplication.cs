@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Relisten.UserApi.Auth;
+using Relisten.UserApi.Configuration;
 using Relisten.UserApi.Serialization;
+using Relisten.UserApi.Services;
 
 namespace Relisten.UserApi;
 
@@ -12,6 +14,14 @@ public static class UserApiApplication
     {
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthenticatedUserContext, HttpAuthenticatedUserContext>();
+        services.Configure<UserAuthOptions>(configuration.GetSection(UserAuthOptions.SectionName));
+        services.AddSingleton<IAuthProviderVerifier, UnsupportedAuthProviderVerifier>();
+        services.AddSingleton<UserApiDbService>();
+        services.AddSingleton<UserDataSchemaInitializer>();
+        services.AddSingleton<IUserAuthStore, PostgresUserAuthStore>();
+        services.AddSingleton<AccessTokenService>();
+        services.AddSingleton<RefreshTokenService>();
+        services.AddScoped<UserAuthService>();
 
         services
             .AddControllers()
@@ -20,11 +30,11 @@ public static class UserApiApplication
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
 
-        // The foundation slice has protected routes before live OAuth exists. Keep production auth
-        // closed by default; endpoint tests replace this scheme with a fake principal in TestServer.
+        // Access tokens are issued by the user auth service. Provider verification is still closed
+        // by default until the Apple/Google verifier workstream supplies real implementations.
         services
             .AddAuthentication(RelistenUserAuthenticationDefaults.Scheme)
-            .AddScheme<AuthenticationSchemeOptions, DisabledUserAuthenticationHandler>(
+            .AddScheme<AuthenticationSchemeOptions, AccessTokenAuthenticationHandler>(
                 RelistenUserAuthenticationDefaults.Scheme,
                 _ => { });
 
@@ -35,6 +45,8 @@ public static class UserApiApplication
 
     public static WebApplication UseRelistenUserApi(this WebApplication app)
     {
+        app.Services.GetRequiredService<UserDataSchemaInitializer>().Initialize().GetAwaiter().GetResult();
+
         app.UseSwagger(c =>
         {
             c.RouteTemplate = "api-docs/{documentName}/swagger.json";

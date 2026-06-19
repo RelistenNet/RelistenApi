@@ -133,7 +133,8 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 - [x] 2026-06-19T20:35:14Z Created this root AutoPlan package and initial workstream structure.
 - [x] 2026-06-19T20:54:30Z Started Milestone 1 on branch `codex/user-library-foundation`; root Codex agent claimed workstream experiment `FND-001`.
 - [x] 2026-06-19T21:02:30Z Completed foundation workstream first iteration in commit `b7cab47` with separate `RelistenUserApi` and `RelistenUserApiTests` projects, validation evidence, and runtime smoke check.
-- [ ] Promote auth/session workstream to active after the foundation exposes a minimal protected endpoint and serialization contract.
+- [x] 2026-06-19T23:24:01Z Promoted auth/session workstream to active on branch `codex/user-library-auth`.
+- [x] 2026-06-19T23:53:31Z Completed auth/session first iteration with provider-subject signup, Postgres-backed refresh rotation, session listing/revocation, Development/Test local token endpoint, behavior tests, Postgres store tests, and reviewer passes.
 - [ ] Promote playlist/sharing workstream after auth identities and user-data schema helpers exist.
 - [ ] Promote sync/favorites/settings and playback-history workstreams after the core user and playlist tables exist.
 - [ ] Run a reviewer pass after each milestone before promoting dependent backlog workstreams.
@@ -143,7 +144,7 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 | Workstream | Status | Responsible agent | Blocker | Plan | Ledger | Worktree | Next step | Latest next_action |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | user-library-foundation | completed | root Codex agent | none | `docs/workstreams/active/user-library-foundation/plan.md` | `docs/workstreams/active/user-library-foundation/ledger.md` | branch `codex/user-library-foundation`; code commit `b7cab47` | Foundation slice complete: separate project, independent run/build shape, schema bootstrap, serializer contract tests, and protected profile endpoint. | `done` |
-| auth-and-sessions | backlog | unassigned | depends on foundation serializer and schema seams | `docs/workstreams/backlog/auth-and-sessions/plan.md` | `docs/workstreams/backlog/auth-and-sessions/ledger.md` | none | Implement Apple/Google provider-subject auth, refresh rotation, session revoke, and reauth markers. | `continue` |
+| auth-and-sessions | completed | root Codex agent | none | `docs/workstreams/active/auth-and-sessions/plan.md` | `docs/workstreams/active/auth-and-sessions/ledger.md` | branch `codex/user-library-auth` | Auth/session slice complete: provider-subject signup seam, Postgres-backed sessions and refresh rotation, Development/Test local mobile token endpoint, behavior tests, Postgres store tests, and reviewer pass. | `done` |
 | playlists-and-sharing | backlog | unassigned | depends on users/auth and playlist schema migration | `docs/workstreams/backlog/playlists-and-sharing/plan.md` | `docs/workstreams/backlog/playlists-and-sharing/ledger.md` | none | Implement playlist aggregate, operations, share-token exchange, follow/clone/invite endpoints. | `continue` |
 | sync-favorites-settings | backlog | unassigned | depends on users, playlists, favorites/settings schema | `docs/workstreams/backlog/sync-favorites-settings/plan.md` | `docs/workstreams/backlog/sync-favorites-settings/ledger.md` | none | Implement incremental sync, tombstones, source/tour/song favorites, and settings. | `continue` |
 | playback-history | backlog | unassigned | depends on users, auth, history schema, catalog aggregate integration choice | `docs/workstreams/backlog/playback-history/plan.md` | `docs/workstreams/backlog/playback-history/ledger.md` | none | Implement authenticated history batch upload with ingest keys and playlist attribution. | `continue` |
@@ -151,11 +152,11 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 
 ## Current Hypothesis
 
-The foundation slice is complete. The next safest move is the `auth-and-sessions` backlog workstream: build Apple/Google provider-subject account creation and refresh-token storage on top of the now-tested route, serializer, auth-context, and `user_data` schema seams.
+The foundation and auth/session slices are complete. The current bet is to promote `playlists-and-sharing` next because stable user identities, server sessions, configured Bearer auth, and `user_data` schema helpers now exist. Keep local mobile development pointed at separate base URLs: catalog API at `http://localhost:3823/api` and user-library API at `http://localhost:5119`.
 
 ## Next Iteration
 
-Promote workstream `auth-and-sessions` from backlog when continuing the broader server AutoPlan. Its first scoped move should implement provider-subject account creation and refresh-token rotation with fake provider verifiers before live Apple/Google validation.
+Promote workstream `playlists-and-sharing`: implement the first playlist aggregate/schema slice under `/api/v3/library/playlists`, using authenticated user/session context from the completed auth workstream.
 
 ## Workstream Notes
 
@@ -169,6 +170,8 @@ When using subagents, prefer one forked worker per active workstream once write 
   Evidence: `RelistenApi/Startup.cs` configures `ApiV3ContractResolver`; the design now requires DTO serialization tests.
 - Observation: The current live play endpoint is `/api/v2/live/play` and writes anonymous aggregate plays directly to `source_track_plays`.
   Evidence: `RelistenApi/Controllers/LiveController.cs` and `RelistenApi/Services/Data/SourceTrackPlayService.cs`.
+- Observation: Migration string/reflection tests are low signal for this server work. Behavior tests and real Postgres store tests provide better evidence.
+  Evidence: Removed `UserLibraryMigrationTests` and `UserLibraryRouteContractTests`; added HTTP auth/session tests and `PostgresUserAuthStoreTests`.
 
 ## Decision Log
 
@@ -181,7 +184,12 @@ When using subagents, prefer one forked worker per active workstream once write 
 - Decision: Leave repo `AGENTS.md` unchanged for now.
   Rationale: The user asked for an AutoPlan artifact, not a permanent repository operating-model update. Future adoption can add an AGENTS note after the AutoPlan is used for implementation.
   Date/Author: 2026-06-19 / Codex.
+- Decision: Add a Development/Test-only local auth endpoint for mobile simulator work.
+  Rationale: Mobile will use separate catalog and user-library base URLs. The iOS Simulator needs real user-library access/refresh tokens against `http://localhost:5119` without Apple/Google credentials. The endpoint is under `/api/v3/library/auth/development/session` and returns 404 outside Development/Test.
+  Date/Author: 2026-06-19 / Codex.
 
 ## Outcomes & Retrospective
 
 2026-06-19: Milestone 1 foundation slice landed in commit `b7cab47`. It added the separate `RelistenUserApi` project, test project, `/health`, protected `/api/v3/library/users/me`, snake-case serialization, no-store user-library headers, disabled-by-default auth, test-only auth override, and schema-qualified `user_data` bootstrap SQL. Remaining Milestone 1 work, if desired before auth promotion, is deployment packaging beyond local run/build shape.
+
+2026-06-19: Milestone 2 auth/session first slice completed on branch `codex/user-library-auth`. It adds Postgres-backed `user_data` users/auth methods/sessions/refresh tokens, configured HMAC access tokens, opaque refresh-token rotation and reuse handling, Apple/Google-only provider callback seam, session list/revoke, and a Development/Test-only local token endpoint for mobile simulator development. Validation passed for `RelistenUserApiTests` 17 tests, existing `RelistenApiTests` 47 tests, full solution build, local Postgres schema smoke, `git diff --check`, and final reviewer pass with no findings.

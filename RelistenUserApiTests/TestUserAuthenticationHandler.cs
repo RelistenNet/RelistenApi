@@ -43,7 +43,8 @@ public sealed class TestUserAuthenticationHandler : AuthenticationHandler<Authen
             new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.UserUuid, userUuid.ToString()),
             new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.DisplayName, displayName),
             new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.Username, username),
-            new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.ScopeId, scopeId)
+            new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.ScopeId, scopeId),
+            new Claim(RelistenUserAuthenticationDefaults.ClaimTypes.SessionUuid, Guid.NewGuid().ToString())
         };
 
         var identity = new ClaimsIdentity(claims, Scheme.Name);

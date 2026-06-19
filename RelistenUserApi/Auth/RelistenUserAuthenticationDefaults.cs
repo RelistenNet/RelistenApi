@@ -10,5 +10,6 @@ public static class RelistenUserAuthenticationDefaults
         public const string DisplayName = "relisten:display_name";
         public const string Username = "relisten:username";
         public const string ScopeId = "relisten:scope_id";
+        public const string SessionUuid = "relisten:session_uuid";
     }
 }

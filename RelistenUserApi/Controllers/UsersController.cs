@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.UserApi.Auth;
 using Relisten.UserApi.Models;
+using Relisten.UserApi.Services;
 
 namespace Relisten.UserApi.Controllers;
 
@@ -12,10 +13,14 @@ namespace Relisten.UserApi.Controllers;
 public sealed class UsersController : ControllerBase
 {
     private readonly IAuthenticatedUserContext _authenticatedUserContext;
+    private readonly UserAuthService _authService;
 
-    public UsersController(IAuthenticatedUserContext authenticatedUserContext)
+    public UsersController(
+        IAuthenticatedUserContext authenticatedUserContext,
+        UserAuthService authService)
     {
         _authenticatedUserContext = authenticatedUserContext;
+        _authService = authService;
     }
 
     [HttpGet("me")]
@@ -32,5 +37,24 @@ public sealed class UsersController : ControllerBase
             Username = user.Username,
             ScopeId = user.ScopeId
         };
+    }
+
+    [HttpGet("me/sessions")]
+    [ProducesResponseType(typeof(IReadOnlyList<UserSessionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IReadOnlyList<UserSessionResponse>> Sessions()
+    {
+        var user = _authenticatedUserContext.CurrentUser;
+        return await _authService.ListSessions(user.UserUuid);
+    }
+
+    [HttpDelete("me/sessions/{sessionUuid:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RevokeSession([FromRoute] Guid sessionUuid)
+    {
+        var user = _authenticatedUserContext.CurrentUser;
+        await _authService.RevokeSession(user.UserUuid, sessionUuid);
+        return NoContent();
     }
 }
