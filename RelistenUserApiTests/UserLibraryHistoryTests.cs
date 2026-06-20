@@ -140,6 +140,7 @@ public class UserLibraryHistoryTests
         stored.PlayedAt.Should().BeCloseTo(playedAt, precision: TimeSpan.FromMilliseconds(1));
         stored.Platform.Should().Be("ios");
         stored.AppVersion.Should().Be("4.2.1");
+        UuidTestAssertions.ShouldBeUuidV7(stored.HistoryUuid);
         queuedAggregate.PlaybackHistoryUuid.Should().Be(stored.HistoryUuid);
         queuedAggregate.SourceTrackUuid.Should().Be(sourceTrackUuid);
         queuedAggregate.SourceUuid.Should().Be(sourceUuid);

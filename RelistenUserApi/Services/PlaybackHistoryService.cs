@@ -64,7 +64,7 @@ public sealed class PlaybackHistoryService
         {
             var normalized = NormalizeEvent(historyEvent);
             var now = DateTimeOffset.UtcNow;
-            var historyUuid = Guid.NewGuid();
+            var historyUuid = UserDataUuid.New();
             var insertedHistoryUuid = await connection.QuerySingleOrDefaultAsync<Guid?>(
                 """
                 INSERT INTO user_data.playback_history_ingest_keys

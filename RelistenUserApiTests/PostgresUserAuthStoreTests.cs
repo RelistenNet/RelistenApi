@@ -14,7 +14,7 @@ public class PostgresUserAuthStoreTests
         var store = await NewStoreOrIgnore();
         var now = DateTimeOffset.UtcNow;
         var username = UniqueUsername();
-        var (user, _) = await store.CreateUserWithProvider(
+        var (user, authMethod) = await store.CreateUserWithProvider(
             "google",
             $"google-subject-{username}",
             username,
@@ -57,6 +57,11 @@ public class PostgresUserAuthStoreTests
 
         replacement.Should().NotBeNull();
         replacement!.Selector.Should().Be(replacementToken.Selector);
+        UuidTestAssertions.ShouldBeUuidV7(user.UserUuid);
+        UuidTestAssertions.ShouldBeUuidV7(authMethod.AuthMethodUuid);
+        UuidTestAssertions.ShouldBeUuidV7(session.SessionUuid);
+        UuidTestAssertions.ShouldBeUuidV7(firstRecord.RefreshTokenUuid);
+        UuidTestAssertions.ShouldBeUuidV7(replacement.RefreshTokenUuid);
         secondAttempt.Should().BeNull();
         rotated!.Status.Should().Be(RefreshTokenStatus.Rotated);
         rotated.ReplacedByTokenUuid.Should().Be(replacement.RefreshTokenUuid);

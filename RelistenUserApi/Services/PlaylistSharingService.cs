@@ -51,7 +51,7 @@ public sealed class PlaylistSharingService
             var issued = _tokens.IssueBearer();
             var record = new PlaylistShareTokenRecord
             {
-                ShareTokenUuid = Guid.NewGuid(),
+                ShareTokenUuid = UserDataUuid.New(),
                 PlaylistUuid = playlistUuid,
                 CreatedByUserUuid = ownerUserUuid,
                 Role = role,
@@ -480,7 +480,7 @@ public sealed class PlaylistSharingService
             """,
             new
             {
-                CollaboratorUuid = Guid.NewGuid(),
+                CollaboratorUuid = UserDataUuid.New(),
                 PlaylistUuid = playlistUuid,
                 invitee.UserUuid,
                 OwnerUserUuid = ownerUserUuid,
@@ -655,7 +655,7 @@ public sealed class PlaylistSharingService
             .Where(entry => entry.BlockUuid.HasValue)
             .Select(entry => entry.BlockUuid!.Value)
             .Distinct()
-            .ToDictionary(blockUuid => blockUuid, _ => Guid.NewGuid());
+            .ToDictionary(blockUuid => blockUuid, _ => UserDataUuid.New());
 
         foreach (var block in blockUuidMap)
         {
@@ -689,7 +689,7 @@ public sealed class PlaylistSharingService
                 """,
                 new
                 {
-                    PlaylistEntryUuid = Guid.NewGuid(),
+                    PlaylistEntryUuid = UserDataUuid.New(),
                     clone.PlaylistUuid,
                     entry.SourceTrackUuid,
                     BlockUuid = entry.BlockUuid.HasValue ? blockUuidMap[entry.BlockUuid.Value] : (Guid?)null,
@@ -731,7 +731,7 @@ public sealed class PlaylistSharingService
             """,
             new
             {
-                LogUuid = Guid.NewGuid(),
+                LogUuid = UserDataUuid.New(),
                 ClonePlaylistUuid = clonePlaylistUuid,
                 SourcePlaylistUuid = sourcePlaylistUuid,
                 UserUuid = userUuid,
@@ -1041,7 +1041,7 @@ public sealed class PlaylistSharingService
             """,
             new
             {
-                MobileAccessGrantUuid = Guid.NewGuid(),
+                MobileAccessGrantUuid = UserDataUuid.New(),
                 shareToken.PlaylistUuid,
                 shareToken.ShareTokenUuid,
                 DeviceId = deviceId,
@@ -1088,7 +1088,7 @@ public sealed class PlaylistSharingService
             """,
             new
             {
-                CollaboratorUuid = Guid.NewGuid(),
+                CollaboratorUuid = UserDataUuid.New(),
                 PlaylistUuid = playlistUuid,
                 UserUuid = userUuid,
                 Now = now

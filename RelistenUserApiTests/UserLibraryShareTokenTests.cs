@@ -32,6 +32,7 @@ public class UserLibraryShareTokenTests
 
         ownerReadAfterShare.Visibility.Should().Be("unlisted");
         shareToken.Token.Should().NotBeNullOrWhiteSpace();
+        UuidTestAssertions.ShouldBeUuidV7(shareToken.ShareTokenUuid);
 
         var tokenlessAnonymous = await client.GetAsync($"/api/v3/library/playlists/{playlist.ShortId}");
         tokenlessAnonymous.StatusCode.Should().Be(HttpStatusCode.NotFound);

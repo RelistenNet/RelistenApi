@@ -37,6 +37,8 @@ public class UserLibraryAuthTests
         auth.User.Username.Should().Be("relisten_user");
         auth.RefreshToken.Should().Contain(".");
         auth.AccessToken.Should().Contain(".");
+        UuidTestAssertions.ShouldBeUuidV7(auth.User.UserUuid);
+        UuidTestAssertions.ShouldBeUuidV7(auth.Session.SessionUuid);
 
         var request = new HttpRequestMessage(HttpMethod.Get, "/api/v3/library/users/me");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);

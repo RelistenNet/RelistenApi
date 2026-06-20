@@ -17,6 +17,31 @@ namespace RelistenUserApiTests;
 public class UserLibraryPlaylistTests
 {
     [Test]
+    public async Task Create_ShouldGenerateUuidV7WhenPlaylistUuidIsOmitted()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v3/library/playlists");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        request.Content = JsonContent(new CreatePlaylistRequest
+        {
+            Name = "Server Generated Playlist",
+            Description = "No client playlist UUID"
+        });
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, body);
+        var playlist = JsonConvert.DeserializeObject<PlaylistResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+        UuidTestAssertions.ShouldBeUuidV7(playlist.PlaylistUuid);
+    }
+
+    [Test]
     public async Task CreateAndAddTrack_ShouldPersistDuplicateSourceTracks()
     {
         await EnsurePostgresOrIgnore();

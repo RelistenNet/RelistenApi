@@ -93,7 +93,7 @@ public sealed class WebOAuthService
             identity,
             username: null,
             displayName: identity.DisplayName,
-            device: new DeviceDescriptor($"web:{Guid.NewGuid():N}", "Web Browser", "web"),
+            device: new DeviceDescriptor($"web:{UserDataUuid.New():N}", "Web Browser", "web"),
             allowGeneratedUsername: true);
 
         return new WebOAuthCallbackResult(session, state.ReturnUrl);

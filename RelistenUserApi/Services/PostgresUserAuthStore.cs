@@ -52,7 +52,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
     {
         var user = new UserAccount
         {
-            UserUuid = Guid.NewGuid(),
+            UserUuid = UserDataUuid.New(),
             Username = username,
             DisplayName = displayName,
             CreatedAt = now,
@@ -60,7 +60,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
         };
         var authMethod = new UserAuthMethod
         {
-            AuthMethodUuid = Guid.NewGuid(),
+            AuthMethodUuid = UserDataUuid.New(),
             UserUuid = user.UserUuid,
             Provider = NormalizeProvider(provider),
             ProviderSubject = providerSubject,
@@ -141,7 +141,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
     {
         var session = new UserSession
         {
-            SessionUuid = Guid.NewGuid(),
+            SessionUuid = UserDataUuid.New(),
             UserUuid = userUuid,
             DeviceId = device.DeviceId,
             DeviceName = device.DeviceName,
@@ -294,7 +294,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
     {
         var record = new RefreshTokenRecord
         {
-            RefreshTokenUuid = Guid.NewGuid(),
+            RefreshTokenUuid = UserDataUuid.New(),
             SessionUuid = sessionUuid,
             Selector = token.Selector,
             SecretHash = token.SecretHash,
@@ -500,7 +500,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
     {
         return new RefreshTokenRecord
         {
-            RefreshTokenUuid = Guid.NewGuid(),
+            RefreshTokenUuid = UserDataUuid.New(),
             SessionUuid = sessionUuid,
             Selector = token.Selector,
             SecretHash = token.SecretHash,

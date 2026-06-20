@@ -49,7 +49,7 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
 
             var user = new UserAccount
             {
-                UserUuid = Guid.NewGuid(),
+                UserUuid = UserDataUuid.New(),
                 Username = username,
                 DisplayName = displayName,
                 CreatedAt = now,
@@ -57,7 +57,7 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
             };
             var authMethod = new UserAuthMethod
             {
-                AuthMethodUuid = Guid.NewGuid(),
+                AuthMethodUuid = UserDataUuid.New(),
                 UserUuid = user.UserUuid,
                 Provider = key.Item1,
                 ProviderSubject = providerSubject,
@@ -85,7 +85,7 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
         {
             var session = new UserSession
             {
-                SessionUuid = Guid.NewGuid(),
+                SessionUuid = UserDataUuid.New(),
                 UserUuid = userUuid,
                 DeviceId = device.DeviceId,
                 DeviceName = device.DeviceName,
@@ -268,7 +268,7 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
     {
         return new RefreshTokenRecord
         {
-            RefreshTokenUuid = Guid.NewGuid(),
+            RefreshTokenUuid = UserDataUuid.New(),
             SessionUuid = sessionUuid,
             Selector = token.Selector,
             SecretHash = token.SecretHash,

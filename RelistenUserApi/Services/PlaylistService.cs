@@ -91,7 +91,7 @@ public sealed class PlaylistService
     public async Task<PlaylistResponse> Create(Guid ownerUserUuid, CreatePlaylistRequest request)
     {
         var now = DateTimeOffset.UtcNow;
-        var playlistUuid = request.PlaylistUuid ?? Guid.NewGuid();
+        var playlistUuid = request.PlaylistUuid ?? UserDataUuid.New();
         var name = NormalizeName(request.Name);
         var description = NormalizeDescription(request.Description);
 
@@ -271,7 +271,7 @@ public sealed class PlaylistService
             """,
             new
             {
-                LogUuid = Guid.NewGuid(),
+                LogUuid = UserDataUuid.New(),
                 PlaylistUuid = playlistUuid,
                 UserUuid = userUuid,
                 OperationJson = operationJson,
@@ -401,7 +401,7 @@ public sealed class PlaylistService
             request.SourceUuid.Value,
             request.StartTrackPosition.Value,
             request.EndTrackPosition.Value);
-        var entryUuids = request.EntryUuids ?? sourceTrackUuids.Select(_ => Guid.NewGuid()).ToList();
+        var entryUuids = request.EntryUuids ?? sourceTrackUuids.Select(_ => UserDataUuid.New()).ToList();
         if (entryUuids.Count != sourceTrackUuids.Count)
         {
             throw new PlaylistOperationException("invalid_operation");
