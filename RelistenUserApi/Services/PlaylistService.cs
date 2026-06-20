@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Dapper;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -12,16 +11,19 @@ public sealed class PlaylistService
 {
     private const int MaxPlaylistNameLength = 200;
     private const int MaxEntriesPerPlaylist = 2000;
-    private static readonly char[] ShortIdAlphabet =
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".ToCharArray();
 
     private readonly UserApiDbService _db;
     private readonly CatalogSourceRangeService _catalogSourceRanges;
+    private readonly ShortIdService _shortIds;
 
-    public PlaylistService(UserApiDbService db, CatalogSourceRangeService catalogSourceRanges)
+    public PlaylistService(
+        UserApiDbService db,
+        CatalogSourceRangeService catalogSourceRanges,
+        ShortIdService shortIds)
     {
         _db = db;
         _catalogSourceRanges = catalogSourceRanges;
+        _shortIds = shortIds;
     }
 
     public async Task<IReadOnlyList<PlaylistResponse>> ListForUser(Guid userUuid)
@@ -110,7 +112,7 @@ public sealed class PlaylistService
                     new
                     {
                         PlaylistUuid = playlistUuid,
-                        ShortId = GenerateShortId(),
+                        ShortId = _shortIds.Generate(),
                         OwnerUserUuid = ownerUserUuid,
                         Name = name,
                         Description = description,
@@ -1125,19 +1127,6 @@ public sealed class PlaylistService
     private static string ReplayStatus(string resultStatus)
     {
         return resultStatus == "applied" ? "noop_already_applied" : resultStatus;
-    }
-
-    private static string GenerateShortId()
-    {
-        Span<byte> bytes = stackalloc byte[10];
-        RandomNumberGenerator.Fill(bytes);
-        Span<char> chars = stackalloc char[10];
-        for (var i = 0; i < chars.Length; i++)
-        {
-            chars[i] = ShortIdAlphabet[bytes[i] % ShortIdAlphabet.Length];
-        }
-
-        return new string(chars);
     }
 
     private sealed class ExistingOperationRow

@@ -20,6 +20,7 @@ public static class UserApiApplication
         services.AddSingleton<UserDataSchemaInitializer>();
         services.AddSingleton<IUserAuthStore, PostgresUserAuthStore>();
         services.AddSingleton<OpaqueTokenService>();
+        services.AddSingleton<ShortIdService>();
         services.AddSingleton<AccessTokenService>();
         services.AddSingleton<RefreshTokenService>();
         services.AddSingleton<CatalogSourceRangeService>();

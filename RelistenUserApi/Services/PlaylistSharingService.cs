@@ -1,20 +1,26 @@
 using Dapper;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Npgsql;
 using Relisten.UserApi.Models;
+using Relisten.UserApi.Serialization;
 
 namespace Relisten.UserApi.Services;
 
 public sealed class PlaylistSharingService
 {
+    private const int MaxPlaylistNameLength = 200;
     private static readonly TimeSpan MobileGrantLifetime = TimeSpan.FromHours(24);
 
     private readonly UserApiDbService _db;
     private readonly OpaqueTokenService _tokens;
+    private readonly ShortIdService _shortIds;
 
-    public PlaylistSharingService(UserApiDbService db, OpaqueTokenService tokens)
+    public PlaylistSharingService(UserApiDbService db, OpaqueTokenService tokens, ShortIdService shortIds)
     {
         _db = db;
         _tokens = tokens;
+        _shortIds = shortIds;
     }
 
     public async Task<PlaylistShareTokenResponse?> CreateShareToken(
@@ -296,6 +302,508 @@ public sealed class PlaylistSharingService
         await transaction.CommitAsync();
         return await GetViewerState(userUuid, playlistUuid)
             ?? throw new InvalidOperationException("Followed playlist could not be loaded.");
+    }
+
+    public async Task<PlaylistCloneResult?> ClonePlaylist(
+        Guid userUuid,
+        string playlistIdentifier,
+        PlaylistMobileGrantCredential? mobileGrant,
+        ClonePlaylistRequest request)
+    {
+        if (request.IdempotencyKey == Guid.Empty || request.NewPlaylistUuid == Guid.Empty)
+        {
+            throw new PlaylistOperationException("invalid_idempotency_key");
+        }
+
+        await using var connection = _db.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        await LockIdempotencyKey(connection, transaction, request.IdempotencyKey);
+        var sourcePlaylist = await LockPlaylistForClone(connection, playlistIdentifier, transaction);
+        if (sourcePlaylist == null)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+        var sourceSnapshot = await BuildSnapshot(connection, sourcePlaylist, transaction);
+
+        var existing = await LoadExistingOperation(connection, transaction, request.IdempotencyKey);
+        if (existing != null)
+        {
+            if (existing.PlaylistUuid != request.NewPlaylistUuid ||
+                !CloneOperationsMatch(existing.OperationJson, request, sourcePlaylist.PlaylistUuid))
+            {
+                throw new PlaylistOperationException("idempotency_key_conflict");
+            }
+
+            var replay = await LoadPlaylistRecord(connection, request.NewPlaylistUuid, transaction);
+            if (replay == null || replay.OwnerUserUuid != userUuid)
+            {
+                throw new PlaylistOperationException("idempotency_key_conflict");
+            }
+
+            var replaySnapshot = await BuildSnapshot(connection, replay, transaction);
+            await transaction.CommitAsync();
+            return new PlaylistCloneResult(ToResponse(replaySnapshot), Created: false);
+        }
+
+        var sourceAccess = await ResolveAccess(connection, sourcePlaylist, userUuid, mobileGrant, transaction);
+        if (sourceAccess == null)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+
+        var cloneRecord = await InsertClonedPlaylist(
+            connection,
+            transaction,
+            userUuid,
+            sourceSnapshot,
+            request);
+        await InsertCloneOperationLog(
+            connection,
+            transaction,
+            cloneRecord.PlaylistUuid,
+            sourcePlaylist.PlaylistUuid,
+            userUuid,
+            request);
+        var clonedSnapshot = await BuildSnapshot(connection, cloneRecord, transaction);
+        await transaction.CommitAsync();
+
+        return new PlaylistCloneResult(ToResponse(clonedSnapshot), Created: true);
+    }
+
+    public async Task<PlaylistCollaboratorResponse?> InviteCollaborator(
+        Guid ownerUserUuid,
+        Guid playlistUuid,
+        CreatePlaylistCollaboratorInvitationRequest request)
+    {
+        var username = NormalizeUsername(request.Username);
+        await using var connection = _db.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        var playlist = await LockPlaylistForOwner(connection, transaction, ownerUserUuid, playlistUuid);
+        if (playlist == null)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+
+        var invitee = await LoadUserByUsername(connection, username, transaction);
+        if (invitee == null)
+        {
+            throw new PlaylistOperationException("user_not_found");
+        }
+
+        if (invitee.UserUuid == ownerUserUuid)
+        {
+            throw new PlaylistOperationException("invalid_collaborator");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO user_data.playlist_collaborators
+                (id, playlist_id, user_id, role, invited_by, invited_at)
+            VALUES
+                (@CollaboratorUuid, @PlaylistUuid, @UserUuid, 'editor', @OwnerUserUuid, @Now)
+            ON CONFLICT (playlist_id, user_id)
+            DO UPDATE SET
+                role = 'editor',
+                invited_by = @OwnerUserUuid,
+                invited_at = @Now,
+                accepted_at = CASE
+                    WHEN user_data.playlist_collaborators.revoked_at IS NULL
+                    THEN user_data.playlist_collaborators.accepted_at
+                    ELSE NULL
+                END,
+                revoked_at = NULL
+            """,
+            new
+            {
+                CollaboratorUuid = Guid.NewGuid(),
+                PlaylistUuid = playlistUuid,
+                invitee.UserUuid,
+                OwnerUserUuid = ownerUserUuid,
+                Now = now
+            },
+            transaction);
+
+        var collaborator = await LoadCollaborator(connection, playlistUuid, invitee.UserUuid, transaction)
+            ?? throw new InvalidOperationException("Invited collaborator could not be loaded.");
+        await transaction.CommitAsync();
+        return collaborator;
+    }
+
+    public async Task<PlaylistCollaboratorResponse?> AcceptCollaboratorInvitation(Guid userUuid, Guid playlistUuid)
+    {
+        await using var connection = _db.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        var playlistExists = await LoadPlaylistRecord(connection, playlistUuid, transaction) != null;
+        if (!playlistExists)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+
+        var collaborator = await LockCollaborator(connection, playlistUuid, userUuid, transaction);
+        if (collaborator == null || collaborator.RevokedAt.HasValue)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+
+        if (!collaborator.AcceptedAt.HasValue)
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE user_data.playlist_collaborators
+                SET accepted_at = @Now
+                WHERE playlist_id = @PlaylistUuid
+                  AND user_id = @UserUuid
+                  AND revoked_at IS NULL
+                """,
+                new { PlaylistUuid = playlistUuid, UserUuid = userUuid, Now = DateTimeOffset.UtcNow },
+                transaction);
+        }
+
+        var accepted = await LoadCollaborator(connection, playlistUuid, userUuid, transaction)
+            ?? throw new InvalidOperationException("Accepted collaborator could not be loaded.");
+        await transaction.CommitAsync();
+        return accepted;
+    }
+
+    public async Task<bool> RevokeCollaborator(Guid ownerUserUuid, Guid playlistUuid, Guid collaboratorUserUuid)
+    {
+        if (ownerUserUuid == collaboratorUserUuid)
+        {
+            return false;
+        }
+
+        await using var connection = _db.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        var playlist = await LockPlaylistForOwner(connection, transaction, ownerUserUuid, playlistUuid);
+        if (playlist == null)
+        {
+            await transaction.RollbackAsync();
+            return false;
+        }
+
+        var affected = await connection.ExecuteAsync(
+            """
+            UPDATE user_data.playlist_collaborators
+            SET revoked_at = COALESCE(revoked_at, @Now)
+            WHERE playlist_id = @PlaylistUuid
+              AND user_id = @CollaboratorUserUuid
+            """,
+            new
+            {
+                PlaylistUuid = playlistUuid,
+                CollaboratorUserUuid = collaboratorUserUuid,
+                Now = DateTimeOffset.UtcNow
+            },
+            transaction);
+
+        if (affected == 0)
+        {
+            await transaction.RollbackAsync();
+            return false;
+        }
+
+        await transaction.CommitAsync();
+        return true;
+    }
+
+    private async Task<PlaylistRecord> InsertClonedPlaylist(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid ownerUserUuid,
+        PlaylistSnapshot sourceSnapshot,
+        ClonePlaylistRequest request)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var name = CloneName(sourceSnapshot.Playlist.Name, request.Name);
+        var description = CloneDescription(sourceSnapshot.Playlist.Description, request.Description);
+        PlaylistRecord? clone = null;
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            clone = new PlaylistRecord
+            {
+                PlaylistUuid = request.NewPlaylistUuid,
+                ShortId = _shortIds.Generate(),
+                OwnerUserUuid = ownerUserUuid,
+                Name = name,
+                Description = description,
+                Visibility = "private",
+                CurrentRevision = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await connection.ExecuteAsync("SAVEPOINT clone_playlist_short_id", transaction: transaction);
+            try
+            {
+                await connection.ExecuteAsync(
+                    """
+                    INSERT INTO user_data.playlists
+                        (id, short_id, owner_id, name, description, visibility, current_revision,
+                         moderation_status, created_at, updated_at)
+                    VALUES
+                        (@PlaylistUuid, @ShortId, @OwnerUserUuid, @Name, @Description, 'private', 1,
+                         'approved', @CreatedAt, @UpdatedAt)
+                    """,
+                    clone,
+                    transaction);
+                await connection.ExecuteAsync("RELEASE SAVEPOINT clone_playlist_short_id", transaction: transaction);
+                break;
+            }
+            catch (PostgresException ex) when (
+                ex.SqlState == PostgresErrorCodes.UniqueViolation &&
+                string.Equals(ex.ConstraintName, "playlists_pkey", StringComparison.Ordinal))
+            {
+                await RollbackClonePlaylistSavepoint(connection, transaction);
+                throw new PlaylistOperationException("playlist_uuid_conflict");
+            }
+            catch (PostgresException ex) when (
+                ex.SqlState == PostgresErrorCodes.UniqueViolation &&
+                string.Equals(ex.ConstraintName, "playlists_short_id_key", StringComparison.Ordinal))
+            {
+                await RollbackClonePlaylistSavepoint(connection, transaction);
+                if (attempt == 4)
+                {
+                    throw new PlaylistOperationException("short_id_collision");
+                }
+            }
+        }
+
+        if (clone == null)
+        {
+            throw new PlaylistOperationException("short_id_collision");
+        }
+
+        var blockUuidMap = sourceSnapshot.Entries
+            .Where(entry => entry.BlockUuid.HasValue)
+            .Select(entry => entry.BlockUuid!.Value)
+            .Distinct()
+            .ToDictionary(blockUuid => blockUuid, _ => Guid.NewGuid());
+
+        foreach (var block in blockUuidMap)
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO user_data.playlist_blocks
+                    (id, playlist_id, created_by, created_at)
+                VALUES
+                    (@BlockUuid, @PlaylistUuid, @OwnerUserUuid, @Now)
+                """,
+                new
+                {
+                    BlockUuid = block.Value,
+                    clone.PlaylistUuid,
+                    OwnerUserUuid = ownerUserUuid,
+                    Now = now
+                },
+                transaction);
+        }
+
+        foreach (var entry in sourceSnapshot.Entries)
+        {
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO user_data.playlist_entries
+                    (id, playlist_id, source_track_uuid, block_uuid, position, block_position,
+                     added_by, created_at, updated_at)
+                VALUES
+                    (@PlaylistEntryUuid, @PlaylistUuid, @SourceTrackUuid, @BlockUuid, @Position,
+                     @BlockPosition, @OwnerUserUuid, @Now, @Now)
+                """,
+                new
+                {
+                    PlaylistEntryUuid = Guid.NewGuid(),
+                    clone.PlaylistUuid,
+                    entry.SourceTrackUuid,
+                    BlockUuid = entry.BlockUuid.HasValue ? blockUuidMap[entry.BlockUuid.Value] : (Guid?)null,
+                    entry.Position,
+                    entry.BlockPosition,
+                    OwnerUserUuid = ownerUserUuid,
+                    Now = now
+                },
+                transaction);
+        }
+
+        return clone;
+    }
+
+    private static async Task RollbackClonePlaylistSavepoint(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction)
+    {
+        await connection.ExecuteAsync("ROLLBACK TO SAVEPOINT clone_playlist_short_id", transaction: transaction);
+        await connection.ExecuteAsync("RELEASE SAVEPOINT clone_playlist_short_id", transaction: transaction);
+    }
+
+    private static Task InsertCloneOperationLog(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid clonePlaylistUuid,
+        Guid sourcePlaylistUuid,
+        Guid userUuid,
+        ClonePlaylistRequest request)
+    {
+        return connection.ExecuteAsync(
+            """
+            INSERT INTO user_data.playlist_edit_log
+                (id, playlist_id, user_id, operation, idempotency_key, base_revision,
+                 result_revision, result_status, created_at)
+            VALUES
+                (@LogUuid, @ClonePlaylistUuid, @UserUuid, CAST(@OperationJson AS jsonb),
+                 @IdempotencyKey, NULL, 1, 'applied', @Now)
+            """,
+            new
+            {
+                LogUuid = Guid.NewGuid(),
+                ClonePlaylistUuid = clonePlaylistUuid,
+                SourcePlaylistUuid = sourcePlaylistUuid,
+                UserUuid = userUuid,
+                OperationJson = CloneOperationJson(sourcePlaylistUuid, request),
+                request.IdempotencyKey,
+                Now = DateTimeOffset.UtcNow
+            },
+            transaction);
+    }
+
+    private static string CloneOperationJson(Guid sourcePlaylistUuid, ClonePlaylistRequest request)
+    {
+        return JsonConvert.SerializeObject(
+            new CloneOperationLog
+            {
+                Op = "clone_playlist",
+                SourcePlaylistUuid = sourcePlaylistUuid,
+                NewPlaylistUuid = request.NewPlaylistUuid,
+                Name = string.IsNullOrWhiteSpace(request.Name) ? null : request.Name.Trim(),
+                Description = request.Description == null ? null : request.Description.Trim()
+            },
+            UserLibraryJson.SerializerSettings);
+    }
+
+    private static bool CloneOperationsMatch(
+        string existingOperationJson,
+        ClonePlaylistRequest request,
+        Guid sourcePlaylistUuid)
+    {
+        return JToken.DeepEquals(
+            JToken.Parse(existingOperationJson),
+            JToken.Parse(CloneOperationJson(sourcePlaylistUuid, request)));
+    }
+
+    private static Task<ExistingOperationRow?> LoadExistingOperation(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid idempotencyKey)
+    {
+        return connection.QuerySingleOrDefaultAsync<ExistingOperationRow>(
+            """
+            SELECT
+                playlist_id AS "PlaylistUuid",
+                operation::text AS "OperationJson"
+            FROM user_data.playlist_edit_log
+            WHERE idempotency_key = @IdempotencyKey
+            """,
+            new { IdempotencyKey = idempotencyKey },
+            transaction);
+    }
+
+    private static Task LockIdempotencyKey(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid idempotencyKey)
+    {
+        var bytes = idempotencyKey.ToByteArray();
+        var lockKey = BitConverter.ToInt64(bytes, 0);
+        return connection.ExecuteAsync(
+            "SELECT pg_advisory_xact_lock(@LockKey)",
+            new { LockKey = lockKey },
+            transaction);
+    }
+
+    private static async Task<UserAccount?> LoadUserByUsername(
+        NpgsqlConnection connection,
+        string username,
+        NpgsqlTransaction transaction)
+    {
+        return await connection.QuerySingleOrDefaultAsync<UserAccount>(
+            """
+            SELECT
+                id AS "UserUuid",
+                username AS "Username",
+                display_name AS "DisplayName",
+                created_at AS "CreatedAt",
+                updated_at AS "UpdatedAt"
+            FROM user_data.users
+            WHERE username_lower = @UsernameLower
+            """,
+            new { UsernameLower = username.ToLowerInvariant() },
+            transaction);
+    }
+
+    private static Task<PlaylistCollaboratorResponse?> LoadCollaborator(
+        NpgsqlConnection connection,
+        Guid playlistUuid,
+        Guid userUuid,
+        NpgsqlTransaction transaction)
+    {
+        return connection.QuerySingleOrDefaultAsync<PlaylistCollaboratorResponse>(
+            """
+            SELECT
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                u.username AS "Username",
+                c.role AS "Role",
+                c.invited_by AS "InvitedByUserUuid",
+                c.invited_at AS "InvitedAt",
+                c.accepted_at AS "AcceptedAt",
+                c.revoked_at AS "RevokedAt"
+            FROM user_data.playlist_collaborators c
+            INNER JOIN user_data.users u ON u.id = c.user_id
+            WHERE c.playlist_id = @PlaylistUuid
+              AND c.user_id = @UserUuid
+            """,
+            new { PlaylistUuid = playlistUuid, UserUuid = userUuid },
+            transaction);
+    }
+
+    private static Task<PlaylistCollaboratorResponse?> LockCollaborator(
+        NpgsqlConnection connection,
+        Guid playlistUuid,
+        Guid userUuid,
+        NpgsqlTransaction transaction)
+    {
+        return connection.QuerySingleOrDefaultAsync<PlaylistCollaboratorResponse>(
+            """
+            SELECT
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                u.username AS "Username",
+                c.role AS "Role",
+                c.invited_by AS "InvitedByUserUuid",
+                c.invited_at AS "InvitedAt",
+                c.accepted_at AS "AcceptedAt",
+                c.revoked_at AS "RevokedAt"
+            FROM user_data.playlist_collaborators c
+            INNER JOIN user_data.users u ON u.id = c.user_id
+            WHERE c.playlist_id = @PlaylistUuid
+              AND c.user_id = @UserUuid
+            FOR UPDATE OF c
+            """,
+            new { PlaylistUuid = playlistUuid, UserUuid = userUuid },
+            transaction);
     }
 
     private async Task<PlaylistAccess?> ResolveAccess(
@@ -656,6 +1164,30 @@ public sealed class PlaylistSharingService
             transaction);
     }
 
+    private static Task<PlaylistRecord?> LockPlaylistForClone(
+        NpgsqlConnection connection,
+        string playlistIdentifier,
+        NpgsqlTransaction transaction)
+    {
+        return connection.QuerySingleOrDefaultAsync<PlaylistRecord>(
+            PlaylistSelectSql + """
+
+            WHERE archived_at IS NULL
+              AND (
+                  (@PlaylistUuid IS NOT NULL AND id = @PlaylistUuid)
+                  OR
+                  (@PlaylistUuid IS NULL AND short_id = @PlaylistIdentifier)
+              )
+            FOR SHARE
+            """,
+            new
+            {
+                PlaylistUuid = TryParseGuid(playlistIdentifier),
+                PlaylistIdentifier = playlistIdentifier
+            },
+            transaction);
+    }
+
     private static async Task<IReadOnlyList<PlaylistEntryRecord>> LoadEntries(
         NpgsqlConnection connection,
         Guid playlistUuid,
@@ -735,6 +1267,42 @@ public sealed class PlaylistSharingService
             : throw new PlaylistOperationException("invalid_share_role");
     }
 
+    private static string NormalizeUsername(string username)
+    {
+        var normalized = username.Trim();
+        return string.IsNullOrWhiteSpace(normalized) || normalized.Length > 30
+            ? throw new PlaylistOperationException("invalid_username")
+            : normalized;
+    }
+
+    private static string CloneName(string sourceName, string? requestedName)
+    {
+        var name = string.IsNullOrWhiteSpace(requestedName)
+            ? DefaultCloneName(sourceName)
+            : requestedName.Trim();
+        if (name.Length > MaxPlaylistNameLength)
+        {
+            throw new PlaylistOperationException("invalid_playlist_name");
+        }
+
+        return name;
+    }
+
+    private static string DefaultCloneName(string sourceName)
+    {
+        const string suffix = " Copy";
+        return sourceName.Length + suffix.Length <= MaxPlaylistNameLength
+            ? sourceName + suffix
+            : sourceName[..MaxPlaylistNameLength];
+    }
+
+    private static string? CloneDescription(string? sourceDescription, string? requestedDescription)
+    {
+        return requestedDescription == null
+            ? sourceDescription
+            : string.IsNullOrWhiteSpace(requestedDescription) ? null : requestedDescription.Trim();
+    }
+
     private static Guid? TryParseGuid(string value)
     {
         return Guid.TryParse(value, out var guid) ? guid : null;
@@ -745,6 +1313,21 @@ public sealed class PlaylistSharingService
         return cappedExpiresAt.HasValue && cappedExpiresAt.Value < defaultExpiresAt
             ? cappedExpiresAt.Value
             : defaultExpiresAt;
+    }
+
+    private sealed class ExistingOperationRow
+    {
+        public required Guid PlaylistUuid { get; init; }
+        public required string OperationJson { get; init; }
+    }
+
+    private sealed class CloneOperationLog
+    {
+        public required string Op { get; init; }
+        public required Guid SourcePlaylistUuid { get; init; }
+        public required Guid NewPlaylistUuid { get; init; }
+        public string? Name { get; init; }
+        public string? Description { get; init; }
     }
 
     private const string PlaylistSelectSql = """
@@ -762,6 +1345,8 @@ public sealed class PlaylistSharingService
         FROM user_data.playlists
         """;
 }
+
+public sealed record PlaylistCloneResult(PlaylistResponse Playlist, bool Created);
 
 internal static class PlaylistViewerStateExtensions
 {

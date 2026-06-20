@@ -61,6 +61,14 @@ public sealed class PlaylistOperationResponse
     public required PlaylistResponse Playlist { get; init; }
 }
 
+public sealed class ClonePlaylistRequest
+{
+    public required Guid IdempotencyKey { get; init; }
+    public required Guid NewPlaylistUuid { get; init; }
+    public string? Name { get; init; }
+    public string? Description { get; init; }
+}
+
 public sealed class CreatePlaylistShareTokenRequest
 {
     public required string Role { get; init; }
@@ -108,6 +116,23 @@ public sealed class PlaylistViewerStateResponse
     public required bool IsCollaborator { get; init; }
     public required bool CanEdit { get; init; }
     public required string AccessRole { get; init; }
+}
+
+public sealed class CreatePlaylistCollaboratorInvitationRequest
+{
+    public required string Username { get; init; }
+}
+
+public sealed class PlaylistCollaboratorResponse
+{
+    public required Guid PlaylistUuid { get; init; }
+    public required Guid UserUuid { get; init; }
+    public required string Username { get; init; }
+    public required string Role { get; init; }
+    public Guid? InvitedByUserUuid { get; init; }
+    public required DateTimeOffset InvitedAt { get; init; }
+    public DateTimeOffset? AcceptedAt { get; init; }
+    public DateTimeOffset? RevokedAt { get; init; }
 }
 
 public sealed class PlaylistErrorResponse

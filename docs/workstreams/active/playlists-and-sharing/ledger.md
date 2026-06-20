@@ -41,6 +41,19 @@
 - Expected artifacts: Code diff, targeted test output, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
 - Linked ExecPlan: none. Create one only if reorder semantics require a broader rewrite than the current playlist operation service can cleanly support.
 
+### PL-004: Clone And Collaborator Invitations
+
+- Timestamp: 2026-06-20T01:22:15Z
+- Intention / hypothesis: Playlist clone and direct collaborator invitations can be implemented as a small sharing-layer extension over the existing playlist aggregate: clone should copy playlist state into a new owner-scoped playlist with new entry/block UUIDs, while invitations should grant editor access only after the intended invitee accepts.
+- Responsible agent: root Codex agent.
+- Start commit: `a14ab3a`
+- Worktree or branch: branch `codex/user-library-collaboration` in `/Users/alecgorge/code/relisten/RelistenApi`.
+- Mutable surface: playlist share/collaboration DTOs, `PlaylistSharingService`, `PlaylistService` only if clone needs a narrow helper, playlist controller collaboration routes, `user_data` collaboration schema/bootstrap if invitation metadata needs a column or table, and `RelistenUserApiTests` fixtures whose names contain `ShareToken` or `UserLibraryPlaylist`.
+- Validator: targeted `RelistenUserApiTests` playlist/share-token tests plus `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj`, `dotnet test RelistenApiTests/RelistenApiTests.csproj`, and `dotnet build RelistenApi.sln`.
+- Expected deliverable: clone endpoint, direct invite endpoint, invite acceptance endpoint, collaborator write/read access after acceptance, rejection for non-invitees, revoked invitation/collaborator access denial, and clone tests proving copied entries remain independent playlist-entry identities.
+- Expected artifacts: Code diff, targeted test output, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
+- Linked ExecPlan: none. Create one only if clone/collaboration semantics require larger schema or sync work than a narrow server slice can support.
+
 ## Outcomes
 
 ### PL-001 Outcome
@@ -103,3 +116,23 @@
 - Conclusion: PL-003 is complete. The slice adds `add_source_range_as_block`, placement-aware adds, `move_entry`, `move_block`, canonical playlist-position rewrites, integer block-position renumbering, non-applied deterministic replay statuses, source-range catalog resolution through a narrow service, and block identity enforcement with cleanup and a foreign key.
 - next_action: continue
 - Next move: Start PL-004 for clone and collaborator invitation acceptance, including owner/invitee authorization, tokenless clone/follow interactions, and tests for collaborator write access through accepted invites.
+
+### PL-004 Outcome
+
+- Timestamp: 2026-06-20T01:45:02Z
+- End commit: committed immediately after this ledger update on branch `codex/user-library-collaboration`.
+- Artifact location: `RelistenUserApi/Controllers/PlaylistsController.cs`, `RelistenUserApi/Models/PlaylistDtos.cs`, `RelistenUserApi/Services/PlaylistSharingService.cs`, `RelistenUserApi/Services/ShortIdService.cs`, `RelistenUserApi/Services/PlaylistService.cs`, and behavior tests in `RelistenUserApiTests/UserLibraryShareTokenTests.cs`.
+- Evidence summary:
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter UserLibraryShareTokenTests` passed 10 tests.
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 50 tests.
+  - `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests.
+  - `dotnet build RelistenApi.sln` passed with 0 warnings and 0 errors.
+  - `git diff --check` passed.
+- Review summary:
+  - Explorer identified the existing collaborator table shape, clone identity requirements, pending-invite access boundary, revoke behavior, and the need to avoid copying source access rows.
+  - First reviewer found clone revision/log inconsistency, non-snapshot clone reads, and short-id collision handling gaps. The implementation now creates clones at revision 1, logs the clone operation against the cloned playlist, takes a source playlist snapshot under transaction, and retries short-id collisions.
+  - Second reviewer found the short-id retry still needed transaction savepoints, clone idempotency locks needed to precede source locks, and replay should build its response snapshot inside the transaction. The implementation now uses an advisory idempotency lock first, wraps clone playlist insert attempts in savepoints, and snapshots replay responses before commit.
+  - Final reviewer found clone idempotency collapsed omitted versus explicit empty descriptions, collaborator revoke was not retry-idempotent, and the documented invitation accept route was missing. The implementation now preserves null-versus-clear description semantics in the clone operation log, makes collaborator revoke retry-safe, adds `/api/v3/library/invitations/{playlistUuid}/accept`, and covers those cases with HTTP behavior tests.
+- Conclusion: PL-004 is complete. The slice adds playlist clone, new clone-owned entry/block identities, idempotent clone replay, direct collaborator invitation, invitee-only acceptance, collaborator write access after acceptance, owner revocation, retry-safe revoke, and both nested and invitation-inbox accept routes.
+- next_action: continue
+- Next move: Start PL-005 for public playlist/cache behavior and the remaining playlist read contract, including revision-aware public cache headers, private/authenticated no-store checks, and catalog hydration boundaries before promoting sync/favorites/settings.

@@ -42,8 +42,8 @@ Depends on foundation and basic authenticated user identity. Auth/session landed
 
 ## Current Hypothesis
 
-A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks and reorder operations are now in place without adding event sourcing. The next playlist/sharing slice should finish the remaining M1 collaboration surface: clone and direct collaborator invitation acceptance.
+A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks, reorder operations, clone, and collaborator invitations are now in place without adding event sourcing. The next playlist/sharing slice should close the remaining read-contract hardening before sync work: public playlist cache behavior, private/authenticated no-store behavior, and catalog hydration boundaries.
 
 ## Next Scoped Step
 
-Implement PL-004: clone and collaborator invitation acceptance. Tests should prove cloned playlists preserve entry identity semantics through new playlist-entry UUIDs, accepted collaborators can write through the existing operation endpoint, non-invitees cannot accept or write, and revoked invitations/collaborators stop granting access. Keep catalog hydration and public cache behavior as later slices.
+Implement PL-005: public playlist/cache behavior and the remaining playlist read contract. Tests should prove public reads are revision-cacheable, private/authenticated reads stay `no-store`, share-token and mobile-grant paths do not leak tokens, and playlist responses expose a stable catalog hydration boundary for mobile without pulling catalog API concerns into the user-library service.

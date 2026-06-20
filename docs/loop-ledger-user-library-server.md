@@ -117,3 +117,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused playlist/share-token tests passed 29 tests, `RelistenUserApiTests` passed 46 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained migration markers 1 through 5 plus `playlist_entries_block_uuid_fkey`.
 - Review: Explorer findings shaped the catalog resolver and reorder update strategy. First reviewer findings on standalone moves, self-referential anchors, and orphaned block rows were fixed. Second reviewer reported no findings.
 - Next Action: continue for `playlists-and-sharing`; implement clone and collaborator invitation acceptance next.
+
+### 2026-06-20T01:22:15Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-collaboration`.
+- Action: Claimed preregistered experiment `PL-004` before implementation edits.
+- Start commit: `a14ab3a`.
+- Next Action: continue.
+
+### 2026-06-20T01:45:02Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Result: completed experiment `PL-004`.
+- Branch: `codex/user-library-collaboration`.
+- Evidence: focused share/collaboration tests passed 10 tests, `RelistenUserApiTests` passed 50 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and `git diff --check` passed.
+- Review: Explorer findings shaped clone and invitation boundaries. Reviewer findings on clone revision/logging, snapshot consistency, short-id collision retry, idempotency lock ordering, replay snapshots, description idempotency semantics, retry-safe revoke, and the documented invitation accept route were accepted and fixed with behavior tests.
+- Next Action: continue for `playlists-and-sharing`; implement public playlist/cache behavior and the remaining playlist read contract next.
