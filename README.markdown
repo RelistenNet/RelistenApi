@@ -34,4 +34,42 @@ Both commands will start an Adminer server at [http://localhost:18080](http://lo
 2. If prompted, restore the packages for the project
 3. Debug > Start Debugging (F5) or Debug > Start without Debugging (shift+F5)
 
-Open the API Server at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs)
+Open the catalog API server at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs)
+
+## User Library API
+
+The user-library API is a separate ASP.NET Core project and runs as a separate process from the catalog API:
+
+```
+dotnet run --project RelistenUserApi/RelistenUserApi.csproj --urls http://localhost:5119
+```
+
+Useful local checks:
+
+```
+curl -i http://localhost:5119/health
+curl -i http://localhost:5119/api/v3/library/users/me
+```
+
+For local mobile simulator development, `Development` and `Test` environments expose:
+
+```
+POST http://localhost:5119/api/v3/library/auth/development/session
+```
+
+This endpoint is closed outside `Development`/`Test`.
+
+The user-library image is built separately from the catalog API:
+
+```
+docker build -f Dockerfile.userapi -t relisten-user-api:local .
+docker run --rm -p 5119:5119 -e UserData__InitializeSchema=false relisten-user-api:local
+```
+
+That container command is a health-check smoke only. For a database-backed local container, pass `DATABASE_URL` and `UserAuth__AccessTokenSigningKey`.
+
+Manual deployment uses the separate GitHub Actions workflow:
+
+```
+./deploy-user-api
+```

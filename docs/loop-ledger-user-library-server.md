@@ -235,3 +235,13 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibraryContractTests` passed 8 tests, `RelistenUserApiTests` passed 77 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
 - Review: Reviewer found no code/test correctness issues and flagged stale docs; the evidence and board text now match the completed checks.
 - Next Action: done for CT-001; commit this slice, then continue deployment/runtime release gates.
+
+### 2026-06-20T04:49:12Z Coordination Update
+
+- Active workstream: `server-contract-tests`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-deployment-hardening`.
+- Action: Started CT-002 for separate user API deployment artifacts.
+- Evidence: release publish produced `RelistenUserApi.dll`, focused `UserLibraryContractTests` passed 8 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, Docker image build for `Dockerfile.userapi` passed, container `/health` smoke returned `OK` with schema initialization disabled, workflow YAML parse passed, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
+- Review: Reviewer findings were fixed with deploy concurrency, pinned action refs for secret-sensitive setup, base64-decoded kubeconfig setup preserving the existing secret contract, direct kubectl rollout commands, and rollout status waiting. Final reviewer verification found no deployment workflow blockers.
+- Next Action: done for CT-002; commit this slice, then implement account deletion/export server gates.

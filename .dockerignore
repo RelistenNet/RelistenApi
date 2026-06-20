@@ -1,6 +1,14 @@
 /Data/
 /local-dev/
+**/.DS_Store
 /RelistenApi/out/
 /RelistenApi/bin/
 /RelistenApi/obj/
+/RelistenApiTests/bin/
+/RelistenApiTests/obj/
+/RelistenUserApi/out/
+/RelistenUserApi/bin/
+/RelistenUserApi/obj/
+/RelistenUserApiTests/bin/
+/RelistenUserApiTests/obj/
 /.git/

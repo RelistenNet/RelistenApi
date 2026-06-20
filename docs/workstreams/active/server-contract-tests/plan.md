@@ -15,6 +15,7 @@ Allowed files and directories:
 - `RelistenUserApiTests/` endpoint/contract/hardening fixtures
 - `RelistenApiTests/` no-regression fixtures where the existing catalog API is involved
 - small production fixes required by contract tests
+- deploy/runtime files required for the separate user API server image and local smoke commands
 - docs updates for local validation commands
 
 Out of scope:
@@ -42,4 +43,4 @@ A small set of integration-style tests gives better maintenance value than a lar
 
 ## Next Scoped Step
 
-CT-001 is in progress on branch `codex/user-library-contract-hardening`: add representative no-store checks for authenticated read endpoints and real database schema-placement coverage for user-owned tables.
+CT-001 is complete. CT-002 is in progress on branch `codex/user-library-deployment-hardening`: add separate user API image/workflow artifacts and validate the release build path.

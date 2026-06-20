@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+gh workflow run build_and_push_user_api_image.yml

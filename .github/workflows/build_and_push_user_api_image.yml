@@ -1,0 +1,70 @@
+name: Build and push user API image
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+concurrency:
+  group: relistenuserapi-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: relistennet/relistenuserapi
+  REGISTRY: 100.97.22.118:32000
+  TAG: latest
+
+jobs:
+  build_push_and_rollout_restart:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Tailscale
+      uses: tailscale/github-action@0263d9e6d793eaefcf1de98ff7fde47abe6664d3
+      with:
+        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        use-cache: 'true'
+        tags: tag:ci
+        version: latest
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      with:
+        buildkitd-config-inline: |
+          [registry."${{ env.REGISTRY }}"]
+            http = true
+            insecure = true
+
+    - name: Build and push image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Dockerfile.userapi
+        platforms: linux/amd64
+        tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.TAG }}
+        push: true
+        build-args: |
+          BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_started_at }}
+          VCS_REF=${{ github.sha }}
+          VERSION=${{ env.TAG }}
+          SOURCE=${{ github.server_url }}/${{ github.repository }}
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@15650b3ad78fff148532a140b8a4c821796b2d7b
+
+    - name: Configure kubeconfig
+      env:
+        KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+      run: |
+        mkdir -p "$HOME/.kube"
+        printf '%s' "$KUBE_CONFIG" | base64 -d > "$HOME/.kube/config"
+        chmod 600 "$HOME/.kube/config"
+
+    - name: Restart deployment
+      run: kubectl rollout restart deployment/relistenuserapi
+
+    - name: Wait for rollout
+      run: kubectl rollout status deployment/relistenuserapi --timeout=180s
