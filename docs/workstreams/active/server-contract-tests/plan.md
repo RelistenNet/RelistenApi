@@ -12,7 +12,8 @@ Feature-specific tests prove individual services. This workstream proves the ser
 
 Allowed files and directories:
 
-- `RelistenApiTests/` endpoint/contract/hardening fixtures
+- `RelistenUserApiTests/` endpoint/contract/hardening fixtures
+- `RelistenApiTests/` no-regression fixtures where the existing catalog API is involved
 - small production fixes required by contract tests
 - docs updates for local validation commands
 
@@ -23,6 +24,7 @@ Out of scope:
 
 ## Main Validator
 
+    dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj
     dotnet test RelistenApiTests/RelistenApiTests.csproj
     dotnet build RelistenApi.sln
 
@@ -40,5 +42,4 @@ A small set of integration-style tests gives better maintenance value than a lar
 
 ## Next Scoped Step
 
-After the foundation stream lands, add serializer and migration placement tests. After each later milestone, add focused contract tests for the new endpoint family.
-
+CT-001 is in progress on branch `codex/user-library-contract-hardening`: add representative no-store checks for authenticated read endpoints and real database schema-placement coverage for user-owned tables.

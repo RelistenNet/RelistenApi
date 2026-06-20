@@ -225,3 +225,13 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibraryHistoryTests` passed 6 tests, `RelistenUserApiTests` passed 69 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and local Postgres schema smoke found migration marker 9 plus `playback_history_catalog_play_queue` and its unprocessed index.
 - Review: Root review kept the aggregate boundary as an anonymous `user_data` outbox. The user API does not write directly to `public.source_track_plays`, does not enqueue duplicate retry or history-disabled uploads, and does not put user/device/client-event/playlist/app-version fields into the aggregate queue.
 - Next Action: done for `playback-history`; promote `server-contract-tests` next.
+
+### 2026-06-20T04:43:12Z Coordination Update
+
+- Active workstream: `server-contract-tests`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-contract-hardening`.
+- Action: Promoted server-contract-tests from backlog to active, moved its workstream files under `docs/workstreams/active/`, and claimed experiment `CT-001`.
+- Evidence: focused `UserLibraryContractTests` passed 8 tests, `RelistenUserApiTests` passed 77 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
+- Review: Reviewer found no code/test correctness issues and flagged stale docs; the evidence and board text now match the completed checks.
+- Next Action: done for CT-001; commit this slice, then continue deployment/runtime release gates.
