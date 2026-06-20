@@ -22,6 +22,7 @@ public static class UserApiApplication
         services.AddSingleton<AccessTokenService>();
         services.AddSingleton<RefreshTokenService>();
         services.AddScoped<UserAuthService>();
+        services.AddScoped<PlaylistService>();
 
         services
             .AddControllers()

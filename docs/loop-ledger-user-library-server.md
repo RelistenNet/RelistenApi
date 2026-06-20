@@ -63,3 +63,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Review: First reviewer findings were accepted and fixed; user feedback removed low-signal migration/route reflection tests; second reviewer findings were accepted and fixed; final reviewer reported no findings.
 - Steering incorporated: Mobile local development will use separate catalog/user-library base URLs, so the auth slice added a Development/Test-only token endpoint for the iOS Simulator at `/api/v3/library/auth/development/session`.
 - Next Action: done for `auth-and-sessions`; promote `playlists-and-sharing` next.
+
+### 2026-06-19T23:55:35Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-playlists`.
+- Action: Promoted playlists-and-sharing from backlog to active and claimed preregistered experiment `PL-001` before implementation edits.
+- Start commit: `709bb81`.
+- Next Action: continue.
+
+### 2026-06-20T00:27:02Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Result: completed experiment `PL-001`.
+- Branch: `codex/user-library-playlists`.
+- Evidence: focused playlist tests passed 14 tests, `RelistenUserApiTests` passed 31 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained the expected `user_data` playlist/auth tables with migration markers 1, 2, and 3.
+- Review: Reviewer findings were accepted and fixed, including idempotency replay/conflict handling, cross-playlist UUID conflicts, block UUID identity, invalid mixed operation fields, missing `idempotency_key`, and list endpoint entry loading. Final reviewer reported no findings.
+- Next Action: continue for `playlists-and-sharing`; implement share-token creation/exchange, mobile access grants, collaborator/follower access checks, and tokenless reopened-link resolution next.

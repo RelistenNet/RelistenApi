@@ -66,4 +66,77 @@ public static class UserDataSchemaSql
         CREATE INDEX IF NOT EXISTS idx_refresh_tokens_session_id
             ON user_data.refresh_tokens(session_id);
         """;
+
+    public const string PlaylistTables = """
+        CREATE TABLE IF NOT EXISTS user_data.playlists (
+            id UUID PRIMARY KEY,
+            short_id TEXT NOT NULL UNIQUE,
+            owner_id UUID NOT NULL REFERENCES user_data.users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT,
+            visibility TEXT NOT NULL DEFAULT 'private'
+                CHECK (visibility IN ('private', 'unlisted', 'public')),
+            current_revision BIGINT NOT NULL DEFAULT 0,
+            moderation_status TEXT NOT NULL DEFAULT 'approved'
+                CHECK (moderation_status IN ('approved', 'pending_review', 'hidden')),
+            archived_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_data.playlist_blocks (
+            id UUID PRIMARY KEY,
+            playlist_id UUID NOT NULL REFERENCES user_data.playlists(id) ON DELETE CASCADE,
+            created_by UUID NOT NULL REFERENCES user_data.users(id),
+            created_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_data.playlist_entries (
+            id UUID PRIMARY KEY,
+            playlist_id UUID NOT NULL REFERENCES user_data.playlists(id) ON DELETE CASCADE,
+            source_track_uuid UUID NOT NULL,
+            block_uuid UUID,
+            position TEXT NOT NULL,
+            block_position INT,
+            added_by UUID NOT NULL REFERENCES user_data.users(id),
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL,
+            CONSTRAINT chk_playlist_entries_block_position
+                CHECK (
+                    (block_uuid IS NULL AND block_position IS NULL)
+                    OR
+                    (block_uuid IS NOT NULL AND block_position IS NOT NULL AND block_position >= 0)
+                )
+        );
+
+        CREATE TABLE IF NOT EXISTS user_data.playlist_edit_log (
+            id UUID PRIMARY KEY,
+            playlist_id UUID NOT NULL REFERENCES user_data.playlists(id) ON DELETE CASCADE,
+            user_id UUID NOT NULL REFERENCES user_data.users(id),
+            operation JSONB NOT NULL,
+            idempotency_key UUID NOT NULL UNIQUE,
+            base_revision BIGINT,
+            result_revision BIGINT NOT NULL,
+            result_status TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_playlists_owner_id
+            ON user_data.playlists(owner_id)
+            WHERE archived_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_playlist_entries_playlist_id
+            ON user_data.playlist_entries(playlist_id);
+        CREATE INDEX IF NOT EXISTS idx_playlist_entries_block_uuid
+            ON user_data.playlist_entries(block_uuid)
+            WHERE block_uuid IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_playlist_blocks_playlist_id
+            ON user_data.playlist_blocks(playlist_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_playlist_entries_playlist_position
+            ON user_data.playlist_entries(playlist_id, position);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_playlist_entries_block_position
+            ON user_data.playlist_entries(playlist_id, block_uuid, block_position)
+            WHERE block_uuid IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_playlist_edit_log_playlist_id
+            ON user_data.playlist_edit_log(playlist_id);
+        """;
 }
