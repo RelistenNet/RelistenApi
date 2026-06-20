@@ -40,6 +40,7 @@ public class UserLibraryHistoryTests
         var clientEventUuid = Guid.NewGuid();
         var deviceId = $"history-test-{Guid.NewGuid():N}";
         var sourceUuid = Guid.NewGuid();
+        var playedAt = DateTimeOffset.Parse("2026-06-20T11:00:00Z");
         var request = new PlaybackHistoryBatchRequest
         {
             Events =
@@ -50,7 +51,8 @@ public class UserLibraryHistoryTests
                     sourceTrackUuid,
                     sourceUuid,
                     playlist.PlaylistUuid,
-                    playlistEntryUuid)
+                    playlistEntryUuid,
+                    playedAt: playedAt)
             ]
         };
 
@@ -73,12 +75,14 @@ public class UserLibraryHistoryTests
         var stored = await connection.QuerySingleAsync<PlaybackHistoryRow>(
             """
             SELECT
+                id AS "HistoryUuid",
                 user_id AS "UserUuid",
                 client_event_uuid AS "ClientEventUuid",
                 source_track_uuid AS "SourceTrackUuid",
                 source_uuid AS "SourceUuid",
                 playlist_uuid AS "PlaylistUuid",
                 playlist_entry_uuid AS "PlaylistEntryUuid",
+                played_at AS "PlayedAt",
                 device_id AS "DeviceId",
                 platform AS "Platform",
                 app_version AS "AppVersion"
@@ -93,6 +97,26 @@ public class UserLibraryHistoryTests
                 DeviceId = deviceId,
                 ClientEventUuid = clientEventUuid
             });
+        var queuedAggregate = await connection.QuerySingleAsync<CatalogAggregateQueueRow>(
+            """
+            SELECT
+                playback_history_id AS "PlaybackHistoryUuid",
+                source_track_uuid AS "SourceTrackUuid",
+                source_uuid AS "SourceUuid",
+                played_at AS "PlayedAt",
+                platform AS "Platform",
+                processed_at AS "ProcessedAt"
+            FROM user_data.playback_history_catalog_play_queue
+            WHERE playback_history_id = @PlaybackHistoryUuid
+            """,
+            new { PlaybackHistoryUuid = stored.HistoryUuid });
+        var queuedAggregateCount = await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int
+            FROM user_data.playback_history_catalog_play_queue
+            WHERE playback_history_id = @PlaybackHistoryUuid
+            """,
+            new { PlaybackHistoryUuid = stored.HistoryUuid });
         var keyCount = await connection.QuerySingleAsync<int>(
             """
             SELECT count(*)::int
@@ -113,8 +137,16 @@ public class UserLibraryHistoryTests
         stored.SourceUuid.Should().Be(sourceUuid);
         stored.PlaylistUuid.Should().Be(playlist.PlaylistUuid);
         stored.PlaylistEntryUuid.Should().Be(playlistEntryUuid);
+        stored.PlayedAt.Should().BeCloseTo(playedAt, precision: TimeSpan.FromMilliseconds(1));
         stored.Platform.Should().Be("ios");
         stored.AppVersion.Should().Be("4.2.1");
+        queuedAggregate.PlaybackHistoryUuid.Should().Be(stored.HistoryUuid);
+        queuedAggregate.SourceTrackUuid.Should().Be(sourceTrackUuid);
+        queuedAggregate.SourceUuid.Should().Be(sourceUuid);
+        queuedAggregate.PlayedAt.Should().BeCloseTo(playedAt, precision: TimeSpan.FromMilliseconds(1));
+        queuedAggregate.Platform.Should().Be("ios");
+        queuedAggregate.ProcessedAt.Should().BeNull();
+        queuedAggregateCount.Should().Be(1);
         keyCount.Should().Be(1);
     }
 
@@ -128,6 +160,8 @@ public class UserLibraryHistoryTests
         await UpdateSettings(client, auth.AccessToken, JObject.Parse("""{ "history_enabled": false }"""));
         var clientEventUuid = Guid.NewGuid();
         var deviceId = $"history-disabled-{Guid.NewGuid():N}";
+        var sourceTrackUuid = Guid.NewGuid();
+        var sourceUuid = Guid.NewGuid();
         var request = new PlaybackHistoryBatchRequest
         {
             Events =
@@ -135,8 +169,8 @@ public class UserLibraryHistoryTests
                 NewHistoryEvent(
                     clientEventUuid,
                     deviceId,
-                    sourceTrackUuid: Guid.NewGuid(),
-                    sourceUuid: Guid.NewGuid(),
+                    sourceTrackUuid,
+                    sourceUuid,
                     playlistUuid: null,
                     playlistEntryUuid: null)
             ]
@@ -180,9 +214,22 @@ public class UserLibraryHistoryTests
                 DeviceId = deviceId,
                 ClientEventUuid = clientEventUuid
             });
+        var queuedAggregateCount = await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int
+            FROM user_data.playback_history_catalog_play_queue
+            WHERE source_track_uuid = @SourceTrackUuid
+              AND source_uuid = @SourceUuid
+            """,
+            new
+            {
+                SourceTrackUuid = sourceTrackUuid,
+                SourceUuid = sourceUuid
+            });
 
         historyCount.Should().Be(0);
         keyCount.Should().Be(0);
+        queuedAggregateCount.Should().Be(0);
     }
 
     [Test]
@@ -523,14 +570,26 @@ public class UserLibraryHistoryTests
 
     private sealed class PlaybackHistoryRow
     {
+        public required Guid HistoryUuid { get; init; }
         public required Guid UserUuid { get; init; }
         public required Guid ClientEventUuid { get; init; }
         public required Guid SourceTrackUuid { get; init; }
         public required Guid SourceUuid { get; init; }
         public Guid? PlaylistUuid { get; init; }
         public Guid? PlaylistEntryUuid { get; init; }
+        public required DateTimeOffset PlayedAt { get; init; }
         public required string DeviceId { get; init; }
         public required string Platform { get; init; }
         public required string AppVersion { get; init; }
+    }
+
+    private sealed class CatalogAggregateQueueRow
+    {
+        public required Guid PlaybackHistoryUuid { get; init; }
+        public required Guid SourceTrackUuid { get; init; }
+        public required Guid SourceUuid { get; init; }
+        public required DateTimeOffset PlayedAt { get; init; }
+        public required string Platform { get; init; }
+        public DateTimeOffset? ProcessedAt { get; init; }
     }
 }

@@ -11,10 +11,14 @@ public sealed class PlaybackHistoryService
     private const int MaxRecentLimit = 100;
 
     private readonly UserApiDbService _db;
+    private readonly PlaybackHistoryCatalogAggregateSink _catalogAggregateSink;
 
-    public PlaybackHistoryService(UserApiDbService db)
+    public PlaybackHistoryService(
+        UserApiDbService db,
+        PlaybackHistoryCatalogAggregateSink catalogAggregateSink)
     {
         _db = db;
+        _catalogAggregateSink = catalogAggregateSink;
     }
 
     public async Task<PlaybackHistoryBatchResponse> IngestBatch(
@@ -122,6 +126,16 @@ public sealed class PlaybackHistoryService
                     Now = now
                 },
                 transaction);
+
+            await _catalogAggregateSink.EnqueueAcceptedPlay(
+                connection,
+                transaction,
+                insertedHistoryUuid.Value,
+                historyEvent.SourceTrackUuid,
+                historyEvent.SourceUuid,
+                historyEvent.PlayedAt,
+                normalized.Platform,
+                now);
 
             acceptedCount++;
             results.Add(new PlaybackHistoryEventResultResponse

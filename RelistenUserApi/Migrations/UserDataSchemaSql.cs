@@ -364,4 +364,23 @@ public static class UserDataSchemaSql
         CREATE INDEX IF NOT EXISTS idx_playback_history_client_event
             ON user_data.playback_history(user_id, device_id, client_event_uuid);
         """;
+
+    public const string PlaybackHistoryCatalogPlayQueue = """
+        CREATE TABLE IF NOT EXISTS user_data.playback_history_catalog_play_queue (
+            playback_history_id UUID PRIMARY KEY,
+            source_track_uuid UUID NOT NULL,
+            source_uuid UUID NOT NULL,
+            played_at TIMESTAMPTZ NOT NULL,
+            platform TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            processed_at TIMESTAMPTZ,
+            processing_error TEXT
+        );
+        """;
+
+    public const string PlaybackHistoryCatalogPlayQueueUnprocessedIndex = """
+        CREATE INDEX IF NOT EXISTS idx_playback_history_catalog_play_queue_unprocessed
+            ON user_data.playback_history_catalog_play_queue(created_at)
+            WHERE processed_at IS NULL;
+        """;
 }

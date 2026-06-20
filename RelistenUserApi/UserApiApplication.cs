@@ -28,6 +28,7 @@ public static class UserApiApplication
         services.AddScoped<PlaylistService>();
         services.AddScoped<PlaylistSharingService>();
         services.AddScoped<UserLibrarySyncService>();
+        services.AddScoped<PlaybackHistoryCatalogAggregateSink>();
         services.AddScoped<PlaybackHistoryService>();
 
         services

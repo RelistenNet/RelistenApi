@@ -2,7 +2,7 @@
 
 ## Goal
 
-Implement authenticated playback history batch upload, race-safe idempotency, playlist attribution, history-disabled behavior, and narrow catalog popularity integration under `/api/v3/library/history`.
+Implement authenticated playback history batch upload, race-safe idempotency, playlist attribution, history-disabled behavior, recent personal history reads, and narrow catalog popularity integration under `/api/v3/library/history`.
 
 ## Why This Workstream Exists
 
@@ -40,8 +40,8 @@ Depends on authenticated users and user settings for history-disabled behavior. 
 
 ## Current Hypothesis
 
-Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into `user_data.playback_history`. Expose recent personal history through a capped authenticated read endpoint. Do not write directly to catalog `source_track_plays` from the user API; add a narrow catalog-owned aggregate sink later.
+Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into `user_data.playback_history`. Expose recent personal history through a capped authenticated read endpoint. Feed catalog popularity through an anonymous `user_data.playback_history_catalog_play_queue` outbox instead of writing directly to catalog `source_track_plays` from the user API.
 
 ## Next Scoped Step
 
-HIST-001 and HIST-002 are implemented. The next step is to add a narrow catalog-owned aggregate sink for accepted plays.
+HIST-001, HIST-002, and HIST-003 are implemented. The playback-history M1 server surface is ready for server-contract hardening.

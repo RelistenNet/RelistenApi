@@ -30,9 +30,23 @@ public sealed class UserDataSchemaInitializer
         await connection.ExecuteAsync(UserDataSchemaSql.FavoritesSettingsTables);
         await connection.ExecuteAsync(UserDataSchemaSql.PlaylistSyncTables);
         await connection.ExecuteAsync(UserDataSchemaSql.PlaybackHistoryTables);
-        await connection.ExecuteAsync(UserDataSchemaSql.PlaybackHistoryUserPlayedAtIndex);
-        await connection.ExecuteAsync(UserDataSchemaSql.PlaybackHistoryPlaylistIndex);
-        await connection.ExecuteAsync(UserDataSchemaSql.PlaybackHistoryClientEventIndex);
+        await ExecuteIndexIfMissing(
+            connection,
+            "user_data.idx_playback_history_user_played_at",
+            UserDataSchemaSql.PlaybackHistoryUserPlayedAtIndex);
+        await ExecuteIndexIfMissing(
+            connection,
+            "user_data.idx_playback_history_playlist_uuid",
+            UserDataSchemaSql.PlaybackHistoryPlaylistIndex);
+        await ExecuteIndexIfMissing(
+            connection,
+            "user_data.idx_playback_history_client_event",
+            UserDataSchemaSql.PlaybackHistoryClientEventIndex);
+        await connection.ExecuteAsync(UserDataSchemaSql.PlaybackHistoryCatalogPlayQueue);
+        await ExecuteIndexIfMissing(
+            connection,
+            "user_data.idx_playback_history_catalog_play_queue_unprocessed",
+            UserDataSchemaSql.PlaybackHistoryCatalogPlayQueueUnprocessedIndex);
         await connection.ExecuteAsync(
             """
             INSERT INTO user_data.user_service_migrations (version, description)
@@ -44,8 +58,23 @@ public sealed class UserDataSchemaInitializer
                 (5, 'Add playlist block foreign key for Relisten user API'),
                 (6, 'Create favorites and settings tables for Relisten user API'),
                 (7, 'Add playlist sync metadata for Relisten user API'),
-                (8, 'Create playback history tables for Relisten user API')
+                (8, 'Create playback history tables for Relisten user API'),
+                (9, 'Create playback history catalog play queue for Relisten user API')
             ON CONFLICT (version) DO NOTHING;
             """);
+    }
+
+    private static async Task ExecuteIndexIfMissing(
+        Npgsql.NpgsqlConnection connection,
+        string indexName,
+        string createSql)
+    {
+        var exists = await connection.QuerySingleAsync<bool>(
+            "SELECT to_regclass(@IndexName) IS NOT NULL",
+            new { IndexName = indexName });
+        if (!exists)
+        {
+            await connection.ExecuteAsync(createSql);
+        }
     }
 }

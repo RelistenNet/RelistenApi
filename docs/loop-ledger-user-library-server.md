@@ -216,3 +216,12 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibraryHistoryTests` passed 6 tests, `RelistenUserApiTests` passed 69 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
 - Review: Root adversarial pass tightened the recent-history response by omitting ingest-only `device_id`, `platform`, and `app_version`. Reviewer found a low raw response-shape test gap; the test now asserts snake-case attribution fields and rejects ingest-only metadata. Focused tests caught the intermediate DTO mistake before full validation.
 - Next Action: continue for `playback-history`; implement the catalog-owned aggregate sink next.
+
+### 2026-06-20T04:37:47Z Coordination Update
+
+- Active workstream: `playback-history`.
+- Result: completed experiment `HIST-003`.
+- Branch: `codex/user-library-history-aggregate`.
+- Evidence: focused `UserLibraryHistoryTests` passed 6 tests, `RelistenUserApiTests` passed 69 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and local Postgres schema smoke found migration marker 9 plus `playback_history_catalog_play_queue` and its unprocessed index.
+- Review: Root review kept the aggregate boundary as an anonymous `user_data` outbox. The user API does not write directly to `public.source_track_plays`, does not enqueue duplicate retry or history-disabled uploads, and does not put user/device/client-event/playlist/app-version fields into the aggregate queue.
+- Next Action: done for `playback-history`; promote `server-contract-tests` next.
