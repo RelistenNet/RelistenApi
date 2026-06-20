@@ -27,6 +27,7 @@ public static class UserApiApplication
         services.AddScoped<UserAuthService>();
         services.AddScoped<PlaylistService>();
         services.AddScoped<PlaylistSharingService>();
+        services.AddScoped<UserLibrarySyncService>();
 
         services
             .AddControllers()

@@ -16,7 +16,7 @@ Allowed files and directories:
 - sync cursor, tombstone, favorite, and settings services under `RelistenUserApi/Services/`
 - sync/favorite/settings controllers under `RelistenUserApi/Controllers/`
 - migrations for `user_favorites`, `user_settings`, sync cursor/tombstone support if separate rows are needed
-- tests under `RelistenApiTests/` whose names contain `UserLibrarySync`, `UserLibraryFavorites`, or `UserLibrarySettings`
+- tests under `RelistenUserApiTests/` whose names contain `UserLibrarySync`, `UserLibraryFavorites`, or `UserLibrarySettings`
 
 Out of scope:
 
@@ -26,12 +26,12 @@ Out of scope:
 
 ## Main Validator
 
-    dotnet test RelistenApiTests/RelistenApiTests.csproj --filter "FullyQualifiedName~UserLibrarySync|FullyQualifiedName~UserLibraryFavorites|FullyQualifiedName~UserLibrarySettings"
+    dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibrarySync|FullyQualifiedName~UserLibraryFavorites|FullyQualifiedName~UserLibrarySettings"
     dotnet build RelistenApi.sln
 
 ## Fastest Useful Current Check
 
-    dotnet test RelistenApiTests/RelistenApiTests.csproj --filter "FullyQualifiedName~UserLibraryFavorites"
+    dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryFavorites"
 
 ## Dependencies or Blockers
 
@@ -39,9 +39,8 @@ Depends on authenticated users and enough playlist tables to include playlist ch
 
 ## Current Hypothesis
 
-Sync should be simple and cursor-based: each user-owned row that needs cross-device deletion semantics has `updated_at` and `deleted_at`, and the sync endpoint returns changed rows plus tombstones since the cursor. Avoid a complex CRDT or bidirectional merge system for M1.
+Sync should be simple and cursor-based: each user-owned row family that needs cross-device semantics advances a monotonic `sync_version`, and the sync endpoint returns changed rows plus tombstones after the cursor. Avoid timestamp watermarks, a complex CRDT, or a bidirectional merge system for M1.
 
 ## Next Scoped Step
 
-Implement favorites with `artist`, `show`, `source`, `track`, `tour`, and `song`, then add settings. Add sync cursor aggregation after at least two user-data row families exist.
-
+Aggregate playlist, collaborator invitation, follower, and revocation changes into the same sync feed. Add tombstone/version support where existing playlist-sharing tables need it, then prove incremental mobile behavior with endpoint tests.

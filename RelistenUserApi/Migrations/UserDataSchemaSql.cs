@@ -228,4 +228,57 @@ public static class UserDataSchemaSql
             ON user_data.playlist_followers(user_id)
             WHERE unfollowed_at IS NULL;
         """;
+
+    public const string FavoritesSettingsTables = """
+        CREATE SEQUENCE IF NOT EXISTS user_data.user_sync_version_seq AS BIGINT;
+
+        CREATE TABLE IF NOT EXISTS user_data.user_favorites (
+            user_id UUID NOT NULL REFERENCES user_data.users(id) ON DELETE CASCADE,
+            entity_type TEXT NOT NULL
+                CHECK (entity_type IN ('artist', 'show', 'source', 'track', 'tour', 'song')),
+            entity_uuid UUID NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL,
+            deleted_at TIMESTAMPTZ,
+            sync_version BIGINT NOT NULL DEFAULT nextval('user_data.user_sync_version_seq'),
+            PRIMARY KEY (user_id, entity_type, entity_uuid)
+        );
+
+        CREATE TABLE IF NOT EXISTS user_data.user_settings (
+            user_id UUID PRIMARY KEY REFERENCES user_data.users(id) ON DELETE CASCADE,
+            settings JSONB NOT NULL DEFAULT '{}',
+            updated_at TIMESTAMPTZ NOT NULL,
+            sync_version BIGINT NOT NULL DEFAULT nextval('user_data.user_sync_version_seq')
+        );
+
+        ALTER TABLE user_data.user_favorites
+            ADD COLUMN IF NOT EXISTS sync_version BIGINT;
+        UPDATE user_data.user_favorites
+        SET sync_version = nextval('user_data.user_sync_version_seq')
+        WHERE sync_version IS NULL;
+        ALTER TABLE user_data.user_favorites
+            ALTER COLUMN sync_version SET NOT NULL,
+            ALTER COLUMN sync_version SET DEFAULT nextval('user_data.user_sync_version_seq');
+
+        ALTER TABLE user_data.user_settings
+            ADD COLUMN IF NOT EXISTS sync_version BIGINT;
+        UPDATE user_data.user_settings
+        SET sync_version = nextval('user_data.user_sync_version_seq')
+        WHERE sync_version IS NULL;
+        ALTER TABLE user_data.user_settings
+            ALTER COLUMN sync_version SET NOT NULL,
+            ALTER COLUMN sync_version SET DEFAULT nextval('user_data.user_sync_version_seq');
+
+        CREATE INDEX IF NOT EXISTS idx_user_favorites_user_updated
+            ON user_data.user_favorites(user_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_user_favorites_user_sync_version
+            ON user_data.user_favorites(user_id, sync_version);
+        CREATE INDEX IF NOT EXISTS idx_user_favorites_user_active
+            ON user_data.user_favorites(user_id, entity_type)
+            WHERE deleted_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_user_settings_updated
+            ON user_data.user_settings(user_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_user_settings_sync_version
+            ON user_data.user_settings(user_id, sync_version);
+        """;
 }

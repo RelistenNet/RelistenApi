@@ -153,3 +153,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused playlist/share-token tests passed 40 tests, `RelistenUserApiTests` passed 57 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and `git diff --check` passed.
 - Review: Explorer findings shaped the cache/read scope. Reviewer findings on missing `Vary` and partial mobile-grant headers becoming cacheable were accepted and fixed with behavior tests. Final reviewer reported no actionable findings.
 - Next Action: continue; promote `sync-favorites-settings` next for favorites/settings schema, tombstones, and sync cursors.
+
+### 2026-06-20T02:02:51Z Coordination Update
+
+- Active workstream: `sync-favorites-settings`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-sync`.
+- Action: Promoted sync-favorites-settings from backlog to active, moved its workstream files under `docs/workstreams/active/`, and claimed preregistered experiment `SYNC-001` before implementation edits.
+- Start commit: `019b599`.
+- Next Action: continue.
+
+### 2026-06-20T04:06:46Z Coordination Update
+
+- Active workstream: `sync-favorites-settings`.
+- Result: completed experiment `SYNC-001`.
+- Branch: `codex/user-library-sync`.
+- Evidence: focused `UserLibrarySyncTests` passed 4 tests, `RelistenUserApiTests` passed 61 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained migration marker 6 plus `sync_version` support for favorites/settings.
+- Review: Reviewer findings on timestamp cursor skips and idempotent retry churn were fixed with sequence-backed cursors, per-user advisory transaction locks, and no-op retry preservation. The root review also fixed timestamp-based response ordering after the corrected reviewer attempt hit the subagent usage limit.
+- Next Action: continue for `sync-favorites-settings`; implement `SYNC-002` for playlist, invitation, and revocation sync aggregation before playback-history promotion.
