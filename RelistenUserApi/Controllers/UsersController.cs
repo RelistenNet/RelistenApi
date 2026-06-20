@@ -13,13 +13,16 @@ namespace Relisten.UserApi.Controllers;
 public sealed class UsersController : ControllerBase
 {
     private readonly IAuthenticatedUserContext _authenticatedUserContext;
+    private readonly UserAccountDataService _accountDataService;
     private readonly UserAuthService _authService;
 
     public UsersController(
         IAuthenticatedUserContext authenticatedUserContext,
+        UserAccountDataService accountDataService,
         UserAuthService authService)
     {
         _authenticatedUserContext = authenticatedUserContext;
+        _accountDataService = accountDataService;
         _authService = authService;
     }
 
@@ -46,6 +49,33 @@ public sealed class UsersController : ControllerBase
     {
         var user = _authenticatedUserContext.CurrentUser;
         return await _authService.ListSessions(user.UserUuid);
+    }
+
+    [HttpPost("me/export")]
+    [ProducesResponseType(typeof(AccountExportResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<AccountExportResponse> Export()
+    {
+        var user = _authenticatedUserContext.CurrentUser;
+        return await _accountDataService.Export(user.UserUuid);
+    }
+
+    [HttpDelete("me")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(AccountDeletionErrorResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> DeleteAccount()
+    {
+        var user = _authenticatedUserContext.CurrentUser;
+        try
+        {
+            await _accountDataService.Delete(user.UserUuid);
+            return NoContent();
+        }
+        catch (UserAccountDeletionException ex)
+        {
+            return Conflict(new AccountDeletionErrorResponse { Error = ex.Code });
+        }
     }
 
     [HttpDelete("me/sessions/{sessionUuid:guid}")]

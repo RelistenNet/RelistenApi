@@ -245,3 +245,13 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: release publish produced `RelistenUserApi.dll`, focused `UserLibraryContractTests` passed 8 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, Docker image build for `Dockerfile.userapi` passed, container `/health` smoke returned `OK` with schema initialization disabled, workflow YAML parse passed, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
 - Review: Reviewer findings were fixed with deploy concurrency, pinned action refs for secret-sensitive setup, base64-decoded kubeconfig setup preserving the existing secret contract, direct kubectl rollout commands, and rollout status waiting. Final reviewer verification found no deployment workflow blockers.
 - Next Action: done for CT-002; commit this slice, then implement account deletion/export server gates.
+
+### 2026-06-20T05:07:54Z Coordination Update
+
+- Active workstream: `server-contract-tests`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-account-gates`.
+- Action: Started CT-003 for account export/deletion server gates.
+- Evidence: focused `UserLibraryAccountTests` passed 2 tests, `RelistenUserApiTests` passed 79 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no committed local Google OAuth client files, downloaded paths, or secret references.
+- Review: Reviewer found a real deletion-order bug for users with non-empty owned playlists. The fix deletes owned playlists before deleting the user, adds a regression setup with block-backed owned playlist content, and a validator confirmed the fix with no new actionable findings.
+- Next Action: done for CT-003 after reviewer reconciliation; then reassess real provider verification/recent-reauth and final runtime docs.

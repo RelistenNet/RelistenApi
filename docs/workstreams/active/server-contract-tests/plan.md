@@ -39,8 +39,8 @@ Depends on endpoint families existing. Can add serializer and migration placemen
 
 ## Current Hypothesis
 
-A small set of integration-style tests gives better maintenance value than a large brittle snapshot suite. Prefer explicit route/header/body assertions for behavior that matters to mobile/web clients.
+A small set of integration-style tests gives better maintenance value than a large brittle snapshot suite. Account export/deletion gates are best covered by authenticated endpoint tests plus database side-effect assertions, not migration-string or route-reflection checks.
 
 ## Next Scoped Step
 
-CT-001 is complete. CT-002 is in progress on branch `codex/user-library-deployment-hardening`: add separate user API image/workflow artifacts and validate the release build path.
+CT-001, CT-002, and CT-003 are complete. The remaining hardening pass is final runtime documentation and any provider recent-reauth integration once Apple/Google verification is implemented.

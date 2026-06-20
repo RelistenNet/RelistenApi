@@ -30,6 +30,7 @@ public static class UserApiApplication
         services.AddScoped<UserLibrarySyncService>();
         services.AddScoped<PlaybackHistoryCatalogAggregateSink>();
         services.AddScoped<PlaybackHistoryService>();
+        services.AddScoped<UserAccountDataService>();
 
         services
             .AddControllers()
