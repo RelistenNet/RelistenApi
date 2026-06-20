@@ -19,10 +19,12 @@ public static class UserApiApplication
         services.AddSingleton<UserApiDbService>();
         services.AddSingleton<UserDataSchemaInitializer>();
         services.AddSingleton<IUserAuthStore, PostgresUserAuthStore>();
+        services.AddSingleton<OpaqueTokenService>();
         services.AddSingleton<AccessTokenService>();
         services.AddSingleton<RefreshTokenService>();
         services.AddScoped<UserAuthService>();
         services.AddScoped<PlaylistService>();
+        services.AddScoped<PlaylistSharingService>();
 
         services
             .AddControllers()

@@ -15,6 +15,19 @@
 - Expected artifacts: Code diff, targeted test output, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
 - Linked ExecPlan: likely needed if the operation service grows beyond a narrow first slice.
 
+### PL-002: Share Tokens And Mobile Access Grants
+
+- Timestamp: 2026-06-20T00:35:57Z
+- Intention / hypothesis: Share-token access can be implemented as a narrow, testable layer over the existing playlist aggregate: owner-created role-scoped URL tokens, signed-out mobile viewer exchange into a short-lived device grant, signed-in editor exchange into durable collaborator access, and tokenless reads through owner/collaborator/follower/mobile-grant state.
+- Responsible agent: root Codex agent.
+- Start commit: `23346bf`
+- Worktree or branch: branch `codex/user-library-share-tokens` in `/Users/alecgorge/code/relisten/RelistenApi`.
+- Mutable surface: playlist/share DTOs, playlist sharing/access services, playlist controller routes, `user_data` migrations/bootstrap SQL, and `RelistenUserApiTests` fixtures whose names contain `ShareToken` or `UserLibraryPlaylist`.
+- Validator: targeted `RelistenUserApiTests` playlist/share-token tests plus `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj`, `dotnet test RelistenApiTests/RelistenApiTests.csproj`, and `dotnet build RelistenApi.sln`.
+- Expected deliverable: Share-token schema/bootstrap, owner-only token create/revoke endpoints, exchange endpoint for mobile signed-out viewer grants and signed-in editor collaborator conversion, follower/collaborator/mobile-grant access checks for tokenless playlist reads, and tests proving tokenless reopened-link behavior.
+- Expected artifacts: Code diff, targeted test output, local Postgres schema smoke, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
+- Linked ExecPlan: none. Create one only if the sharing/access slice grows beyond a narrow server increment.
+
 ## Outcomes
 
 ### PL-001 Outcome
@@ -36,3 +49,24 @@
 - Conclusion: PL-001 is complete. The first playlist aggregate slice supports authenticated create/list/get under `/api/v3/library/playlists`, append-only `add_track`, append-only `add_tracks_as_block`, duplicate source tracks through distinct playlist-entry UUIDs, integer `block_position`, playlist-level sortable position strings, idempotent replay, owner-scoped reads, snake-case JSON, no-store authenticated responses, and schema-qualified `user_data` playlist tables.
 - next_action: continue
 - Next move: Start a new playlist/sharing slice for share-token creation/exchange, mobile token exchange/access grants, collaborator/follower access checks, and the first tokenless reopened-link behavior before catalog hydration or reorder/delete.
+
+### PL-002 Outcome
+
+- Timestamp: 2026-06-20T00:59:06Z
+- End commit: committed immediately after this ledger update on branch `codex/user-library-share-tokens`.
+- Artifact location: `RelistenUserApi/Controllers/PlaylistsController.cs`, `RelistenUserApi/Services/PlaylistSharingService.cs`, `RelistenUserApi/Services/OpaqueTokenService.cs`, `RelistenUserApi/Services/PlaylistService.cs`, `RelistenUserApi/Migrations/004_CreatePlaylistSharingTables.cs`, `RelistenUserApi/Migrations/UserDataSchemaSql.cs`, playlist share/access DTOs and records, and `RelistenUserApiTests/UserLibraryShareTokenTests.cs`.
+- Evidence summary:
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryPlaylist|FullyQualifiedName~PlaylistOperation|FullyQualifiedName~ShareToken"` passed 20 tests.
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 37 tests.
+  - `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests.
+  - `dotnet build RelistenApi.sln` passed with 0 warnings and 0 errors.
+  - `git diff --check` passed.
+  - Local Postgres smoke showed `user_data` tables: `playlist_blocks`, `playlist_collaborators`, `playlist_edit_log`, `playlist_entries`, `playlist_followers`, `playlist_mobile_access_grants`, `playlist_share_tokens`, `playlists`, `refresh_tokens`, `user_auth_methods`, `user_service_migrations`, `user_sessions`, `users`; migration marker rows 1, 2, 3, and 4.
+- Review summary:
+  - Explorer called out owner-only current reads/writes, missing share/access tables, need for central access resolution, mobile grant device binding, short-id routing, owner-only share-token management, and tokenless reopened-link tests.
+  - First reviewer found mobile grants could outlive an expiring source share token. The implementation now caps mobile grant expiry to the earlier of 24 hours or source token expiry and tests the near-expiry case.
+  - Second reviewer found a high-severity exchange/revoke race. Exchange and revoke now lock the share-token row with `FOR UPDATE`, and a race test proves an exchange waiting behind a revoke fails with `invalid_share_token`.
+  - Final reviewer reported no findings. Residual risks: durable follower/collaborator access survives share-token revocation by design, public playlist cache/ETag behavior remains deferred, and mobile grant plus device-id exfiltration is bearer-equivalent until expiry.
+- Conclusion: PL-002 is complete. The slice adds owner-only share-token creation/revocation, hashed URL share tokens, short-lived selector/secret mobile grants, anonymous token exchange for signed-out viewer access, signed-in editor exchange into durable collaborator write access, follower-backed tokenless reopened links, owner/collaborator/follower/mobile-grant access resolution for `GET /api/v3/library/playlists/{playlistUuidOrShortId}`, and tests for owner boundaries, wrong-device grants, viewer write denial, revocation, expiry capping, and exchange/revoke serialization.
+- next_action: continue
+- Next move: Start PL-003 for source-range-as-block and reorder operations, including canonical playlist positions, integer block positions, and tests that cover duplicate tracks and block contiguity after reorder.

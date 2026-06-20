@@ -81,3 +81,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused playlist tests passed 14 tests, `RelistenUserApiTests` passed 31 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained the expected `user_data` playlist/auth tables with migration markers 1, 2, and 3.
 - Review: Reviewer findings were accepted and fixed, including idempotency replay/conflict handling, cross-playlist UUID conflicts, block UUID identity, invalid mixed operation fields, missing `idempotency_key`, and list endpoint entry loading. Final reviewer reported no findings.
 - Next Action: continue for `playlists-and-sharing`; implement share-token creation/exchange, mobile access grants, collaborator/follower access checks, and tokenless reopened-link resolution next.
+
+### 2026-06-20T00:35:57Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-share-tokens`.
+- Action: Claimed preregistered experiment `PL-002` before implementation edits.
+- Start commit: `23346bf`.
+- Next Action: continue.
+
+### 2026-06-20T00:59:06Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Result: completed experiment `PL-002`.
+- Branch: `codex/user-library-share-tokens`.
+- Evidence: focused playlist/share-token tests passed 20 tests, `RelistenUserApiTests` passed 37 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained expected `user_data` share/access tables with migration markers 1, 2, 3, and 4.
+- Review: Explorer findings shaped the access resolver and tests. First reviewer finding on mobile grants outliving source token expiry was fixed. Second reviewer finding on exchange/revoke races was fixed with share-token row locks and a race test. Final reviewer reported no findings.
+- Next Action: continue for `playlists-and-sharing`; implement source-range-as-block and reorder operations next.

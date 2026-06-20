@@ -25,13 +25,15 @@ public sealed class UserDataSchemaInitializer
         await connection.ExecuteAsync(UserDataSchemaSql.Bootstrap);
         await connection.ExecuteAsync(UserDataSchemaSql.AuthTables);
         await connection.ExecuteAsync(UserDataSchemaSql.PlaylistTables);
+        await connection.ExecuteAsync(UserDataSchemaSql.PlaylistSharingTables);
         await connection.ExecuteAsync(
             """
             INSERT INTO user_data.user_service_migrations (version, description)
             VALUES
                 (1, 'Create user_data schema for Relisten user API'),
                 (2, 'Create auth and session tables for Relisten user API'),
-                (3, 'Create playlist tables for Relisten user API')
+                (3, 'Create playlist tables for Relisten user API'),
+                (4, 'Create playlist sharing tables for Relisten user API')
             ON CONFLICT (version) DO NOTHING;
             """);
     }

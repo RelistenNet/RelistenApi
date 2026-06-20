@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Relisten.UserApi.Auth;
@@ -14,13 +15,16 @@ public sealed class PlaylistsController : ControllerBase
 {
     private readonly IAuthenticatedUserContext _authenticatedUserContext;
     private readonly PlaylistService _playlistService;
+    private readonly PlaylistSharingService _sharingService;
 
     public PlaylistsController(
         IAuthenticatedUserContext authenticatedUserContext,
-        PlaylistService playlistService)
+        PlaylistService playlistService,
+        PlaylistSharingService sharingService)
     {
         _authenticatedUserContext = authenticatedUserContext;
         _playlistService = playlistService;
+        _sharingService = sharingService;
     }
 
     [HttpGet]
@@ -42,7 +46,7 @@ public sealed class PlaylistsController : ControllerBase
             var playlist = await _playlistService.Create(
                 _authenticatedUserContext.CurrentUser.UserUuid,
                 request);
-            return CreatedAtAction(nameof(Get), new { playlistUuid = playlist.PlaylistUuid }, playlist);
+            return CreatedAtAction(nameof(Get), new { playlistIdentifier = playlist.PlaylistUuid }, playlist);
         }
         catch (PlaylistOperationException ex)
         {
@@ -50,16 +54,105 @@ public sealed class PlaylistsController : ControllerBase
         }
     }
 
-    [HttpGet("{playlistUuid:guid}")]
+    [AllowAnonymous]
+    [HttpGet("{playlistIdentifier}")]
     [ProducesResponseType(typeof(PlaylistResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaylistResponse>> Get([FromRoute] string playlistIdentifier)
+    {
+        var access = await _sharingService.GetForViewer(
+            OptionalAuthenticatedUserUuid(),
+            playlistIdentifier,
+            MobileGrantFromHeaders());
+        return access == null ? NotFound() : PlaylistSharingService.ToResponse(access.Snapshot);
+    }
+
+    [HttpGet("{playlistUuid:guid}/viewer-state")]
+    [ProducesResponseType(typeof(PlaylistViewerStateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<PlaylistResponse>> Get([FromRoute] Guid playlistUuid)
+    public async Task<ActionResult<PlaylistViewerStateResponse>> ViewerState([FromRoute] Guid playlistUuid)
     {
-        var playlist = await _playlistService.GetForOwner(
+        var viewerState = await _sharingService.GetViewerState(
             _authenticatedUserContext.CurrentUser.UserUuid,
             playlistUuid);
-        return playlist == null ? NotFound() : playlist;
+        return viewerState == null ? NotFound() : viewerState;
+    }
+
+    [HttpPost("{playlistUuid:guid}/follow")]
+    [ProducesResponseType(typeof(PlaylistViewerStateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaylistViewerStateResponse>> Follow([FromRoute] Guid playlistUuid)
+    {
+        var viewerState = await _sharingService.Follow(
+            _authenticatedUserContext.CurrentUser.UserUuid,
+            playlistUuid,
+            MobileGrantFromHeaders());
+        return viewerState == null ? NotFound() : viewerState;
+    }
+
+    [HttpPost("{playlistUuid:guid}/share-tokens")]
+    [ProducesResponseType(typeof(PlaylistShareTokenResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(PlaylistErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaylistShareTokenResponse>> CreateShareToken(
+        [FromRoute] Guid playlistUuid,
+        [FromBody] CreatePlaylistShareTokenRequest request)
+    {
+        try
+        {
+            var token = await _sharingService.CreateShareToken(
+                _authenticatedUserContext.CurrentUser.UserUuid,
+                playlistUuid,
+                request);
+            return token == null
+                ? NotFound()
+                : CreatedAtAction(nameof(Get), new { playlistIdentifier = token.PlaylistUuid }, token);
+        }
+        catch (PlaylistOperationException ex)
+        {
+            return PlaylistError(ex);
+        }
+    }
+
+    [HttpDelete("{playlistUuid:guid}/share-tokens/{shareTokenUuid:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> RevokeShareToken(
+        [FromRoute] Guid playlistUuid,
+        [FromRoute] Guid shareTokenUuid)
+    {
+        return await _sharingService.RevokeShareToken(
+            _authenticatedUserContext.CurrentUser.UserUuid,
+            playlistUuid,
+            shareTokenUuid)
+            ? NoContent()
+            : NotFound();
+    }
+
+    [AllowAnonymous]
+    [HttpPost("{playlistIdentifier}/share-tokens/exchange")]
+    [ProducesResponseType(typeof(ExchangePlaylistShareTokenResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaylistErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(PlaylistErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ExchangePlaylistShareTokenResponse>> ExchangeShareToken(
+        [FromRoute] string playlistIdentifier,
+        [FromBody] ExchangePlaylistShareTokenRequest request)
+    {
+        try
+        {
+            return await _sharingService.ExchangeShareToken(
+                OptionalAuthenticatedUserUuid(),
+                playlistIdentifier,
+                request);
+        }
+        catch (PlaylistOperationException ex)
+        {
+            return PlaylistError(ex);
+        }
     }
 
     [HttpPost("{playlistUuid:guid}/operations")]
@@ -81,7 +174,31 @@ public sealed class PlaylistsController : ControllerBase
         }
         catch (PlaylistOperationException ex)
         {
-            return BadRequest(new PlaylistErrorResponse { Error = ex.Code });
+            return PlaylistError(ex);
         }
+    }
+
+    private Guid? OptionalAuthenticatedUserUuid()
+    {
+        return Guid.TryParse(
+            User.FindFirstValue(RelistenUserAuthenticationDefaults.ClaimTypes.UserUuid),
+            out var userUuid)
+            ? userUuid
+            : null;
+    }
+
+    private PlaylistMobileGrantCredential? MobileGrantFromHeaders()
+    {
+        var grant = Request.Headers["X-Relisten-Mobile-Grant"].ToString();
+        var deviceId = Request.Headers["X-Relisten-Device-Id"].ToString();
+        return string.IsNullOrWhiteSpace(grant) || string.IsNullOrWhiteSpace(deviceId)
+            ? null
+            : new PlaylistMobileGrantCredential(grant.Trim(), deviceId.Trim());
+    }
+
+    private ObjectResult PlaylistError(PlaylistOperationException ex)
+    {
+        var response = new PlaylistErrorResponse { Error = ex.Code };
+        return ex.Code == "sign_in_required" ? Unauthorized(response) : BadRequest(response);
     }
 }

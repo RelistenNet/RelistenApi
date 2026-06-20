@@ -39,7 +39,25 @@ public sealed class PlaylistService
                 created_at AS "CreatedAt",
                 updated_at AS "UpdatedAt"
             FROM user_data.playlists
-            WHERE owner_id = @UserUuid AND archived_at IS NULL
+            WHERE archived_at IS NULL
+              AND (
+                  owner_id = @UserUuid
+                  OR EXISTS (
+                      SELECT 1
+                      FROM user_data.playlist_collaborators c
+                      WHERE c.playlist_id = playlists.id
+                        AND c.user_id = @UserUuid
+                        AND c.accepted_at IS NOT NULL
+                        AND c.revoked_at IS NULL
+                  )
+                  OR EXISTS (
+                      SELECT 1
+                      FROM user_data.playlist_followers f
+                      WHERE f.playlist_id = playlists.id
+                        AND f.user_id = @UserUuid
+                        AND f.unfollowed_at IS NULL
+                  )
+              )
             ORDER BY updated_at DESC
             """,
             new { UserUuid = userUuid });
@@ -165,7 +183,13 @@ public sealed class PlaylistService
                 throw new PlaylistOperationException("idempotency_key_conflict");
             }
 
-            var replaySnapshot = await LoadSnapshot(connection, userUuid, playlistUuid, transaction);
+            if (!await CanWritePlaylist(connection, transaction, userUuid, playlistUuid))
+            {
+                await transaction.RollbackAsync();
+                return null;
+            }
+
+            var replaySnapshot = await LoadSnapshot(connection, playlistUuid, transaction);
             await transaction.CommitAsync();
             return replaySnapshot == null
                 ? null
@@ -177,7 +201,7 @@ public sealed class PlaylistService
                 };
         }
 
-        var playlist = await LockPlaylistForOwner(connection, transaction, userUuid, playlistUuid);
+        var playlist = await LockPlaylistForWriter(connection, transaction, userUuid, playlistUuid);
         if (playlist == null)
         {
             await transaction.RollbackAsync();
@@ -258,7 +282,7 @@ public sealed class PlaylistService
             },
             transaction);
 
-        var snapshot = await LoadSnapshot(connection, userUuid, playlistUuid, transaction)
+        var snapshot = await LoadSnapshot(connection, playlistUuid, transaction)
             ?? throw new InvalidOperationException("Updated playlist could not be loaded.");
         await transaction.CommitAsync();
 
@@ -490,10 +514,46 @@ public sealed class PlaylistService
         };
     }
 
-    private static Task<PlaylistRecord?> LockPlaylistForOwner(
+    private static async Task<PlaylistSnapshot?> LoadSnapshot(
+        NpgsqlConnection connection,
+        Guid playlistUuid,
+        NpgsqlTransaction? transaction)
+    {
+        var playlist = await connection.QuerySingleOrDefaultAsync<PlaylistRecord>(
+            """
+            SELECT
+                id AS "PlaylistUuid",
+                short_id AS "ShortId",
+                owner_id AS "OwnerUserUuid",
+                name AS "Name",
+                description AS "Description",
+                visibility AS "Visibility",
+                current_revision AS "CurrentRevision",
+                archived_at AS "ArchivedAt",
+                created_at AS "CreatedAt",
+                updated_at AS "UpdatedAt"
+            FROM user_data.playlists
+            WHERE id = @PlaylistUuid AND archived_at IS NULL
+            """,
+            new { PlaylistUuid = playlistUuid },
+            transaction);
+
+        if (playlist == null)
+        {
+            return null;
+        }
+
+        return new PlaylistSnapshot
+        {
+            Playlist = playlist,
+            Entries = await LoadEntries(connection, playlistUuid, transaction)
+        };
+    }
+
+    private static Task<PlaylistRecord?> LockPlaylistForWriter(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid ownerUserUuid,
+        Guid userUuid,
         Guid playlistUuid)
     {
         return connection.QuerySingleOrDefaultAsync<PlaylistRecord>(
@@ -510,11 +570,53 @@ public sealed class PlaylistService
                 created_at AS "CreatedAt",
                 updated_at AS "UpdatedAt"
             FROM user_data.playlists
-            WHERE id = @PlaylistUuid AND owner_id = @OwnerUserUuid AND archived_at IS NULL
+            WHERE id = @PlaylistUuid
+              AND archived_at IS NULL
+              AND (
+                  owner_id = @UserUuid
+                  OR EXISTS (
+                      SELECT 1
+                      FROM user_data.playlist_collaborators c
+                      WHERE c.playlist_id = playlists.id
+                        AND c.user_id = @UserUuid
+                        AND c.role = 'editor'
+                        AND c.accepted_at IS NOT NULL
+                        AND c.revoked_at IS NULL
+                  )
+              )
             FOR UPDATE
             """,
-            new { PlaylistUuid = playlistUuid, OwnerUserUuid = ownerUserUuid },
+            new { PlaylistUuid = playlistUuid, UserUuid = userUuid },
             transaction);
+    }
+
+    private static async Task<bool> CanWritePlaylist(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid userUuid,
+        Guid playlistUuid)
+    {
+        return await connection.QuerySingleOrDefaultAsync<int?>(
+            """
+            SELECT 1
+            FROM user_data.playlists
+            WHERE id = @PlaylistUuid
+              AND archived_at IS NULL
+              AND (
+                  owner_id = @UserUuid
+                  OR EXISTS (
+                      SELECT 1
+                      FROM user_data.playlist_collaborators c
+                      WHERE c.playlist_id = playlists.id
+                        AND c.user_id = @UserUuid
+                        AND c.role = 'editor'
+                        AND c.accepted_at IS NOT NULL
+                        AND c.revoked_at IS NULL
+                  )
+              )
+            """,
+            new { PlaylistUuid = playlistUuid, UserUuid = userUuid },
+            transaction) == 1;
     }
 
     private static async Task<IReadOnlyList<PlaylistEntryRecord>> LoadEntries(

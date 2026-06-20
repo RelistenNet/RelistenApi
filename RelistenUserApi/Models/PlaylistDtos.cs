@@ -56,6 +56,55 @@ public sealed class PlaylistOperationResponse
     public required PlaylistResponse Playlist { get; init; }
 }
 
+public sealed class CreatePlaylistShareTokenRequest
+{
+    public required string Role { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+}
+
+public sealed class PlaylistShareTokenResponse
+{
+    public required Guid ShareTokenUuid { get; init; }
+    public required Guid PlaylistUuid { get; init; }
+    public required string Role { get; init; }
+    public string? Token { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+    public DateTimeOffset? RevokedAt { get; init; }
+    public required DateTimeOffset CreatedAt { get; init; }
+}
+
+public sealed class ExchangePlaylistShareTokenRequest
+{
+    public required string Token { get; init; }
+    public string? DeviceId { get; init; }
+    public string? Platform { get; init; }
+}
+
+public sealed class ExchangePlaylistShareTokenResponse
+{
+    public required string ResultStatus { get; init; }
+    public required string AccessRole { get; init; }
+    public PlaylistMobileAccessGrantResponse? MobileAccessGrant { get; init; }
+    public required PlaylistResponse Playlist { get; init; }
+}
+
+public sealed class PlaylistMobileAccessGrantResponse
+{
+    public required string Token { get; init; }
+    public required string DeviceId { get; init; }
+    public required string Platform { get; init; }
+    public required DateTimeOffset ExpiresAt { get; init; }
+}
+
+public sealed class PlaylistViewerStateResponse
+{
+    public required bool IsOwner { get; init; }
+    public required bool IsFollowing { get; init; }
+    public required bool IsCollaborator { get; init; }
+    public required bool CanEdit { get; init; }
+    public required string AccessRole { get; init; }
+}
+
 public sealed class PlaylistErrorResponse
 {
     public required string Error { get; init; }
