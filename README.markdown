@@ -41,6 +41,8 @@ Open the catalog API server at: [http://localhost:3823/api-docs](http://localhos
 The user-library API is a separate ASP.NET Core project and runs as a separate process from the catalog API:
 
 ```
+ASPNETCORE_ENVIRONMENT=Development \
+UserAuth__AccessTokenSigningKey=local-dev-signing-key-at-least-32-bytes-long \
 dotnet run --project RelistenUserApi/RelistenUserApi.csproj --urls http://localhost:5119
 ```
 
@@ -58,6 +60,25 @@ POST http://localhost:5119/api/v3/library/auth/development/session
 ```
 
 This endpoint is closed outside `Development`/`Test`.
+
+Provider sign-in uses Apple/Google OIDC ID tokens:
+
+```
+POST http://localhost:5119/api/v3/library/auth/callback/google
+POST http://localhost:5119/api/v3/library/auth/callback/apple
+POST http://localhost:5119/api/v3/library/auth/reauthenticate/google
+POST http://localhost:5119/api/v3/library/auth/reauthenticate/apple
+```
+
+Production provider auth fails closed until valid audiences are configured. Use environment variables or deployment secrets, not checked-in client files:
+
+```
+UserAuth__AccessTokenSigningKey=...
+UserAuth__Google__Audiences__0=<google-web-or-mobile-client-id>
+UserAuth__Apple__Audiences__0=<apple-service-id-or-bundle-id>
+```
+
+The provider callback request body sends an ID token as `provider_token` and the client nonce as `nonce`. Account export and deletion require recent provider reauthentication.
 
 The user-library image is built separately from the catalog API:
 

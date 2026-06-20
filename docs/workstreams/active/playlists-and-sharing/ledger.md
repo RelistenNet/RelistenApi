@@ -168,3 +168,11 @@
 - Conclusion: PL-005 is complete. The slice adds owner-only visibility updates with revision bumps, anonymous tokenless public playlist reads with revision ETags and `304 Not Modified`, conservative `Vary` headers, no-store behavior for authenticated/private/unlisted/mobile-grant and token-bearing paths, explicit unsupported hydration behavior, public-to-private transition coverage, and no token echo on mobile-grant reads.
 - next_action: continue
 - Next move: Promote `sync-favorites-settings` from backlog and start its first schema/API slice for source/tour/song favorites, settings, tombstones, and incremental sync cursors.
+
+### M1 Closure Outcome
+
+- Timestamp: 2026-06-20T05:29:24Z
+- Result: Playlist/sharing is complete for the M1 server plan after downstream sync, history, account-gate, provider-auth, and contract-hardening work validated against the playlist API surface.
+- Evidence summary: Full `RelistenUserApiTests` reached 86 passing tests, existing `RelistenApiTests` reached 47 passing tests, and `dotnet build RelistenApi.sln` passed with 0 warnings/errors on the final provider-auth branch. Playlist/share coverage includes create/list/get, add-track, add-block, source-range block, entry/block reorder, share-token exchange, mobile grants, follow, clone, collaborator invite/accept/revoke, public cache, private/auth no-store, and token scrubbing.
+- Conclusion: The M1 playlist/sharing server surface is complete. Bounded catalog hydration, playlist edit-log reads, batch operations, unfollow, archive/delete, and invitation decline remain future backlog, not blockers for this server foundation AutoPlan.
+- next_action: done

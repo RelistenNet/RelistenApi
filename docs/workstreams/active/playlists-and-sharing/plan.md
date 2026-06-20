@@ -42,8 +42,8 @@ Depends on foundation and basic authenticated user identity. Auth/session landed
 
 ## Current Hypothesis
 
-A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks, reorder operations, clone, collaborator invitations, and public cache/read-contract hardening are now in place without adding event sourcing. This workstream has enough M1 playlist/sharing surface to unblock sync/favorites/settings; bounded catalog hydration remains deferred as a later playlist read-contract slice.
+A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks, reorder operations, clone, collaborator invitations, share-token mobile grants, and public cache/read-contract hardening are now in place without adding event sourcing. This workstream has the M1 playlist/sharing server surface needed by the user-library foundation; bounded catalog hydration remains deferred as future backlog work.
 
 ## Next Scoped Step
 
-Pause new playlist/sharing implementation while `sync-favorites-settings` starts. Return here later for bounded `?hydrate=true`, playlist edit log reads, batch operations, unfollow, archive/delete, and invitation decline if those become required before release.
+This workstream is complete for the M1 server plan. Future backlog: bounded `?hydrate=true`, playlist edit log reads, batch operations, unfollow, archive/delete, and invitation decline.

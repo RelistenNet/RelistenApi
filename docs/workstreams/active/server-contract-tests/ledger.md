@@ -41,6 +41,18 @@
 - Expected artifacts: Code diff, targeted/full test output, root AutoPlan board update, and this ledger outcome.
 - Linked ExecPlan: not needed unless provider recent-reauth work is added.
 
+### CT-004: Final Runtime Docs And Acceptance Pass
+
+- Timestamp: 2026-06-20T05:29:24Z
+- Intention / hypothesis: A short final docs pass can make the separately deployable user API runnable by a future maintainer without exposing local OAuth files or secrets.
+- Responsible agent: root Codex agent.
+- Start commit: `912be3d`
+- Worktree or branch: branch `codex/user-library-final-docs` in `/Users/alecgorge/code/relisten/RelistenApi`.
+- Mutable surface: README and AutoPlan/workstream docs only, unless final smoke checks reveal a real runtime bug.
+- Validator: `dotnet sln RelistenApi.sln list`, full user API tests, existing catalog tests, solution build, local `/health` and unauthenticated `/users/me` smoke checks, `git diff --check`, and secret-path scan.
+- Expected deliverable: Current runtime docs for local user API startup, dev auth path, provider audience configuration, and final acceptance evidence.
+- Expected artifacts: Documentation diff, validator output, root AutoPlan board update, and this ledger outcome.
+
 ## Outcomes
 
 ### CT-001: Outcome
@@ -71,4 +83,14 @@
 - Evidence: focused `UserLibraryAccountTests` passed 2 tests; full `RelistenUserApiTests` passed 79 tests; existing `RelistenApiTests` passed 47 tests; `dotnet build RelistenApi.sln` passed with 0 warnings/errors; `git diff --check` passed; secret-path scan found no committed local Google OAuth client files, downloaded paths, or secret references.
 - Review: Reviewer found a high-severity deletion-order bug for accounts with non-empty owned playlists because owned playlist entries/blocks still referenced the user through non-cascading FKs. The service now deletes owned playlists before deleting the user and the deletion test creates a non-empty owned playlist to lock in the fix. Validator confirmed the original finding was valid, the fix is sufficient, and no new actionable findings remain.
 - Conclusion: CT-003 covers the M1 server-side account export/deletion gate without adding brittle migration-string tests.
+- next_action: done
+
+### CT-004: Outcome
+
+- Timestamp: 2026-06-20T05:29:24Z
+- Result: Updated runtime docs to include the required local signing key, Development/Test simulator auth endpoint, Apple/Google provider callback and reauth routes, and provider audience configuration through environment variables or deployment secrets.
+- Artifact locations: `README.markdown`, `docs/autoplan-user-library-server.md`, `docs/workstreams/active/playlists-and-sharing/plan.md`, `docs/workstreams/active/playlists-and-sharing/ledger.md`, and this workstream plan/ledger.
+- Evidence: `dotnet sln RelistenApi.sln list` includes `RelistenUserApi` and `RelistenUserApiTests`; `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 86 tests; `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests; `dotnet build RelistenApi.sln` passed with 0 warnings/errors; local Development server on `http://localhost:5119` returned `/health` 200 `OK`, unauthenticated `/api/v3/library/users/me` 401 with `Cache-Control: no-store`, Development auth session 200, and authenticated `/api/v3/library/users/me` 200 with snake-case JSON and no-store; `git diff --check` passed; secret-path scan found no local OAuth client files, downloaded paths, or secret references.
+- Review: Root review checked that docs use placeholders only and do not include downloaded OAuth client file paths, client secrets, or 1Password secret references.
+- Conclusion: Final runtime docs close the remaining hardening/documentation gap for the user-library server plan.
 - next_action: done

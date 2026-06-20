@@ -265,3 +265,13 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused auth/account/session/Postgres-store filter passed 22 tests, `RelistenUserApiTests` passed 86 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, local Postgres smoke found migration marker 10 plus `user_data.user_sessions.reauthenticated_at`, `git diff --check` passed, and secret-path scan found no local OAuth client files, downloaded paths, or secret references.
 - Review: Root review normalized provider-token failure handling after JWKS refresh. Reviewer findings on empty algorithm allowlists and missing Postgres-backed reauth endpoint coverage were fixed with fail-closed algorithm normalization and a Postgres account-gate test that calls `/api/v3/library/auth/reauthenticate/google`.
 - Next Action: done for AUTH-002; commit this slice, then perform final acceptance/runtime docs pass.
+
+### 2026-06-20T05:33:04Z Coordination Update
+
+- Active workstream: `server-contract-tests`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-final-docs`.
+- Action: Completed final runtime docs and acceptance pass for the user-library server AutoPlan.
+- Evidence: `dotnet sln RelistenApi.sln list` includes `RelistenUserApi` and `RelistenUserApiTests`; `RelistenUserApiTests` passed 86 tests; `RelistenApiTests` passed 47 tests; `dotnet build RelistenApi.sln` passed with 0 warnings/errors; local Development server on `http://localhost:5119` returned `/health` 200 `OK`, unauthenticated `/api/v3/library/users/me` 401 with no-store, Development auth session 200, and authenticated `/api/v3/library/users/me` 200 with snake-case JSON and no-store; `git diff --check` passed; secret-path scan found no local OAuth client files, downloaded paths, or secret references.
+- Review: Root review verified README documents runtime auth/audience knobs with placeholders only, and updated workstream state so M1-complete surfaces are marked done while future hydration/provider-linking work remains backlog.
+- Next Action: done; commit this slice and mark the AutoPlan goal complete.

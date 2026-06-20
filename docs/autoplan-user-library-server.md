@@ -38,10 +38,10 @@ Fast day-to-day checks are narrower: run the targeted NUnit fixture for the work
 
 ## Local Testing and External Credentials
 
-Implementation should not block on Apple, Google, or production credentials for the foundation and most server behavior. Use deterministic test seams:
+Implementation should not block on Apple, Google, or production credentials for tests and local simulator development. Use deterministic test seams:
 
 - Serializer and controller tests run in-process against `RelistenUserApi`.
-- Auth/session tests use fake provider verifiers that return provider, subject, and allowlisted claims; they do not call Apple or Google.
+- Auth/session tests use fake provider verifiers and generated OIDC test tokens; they do not call Apple or Google.
 - Migration tests use local Postgres from `./start-local-databases.sh` when database coverage is needed.
 - Protected endpoint tests use a test authentication handler or locally signed test JWTs, not real provider tokens.
 
@@ -58,7 +58,7 @@ curl -i http://localhost:5119/api/v3/library/users/me
 
 The unauthenticated `/api/v3/library/users/me` smoke check should return `401` with `Cache-Control: no-store`. Contract tests should cover successful authenticated requests through the test auth seam.
 
-Live Apple/Google credentials are only needed when implementing provider verification against real identity providers. At that point, expect to collect Google OAuth client IDs for supported platforms and Apple Sign In identifiers/key material for web/mobile callbacks. Keep those out of the repo and inject them through local secrets or environment variables. No email provider, SMTP, or SES credentials should be required for M1.
+Live Apple/Google sign-in requires configured OIDC audiences/client IDs, supplied through deployment secrets or environment variables such as `UserAuth__Google__Audiences__0` and `UserAuth__Apple__Audiences__0`. Local mobile simulator testing can still use the Development-only auth endpoint without provider credentials. Keep downloaded OAuth client files and client secrets out of the repo. No email provider, SMTP, or SES credentials are required for M1.
 
 ## Mutable Surface
 
@@ -157,7 +157,8 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 - [x] 2026-06-20T04:49:12Z Completed deployment hardening on branch `codex/user-library-deployment-hardening` with a separate user API Dockerfile, image workflow, deploy helper, README smoke commands, Docker build, container health smoke, and reviewer-verified rollout hardening.
 - [x] 2026-06-20T05:07:54Z Completed account export/deletion gates on branch `codex/user-library-account-gates` with authenticated endpoints, behavior tests, token invalidation checks, and shared-playlist deletion coverage.
 - [x] 2026-06-20T05:29:24Z Completed live Apple/Google OIDC provider verification and recent-reauth gating on branch `codex/user-library-provider-auth` with fail-closed audience/algorithm config, Development/Test auth preserved, and reviewer fixes.
-- [ ] Run a reviewer pass after each milestone before promoting dependent backlog workstreams.
+- [x] 2026-06-20T05:33:04Z Completed final runtime docs and acceptance pass on branch `codex/user-library-final-docs`.
+- [x] Run a reviewer pass after each milestone before promoting dependent backlog workstreams.
 
 ## Workstream Board
 
@@ -165,10 +166,10 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | user-library-foundation | completed | root Codex agent | none | `docs/workstreams/active/user-library-foundation/plan.md` | `docs/workstreams/active/user-library-foundation/ledger.md` | branch `codex/user-library-foundation`; code commit `b7cab47` | Foundation slice complete: separate project, independent run/build shape, schema bootstrap, serializer contract tests, and protected profile endpoint. | `done` |
 | auth-and-sessions | completed | root Codex agent | none | `docs/workstreams/active/auth-and-sessions/plan.md` | `docs/workstreams/active/auth-and-sessions/ledger.md` | branch `codex/user-library-provider-auth` | AUTH-002 complete: live Apple/Google OIDC ID-token verification, fail-closed provider config, and recent-reauth marker for account gates. | `done` |
-| playlists-and-sharing | active | root Codex agent | none | `docs/workstreams/active/playlists-and-sharing/plan.md` | `docs/workstreams/active/playlists-and-sharing/ledger.md` | branch `codex/user-library-playlist-cache` | Core playlist/sharing M1 surface complete enough to support sync/favorites/settings; bounded catalog hydration remains deferred. | `continue` |
+| playlists-and-sharing | completed | root Codex agent | none | `docs/workstreams/active/playlists-and-sharing/plan.md` | `docs/workstreams/active/playlists-and-sharing/ledger.md` | branch `codex/user-library-playlist-cache` | Core playlist/sharing M1 surface complete; bounded catalog hydration remains deferred outside this server foundation plan. | `done` |
 | sync-favorites-settings | completed | root Codex agent | none | `docs/workstreams/active/sync-favorites-settings/plan.md` | `docs/workstreams/active/sync-favorites-settings/ledger.md` | branch `codex/user-library-sync-feed` | Sync/favorites/settings complete for M1: favorites, settings, playlists, invitations, accepted access, and revocations. | `done` |
 | playback-history | completed | root Codex agent | none | `docs/workstreams/active/playback-history/plan.md` | `docs/workstreams/active/playback-history/ledger.md` | branch `codex/user-library-history-aggregate` | M1 playback-history server surface complete: batch ingest, recent reads, and anonymous catalog aggregate queue. | `done` |
-| server-contract-tests | active | root Codex agent | none | `docs/workstreams/active/server-contract-tests/plan.md` | `docs/workstreams/active/server-contract-tests/ledger.md` | branch `codex/user-library-account-gates` | CT-003 account export/deletion gates complete; next reassess provider recent-reauth and final runtime docs. | `done` |
+| server-contract-tests | completed | root Codex agent | none | `docs/workstreams/active/server-contract-tests/plan.md` | `docs/workstreams/active/server-contract-tests/ledger.md` | branch `codex/user-library-final-docs` | Final runtime docs and acceptance checks complete. | `done` |
 
 ## Current Hypothesis
 
@@ -176,7 +177,7 @@ The foundation, auth/session, live Apple/Google OIDC provider verification, rece
 
 ## Next Iteration
 
-Commit AUTH-002, then do a final acceptance pass over runtime docs and local/deploy smoke commands before marking the server AutoPlan complete.
+Commit final docs and mark the server AutoPlan complete if the working tree is clean.
 
 ## Workstream Notes
 
@@ -246,3 +247,5 @@ When using subagents, prefer one forked worker per active workstream once write 
 2026-06-20: Milestone 6 account export/deletion gates completed on branch `codex/user-library-account-gates`. It adds authenticated `POST /api/v3/library/users/me/export` and `DELETE /api/v3/library/users/me`, account export DTOs, account data cleanup/reassignment logic for non-owned playlist references, and behavior tests that assert snake-case export, scoped data export, stale access/refresh token rejection, deletion of user-owned rows, and preservation of shared playlist content after collaborator deletion. Validation passed for focused account tests 2/2, `RelistenUserApiTests` 79 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, `git diff --check`, and secret-path scan.
 
 2026-06-20: Milestone 2/6 provider-auth completion slice landed on branch `codex/user-library-provider-auth`. It replaces the production fake provider seam with OIDC ID-token verification for Apple/Google, requires configured audiences and nonblank algorithm allowlists, requires nonce for real provider tokens, adds `/api/v3/library/auth/reauthenticate/{provider}`, stores `reauthenticated_at` on sessions, and gates account export/delete on recent reauth. Validation passed for focused auth/account/session/Postgres-store tests 22/22, `RelistenUserApiTests` 86 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, local Postgres marker/column smoke, `git diff --check`, and secret-path scan. Reviewer findings on empty algorithm allowlists and missing Postgres reauth endpoint coverage were fixed.
+
+2026-06-20: Final runtime docs and acceptance pass completed on branch `codex/user-library-final-docs`. README now documents the separate local user API process, signing-key requirement, Development/Test simulator auth path, Apple/Google provider callback and reauth routes, and provider audience environment variables without committing local OAuth client files or secrets. Final acceptance passed: solution list includes the user API/test projects, `RelistenUserApiTests` 86 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, local user API `/health` 200, unauthenticated `/users/me` 401 no-store, Development auth session 200, authenticated `/users/me` 200 snake-case no-store, `git diff --check`, and secret-path scan.

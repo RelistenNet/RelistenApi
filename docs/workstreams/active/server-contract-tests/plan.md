@@ -39,8 +39,8 @@ Depends on endpoint families existing. Can add serializer and migration placemen
 
 ## Current Hypothesis
 
-A small set of integration-style tests gives better maintenance value than a large brittle snapshot suite. Account export/deletion gates are best covered by authenticated endpoint tests plus database side-effect assertions, not migration-string or route-reflection checks.
+A small set of integration-style tests gives better maintenance value than a large brittle snapshot suite. Account export/deletion gates are covered by authenticated endpoint tests plus database side-effect assertions, not migration-string or route-reflection checks. Runtime docs now describe the separate user API process, Development-only auth path, and Apple/Google audience configuration.
 
 ## Next Scoped Step
 
-CT-001, CT-002, and CT-003 are complete. The remaining hardening pass is final runtime documentation and any provider recent-reauth integration once Apple/Google verification is implemented.
+CT-001, CT-002, CT-003, provider recent-reauth integration, and final runtime documentation are complete for the M1 server plan.
