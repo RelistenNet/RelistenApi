@@ -140,6 +140,37 @@ public static class UserDataSchemaSql
             ON user_data.playlist_edit_log(playlist_id);
         """;
 
+    public const string PlaylistBlockForeignKey = """
+        INSERT INTO user_data.playlist_blocks (id, playlist_id, created_by, created_at)
+        SELECT
+            e.block_uuid,
+            e.playlist_id,
+            (ARRAY_AGG(e.added_by ORDER BY e.created_at))[1],
+            MIN(e.created_at)
+        FROM user_data.playlist_entries e
+        LEFT JOIN user_data.playlist_blocks b ON b.id = e.block_uuid
+        WHERE e.block_uuid IS NOT NULL
+          AND b.id IS NULL
+        GROUP BY e.block_uuid, e.playlist_id
+        ON CONFLICT (id) DO NOTHING;
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'playlist_entries_block_uuid_fkey'
+                  AND conrelid = 'user_data.playlist_entries'::regclass
+            ) THEN
+                ALTER TABLE user_data.playlist_entries
+                    ADD CONSTRAINT playlist_entries_block_uuid_fkey
+                    FOREIGN KEY (block_uuid)
+                    REFERENCES user_data.playlist_blocks(id)
+                    ON DELETE RESTRICT;
+            END IF;
+        END $$;
+        """;
+
     public const string PlaylistSharingTables = """
         CREATE TABLE IF NOT EXISTS user_data.playlist_share_tokens (
             id UUID PRIMARY KEY,

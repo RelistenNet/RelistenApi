@@ -22,6 +22,7 @@ public static class UserApiApplication
         services.AddSingleton<OpaqueTokenService>();
         services.AddSingleton<AccessTokenService>();
         services.AddSingleton<RefreshTokenService>();
+        services.AddSingleton<CatalogSourceRangeService>();
         services.AddScoped<UserAuthService>();
         services.AddScoped<PlaylistService>();
         services.AddScoped<PlaylistSharingService>();

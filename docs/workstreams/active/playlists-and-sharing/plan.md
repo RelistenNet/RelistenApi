@@ -42,8 +42,8 @@ Depends on foundation and basic authenticated user identity. Auth/session landed
 
 ## Current Hypothesis
 
-A small playlist aggregate service can own operation application inside a database transaction. The first slice should create playlist metadata, create raw entries, log idempotent operations, compute canonical playlist-level `position` strings, keep `block_position` as integer ordinal inside blocks, and return deterministic operation results without adding an event-sourcing framework.
+A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks and reorder operations are now in place without adding event sourcing. The next playlist/sharing slice should finish the remaining M1 collaboration surface: clone and direct collaborator invitation acceptance.
 
 ## Next Scoped Step
 
-Implement share-token creation/exchange, mobile token exchange/access grants, collaborator/follower access checks, and tokenless reopened-link resolution for users who followed, cloned, collaborated, or still have valid local/mobile access. Keep catalog hydration, source-range expansion, reorder/delete, and public cache behavior as later slices unless the share-token contract requires a narrow supporting field.
+Implement PL-004: clone and collaborator invitation acceptance. Tests should prove cloned playlists preserve entry identity semantics through new playlist-entry UUIDs, accepted collaborators can write through the existing operation endpoint, non-invitees cannot accept or write, and revoked invitations/collaborators stop granting access. Keep catalog hydration and public cache behavior as later slices.

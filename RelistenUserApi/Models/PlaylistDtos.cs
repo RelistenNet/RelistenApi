@@ -36,9 +36,12 @@ public sealed class PlaylistOperationRequest
     public long? BaseRevision { get; init; }
     public Guid? EntryUuid { get; init; }
     public Guid? SourceTrackUuid { get; init; }
+    public Guid? SourceUuid { get; init; }
     public Guid? BlockUuid { get; init; }
     public List<Guid>? EntryUuids { get; init; }
     public List<Guid>? SourceTrackUuids { get; init; }
+    public int? StartTrackPosition { get; init; }
+    public int? EndTrackPosition { get; init; }
     public PlaylistPlacementRequest? Placement { get; init; }
 }
 
@@ -46,6 +49,8 @@ public sealed class PlaylistPlacementRequest
 {
     public Guid? AfterEntryUuid { get; init; }
     public Guid? BeforeEntryUuid { get; init; }
+    public Guid? TargetBlockUuid { get; init; }
+    public int? TargetBlockIndex { get; init; }
     public string? PositionHint { get; init; }
 }
 

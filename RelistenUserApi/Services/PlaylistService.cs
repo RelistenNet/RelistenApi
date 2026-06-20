@@ -16,10 +16,12 @@ public sealed class PlaylistService
         "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz".ToCharArray();
 
     private readonly UserApiDbService _db;
+    private readonly CatalogSourceRangeService _catalogSourceRanges;
 
-    public PlaylistService(UserApiDbService db)
+    public PlaylistService(UserApiDbService db, CatalogSourceRangeService catalogSourceRanges)
     {
         _db = db;
+        _catalogSourceRanges = catalogSourceRanges;
     }
 
     public async Task<IReadOnlyList<PlaylistResponse>> ListForUser(Guid userUuid)
@@ -164,7 +166,8 @@ public sealed class PlaylistService
             SELECT
                 playlist_id AS "PlaylistUuid",
                 operation::text AS "OperationJson",
-                result_revision AS "ResultRevision"
+                result_revision AS "ResultRevision",
+                result_status AS "ResultStatus"
             FROM user_data.playlist_edit_log
             WHERE idempotency_key = @IdempotencyKey
             """,
@@ -196,7 +199,7 @@ public sealed class PlaylistService
                 : new PlaylistOperationResponse
                 {
                     ResultRevision = existing.ResultRevision,
-                    ResultStatus = "noop_already_applied",
+                    ResultStatus = ReplayStatus(existing.ResultStatus),
                     Playlist = ToResponse(replaySnapshot)
                 };
         }
@@ -209,56 +212,50 @@ public sealed class PlaylistService
         }
 
         var entries = await LoadEntries(connection, playlistUuid, transaction);
-        if (entries.Count >= MaxEntriesPerPlaylist)
+        var mutation = await BuildMutation(request, userUuid, playlistUuid, entries);
+
+        if (mutation.FinalEntries.Count > MaxEntriesPerPlaylist)
         {
             throw new PlaylistOperationException("rejected_limit");
         }
 
-        ValidateClientIds(request, entries);
-
-        var newEntries = request.Op switch
-        {
-            "add_track" => BuildSingleEntry(request, userUuid, playlistUuid, entries.Count),
-            "add_tracks_as_block" => BuildBlockEntries(request, userUuid, playlistUuid, entries.Count),
-            _ => throw new PlaylistOperationException("unsupported_operation")
-        };
-
-        if (entries.Count + newEntries.Count > MaxEntriesPerPlaylist)
-        {
-            throw new PlaylistOperationException("rejected_limit");
-        }
-
-        if (request.Op == "add_tracks_as_block" && request.BlockUuid.HasValue)
+        if (mutation.ResultStatus == "applied" && mutation.NewBlockUuid.HasValue)
         {
             await InsertBlock(
                 connection,
                 transaction,
-                request.BlockUuid.Value,
+                mutation.NewBlockUuid.Value,
                 playlistUuid,
                 userUuid,
                 DateTimeOffset.UtcNow);
         }
 
-        foreach (var entry in newEntries)
+        foreach (var entry in mutation.NewEntries)
         {
-            await InsertEntry(connection, transaction, entry);
+            await InsertEntry(connection, transaction, entry.ToRecord(TemporaryPosition(entry.PlaylistEntryUuid)));
         }
 
-        var resultRevision = playlist.CurrentRevision + 1;
-        await connection.ExecuteAsync(
-            """
-            UPDATE user_data.playlists
-            SET current_revision = @ResultRevision,
-                updated_at = @Now
-            WHERE id = @PlaylistUuid
-            """,
-            new
-            {
-                PlaylistUuid = playlistUuid,
-                ResultRevision = resultRevision,
-                Now = DateTimeOffset.UtcNow
-            },
-            transaction);
+        var resultRevision = playlist.CurrentRevision;
+        if (mutation.ResultStatus == "applied")
+        {
+            await RewritePlaylistEntries(connection, transaction, playlistUuid, mutation.FinalEntries);
+            await DeleteEmptyBlocks(connection, transaction, playlistUuid);
+            resultRevision++;
+            await connection.ExecuteAsync(
+                """
+                UPDATE user_data.playlists
+                SET current_revision = @ResultRevision,
+                    updated_at = @Now
+                WHERE id = @PlaylistUuid
+                """,
+                new
+                {
+                    PlaylistUuid = playlistUuid,
+                    ResultRevision = resultRevision,
+                    Now = DateTimeOffset.UtcNow
+                },
+                transaction);
+        }
 
         await connection.ExecuteAsync(
             """
@@ -267,7 +264,7 @@ public sealed class PlaylistService
                  result_revision, result_status, created_at)
             VALUES
                 (@LogUuid, @PlaylistUuid, @UserUuid, CAST(@OperationJson AS jsonb), @IdempotencyKey,
-                 @BaseRevision, @ResultRevision, 'applied', @Now)
+                 @BaseRevision, @ResultRevision, @ResultStatus, @Now)
             """,
             new
             {
@@ -278,6 +275,7 @@ public sealed class PlaylistService
                 request.IdempotencyKey,
                 request.BaseRevision,
                 ResultRevision = resultRevision,
+                mutation.ResultStatus,
                 Now = DateTimeOffset.UtcNow
             },
             transaction);
@@ -289,72 +287,240 @@ public sealed class PlaylistService
         return new PlaylistOperationResponse
         {
             ResultRevision = resultRevision,
-            ResultStatus = "applied",
+            ResultStatus = mutation.ResultStatus,
             Playlist = ToResponse(snapshot)
         };
     }
 
-    private static IReadOnlyList<PlaylistEntryRecord> BuildSingleEntry(
+    private async Task<PlaylistMutation> BuildMutation(
         PlaylistOperationRequest request,
         Guid userUuid,
         Guid playlistUuid,
-        int existingCount)
+        IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        return request.Op switch
+        {
+            "add_track" => BuildSingleEntry(request, userUuid, playlistUuid, entries),
+            "add_tracks_as_block" => BuildBlockEntries(request, userUuid, playlistUuid, entries),
+            "add_source_range_as_block" => await BuildSourceRangeBlockEntries(request, userUuid, playlistUuid, entries),
+            "move_entry" => MoveEntry(request, entries),
+            "move_block" => MoveBlock(request, entries),
+            _ => throw new PlaylistOperationException("unsupported_operation")
+        };
+    }
+
+    private static PlaylistMutation BuildSingleEntry(
+        PlaylistOperationRequest request,
+        Guid userUuid,
+        Guid playlistUuid,
+        IReadOnlyList<PlaylistEntryRecord> entries)
     {
         if (request.EntryUuid == null ||
             request.SourceTrackUuid == null ||
             request.BlockUuid != null ||
             request.EntryUuids != null ||
-            request.SourceTrackUuids != null)
+            request.SourceTrackUuids != null ||
+            request.SourceUuid != null ||
+            request.StartTrackPosition != null ||
+            request.EndTrackPosition != null ||
+            HasBlockPlacement(request.Placement))
         {
             throw new PlaylistOperationException("invalid_operation");
         }
 
-        RejectPlacement(request);
+        ValidateNewClientIds([request.EntryUuid.Value], blockUuid: null, entries);
 
-        return
-        [
-            NewEntry(
+        var newEntry = NewEntry(
                 playlistUuid,
                 request.EntryUuid.Value,
                 request.SourceTrackUuid.Value,
                 blockUuid: null,
                 blockPosition: null,
-                position: PositionForOrdinal(existingCount),
-                userUuid)
-        ];
+                position: TemporaryPosition(request.EntryUuid.Value),
+                userUuid);
+        return ApplyAdd(entries, [newEntry], request.Placement, newBlockUuid: null);
     }
 
-    private static IReadOnlyList<PlaylistEntryRecord> BuildBlockEntries(
+    private static PlaylistMutation BuildBlockEntries(
         PlaylistOperationRequest request,
         Guid userUuid,
         Guid playlistUuid,
-        int existingCount)
+        IReadOnlyList<PlaylistEntryRecord> entries)
     {
         if (request.BlockUuid == null ||
             request.EntryUuids is not { Count: > 0 } ||
             request.SourceTrackUuids is not { Count: > 0 } ||
             request.EntryUuids.Count != request.SourceTrackUuids.Count ||
             request.EntryUuid != null ||
-            request.SourceTrackUuid != null)
+            request.SourceTrackUuid != null ||
+            request.SourceUuid != null ||
+            request.StartTrackPosition != null ||
+            request.EndTrackPosition != null ||
+            HasBlockPlacement(request.Placement))
         {
             throw new PlaylistOperationException("invalid_operation");
         }
 
-        RejectPlacement(request);
+        ValidateNewClientIds(request.EntryUuids, request.BlockUuid, entries);
 
-        return request.EntryUuids
+        var newEntries = request.EntryUuids
             .Select((entryUuid, index) => NewEntry(
                 playlistUuid,
                 entryUuid,
                 request.SourceTrackUuids[index],
                 request.BlockUuid.Value,
                 index,
-                PositionForOrdinal(existingCount + index),
+                TemporaryPosition(entryUuid),
                 userUuid))
             .ToList();
+        return ApplyAdd(entries, newEntries, request.Placement, request.BlockUuid.Value);
     }
 
-    private static PlaylistEntryRecord NewEntry(
+    private async Task<PlaylistMutation> BuildSourceRangeBlockEntries(
+        PlaylistOperationRequest request,
+        Guid userUuid,
+        Guid playlistUuid,
+        IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        if (request.BlockUuid == null ||
+            request.SourceUuid == null ||
+            request.StartTrackPosition == null ||
+            request.EndTrackPosition == null ||
+            request.EntryUuid != null ||
+            request.SourceTrackUuid != null ||
+            request.SourceTrackUuids != null ||
+            HasBlockPlacement(request.Placement))
+        {
+            throw new PlaylistOperationException("invalid_operation");
+        }
+
+        var sourceTrackUuids = await _catalogSourceRanges.ResolveSourceTrackUuids(
+            request.SourceUuid.Value,
+            request.StartTrackPosition.Value,
+            request.EndTrackPosition.Value);
+        var entryUuids = request.EntryUuids ?? sourceTrackUuids.Select(_ => Guid.NewGuid()).ToList();
+        if (entryUuids.Count != sourceTrackUuids.Count)
+        {
+            throw new PlaylistOperationException("invalid_operation");
+        }
+
+        ValidateNewClientIds(entryUuids, request.BlockUuid, entries);
+
+        var newEntries = entryUuids
+            .Select((entryUuid, index) => NewEntry(
+                playlistUuid,
+                entryUuid,
+                sourceTrackUuids[index],
+                request.BlockUuid.Value,
+                index,
+                TemporaryPosition(entryUuid),
+                userUuid))
+            .ToList();
+        return ApplyAdd(entries, newEntries, request.Placement, request.BlockUuid.Value);
+    }
+
+    private static PlaylistMutation MoveEntry(
+        PlaylistOperationRequest request,
+        IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        if (request.EntryUuid == null ||
+            request.SourceTrackUuid != null ||
+            request.BlockUuid != null ||
+            request.EntryUuids != null ||
+            request.SourceTrackUuids != null ||
+            request.SourceUuid != null ||
+            request.StartTrackPosition != null ||
+            request.EndTrackPosition != null ||
+            request.Placement == null)
+        {
+            throw new PlaylistOperationException("invalid_operation");
+        }
+
+        var unchangedEntries = ToMutableEntries(entries);
+        var mutableEntries = ToMutableEntries(entries);
+        var entry = mutableEntries.SingleOrDefault(candidate => candidate.PlaylistEntryUuid == request.EntryUuid);
+        if (entry == null)
+        {
+            return PlaylistMutation.NoStateChange("noop_entry_missing", unchangedEntries);
+        }
+
+        RejectMoveAnchors(request.Placement, [request.EntryUuid.Value]);
+        mutableEntries.Remove(entry);
+        if (request.Placement.TargetBlockUuid.HasValue)
+        {
+            entry.BlockUuid = request.Placement.TargetBlockUuid;
+            var blockIndex = PlacementIndexInsideBlock(
+                mutableEntries,
+                request.Placement.TargetBlockUuid.Value,
+                request.Placement.TargetBlockIndex);
+            mutableEntries.Insert(blockIndex, entry);
+        }
+        else
+        {
+            entry.BlockUuid = null;
+            entry.BlockPosition = null;
+            var insertionIndex = PlacementIndex(mutableEntries, request.Placement);
+            mutableEntries.Insert(insertionIndex, entry);
+        }
+
+        return CanonicalizeOrReject(mutableEntries, unchangedEntries: unchangedEntries);
+    }
+
+    private static PlaylistMutation MoveBlock(
+        PlaylistOperationRequest request,
+        IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        if (request.BlockUuid == null ||
+            request.EntryUuid != null ||
+            request.SourceTrackUuid != null ||
+            request.EntryUuids != null ||
+            request.SourceTrackUuids != null ||
+            request.SourceUuid != null ||
+            request.StartTrackPosition != null ||
+            request.EndTrackPosition != null ||
+            request.Placement == null ||
+            HasBlockPlacement(request.Placement))
+        {
+            throw new PlaylistOperationException("invalid_operation");
+        }
+
+        var unchangedEntries = ToMutableEntries(entries);
+        var mutableEntries = ToMutableEntries(entries);
+        var blockEntries = mutableEntries
+            .Where(entry => entry.BlockUuid == request.BlockUuid)
+            .OrderBy(entry => entry.BlockPosition)
+            .ThenBy(entry => entry.Position)
+            .ToList();
+        if (blockEntries.Count == 0)
+        {
+            return PlaylistMutation.NoStateChange("noop_block_empty", unchangedEntries);
+        }
+
+        RejectMoveAnchors(request.Placement, blockEntries.Select(entry => entry.PlaylistEntryUuid));
+
+        foreach (var entry in blockEntries)
+        {
+            mutableEntries.Remove(entry);
+        }
+
+        var insertionIndex = PlacementIndex(mutableEntries, request.Placement);
+        mutableEntries.InsertRange(insertionIndex, blockEntries);
+        return CanonicalizeOrReject(mutableEntries, unchangedEntries: unchangedEntries);
+    }
+
+    private static PlaylistMutation ApplyAdd(
+        IReadOnlyList<PlaylistEntryRecord> entries,
+        IReadOnlyList<PlaylistEntryMutation> newEntries,
+        PlaylistPlacementRequest? placement,
+        Guid? newBlockUuid)
+    {
+        var unchangedEntries = ToMutableEntries(entries);
+        var finalEntries = ToMutableEntries(entries);
+        finalEntries.InsertRange(PlacementIndex(finalEntries, placement), newEntries);
+        return CanonicalizeOrReject(finalEntries, newEntries, newBlockUuid, unchangedEntries);
+    }
+
+    private static PlaylistEntryMutation NewEntry(
         Guid playlistUuid,
         Guid entryUuid,
         Guid sourceTrackUuid,
@@ -364,7 +530,7 @@ public sealed class PlaylistService
         Guid userUuid)
     {
         var now = DateTimeOffset.UtcNow;
-        return new PlaylistEntryRecord
+        return new PlaylistEntryMutation
         {
             PlaylistEntryUuid = entryUuid,
             PlaylistUuid = playlistUuid,
@@ -376,6 +542,70 @@ public sealed class PlaylistService
             CreatedAt = now,
             UpdatedAt = now
         };
+    }
+
+    private static async Task RewritePlaylistEntries(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid playlistUuid,
+        IReadOnlyList<PlaylistEntryMutation> entries)
+    {
+        var now = DateTimeOffset.UtcNow;
+        await connection.ExecuteAsync(
+            """
+            UPDATE user_data.playlist_entries
+            SET position = CONCAT('~rewrite~', REPLACE(id::text, '-', '')),
+                block_uuid = NULL,
+                block_position = NULL,
+                updated_at = @Now
+            WHERE playlist_id = @PlaylistUuid
+            """,
+            new { PlaylistUuid = playlistUuid, Now = now },
+            transaction);
+
+        foreach (var entry in entries)
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE user_data.playlist_entries
+                SET position = @Position,
+                    block_uuid = @BlockUuid,
+                    block_position = @BlockPosition,
+                    updated_at = @Now
+                WHERE id = @PlaylistEntryUuid
+                  AND playlist_id = @PlaylistUuid
+                """,
+                new
+                {
+                    entry.PlaylistEntryUuid,
+                    entry.PlaylistUuid,
+                    entry.Position,
+                    entry.BlockUuid,
+                    entry.BlockPosition,
+                    Now = now
+                },
+                transaction);
+        }
+    }
+
+    private static Task DeleteEmptyBlocks(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid playlistUuid)
+    {
+        return connection.ExecuteAsync(
+            """
+            DELETE FROM user_data.playlist_blocks b
+            WHERE b.playlist_id = @PlaylistUuid
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM user_data.playlist_entries e
+                  WHERE e.playlist_id = b.playlist_id
+                    AND e.block_uuid = b.id
+              )
+            """,
+            new { PlaylistUuid = playlistUuid },
+            transaction);
     }
 
     private static async Task InsertEntry(
@@ -452,16 +682,16 @@ public sealed class PlaylistService
             transaction);
     }
 
-    private static void ValidateClientIds(
-        PlaylistOperationRequest request,
+    private static void ValidateNewClientIds(
+        IReadOnlyCollection<Guid> requestedEntryUuids,
+        Guid? blockUuid,
         IReadOnlyList<PlaylistEntryRecord> existingEntries)
     {
-        var requestedEntryUuids = request.Op switch
+        if (requestedEntryUuids.Any(entryUuid => entryUuid == Guid.Empty) ||
+            blockUuid == Guid.Empty)
         {
-            "add_track" when request.EntryUuid.HasValue => [request.EntryUuid.Value],
-            "add_tracks_as_block" when request.EntryUuids != null => request.EntryUuids,
-            _ => []
-        };
+            throw new PlaylistOperationException("invalid_operation");
+        }
 
         if (requestedEntryUuids.Count != requestedEntryUuids.Distinct().Count() ||
             requestedEntryUuids.Any(entryUuid =>
@@ -470,11 +700,199 @@ public sealed class PlaylistService
             throw new PlaylistOperationException("entry_uuid_conflict");
         }
 
-        if (request.BlockUuid.HasValue &&
-            existingEntries.Any(existing => existing.BlockUuid == request.BlockUuid))
+        if (blockUuid.HasValue &&
+            existingEntries.Any(existing => existing.BlockUuid == blockUuid))
         {
             throw new PlaylistOperationException("block_uuid_conflict");
         }
+    }
+
+    private static PlaylistMutation CanonicalizeOrReject(
+        List<PlaylistEntryMutation> finalEntries,
+        IReadOnlyList<PlaylistEntryMutation>? newEntries = null,
+        Guid? newBlockUuid = null,
+        IReadOnlyList<PlaylistEntryMutation>? unchangedEntries = null)
+    {
+        if (!BlocksAreContiguous(finalEntries))
+        {
+            return PlaylistMutation.NoStateChange("rejected_contiguity", unchangedEntries ?? []);
+        }
+
+        for (var index = 0; index < finalEntries.Count; index++)
+        {
+            finalEntries[index].Position = PositionForOrdinal(index);
+        }
+
+        var blockPositions = new Dictionary<Guid, int>();
+        foreach (var entry in finalEntries)
+        {
+            if (!entry.BlockUuid.HasValue)
+            {
+                entry.BlockPosition = null;
+                continue;
+            }
+
+            var nextPosition = blockPositions.GetValueOrDefault(entry.BlockUuid.Value);
+            entry.BlockPosition = nextPosition;
+            blockPositions[entry.BlockUuid.Value] = nextPosition + 1;
+        }
+
+        return PlaylistMutation.Applied(finalEntries, newEntries ?? [], newBlockUuid);
+    }
+
+    private static bool BlocksAreContiguous(IReadOnlyList<PlaylistEntryMutation> entries)
+    {
+        var seenBlocks = new HashSet<Guid>();
+        Guid? currentBlockUuid = null;
+
+        foreach (var entry in entries)
+        {
+            if (!entry.BlockUuid.HasValue)
+            {
+                currentBlockUuid = null;
+                continue;
+            }
+
+            if (currentBlockUuid == entry.BlockUuid)
+            {
+                continue;
+            }
+
+            if (seenBlocks.Contains(entry.BlockUuid.Value))
+            {
+                return false;
+            }
+
+            seenBlocks.Add(entry.BlockUuid.Value);
+            currentBlockUuid = entry.BlockUuid;
+        }
+
+        return true;
+    }
+
+    private static List<PlaylistEntryMutation> ToMutableEntries(IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        return entries
+            .Select(entry => new PlaylistEntryMutation
+            {
+                PlaylistEntryUuid = entry.PlaylistEntryUuid,
+                PlaylistUuid = entry.PlaylistUuid,
+                SourceTrackUuid = entry.SourceTrackUuid,
+                BlockUuid = entry.BlockUuid,
+                BlockPosition = entry.BlockPosition,
+                Position = entry.Position,
+                AddedByUserUuid = entry.AddedByUserUuid,
+                CreatedAt = entry.CreatedAt,
+                UpdatedAt = entry.UpdatedAt
+            })
+            .ToList();
+    }
+
+    private static int PlacementIndex(
+        IReadOnlyList<PlaylistEntryMutation> entries,
+        PlaylistPlacementRequest? placement)
+    {
+        if (placement == null)
+        {
+            return entries.Count;
+        }
+
+        if (placement.TargetBlockIndex.HasValue)
+        {
+            throw new PlaylistOperationException("invalid_placement");
+        }
+
+        var afterIndex = placement.AfterEntryUuid.HasValue
+            ? FindEntryIndex(entries, placement.AfterEntryUuid.Value)
+            : null;
+        var beforeIndex = placement.BeforeEntryUuid.HasValue
+            ? FindEntryIndex(entries, placement.BeforeEntryUuid.Value)
+            : null;
+
+        if (afterIndex.HasValue && beforeIndex.HasValue && afterIndex.Value < beforeIndex.Value)
+        {
+            return afterIndex.Value + 1;
+        }
+
+        if (beforeIndex.HasValue)
+        {
+            return beforeIndex.Value;
+        }
+
+        if (afterIndex.HasValue)
+        {
+            return afterIndex.Value + 1;
+        }
+
+        return entries.Count;
+    }
+
+    private static int PlacementIndexInsideBlock(
+        IReadOnlyList<PlaylistEntryMutation> entries,
+        Guid blockUuid,
+        int? targetBlockIndex)
+    {
+        if (blockUuid == Guid.Empty || targetBlockIndex < 0)
+        {
+            throw new PlaylistOperationException("invalid_placement");
+        }
+
+        var blockEntryIndexes = entries
+            .Select((entry, index) => new { entry, index })
+            .Where(item => item.entry.BlockUuid == blockUuid)
+            .Select(item => item.index)
+            .ToList();
+        if (blockEntryIndexes.Count == 0)
+        {
+            throw new PlaylistOperationException("invalid_placement");
+        }
+
+        var insertionIndexInBlock = targetBlockIndex ?? blockEntryIndexes.Count;
+        if (insertionIndexInBlock > blockEntryIndexes.Count)
+        {
+            throw new PlaylistOperationException("invalid_placement");
+        }
+
+        return insertionIndexInBlock == blockEntryIndexes.Count
+            ? blockEntryIndexes[^1] + 1
+            : blockEntryIndexes[insertionIndexInBlock];
+    }
+
+    private static int? FindEntryIndex(
+        IReadOnlyList<PlaylistEntryMutation> entries,
+        Guid entryUuid)
+    {
+        for (var index = 0; index < entries.Count; index++)
+        {
+            if (entries[index].PlaylistEntryUuid == entryUuid)
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private static void RejectMoveAnchors(
+        PlaylistPlacementRequest? placement,
+        IEnumerable<Guid> movingEntryUuids)
+    {
+        if (placement == null)
+        {
+            return;
+        }
+
+        var movingSet = movingEntryUuids.ToHashSet();
+        if ((placement.AfterEntryUuid.HasValue && movingSet.Contains(placement.AfterEntryUuid.Value)) ||
+            (placement.BeforeEntryUuid.HasValue && movingSet.Contains(placement.BeforeEntryUuid.Value)))
+        {
+            throw new PlaylistOperationException("invalid_placement");
+        }
+    }
+
+    private static bool HasBlockPlacement(PlaylistPlacementRequest? placement)
+    {
+        return placement?.TargetBlockUuid != null || placement?.TargetBlockIndex != null;
     }
 
     private static async Task<PlaylistSnapshot?> LoadSnapshot(
@@ -699,12 +1117,14 @@ public sealed class PlaylistService
         return (zeroBasedOrdinal + 1).ToString("D10");
     }
 
-    private static void RejectPlacement(PlaylistOperationRequest request)
+    private static string TemporaryPosition(Guid entryUuid)
     {
-        if (request.Placement != null)
-        {
-            throw new PlaylistOperationException("unsupported_placement");
-        }
+        return $"~new~{entryUuid:N}";
+    }
+
+    private static string ReplayStatus(string resultStatus)
+    {
+        return resultStatus == "applied" ? "noop_already_applied" : resultStatus;
     }
 
     private static string GenerateShortId()
@@ -725,6 +1145,69 @@ public sealed class PlaylistService
         public required Guid PlaylistUuid { get; init; }
         public required string OperationJson { get; init; }
         public required long ResultRevision { get; init; }
+        public required string ResultStatus { get; init; }
+    }
+
+    private sealed class PlaylistMutation
+    {
+        public required string ResultStatus { get; init; }
+        public required IReadOnlyList<PlaylistEntryMutation> FinalEntries { get; init; }
+        public IReadOnlyList<PlaylistEntryMutation> NewEntries { get; init; } = [];
+        public Guid? NewBlockUuid { get; init; }
+
+        public static PlaylistMutation Applied(
+            IReadOnlyList<PlaylistEntryMutation> finalEntries,
+            IReadOnlyList<PlaylistEntryMutation> newEntries,
+            Guid? newBlockUuid)
+        {
+            return new PlaylistMutation
+            {
+                ResultStatus = "applied",
+                FinalEntries = finalEntries,
+                NewEntries = newEntries,
+                NewBlockUuid = newBlockUuid
+            };
+        }
+
+        public static PlaylistMutation NoStateChange(
+            string resultStatus,
+            IReadOnlyList<PlaylistEntryMutation> finalEntries)
+        {
+            return new PlaylistMutation
+            {
+                ResultStatus = resultStatus,
+                FinalEntries = finalEntries
+            };
+        }
+    }
+
+    private sealed class PlaylistEntryMutation
+    {
+        public required Guid PlaylistEntryUuid { get; init; }
+        public required Guid PlaylistUuid { get; init; }
+        public required Guid SourceTrackUuid { get; init; }
+        public Guid? BlockUuid { get; set; }
+        public int? BlockPosition { get; set; }
+        public required string Position { get; set; }
+        public required Guid AddedByUserUuid { get; init; }
+        public required DateTimeOffset CreatedAt { get; init; }
+        public required DateTimeOffset UpdatedAt { get; init; }
+
+        public PlaylistEntryRecord ToRecord(string position)
+        {
+            return new PlaylistEntryRecord
+            {
+                PlaylistEntryUuid = PlaylistEntryUuid,
+                PlaylistUuid = PlaylistUuid,
+                SourceTrackUuid = SourceTrackUuid,
+                BlockUuid = BlockUuid,
+                BlockPosition = BlockPosition,
+                Position = position,
+                AddedByUserUuid = AddedByUserUuid,
+                CreatedAt = CreatedAt,
+                UpdatedAt = UpdatedAt
+            };
+        }
     }
 
     private static bool JsonOperationsEqual(string left, string right)

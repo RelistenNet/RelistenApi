@@ -28,6 +28,19 @@
 - Expected artifacts: Code diff, targeted test output, local Postgres schema smoke, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
 - Linked ExecPlan: none. Create one only if the sharing/access slice grows beyond a narrow server increment.
 
+### PL-003: Source Range Blocks And Reorder Operations
+
+- Timestamp: 2026-06-20T01:01:54Z
+- Intention / hypothesis: Source-range blocks and reorder operations can extend the existing transactional playlist operation service without adding event sourcing: source ranges should write contiguous entries in one block, while reorder should update canonical playlist positions and preserve integer block positions and block contiguity.
+- Responsible agent: root Codex agent.
+- Start commit: `8265b66`
+- Worktree or branch: branch `codex/user-library-playlist-reorder` in `/Users/alecgorge/code/relisten/RelistenApi`.
+- Mutable surface: playlist operation DTOs and entities, `PlaylistService`, playlist controller operation routes only if the existing operation endpoint needs new request shapes, and `RelistenUserApiTests` fixtures whose names contain `UserLibraryPlaylist` or `PlaylistOperation`.
+- Validator: targeted `RelistenUserApiTests` playlist operation tests plus `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj`, `dotnet test RelistenApiTests/RelistenApiTests.csproj`, and `dotnet build RelistenApi.sln`.
+- Expected deliverable: source-range-as-block operation semantics, entry/block reorder semantics, deterministic validation for broken block contiguity, duplicate-track-safe ordering behavior, and tests proving canonical positions and integer block positions survive reorder.
+- Expected artifacts: Code diff, targeted test output, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
+- Linked ExecPlan: none. Create one only if reorder semantics require a broader rewrite than the current playlist operation service can cleanly support.
+
 ## Outcomes
 
 ### PL-001 Outcome
@@ -70,3 +83,23 @@
 - Conclusion: PL-002 is complete. The slice adds owner-only share-token creation/revocation, hashed URL share tokens, short-lived selector/secret mobile grants, anonymous token exchange for signed-out viewer access, signed-in editor exchange into durable collaborator write access, follower-backed tokenless reopened links, owner/collaborator/follower/mobile-grant access resolution for `GET /api/v3/library/playlists/{playlistUuidOrShortId}`, and tests for owner boundaries, wrong-device grants, viewer write denial, revocation, expiry capping, and exchange/revoke serialization.
 - next_action: continue
 - Next move: Start PL-003 for source-range-as-block and reorder operations, including canonical playlist positions, integer block positions, and tests that cover duplicate tracks and block contiguity after reorder.
+
+### PL-003 Outcome
+
+- Timestamp: 2026-06-20T01:21:03Z
+- End commit: committed immediately after this ledger update on branch `codex/user-library-playlist-reorder`.
+- Artifact location: `RelistenUserApi/Services/PlaylistService.cs`, `RelistenUserApi/Services/CatalogSourceRangeService.cs`, `RelistenUserApi/Models/PlaylistDtos.cs`, `RelistenUserApi/Migrations/005_AddPlaylistBlockForeignKey.cs`, `RelistenUserApi/Migrations/UserDataSchemaSql.cs`, `RelistenUserApi/Services/UserDataSchemaInitializer.cs`, and behavior tests in `RelistenUserApiTests/UserLibraryPlaylistTests.cs`.
+- Evidence summary:
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryPlaylist|FullyQualifiedName~PlaylistOperation|FullyQualifiedName~ShareToken"` passed 29 tests.
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 46 tests.
+  - `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests.
+  - `dotnet build RelistenApi.sln` passed with 0 warnings and 0 errors.
+  - `git diff --check` passed.
+  - Local Postgres smoke showed `user_data.user_service_migrations` marker rows 1, 2, 3, 4, and 5, plus `playlist_entries_block_uuid_fkey` referencing `user_data.playlist_blocks`.
+- Review summary:
+  - Explorer identified the existing append-only operation shape, missing source-range fields, placement fields, catalog resolver need, reorder unique-index risk, and the full-playlist reorder rejection risk.
+  - First reviewer found three real issues: moving a block entry to standalone did not clear block fields, self-referential move anchors silently appended, and emptied block rows could be orphaned. The implementation now clears block membership, rejects anchors inside the moving set, deletes empty blocks after applied operations, and adds a database foreign key from entries to block rows.
+  - Second reviewer reported no findings. Residual risks: placement behavior for missing or contradictory anchors remains intentionally permissive server-owned intent handling, source-range hydration is raw UUID-only, and clone/direct invite/public cache behavior remains deferred.
+- Conclusion: PL-003 is complete. The slice adds `add_source_range_as_block`, placement-aware adds, `move_entry`, `move_block`, canonical playlist-position rewrites, integer block-position renumbering, non-applied deterministic replay statuses, source-range catalog resolution through a narrow service, and block identity enforcement with cleanup and a foreign key.
+- next_action: continue
+- Next move: Start PL-004 for clone and collaborator invitation acceptance, including owner/invitee authorization, tokenless clone/follow interactions, and tests for collaborator write access through accepted invites.

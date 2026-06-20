@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using Dapper;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -98,6 +99,87 @@ public class UserLibraryPlaylistTests
         replay.ResultStatus.Should().Be("noop_already_applied");
         replay.ResultRevision.Should().Be(1);
         replay.Playlist.Entries.Should().HaveCount(3);
+    }
+
+    [Test]
+    public async Task AddSourceRangeAsBlock_ShouldResolveCatalogTracksAndReplayIdempotently()
+    {
+        await EnsurePostgresOrIgnore();
+        var catalogSource = await SeedCatalogSource(trackCount: 5);
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var anchorEntryUuid = Guid.NewGuid();
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, anchorEntryUuid, Guid.NewGuid());
+        var blockUuid = Guid.NewGuid();
+        var entryUuids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var operation = new PlaylistOperationRequest
+        {
+            Op = "add_source_range_as_block",
+            IdempotencyKey = Guid.NewGuid(),
+            BlockUuid = blockUuid,
+            EntryUuids = entryUuids,
+            SourceUuid = catalogSource.SourceUuid,
+            StartTrackPosition = 2,
+            EndTrackPosition = 4,
+            Placement = new PlaylistPlacementRequest { BeforeEntryUuid = anchorEntryUuid }
+        };
+
+        var applied = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, operation);
+        var replay = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, operation);
+
+        applied.ResultStatus.Should().Be("applied");
+        applied.ResultRevision.Should().Be(2);
+        applied.Playlist.Entries.Take(3).Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(entryUuids);
+        applied.Playlist.Entries[3].PlaylistEntryUuid.Should().Be(anchorEntryUuid);
+        applied.Playlist.Entries.Take(3).Select(entry => entry.SourceTrackUuid)
+            .Should()
+            .Equal(catalogSource.TrackUuids.Skip(1).Take(3));
+        applied.Playlist.Entries.Take(3).Select(entry => entry.BlockUuid)
+            .Should()
+            .OnlyContain(uuid => uuid == blockUuid);
+        applied.Playlist.Entries.Take(3).Select(entry => entry.BlockPosition)
+            .Should()
+            .Equal(0, 1, 2);
+        applied.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003", "0000000004");
+        replay.ResultStatus.Should().Be("noop_already_applied");
+        replay.ResultRevision.Should().Be(2);
+        replay.Playlist.Entries.Take(3).Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(entryUuids);
+    }
+
+    [Test]
+    public async Task AddSourceRangeAsBlock_ShouldRejectInvalidCatalogRange()
+    {
+        await EnsurePostgresOrIgnore();
+        var catalogSource = await SeedCatalogSource(trackCount: 2);
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+
+        var error = await ApplyOperationExpectingError(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_source_range_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = Guid.NewGuid(),
+                EntryUuids = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()],
+                SourceUuid = catalogSource.SourceUuid,
+                StartTrackPosition = 1,
+                EndTrackPosition = 3
+            });
+
+        error.Should().Be("invalid_source_range");
     }
 
     [Test]
@@ -399,31 +481,43 @@ public class UserLibraryPlaylistTests
     }
 
     [Test]
-    public async Task Operations_ShouldRejectPlacementUntilReorderSupportExists()
+    public async Task AddTrack_ShouldHonorPlacementAndReturnCanonicalPositions()
     {
         await EnsurePostgresOrIgnore();
         await using var factory = NewFactory();
         using var client = factory.CreateClient();
         var auth = await SignIn(client);
         var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var firstEntryUuid = Guid.NewGuid();
+        var secondEntryUuid = Guid.NewGuid();
+        var insertedEntryUuid = Guid.NewGuid();
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, firstEntryUuid, Guid.NewGuid());
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, secondEntryUuid, Guid.NewGuid());
 
-        var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"/api/v3/library/playlists/{playlist.PlaylistUuid}/operations");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
-        request.Content = JsonContent(new PlaylistOperationRequest
-        {
-            Op = "add_track",
-            IdempotencyKey = Guid.NewGuid(),
-            EntryUuid = Guid.NewGuid(),
-            SourceTrackUuid = Guid.NewGuid(),
-            Placement = new PlaylistPlacementRequest { PositionHint = "aM" }
-        });
-        var response = await client.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
+        var inserted = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_track",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = insertedEntryUuid,
+                SourceTrackUuid = Guid.NewGuid(),
+                Placement = new PlaylistPlacementRequest
+                {
+                    BeforeEntryUuid = secondEntryUuid,
+                    PositionHint = "client-hint-is-not-canonical"
+                }
+            });
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        JObject.Parse(body)["error"]!.Value<string>().Should().Be("unsupported_placement");
+        inserted.ResultStatus.Should().Be("applied");
+        inserted.Playlist.Entries.Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(firstEntryUuid, insertedEntryUuid, secondEntryUuid);
+        inserted.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003");
     }
 
     [Test]
@@ -449,6 +543,352 @@ public class UserLibraryPlaylistTests
             });
 
         error.Should().Be("invalid_operation");
+    }
+
+    [Test]
+    public async Task MoveEntry_ShouldReorderByPlaylistEntryUuidNotSourceTrackUuid()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var duplicateSourceTrackUuid = Guid.NewGuid();
+        var firstEntryUuid = Guid.NewGuid();
+        var secondEntryUuid = Guid.NewGuid();
+        var tailEntryUuid = Guid.NewGuid();
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, firstEntryUuid, duplicateSourceTrackUuid);
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, secondEntryUuid, duplicateSourceTrackUuid);
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, tailEntryUuid, Guid.NewGuid());
+
+        var moved = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_entry",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = secondEntryUuid,
+                Placement = new PlaylistPlacementRequest { BeforeEntryUuid = firstEntryUuid }
+            });
+
+        moved.ResultStatus.Should().Be("applied");
+        moved.ResultRevision.Should().Be(4);
+        moved.Playlist.Entries.Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(secondEntryUuid, firstEntryUuid, tailEntryUuid);
+        moved.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003");
+        moved.Playlist.Entries.Take(2).Select(entry => entry.SourceTrackUuid)
+            .Should()
+            .OnlyContain(uuid => uuid == duplicateSourceTrackUuid);
+    }
+
+    [Test]
+    public async Task MoveBlock_ShouldMoveWholeBlockAndPreserveIntegerBlockPositions()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var firstStandaloneUuid = Guid.NewGuid();
+        var blockEntryUuids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var blockUuid = Guid.NewGuid();
+        var lastStandaloneUuid = Guid.NewGuid();
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, firstStandaloneUuid, Guid.NewGuid());
+        await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_tracks_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                EntryUuids = blockEntryUuids,
+                SourceTrackUuids = [Guid.NewGuid(), Guid.NewGuid()]
+            });
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, lastStandaloneUuid, Guid.NewGuid());
+
+        var moved = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                Placement = new PlaylistPlacementRequest { AfterEntryUuid = lastStandaloneUuid }
+            });
+
+        moved.ResultStatus.Should().Be("applied");
+        moved.Playlist.Entries.Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(firstStandaloneUuid, lastStandaloneUuid, blockEntryUuids[0], blockEntryUuids[1]);
+        moved.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003", "0000000004");
+        moved.Playlist.Entries.Skip(2).Select(entry => entry.BlockUuid)
+            .Should()
+            .OnlyContain(uuid => uuid == blockUuid);
+        moved.Playlist.Entries.Skip(2).Select(entry => entry.BlockPosition)
+            .Should()
+            .Equal(0, 1);
+    }
+
+    [Test]
+    public async Task MoveEntry_ShouldMoveBlockEntryToStandaloneAndDeleteEmptyBlock()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var blockUuid = Guid.NewGuid();
+        var entryUuid = Guid.NewGuid();
+        await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_tracks_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                EntryUuids = [entryUuid],
+                SourceTrackUuids = [Guid.NewGuid()]
+            });
+
+        var moved = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_entry",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = entryUuid,
+                Placement = new PlaylistPlacementRequest()
+            });
+
+        moved.ResultStatus.Should().Be("applied");
+        moved.Playlist.Entries.Should().ContainSingle();
+        moved.Playlist.Entries[0].BlockUuid.Should().BeNull();
+        moved.Playlist.Entries[0].BlockPosition.Should().BeNull();
+        (await CountBlockRows(blockUuid)).Should().Be(0);
+    }
+
+    [Test]
+    public async Task MoveEntry_ShouldMoveStandaloneEntryIntoExistingBlockAtTargetIndex()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var blockEntryUuids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var standaloneUuid = Guid.NewGuid();
+        var blockUuid = Guid.NewGuid();
+        await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_tracks_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                EntryUuids = blockEntryUuids,
+                SourceTrackUuids = [Guid.NewGuid(), Guid.NewGuid()]
+            });
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, standaloneUuid, Guid.NewGuid());
+
+        var moved = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_entry",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = standaloneUuid,
+                Placement = new PlaylistPlacementRequest
+                {
+                    TargetBlockUuid = blockUuid,
+                    TargetBlockIndex = 1
+                }
+            });
+
+        moved.ResultStatus.Should().Be("applied");
+        moved.Playlist.Entries.Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(blockEntryUuids[0], standaloneUuid, blockEntryUuids[1]);
+        moved.Playlist.Entries.Select(entry => entry.BlockUuid)
+            .Should()
+            .OnlyContain(uuid => uuid == blockUuid);
+        moved.Playlist.Entries.Select(entry => entry.BlockPosition)
+            .Should()
+            .Equal(0, 1, 2);
+        moved.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003");
+    }
+
+    [Test]
+    public async Task MoveOperations_ShouldRejectAnchorsInsideMovingSet()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var firstEntryUuid = Guid.NewGuid();
+        var secondEntryUuid = Guid.NewGuid();
+        var blockEntryUuids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var blockUuid = Guid.NewGuid();
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, firstEntryUuid, Guid.NewGuid());
+        await AddTrack(client, auth.AccessToken, playlist.PlaylistUuid, secondEntryUuid, Guid.NewGuid());
+        await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_tracks_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                EntryUuids = blockEntryUuids,
+                SourceTrackUuids = [Guid.NewGuid(), Guid.NewGuid()]
+            });
+
+        var selfEntryAnchor = await ApplyOperationExpectingError(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_entry",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = firstEntryUuid,
+                Placement = new PlaylistPlacementRequest { BeforeEntryUuid = firstEntryUuid }
+            });
+        var selfBlockAnchor = await ApplyOperationExpectingError(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "move_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = blockUuid,
+                Placement = new PlaylistPlacementRequest { AfterEntryUuid = blockEntryUuids[0] }
+            });
+
+        selfEntryAnchor.Should().Be("invalid_placement");
+        selfBlockAnchor.Should().Be("invalid_placement");
+    }
+
+    [Test]
+    public async Task MoveEntry_ShouldRejectPlacementThatBreaksBlockContiguity()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var blockEntryUuids = new List<Guid> { Guid.NewGuid(), Guid.NewGuid() };
+        var standaloneUuid = Guid.NewGuid();
+        await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_tracks_as_block",
+                IdempotencyKey = Guid.NewGuid(),
+                BlockUuid = Guid.NewGuid(),
+                EntryUuids = blockEntryUuids,
+                SourceTrackUuids = [Guid.NewGuid(), Guid.NewGuid()]
+            });
+        var beforeRejectedMove = await AddTrack(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            standaloneUuid,
+            Guid.NewGuid());
+
+        var rejectedOperation = new PlaylistOperationRequest
+        {
+            Op = "move_entry",
+            IdempotencyKey = Guid.NewGuid(),
+            EntryUuid = standaloneUuid,
+            Placement = new PlaylistPlacementRequest
+            {
+                AfterEntryUuid = blockEntryUuids[0],
+                BeforeEntryUuid = blockEntryUuids[1]
+            }
+        };
+        var rejected = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            rejectedOperation);
+        var replay = await ApplyOperation(
+            client,
+            auth.AccessToken,
+            playlist.PlaylistUuid,
+            rejectedOperation);
+
+        rejected.ResultStatus.Should().Be("rejected_contiguity");
+        rejected.ResultRevision.Should().Be(beforeRejectedMove.ResultRevision);
+        replay.ResultStatus.Should().Be("rejected_contiguity");
+        replay.ResultRevision.Should().Be(beforeRejectedMove.ResultRevision);
+        rejected.Playlist.Entries.Select(entry => entry.PlaylistEntryUuid)
+            .Should()
+            .Equal(blockEntryUuids[0], blockEntryUuids[1], standaloneUuid);
+        rejected.Playlist.Entries.Select(entry => entry.Position)
+            .Should()
+            .Equal("0000000001", "0000000002", "0000000003");
+    }
+
+    [Test]
+    public async Task NoopMoveOperations_ShouldReplaySameDeterministicStatus()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var playlist = await CreatePlaylist(client, auth.AccessToken);
+        var missingEntryOperation = new PlaylistOperationRequest
+        {
+            Op = "move_entry",
+            IdempotencyKey = Guid.NewGuid(),
+            EntryUuid = Guid.NewGuid(),
+            Placement = new PlaylistPlacementRequest()
+        };
+        var emptyBlockOperation = new PlaylistOperationRequest
+        {
+            Op = "move_block",
+            IdempotencyKey = Guid.NewGuid(),
+            BlockUuid = Guid.NewGuid(),
+            Placement = new PlaylistPlacementRequest()
+        };
+
+        var missingEntry = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, missingEntryOperation);
+        var missingEntryReplay = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, missingEntryOperation);
+        var emptyBlock = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, emptyBlockOperation);
+        var emptyBlockReplay = await ApplyOperation(client, auth.AccessToken, playlist.PlaylistUuid, emptyBlockOperation);
+
+        missingEntry.ResultStatus.Should().Be("noop_entry_missing");
+        missingEntryReplay.ResultStatus.Should().Be("noop_entry_missing");
+        missingEntryReplay.ResultRevision.Should().Be(missingEntry.ResultRevision);
+        emptyBlock.ResultStatus.Should().Be("noop_block_empty");
+        emptyBlockReplay.ResultStatus.Should().Be("noop_block_empty");
+        emptyBlockReplay.ResultRevision.Should().Be(emptyBlock.ResultRevision);
     }
 
     [Test]
@@ -564,6 +1004,26 @@ public class UserLibraryPlaylistTests
             UserLibraryJson.SerializerSettings)!;
     }
 
+    private static Task<PlaylistOperationResponse> AddTrack(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        Guid entryUuid,
+        Guid sourceTrackUuid)
+    {
+        return ApplyOperation(
+            client,
+            accessToken,
+            playlistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_track",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = entryUuid,
+                SourceTrackUuid = sourceTrackUuid
+            });
+    }
+
     private static async Task<string> ApplyOperationExpectingError(
         HttpClient client,
         string accessToken,
@@ -639,13 +1099,7 @@ public class UserLibraryPlaylistTests
 
     private static async Task EnsurePostgresOrIgnore()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["UserData:DatabaseUrl"] = DatabaseUrl
-            })
-            .Build();
-        await using var connection = new UserApiDbService(configuration).CreateConnection();
+        await using var connection = NewDbService().CreateConnection();
 
         try
         {
@@ -655,6 +1109,87 @@ public class UserLibraryPlaylistTests
         {
             Assert.Ignore("Local Postgres is not available for playlist integration tests.");
         }
+    }
+
+    private static async Task<CatalogSourceFixture> SeedCatalogSource(int trackCount)
+    {
+        await using var connection = NewDbService().CreateConnection();
+        await connection.OpenAsync();
+        var artistId = await connection.QuerySingleOrDefaultAsync<int?>(
+            "SELECT id FROM public.artists ORDER BY id LIMIT 1");
+        if (!artistId.HasValue)
+        {
+            Assert.Ignore("Local catalog seed data does not include an artist for source-range tests.");
+        }
+
+        var sourceUuid = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var sourceId = await connection.QuerySingleAsync<long>(
+            """
+            INSERT INTO public.sources
+                (is_soundboard, is_remaster, avg_rating, num_reviews, upstream_identifier,
+                 has_jamcharts, updated_at, artist_id, display_date, flac_type, uuid)
+            VALUES
+                (FALSE, FALSE, 0, 0, @UpstreamIdentifier, FALSE, @Now, @ArtistId,
+                 @DisplayDate, 0, @SourceUuid)
+            RETURNING id
+            """,
+            new
+            {
+                UpstreamIdentifier = $"playlist-test-source-{sourceUuid:N}",
+                Now = now,
+                ArtistId = artistId.Value,
+                DisplayDate = $"playlist-test-{sourceUuid:N}",
+                SourceUuid = sourceUuid
+            });
+
+        var trackUuids = new List<Guid>();
+        for (var position = 1; position <= trackCount; position++)
+        {
+            var trackUuid = Guid.NewGuid();
+            trackUuids.Add(trackUuid);
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO public.source_tracks
+                    (source_id, track_position, duration, title, slug, mp3_url,
+                     updated_at, artist_id, uuid)
+                VALUES
+                    (@SourceId, @TrackPosition, 180, @Title, @Slug, @Mp3Url,
+                     @Now, @ArtistId, @TrackUuid)
+                """,
+                new
+                {
+                    SourceId = sourceId,
+                    TrackPosition = position,
+                    Title = $"Playlist Test Track {position}",
+                    Slug = $"playlist-test-track-{trackUuid:N}",
+                    Mp3Url = $"https://test.invalid/{trackUuid:N}.mp3",
+                    Now = now,
+                    ArtistId = artistId.Value,
+                    TrackUuid = trackUuid
+                });
+        }
+
+        return new CatalogSourceFixture(sourceUuid, trackUuids);
+    }
+
+    private static async Task<int> CountBlockRows(Guid blockUuid)
+    {
+        await using var connection = NewDbService().CreateConnection();
+        return await connection.QuerySingleAsync<int>(
+            "SELECT COUNT(*) FROM user_data.playlist_blocks WHERE id = @BlockUuid",
+            new { BlockUuid = blockUuid });
+    }
+
+    private static UserApiDbService NewDbService()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["UserData:DatabaseUrl"] = DatabaseUrl
+            })
+            .Build();
+        return new UserApiDbService(configuration);
     }
 
     private static string UniqueUsername()
@@ -667,4 +1202,6 @@ public class UserLibraryPlaylistTests
         "postgresql://relisten:local_dev_password@127.0.0.1:15432/relisten_db";
 
     private const string TestSigningKey = "test-access-token-signing-key-with-more-than-32-bytes";
+
+    private sealed record CatalogSourceFixture(Guid SourceUuid, IReadOnlyList<Guid> TrackUuids);
 }

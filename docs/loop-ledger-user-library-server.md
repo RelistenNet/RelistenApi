@@ -99,3 +99,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused playlist/share-token tests passed 20 tests, `RelistenUserApiTests` passed 37 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained expected `user_data` share/access tables with migration markers 1, 2, 3, and 4.
 - Review: Explorer findings shaped the access resolver and tests. First reviewer finding on mobile grants outliving source token expiry was fixed. Second reviewer finding on exchange/revoke races was fixed with share-token row locks and a race test. Final reviewer reported no findings.
 - Next Action: continue for `playlists-and-sharing`; implement source-range-as-block and reorder operations next.
+
+### 2026-06-20T01:01:54Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-playlist-reorder`.
+- Action: Claimed preregistered experiment `PL-003` before implementation edits.
+- Start commit: `8265b66`.
+- Next Action: continue.
+
+### 2026-06-20T01:21:03Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Result: completed experiment `PL-003`.
+- Branch: `codex/user-library-playlist-reorder`.
+- Evidence: focused playlist/share-token tests passed 29 tests, `RelistenUserApiTests` passed 46 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained migration markers 1 through 5 plus `playlist_entries_block_uuid_fkey`.
+- Review: Explorer findings shaped the catalog resolver and reorder update strategy. First reviewer findings on standalone moves, self-referential anchors, and orphaned block rows were fixed. Second reviewer reported no findings.
+- Next Action: continue for `playlists-and-sharing`; implement clone and collaborator invitation acceptance next.
