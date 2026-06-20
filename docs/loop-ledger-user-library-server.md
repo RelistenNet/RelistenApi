@@ -171,3 +171,12 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibrarySyncTests` passed 4 tests, `RelistenUserApiTests` passed 61 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and local Postgres contained migration marker 6 plus `sync_version` support for favorites/settings.
 - Review: Reviewer findings on timestamp cursor skips and idempotent retry churn were fixed with sequence-backed cursors, per-user advisory transaction locks, and no-op retry preservation. The root review also fixed timestamp-based response ordering after the corrected reviewer attempt hit the subagent usage limit.
 - Next Action: continue for `sync-favorites-settings`; implement `SYNC-002` for playlist, invitation, and revocation sync aggregation before playback-history promotion.
+
+### 2026-06-20T04:14:40Z Coordination Update
+
+- Active workstream: `sync-favorites-settings`.
+- Result: completed experiment `SYNC-002`.
+- Branch: `codex/user-library-sync-feed`.
+- Evidence: focused `UserLibrarySyncTests` passed 6 tests, `RelistenUserApiTests` passed 63 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, secret-path scan found no local OAuth secrets or paths, and local Postgres contained migration markers 6 and 7 plus playlist/collaborator/follower `sync_version` columns.
+- Review: Root adversarial pass checked cursor advancement, access scoping, idempotent/no-op churn, and noisy tombstones; it fixed direct editor share-token exchange producing irrelevant invitation tombstones.
+- Next Action: done for `sync-favorites-settings`; promote `playback-history` next.

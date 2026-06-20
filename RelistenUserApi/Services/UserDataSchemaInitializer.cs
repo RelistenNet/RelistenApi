@@ -28,6 +28,7 @@ public sealed class UserDataSchemaInitializer
         await connection.ExecuteAsync(UserDataSchemaSql.PlaylistBlockForeignKey);
         await connection.ExecuteAsync(UserDataSchemaSql.PlaylistSharingTables);
         await connection.ExecuteAsync(UserDataSchemaSql.FavoritesSettingsTables);
+        await connection.ExecuteAsync(UserDataSchemaSql.PlaylistSyncTables);
         await connection.ExecuteAsync(
             """
             INSERT INTO user_data.user_service_migrations (version, description)
@@ -37,7 +38,8 @@ public sealed class UserDataSchemaInitializer
                 (3, 'Create playlist tables for Relisten user API'),
                 (4, 'Create playlist sharing tables for Relisten user API'),
                 (5, 'Add playlist block foreign key for Relisten user API'),
-                (6, 'Create favorites and settings tables for Relisten user API')
+                (6, 'Create favorites and settings tables for Relisten user API'),
+                (7, 'Add playlist sync metadata for Relisten user API')
             ON CONFLICT (version) DO NOTHING;
             """);
     }

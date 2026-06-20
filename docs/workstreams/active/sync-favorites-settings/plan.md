@@ -39,8 +39,8 @@ Depends on authenticated users and enough playlist tables to include playlist ch
 
 ## Current Hypothesis
 
-Sync should be simple and cursor-based: each user-owned row family that needs cross-device semantics advances a monotonic `sync_version`, and the sync endpoint returns changed rows plus tombstones after the cursor. Avoid timestamp watermarks, a complex CRDT, or a bidirectional merge system for M1.
+The M1 sync contract is complete enough to unblock playback-history: each user-owned row family that needs cross-device semantics advances a monotonic `sync_version`, and the sync endpoint returns changed rows plus tombstones after the cursor. This workstream avoided timestamp watermarks, a complex CRDT, and a bidirectional merge system.
 
 ## Next Scoped Step
 
-Aggregate playlist, collaborator invitation, follower, and revocation changes into the same sync feed. Add tombstone/version support where existing playlist-sharing tables need it, then prove incremental mobile behavior with endpoint tests.
+No further sync/favorites/settings work is planned before playback-history. Future work can add explicit unfollow/archive endpoints if product scope requires them.

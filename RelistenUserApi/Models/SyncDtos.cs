@@ -33,6 +33,9 @@ public sealed class UserLibrarySyncChangeResponse
     public required string ResourceType { get; init; }
     public FavoriteResponse? Favorite { get; init; }
     public UserSettingsResponse? Settings { get; init; }
+    public PlaylistResponse? Playlist { get; init; }
+    public PlaylistViewerStateResponse? PlaylistViewerState { get; init; }
+    public PlaylistCollaboratorResponse? Collaborator { get; init; }
     public required DateTimeOffset UpdatedAt { get; init; }
 }
 
@@ -41,6 +44,8 @@ public sealed class UserLibraryTombstoneResponse
     public required string ResourceType { get; init; }
     public string? EntityType { get; init; }
     public Guid? EntityUuid { get; init; }
+    public Guid? PlaylistUuid { get; init; }
+    public Guid? UserUuid { get; init; }
     public required DateTimeOffset DeletedAt { get; init; }
 }
 

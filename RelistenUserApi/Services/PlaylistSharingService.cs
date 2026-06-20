@@ -80,7 +80,8 @@ public sealed class PlaylistSharingService
                         UPDATE user_data.playlists
                         SET visibility = 'unlisted',
                             current_revision = current_revision + 1,
-                            updated_at = @Now
+                            updated_at = @Now,
+                            sync_version = nextval('user_data.user_sync_version_seq')
                         WHERE id = @PlaylistUuid
                         """,
                         new { PlaylistUuid = playlistUuid, Now = now },
@@ -293,7 +294,18 @@ public sealed class PlaylistSharingService
                 VALUES
                     (@PlaylistUuid, @UserUuid, @Now)
                 ON CONFLICT (playlist_id, user_id)
-                DO UPDATE SET followed_at = @Now, unfollowed_at = NULL
+                DO UPDATE SET
+                    followed_at = CASE
+                        WHEN user_data.playlist_followers.unfollowed_at IS NULL
+                        THEN user_data.playlist_followers.followed_at
+                        ELSE @Now
+                    END,
+                    unfollowed_at = NULL,
+                    sync_version = CASE
+                        WHEN user_data.playlist_followers.unfollowed_at IS NULL
+                        THEN user_data.playlist_followers.sync_version
+                        ELSE nextval('user_data.user_sync_version_seq')
+                    END
                 """,
                 new { PlaylistUuid = playlistUuid, UserUuid = userUuid, Now = DateTimeOffset.UtcNow },
                 transaction);
@@ -328,7 +340,8 @@ public sealed class PlaylistSharingService
                 UPDATE user_data.playlists
                 SET visibility = @Visibility,
                     current_revision = current_revision + 1,
-                    updated_at = @Now
+                    updated_at = @Now,
+                    sync_version = nextval('user_data.user_sync_version_seq')
                 WHERE id = @PlaylistUuid
                 """,
                 new
@@ -462,7 +475,8 @@ public sealed class PlaylistSharingService
                     THEN user_data.playlist_collaborators.accepted_at
                     ELSE NULL
                 END,
-                revoked_at = NULL
+                revoked_at = NULL,
+                sync_version = nextval('user_data.user_sync_version_seq')
             """,
             new
             {
@@ -505,7 +519,8 @@ public sealed class PlaylistSharingService
             await connection.ExecuteAsync(
                 """
                 UPDATE user_data.playlist_collaborators
-                SET accepted_at = @Now
+                SET accepted_at = @Now,
+                    sync_version = nextval('user_data.user_sync_version_seq')
                 WHERE playlist_id = @PlaylistUuid
                   AND user_id = @UserUuid
                   AND revoked_at IS NULL
@@ -541,7 +556,12 @@ public sealed class PlaylistSharingService
         var affected = await connection.ExecuteAsync(
             """
             UPDATE user_data.playlist_collaborators
-            SET revoked_at = COALESCE(revoked_at, @Now)
+            SET revoked_at = COALESCE(revoked_at, @Now),
+                sync_version = CASE
+                    WHEN revoked_at IS NULL
+                    THEN nextval('user_data.user_sync_version_seq')
+                    ELSE sync_version
+                END
             WHERE playlist_id = @PlaylistUuid
               AND user_id = @CollaboratorUserUuid
             """,
@@ -1049,7 +1069,22 @@ public sealed class PlaylistSharingService
             VALUES
                 (@CollaboratorUuid, @PlaylistUuid, @UserUuid, 'editor', @Now, @Now)
             ON CONFLICT (playlist_id, user_id)
-            DO UPDATE SET role = 'editor', accepted_at = @Now, revoked_at = NULL
+            DO UPDATE SET
+                role = 'editor',
+                accepted_at = CASE
+                    WHEN user_data.playlist_collaborators.revoked_at IS NULL
+                     AND user_data.playlist_collaborators.accepted_at IS NOT NULL
+                    THEN user_data.playlist_collaborators.accepted_at
+                    ELSE @Now
+                END,
+                revoked_at = NULL,
+                sync_version = CASE
+                    WHEN user_data.playlist_collaborators.revoked_at IS NULL
+                     AND user_data.playlist_collaborators.accepted_at IS NOT NULL
+                     AND user_data.playlist_collaborators.role = 'editor'
+                    THEN user_data.playlist_collaborators.sync_version
+                    ELSE nextval('user_data.user_sync_version_seq')
+                END
             """,
             new
             {

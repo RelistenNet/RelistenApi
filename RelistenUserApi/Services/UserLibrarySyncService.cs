@@ -230,7 +230,7 @@ public sealed class UserLibrarySyncService
             """,
             new { UserUuid = userUuid, Since = since },
             transaction);
-        var tombstones = (await connection.QueryAsync<FavoriteTombstoneRow>(
+        var favoriteTombstones = (await connection.QueryAsync<FavoriteTombstoneRow>(
                 """
                 SELECT
                     entity_type AS "EntityType",
@@ -246,6 +246,11 @@ public sealed class UserLibrarySyncService
                 new { UserUuid = userUuid, Since = since },
                 transaction))
             .ToList();
+        var playlists = await LoadPlaylistChanges(connection, transaction, userUuid, since);
+        var entriesByPlaylist = await LoadEntriesByPlaylist(connection, transaction, playlists);
+        var pendingInvitations = await LoadPendingInvitations(connection, transaction, userUuid, since);
+        var ownerCollaborators = await LoadOwnerCollaboratorChanges(connection, transaction, userUuid, since);
+        var playlistTombstones = await LoadPlaylistTombstones(connection, transaction, userUuid, since);
 
         var changes = favorites
             .Select(row => new VersionedSyncChange(
@@ -269,7 +274,62 @@ public sealed class UserLibrarySyncService
                         UpdatedAt = settings.UpdatedAt
                     }));
         }
-        var nextCursor = NextCursor(since, favorites, settings, tombstones);
+
+        foreach (var playlist in playlists)
+        {
+            changes.Add(
+                new VersionedSyncChange(
+                    playlist.SyncVersion,
+                    new UserLibrarySyncChangeResponse
+                    {
+                        ResourceType = "playlist",
+                        Playlist = ToPlaylistResponse(
+                            playlist,
+                            entriesByPlaylist.GetValueOrDefault(playlist.PlaylistUuid, [])),
+                        PlaylistViewerState = ToViewerStateResponse(playlist),
+                        UpdatedAt = playlist.UpdatedAt
+                    }));
+        }
+
+        foreach (var invitation in pendingInvitations)
+        {
+            changes.Add(
+                new VersionedSyncChange(
+                    invitation.SyncVersion,
+                    new UserLibrarySyncChangeResponse
+                    {
+                        ResourceType = "collaborator_invitation",
+                        Collaborator = ToCollaboratorResponse(invitation),
+                        UpdatedAt = invitation.UpdatedAt
+                    }));
+        }
+
+        foreach (var collaborator in ownerCollaborators)
+        {
+            changes.Add(
+                new VersionedSyncChange(
+                    collaborator.SyncVersion,
+                    new UserLibrarySyncChangeResponse
+                    {
+                        ResourceType = "playlist_collaborator",
+                        Collaborator = ToCollaboratorResponse(collaborator),
+                        UpdatedAt = collaborator.UpdatedAt
+                    }));
+        }
+
+        var tombstones = favoriteTombstones
+            .Select(row => new VersionedTombstone(row.SyncVersion, ToTombstoneResponse(row)))
+            .Concat(playlistTombstones.Select(row => new VersionedTombstone(row.SyncVersion, ToTombstoneResponse(row))))
+            .ToList();
+        var nextCursor = NextCursor(
+            since,
+            favorites.Select(row => row.SyncVersion),
+            settings == null ? Enumerable.Empty<long>() : [settings.SyncVersion],
+            favoriteTombstones.Select(row => row.SyncVersion),
+            playlists.Select(row => row.SyncVersion),
+            pendingInvitations.Select(row => row.SyncVersion),
+            ownerCollaborators.Select(row => row.SyncVersion),
+            playlistTombstones.Select(row => row.SyncVersion));
         await transaction.CommitAsync();
 
         return new UserLibrarySyncResponse
@@ -278,9 +338,228 @@ public sealed class UserLibrarySyncService
                 .OrderBy(change => change.SyncVersion)
                 .Select(change => change.Response)
                 .ToList(),
-            Tombstones = tombstones.Select(ToTombstoneResponse).ToList(),
+            Tombstones = tombstones
+                .OrderBy(tombstone => tombstone.SyncVersion)
+                .Select(tombstone => tombstone.Response)
+                .ToList(),
             NextCursor = FormatCursor(nextCursor)
         };
+    }
+
+    private static async Task<IReadOnlyList<PlaylistSyncRow>> LoadPlaylistChanges(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid userUuid,
+        long since)
+    {
+        var rows = await connection.QueryAsync<PlaylistSyncRow>(
+            """
+            SELECT
+                p.id AS "PlaylistUuid",
+                p.short_id AS "ShortId",
+                p.owner_id AS "OwnerUserUuid",
+                p.name AS "Name",
+                p.description AS "Description",
+                p.visibility AS "Visibility",
+                p.current_revision AS "CurrentRevision",
+                p.created_at AS "CreatedAt",
+                p.updated_at AS "UpdatedAt",
+                (p.owner_id = @UserUuid) AS "IsOwner",
+                (c.user_id IS NOT NULL) AS "IsCollaborator",
+                (f.user_id IS NOT NULL) AS "IsFollowing",
+                GREATEST(
+                    p.sync_version,
+                    COALESCE(c.sync_version, 0),
+                    COALESCE(f.sync_version, 0)
+                ) AS "SyncVersion"
+            FROM user_data.playlists p
+            LEFT JOIN user_data.playlist_collaborators c
+              ON c.playlist_id = p.id
+             AND c.user_id = @UserUuid
+             AND c.accepted_at IS NOT NULL
+             AND c.revoked_at IS NULL
+            LEFT JOIN user_data.playlist_followers f
+              ON f.playlist_id = p.id
+             AND f.user_id = @UserUuid
+             AND f.unfollowed_at IS NULL
+            WHERE p.archived_at IS NULL
+              AND (
+                  p.owner_id = @UserUuid
+                  OR c.user_id IS NOT NULL
+                  OR f.user_id IS NOT NULL
+              )
+              AND GREATEST(
+                    p.sync_version,
+                    COALESCE(c.sync_version, 0),
+                    COALESCE(f.sync_version, 0)
+                  ) > @Since
+            ORDER BY "SyncVersion"
+            """,
+            new { UserUuid = userUuid, Since = since },
+            transaction);
+
+        return rows.ToList();
+    }
+
+    private static async Task<IReadOnlyDictionary<Guid, IReadOnlyList<PlaylistEntryRecord>>> LoadEntriesByPlaylist(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        IReadOnlyList<PlaylistSyncRow> playlists)
+    {
+        if (playlists.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<PlaylistEntryRecord>>();
+        }
+
+        var entries = await connection.QueryAsync<PlaylistEntryRecord>(
+            """
+            SELECT
+                id AS "PlaylistEntryUuid",
+                playlist_id AS "PlaylistUuid",
+                source_track_uuid AS "SourceTrackUuid",
+                block_uuid AS "BlockUuid",
+                block_position AS "BlockPosition",
+                position AS "Position",
+                added_by AS "AddedByUserUuid",
+                created_at AS "CreatedAt",
+                updated_at AS "UpdatedAt"
+            FROM user_data.playlist_entries
+            WHERE playlist_id = ANY(@PlaylistUuids)
+            ORDER BY playlist_id, position
+            """,
+            new { PlaylistUuids = playlists.Select(playlist => playlist.PlaylistUuid).ToArray() },
+            transaction);
+
+        return entries
+            .GroupBy(entry => entry.PlaylistUuid)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<PlaylistEntryRecord>)group.ToList());
+    }
+
+    private static async Task<IReadOnlyList<CollaboratorSyncRow>> LoadPendingInvitations(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid userUuid,
+        long since)
+    {
+        var rows = await connection.QueryAsync<CollaboratorSyncRow>(
+            """
+            SELECT
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                u.username AS "Username",
+                c.role AS "Role",
+                c.invited_by AS "InvitedByUserUuid",
+                c.invited_at AS "InvitedAt",
+                c.accepted_at AS "AcceptedAt",
+                c.revoked_at AS "RevokedAt",
+                c.invited_at AS "UpdatedAt",
+                c.sync_version AS "SyncVersion"
+            FROM user_data.playlist_collaborators c
+            INNER JOIN user_data.playlists p ON p.id = c.playlist_id
+            INNER JOIN user_data.users u ON u.id = c.user_id
+            WHERE c.user_id = @UserUuid
+              AND c.accepted_at IS NULL
+              AND c.revoked_at IS NULL
+              AND p.archived_at IS NULL
+              AND c.sync_version > @Since
+            ORDER BY c.sync_version
+            """,
+            new { UserUuid = userUuid, Since = since },
+            transaction);
+
+        return rows.ToList();
+    }
+
+    private static async Task<IReadOnlyList<CollaboratorSyncRow>> LoadOwnerCollaboratorChanges(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid userUuid,
+        long since)
+    {
+        var rows = await connection.QueryAsync<CollaboratorSyncRow>(
+            """
+            SELECT
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                u.username AS "Username",
+                c.role AS "Role",
+                c.invited_by AS "InvitedByUserUuid",
+                c.invited_at AS "InvitedAt",
+                c.accepted_at AS "AcceptedAt",
+                c.revoked_at AS "RevokedAt",
+                COALESCE(c.accepted_at, c.invited_at) AS "UpdatedAt",
+                c.sync_version AS "SyncVersion"
+            FROM user_data.playlist_collaborators c
+            INNER JOIN user_data.playlists p ON p.id = c.playlist_id
+            INNER JOIN user_data.users u ON u.id = c.user_id
+            WHERE p.owner_id = @UserUuid
+              AND p.archived_at IS NULL
+              AND c.revoked_at IS NULL
+              AND c.sync_version > @Since
+            ORDER BY c.sync_version
+            """,
+            new { UserUuid = userUuid, Since = since },
+            transaction);
+
+        return rows.ToList();
+    }
+
+    private static async Task<IReadOnlyList<PlaylistTombstoneRow>> LoadPlaylistTombstones(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid userUuid,
+        long since)
+    {
+        var rows = await connection.QueryAsync<PlaylistTombstoneRow>(
+            """
+            SELECT
+                'playlist_collaborator' AS "ResourceType",
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                c.revoked_at AS "DeletedAt",
+                c.sync_version AS "SyncVersion"
+            FROM user_data.playlist_collaborators c
+            INNER JOIN user_data.playlists p ON p.id = c.playlist_id
+            WHERE p.owner_id = @UserUuid
+              AND c.revoked_at IS NOT NULL
+              AND c.sync_version > @Since
+
+            UNION ALL
+
+            SELECT
+                'playlist_access' AS "ResourceType",
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                c.revoked_at AS "DeletedAt",
+                c.sync_version AS "SyncVersion"
+            FROM user_data.playlist_collaborators c
+            WHERE c.user_id = @UserUuid
+              AND c.accepted_at IS NOT NULL
+              AND c.revoked_at IS NOT NULL
+              AND c.sync_version > @Since
+
+            UNION ALL
+
+            SELECT
+                'collaborator_invitation' AS "ResourceType",
+                c.playlist_id AS "PlaylistUuid",
+                c.user_id AS "UserUuid",
+                COALESCE(c.revoked_at, c.accepted_at) AS "DeletedAt",
+                c.sync_version AS "SyncVersion"
+            FROM user_data.playlist_collaborators c
+            WHERE c.user_id = @UserUuid
+              AND c.invited_by IS NOT NULL
+              AND (
+                  (c.accepted_at IS NULL AND c.revoked_at IS NOT NULL)
+                  OR c.accepted_at IS NOT NULL
+              )
+              AND c.sync_version > @Since
+            ORDER BY "SyncVersion"
+            """,
+            new { UserUuid = userUuid, Since = since },
+            transaction);
+
+        return rows.ToList();
     }
 
     private static string NormalizeFavoriteEntityType(string entityType)
@@ -317,26 +596,15 @@ public sealed class UserLibrarySyncService
         return cursor.ToString(CultureInfo.InvariantCulture);
     }
 
-    private static long NextCursor(
-        long since,
-        IReadOnlyList<FavoriteRow> favorites,
-        SettingsRow? settings,
-        IReadOnlyList<FavoriteTombstoneRow> tombstones)
+    private static long NextCursor(long since, params IEnumerable<long>[] syncVersions)
     {
         var nextCursor = since;
-        foreach (var favorite in favorites)
+        foreach (var versions in syncVersions)
         {
-            nextCursor = Math.Max(nextCursor, favorite.SyncVersion);
-        }
-
-        if (settings != null)
-        {
-            nextCursor = Math.Max(nextCursor, settings.SyncVersion);
-        }
-
-        foreach (var tombstone in tombstones)
-        {
-            nextCursor = Math.Max(nextCursor, tombstone.SyncVersion);
+            foreach (var version in versions)
+            {
+                nextCursor = Math.Max(nextCursor, version);
+            }
         }
 
         return nextCursor;
@@ -375,6 +643,60 @@ public sealed class UserLibrarySyncService
         };
     }
 
+    private static PlaylistResponse ToPlaylistResponse(
+        PlaylistSyncRow row,
+        IReadOnlyList<PlaylistEntryRecord> entries)
+    {
+        return new PlaylistResponse
+        {
+            PlaylistUuid = row.PlaylistUuid,
+            ShortId = row.ShortId,
+            OwnerUserUuid = row.OwnerUserUuid,
+            Name = row.Name,
+            Description = row.Description,
+            Visibility = row.Visibility,
+            CurrentRevision = row.CurrentRevision,
+            Entries = entries
+                .Select(entry => new PlaylistEntryResponse
+                {
+                    PlaylistEntryUuid = entry.PlaylistEntryUuid,
+                    SourceTrackUuid = entry.SourceTrackUuid,
+                    BlockUuid = entry.BlockUuid,
+                    BlockPosition = entry.BlockPosition,
+                    Position = entry.Position,
+                    AddedByUserUuid = entry.AddedByUserUuid
+                })
+                .ToList()
+        };
+    }
+
+    private static PlaylistViewerStateResponse ToViewerStateResponse(PlaylistSyncRow row)
+    {
+        return new PlaylistViewerStateResponse
+        {
+            IsOwner = row.IsOwner,
+            IsFollowing = row.IsFollowing,
+            IsCollaborator = row.IsCollaborator,
+            CanEdit = row.IsOwner || row.IsCollaborator,
+            AccessRole = row.IsOwner ? "owner" : row.IsCollaborator ? "editor" : "viewer"
+        };
+    }
+
+    private static PlaylistCollaboratorResponse ToCollaboratorResponse(CollaboratorSyncRow row)
+    {
+        return new PlaylistCollaboratorResponse
+        {
+            PlaylistUuid = row.PlaylistUuid,
+            UserUuid = row.UserUuid,
+            Username = row.Username,
+            Role = row.Role,
+            InvitedByUserUuid = row.InvitedByUserUuid,
+            InvitedAt = row.InvitedAt,
+            AcceptedAt = row.AcceptedAt,
+            RevokedAt = row.RevokedAt
+        };
+    }
+
     private static UserLibraryTombstoneResponse ToTombstoneResponse(FavoriteTombstoneRow row)
     {
         return new UserLibraryTombstoneResponse
@@ -382,6 +704,17 @@ public sealed class UserLibrarySyncService
             ResourceType = "favorite",
             EntityType = row.EntityType,
             EntityUuid = row.EntityUuid,
+            DeletedAt = row.DeletedAt
+        };
+    }
+
+    private static UserLibraryTombstoneResponse ToTombstoneResponse(PlaylistTombstoneRow row)
+    {
+        return new UserLibraryTombstoneResponse
+        {
+            ResourceType = row.ResourceType,
+            PlaylistUuid = row.PlaylistUuid,
+            UserUuid = row.UserUuid,
             DeletedAt = row.DeletedAt
         };
     }
@@ -410,7 +743,49 @@ public sealed class UserLibrarySyncService
         public required long SyncVersion { get; init; }
     }
 
+    private sealed class PlaylistSyncRow
+    {
+        public required Guid PlaylistUuid { get; init; }
+        public required string ShortId { get; init; }
+        public required Guid OwnerUserUuid { get; init; }
+        public required string Name { get; init; }
+        public string? Description { get; init; }
+        public required string Visibility { get; init; }
+        public required long CurrentRevision { get; init; }
+        public required DateTimeOffset CreatedAt { get; init; }
+        public required DateTimeOffset UpdatedAt { get; init; }
+        public required bool IsOwner { get; init; }
+        public required bool IsCollaborator { get; init; }
+        public required bool IsFollowing { get; init; }
+        public required long SyncVersion { get; init; }
+    }
+
+    private sealed class CollaboratorSyncRow
+    {
+        public required Guid PlaylistUuid { get; init; }
+        public required Guid UserUuid { get; init; }
+        public required string Username { get; init; }
+        public required string Role { get; init; }
+        public Guid? InvitedByUserUuid { get; init; }
+        public required DateTimeOffset InvitedAt { get; init; }
+        public DateTimeOffset? AcceptedAt { get; init; }
+        public DateTimeOffset? RevokedAt { get; init; }
+        public required DateTimeOffset UpdatedAt { get; init; }
+        public required long SyncVersion { get; init; }
+    }
+
+    private sealed class PlaylistTombstoneRow
+    {
+        public required string ResourceType { get; init; }
+        public required Guid PlaylistUuid { get; init; }
+        public required Guid UserUuid { get; init; }
+        public required DateTimeOffset DeletedAt { get; init; }
+        public required long SyncVersion { get; init; }
+    }
+
     private sealed record VersionedSyncChange(long SyncVersion, UserLibrarySyncChangeResponse Response);
+
+    private sealed record VersionedTombstone(long SyncVersion, UserLibraryTombstoneResponse Response);
 }
 
 public sealed class UserLibrarySyncException : Exception

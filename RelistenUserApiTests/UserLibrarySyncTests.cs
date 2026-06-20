@@ -104,6 +104,123 @@ public class UserLibrarySyncTests
     }
 
     [Test]
+    public async Task Sync_ShouldIncludeFollowedPlaylistAndLaterOwnerEdits()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var viewer = await SignIn(client);
+
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var ownerInitialSync = await PullSync(client, owner.AccessToken);
+        ownerInitialSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist" &&
+            change.Playlist!.PlaylistUuid == playlist.PlaylistUuid &&
+            change.PlaylistViewerState!.IsOwner);
+
+        await UpdateVisibility(client, owner.AccessToken, playlist.PlaylistUuid, "public");
+        await FollowPlaylist(client, viewer.AccessToken, playlist.PlaylistUuid);
+        var viewerFollowSync = await PullSync(client, viewer.AccessToken);
+        var followedPlaylist = viewerFollowSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist" &&
+            change.Playlist!.PlaylistUuid == playlist.PlaylistUuid).Subject;
+        followedPlaylist.PlaylistViewerState!.IsFollowing.Should().BeTrue();
+        followedPlaylist.PlaylistViewerState.AccessRole.Should().Be("viewer");
+        followedPlaylist.Playlist!.Entries.Should().BeEmpty();
+
+        var sourceTrackUuid = Guid.NewGuid();
+        await ApplyOperation(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            new PlaylistOperationRequest
+            {
+                Op = "add_track",
+                IdempotencyKey = Guid.NewGuid(),
+                EntryUuid = Guid.NewGuid(),
+                SourceTrackUuid = sourceTrackUuid
+            });
+        var viewerEditSync = await PullSync(client, viewer.AccessToken, viewerFollowSync.NextCursor);
+        var editedPlaylist = viewerEditSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist" &&
+            change.Playlist!.PlaylistUuid == playlist.PlaylistUuid).Subject;
+
+        editedPlaylist.Playlist!.Entries.Should().ContainSingle(entry => entry.SourceTrackUuid == sourceTrackUuid);
+        editedPlaylist.PlaylistViewerState!.AccessRole.Should().Be("viewer");
+
+        var idle = await PullSync(client, viewer.AccessToken, viewerEditSync.NextCursor);
+        idle.Changes.Should().BeEmpty();
+        idle.Tombstones.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task Sync_ShouldDeliverCollaboratorInvitationsAndRevocations()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var invitee = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var ownerBaseline = await PullSync(client, owner.AccessToken);
+        var inviteeBaseline = await PullSync(client, invitee.AccessToken);
+
+        await InviteCollaborator(client, owner.AccessToken, playlist.PlaylistUuid, invitee.User.Username);
+        var inviteeInviteSync = await PullSync(client, invitee.AccessToken, inviteeBaseline.NextCursor);
+        var invitation = inviteeInviteSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "collaborator_invitation" &&
+            change.Collaborator!.PlaylistUuid == playlist.PlaylistUuid).Subject;
+        invitation.Collaborator!.UserUuid.Should().Be(invitee.User.UserUuid);
+        invitation.Collaborator.AcceptedAt.Should().BeNull();
+        invitation.Collaborator.InvitedByUserUuid.Should().Be(owner.User.UserUuid);
+
+        var ownerInviteSync = await PullSync(client, owner.AccessToken, ownerBaseline.NextCursor);
+        ownerInviteSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist_collaborator" &&
+            change.Collaborator!.PlaylistUuid == playlist.PlaylistUuid &&
+            change.Collaborator.UserUuid == invitee.User.UserUuid &&
+            change.Collaborator.AcceptedAt == null);
+
+        await AcceptInvitation(client, invitee.AccessToken, playlist.PlaylistUuid);
+        var inviteeAcceptSync = await PullSync(client, invitee.AccessToken, inviteeInviteSync.NextCursor);
+        inviteeAcceptSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist" &&
+            change.Playlist!.PlaylistUuid == playlist.PlaylistUuid &&
+            change.PlaylistViewerState!.IsCollaborator &&
+            change.PlaylistViewerState.CanEdit);
+        inviteeAcceptSync.Tombstones.Should().Contain(tombstone =>
+            tombstone.ResourceType == "collaborator_invitation" &&
+            tombstone.PlaylistUuid == playlist.PlaylistUuid &&
+            tombstone.UserUuid == invitee.User.UserUuid);
+
+        var ownerAcceptSync = await PullSync(client, owner.AccessToken, ownerInviteSync.NextCursor);
+        ownerAcceptSync.Changes.Should().ContainSingle(change =>
+            change.ResourceType == "playlist_collaborator" &&
+            change.Collaborator!.PlaylistUuid == playlist.PlaylistUuid &&
+            change.Collaborator.UserUuid == invitee.User.UserUuid &&
+            change.Collaborator.AcceptedAt != null);
+
+        var revoke = await RevokeCollaborator(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            invitee.User.UserUuid);
+        revoke.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var inviteeRevokeSync = await PullSync(client, invitee.AccessToken, inviteeAcceptSync.NextCursor);
+        inviteeRevokeSync.Tombstones.Should().Contain(tombstone =>
+            tombstone.ResourceType == "playlist_access" &&
+            tombstone.PlaylistUuid == playlist.PlaylistUuid &&
+            tombstone.UserUuid == invitee.User.UserUuid);
+
+        var ownerRevokeSync = await PullSync(client, owner.AccessToken, ownerAcceptSync.NextCursor);
+        ownerRevokeSync.Tombstones.Should().Contain(tombstone =>
+            tombstone.ResourceType == "playlist_collaborator" &&
+            tombstone.PlaylistUuid == playlist.PlaylistUuid &&
+            tombstone.UserUuid == invitee.User.UserUuid);
+    }
+
+    [Test]
     public async Task IdempotentRetries_ShouldNotCreateNewSyncChanges()
     {
         await EnsurePostgresOrIgnore();
@@ -259,6 +376,133 @@ public class UserLibrarySyncTests
         return JsonConvert.DeserializeObject<UserSettingsResponse>(
             body,
             UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistResponse> CreatePlaylist(HttpClient client, string accessToken)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v3/library/playlists");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent(new CreatePlaylistRequest
+        {
+            PlaylistUuid = Guid.NewGuid(),
+            Name = "Sync Playlist"
+        });
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, body);
+        return JsonConvert.DeserializeObject<PlaylistResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistResponse> UpdateVisibility(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        string visibility)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/api/v3/library/playlists/{playlistUuid}/visibility");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent(new UpdatePlaylistVisibilityRequest { Visibility = visibility });
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistViewerStateResponse> FollowPlaylist(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v3/library/playlists/{playlistUuid}/follow");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistViewerStateResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistOperationResponse> ApplyOperation(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        PlaylistOperationRequest operation)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v3/library/playlists/{playlistUuid}/operations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent(operation);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistOperationResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistCollaboratorResponse> InviteCollaborator(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        string username)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v3/library/playlists/{playlistUuid}/collaborators/invitations");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent(new CreatePlaylistCollaboratorInvitationRequest { Username = username });
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created, body);
+        return JsonConvert.DeserializeObject<PlaylistCollaboratorResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistCollaboratorResponse> AcceptInvitation(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v3/library/invitations/{playlistUuid}/accept");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistCollaboratorResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<HttpResponseMessage> RevokeCollaborator(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        Guid collaboratorUserUuid)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/v3/library/playlists/{playlistUuid}/collaborators/{collaboratorUserUuid}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return await client.SendAsync(request);
     }
 
     private static async Task<UserLibrarySyncResponse> PullSync(

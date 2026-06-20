@@ -281,4 +281,42 @@ public static class UserDataSchemaSql
         CREATE INDEX IF NOT EXISTS idx_user_settings_sync_version
             ON user_data.user_settings(user_id, sync_version);
         """;
+
+    public const string PlaylistSyncTables = """
+        ALTER TABLE user_data.playlists
+            ADD COLUMN IF NOT EXISTS sync_version BIGINT;
+        UPDATE user_data.playlists
+        SET sync_version = nextval('user_data.user_sync_version_seq')
+        WHERE sync_version IS NULL;
+        ALTER TABLE user_data.playlists
+            ALTER COLUMN sync_version SET NOT NULL,
+            ALTER COLUMN sync_version SET DEFAULT nextval('user_data.user_sync_version_seq');
+
+        ALTER TABLE user_data.playlist_collaborators
+            ADD COLUMN IF NOT EXISTS sync_version BIGINT;
+        UPDATE user_data.playlist_collaborators
+        SET sync_version = nextval('user_data.user_sync_version_seq')
+        WHERE sync_version IS NULL;
+        ALTER TABLE user_data.playlist_collaborators
+            ALTER COLUMN sync_version SET NOT NULL,
+            ALTER COLUMN sync_version SET DEFAULT nextval('user_data.user_sync_version_seq');
+
+        ALTER TABLE user_data.playlist_followers
+            ADD COLUMN IF NOT EXISTS sync_version BIGINT;
+        UPDATE user_data.playlist_followers
+        SET sync_version = nextval('user_data.user_sync_version_seq')
+        WHERE sync_version IS NULL;
+        ALTER TABLE user_data.playlist_followers
+            ALTER COLUMN sync_version SET NOT NULL,
+            ALTER COLUMN sync_version SET DEFAULT nextval('user_data.user_sync_version_seq');
+
+        CREATE INDEX IF NOT EXISTS idx_playlists_owner_sync_version
+            ON user_data.playlists(owner_id, sync_version);
+        CREATE INDEX IF NOT EXISTS idx_playlist_collaborators_user_sync_version
+            ON user_data.playlist_collaborators(user_id, sync_version);
+        CREATE INDEX IF NOT EXISTS idx_playlist_collaborators_playlist_sync_version
+            ON user_data.playlist_collaborators(playlist_id, sync_version);
+        CREATE INDEX IF NOT EXISTS idx_playlist_followers_user_sync_version
+            ON user_data.playlist_followers(user_id, sync_version);
+        """;
 }

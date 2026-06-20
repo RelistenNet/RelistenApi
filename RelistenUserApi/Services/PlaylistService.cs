@@ -247,7 +247,8 @@ public sealed class PlaylistService
                 """
                 UPDATE user_data.playlists
                 SET current_revision = @ResultRevision,
-                    updated_at = @Now
+                    updated_at = @Now,
+                    sync_version = nextval('user_data.user_sync_version_seq')
                 WHERE id = @PlaylistUuid
                 """,
                 new
