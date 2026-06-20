@@ -59,7 +59,8 @@ public sealed class OidcAuthProviderVerifier : IAuthProviderVerifier
         var providerOptions = OptionsForProvider(normalizedProvider);
         var audiences = providerOptions.Audiences
             .Where(audience => !string.IsNullOrWhiteSpace(audience))
-            .Select(audience => audience.Trim())
+            .Select(audience => audience!.Trim())
+            .Distinct(StringComparer.Ordinal)
             .ToArray();
         var algorithms = providerOptions.ValidAlgorithms
             .Where(algorithm => !string.IsNullOrWhiteSpace(algorithm))
@@ -91,7 +92,10 @@ public sealed class OidcAuthProviderVerifier : IAuthProviderVerifier
             throw new UserAuthException("invalid_provider_token");
         }
 
-        return new ProviderIdentity(normalizedProvider, subject);
+        return new ProviderIdentity(
+            normalizedProvider,
+            subject,
+            OptionalClaim(principal, "name"));
     }
 
     private async Task<ClaimsPrincipal> ValidateToken(
@@ -166,5 +170,11 @@ public sealed class OidcAuthProviderVerifier : IAuthProviderVerifier
         return string.IsNullOrWhiteSpace(provider)
             ? string.Empty
             : provider.Trim().ToLowerInvariant();
+    }
+
+    private static string? OptionalClaim(ClaimsPrincipal principal, string claimType)
+    {
+        var value = principal.FindFirstValue(claimType);
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

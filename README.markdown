@@ -80,6 +80,30 @@ UserAuth__Apple__Audiences__0=<apple-service-id-or-bundle-id>
 
 The provider callback request body sends an ID token as `provider_token` and the client nonce as `nonce`. Account export and deletion require recent provider reauthentication.
 
+Browser web sign-in can use the server-side Google authorization-code flow:
+
+```
+GET http://localhost:5119/api/v3/library/auth/web/google/start?return_url=/account
+GET http://localhost:5119/api/v3/library/auth/web/google/callback
+POST http://localhost:5119/api/v3/library/auth/web/logout
+```
+
+The start endpoint redirects to Google, the callback exchanges the code server-side, and the API sets an httpOnly web session cookie backed by the same `user_sessions` table as bearer sessions. Cookie-authenticated unsafe API calls require a same-origin or allowed `Origin` plus an `X-Relisten-Csrf` header matching the non-httpOnly CSRF cookie.
+
+Configure the Google web OAuth client through deployment secrets or environment variables:
+
+```
+UserAuth__Google__ClientId=<google-web-client-id>
+UserAuth__Google__ClientSecret=<google-web-oauth-client-secret>
+UserAuth__Google__Audiences__0=<google-web-client-id>
+UserAuth__Google__RedirectUri=https://user.relisten.net/api/v3/library/auth/web/google/callback
+UserAuth__Web__AllowedOrigins__0=https://user.relisten.net
+```
+
+For local HTTP-only browser testing, set `UserAuth__Web__SecureCookies=false`. Keep that setting out of production.
+
+Web session cookies and OAuth state use ASP.NET Data Protection with application name `RelistenUserApi`. Multi-instance deployments must use a shared Data Protection key ring through deployment configuration; do not commit local key paths or key material.
+
 The user-library image is built separately from the catalog API:
 
 ```

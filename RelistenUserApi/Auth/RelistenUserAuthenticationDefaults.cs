@@ -3,6 +3,8 @@ namespace Relisten.UserApi.Auth;
 public static class RelistenUserAuthenticationDefaults
 {
     public const string Scheme = "RelistenUser";
+    public const string BearerScheme = "RelistenUserBearer";
+    public const string WebSessionScheme = "RelistenUserWebSession";
 
     public static class ClaimTypes
     {

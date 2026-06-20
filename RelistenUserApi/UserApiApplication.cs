@@ -1,4 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Options;
 using Relisten.UserApi.Auth;
 using Relisten.UserApi.Configuration;
 using Relisten.UserApi.Serialization;
@@ -13,6 +16,7 @@ public static class UserApiApplication
         IConfiguration configuration)
     {
         services.AddHttpContextAccessor();
+        services.AddDataProtection().SetApplicationName("RelistenUserApi");
         services.AddScoped<IAuthenticatedUserContext, HttpAuthenticatedUserContext>();
         services.Configure<UserAuthOptions>(configuration.GetSection(UserAuthOptions.SectionName));
         services.AddSingleton<IOpenIdConnectConfigurationSource, OpenIdConnectConfigurationSource>();
@@ -24,6 +28,11 @@ public static class UserApiApplication
         services.AddSingleton<ShortIdService>();
         services.AddSingleton<AccessTokenService>();
         services.AddSingleton<RefreshTokenService>();
+        services.AddScoped<WebSessionCookieEvents>();
+        services.AddScoped<WebSessionCookieService>();
+        services.AddScoped<WebOAuthStateService>();
+        services.AddScoped<WebOAuthService>();
+        services.AddHttpClient<IWebOAuthCodeExchanger, GoogleWebOAuthCodeExchanger>();
         services.AddSingleton<CatalogSourceRangeService>();
         services.AddScoped<UserAuthService>();
         services.AddScoped<PlaylistService>();
@@ -44,9 +53,41 @@ public static class UserApiApplication
         // are verified by the configured provider verifier.
         services
             .AddAuthentication(RelistenUserAuthenticationDefaults.Scheme)
-            .AddScheme<AuthenticationSchemeOptions, AccessTokenAuthenticationHandler>(
+            .AddPolicyScheme(
                 RelistenUserAuthenticationDefaults.Scheme,
+                RelistenUserAuthenticationDefaults.Scheme,
+                options =>
+                {
+                    options.ForwardDefaultSelector = context =>
+                    {
+                        var authorization = context.Request.Headers.Authorization.ToString();
+                        return authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                            ? RelistenUserAuthenticationDefaults.BearerScheme
+                            : RelistenUserAuthenticationDefaults.WebSessionScheme;
+                    };
+                })
+            .AddScheme<AuthenticationSchemeOptions, AccessTokenAuthenticationHandler>(
+                RelistenUserAuthenticationDefaults.BearerScheme,
+                _ => { })
+            .AddCookie(
+                RelistenUserAuthenticationDefaults.WebSessionScheme,
                 _ => { });
+        services
+            .AddOptions<CookieAuthenticationOptions>(RelistenUserAuthenticationDefaults.WebSessionScheme)
+            .Configure<IOptions<UserAuthOptions>>((cookieOptions, authOptions) =>
+            {
+                var web = authOptions.Value.Web;
+                cookieOptions.Cookie.Name = web.SessionCookieName;
+                cookieOptions.Cookie.HttpOnly = true;
+                cookieOptions.Cookie.SameSite = SameSiteMode.Lax;
+                cookieOptions.Cookie.SecurePolicy = web.SecureCookies
+                    ? CookieSecurePolicy.Always
+                    : CookieSecurePolicy.None;
+                cookieOptions.Cookie.Path = "/";
+                cookieOptions.EventsType = typeof(WebSessionCookieEvents);
+                cookieOptions.SlidingExpiration = true;
+                cookieOptions.ExpireTimeSpan = TimeSpan.FromDays(Math.Max(1, web.SessionCookieDays));
+            });
 
         services.AddAuthorization();
 
@@ -71,6 +112,7 @@ public static class UserApiApplication
 
         app.UseUserLibraryNoStoreHeaders();
         app.UseAuthentication();
+        app.UseMiddleware<UserLibraryWebCsrfMiddleware>();
         app.UseAuthorization();
         app.MapControllers();
 

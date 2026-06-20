@@ -1,9 +1,13 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Relisten.UserApi.Configuration;
 using Relisten.UserApi.Models;
 
 namespace Relisten.UserApi.Services;
+
+public sealed record UserAuthSessionResult(UserAccount User, UserSession Session);
 
 public sealed partial class UserAuthService
 {
@@ -42,14 +46,31 @@ public sealed partial class UserAuthService
             throw new UserAuthException("provider_mismatch");
         }
 
-        var existing = await _authStore.FindUserByProvider(identity.Provider, identity.ProviderSubject);
-        var user = existing?.User ?? await CreateUser(identity, request, now);
-        var session = await _authStore.CreateSession(
-            user.UserUuid,
+        var result = await SignInWithVerifiedIdentity(
+            identity,
+            request.Username,
+            request.DisplayName,
             new DeviceDescriptor(request.DeviceId, request.DeviceName, request.Platform),
+            allowGeneratedUsername: false,
             now);
 
-        return await IssueTokenResponse(user, session, now);
+        return await IssueTokenResponse(result.User, result.Session, now);
+    }
+
+    public Task<UserAuthSessionResult> SignInWithVerifiedIdentity(
+        ProviderIdentity identity,
+        string? username,
+        string? displayName,
+        DeviceDescriptor device,
+        bool allowGeneratedUsername)
+    {
+        return SignInWithVerifiedIdentity(
+            identity,
+            username,
+            displayName,
+            device,
+            allowGeneratedUsername,
+            DateTimeOffset.UtcNow);
     }
 
     public async Task<UserSessionResponse> Reauthenticate(
@@ -212,18 +233,51 @@ public sealed partial class UserAuthService
         }
     }
 
-    private async Task<UserAccount> CreateUser(
+    private async Task<UserAuthSessionResult> SignInWithVerifiedIdentity(
         ProviderIdentity identity,
-        ProviderSignInRequest request,
+        string? username,
+        string? displayName,
+        DeviceDescriptor device,
+        bool allowGeneratedUsername,
         DateTimeOffset now)
     {
-        var username = NormalizeUsername(request.Username);
+        var normalizedProvider = NormalizeProvider(identity.Provider);
+        if (!_options.AllowedProviders.Contains(normalizedProvider, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new UserAuthException("provider_not_supported");
+        }
+
+        var normalizedIdentity = identity with { Provider = normalizedProvider };
+        var existing = await _authStore.FindUserByProvider(
+            normalizedIdentity.Provider,
+            normalizedIdentity.ProviderSubject);
+        var user = existing?.User ?? await CreateUser(
+            normalizedIdentity,
+            username,
+            displayName,
+            allowGeneratedUsername,
+            now);
+        var session = await _authStore.CreateSession(user.UserUuid, device, now);
+
+        return new UserAuthSessionResult(user, session);
+    }
+
+    private async Task<UserAccount> CreateUser(
+        ProviderIdentity identity,
+        string? username,
+        string? displayName,
+        bool allowGeneratedUsername,
+        DateTimeOffset now)
+    {
+        var normalizedUsername = allowGeneratedUsername && string.IsNullOrWhiteSpace(username)
+            ? GeneratedProviderUsername(identity)
+            : NormalizeUsername(username);
 
         return (await _authStore.CreateUserWithProvider(
             identity.Provider,
             identity.ProviderSubject,
-            username,
-            DisplayNameOrUsername(request.DisplayName, username),
+            normalizedUsername,
+            DisplayNameOrUsername(FirstNonBlank(displayName, identity.DisplayName), normalizedUsername),
             now)).User;
     }
 
@@ -313,6 +367,19 @@ public sealed partial class UserAuthService
         return string.IsNullOrWhiteSpace(displayName)
             ? username
             : displayName.Trim();
+    }
+
+    private static string? FirstNonBlank(params string?[] values)
+    {
+        return values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+    }
+
+    private static string GeneratedProviderUsername(ProviderIdentity identity)
+    {
+        var provider = NormalizeProvider(identity.Provider);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{provider}:{identity.ProviderSubject}"));
+        var suffix = Convert.ToHexString(hash).ToLowerInvariant()[..16];
+        return $"{provider}_{suffix}";
     }
 
     private const string DevelopmentProvider = "development";

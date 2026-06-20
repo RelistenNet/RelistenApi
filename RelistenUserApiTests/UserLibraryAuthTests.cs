@@ -208,6 +208,37 @@ public class UserLibraryAuthTests
     }
 
     [Test]
+    public async Task ProviderCallback_ShouldNotUseWebClientIdAsImplicitAudience()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-web-client-id");
+        await using var factory = NewOidcFactory(
+            oidc,
+            configureAudience: false,
+            configureClientId: true);
+        using var client = factory.CreateClient();
+        var token = oidc.IssueIdToken("google-subject-web-client-only", "nonce-123");
+
+        var response = await client.PostAsync(
+            "/api/v3/library/auth/callback/google",
+            JsonContent(new ProviderSignInRequest
+            {
+                ProviderToken = token,
+                Nonce = "nonce-123",
+                Username = "oidc_webonly",
+                DisplayName = "OIDC Web Only",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(await response.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("provider_not_configured");
+    }
+
+    [Test]
     public async Task OidcVerifier_ShouldFailClosedWhenAlgorithmAllowlistIsEmpty()
     {
         var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
@@ -420,6 +451,32 @@ public class UserLibraryAuthTests
     }
 
     [Test]
+    public async Task ProviderCallback_ShouldRequireUsernameForJsonSignIn()
+    {
+        var fakeProvider = new FakeProviderVerifier();
+        fakeProvider.AddSubject("google", "provider-token", "google-subject-1");
+        await using var factory = NewFactory(fakeProvider);
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync(
+            "/api/v3/library/auth/callback/google",
+            JsonContent(new ProviderSignInRequest
+            {
+                ProviderToken = "provider-token",
+                DisplayName = "Relisten User",
+                DeviceId = "device-1",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        JObject.Parse(await response.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("username_required");
+    }
+
+    [Test]
     public async Task BearerAccess_ShouldRejectSessionForDifferentUser()
     {
         var fakeProvider = new FakeProviderVerifier();
@@ -535,7 +592,8 @@ public class UserLibraryAuthTests
 
     private static WebApplicationFactory<Program> NewOidcFactory(
         TestOidcProvider oidc,
-        bool configureAudience = true)
+        bool configureAudience = true,
+        bool configureClientId = false)
     {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
@@ -557,6 +615,10 @@ public class UserLibraryAuthTests
                     if (configureAudience)
                     {
                         values["UserAuth:Google:Audiences:0"] = oidc.Audience;
+                    }
+                    if (configureClientId)
+                    {
+                        values["UserAuth:Google:ClientId"] = oidc.Audience;
                     }
 
                     configuration.AddInMemoryCollection(values);

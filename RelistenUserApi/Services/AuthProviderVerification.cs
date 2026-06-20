@@ -1,6 +1,9 @@
 namespace Relisten.UserApi.Services;
 
-public sealed record ProviderIdentity(string Provider, string ProviderSubject);
+public sealed record ProviderIdentity(
+    string Provider,
+    string ProviderSubject,
+    string? DisplayName = null);
 
 public interface IAuthProviderVerifier
 {
