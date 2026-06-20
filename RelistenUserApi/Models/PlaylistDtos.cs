@@ -69,6 +69,11 @@ public sealed class ClonePlaylistRequest
     public string? Description { get; init; }
 }
 
+public sealed class UpdatePlaylistVisibilityRequest
+{
+    public required string Visibility { get; init; }
+}
+
 public sealed class CreatePlaylistShareTokenRequest
 {
     public required string Role { get; init; }

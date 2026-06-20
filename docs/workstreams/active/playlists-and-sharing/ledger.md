@@ -54,6 +54,19 @@
 - Expected artifacts: Code diff, targeted test output, root AutoPlan board update, reviewer subagent report, and this ledger outcome.
 - Linked ExecPlan: none. Create one only if clone/collaboration semantics require larger schema or sync work than a narrow server slice can support.
 
+### PL-005: Public Playlist Cache And Read Contract
+
+- Timestamp: 2026-06-20T01:49:48Z
+- Intention / hypothesis: Public playlist reads can be made revision-cacheable without weakening private/unlisted access by adding a small owner visibility endpoint and routing cache headers from the resolved playlist access context instead of the global no-store middleware.
+- Responsible agent: root Codex agent.
+- Start commit: `6deea35`
+- Worktree or branch: branch `codex/user-library-playlist-cache` in `/Users/alecgorge/code/relisten/RelistenApi`.
+- Mutable surface: playlist read DTOs, `PlaylistSharingService` read/access result shape, `PlaylistsController` read and visibility routes, user-library cache-header middleware, and `RelistenUserApiTests` fixtures whose names contain `UserLibraryPlaylist` or `ShareToken`.
+- Validator: targeted `RelistenUserApiTests` playlist/share-token tests plus `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj`, `dotnet test RelistenApiTests/RelistenApiTests.csproj`, and `dotnet build RelistenApi.sln`.
+- Expected deliverable: owner-only visibility update, anonymous public playlist reads with revision ETags, `304 Not Modified` handling for matching public ETags, no-store private/authenticated/unlisted reads, and tests proving token-bearing paths do not cache or echo tokens.
+- Expected artifacts: Code diff, targeted test output, root AutoPlan board update, explorer/reviewer subagent reports, and this ledger outcome.
+- Linked ExecPlan: none. Create one only if cache/header behavior requires broader HTTP infrastructure than route-local response headers can cover.
+
 ## Outcomes
 
 ### PL-001 Outcome
@@ -136,3 +149,22 @@
 - Conclusion: PL-004 is complete. The slice adds playlist clone, new clone-owned entry/block identities, idempotent clone replay, direct collaborator invitation, invitee-only acceptance, collaborator write access after acceptance, owner revocation, retry-safe revoke, and both nested and invitation-inbox accept routes.
 - next_action: continue
 - Next move: Start PL-005 for public playlist/cache behavior and the remaining playlist read contract, including revision-aware public cache headers, private/authenticated no-store checks, and catalog hydration boundaries before promoting sync/favorites/settings.
+
+### PL-005 Outcome
+
+- Timestamp: 2026-06-20T02:01:13Z
+- End commit: committed immediately after this ledger update on branch `codex/user-library-playlist-cache`.
+- Artifact location: `RelistenUserApi/Controllers/PlaylistsController.cs`, `RelistenUserApi/Models/PlaylistDtos.cs`, `RelistenUserApi/Services/PlaylistSharingService.cs`, `RelistenUserApi/UserApiApplication.cs`, and behavior tests in `RelistenUserApiTests/UserLibraryPlaylistTests.cs` and `RelistenUserApiTests/UserLibraryShareTokenTests.cs`.
+- Evidence summary:
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryPlaylist|FullyQualifiedName~ShareToken"` passed 40 tests.
+  - `dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj` passed 57 tests.
+  - `dotnet test RelistenApiTests/RelistenApiTests.csproj` passed 47 tests.
+  - `dotnet build RelistenApi.sln` passed with 0 warnings and 0 errors.
+  - `git diff --check` passed.
+- Review summary:
+  - Explorer identified that public visibility existed in the access resolver but had no route, the global no-store middleware would overwrite public cache headers, and `?hydrate=` had no explicit contract.
+  - First reviewer found two cache-privacy issues: public responses lacked `Vary` for headers that affect cache decisions, and malformed partial mobile-grant headers could be treated as tokenless cacheable reads. The implementation now sends `Vary: Authorization, X-Relisten-Mobile-Grant, X-Relisten-Device-Id` on public cacheable reads and disqualifies any request carrying either mobile-grant header from public caching.
+  - Final reviewer reported no actionable findings. Residual hydration work remains intentionally deferred: `?hydrate=true` returns `hydration_not_supported` until a bounded catalog hydration service is implemented.
+- Conclusion: PL-005 is complete. The slice adds owner-only visibility updates with revision bumps, anonymous tokenless public playlist reads with revision ETags and `304 Not Modified`, conservative `Vary` headers, no-store behavior for authenticated/private/unlisted/mobile-grant and token-bearing paths, explicit unsupported hydration behavior, public-to-private transition coverage, and no token echo on mobile-grant reads.
+- next_action: continue
+- Next move: Promote `sync-favorites-settings` from backlog and start its first schema/API slice for source/tour/song favorites, settings, tombstones, and incremental sync cursors.

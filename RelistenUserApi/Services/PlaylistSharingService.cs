@@ -304,6 +304,49 @@ public sealed class PlaylistSharingService
             ?? throw new InvalidOperationException("Followed playlist could not be loaded.");
     }
 
+    public async Task<PlaylistResponse?> UpdateVisibility(
+        Guid ownerUserUuid,
+        Guid playlistUuid,
+        UpdatePlaylistVisibilityRequest request)
+    {
+        var visibility = NormalizeVisibility(request.Visibility);
+        await using var connection = _db.CreateConnection();
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+
+        var playlist = await LockPlaylistForOwner(connection, transaction, ownerUserUuid, playlistUuid);
+        if (playlist == null)
+        {
+            await transaction.RollbackAsync();
+            return null;
+        }
+
+        if (playlist.Visibility != visibility)
+        {
+            await connection.ExecuteAsync(
+                """
+                UPDATE user_data.playlists
+                SET visibility = @Visibility,
+                    current_revision = current_revision + 1,
+                    updated_at = @Now
+                WHERE id = @PlaylistUuid
+                """,
+                new
+                {
+                    PlaylistUuid = playlistUuid,
+                    Visibility = visibility,
+                    Now = DateTimeOffset.UtcNow
+                },
+                transaction);
+        }
+
+        var updated = await LoadPlaylistRecord(connection, playlistUuid, transaction)
+            ?? throw new InvalidOperationException("Updated playlist could not be loaded.");
+        var snapshot = await BuildSnapshot(connection, updated, transaction);
+        await transaction.CommitAsync();
+        return ToResponse(snapshot);
+    }
+
     public async Task<PlaylistCloneResult?> ClonePlaylist(
         Guid userUuid,
         string playlistIdentifier,
@@ -1265,6 +1308,19 @@ public sealed class PlaylistSharingService
         return normalized is "viewer" or "editor"
             ? normalized
             : throw new PlaylistOperationException("invalid_share_role");
+    }
+
+    private static string NormalizeVisibility(string visibility)
+    {
+        if (string.IsNullOrWhiteSpace(visibility))
+        {
+            throw new PlaylistOperationException("invalid_visibility");
+        }
+
+        var normalized = visibility.Trim().ToLowerInvariant();
+        return normalized is "private" or "unlisted" or "public"
+            ? normalized
+            : throw new PlaylistOperationException("invalid_visibility");
     }
 
     private static string NormalizeUsername(string username)

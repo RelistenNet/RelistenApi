@@ -135,3 +135,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused share/collaboration tests passed 10 tests, `RelistenUserApiTests` passed 50 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and `git diff --check` passed.
 - Review: Explorer findings shaped clone and invitation boundaries. Reviewer findings on clone revision/logging, snapshot consistency, short-id collision retry, idempotency lock ordering, replay snapshots, description idempotency semantics, retry-safe revoke, and the documented invitation accept route were accepted and fixed with behavior tests.
 - Next Action: continue for `playlists-and-sharing`; implement public playlist/cache behavior and the remaining playlist read contract next.
+
+### 2026-06-20T01:49:48Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-playlist-cache`.
+- Action: Claimed preregistered experiment `PL-005` before implementation edits.
+- Start commit: `6deea35`.
+- Next Action: continue.
+
+### 2026-06-20T02:01:13Z Coordination Update
+
+- Active workstream: `playlists-and-sharing`.
+- Result: completed experiment `PL-005`.
+- Branch: `codex/user-library-playlist-cache`.
+- Evidence: focused playlist/share-token tests passed 40 tests, `RelistenUserApiTests` passed 57 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, and `git diff --check` passed.
+- Review: Explorer findings shaped the cache/read scope. Reviewer findings on missing `Vary` and partial mobile-grant headers becoming cacheable were accepted and fixed with behavior tests. Final reviewer reported no actionable findings.
+- Next Action: continue; promote `sync-favorites-settings` next for favorites/settings schema, tombstones, and sync cursors.

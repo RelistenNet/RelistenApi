@@ -56,15 +56,41 @@ public sealed class PlaylistsController : ControllerBase
 
     [AllowAnonymous]
     [HttpGet("{playlistIdentifier}")]
+    [ProducesResponseType(StatusCodes.Status304NotModified)]
     [ProducesResponseType(typeof(PlaylistResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaylistErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<PlaylistResponse>> Get([FromRoute] string playlistIdentifier)
+    public async Task<ActionResult<PlaylistResponse>> Get(
+        [FromRoute] string playlistIdentifier,
+        [FromQuery] bool hydrate = false)
     {
+        var mobileGrant = MobileGrantFromHeaders();
         var access = await _sharingService.GetForViewer(
             OptionalAuthenticatedUserUuid(),
             playlistIdentifier,
-            MobileGrantFromHeaders());
-        return access == null ? NotFound() : PlaylistSharingService.ToResponse(access.Snapshot);
+            mobileGrant);
+        if (access == null)
+        {
+            return NotFound();
+        }
+
+        if (hydrate)
+        {
+            return BadRequest(new PlaylistErrorResponse { Error = "hydration_not_supported" });
+        }
+
+        if (IsAnonymousTokenlessRequest() &&
+            access.Snapshot.Playlist.Visibility == "public")
+        {
+            var etag = PublicPlaylistEtag(access.Snapshot.Playlist);
+            SetPublicPlaylistCacheHeaders(etag);
+            if (RequestMatchesEtag(etag))
+            {
+                return StatusCode(StatusCodes.Status304NotModified);
+            }
+        }
+
+        return PlaylistSharingService.ToResponse(access.Snapshot);
     }
 
     [HttpGet("{playlistUuid:guid}/viewer-state")]
@@ -90,6 +116,29 @@ public sealed class PlaylistsController : ControllerBase
             playlistUuid,
             MobileGrantFromHeaders());
         return viewerState == null ? NotFound() : viewerState;
+    }
+
+    [HttpPatch("{playlistUuid:guid}/visibility")]
+    [ProducesResponseType(typeof(PlaylistResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaylistErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaylistResponse>> UpdateVisibility(
+        [FromRoute] Guid playlistUuid,
+        [FromBody] UpdatePlaylistVisibilityRequest request)
+    {
+        try
+        {
+            var playlist = await _sharingService.UpdateVisibility(
+                _authenticatedUserContext.CurrentUser.UserUuid,
+                playlistUuid,
+                request);
+            return playlist == null ? NotFound() : playlist;
+        }
+        catch (PlaylistOperationException ex)
+        {
+            return PlaylistError(ex);
+        }
     }
 
     [HttpPost("{playlistIdentifier}/clone")]
@@ -281,6 +330,56 @@ public sealed class PlaylistsController : ControllerBase
         return string.IsNullOrWhiteSpace(grant) || string.IsNullOrWhiteSpace(deviceId)
             ? null
             : new PlaylistMobileGrantCredential(grant.Trim(), deviceId.Trim());
+    }
+
+    private bool IsAnonymousTokenlessRequest()
+    {
+        return !Request.Headers.ContainsKey("Authorization") &&
+               !Request.Headers.ContainsKey("X-Relisten-Mobile-Grant") &&
+               !Request.Headers.ContainsKey("X-Relisten-Device-Id");
+    }
+
+    private static string PublicPlaylistEtag(PlaylistRecord playlist)
+    {
+        return $"\"playlist-{playlist.ShortId}-rev-{playlist.CurrentRevision}\"";
+    }
+
+    private void SetPublicPlaylistCacheHeaders(string etag)
+    {
+        Response.Headers["Cache-Control"] = "public, max-age=300";
+        Response.Headers["ETag"] = etag;
+        AddVaryHeaders("Authorization", "X-Relisten-Mobile-Grant", "X-Relisten-Device-Id");
+        Response.Headers.Remove("Pragma");
+    }
+
+    private void AddVaryHeaders(params string[] names)
+    {
+        var values = Response.Headers["Vary"]
+            .ToString()
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        foreach (var name in names)
+        {
+            if (!values.Any(existing => string.Equals(existing, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                values.Add(name);
+            }
+        }
+
+        Response.Headers["Vary"] = string.Join(", ", values);
+    }
+
+    private bool RequestMatchesEtag(string etag)
+    {
+        var ifNoneMatch = Request.Headers["If-None-Match"].ToString();
+        if (string.IsNullOrWhiteSpace(ifNoneMatch))
+        {
+            return false;
+        }
+
+        return ifNoneMatch
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(candidate => candidate == "*" || string.Equals(candidate, etag, StringComparison.Ordinal));
     }
 
     private ObjectResult PlaylistError(PlaylistOperationException ex)

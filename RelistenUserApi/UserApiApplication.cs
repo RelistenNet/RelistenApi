@@ -80,10 +80,14 @@ public static class UserApiApplication
             {
                 context.Response.OnStarting(() =>
                 {
-                    // User-library responses are account-scoped or security-sensitive, including
-                    // auth challenges, so this namespace defaults to no-store.
-                    context.Response.Headers.CacheControl = "no-store";
-                    context.Response.Headers.Pragma = "no-cache";
+                    // User-library responses default to no-store. A small number of tokenless
+                    // public playlist reads set an explicit revision-cacheable policy first.
+                    if (!context.Response.Headers.ContainsKey("Cache-Control"))
+                    {
+                        context.Response.Headers["Cache-Control"] = "no-store";
+                        context.Response.Headers["Pragma"] = "no-cache";
+                    }
+
                     return Task.CompletedTask;
                 });
             }

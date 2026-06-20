@@ -51,12 +51,20 @@ public class UserLibraryShareTokenTests
         exchange.MobileAccessGrant.Should().NotBeNull();
         exchange.MobileAccessGrant!.Token.Should().NotBe(shareToken.Token);
 
-        var reopened = await GetPlaylist(
+        var reopenedResponse = await GetPlaylistResponse(
             client,
             playlist.ShortId,
             accessToken: null,
             exchange.MobileAccessGrant.Token,
             "ios-simulator");
+        var reopenedBody = await reopenedResponse.Content.ReadAsStringAsync();
+        reopenedResponse.StatusCode.Should().Be(HttpStatusCode.OK, reopenedBody);
+        reopenedResponse.Headers.CacheControl!.NoStore.Should().BeTrue();
+        reopenedBody.Should().NotContain(shareToken.Token);
+        reopenedBody.Should().NotContain(exchange.MobileAccessGrant.Token);
+        var reopened = JsonConvert.DeserializeObject<PlaylistResponse>(
+            reopenedBody,
+            UserLibraryJson.SerializerSettings)!;
         reopened.PlaylistUuid.Should().Be(playlist.PlaylistUuid);
 
         var wrongDeviceRead = await GetPlaylistResponse(

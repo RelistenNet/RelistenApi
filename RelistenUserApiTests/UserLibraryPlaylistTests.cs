@@ -917,6 +917,238 @@ public class UserLibraryPlaylistTests
     }
 
     [Test]
+    public async Task PublicPlaylistReads_ShouldUseRevisionEtagsForAnonymousTokenlessReads()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var firstTrack = await AddTrack(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            Guid.NewGuid(),
+            Guid.NewGuid());
+        var publicPlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+
+        publicPlaylist.Visibility.Should().Be("public");
+        publicPlaylist.CurrentRevision.Should().Be(firstTrack.ResultRevision + 1);
+
+        var anonymousRead = await client.GetAsync(
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}?hydrate=false");
+        var anonymousBody = await anonymousRead.Content.ReadAsStringAsync();
+        var expectedEtag = $"\"playlist-{publicPlaylist.ShortId}-rev-{publicPlaylist.CurrentRevision}\"";
+
+        anonymousRead.StatusCode.Should().Be(HttpStatusCode.OK, anonymousBody);
+        anonymousRead.Headers.CacheControl!.Public.Should().BeTrue();
+        anonymousRead.Headers.CacheControl.MaxAge.Should().Be(TimeSpan.FromSeconds(300));
+        anonymousRead.Headers.CacheControl.NoStore.Should().BeFalse();
+        anonymousRead.Headers.ETag!.Tag.Should().Be(expectedEtag);
+        var vary = string.Join(", ", anonymousRead.Headers.Vary);
+        vary.Should().Contain("Authorization");
+        vary.Should().Contain("X-Relisten-Mobile-Grant");
+        vary.Should().Contain("X-Relisten-Device-Id");
+        anonymousRead.Headers.Pragma.Should().BeEmpty();
+        var response = JsonConvert.DeserializeObject<PlaylistResponse>(
+            anonymousBody,
+            UserLibraryJson.SerializerSettings)!;
+        response.Entries.Should().ContainSingle();
+
+        var freshRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        freshRequest.Headers.TryAddWithoutValidation("If-None-Match", expectedEtag);
+        var notModified = await client.SendAsync(freshRequest);
+        var notModifiedBody = await notModified.Content.ReadAsStringAsync();
+
+        notModified.StatusCode.Should().Be(HttpStatusCode.NotModified, notModifiedBody);
+        notModified.Headers.CacheControl!.Public.Should().BeTrue();
+        notModified.Headers.ETag!.Tag.Should().Be(expectedEtag);
+        notModifiedBody.Should().BeEmpty();
+
+        var changed = await AddTrack(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            Guid.NewGuid(),
+            Guid.NewGuid());
+        var changedRead = await client.GetAsync($"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+
+        changedRead.StatusCode.Should().Be(HttpStatusCode.OK);
+        changedRead.Headers.ETag!.Tag.Should()
+            .Be($"\"playlist-{publicPlaylist.ShortId}-rev-{changed.ResultRevision}\"");
+    }
+
+    [Test]
+    public async Task PublicPlaylistAuthenticatedReads_ShouldRemainNoStore()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var publicPlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+        var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", owner.AccessToken);
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        response.Headers.ETag.Should().BeNull();
+    }
+
+    [Test]
+    public async Task PublicPlaylistPartialMobileGrantHeader_ShouldRemainNoStore()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var publicPlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+        var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        request.Headers.Add("X-Relisten-Mobile-Grant", "selector.secret");
+
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        response.Headers.ETag.Should().BeNull();
+
+        var deviceOnlyRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        deviceOnlyRequest.Headers.Add("X-Relisten-Device-Id", "ios-simulator");
+        var deviceOnlyResponse = await client.SendAsync(deviceOnlyRequest);
+
+        deviceOnlyResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        deviceOnlyResponse.Headers.CacheControl!.NoStore.Should().BeTrue();
+        deviceOnlyResponse.Headers.ETag.Should().BeNull();
+    }
+
+    [Test]
+    public async Task PublicToPrivateTransition_ShouldHideAnonymousReadsButRetainFollowerAccess()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var follower = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var publicPlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+        await FollowPlaylist(client, follower.AccessToken, playlist.PlaylistUuid);
+
+        var privatePlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "private");
+        var anonymousRead = await client.GetAsync($"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        var followerRequest = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"/api/v3/library/playlists/{publicPlaylist.ShortId}");
+        followerRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", follower.AccessToken);
+        var followerRead = await client.SendAsync(followerRequest);
+
+        privatePlaylist.Visibility.Should().Be("private");
+        privatePlaylist.CurrentRevision.Should().Be(publicPlaylist.CurrentRevision + 1);
+        anonymousRead.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        anonymousRead.Headers.CacheControl!.NoStore.Should().BeTrue();
+        anonymousRead.Headers.ETag.Should().BeNull();
+        followerRead.StatusCode.Should().Be(HttpStatusCode.OK);
+        followerRead.Headers.CacheControl!.NoStore.Should().BeTrue();
+        followerRead.Headers.ETag.Should().BeNull();
+    }
+
+    [Test]
+    public async Task PrivateAnonymousRead_ShouldRemainNotFoundNoStore()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+
+        var response = await client.GetAsync($"/api/v3/library/playlists/{playlist.ShortId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        response.Headers.ETag.Should().BeNull();
+    }
+
+    [Test]
+    public async Task HydratedPlaylistReads_ShouldUseExplicitUnsupportedBoundary()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+        var publicPlaylist = await UpdateVisibility(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+
+        var response = await client.GetAsync($"/api/v3/library/playlists/{publicPlaylist.ShortId}?hydrate=true");
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+        JObject.Parse(body)["error"]!.Value<string>().Should().Be("hydration_not_supported");
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        response.Headers.ETag.Should().BeNull();
+    }
+
+    [Test]
+    public async Task UpdateVisibility_ShouldBeOwnerOnlyAndValidateValues()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var other = await SignIn(client);
+        var playlist = await CreatePlaylist(client, owner.AccessToken);
+
+        var nonOwner = await UpdateVisibilityResponse(
+            client,
+            other.AccessToken,
+            playlist.PlaylistUuid,
+            "public");
+        var invalid = await UpdateVisibilityResponse(
+            client,
+            owner.AccessToken,
+            playlist.PlaylistUuid,
+            "discoverable");
+        var invalidBody = await invalid.Content.ReadAsStringAsync();
+
+        nonOwner.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        invalid.StatusCode.Should().Be(HttpStatusCode.BadRequest, invalidBody);
+        JObject.Parse(invalidBody)["error"]!.Value<string>().Should().Be("invalid_visibility");
+    }
+
+    [Test]
     public async Task Playlists_ShouldSerializeSnakeCaseAndRequireAuth()
     {
         await EnsurePostgresOrIgnore();
@@ -981,6 +1213,53 @@ public class UserLibraryPlaylistTests
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, body);
         return JsonConvert.DeserializeObject<PlaylistResponse>(body, UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<PlaylistResponse> UpdateVisibility(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        string visibility)
+    {
+        var response = await UpdateVisibilityResponse(client, accessToken, playlistUuid, visibility);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<HttpResponseMessage> UpdateVisibilityResponse(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid,
+        string visibility)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/api/v3/library/playlists/{playlistUuid}/visibility");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        request.Content = JsonContent(new UpdatePlaylistVisibilityRequest { Visibility = visibility });
+        return await client.SendAsync(request);
+    }
+
+    private static async Task<PlaylistViewerStateResponse> FollowPlaylist(
+        HttpClient client,
+        string accessToken,
+        Guid playlistUuid)
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"/api/v3/library/playlists/{playlistUuid}/follow");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<PlaylistViewerStateResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
     }
 
     private static async Task<PlaylistOperationResponse> ApplyOperation(

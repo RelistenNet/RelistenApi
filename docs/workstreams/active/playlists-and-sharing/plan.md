@@ -42,8 +42,8 @@ Depends on foundation and basic authenticated user identity. Auth/session landed
 
 ## Current Hypothesis
 
-A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks, reorder operations, clone, and collaborator invitations are now in place without adding event sourcing. The next playlist/sharing slice should close the remaining read-contract hardening before sync work: public playlist cache behavior, private/authenticated no-store behavior, and catalog hydration boundaries.
+A small playlist aggregate service can own operation application inside a database transaction. Source-range blocks, reorder operations, clone, collaborator invitations, and public cache/read-contract hardening are now in place without adding event sourcing. This workstream has enough M1 playlist/sharing surface to unblock sync/favorites/settings; bounded catalog hydration remains deferred as a later playlist read-contract slice.
 
 ## Next Scoped Step
 
-Implement PL-005: public playlist/cache behavior and the remaining playlist read contract. Tests should prove public reads are revision-cacheable, private/authenticated reads stay `no-store`, share-token and mobile-grant paths do not leak tokens, and playlist responses expose a stable catalog hydration boundary for mobile without pulling catalog API concerns into the user-library service.
+Pause new playlist/sharing implementation while `sync-favorites-settings` starts. Return here later for bounded `?hydrate=true`, playlist edit log reads, batch operations, unfollow, archive/delete, and invitation decline if those become required before release.
