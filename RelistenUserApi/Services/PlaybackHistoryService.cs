@@ -1,3 +1,4 @@
+using System.Globalization;
 using Dapper;
 using Relisten.UserApi.Models;
 
@@ -6,6 +7,8 @@ namespace Relisten.UserApi.Services;
 public sealed class PlaybackHistoryService
 {
     private const int MaxBatchSize = 500;
+    private const int DefaultRecentLimit = 50;
+    private const int MaxRecentLimit = 100;
 
     private readonly UserApiDbService _db;
 
@@ -138,6 +141,39 @@ public sealed class PlaybackHistoryService
         };
     }
 
+    public async Task<PlaybackHistoryRecentResponse> GetRecent(Guid userUuid, string? limit)
+    {
+        var normalizedLimit = NormalizeRecentLimit(limit);
+        await using var connection = _db.CreateConnection();
+        var items = await connection.QueryAsync<PlaybackHistoryItemResponse>(
+            """
+            SELECT
+                id AS "HistoryUuid",
+                client_event_uuid AS "ClientEventUuid",
+                source_track_uuid AS "SourceTrackUuid",
+                source_uuid AS "SourceUuid",
+                playlist_uuid AS "PlaylistUuid",
+                playlist_entry_uuid AS "PlaylistEntryUuid",
+                block_uuid AS "BlockUuid",
+                block_position AS "BlockPosition",
+                played_at AS "PlayedAt"
+            FROM user_data.playback_history
+            WHERE user_id = @UserUuid
+            ORDER BY played_at DESC, id DESC
+            LIMIT @Limit
+            """,
+            new
+            {
+                UserUuid = userUuid,
+                Limit = normalizedLimit
+            });
+
+        return new PlaybackHistoryRecentResponse
+        {
+            Items = items.ToList()
+        };
+    }
+
     private static void ValidateEvent(PlaybackHistoryEventRequest historyEvent)
     {
         if (historyEvent.ClientEventUuid == Guid.Empty ||
@@ -173,6 +209,23 @@ public sealed class PlaybackHistoryService
             historyEvent.Platform.Trim().ToLowerInvariant(),
             historyEvent.AppVersion.Trim(),
             historyEvent.DeviceId.Trim());
+    }
+
+    private static int NormalizeRecentLimit(string? limit)
+    {
+        if (limit == null)
+        {
+            return DefaultRecentLimit;
+        }
+
+        if (!int.TryParse(limit, NumberStyles.None, CultureInfo.InvariantCulture, out var parsedLimit) ||
+            parsedLimit <= 0 ||
+            parsedLimit > MaxRecentLimit)
+        {
+            throw new PlaybackHistoryException("invalid_history_limit");
+        }
+
+        return parsedLimit;
     }
 
     private static async Task<bool> IsHistoryEnabled(

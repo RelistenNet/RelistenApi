@@ -198,3 +198,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibraryHistoryTests` passed 2 tests, `RelistenUserApiTests` passed 65 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, secret-path scan found no local OAuth secrets or paths, and local Postgres contained migration marker 8 plus `playback_history`, `playback_history_ingest_keys`, and expected playback-history indexes.
 - Review: Root adversarial pass fixed ingest-key `device_id` normalization, added block-attribution validation, confirmed no direct user API writes to catalog `source_track_plays`, and deferred Timescale hypertable conversion after full-suite validation exposed non-idempotent local DDL when startup converted the table implicitly.
 - Next Action: continue for `playback-history`; implement a narrow catalog aggregate sink or recent-history query endpoint next.
+
+### 2026-06-20T04:27:04Z Coordination Update
+
+- Active workstream: `playback-history`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-history-read`.
+- Action: Claimed preregistered experiment `HIST-002` for a capped authenticated recent-history endpoint before implementation completion.
+- Start commit: `315ce33`.
+- Next Action: continue.
+
+### 2026-06-20T04:29:14Z Coordination Update
+
+- Active workstream: `playback-history`.
+- Result: completed experiment `HIST-002`.
+- Branch: `codex/user-library-history-read`.
+- Evidence: focused `UserLibraryHistoryTests` passed 6 tests, `RelistenUserApiTests` passed 69 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no local OAuth secrets or paths.
+- Review: Root adversarial pass tightened the recent-history response by omitting ingest-only `device_id`, `platform`, and `app_version`. Reviewer found a low raw response-shape test gap; the test now asserts snake-case attribution fields and rejects ingest-only metadata. Focused tests caught the intermediate DTO mistake before full validation.
+- Next Action: continue for `playback-history`; implement the catalog-owned aggregate sink next.

@@ -40,8 +40,8 @@ Depends on authenticated users and user settings for history-disabled behavior. 
 
 ## Current Hypothesis
 
-Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into `user_data.playback_history`. Do not write directly to catalog `source_track_plays` from this slice; add a narrow aggregate sink later.
+Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into `user_data.playback_history`. Expose recent personal history through a capped authenticated read endpoint. Do not write directly to catalog `source_track_plays` from the user API; add a narrow catalog-owned aggregate sink later.
 
 ## Next Scoped Step
 
-HIST-001 is implemented. The next step is to add a narrow catalog aggregate sink or recent-history query endpoint after the batch ingest contract is reviewed.
+HIST-001 and HIST-002 are implemented. The next step is to add a narrow catalog-owned aggregate sink for accepted plays.

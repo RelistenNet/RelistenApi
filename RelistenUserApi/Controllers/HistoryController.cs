@@ -23,6 +23,24 @@ public sealed class HistoryController : ControllerBase
         _historyService = historyService;
     }
 
+    [HttpGet("recent")]
+    [ProducesResponseType(typeof(PlaybackHistoryRecentResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PlaybackHistoryErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<PlaybackHistoryRecentResponse>> Recent([FromQuery] string? limit = null)
+    {
+        try
+        {
+            return await _historyService.GetRecent(
+                _authenticatedUserContext.CurrentUser.UserUuid,
+                limit);
+        }
+        catch (PlaybackHistoryException ex)
+        {
+            return BadRequest(new PlaybackHistoryErrorResponse { Error = ex.Code });
+        }
+    }
+
     [HttpPost("batch")]
     [ProducesResponseType(typeof(PlaybackHistoryBatchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(PlaybackHistoryErrorResponse), StatusCodes.Status400BadRequest)]

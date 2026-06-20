@@ -185,13 +185,132 @@ public class UserLibraryHistoryTests
         keyCount.Should().Be(0);
     }
 
+    [Test]
+    public async Task Recent_ShouldReturnNewestRowsForCurrentUserOnly()
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var owner = await SignIn(client);
+        var otherUser = await SignIn(client);
+        var olderEventUuid = Guid.NewGuid();
+        var newerEventUuid = Guid.NewGuid();
+        var excludedEventUuid = Guid.NewGuid();
+        var otherUserEventUuid = Guid.NewGuid();
+        var deviceId = $"history-recent-{Guid.NewGuid():N}";
+        var sourceUuid = Guid.NewGuid();
+        var newerSourceTrackUuid = Guid.NewGuid();
+        var playlistUuid = Guid.NewGuid();
+        var playlistEntryUuid = Guid.NewGuid();
+        var blockUuid = Guid.NewGuid();
+
+        await UploadBatch(
+            client,
+            owner.AccessToken,
+            new PlaybackHistoryBatchRequest
+            {
+                Events =
+                [
+                    NewHistoryEvent(
+                        olderEventUuid,
+                        deviceId,
+                        sourceTrackUuid: Guid.NewGuid(),
+                        sourceUuid,
+                        playlistUuid: null,
+                        playlistEntryUuid: null,
+                        playedAt: DateTimeOffset.Parse("2026-06-20T10:00:00Z")),
+                    NewHistoryEvent(
+                        newerEventUuid,
+                        deviceId,
+                        sourceTrackUuid: newerSourceTrackUuid,
+                        sourceUuid,
+                        playlistUuid,
+                        playlistEntryUuid,
+                        blockUuid,
+                        blockPosition: 7,
+                        playedAt: DateTimeOffset.Parse("2026-06-20T10:02:00Z")),
+                    NewHistoryEvent(
+                        excludedEventUuid,
+                        deviceId,
+                        sourceTrackUuid: Guid.NewGuid(),
+                        sourceUuid,
+                        playlistUuid: null,
+                        playlistEntryUuid: null,
+                        playedAt: DateTimeOffset.Parse("2026-06-20T09:59:00Z"))
+                ]
+            });
+        await UploadBatch(
+            client,
+            otherUser.AccessToken,
+            new PlaybackHistoryBatchRequest
+            {
+                Events =
+                [
+                    NewHistoryEvent(
+                        otherUserEventUuid,
+                        deviceId,
+                        sourceTrackUuid: Guid.NewGuid(),
+                        sourceUuid,
+                        playlistUuid: null,
+                        playlistEntryUuid: null,
+                        playedAt: DateTimeOffset.Parse("2026-06-20T10:03:00Z"))
+                ]
+            });
+
+        var recent = await ReadRecent(client, owner.AccessToken, limit: 2);
+        var recentJson = await ReadRecentJson(client, owner.AccessToken, limit: 2);
+        var firstItemJson = (JObject)((JArray)recentJson["items"]!)[0]!;
+
+        recent.Items.Select(item => item.ClientEventUuid)
+            .Should()
+            .Equal(newerEventUuid, olderEventUuid);
+        recent.Items[0].SourceTrackUuid.Should().Be(newerSourceTrackUuid);
+        recent.Items[0].PlaylistUuid.Should().Be(playlistUuid);
+        recent.Items[0].PlaylistEntryUuid.Should().Be(playlistEntryUuid);
+        recent.Items[0].BlockUuid.Should().Be(blockUuid);
+        recent.Items[0].BlockPosition.Should().Be(7);
+        recent.Items.Should().NotContain(item => item.ClientEventUuid == excludedEventUuid);
+        recent.Items.Should().NotContain(item => item.ClientEventUuid == otherUserEventUuid);
+        firstItemJson["client_event_uuid"]!.Value<string>().Should().Be(newerEventUuid.ToString());
+        firstItemJson["source_track_uuid"]!.Value<string>().Should().Be(newerSourceTrackUuid.ToString());
+        firstItemJson["playlist_uuid"]!.Value<string>().Should().Be(playlistUuid.ToString());
+        firstItemJson["playlist_entry_uuid"]!.Value<string>().Should().Be(playlistEntryUuid.ToString());
+        firstItemJson["block_uuid"]!.Value<string>().Should().Be(blockUuid.ToString());
+        firstItemJson["block_position"]!.Value<int>().Should().Be(7);
+        firstItemJson.Property("device_id").Should().BeNull();
+        firstItemJson.Property("platform").Should().BeNull();
+        firstItemJson.Property("app_version").Should().BeNull();
+    }
+
+    [TestCase("101")]
+    [TestCase("0")]
+    [TestCase("not-a-number")]
+    public async Task Recent_ShouldRejectInvalidLimit(string limit)
+    {
+        await EnsurePostgresOrIgnore();
+        await using var factory = NewFactory();
+        using var client = factory.CreateClient();
+        var auth = await SignIn(client);
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v3/library/history/recent?limit={limit}");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, body);
+        JObject.Parse(body)["error"]!.Value<string>().Should().Be("invalid_history_limit");
+    }
+
     private static PlaybackHistoryEventRequest NewHistoryEvent(
         Guid clientEventUuid,
         string deviceId,
         Guid sourceTrackUuid,
         Guid sourceUuid,
         Guid? playlistUuid,
-        Guid? playlistEntryUuid)
+        Guid? playlistEntryUuid,
+        Guid? blockUuid = null,
+        int? blockPosition = null,
+        DateTimeOffset? playedAt = null)
     {
         return new PlaybackHistoryEventRequest
         {
@@ -200,7 +319,9 @@ public class UserLibraryHistoryTests
             SourceUuid = sourceUuid,
             PlaylistUuid = playlistUuid,
             PlaylistEntryUuid = playlistEntryUuid,
-            PlayedAt = DateTimeOffset.UtcNow.AddSeconds(-5),
+            BlockUuid = blockUuid,
+            BlockPosition = blockPosition,
+            PlayedAt = playedAt ?? DateTimeOffset.UtcNow.AddSeconds(-5),
             Platform = "ios",
             AppVersion = "4.2.1",
             DeviceId = deviceId
@@ -280,6 +401,42 @@ public class UserLibraryHistoryTests
             request,
             accessToken,
             HttpStatusCode.OK);
+    }
+
+    private static async Task<PlaybackHistoryRecentResponse> ReadRecent(
+        HttpClient client,
+        string accessToken,
+        int? limit)
+    {
+        var body = await ReadRecentBody(client, accessToken, limit);
+        return JsonConvert.DeserializeObject<PlaybackHistoryRecentResponse>(
+            body,
+            UserLibraryJson.SerializerSettings)!;
+    }
+
+    private static async Task<JObject> ReadRecentJson(
+        HttpClient client,
+        string accessToken,
+        int? limit)
+    {
+        return JObject.Parse(await ReadRecentBody(client, accessToken, limit));
+    }
+
+    private static async Task<string> ReadRecentBody(
+        HttpClient client,
+        string accessToken,
+        int? limit)
+    {
+        var requestUri = limit.HasValue
+            ? $"/api/v3/library/history/recent?limit={limit.Value}"
+            : "/api/v3/library/history/recent";
+        var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return body;
     }
 
     private static async Task<TResponse> PostJson<TRequest, TResponse>(
