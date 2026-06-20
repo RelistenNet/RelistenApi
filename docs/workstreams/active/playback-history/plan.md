@@ -17,7 +17,7 @@ Allowed files and directories:
 - history controllers under `RelistenUserApi/Controllers/`
 - migrations for `playback_history`, `playback_history_ingest_keys`, Timescale setup where applicable
 - narrow integration with existing `SourceTrackPlaysService` or a catalog-owned wrapper
-- tests under `RelistenApiTests/` whose names contain `UserLibraryHistory` or `PlaybackHistory`
+- tests under `RelistenUserApiTests/` whose names contain `UserLibraryHistory` or `PlaybackHistory`
 
 Out of scope:
 
@@ -27,22 +27,21 @@ Out of scope:
 
 ## Main Validator
 
-    dotnet test RelistenApiTests/RelistenApiTests.csproj --filter "FullyQualifiedName~UserLibraryHistory|FullyQualifiedName~PlaybackHistory"
+    dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryHistory|FullyQualifiedName~PlaybackHistory"
     dotnet build RelistenApi.sln
 
 ## Fastest Useful Current Check
 
-    dotnet test RelistenApiTests/RelistenApiTests.csproj --filter "FullyQualifiedName~PlaybackHistoryIngest"
+    dotnet test RelistenUserApiTests/RelistenUserApiTests.csproj --filter "FullyQualifiedName~UserLibraryHistory"
 
 ## Dependencies or Blockers
 
-Depends on authenticated users, user settings for history-disabled behavior, and a decision about whether local development should require TimescaleDB or run a reduced Postgres-compatible test path.
+Depends on authenticated users and user settings for history-disabled behavior. HIST-001 uses a regular Postgres-compatible table; Timescale hypertable conversion should be an explicit later migration.
 
 ## Current Hypothesis
 
-Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into the history hypertable. Keep catalog aggregate insertion fire-and-forget and narrow, preferably through an existing service.
+Use a regular `playback_history_ingest_keys` table with a unique primary key for race-safe idempotency, then insert accepted rows into `user_data.playback_history`. Do not write directly to catalog `source_track_plays` from this slice; add a narrow aggregate sink later.
 
 ## Next Scoped Step
 
-After user settings exist, implement the batch request DTO and ingest-key service with unit/integration tests before adding Timescale-specific retention/continuous aggregate work.
-
+HIST-001 is implemented. The next step is to add a narrow catalog aggregate sink or recent-history query endpoint after the batch ingest contract is reviewed.

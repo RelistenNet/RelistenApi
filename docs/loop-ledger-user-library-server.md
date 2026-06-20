@@ -180,3 +180,21 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibrarySyncTests` passed 6 tests, `RelistenUserApiTests` passed 63 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, secret-path scan found no local OAuth secrets or paths, and local Postgres contained migration markers 6 and 7 plus playlist/collaborator/follower `sync_version` columns.
 - Review: Root adversarial pass checked cursor advancement, access scoping, idempotent/no-op churn, and noisy tombstones; it fixed direct editor share-token exchange producing irrelevant invitation tombstones.
 - Next Action: done for `sync-favorites-settings`; promote `playback-history` next.
+
+### 2026-06-20T04:20:20Z Coordination Update
+
+- Active workstream: `playback-history`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-playback-history`.
+- Action: Promoted playback-history from backlog to active, moved its workstream files under `docs/workstreams/active/`, and claimed preregistered experiment `HIST-001` before implementation edits.
+- Start commit: `2cc2a51`.
+- Next Action: continue.
+
+### 2026-06-20T04:23:26Z Coordination Update
+
+- Active workstream: `playback-history`.
+- Result: completed experiment `HIST-001`.
+- Branch: `codex/user-library-playback-history`.
+- Evidence: focused `UserLibraryHistoryTests` passed 2 tests, `RelistenUserApiTests` passed 65 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, secret-path scan found no local OAuth secrets or paths, and local Postgres contained migration marker 8 plus `playback_history`, `playback_history_ingest_keys`, and expected playback-history indexes.
+- Review: Root adversarial pass fixed ingest-key `device_id` normalization, added block-attribution validation, confirmed no direct user API writes to catalog `source_track_plays`, and deferred Timescale hypertable conversion after full-suite validation exposed non-idempotent local DDL when startup converted the table implicitly.
+- Next Action: continue for `playback-history`; implement a narrow catalog aggregate sink or recent-history query endpoint next.

@@ -148,7 +148,8 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 - [x] 2026-06-20T02:02:51Z Promoted sync/favorites/settings to active on branch `codex/user-library-sync`.
 - [x] 2026-06-20T04:06:46Z Completed sync/favorites/settings first iteration with source/tour/song-inclusive favorites, settings JSON, tombstones, sequence-backed sync cursors, idempotent retry behavior, and validation evidence.
 - [x] 2026-06-20T04:14:40Z Completed sync/favorites/settings second iteration with playlist snapshots, follower-visible playlist edits, collaborator invitations, accepted access, revocation tombstones, high-signal tests, schema smoke, and validation evidence.
-- [ ] Promote playback-history now that sync/favorites/settings covers the full Milestone 4 sync contract.
+- [x] 2026-06-20T04:20:20Z Promoted playback-history to active on branch `codex/user-library-playback-history`.
+- [x] 2026-06-20T04:23:26Z Completed playback-history first iteration with authenticated batch upload, ingest-key dedupe, playlist attribution, history-disabled no-op behavior, high-signal tests, schema smoke, and validation evidence.
 - [ ] Run a reviewer pass after each milestone before promoting dependent backlog workstreams.
 
 ## Workstream Board
@@ -159,16 +160,16 @@ Milestone 6 hardens deployment, observability, and release gates. It verifies ca
 | auth-and-sessions | completed | root Codex agent | none | `docs/workstreams/active/auth-and-sessions/plan.md` | `docs/workstreams/active/auth-and-sessions/ledger.md` | branch `codex/user-library-auth` | Auth/session slice complete: provider-subject signup seam, Postgres-backed sessions and refresh rotation, Development/Test local mobile token endpoint, behavior tests, Postgres store tests, and reviewer pass. | `done` |
 | playlists-and-sharing | active | root Codex agent | none | `docs/workstreams/active/playlists-and-sharing/plan.md` | `docs/workstreams/active/playlists-and-sharing/ledger.md` | branch `codex/user-library-playlist-cache` | Core playlist/sharing M1 surface complete enough to support sync/favorites/settings; bounded catalog hydration remains deferred. | `continue` |
 | sync-favorites-settings | completed | root Codex agent | none | `docs/workstreams/active/sync-favorites-settings/plan.md` | `docs/workstreams/active/sync-favorites-settings/ledger.md` | branch `codex/user-library-sync-feed` | Sync/favorites/settings complete for M1: favorites, settings, playlists, invitations, accepted access, and revocations. | `done` |
-| playback-history | backlog | unassigned | depends on users, auth, history schema, catalog aggregate integration choice | `docs/workstreams/backlog/playback-history/plan.md` | `docs/workstreams/backlog/playback-history/ledger.md` | none | Implement authenticated history batch upload with ingest keys and playlist attribution. | `continue` |
+| playback-history | active | root Codex agent | catalog aggregate sink and recent-history query deferred | `docs/workstreams/active/playback-history/plan.md` | `docs/workstreams/active/playback-history/ledger.md` | branch `codex/user-library-playback-history` | HIST-001 complete; next slice should add a narrow catalog aggregate sink or recent-history query endpoint. | `continue` |
 | server-contract-tests | backlog | unassigned | depends on endpoints existing | `docs/workstreams/backlog/server-contract-tests/plan.md` | `docs/workstreams/backlog/server-contract-tests/ledger.md` | none | Add broad endpoint contract, cache/header, migration placement, and no-regression tests. | `continue` |
 
 ## Current Hypothesis
 
-The foundation, auth/session, playlist aggregate, share-token/mobile-access, source-range, reorder, clone, collaborator-invitation, public cache/read-contract, and sync/favorites/settings slices are complete for M1. Playback-history is the next server workstream. Sync cursors should remain sequence-backed rather than timestamp-watermark based. Keep local mobile development pointed at separate base URLs: catalog API at `http://localhost:3823/api` and user-library API at `http://localhost:5119`. Provider credential files are local/dev inputs only and must stay out of repo source.
+The foundation, auth/session, playlist aggregate, share-token/mobile-access, source-range, reorder, clone, collaborator-invitation, public cache/read-contract, sync/favorites/settings, and playback-history batch-ingest slices are complete for M1. Playback-history still needs either a narrow catalog aggregate sink or a recent-history query endpoint before moving to server-contract hardening. Sync cursors should remain sequence-backed rather than timestamp-watermark based. Keep local mobile development pointed at separate base URLs: catalog API at `http://localhost:3823/api` and user-library API at `http://localhost:5119`. Provider credential files are local/dev inputs only and must stay out of repo source.
 
 ## Next Iteration
 
-Promote `playback-history`: implement authenticated batch upload with client event idempotency, history-disabled behavior, playlist attribution from Queue V2 identifiers, and anonymous aggregate isolation.
+Continue `playback-history`: choose the next narrow slice, either a catalog-owned aggregate sink for accepted plays or a recent-history read endpoint. Keep direct writes to catalog `source_track_plays` out of the user API.
 
 ## Workstream Notes
 
@@ -184,6 +185,8 @@ When using subagents, prefer one forked worker per active workstream once write 
   Evidence: `RelistenApi/Controllers/LiveController.cs` and `RelistenApi/Services/Data/SourceTrackPlayService.cs`.
 - Observation: Migration string/reflection tests are low signal for this server work. Behavior tests and real Postgres store tests provide better evidence.
   Evidence: Removed `UserLibraryMigrationTests` and `UserLibraryRouteContractTests`; added HTTP auth/session tests and `PostgresUserAuthStoreTests`.
+- Observation: Local startup DDL must avoid grouped repeated index creation on a playback-history table that was already converted to a Timescale hypertable.
+  Evidence: Full `RelistenUserApiTests` exposed `unrecognized node type` errors until playback-history table creation and each index statement were executed separately, with Timescale conversion deferred to a later explicit migration.
 
 ## Decision Log
 
@@ -199,6 +202,9 @@ When using subagents, prefer one forked worker per active workstream once write 
 - Decision: Add a Development/Test-only local auth endpoint for mobile simulator work.
   Rationale: Mobile will use separate catalog and user-library base URLs. The iOS Simulator needs real user-library access/refresh tokens against `http://localhost:5119` without Apple/Google credentials. The endpoint is under `/api/v3/library/auth/development/session` and returns 404 outside Development/Test.
   Date/Author: 2026-06-19 / Codex.
+- Decision: Keep HIST-001 playback history on a regular Postgres-compatible table and defer Timescale hypertable conversion to an explicit later migration.
+  Rationale: Local development and tests need repeated, idempotent schema initialization. Hidden startup conversion to Timescale caused non-idempotent local DDL failures after the first conversion.
+  Date/Author: 2026-06-20 / Codex.
 
 ## Outcomes & Retrospective
 
@@ -219,3 +225,5 @@ When using subagents, prefer one forked worker per active workstream once write 
 2026-06-20: Milestone 4 favorites/settings sync-base slice completed on branch `codex/user-library-sync`. It adds schema-qualified favorites and settings storage, source/tour/song favorite support, active favorite list/add/remove endpoints, settings get/update, tombstones, per-user advisory transaction locks, sequence-backed sync cursors, no-op retry preservation, and authenticated HTTP/Postgres tests. Validation passed for focused sync tests 4/4, `RelistenUserApiTests` 61 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, local Postgres schema smoke, and `git diff --check`. Reviewer findings on timestamp cursor skips and idempotent retry churn were fixed; a final corrected reviewer attempt hit the subagent usage limit, so the root pass reviewed the corrected diff and fixed timestamp-based change ordering.
 
 2026-06-20: Milestone 4 playlist/invitation/revocation sync slice completed on branch `codex/user-library-sync-feed`. It adds playlist/collaborator/follower sync metadata, playlist mutation version bumps, follower-visible playlist snapshot changes, pending collaborator invitation changes, owner collaborator changes, accepted-invitation tombstones, and collaborator access revocation tombstones. Validation passed for focused sync tests 6/6, `RelistenUserApiTests` 63 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, local Postgres schema smoke, `git diff --check`, and secret-path scan. Root review fixed a noisy tombstone case for direct editor share-token exchange.
+
+2026-06-20: Milestone 5 playback-history batch ingest slice completed on branch `codex/user-library-playback-history`. It adds authenticated `/api/v3/library/history/batch`, `playback_history` and `playback_history_ingest_keys` tables, client-event dedupe on `(user_id, device_id, client_event_uuid)`, playlist attribution fields, history-disabled no-op behavior, and HTTP/Postgres tests. Validation passed for focused history tests 2/2, `RelistenUserApiTests` 65 tests, existing `RelistenApiTests` 47 tests, full solution build with 0 warnings, local Postgres schema smoke, `git diff --check`, and secret-path scan. Root review fixed device-id normalization and deferred direct catalog aggregate writes.

@@ -319,4 +319,49 @@ public static class UserDataSchemaSql
         CREATE INDEX IF NOT EXISTS idx_playlist_followers_user_sync_version
             ON user_data.playlist_followers(user_id, sync_version);
         """;
+
+    public const string PlaybackHistoryTables = """
+        CREATE TABLE IF NOT EXISTS user_data.playback_history (
+            id UUID NOT NULL,
+            user_id UUID NOT NULL REFERENCES user_data.users(id) ON DELETE CASCADE,
+            client_event_uuid UUID NOT NULL,
+            source_track_uuid UUID NOT NULL,
+            source_uuid UUID NOT NULL,
+            playlist_uuid UUID,
+            playlist_entry_uuid UUID,
+            block_uuid UUID,
+            block_position INT,
+            played_at TIMESTAMPTZ NOT NULL,
+            platform TEXT NOT NULL,
+            app_version TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS user_data.playback_history_ingest_keys (
+            user_id UUID NOT NULL REFERENCES user_data.users(id) ON DELETE CASCADE,
+            device_id TEXT NOT NULL,
+            client_event_uuid UUID NOT NULL,
+            playback_history_id UUID NOT NULL,
+            playback_history_played_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (user_id, device_id, client_event_uuid)
+        );
+        """;
+
+    public const string PlaybackHistoryUserPlayedAtIndex = """
+        CREATE INDEX IF NOT EXISTS idx_playback_history_user_played_at
+            ON user_data.playback_history(user_id, played_at DESC);
+        """;
+
+    public const string PlaybackHistoryPlaylistIndex = """
+        CREATE INDEX IF NOT EXISTS idx_playback_history_playlist_uuid
+            ON user_data.playback_history(playlist_uuid)
+            WHERE playlist_uuid IS NOT NULL;
+        """;
+
+    public const string PlaybackHistoryClientEventIndex = """
+        CREATE INDEX IF NOT EXISTS idx_playback_history_client_event
+            ON user_data.playback_history(user_id, device_id, client_event_uuid);
+        """;
 }
