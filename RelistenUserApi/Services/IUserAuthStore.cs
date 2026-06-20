@@ -22,6 +22,7 @@ public interface IUserAuthStore
     Task RevokeSession(Guid userUuid, Guid sessionUuid, DateTimeOffset now);
     Task RevokeSessionByRefreshToken(Guid refreshTokenUuid, DateTimeOffset now);
     Task TouchSession(Guid sessionUuid, DateTimeOffset now);
+    Task MarkSessionReauthenticated(Guid userUuid, Guid sessionUuid, DateTimeOffset now);
     Task<RefreshTokenRecord> AddRefreshToken(Guid sessionUuid, RefreshToken token);
     Task<RefreshTokenRecord?> RotateRefreshToken(
         Guid currentRefreshTokenUuid,

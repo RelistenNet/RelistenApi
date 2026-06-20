@@ -45,10 +45,10 @@ Depends on `user-library-foundation` for serializer behavior, authenticated user
 
 Auth can remain maintainable by separating provider verification, session storage, token issuance, and controller orchestration into small classes. Avoid placing OAuth/provider logic in controllers. Do not auto-link Apple and Google accounts by email.
 
-Most auth behavior can be tested before live provider credentials exist. The current implementation uses an `IAuthProviderVerifier` seam and fake Apple/Google verifiers in tests. Real provider signature/issuer/audience validation remains deferred. No email provider credentials are required in M1.
+Most auth behavior can be tested before live provider credentials exist. The current implementation uses a real OIDC `IAuthProviderVerifier` for Apple/Google ID tokens and fake provider verifiers in tests. Production provider auth fails closed until client IDs/audiences are configured. No email provider credentials are required in M1.
 
 Mobile local development needs real Bearer auth/refresh behavior without Apple/Google credentials. The current implementation provides `POST /api/v3/library/auth/development/session` only in `Development` or `Test`; it creates a server-side session and issues the same access/refresh token shape used by the normal auth flow. The endpoint must stay closed outside Development/Test.
 
 ## Next Scoped Step
 
-This workstream iteration is complete. If reopened, the next scoped step is live Apple/Google provider verification against configured client IDs/key material; do not add email or ATProto login in this M1 workstream.
+AUTH-001 and AUTH-002 are complete. If reopened, the next scoped step is provider link/unlink management; do not add email or ATProto login in this M1 workstream.

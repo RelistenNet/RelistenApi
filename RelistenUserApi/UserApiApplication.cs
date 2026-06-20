@@ -15,7 +15,8 @@ public static class UserApiApplication
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthenticatedUserContext, HttpAuthenticatedUserContext>();
         services.Configure<UserAuthOptions>(configuration.GetSection(UserAuthOptions.SectionName));
-        services.AddSingleton<IAuthProviderVerifier, UnsupportedAuthProviderVerifier>();
+        services.AddSingleton<IOpenIdConnectConfigurationSource, OpenIdConnectConfigurationSource>();
+        services.AddSingleton<IAuthProviderVerifier, OidcAuthProviderVerifier>();
         services.AddSingleton<UserApiDbService>();
         services.AddSingleton<UserDataSchemaInitializer>();
         services.AddSingleton<IUserAuthStore, PostgresUserAuthStore>();
@@ -39,8 +40,8 @@ public static class UserApiApplication
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen();
 
-        // Access tokens are issued by the user auth service. Provider verification is still closed
-        // by default until the Apple/Google verifier workstream supplies real implementations.
+        // Access tokens are issued by the user auth service after Apple/Google ID tokens
+        // are verified by the configured provider verifier.
         services
             .AddAuthentication(RelistenUserAuthenticationDefaults.Scheme)
             .AddScheme<AuthenticationSchemeOptions, AccessTokenAuthenticationHandler>(

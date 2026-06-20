@@ -36,7 +36,7 @@ public sealed partial class UserAuthService
             throw new UserAuthException("provider_not_supported");
         }
 
-        var identity = await _providerVerifier.Verify(normalizedProvider, request.ProviderToken);
+        var identity = await _providerVerifier.Verify(normalizedProvider, request.ProviderToken, request.Nonce);
         if (!string.Equals(normalizedProvider, identity.Provider, StringComparison.OrdinalIgnoreCase))
         {
             throw new UserAuthException("provider_mismatch");
@@ -50,6 +50,47 @@ public sealed partial class UserAuthService
             now);
 
         return await IssueTokenResponse(user, session, now);
+    }
+
+    public async Task<UserSessionResponse> Reauthenticate(
+        Guid userUuid,
+        Guid? sessionUuid,
+        string provider,
+        ProviderReauthenticationRequest request)
+    {
+        if (!sessionUuid.HasValue)
+        {
+            throw new UserAuthException("session_required");
+        }
+
+        var normalizedProvider = NormalizeProvider(provider);
+        if (!_options.AllowedProviders.Contains(normalizedProvider, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new UserAuthException("provider_not_supported");
+        }
+
+        var identity = await _providerVerifier.Verify(normalizedProvider, request.ProviderToken, request.Nonce);
+        if (!string.Equals(normalizedProvider, identity.Provider, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UserAuthException("provider_mismatch");
+        }
+
+        var linkedUser = await _authStore.FindUserByProvider(identity.Provider, identity.ProviderSubject);
+        if (linkedUser == null || linkedUser.Value.User.UserUuid != userUuid)
+        {
+            throw new UserAuthException("provider_not_linked");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        await _authStore.MarkSessionReauthenticated(userUuid, sessionUuid.Value, now);
+        var session = await _authStore.GetSession(sessionUuid.Value)
+            ?? throw new UserAuthException("session_revoked");
+        if (session.UserUuid != userUuid || session.RevokedAt != null)
+        {
+            throw new UserAuthException("session_revoked");
+        }
+
+        return ToSessionResponse(session);
     }
 
     public async Task<AuthTokenResponse> SignInDevelopmentUser(DevelopmentSessionRequest request)
@@ -151,6 +192,26 @@ public sealed partial class UserAuthService
         return _authStore.RevokeSession(userUuid, sessionUuid, DateTimeOffset.UtcNow);
     }
 
+    public async Task RequireRecentReauthentication(Guid userUuid, Guid? sessionUuid)
+    {
+        if (!sessionUuid.HasValue)
+        {
+            throw new UserAuthException("recent_reauthentication_required");
+        }
+
+        var session = await _authStore.GetSession(sessionUuid.Value);
+        var window = TimeSpan.FromMinutes(Math.Max(1, _options.RecentReauthenticationWindowMinutes));
+        var cutoff = DateTimeOffset.UtcNow.Subtract(window);
+        if (session == null ||
+            session.UserUuid != userUuid ||
+            session.RevokedAt != null ||
+            session.ReauthenticatedAt == null ||
+            session.ReauthenticatedAt < cutoff)
+        {
+            throw new UserAuthException("recent_reauthentication_required");
+        }
+    }
+
     private async Task<UserAccount> CreateUser(
         ProviderIdentity identity,
         ProviderSignInRequest request,
@@ -219,6 +280,7 @@ public sealed partial class UserAuthService
             Platform = session.Platform,
             LastUsedAt = session.LastUsedAt,
             CreatedAt = session.CreatedAt,
+            ReauthenticatedAt = session.ReauthenticatedAt,
             RevokedAt = session.RevokedAt
         };
     }

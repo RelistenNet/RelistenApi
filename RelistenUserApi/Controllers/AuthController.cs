@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Relisten.UserApi.Auth;
 using Relisten.UserApi.Models;
 using Relisten.UserApi.Services;
 
@@ -9,11 +11,16 @@ namespace Relisten.UserApi.Controllers;
 [Produces("application/json")]
 public sealed class AuthController : ControllerBase
 {
+    private readonly IAuthenticatedUserContext _authenticatedUserContext;
     private readonly UserAuthService _authService;
     private readonly IHostEnvironment _environment;
 
-    public AuthController(UserAuthService authService, IHostEnvironment environment)
+    public AuthController(
+        IAuthenticatedUserContext authenticatedUserContext,
+        UserAuthService authService,
+        IHostEnvironment environment)
     {
+        _authenticatedUserContext = authenticatedUserContext;
         _authService = authService;
         _environment = environment;
     }
@@ -73,6 +80,30 @@ public sealed class AuthController : ControllerBase
         }
     }
 
+    [Authorize]
+    [HttpPost("reauthenticate/{provider}")]
+    [ProducesResponseType(typeof(UserSessionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AuthErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(AuthErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserSessionResponse>> Reauthenticate(
+        [FromRoute] string provider,
+        [FromBody] ProviderReauthenticationRequest request)
+    {
+        var user = _authenticatedUserContext.CurrentUser;
+        try
+        {
+            return await _authService.Reauthenticate(
+                user.UserUuid,
+                user.SessionUuid,
+                provider,
+                request);
+        }
+        catch (UserAuthException ex)
+        {
+            return AuthError(ex);
+        }
+    }
+
     [HttpPost("logout")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(AuthErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -96,6 +127,7 @@ public sealed class AuthController : ControllerBase
         {
             "invalid_username" or "username_required" or "username_taken" or "provider_not_supported" =>
                 BadRequest(response),
+            "nonce_required" => BadRequest(response),
             _ => Unauthorized(response)
         };
     }

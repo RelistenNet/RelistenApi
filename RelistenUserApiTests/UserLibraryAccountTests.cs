@@ -4,7 +4,9 @@ using Dapper;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Relisten.UserApi.Models;
@@ -250,6 +252,47 @@ public class UserLibraryAccountTests
         counts.OwnerPlaylistBlocksReassigned.Should().Be(1);
     }
 
+    [Test]
+    public async Task ExportAndDelete_ShouldRequireRecentReauthentication()
+    {
+        await EnsurePostgresOrIgnore();
+        var fakeProvider = new FakeProviderVerifier();
+        await using var factory = NewFactory(fakeProvider);
+        using var client = factory.CreateClient();
+        var username = UniqueUsername();
+        var providerSubject = $"google-subject-{Guid.NewGuid():N}";
+        fakeProvider.AddSubject("google", "sign-in-token", providerSubject);
+        fakeProvider.AddSubject("google", "reauth-token", providerSubject);
+        var auth = await ProviderSignIn(client, "sign-in-token", username);
+
+        await SetSessionReauthenticatedAt(auth.Session.SessionUuid, DateTimeOffset.UtcNow.AddHours(-1));
+
+        var staleExport = await ExportAccount(client, auth.AccessToken);
+        var staleDelete = await DeleteAccount(client, auth.AccessToken);
+        var userRowsAfterStaleDelete = await CountUserRows(auth.User.UserUuid);
+
+        staleExport.Response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(staleExport.Body)["error"]!.Value<string>().Should().Be("recent_reauthentication_required");
+        staleDelete.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(await staleDelete.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("recent_reauthentication_required");
+        userRowsAfterStaleDelete.Should().Be(1);
+
+        await Reauthenticate(client, auth.AccessToken, "reauth-token");
+        var markerAfterReauth = await LoadSessionReauthenticatedAt(auth.Session.SessionUuid);
+        var freshExport = await ExportAccount(client, auth.AccessToken);
+        var freshDelete = await DeleteAccount(client, auth.AccessToken);
+        var userRowsAfterDelete = await CountUserRows(auth.User.UserUuid);
+
+        markerAfterReauth.Should().NotBeNull();
+        markerAfterReauth.Should().BeAfter(DateTime.UtcNow.AddMinutes(-1));
+        freshExport.Response.StatusCode.Should().Be(HttpStatusCode.OK, freshExport.Body);
+        freshDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        userRowsAfterDelete.Should().Be(0);
+    }
+
     private static async Task<AuthTokenResponse> SignIn(
         HttpClient client,
         string? username = null,
@@ -263,6 +306,27 @@ public class UserLibraryAccountTests
                 Username = username ?? UniqueUsername(),
                 DisplayName = "Account Test User",
                 DeviceId = deviceId ?? $"account-test-{Guid.NewGuid():N}",
+                DeviceName = "Test Device",
+                Platform = "ios"
+            },
+            accessToken: null,
+            expectedStatus: HttpStatusCode.OK);
+    }
+
+    private static async Task<AuthTokenResponse> ProviderSignIn(
+        HttpClient client,
+        string providerToken,
+        string username)
+    {
+        return await PostJson<ProviderSignInRequest, AuthTokenResponse>(
+            client,
+            "/api/v3/library/auth/callback/google",
+            new ProviderSignInRequest
+            {
+                ProviderToken = providerToken,
+                Username = username,
+                DisplayName = "Account Provider User",
+                DeviceId = $"provider-account-test-{Guid.NewGuid():N}",
                 DeviceName = "Test Device",
                 Platform = "ios"
             },
@@ -426,6 +490,55 @@ public class UserLibraryAccountTests
         return await client.SendAsync(request);
     }
 
+    private static async Task<UserSessionResponse> Reauthenticate(
+        HttpClient client,
+        string accessToken,
+        string providerToken)
+    {
+        return await PostJson<ProviderReauthenticationRequest, UserSessionResponse>(
+            client,
+            "/api/v3/library/auth/reauthenticate/google",
+            new ProviderReauthenticationRequest { ProviderToken = providerToken },
+            accessToken,
+            HttpStatusCode.OK);
+    }
+
+    private static async Task SetSessionReauthenticatedAt(Guid sessionUuid, DateTimeOffset reauthenticatedAt)
+    {
+        await using var connection = NewDbService().CreateConnection();
+        await connection.ExecuteAsync(
+            """
+            UPDATE user_data.user_sessions
+            SET reauthenticated_at = @ReauthenticatedAt
+            WHERE id = @SessionUuid
+            """,
+            new { SessionUuid = sessionUuid, ReauthenticatedAt = reauthenticatedAt });
+    }
+
+    private static async Task<DateTime?> LoadSessionReauthenticatedAt(Guid sessionUuid)
+    {
+        await using var connection = NewDbService().CreateConnection();
+        return await connection.QuerySingleAsync<DateTime?>(
+            """
+            SELECT reauthenticated_at
+            FROM user_data.user_sessions
+            WHERE id = @SessionUuid
+            """,
+            new { SessionUuid = sessionUuid });
+    }
+
+    private static async Task<int> CountUserRows(Guid userUuid)
+    {
+        await using var connection = NewDbService().CreateConnection();
+        return await connection.QuerySingleAsync<int>(
+            """
+            SELECT count(*)::int
+            FROM user_data.users
+            WHERE id = @UserUuid
+            """,
+            new { UserUuid = userUuid });
+    }
+
     private static async Task<TResponse> PostJson<TRequest, TResponse>(
         HttpClient client,
         string path,
@@ -455,12 +568,20 @@ public class UserLibraryAccountTests
             "application/json");
     }
 
-    private static WebApplicationFactory<Program> NewFactory()
+    private static WebApplicationFactory<Program> NewFactory(FakeProviderVerifier? fakeProvider = null)
     {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Test");
+                if (fakeProvider != null)
+                {
+                    builder.ConfigureTestServices(services =>
+                    {
+                        services.AddSingleton<IAuthProviderVerifier>(fakeProvider);
+                    });
+                }
+
                 builder.ConfigureAppConfiguration((_, configuration) =>
                 {
                     configuration.AddInMemoryCollection(new Dictionary<string, string?>

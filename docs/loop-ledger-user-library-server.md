@@ -255,3 +255,13 @@ This ledger records root-level coordination for `docs/autoplan-user-library-serv
 - Evidence: focused `UserLibraryAccountTests` passed 2 tests, `RelistenUserApiTests` passed 79 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, `git diff --check` passed, and secret-path scan found no committed local Google OAuth client files, downloaded paths, or secret references.
 - Review: Reviewer found a real deletion-order bug for users with non-empty owned playlists. The fix deletes owned playlists before deleting the user, adds a regression setup with block-backed owned playlist content, and a validator confirmed the fix with no new actionable findings.
 - Next Action: done for CT-003 after reviewer reconciliation; then reassess real provider verification/recent-reauth and final runtime docs.
+
+### 2026-06-20T05:29:24Z Coordination Update
+
+- Active workstream: `auth-and-sessions`.
+- Responsible agent: root Codex agent.
+- Branch: `codex/user-library-provider-auth`.
+- Action: Completed AUTH-002 for live Apple/Google OIDC provider verification and recent-reauth account gates.
+- Evidence: focused auth/account/session/Postgres-store filter passed 22 tests, `RelistenUserApiTests` passed 86 tests, `RelistenApiTests` passed 47 tests, `dotnet build RelistenApi.sln` passed with 0 warnings/errors, local Postgres smoke found migration marker 10 plus `user_data.user_sessions.reauthenticated_at`, `git diff --check` passed, and secret-path scan found no local OAuth client files, downloaded paths, or secret references.
+- Review: Root review normalized provider-token failure handling after JWKS refresh. Reviewer findings on empty algorithm allowlists and missing Postgres-backed reauth endpoint coverage were fixed with fail-closed algorithm normalization and a Postgres account-gate test that calls `/api/v3/library/auth/reauthenticate/google`.
+- Next Action: done for AUTH-002; commit this slice, then perform final acceptance/runtime docs pass.

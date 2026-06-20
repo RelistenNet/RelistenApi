@@ -11,7 +11,7 @@ public sealed class FakeProviderVerifier : IAuthProviderVerifier
         _subjects[(provider.ToLowerInvariant(), token)] = subject;
     }
 
-    public Task<ProviderIdentity> Verify(string provider, string providerToken)
+    public Task<ProviderIdentity> Verify(string provider, string providerToken, string? nonce)
     {
         return _subjects.TryGetValue((provider.ToLowerInvariant(), providerToken), out var subject)
             ? Task.FromResult(new ProviderIdentity(provider.ToLowerInvariant(), subject))

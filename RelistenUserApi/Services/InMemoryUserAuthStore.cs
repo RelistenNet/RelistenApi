@@ -91,7 +91,8 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
                 DeviceName = device.DeviceName,
                 Platform = device.Platform,
                 LastUsedAt = now,
-                CreatedAt = now
+                CreatedAt = now,
+                ReauthenticatedAt = now
             };
 
             _sessions.Add(session.SessionUuid, session);
@@ -154,6 +155,22 @@ public sealed class InMemoryUserAuthStore : IUserAuthStore
         {
             if (_sessions.TryGetValue(sessionUuid, out var session))
             {
+                session.LastUsedAt = now;
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task MarkSessionReauthenticated(Guid userUuid, Guid sessionUuid, DateTimeOffset now)
+    {
+        lock (_lock)
+        {
+            if (_sessions.TryGetValue(sessionUuid, out var session) &&
+                session.UserUuid == userUuid &&
+                session.RevokedAt == null)
+            {
+                session.ReauthenticatedAt = now;
                 session.LastUsedAt = now;
             }
         }

@@ -185,6 +185,7 @@ public sealed class UserAccountDataService
                 platform AS "Platform",
                 last_used_at AS "LastUsedAt",
                 created_at AS "CreatedAt",
+                reauthenticated_at AS "ReauthenticatedAt",
                 revoked_at AS "RevokedAt"
             FROM user_data.user_sessions
             WHERE user_id = @UserUuid

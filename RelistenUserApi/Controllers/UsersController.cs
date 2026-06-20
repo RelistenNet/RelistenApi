@@ -53,24 +53,37 @@ public sealed class UsersController : ControllerBase
 
     [HttpPost("me/export")]
     [ProducesResponseType(typeof(AccountExportResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<AccountExportResponse> Export()
+    [ProducesResponseType(typeof(AuthErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AccountExportResponse>> Export()
     {
         var user = _authenticatedUserContext.CurrentUser;
-        return await _accountDataService.Export(user.UserUuid);
+        try
+        {
+            await _authService.RequireRecentReauthentication(user.UserUuid, user.SessionUuid);
+            return await _accountDataService.Export(user.UserUuid);
+        }
+        catch (UserAuthException ex)
+        {
+            return Unauthorized(new AuthErrorResponse { Error = ex.Code });
+        }
     }
 
     [HttpDelete("me")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(AccountDeletionErrorResponse), StatusCodes.Status409Conflict)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(AuthErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> DeleteAccount()
     {
         var user = _authenticatedUserContext.CurrentUser;
         try
         {
+            await _authService.RequireRecentReauthentication(user.UserUuid, user.SessionUuid);
             await _accountDataService.Delete(user.UserUuid);
             return NoContent();
+        }
+        catch (UserAuthException ex)
+        {
+            return Unauthorized(new AuthErrorResponse { Error = ex.Code });
         }
         catch (UserAccountDeletionException ex)
         {

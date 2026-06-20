@@ -147,16 +147,17 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
             DeviceName = device.DeviceName,
             Platform = device.Platform,
             LastUsedAt = now,
-            CreatedAt = now
+            CreatedAt = now,
+            ReauthenticatedAt = now
         };
 
         await using var connection = _db.CreateConnection();
         await connection.ExecuteAsync(
             """
             INSERT INTO user_data.user_sessions
-                (id, user_id, device_id, device_name, platform, last_used_at, created_at)
+                (id, user_id, device_id, device_name, platform, last_used_at, created_at, reauthenticated_at)
             VALUES
-                (@SessionUuid, @UserUuid, @DeviceId, @DeviceName, @Platform, @LastUsedAt, @CreatedAt)
+                (@SessionUuid, @UserUuid, @DeviceId, @DeviceName, @Platform, @LastUsedAt, @CreatedAt, @ReauthenticatedAt)
             """,
             session);
 
@@ -176,6 +177,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
                 platform AS "Platform",
                 last_used_at AS "LastUsedAt",
                 created_at AS "CreatedAt",
+                reauthenticated_at AS "ReauthenticatedAt",
                 revoked_at AS "RevokedAt"
             FROM user_data.user_sessions
             WHERE id = @SessionUuid
@@ -196,6 +198,7 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
                 platform AS "Platform",
                 last_used_at AS "LastUsedAt",
                 created_at AS "CreatedAt",
+                reauthenticated_at AS "ReauthenticatedAt",
                 revoked_at AS "RevokedAt"
             FROM user_data.user_sessions
             WHERE user_id = @UserUuid AND revoked_at IS NULL
@@ -270,6 +273,21 @@ public sealed class PostgresUserAuthStore : IUserAuthStore
             WHERE id = @SessionUuid AND revoked_at IS NULL
             """,
             new { SessionUuid = sessionUuid, Now = now });
+    }
+
+    public async Task MarkSessionReauthenticated(Guid userUuid, Guid sessionUuid, DateTimeOffset now)
+    {
+        await using var connection = _db.CreateConnection();
+        await connection.ExecuteAsync(
+            """
+            UPDATE user_data.user_sessions
+            SET reauthenticated_at = @Now,
+                last_used_at = @Now
+            WHERE id = @SessionUuid
+              AND user_id = @UserUuid
+              AND revoked_at IS NULL
+            """,
+            new { UserUuid = userUuid, SessionUuid = sessionUuid, Now = now });
     }
 
     public async Task<RefreshTokenRecord> AddRefreshToken(Guid sessionUuid, RefreshToken token)

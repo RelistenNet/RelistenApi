@@ -59,7 +59,8 @@ public sealed class UserDataSchemaInitializer
                 (6, 'Create favorites and settings tables for Relisten user API'),
                 (7, 'Add playlist sync metadata for Relisten user API'),
                 (8, 'Create playback history tables for Relisten user API'),
-                (9, 'Create playback history catalog play queue for Relisten user API')
+                (9, 'Create playback history catalog play queue for Relisten user API'),
+                (10, 'Add session reauthentication marker for Relisten user API')
             ON CONFLICT (version) DO NOTHING;
             """);
     }

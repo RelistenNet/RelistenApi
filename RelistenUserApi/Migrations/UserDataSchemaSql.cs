@@ -45,8 +45,12 @@ public static class UserDataSchemaSql
             platform TEXT NOT NULL,
             last_used_at TIMESTAMPTZ NOT NULL,
             created_at TIMESTAMPTZ NOT NULL,
+            reauthenticated_at TIMESTAMPTZ,
             revoked_at TIMESTAMPTZ
         );
+
+        ALTER TABLE user_data.user_sessions
+            ADD COLUMN IF NOT EXISTS reauthenticated_at TIMESTAMPTZ;
 
         CREATE TABLE IF NOT EXISTS user_data.refresh_tokens (
             id UUID PRIMARY KEY,

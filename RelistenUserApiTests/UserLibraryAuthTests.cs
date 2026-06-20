@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using FluentAssertions;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -9,6 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
 using Relisten.UserApi.Configuration;
 using Relisten.UserApi.Models;
 using Relisten.UserApi.Services;
@@ -42,6 +47,190 @@ public class UserLibraryAuthTests
         body.Should().Contain("\"username\":\"relisten_user\"");
         body.Should().Contain("\"user_uuid\"");
         body.Should().NotContain("UserUuid");
+    }
+
+    [Test]
+    public async Task ProviderCallback_ShouldVerifyConfiguredOidcTokenAndNonce()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        await using var factory = NewOidcFactory(oidc);
+        using var client = factory.CreateClient();
+        var token = oidc.IssueIdToken("google-subject-oidc", "nonce-123");
+
+        var auth = await PostJson<ProviderSignInRequest, AuthTokenResponse>(
+            client,
+            "/api/v3/library/auth/callback/google",
+            new ProviderSignInRequest
+            {
+                ProviderToken = token,
+                Nonce = "nonce-123",
+                Username = "oidc_user",
+                DisplayName = "OIDC User",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            });
+
+        auth.User.Username.Should().Be("oidc_user");
+        auth.Session.ReauthenticatedAt.Should().NotBeNull();
+        auth.RefreshToken.Should().Contain(".");
+        auth.AccessToken.Should().Contain(".");
+    }
+
+    [Test]
+    public async Task ProviderCallback_ShouldRejectOidcTokenWithWrongNonce()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        await using var factory = NewOidcFactory(oidc);
+        using var client = factory.CreateClient();
+        var token = oidc.IssueIdToken("google-subject-nonce", "expected-nonce");
+
+        var response = await client.PostAsync(
+            "/api/v3/library/auth/callback/google",
+            JsonContent(new ProviderSignInRequest
+            {
+                ProviderToken = token,
+                Nonce = "wrong-nonce",
+                Username = "oidc_nonce",
+                DisplayName = "OIDC Nonce",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(await response.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("invalid_nonce");
+    }
+
+    [Test]
+    public async Task Reauthenticate_ShouldUpdateCurrentSessionForLinkedOidcSubject()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        await using var factory = NewOidcFactory(oidc);
+        using var client = factory.CreateClient();
+        var signInToken = oidc.IssueIdToken("google-subject-reauth", "sign-in-nonce");
+        var auth = await PostJson<ProviderSignInRequest, AuthTokenResponse>(
+            client,
+            "/api/v3/library/auth/callback/google",
+            new ProviderSignInRequest
+            {
+                ProviderToken = signInToken,
+                Nonce = "sign-in-nonce",
+                Username = "oidc_reauth",
+                DisplayName = "OIDC Reauth",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            });
+        var reauthToken = oidc.IssueIdToken("google-subject-reauth", "reauth-nonce");
+
+        var session = await PostJson<ProviderReauthenticationRequest, UserSessionResponse>(
+            client,
+            "/api/v3/library/auth/reauthenticate/google",
+            new ProviderReauthenticationRequest
+            {
+                ProviderToken = reauthToken,
+                Nonce = "reauth-nonce"
+            },
+            auth.AccessToken);
+
+        session.SessionUuid.Should().Be(auth.Session.SessionUuid);
+        session.ReauthenticatedAt.Should().NotBeNull();
+    }
+
+    [Test]
+    public async Task Reauthenticate_ShouldRejectUnlinkedProviderSubject()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        await using var factory = NewOidcFactory(oidc);
+        using var client = factory.CreateClient();
+        var signInToken = oidc.IssueIdToken("google-subject-linked", "sign-in-nonce");
+        var auth = await PostJson<ProviderSignInRequest, AuthTokenResponse>(
+            client,
+            "/api/v3/library/auth/callback/google",
+            new ProviderSignInRequest
+            {
+                ProviderToken = signInToken,
+                Nonce = "sign-in-nonce",
+                Username = "oidc_unlinked",
+                DisplayName = "OIDC Unlinked",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            });
+        var unlinkedToken = oidc.IssueIdToken("google-subject-unlinked", "reauth-nonce");
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v3/library/auth/reauthenticate/google");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        request.Content = JsonContent(new ProviderReauthenticationRequest
+        {
+            ProviderToken = unlinkedToken,
+            Nonce = "reauth-nonce"
+        });
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(await response.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("provider_not_linked");
+    }
+
+    [Test]
+    public async Task ProviderCallback_ShouldFailClosedWhenAudienceIsNotConfigured()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        await using var factory = NewOidcFactory(oidc, configureAudience: false);
+        using var client = factory.CreateClient();
+        var token = oidc.IssueIdToken("google-subject-unconfigured", "nonce-123");
+
+        var response = await client.PostAsync(
+            "/api/v3/library/auth/callback/google",
+            JsonContent(new ProviderSignInRequest
+            {
+                ProviderToken = token,
+                Nonce = "nonce-123",
+                Username = "oidc_noaud",
+                DisplayName = "OIDC No Audience",
+                DeviceId = "device-oidc",
+                DeviceName = "iPhone",
+                Platform = "ios"
+            }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        JObject.Parse(await response.Content.ReadAsStringAsync())["error"]!
+            .Value<string>()
+            .Should()
+            .Be("provider_not_configured");
+    }
+
+    [Test]
+    public async Task OidcVerifier_ShouldFailClosedWhenAlgorithmAllowlistIsEmpty()
+    {
+        var oidc = TestOidcProvider.Create("https://issuer.example.test", "google-client-id");
+        var verifier = new OidcAuthProviderVerifier(
+            Options.Create(new UserAuthOptions
+            {
+                Google = new ProviderTokenValidationOptions
+                {
+                    MetadataAddress = oidc.MetadataAddress,
+                    Audiences = [oidc.Audience],
+                    ValidAlgorithms = []
+                }
+            }),
+            new StaticOpenIdConnectConfigurationSource(oidc.MetadataAddress, oidc.Configuration));
+        var token = oidc.IssueIdToken("google-subject-noalg", "nonce-123");
+
+        var act = async () => await verifier.Verify("google", token, "nonce-123");
+
+        (await act.Should().ThrowAsync<UserAuthException>())
+            .Which
+            .Code
+            .Should()
+            .Be("provider_not_configured");
     }
 
     [Test]
@@ -297,6 +486,22 @@ public class UserLibraryAuthTests
         return JsonConvert.DeserializeObject<TResponse>(body, UserLibraryJson.SerializerSettings)!;
     }
 
+    private static async Task<TResponse> PostJson<TRequest, TResponse>(
+        HttpClient client,
+        string path,
+        TRequest request,
+        string accessToken)
+    {
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, path);
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        httpRequest.Content = JsonContent(request);
+        var response = await client.SendAsync(httpRequest);
+        var body = await response.Content.ReadAsStringAsync();
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        return JsonConvert.DeserializeObject<TResponse>(body, UserLibraryJson.SerializerSettings)!;
+    }
+
     private static StringContent JsonContent<T>(T value)
     {
         return new StringContent(
@@ -328,5 +533,123 @@ public class UserLibraryAuthTests
             });
     }
 
+    private static WebApplicationFactory<Program> NewOidcFactory(
+        TestOidcProvider oidc,
+        bool configureAudience = true)
+    {
+        return new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment("Test");
+                builder.ConfigureTestServices(services =>
+                {
+                    services.AddSingleton<IOpenIdConnectConfigurationSource>(
+                        new StaticOpenIdConnectConfigurationSource(oidc.MetadataAddress, oidc.Configuration));
+                    services.AddSingleton<IUserAuthStore, InMemoryUserAuthStore>();
+                });
+                builder.ConfigureAppConfiguration((_, configuration) =>
+                {
+                    var values = new Dictionary<string, string?>
+                    {
+                        ["UserAuth:AccessTokenSigningKey"] = TestSigningKey,
+                        ["UserAuth:Google:MetadataAddress"] = oidc.MetadataAddress
+                    };
+                    if (configureAudience)
+                    {
+                        values["UserAuth:Google:Audiences:0"] = oidc.Audience;
+                    }
+
+                    configuration.AddInMemoryCollection(values);
+                });
+            });
+    }
+
     private const string TestSigningKey = "test-access-token-signing-key-with-more-than-32-bytes";
+
+    private sealed class StaticOpenIdConnectConfigurationSource : IOpenIdConnectConfigurationSource
+    {
+        private readonly OpenIdConnectConfiguration _configuration;
+        private readonly string _metadataAddress;
+
+        public StaticOpenIdConnectConfigurationSource(
+            string metadataAddress,
+            OpenIdConnectConfiguration configuration)
+        {
+            _metadataAddress = metadataAddress;
+            _configuration = configuration;
+        }
+
+        public Task<OpenIdConnectConfiguration> GetConfiguration(string metadataAddress)
+        {
+            metadataAddress.Should().Be(_metadataAddress);
+            return Task.FromResult(_configuration);
+        }
+
+        public void RequestRefresh(string metadataAddress)
+        {
+            metadataAddress.Should().Be(_metadataAddress);
+        }
+    }
+
+    private sealed class TestOidcProvider
+    {
+        private readonly RsaSecurityKey _signingKey;
+
+        private TestOidcProvider(
+            string issuer,
+            string audience,
+            string metadataAddress,
+            RsaSecurityKey signingKey,
+            OpenIdConnectConfiguration configuration)
+        {
+            Issuer = issuer;
+            Audience = audience;
+            MetadataAddress = metadataAddress;
+            _signingKey = signingKey;
+            Configuration = configuration;
+        }
+
+        public string Issuer { get; }
+        public string Audience { get; }
+        public string MetadataAddress { get; }
+        public OpenIdConnectConfiguration Configuration { get; }
+
+        public static TestOidcProvider Create(string issuer, string audience)
+        {
+            var rsa = RSA.Create(2048);
+            var keyId = Guid.NewGuid().ToString("N");
+            var signingKey = new RsaSecurityKey(rsa) { KeyId = keyId };
+            var publicKey = new RsaSecurityKey(RSA.Create(rsa.ExportParameters(includePrivateParameters: false)))
+            {
+                KeyId = keyId
+            };
+            var configuration = new OpenIdConnectConfiguration { Issuer = issuer };
+            configuration.SigningKeys.Add(publicKey);
+
+            return new TestOidcProvider(
+                issuer,
+                audience,
+                $"{issuer}/.well-known/openid-configuration",
+                signingKey,
+                configuration);
+        }
+
+        public string IssueIdToken(string subject, string nonce)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var token = new JwtSecurityToken(
+                issuer: Issuer,
+                audience: Audience,
+                claims:
+                [
+                    new Claim("sub", subject),
+                    new Claim("nonce", nonce)
+                ],
+                notBefore: now.UtcDateTime.AddMinutes(-1),
+                expires: now.UtcDateTime.AddMinutes(5),
+                signingCredentials: new SigningCredentials(_signingKey, SecurityAlgorithms.RsaSha256));
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+    }
 }

@@ -4,12 +4,12 @@ public sealed record ProviderIdentity(string Provider, string ProviderSubject);
 
 public interface IAuthProviderVerifier
 {
-    Task<ProviderIdentity> Verify(string provider, string providerToken);
+    Task<ProviderIdentity> Verify(string provider, string providerToken, string? nonce);
 }
 
 public sealed class UnsupportedAuthProviderVerifier : IAuthProviderVerifier
 {
-    public Task<ProviderIdentity> Verify(string provider, string providerToken)
+    public Task<ProviderIdentity> Verify(string provider, string providerToken, string? nonce)
     {
         throw new UserAuthException("provider_not_configured");
     }

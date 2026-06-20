@@ -28,6 +28,7 @@ public sealed class AccountSessionExportResponse
     public required string Platform { get; init; }
     public required DateTimeOffset LastUsedAt { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? ReauthenticatedAt { get; init; }
     public DateTimeOffset? RevokedAt { get; init; }
 }
 

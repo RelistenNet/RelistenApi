@@ -27,6 +27,7 @@ public sealed class UserSession
     public required string Platform { get; init; }
     public required DateTimeOffset LastUsedAt { get; set; }
     public required DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? ReauthenticatedAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
 }
 

@@ -3,6 +3,7 @@ namespace Relisten.UserApi.Models;
 public sealed class ProviderSignInRequest
 {
     public required string ProviderToken { get; init; }
+    public string? Nonce { get; init; }
     public string? Username { get; init; }
     public string? DisplayName { get; init; }
     public required string DeviceId { get; init; }
@@ -29,6 +30,12 @@ public sealed class LogoutRequest
     public required string RefreshToken { get; init; }
 }
 
+public sealed class ProviderReauthenticationRequest
+{
+    public required string ProviderToken { get; init; }
+    public string? Nonce { get; init; }
+}
+
 public sealed class AuthTokenResponse
 {
     public required string AccessToken { get; init; }
@@ -47,6 +54,7 @@ public sealed class UserSessionResponse
     public required string Platform { get; init; }
     public required DateTimeOffset LastUsedAt { get; init; }
     public required DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? ReauthenticatedAt { get; init; }
     public DateTimeOffset? RevokedAt { get; init; }
 }
 
