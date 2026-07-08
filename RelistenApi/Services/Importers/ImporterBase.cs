@@ -200,6 +200,22 @@ ON CONFLICT (show_id) DO UPDATE SET
 	max_avg_rating_weighted = EXCLUDED.max_avg_rating_weighted,
 	has_soundboard_source = EXCLUDED.has_soundboard_source,
 	has_flac = EXCLUDED.has_flac
+WHERE
+	(
+		show_source_information.max_updated_at,
+		show_source_information.max_created_at,
+		show_source_information.source_count,
+		show_source_information.max_avg_rating_weighted,
+		show_source_information.has_soundboard_source,
+		show_source_information.has_flac
+	) IS DISTINCT FROM (
+		EXCLUDED.max_updated_at,
+		EXCLUDED.max_created_at,
+		EXCLUDED.source_count,
+		EXCLUDED.max_avg_rating_weighted,
+		EXCLUDED.has_soundboard_source,
+		EXCLUDED.has_flac
+	)
 ;
 
 -- Incremental refresh of venue show counts for this artist
@@ -232,6 +248,8 @@ LEFT JOIN show_counts sc ON sc.venue_id = v.id
 WHERE v.artist_id = @id OR v.artist_id IS NULL
 ON CONFLICT (id) DO UPDATE SET
 	shows_at_venue = EXCLUDED.shows_at_venue
+WHERE
+	venue_show_counts.shows_at_venue IS DISTINCT FROM EXCLUDED.shows_at_venue
 ;
 ";
 
@@ -251,6 +269,14 @@ GROUP BY r.source_id
 ON CONFLICT (source_id) DO UPDATE SET
 	source_review_max_updated_at = EXCLUDED.source_review_max_updated_at,
 	source_review_count = EXCLUDED.source_review_count
+WHERE
+	(
+		source_review_counts.source_review_max_updated_at,
+		source_review_counts.source_review_count
+	) IS DISTINCT FROM (
+		EXCLUDED.source_review_max_updated_at,
+		EXCLUDED.source_review_count
+	)
 ;
 ";
 
@@ -360,6 +386,22 @@ DO
 		avg_duration = EXCLUDED.avg_duration,
 		avg_rating = EXCLUDED.avg_rating,
 		updated_at = EXCLUDED.updated_at
+WHERE
+	(
+		years.show_count,
+		years.source_count,
+		years.duration,
+		years.avg_duration,
+		years.avg_rating,
+		years.updated_at
+	) IS DISTINCT FROM (
+		EXCLUDED.show_count,
+		EXCLUDED.source_count,
+		EXCLUDED.duration,
+		EXCLUDED.avg_duration,
+		EXCLUDED.avg_rating,
+		EXCLUDED.updated_at
+	)
 ;
 
 -- Associate shows with years (must happen before the DELETE below)
@@ -373,6 +415,7 @@ WHERE
 	y.year = to_char(s.date, 'YYYY')
     AND s.artist_id = @id
 	AND y.artist_id = @id
+	AND s.year_id IS DISTINCT FROM y.id
 ;
 
 -- remove years that no longer have shows (e.g., deleted/removed sources)
@@ -420,6 +463,7 @@ FROM
 WHERE
 	s.id = d.source_id
 	AND s.artist_id =  @id
+	AND s.duration IS DISTINCT FROM d.duration
 ;
 
 -- Generate shows table without years or rating information
@@ -467,6 +511,22 @@ DO
 		era_id = EXCLUDED.era_id,
 		venue_id = EXCLUDED.venue_id,
 		avg_duration = EXCLUDED.avg_duration
+WHERE
+	(
+		shows.date,
+		shows.updated_at,
+		shows.tour_id,
+		shows.era_id,
+		shows.venue_id,
+		shows.avg_duration
+	) IS DISTINCT FROM (
+		EXCLUDED.date,
+		EXCLUDED.updated_at,
+		EXCLUDED.tour_id,
+		EXCLUDED.era_id,
+		EXCLUDED.venue_id,
+		EXCLUDED.avg_duration
+	)
 ;
 
 -- Associate sources with show
@@ -489,6 +549,7 @@ FROM
 WHERE
 	a.source_id = s.id
 	AND s.artist_id = @id
+	AND s.show_id IS DISTINCT FROM a.show_id
 ;
 			";
 
@@ -521,6 +582,7 @@ WHERE
 	WHERE
 		s.id = i.id
 		AND s.artist_id = @id
+		AND (s.avg_rating, s.num_reviews) IS DISTINCT FROM (i.avg, i.num_reviews)
 		;
 
 	-- Calculate weighted averages for sources once we have average data and update sources
@@ -579,6 +641,7 @@ WHERE
 	WHERE
 		i.id = s.id
 		AND s.artist_id = @id
+		AND s.avg_rating_weighted IS DISTINCT FROM i.avg_rating_weighted
 	    ;
 				";
             }
@@ -627,6 +690,7 @@ WHERE
 	WHERE
 		i.id = s.id
 		AND s.artist_id = @id
+		AND s.avg_rating_weighted IS DISTINCT FROM i.avg_rating_weighted
 	    ;
 				";
             }
@@ -669,6 +733,7 @@ FROM max_rating r
 WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
+	AND (s.avg_rating, s.updated_at) IS DISTINCT FROM (r.avg_rating, r.updated_at)
     ;
 
 -- delete shows without
@@ -698,15 +763,6 @@ WHERE
 		SELECT 1
 		FROM shows s
 		WHERE s.id = ssi.show_id
-	);
-
--- remove source_review_counts rows for deleted sources
-DELETE FROM source_review_counts src
-WHERE
-	NOT EXISTS (
-		SELECT 1
-		FROM sources s
-		WHERE s.id = src.source_id
 	);
 
 COMMIT;

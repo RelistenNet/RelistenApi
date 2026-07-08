@@ -31,6 +31,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
+using Relisten.Services.Health;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
 using Serilog;
@@ -204,7 +205,7 @@ namespace Relisten
                         migrator.Baseline(2);
                     }
 
-                    migrator.MigrateTo(10);
+                    migrator.MigrateTo(11);
 
                     if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
                     {
@@ -222,6 +223,7 @@ namespace Relisten
 
                 return db;
             });
+            services.AddSingleton<IReadinessCheck, DatabaseReadinessCheck>();
 
             var configurationOptions = RedisService.BuildConfiguration(Configuration["REDIS_URL"]!);
 

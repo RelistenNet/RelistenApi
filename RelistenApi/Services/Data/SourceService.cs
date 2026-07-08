@@ -281,10 +281,16 @@ namespace Relisten.Data
         public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers)
         {
             return await db.WithWriteConnection(con => con.ExecuteAsync(@"
-                DELETE FROM
-                    sources
-                WHERE
-                    upstream_identifier = ANY(@upstreamIdentifiers)
+                WITH source_ids AS MATERIALIZED (
+                    SELECT id
+                    FROM sources
+                    WHERE upstream_identifier = ANY(@upstreamIdentifiers)
+                ), deleted_review_counts AS (
+                    DELETE FROM source_review_counts
+                    WHERE source_id IN (SELECT id FROM source_ids)
+                )
+                DELETE FROM sources
+                WHERE id IN (SELECT id FROM source_ids)
             ", new {upstreamIdentifiers = upstreamIdentifiers.ToList()}));
         }
 

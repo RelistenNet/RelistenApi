@@ -108,6 +108,8 @@ namespace Relisten.Data
 				delete from setlist_shows where artist_id = @ArtistId;
 				delete from source_sets where source_id in (select id from sources where artist_id = @ArtistId);
 				delete from source_reviews where source_id in (select id from sources where artist_id = @ArtistId);
+				delete from source_review_counts where source_id in (select id from sources where artist_id = @ArtistId);
+				delete from show_source_information where artist_id = @ArtistId;
 				delete from shows where artist_id = @ArtistId;
 				delete from sources where artist_id = @ArtistId;
 				delete from tours where artist_id = @ArtistId;

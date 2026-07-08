@@ -86,22 +86,14 @@ namespace Relisten.Data
             return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
                 SELECT
                     v.*,
-                    CASE
-                    	WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                    		COUNT(s.id)
-                    	ELSE
-                    		COUNT(DISTINCT src.show_id)
-                    END as shows_at_venue
+	                COALESCE(counts.shows_at_venue, 0) AS shows_at_venue
                 FROM
-                	venues v
-                    LEFT JOIN shows s ON v.id = s.venue_id
-                    LEFT JOIN sources src ON src.venue_id = v.id
+                    venues v
+                    LEFT JOIN venue_show_counts counts ON counts.id = v.id
                 WHERE
                     v.artist_id = @id
-                GROUP BY
-                	v.artist_id, v.id
                 ORDER BY
-                	v.name ASC
+                    v.name ASC
             ", new {artist.id}));
         }
 
@@ -111,25 +103,11 @@ namespace Relisten.Data
                 SELECT
                     v.*,
                     a.uuid as artist_uuid,
-                    src.shows_at_venue
+	                COALESCE(counts.shows_at_venue, 0) AS shows_at_venue
                 FROM
-                	venues v
-                	JOIN artists a ON v.artist_id = a.id
-                    LEFT JOIN (
-                        SELECT
-                            s.venue_id
-                            , CASE
-                    	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                    		          COUNT(s.id)
-                    	          ELSE
-                    		          COUNT(DISTINCT src.show_id)
-                              END as shows_at_venue
-                        FROM
-                            shows s
-                            JOIN sources src ON s.id = src.show_id
-                        GROUP BY
-                            s.venue_id
-                    ) src ON src.venue_id = v.id
+                    venues v
+                    JOIN artists a ON v.artist_id = a.id
+                    LEFT JOIN venue_show_counts counts ON counts.id = v.id
                 WHERE
                     v.artist_id = @id
                 ORDER BY
@@ -168,24 +146,10 @@ namespace Relisten.Data
                 SELECT
                     v.*
                     , a.uuid as artist_uuid
-                    , src.shows_at_venue
+                    , COALESCE(counts.shows_at_venue, 0) AS shows_at_venue
                 FROM
-                	venues v
-                    LEFT JOIN (
-                        SELECT
-                            s.venue_id
-                            , CASE
-                    	          WHEN COUNT(DISTINCT src.show_id) = 0 THEN
-                    		          COUNT(s.id)
-                    	          ELSE
-                    		          COUNT(DISTINCT src.show_id)
-                              END as shows_at_venue
-                        FROM
-                            shows s
-                            JOIN sources src ON s.id = src.show_id
-                        GROUP BY
-                            s.venue_id
-                    ) src ON src.venue_id = v.id
+                    venues v
+                    LEFT JOIN venue_show_counts counts ON counts.id = v.id
                     JOIN artists a ON a.id = v.artist_id
                 WHERE
                     (v.id = @id OR v.uuid = @uuid OR v.slug = @slug)

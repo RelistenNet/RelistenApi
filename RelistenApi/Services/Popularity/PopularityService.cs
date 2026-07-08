@@ -615,8 +615,22 @@ namespace Relisten.Services.Popularity
         private async Task<Dictionary<Guid, PopularityMetrics>> ComputeYearPopularityMapForArtist(Guid artistUuid)
         {
             var rows = await db.WithConnection(con => con.QueryAsync<PopularityRow>(@"
-                WITH plays_90d AS (
-                    SELECT y.uuid AS uuid, SUM(p.plays) AS plays_90d
+                WITH daily AS (
+                    SELECT
+                        y.uuid,
+                        SUM(p.plays) AS plays_90d,
+                        SUM(p.plays) FILTER (
+                            WHERE p.play_day >= now() - interval '30 days'
+                        ) AS plays_30d,
+                        SUM(p.plays) FILTER (
+                            WHERE p.play_day >= now() - interval '7 days'
+                        ) AS plays_7d,
+                        SUM(p.total_track_seconds) FILTER (
+                            WHERE p.play_day >= now() - interval '30 days'
+                        )::bigint AS seconds_30d,
+                        SUM(p.total_track_seconds) FILTER (
+                            WHERE p.play_day >= now() - interval '7 days'
+                        )::bigint AS seconds_7d
                     FROM source_track_plays_daily p
                     JOIN shows s ON s.uuid = p.show_uuid
                     JOIN years y ON y.id = s.year_id
@@ -624,37 +638,13 @@ namespace Relisten.Services.Popularity
                       AND p.play_day >= now() - interval '90 days'
                     GROUP BY 1
                 ),
-                plays_30d AS (
-                    SELECT y.uuid AS uuid, SUM(p.plays) AS plays_30d,
-                        SUM(p.total_track_seconds)::bigint AS seconds_30d
-                    FROM source_track_plays_daily p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    JOIN years y ON y.id = s.year_id
-                    WHERE p.artist_uuid = @artistUuid
-                      AND p.play_day >= now() - interval '30 days'
-                    GROUP BY 1
-                ),
-                plays_7d AS (
-                    SELECT y.uuid AS uuid, SUM(p.plays) AS plays_7d,
-                        SUM(p.total_track_seconds)::bigint AS seconds_7d
-                    FROM source_track_plays_daily p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    JOIN years y ON y.id = s.year_id
-                    WHERE p.artist_uuid = @artistUuid
-                      AND p.play_day >= now() - interval '7 days'
-                    GROUP BY 1
-                ),
-                plays_6h AS (
-                    SELECT y.uuid AS uuid, SUM(p.plays) AS plays_6h
-                    FROM source_track_plays_hourly p
-                    JOIN shows s ON s.uuid = p.show_uuid
-                    JOIN years y ON y.id = s.year_id
-                    WHERE p.artist_uuid = @artistUuid
-                      AND p.play_hour >= now() - interval '6 hours'
-                    GROUP BY 1
-                ),
-                plays_48h AS (
-                    SELECT y.uuid AS uuid, SUM(p.plays) AS plays_48h,
+                hourly AS (
+                    SELECT
+                        y.uuid,
+                        SUM(p.plays) AS plays_48h,
+                        SUM(p.plays) FILTER (
+                            WHERE p.play_hour >= now() - interval '6 hours'
+                        ) AS plays_6h,
                         SUM(p.total_track_seconds)::bigint AS seconds_48h
                     FROM source_track_plays_hourly p
                     JOIN shows s ON s.uuid = p.show_uuid
@@ -664,20 +654,17 @@ namespace Relisten.Services.Popularity
                     GROUP BY 1
                 )
                 SELECT
-                    COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid, p6.uuid) AS uuid,
-                    COALESCE(p30.plays_30d, 0) AS plays_30d,
-                    COALESCE(p7.plays_7d, 0) AS plays_7d,
-                    COALESCE(p48.plays_48h, 0) AS plays_48h
-                    , COALESCE(p90.plays_90d, 0) AS plays_90d
-                    , COALESCE(p6.plays_6h, 0) AS plays_6h
-                    , COALESCE(p30.seconds_30d, 0) AS seconds_30d
-                    , COALESCE(p7.seconds_7d, 0) AS seconds_7d
-                    , COALESCE(p48.seconds_48h, 0) AS seconds_48h
-                FROM plays_30d p30
-                FULL OUTER JOIN plays_48h p48 ON p48.uuid = p30.uuid
-                FULL OUTER JOIN plays_7d p7 ON p7.uuid = COALESCE(p30.uuid, p48.uuid)
-                FULL OUTER JOIN plays_90d p90 ON p90.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid)
-                FULL OUTER JOIN plays_6h p6 ON p6.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid)
+                    COALESCE(d.uuid, h.uuid) AS uuid,
+                    COALESCE(d.plays_30d, 0) AS plays_30d,
+                    COALESCE(d.plays_7d, 0) AS plays_7d,
+                    COALESCE(h.plays_48h, 0) AS plays_48h,
+                    COALESCE(d.plays_90d, 0) AS plays_90d,
+                    COALESCE(h.plays_6h, 0) AS plays_6h,
+                    COALESCE(d.seconds_30d, 0) AS seconds_30d,
+                    COALESCE(d.seconds_7d, 0) AS seconds_7d,
+                    COALESCE(h.seconds_48h, 0) AS seconds_48h
+                FROM daily d
+                FULL OUTER JOIN hourly h ON h.uuid = d.uuid
             ", new { artistUuid }));
 
             return BuildMetricsMap(rows);

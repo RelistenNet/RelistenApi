@@ -66,17 +66,7 @@ namespace Relisten.Data
                     LEFT JOIN years y ON shows.year_id = y.id
                     JOIN artists a ON a.id = shows.artist_id
 
-                    INNER JOIN (
-                        SELECT
-                            src.show_id,
-                            MAX(src.updated_at) as max_updated_at,
-                            COUNT(*) as source_count,
-                            BOOL_OR(src.is_soundboard) as has_soundboard_source
-                        FROM
-                            sources src
-                        GROUP BY
-                            src.show_id
-                    ) cnt ON cnt.show_id = shows.id
+                    INNER JOIN show_source_information cnt ON cnt.show_id = shows.id
                 WHERE
                     s.artist_id = @artistId
                     AND (s.id = @songId OR s.uuid = @songUuid OR s.slug = @songSlug)
@@ -141,6 +131,8 @@ namespace Relisten.Data
                             LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s_inner.id
                             LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
                             LEFT JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = s_inner.artist_id
+                        WHERE
+                            s_inner.artist_id = @id
                         GROUP BY
                             s_inner.id
                     ) shows ON shows.setlist_song_id = s.id
