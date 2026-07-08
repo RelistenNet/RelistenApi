@@ -29,6 +29,8 @@ public class TestDbServiceConfiguration
         Relisten.DbService.ReadOnlyConnStr.Should()
             .Contain("Max Auto Prepare=100")
             .And.Contain("Auto Prepare Min Usages=5");
+        Relisten.DbService.ConnStr.Should().Contain("No Reset On Close=true");
+        Relisten.DbService.ReadOnlyConnStr.Should().Contain("No Reset On Close=true");
     }
 
     [Test]
@@ -45,6 +47,8 @@ public class TestDbServiceConfiguration
         Relisten.DbService.ReadOnlyConnStr.Should().Contain("Host=localhost,localhost;Port=15432;");
         Relisten.DbService.ConnStr.Should().Contain("Max Auto Prepare=100");
         Relisten.DbService.ReadOnlyConnStr.Should().Contain("Max Auto Prepare=100");
+        Relisten.DbService.ConnStr.Should().NotContain("No Reset On Close");
+        Relisten.DbService.ReadOnlyConnStr.Should().NotContain("No Reset On Close");
     }
 
     private sealed class ProductionHostEnvironment : IHostEnvironment

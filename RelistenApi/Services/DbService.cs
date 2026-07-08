@@ -26,16 +26,18 @@ namespace Relisten
             var parts = uri.UserInfo.Split(':');
             var port = uri.Port.ToString(CultureInfo.InvariantCulture);
             var database = uri.AbsolutePath.Substring(1);
+            var usesPooler = !string.IsNullOrWhiteSpace(writeHost) || !string.IsNullOrWhiteSpace(readOnlyHost);
             writeHost = string.IsNullOrWhiteSpace(writeHost) ? uri.Host : writeHost;
             readOnlyHost = string.IsNullOrWhiteSpace(readOnlyHost) ? writeHost : readOnlyHost;
+            var connectionOptions = PreparedStatementOptions + (usesPooler ? ";No Reset On Close=true" : "");
 
             ConnStr =
-                $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true{PreparedStatementOptions}";
+                $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true{connectionOptions}";
 
             // For read-only connections: try RO first, fall back to RW if unavailable
             // Npgsql handles multi-host failover automatically
             ReadOnlyConnStr =
-                $"Host={readOnlyHost},{writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attributes=prefer-standby{PreparedStatementOptions}";
+                $"Host={readOnlyHost},{writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attributes=prefer-standby{connectionOptions}";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");
