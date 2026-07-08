@@ -23,8 +23,12 @@ public class TestDbServiceConfiguration
         Relisten.DbService.ReadOnlyConnStr.Should()
             .Contain("Host=relisten-db-pgbouncer-ro.default,relisten-db-pgbouncer-rw.default;")
             .And.Contain("Target Session Attributes=prefer-standby");
-        Relisten.DbService.ConnStr.Should().NotContain("Auto Prepare");
-        Relisten.DbService.ReadOnlyConnStr.Should().NotContain("Auto Prepare");
+        Relisten.DbService.ConnStr.Should()
+            .Contain("Max Auto Prepare=100")
+            .And.Contain("Auto Prepare Min Usages=5");
+        Relisten.DbService.ReadOnlyConnStr.Should()
+            .Contain("Max Auto Prepare=100")
+            .And.Contain("Auto Prepare Min Usages=5");
     }
 
     [Test]
@@ -39,6 +43,8 @@ public class TestDbServiceConfiguration
 
         Relisten.DbService.ConnStr.Should().Contain("Host=localhost;Port=15432;");
         Relisten.DbService.ReadOnlyConnStr.Should().Contain("Host=localhost,localhost;Port=15432;");
+        Relisten.DbService.ConnStr.Should().Contain("Max Auto Prepare=100");
+        Relisten.DbService.ReadOnlyConnStr.Should().Contain("Max Auto Prepare=100");
     }
 
     private sealed class ProductionHostEnvironment : IHostEnvironment

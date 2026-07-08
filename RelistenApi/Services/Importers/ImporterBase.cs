@@ -425,7 +425,8 @@ WHERE
 	AND NOT EXISTS (
 		SELECT 1
 		FROM shows s
-		WHERE s.year_id = y.id
+		WHERE s.artist_id = @id
+			AND s.year_id = y.id
 	);
 COMMIT;
 
