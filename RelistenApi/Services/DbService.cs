@@ -13,22 +13,28 @@ namespace Relisten
         private const int MaxSerializationRetries = 3;
         private readonly ILogger<DbService> _logger;
 
-        public DbService(string url, IHostEnvironment hostEnvironment, ILogger<DbService> logger)
+        public DbService(
+            string url,
+            string? writeHost,
+            string? readOnlyHost,
+            IHostEnvironment hostEnvironment,
+            ILogger<DbService> logger)
         {
             _logger = logger;
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             var port = uri.Port.ToString(CultureInfo.InvariantCulture);
             var database = uri.AbsolutePath.Substring(1);
+            writeHost = string.IsNullOrWhiteSpace(writeHost) ? uri.Host : writeHost;
+            readOnlyHost = string.IsNullOrWhiteSpace(readOnlyHost) ? writeHost : readOnlyHost;
 
             ConnStr =
-                $"Host={uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2";
+                $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2";
 
             // For read-only connections: try RO first, fall back to RW if unavailable
             // Npgsql handles multi-host failover automatically
-            var roHost = uri.Host.Replace("relisten-db-rw.default", "relisten-db-ro.default");
             ReadOnlyConnStr =
-                $"Host={roHost},{uri.Host};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2;Target Session Attributes=prefer-standby";
+                $"Host={readOnlyHost},{writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2;Target Session Attributes=prefer-standby";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");

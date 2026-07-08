@@ -162,12 +162,25 @@ namespace Relisten
 
             services.AddSingleton<DbService>(serviceProvider =>
             {
-                var dbUrl = !string.IsNullOrWhiteSpace(Configuration["PGBOUNCER_DATABASE_URL"])
-                    ? Configuration["PGBOUNCER_DATABASE_URL"]
-                    : Configuration["DATABASE_URL"];
+                var dbUrl = Configuration["DATABASE_URL"]
+                    ?? throw new InvalidOperationException("DATABASE_URL is required");
+                var writeHost = Configuration["PGBOUNCER_WRITE_HOST"];
+                var readOnlyHost = Configuration["PGBOUNCER_READ_ONLY_HOST"];
+
+                if (HostEnvironment.IsProduction() &&
+                    (string.IsNullOrWhiteSpace(writeHost) || string.IsNullOrWhiteSpace(readOnlyHost)))
+                {
+                    throw new InvalidOperationException(
+                        "PGBOUNCER_WRITE_HOST and PGBOUNCER_READ_ONLY_HOST are required in production");
+                }
 
                 var logger = serviceProvider.GetRequiredService<ILogger<DbService>>();
-                var db = new DbService(dbUrl!, HostEnvironment, logger);
+                var db = new DbService(
+                    dbUrl,
+                    writeHost,
+                    readOnlyHost,
+                    HostEnvironment,
+                    logger);
 
                 // Run migrations immediately after construction
                 using (var pg = db.CreateConnection(longTimeout: true, readOnly: false))
