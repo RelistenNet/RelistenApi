@@ -29,12 +29,12 @@ namespace Relisten
             readOnlyHost = string.IsNullOrWhiteSpace(readOnlyHost) ? writeHost : readOnlyHost;
 
             ConnStr =
-                $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2";
+                $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true";
 
             // For read-only connections: try RO first, fall back to RW if unavailable
             // Npgsql handles multi-host failover automatically
             ReadOnlyConnStr =
-                $"Host={readOnlyHost},{writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Max Auto Prepare=100;Auto Prepare Min Usages=2;Target Session Attributes=prefer-standby";
+                $"Host={readOnlyHost},{writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true;Target Session Attributes=prefer-standby";
 
             var maskedUrl = url.Replace(parts[1], "********");
             var maskedConnStr = ConnStr.Replace(parts[1], "********");

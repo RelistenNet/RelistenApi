@@ -23,6 +23,8 @@ public class TestDbServiceConfiguration
         Relisten.DbService.ReadOnlyConnStr.Should()
             .Contain("Host=relisten-db-pgbouncer-ro.default,relisten-db-pgbouncer-rw.default;")
             .And.Contain("Target Session Attributes=prefer-standby");
+        Relisten.DbService.ConnStr.Should().NotContain("Auto Prepare");
+        Relisten.DbService.ReadOnlyConnStr.Should().NotContain("Auto Prepare");
     }
 
     [Test]
