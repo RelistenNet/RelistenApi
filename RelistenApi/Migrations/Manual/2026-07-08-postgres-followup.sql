@@ -256,6 +256,8 @@ SELECT to_regclass('public.source_track_plays_old') IS NOT NULL AS legacy_table_
       \if :legacy_coverage_verified
         \echo 'Dropping superseded source-track-play materialized views, view, and table'
         SET lock_timeout = '15s';
+        ALTER SEQUENCE public.source_track_plays_id_seq
+            OWNED BY public.source_track_plays.id;
         DROP MATERIALIZED VIEW IF EXISTS public.source_track_plays_by_hour_48h;
         DROP MATERIALIZED VIEW IF EXISTS public.source_track_plays_by_day_6mo;
         DROP VIEW IF EXISTS public.source_track_plays_enriched;
