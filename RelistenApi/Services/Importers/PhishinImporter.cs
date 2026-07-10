@@ -268,7 +268,12 @@ namespace Relisten.Import
                 }
             }
 
-            var newSongs = await _setlistSongService.InsertAll(artist, songsToSave);
+            var deduped = songsToSave
+                .GroupBy(s => s.slug)
+                .Select(g => g.First())
+                .ToList();
+
+            var newSongs = await _setlistSongService.InsertAll(artist, deduped);
 
             foreach (var s in newSongs)
             {

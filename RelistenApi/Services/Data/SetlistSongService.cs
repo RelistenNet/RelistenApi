@@ -179,6 +179,10 @@ namespace Relisten.Data
                         @upstream_identifiers::text[],
                         @updated_ats::timestamp with time zone[]
                     ) AS t(artist_id, name, slug, upstream_identifier, updated_at)
+                    ON CONFLICT (artist_id, slug) DO UPDATE
+                        SET name = EXCLUDED.name,
+                            upstream_identifier = EXCLUDED.upstream_identifier,
+                            updated_at = EXCLUDED.updated_at
                     RETURNING *
                 ", new
                 {
