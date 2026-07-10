@@ -268,16 +268,21 @@ namespace Relisten.Import
                 }
             }
 
-            var deduped = songsToSave
-                .GroupBy(s => s.slug)
-                .Select(g => g.First())
-                .ToList();
+            var groupedBySlug = songsToSave.GroupBy(s => s.slug).ToList();
+            var deduped = groupedBySlug.Select(g => g.First()).ToList();
 
             var newSongs = await _setlistSongService.InsertAll(artist, deduped);
 
-            foreach (var s in newSongs)
+            var newSongsBySlug = newSongs.ToDictionary(s => s.slug);
+            foreach (var group in groupedBySlug)
             {
-                existingSetlistSongs[s.upstream_identifier] = s;
+                if (newSongsBySlug.TryGetValue(group.Key, out var dbSong))
+                {
+                    foreach (var song in group)
+                    {
+                        existingSetlistSongs[song.upstream_identifier] = dbSong;
+                    }
+                }
             }
 
             stats.Created += newSongs.Count();
