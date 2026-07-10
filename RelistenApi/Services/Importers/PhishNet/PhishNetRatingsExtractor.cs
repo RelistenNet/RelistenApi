@@ -26,6 +26,7 @@ public class PhishNetRatingsScraper(HttpClient httpClient, string displayDate)
 
 public class PhishNetScrapeResults
 {
+    public bool RatingMatched { get; init; }
     public decimal RatingAverage { get; init; }
     public int RatingVotesCast { get; init; }
     public int NumberOfReviewsWritten { get; init; }
@@ -50,6 +51,7 @@ public partial class PhishNetRatingsExtractor(string pageContents)
 
         return new PhishNetScrapeResults
         {
+            RatingMatched = ratingMatches.Success,
             RatingAverage = ImporterUtils.TryParseDecimal(ratingMatches.Groups["AverageRating"].Value),
             RatingVotesCast = ImporterUtils.TryParseInt(ratingMatches.Groups["VotesCast"].Value),
             NumberOfReviewsWritten = PhishNetReviewCountScraper.Matches(PageContents).Count
