@@ -109,44 +109,54 @@ namespace Relisten.Import
             var ratings = await ScrapePhishNetForSource(dbSource, ctx);
             var dirty = false;
 
-            var newAvgRating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
-
-            if (dbSource.num_ratings != ratings.RatingVotesCast
-                || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001)
+            if (!ratings.RatingMatched)
             {
-                dbSource.num_ratings = ratings.RatingVotesCast;
-                dbSource.avg_rating = newAvgRating;
+                ctx?.WriteLine($"{dbSource.display_date} skipping — failed to scrape ratings from phish.net");
+            }
+            else
+            {
+                var newAvgRating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
 
-                dirty = true;
+                if (dbSource.num_ratings != ratings.RatingVotesCast
+                    || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001)
+                {
+                    ctx?.WriteLine($"{dbSource.display_date} ratings changed: num_ratings {dbSource.num_ratings} → {ratings.RatingVotesCast}, avg_rating {dbSource.avg_rating} → {newAvgRating}");
+                    dbSource.num_ratings = ratings.RatingVotesCast;
+                    dbSource.avg_rating = newAvgRating;
+
+                    dirty = true;
+                }
+
+                if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
+                {
+                    ctx?.WriteLine($"{dbSource.display_date} reviews changed: {dbSource.num_reviews} → {ratings.NumberOfReviewsWritten}");
+                    var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
+
+                    var dbReviews = reviews.Select(rev => new SourceReview
+                    {
+                        rating = null,
+                        title = null,
+                        review = rev.review_text,
+                        author = rev.username,
+                        updated_at = rev.posted_at
+                    }).ToList();
+
+                    dbSource.num_reviews = dbReviews.Count;
+
+                    dirty = true;
+
+                    await ReplaceSourceReviews(stats, dbSource, dbReviews);
+                }
             }
 
             var phishNetApiShow = phishNetApiShows.FirstOrDefault(pnetShow => pnetShow.showdate == dbSource.display_date);
 
             if (!dbSource.description.Contains(phishNetApiShow!.setlist_notes))
             {
+                ctx?.WriteLine($"{dbSource.display_date} setlist_notes changed: [{dbSource.description.Length} chars] → [{phishNetApiShow.setlist_notes.Length} chars]");
                 dbSource.description = phishNetApiShow.setlist_notes;
 
                 dirty = true;
-            }
-
-            if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
-            {
-                var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
-
-                var dbReviews = reviews.Select(rev => new SourceReview
-                {
-                    rating = null,
-                    title = null,
-                    review = rev.review_text,
-                    author = rev.username,
-                    updated_at = rev.posted_at
-                }).ToList();
-
-                dbSource.num_reviews = dbReviews.Count;
-
-                dirty = true;
-
-                await ReplaceSourceReviews(stats, dbSource, dbReviews);
             }
 
             if (dirty)

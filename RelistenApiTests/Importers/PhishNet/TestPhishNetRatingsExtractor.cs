@@ -24,7 +24,7 @@ public class TestPhishNetRatingsExtractor
 
         results.Should().BeEquivalentTo(new PhishNetScrapeResults
         {
-            RatingAverage = 4.636m, RatingVotesCast = 500, NumberOfReviewsWritten = 18
+            RatingMatched = true, RatingAverage = 4.636m, RatingVotesCast = 500, NumberOfReviewsWritten = 18
         });
     }
 
@@ -36,7 +36,7 @@ public class TestPhishNetRatingsExtractor
 
         results.Should().BeEquivalentTo(new PhishNetScrapeResults
         {
-            RatingAverage = 4.268m, RatingVotesCast = 50, NumberOfReviewsWritten = 4
+            RatingMatched = true, RatingAverage = 4.268m, RatingVotesCast = 50, NumberOfReviewsWritten = 4
         });
     }
 }
