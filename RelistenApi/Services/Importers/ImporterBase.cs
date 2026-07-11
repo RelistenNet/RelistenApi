@@ -562,7 +562,7 @@ WHERE
 		    SELECT
 		        s.id as id,
 		        COALESCE(AVG(NULLIF(r.rating, 0)), 0) as avg,
-		        COUNT(r.rating) as num_reviews
+		        COUNT(r.id) as num_reviews
 		    FROM
 		        sources s
 		        LEFT JOIN source_reviews r ON r.source_id = s.id
@@ -591,7 +591,7 @@ WHERE
 		    SELECT
 		        s.id as id,
 		        COALESCE(AVG(NULLIF(r.rating, 0)), 0) as avg,
-		        COUNT(r.rating) as num_reviews
+		        COUNT(r.id) as num_reviews
 		    FROM
 		        sources s
 		        LEFT JOIN source_reviews r ON r.source_id = s.id
