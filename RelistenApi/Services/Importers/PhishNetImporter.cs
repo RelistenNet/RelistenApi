@@ -55,11 +55,15 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-            var shows = (await _sourceService.AllForArtist(artist)).OrderBy(s => s.display_date).ToList();
+            var allShows = (await _sourceService.AllForArtist(artist)).OrderBy(s => s.display_date).ToList();
+
+            var shows = CurrentImportOptions.IsThinScrape
+                ? allShows.Where(s => s.display_date.StartsWith(CurrentImportOptions.OnlyYear.ToString()!)).ToList()
+                : allShows;
 
             var prog = ctx?.WriteProgressBar();
 
-            ctx?.WriteLine($"Processing {shows.Count} shows");
+            ctx?.WriteLine($"Processing {shows.Count} shows{(CurrentImportOptions.IsThinScrape ? $" (filtered to year {CurrentImportOptions.OnlyYear}, {allShows.Count} total)" : "")}");
 
             var phishNetApiShows = await phishNetApiClient.Shows(ctx);
 

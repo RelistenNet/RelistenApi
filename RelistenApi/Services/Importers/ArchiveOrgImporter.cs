@@ -94,8 +94,12 @@ namespace Relisten.Import
 
         private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
         {
+            var yearFilter = CurrentImportOptions.IsThinScrape
+                ? $"+AND+year%3A{CurrentImportOptions.OnlyYear}"
+                : "";
+
             return
-                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=*&page=1&output=json&save=yes";
+                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}{yearFilter}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=*&page=1&output=json&save=yes";
         }
 
         private static string DetailsUrlForIdentifier(string identifier)
@@ -274,23 +278,26 @@ namespace Relisten.Import
                 await root.response.docs.AsyncForEachWithProgress(prog, processDoc);
             }
 
-            // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-            var showsToKeep = root.response.docs
-                    .Select(d => d.identifier)
-                    .Except(identifiersWithoutMP3s)
-                ;
+            if (!CurrentImportOptions.IsThinScrape)
+            {
+                // we want to keep all the shows from this import--aside from ones that no longer have MP3s
+                var showsToKeep = root.response.docs
+                        .Select(d => d.identifier)
+                        .Except(identifiersWithoutMP3s)
+                    ;
 
-            // find sources that no longer exist
-            var deletedSourceUpstreamIdentifiers = existingSources
-                    .Select(kvp => kvp.Key)
-                    .Except(showsToKeep)
-                    .ToList()
-                ;
+                // find sources that no longer exist
+                var deletedSourceUpstreamIdentifiers = existingSources
+                        .Select(kvp => kvp.Key)
+                        .Except(showsToKeep)
+                        .ToList()
+                    ;
 
-            ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
-                           $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
-            stats.Removed +=
-                await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+                ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
+                               $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
+                stats.Removed +=
+                    await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+            }
 
             ctx?.WriteLine("Rebuilding shows...");
 

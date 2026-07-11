@@ -27,6 +27,7 @@ namespace Relisten
             ArchiveOrgArtistIndexer archiveOrgArtistIndexer,
             RedisService redisService,
             JerryGarciaComImporter jerryGarciaComImporter,
+            ShowService showService,
             IConfiguration config
         )
         {
@@ -36,6 +37,7 @@ namespace Relisten
             _config = config;
             _redisService = redisService;
             _jerryGarciaComImporter = jerryGarciaComImporter;
+            _showService = showService;
         }
 
         private ImporterService _importerService { get; }
@@ -44,6 +46,7 @@ namespace Relisten
         private IConfiguration _config { get; }
         private RedisService _redisService { get; }
         private JerryGarciaComImporter _jerryGarciaComImporter { get; }
+        private ShowService _showService { get; }
 
         // run every day at 6:30 AM UTC to seed artists before the refresh
         [RecurringJob("30 6 * * *", Enabled = true)]
@@ -283,6 +286,86 @@ namespace Relisten
             var stats = await _jerryGarciaComImporter.BackfillVenuesForArtist(artist, src, ctx);
 
             ctx?.WriteLine($"Backfill complete for {artist.name}. {stats}");
+        }
+
+        // Every 2 hours, avoiding the 6-11 AM UTC window where daily full import runs
+        [RecurringJob("0 0,2,4,12,14,16,18,20,22 * * *", Enabled = true)]
+        [AutomaticRetry(Attempts = 0)]
+        [Queue("artist_import")]
+        [DisplayName("Refresh Active Artists (Thin Scrape)")]
+        public async Task RefreshActiveArtists(PerformContext? context, bool allowedInDev = false)
+        {
+            if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
+            {
+                context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
+                return;
+            }
+
+            var activeArtistIds = (await _showService.ActiveArtistIds(7)).ToHashSet();
+
+            if (activeArtistIds.Count == 0)
+            {
+                context?.WriteLine("No active artists found with shows in the past 7 days");
+                return;
+            }
+
+            var allArtists = await _artistService.All();
+            var activeArtists = allArtists.Where(a => activeArtistIds.Contains(a.id)).ToList();
+
+            context?.WriteLine($"--> Found {activeArtists.Count} active artists with shows in the past 7 days");
+
+            foreach (var artist in activeArtists)
+            {
+                context?.WriteLine($"--> Queueing thin scrape for {artist.name} ({artist.slug})");
+                BackgroundJob.Enqueue(() => RefreshArtistThinScrape(artist.slug, null));
+            }
+
+            context?.WriteLine("--> Queued thin scrape updates for all active artists!");
+        }
+
+        [Queue("artist_import")]
+        [DisplayName("Thin Scrape: {0}")]
+        [AutomaticRetry(Attempts = 0)]
+        public async Task RefreshArtistThinScrape(string idOrSlug, PerformContext? ctx)
+        {
+            var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+
+            if (artist == null)
+            {
+                ctx?.WriteLine($"No artist found for {idOrSlug}");
+                return;
+            }
+
+            if (artistsCurrentlySyncing.ContainsKey(artist.id))
+            {
+                ctx?.WriteLine($"Already syncing {artist.name}. Will not overlap.");
+                return;
+            }
+
+            try
+            {
+                artistsCurrentlySyncing[artist.id] = true;
+
+                var options = new ImportOptions { OnlyYear = DateTime.UtcNow.Year };
+                var artistStats = await _importerService.Import(artist, null, options, ctx);
+
+                ctx?.WriteLine($"--> Thin scrape imported {artist.name}! " + artistStats);
+            }
+            catch (Exception e)
+            {
+                ctx?.WriteLine($"Error processing thin scrape for {artist.name}:");
+                ctx?.LogException(e);
+
+                e.Data["artist"] = artist.name;
+
+                SentrySdk.CaptureException(e);
+
+                throw;
+            }
+            finally
+            {
+                artistsCurrentlySyncing.TryRemove(artist.id, out var _);
+            }
         }
     }
 }

@@ -87,7 +87,13 @@ namespace Relisten.Import
         public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
             PerformContext? ctx)
         {
-            return Import(artist, filterUpstreamSources, null, ctx);
+            return Import(artist, filterUpstreamSources, (string?)null, ctx);
+        }
+
+        public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+            ImportOptions? options, PerformContext? ctx)
+        {
+            return Import(artist, filterUpstreamSources, null, options, ctx);
         }
 
         public async Task<ImportStats> Rebuild(Artist artist, PerformContext? ctx)
@@ -105,14 +111,21 @@ namespace Relisten.Import
             return stats;
         }
 
-        public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+        public Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
             string? showIdentifier, PerformContext? ctx)
         {
+            return Import(artist, filterUpstreamSources, showIdentifier, null, ctx);
+        }
+
+        public async Task<ImportStats> Import(Artist artist, Func<ArtistUpstreamSource, bool>? filterUpstreamSources,
+            string? showIdentifier, ImportOptions? options, PerformContext? ctx)
+        {
             var stats = new ImportStats();
+            var importOptions = options ?? ImportOptions.Default;
 
             var srcs = artist.upstream_sources.ToList();
 
-            ctx?.WriteLine($"Found {srcs.Count} valid importers.");
+            ctx?.WriteLine($"Found {srcs.Count} valid importers.{(importOptions.IsThinScrape ? $" (thin scrape, year={importOptions.OnlyYear})" : "")}");
             var prog = ctx?.WriteProgressBar();
 
             Func<ArtistUpstreamSource, Task> processSource = async item =>
@@ -125,6 +138,8 @@ namespace Relisten.Import
                 }
 
                 ctx?.WriteLine($"Importing with {item.upstream_source_id}, {item.upstream_identifier}");
+
+                item.upstream_source.importer!.CurrentImportOptions = importOptions;
 
                 if (showIdentifier != null)
                 {
@@ -156,6 +171,8 @@ namespace Relisten.Import
     public abstract class ImporterBase : IDisposable
     {
         protected readonly RedisService redisService;
+
+        public ImportOptions CurrentImportOptions { get; set; } = ImportOptions.Default;
 
         public ImporterBase(DbService db, RedisService redisService)
         {
