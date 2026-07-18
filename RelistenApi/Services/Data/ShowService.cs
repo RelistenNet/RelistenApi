@@ -328,6 +328,15 @@ namespace Relisten.Data
             }
         }
 
+        public async Task<IEnumerable<int>> ActiveArtistIds(int days)
+        {
+            return await db.WithConnection(con => con.QueryAsync<int>($@"
+                SELECT DISTINCT artist_id
+                FROM shows
+                WHERE date > CURRENT_DATE - INTERVAL '{days}' day
+            "));
+        }
+
         public async Task<IEnumerable<Show>> AllSimpleForArtist(Artist artist)
         {
             return await db.WithConnection(con => con.QueryAsync<Show>(@"

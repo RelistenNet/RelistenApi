@@ -118,7 +118,6 @@ namespace Relisten.Import
             await RebuildYears(artist);
 
             return stats;
-            //return await ProcessIdentifiers(artist, await this.http.GetAsync(SearchUrlForArtist(artist)));
         }
 
         public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
@@ -497,21 +496,53 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-            var pages = 80;
-
             var prog = ctx?.WriteProgressBar();
             var pageSize = 20;
 
-            for (var currentPage = 1; currentPage <= pages; currentPage++)
+            var isThinScrape = CurrentImportOptions.IsThinScrape;
+            var yearCutoff = isThinScrape ? $"{CurrentImportOptions.OnlyYear}-01-01" : null;
+
+            var pages = 80;
+
+            if (isThinScrape)
+            {
+                // Fetch page 1 just to learn total_pages, then start from the last page
+                var firstPage = await PhishinApiRequest<IEnumerable<PhishinShow>>("shows", ctx, "date", pageSize, 1);
+                pages = firstPage.total_pages;
+            }
+
+            // For thin scrapes: iterate last page → first (newest shows first, since pages are date ASC)
+            // For full imports: iterate first page → last (all shows)
+            var startPage = isThinScrape ? pages : 1;
+            var pageStep = isThinScrape ? -1 : 1;
+            var allShowsBeforeCutoff = false;
+
+            for (var currentPage = startPage;
+                 !allShowsBeforeCutoff && (isThinScrape ? currentPage >= 1 : currentPage <= pages);
+                 currentPage += pageStep)
             {
                 var apiShows =
                     await PhishinApiRequest<IEnumerable<PhishinShow>>("shows", ctx, "date", pageSize, currentPage);
-                pages = apiShows.total_pages;
+
+                if (!isThinScrape)
+                {
+                    pages = apiShows.total_pages;
+                }
 
                 var shows = apiShows.data.ToList();
+                var processedAnyOnPage = false;
 
                 foreach (var (idx, show) in shows.Select((s, i) => (i, s)))
                 {
+                    // Within each page, shows are date ASC. Skip pre-cutoff shows but
+                    // keep processing — later shows on the same page may be in range.
+                    if (isThinScrape && string.Compare(show.date, yearCutoff, StringComparison.Ordinal) < 0)
+                    {
+                        continue;
+                    }
+
+                    processedAnyOnPage = true;
+
                     try
                     {
                         await processShow(show);
@@ -528,6 +559,14 @@ namespace Relisten.Import
                     }
 
                     prog?.SetValue(100.0 * (((currentPage - 1) * pageSize) + idx + 1) / apiShows.total_entries);
+                }
+
+                // If we're doing a thin scrape and an entire page had no shows in range,
+                // all remaining pages (earlier dates) won't either
+                if (isThinScrape && !processedAnyOnPage)
+                {
+                    ctx?.WriteLine($"Thin scrape: no shows on page {currentPage} matched year {CurrentImportOptions.OnlyYear}, stopping");
+                    allShowsBeforeCutoff = true;
                 }
             }
 
