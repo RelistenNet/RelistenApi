@@ -50,6 +50,21 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void ReusesDevelopmentCertificatesAcrossServiceProviders()
+    {
+        using var firstProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+        var first = firstProvider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
+        var firstSigningThumbprint = first.SigningCredentials.Single().Key.KeyId;
+        var firstEncryptionThumbprint = first.EncryptionCredentials.Single().Key.KeyId;
+
+        using var secondProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+        var second = secondProvider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
+
+        second.SigningCredentials.Single().Key.KeyId.Should().Be(firstSigningThumbprint);
+        second.EncryptionCredentials.Single().Key.KeyId.Should().Be(firstEncryptionThumbprint);
+    }
+
+    [Test]
     public void RegistersCurrentAndPreviousOpenIddictCertificates()
     {
         var previous = CreateCertificate("previous.pfx", DateTimeOffset.UtcNow.AddMonths(6));
@@ -84,7 +99,10 @@ public sealed class TestAuthenticationConfiguration
 
     private ServiceProvider BuildProvider(AccountsOptions options, string environmentName)
     {
-        var environment = new TestHostEnvironment(environmentName);
+        var environment = new TestHostEnvironment(environmentName)
+        {
+            ContentRootPath = _certificateDirectory
+        };
         var runtime = AccountsRuntimeConfiguration.Create(options, environment);
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

@@ -13,6 +13,7 @@
 /local-dev/*.dump
 /local-dev/*.partial
 /local-dev/redis-data/
+/RelistenUserService/.local-openiddict/
 
 RelistenApi/out/
 

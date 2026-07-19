@@ -163,12 +163,10 @@ public static class AuthenticationServiceCollectionExtensions
 
         if (environment.IsDevelopment())
         {
-            // Development certificates are persisted through the macOS Keychain. Keys created
-            // by one dotnet process can later require an interactive ACL prompt or fail with
-            // CSSMERR_CSP_OPERATION_AUTH_DENIED. Ephemeral keys make a clean checkout reliable;
-            // restarting the local issuer intentionally invalidates its development tokens.
-            options.AddEphemeralEncryptionKey()
-                .AddEphemeralSigningKey();
+            options.AddSigningCertificate(
+                    DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
+                .AddEncryptionCertificate(
+                    DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
         }
         else
         {
