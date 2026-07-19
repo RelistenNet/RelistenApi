@@ -3,4 +3,10 @@
 /RelistenApi/out/
 /RelistenApi/bin/
 /RelistenApi/obj/
+/Relisten.Accounts.Contracts/bin/
+/Relisten.Accounts.Contracts/obj/
+/RelistenUserService/bin/
+/RelistenUserService/obj/
+/RelistenUserServiceTests/bin/
+/RelistenUserServiceTests/obj/
 /.git/
