@@ -23,37 +23,46 @@ namespace Relisten.Data
 
             var catalogTypes = references.Select(reference => reference.CatalogType).ToArray();
             var catalogUuids = references.Select(reference => reference.CatalogUuid).ToArray();
+            var queryPlan = CatalogReferenceQueryPlan.Create(references);
 
             return await db.WithConnection(async connection =>
             {
                 using var results = await connection.QueryMultipleAsync(
-                    CatalogReferenceResolverSql.Resolve,
-                    new {catalogTypes, catalogUuids});
+                    queryPlan.Sql,
+                    new {catalog_types = catalogTypes, catalog_uuids = catalogUuids});
 
                 var resolvedReferences = (await results.ReadAsync<ResolvedCatalogReference>()).ToArray();
                 var artists = (await results.ReadAsync<ArtistWithCounts>()).ToArray();
                 var features = (await results.ReadAsync<Features>())
-                    .ToDictionary(item => item.artist_id);
+                    .ToDictionary(feature => feature.artist_id);
                 foreach (var artist in artists)
                 {
                     artist.features = features[artist.id];
                     artist.upstream_sources = [];
                 }
 
-                var shows = (await results.ReadAsync<Show>()).ToArray();
-                var sources = (await results.ReadAsync<SourceFull>()).ToArray();
+                var shows = await ReadIfIncluded<Show>(
+                    results, queryPlan, CatalogReferenceResultSets.Shows);
+                var sources = await ReadIfIncluded<SourceFull>(
+                    results, queryPlan, CatalogReferenceResultSets.Sources);
                 foreach (var source in sources)
                 {
                     source.sets = [];
                     source.links = [];
                 }
 
-                var sourceTracks = (await results.ReadAsync<SourceTrack>()).ToArray();
-                var songs = (await results.ReadAsync<SetlistSongWithPlayCount>()).ToArray();
-                var tours = (await results.ReadAsync<TourWithShowCount>()).ToArray();
-                var venues = (await results.ReadAsync<VenueWithShowCount>()).ToArray();
-                var years = (await results.ReadAsync<Year>()).ToArray();
-                var sourceSets = (await results.ReadAsync<SourceSet>()).ToArray();
+                var sourceTracks = await ReadIfIncluded<SourceTrack>(
+                    results, queryPlan, CatalogReferenceResultSets.SourceTracks);
+                var songs = await ReadIfIncluded<SetlistSongWithPlayCount>(
+                    results, queryPlan, CatalogReferenceResultSets.Songs);
+                var tours = await ReadIfIncluded<TourWithShowCount>(
+                    results, queryPlan, CatalogReferenceResultSets.Tours);
+                var venues = await ReadIfIncluded<VenueWithShowCount>(
+                    results, queryPlan, CatalogReferenceResultSets.Venues);
+                var years = await ReadIfIncluded<Year>(
+                    results, queryPlan, CatalogReferenceResultSets.Years);
+                var sourceSets = await ReadIfIncluded<SourceSet>(
+                    results, queryPlan, CatalogReferenceResultSets.SourceSets);
                 foreach (var sourceSet in sourceSets)
                 {
                     sourceSet.tracks = [];
@@ -78,6 +87,19 @@ namespace Relisten.Data
                     }
                 };
             });
+        }
+
+        private static async Task<T[]> ReadIfIncluded<T>(
+            SqlMapper.GridReader results,
+            CatalogReferenceQueryPlan queryPlan,
+            CatalogReferenceResultSets resultSet)
+        {
+            if (!queryPlan.Includes(resultSet))
+            {
+                return [];
+            }
+
+            return (await results.ReadAsync<T>()).ToArray();
         }
 
         private static CatalogResolveResponse EmptyResponse()

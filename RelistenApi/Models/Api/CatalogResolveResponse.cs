@@ -17,6 +17,9 @@ namespace Relisten.Api.Models.Api
     {
         public string catalog_type { get; init; } = string.Empty;
         public Guid catalog_uuid { get; init; }
+
+        // This describes whether the resolver returned a complete mobile catalog graph. Favorite
+        // membership remains valid when a row is unavailable or temporarily cannot be hydrated.
         public string availability { get; init; } = string.Empty;
     }
 
