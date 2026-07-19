@@ -318,7 +318,10 @@ namespace Relisten
                 options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
                 {
                     diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
-                    diagnosticContext.Set("RemoteIP", httpContext.Connection.RemoteIpAddress);
+                    if (httpContext.Connection.RemoteIpAddress is { } remoteIpAddress)
+                    {
+                        diagnosticContext.Set("RemoteIP", remoteIpAddress);
+                    }
                 };
             });
 
