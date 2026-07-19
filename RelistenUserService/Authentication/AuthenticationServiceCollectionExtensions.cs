@@ -163,10 +163,22 @@ public static class AuthenticationServiceCollectionExtensions
 
         if (environment.IsDevelopment())
         {
-            options.AddSigningCertificate(
-                    DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
-                .AddEncryptionCertificate(
-                    DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
+            if (OperatingSystem.IsMacOS())
+            {
+                // .NET does not support EphemeralKeySet for PKCS#12 on macOS.
+                // Raw checkout-local RSA keys avoid certificate and Keychain APIs entirely.
+                options.AddSigningKey(
+                        DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
+                    .AddEncryptionKey(
+                        DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment));
+            }
+            else
+            {
+                options.AddSigningCertificate(
+                        DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
+                    .AddEncryptionCertificate(
+                        DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
+            }
         }
         else
         {
