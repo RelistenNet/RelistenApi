@@ -30,7 +30,9 @@ internal static class DevelopmentOpenIddictCertificateStore
         // material without relying on a certificate previously persisted in Keychain.
         return X509CertificateLoader.LoadPkcs12FromFile(
             path,
-            password: null);
+            password: null,
+            keyStorageFlags: X509KeyStorageFlags.EphemeralKeySet,
+            loaderLimits: null);
     }
 
     private static void CreateCertificate(string path, string purpose)
