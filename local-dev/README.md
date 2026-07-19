@@ -102,17 +102,28 @@ Run the anonymous catalog API in one terminal:
 dotnet run --project RelistenApi/RelistenApi.csproj
 ```
 
-Once the User Service project is present, apply its explicit EF Core migration
-and run its local OpenIddict/accounts endpoint in another terminal:
+Run the User Service in another terminal:
 
 ```sh
-dotnet ef database update \
-  --project RelistenUserService/RelistenUserService.csproj \
-  --startup-project RelistenUserService/RelistenUserService.csproj
 dotnet run --project RelistenUserService/RelistenUserService.csproj
 ```
 
 The catalog API listens on `http://localhost:3823`; the development User Service
-listens on `http://localhost:5443`. The loopback HTTP issuer and fixed identities
-must remain gated to the `Development` environment. Neither service migrates a
-production database at process startup.
+listens on `http://localhost:5443`. Development startup applies the checked-in
+identity and user-data migrations, seeds the local mobile clients, and offers a
+small fixed set of Apple and Google personas. Those personas exercise the real
+authorization-code, PKCE, token, session, account, and favorites paths without
+requiring contributor-owned provider secrets. The loopback issuer, runtime
+migrations, and fixed identities are rejected outside `Development`; production
+migrations remain an explicit deployment operation.
+
+The development issuer creates ephemeral OpenIddict signing and encryption keys.
+Restarting the User Service therefore invalidates its local access and refresh
+tokens; sign in with the fixed persona again after a restart. Production uses
+configured certificates, so normal service restarts do not invalidate sessions.
+
+With the User Service running, check its account/session security invariants:
+
+```sh
+RelistenUserService/SmokeTests/refresh-token-replay.sh
+```
