@@ -298,6 +298,7 @@ namespace Relisten
             services.AddScoped<PopularityJobs, PopularityJobs>();
             services.AddScoped<ScheduledService, ScheduledService>();
             services.AddScoped<SearchService, SearchService>();
+            services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
         }
