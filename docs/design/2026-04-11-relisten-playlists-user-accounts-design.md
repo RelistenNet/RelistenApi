@@ -1,5 +1,7 @@
 # Relisten Playlists & User Accounts — Design Spec
 
+> **Superseded for implementation.** Use the [identity, user-data, and Sonos architecture](../architecture/2026-07-18-relisten-identity-user-data-and-sonos-architecture.md), the [API-to-TestFlight delivery plan](../plans/active/2026-07-18-relisten-mobile-first-account-delivery-plan.md), and the companion [mobile architecture](../../../relisten-mobile/docs/architecture/2026-07-18-relisten-mobile-accounts-library-sync-and-sonos-architecture.md) and [mobile implementation plan](../../../relisten-mobile/docs/plans/active/2026-07-18-relisten-mobile-accounts-library-sync-and-sonos-implementation.md). This document remains historical product exploration, not the account-system contract.
+
 **Date:** 2026-04-11
 **Status:** Draft v2 (revised with review feedback)
 **Prerequisites:**
