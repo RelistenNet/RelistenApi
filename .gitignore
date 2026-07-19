@@ -9,6 +9,9 @@
 /local-dev/relisten.tar
 /local-dev/relisten.tgz
 /local-dev/backup
+/local-dev/backups/
+/local-dev/*.dump
+/local-dev/*.partial
 /local-dev/redis-data/
 
 RelistenApi/out/

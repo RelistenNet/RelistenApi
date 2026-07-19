@@ -1,32 +1,37 @@
 # Local Development
 
-For local development you need redis and postgres. To make things easier there is a `docker-compose.yml` with a script wrapper to preload the database with information.
+Local development uses Docker Compose for PostgreSQL/TimescaleDB, PgBouncer,
+Redis, and Adminer.
 
-## Pre-requistes
+## Prerequisites
 
-1. Docker
+1. Docker with Compose v2
 2. Visual Studio Code (with C# extension)
-3. .NET Core SDK 2.1+ (macOS: `brew cask install dotnet-sdk`)
+3. .NET 10 SDK
 
 ## Database Setup
 
-Run `./start-local-databases.sh`. This will check if you have the latest development backup of the database. This won't change all the time be prepared to have your database blown away and recreated when running this command in the future.
+Start the local services:
 
-If you don't have the latest version, it will download a database backup and restore it to your docker container. This docker container is persisted to `local-dev/postgers-data/pgdata` so it will persist between docker launches.
-
-In the future, if you would like to start the databases without checking for a new database backup, you can run:
-
-```
-docker-compose -f local-dev/docker-compose.yml up -d # the -d is optional to send the command to background
+```sh
+./start-local-databases.sh
 ```
 
-Both commands will start an Adminer server at [http://localhost:18080](http://localhost:18080) so that you can view the tables in the Postgres database. Here are the various connection infos to use Adminer or any other GUI tool (all hosts are `127.0.0.1` or `localhost`):
+Startup is non-destructive. It preserves `relisten_db` and ensures that the
+`relisten_db`, `temporal`, and `temporal_visibility` databases exist under the
+local `relisten` login. Restoring the catalog snapshot is a separate, explicit
+command because it replaces `relisten_db`.
 
-|  service  | port  | database name | username | password           | url |
-| ----------- | ----- | ------------- | -------- | ------------------ | --- | 
-| redis     | 16379 |               | -        | -                  | - |
-| postgres  | 15432 | relisten_db   | relisten | local_dev_password | - |
-| adminer   | 18080 | relisten_db   | relisten | local_dev_password | [http://localhost:18080](http://localhost:18080) |
+See [local-dev/README.md](local-dev/README.md) for connection details, the
+guarded S3 restore procedure, User Service startup, and reset warnings.
+
+Adminer is available at [http://localhost:18080](http://localhost:18080).
+
+Stop the containers without deleting their data:
+
+```sh
+./stop-local-databases.sh
+```
 
 ## Code Setup
 

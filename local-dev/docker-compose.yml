@@ -1,5 +1,3 @@
-version: '3.1'
-
 services:
   relisten-redis:
     image: redis:7.4
@@ -10,7 +8,7 @@ services:
       - 16379:6379
 
   relisten-db:
-    image: timescale/timescaledb:2.19.3-pg17
+    image: timescale/timescaledb:2.28.2-pg17@sha256:909e2c7577c074517c8936b6d8799294b33f25fb5bad978a2199250665f1ce1a
     restart: always
     command:
       - postgres
@@ -26,6 +24,12 @@ services:
     ports:
       - 15432:5432
     shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
 
   relisten-db-pgbouncer:
     image: edoburu/pgbouncer:v1.24.0-p1
@@ -34,6 +38,9 @@ services:
       DATABASE_URL: postgres://relisten:local_dev_password@relisten-db:5432/relisten_db
       POOL_MODE: transaction
       AUTH_TYPE: scram-sha-256
+    depends_on:
+      relisten-db:
+        condition: service_healthy
     ports:
       - 16432:5432
 
@@ -41,7 +48,8 @@ services:
     image: adminer
     restart: always
     depends_on:
-      - relisten-db
+      relisten-db:
+        condition: service_healthy
     environment:
       ADMINER_DEFAULT_SERVER: relisten-db
     ports:
