@@ -23,6 +23,7 @@ namespace Relisten.Api.Models.Api
     {
         public const int ContractVersion = 1;
         public const int MaxReferenceCount = 500;
+        public const long MaxRequestBodySizeBytes = 128 * 1024;
 
         private static readonly HashSet<string> SupportedCatalogTypes = new(StringComparer.Ordinal)
         {
@@ -74,6 +75,14 @@ namespace Relisten.Api.Models.Api
                 return false;
             }
 
+            if (request.references.Count > MaxReferenceCount)
+            {
+                error = new CatalogResolveValidationError(
+                    "too_many_references",
+                    $"references may contain at most {MaxReferenceCount} items.");
+                return false;
+            }
+
             var uniqueReferences = new List<CatalogReference>();
             var seen = new HashSet<CatalogReference>();
 
@@ -109,13 +118,6 @@ namespace Relisten.Api.Models.Api
                 }
 
                 uniqueReferences.Add(catalogReference);
-                if (uniqueReferences.Count > MaxReferenceCount)
-                {
-                    error = new CatalogResolveValidationError(
-                        "too_many_references",
-                        $"references may contain at most {MaxReferenceCount} distinct catalog references.");
-                    return false;
-                }
             }
 
             references = uniqueReferences;

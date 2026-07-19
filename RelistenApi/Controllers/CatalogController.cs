@@ -21,16 +21,21 @@ namespace Relisten.Controllers
         }
 
         [HttpPost("resolve")]
+        [RequestSizeLimit(CatalogResolveRequestValidator.MaxRequestBodySizeBytes)]
         [ProducesResponseType(typeof(CatalogResolveResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-        public async Task<ActionResult<CatalogResolveResponse>> Resolve([FromBody] CatalogResolveRequest request)
+        public async Task<IActionResult> Resolve([FromBody] CatalogResolveRequest request)
         {
             if (!CatalogResolveRequestValidator.TryValidate(request, out var references, out var error))
             {
                 return InvalidRequest(error!);
             }
 
-            return Ok(await _resolver.Resolve(references));
+            return new JsonResult(await _resolver.Resolve(references))
+            {
+                SerializerSettings = RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+            };
         }
 
         private UnprocessableEntityObjectResult InvalidRequest(CatalogResolveValidationError error)

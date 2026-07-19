@@ -42,14 +42,14 @@ public sealed class TestCatalogResolveRequestValidator
     }
 
     [Test]
-    public void EnforcesLimitAfterDeduplication()
+    public void EnforcesRawInputLimitBeforeDeduplication()
     {
         var repeatedUuid = Guid.NewGuid().ToString();
         var accepted = Enumerable
-            .Repeat(("artist", repeatedUuid), CatalogResolveRequestValidator.MaxReferenceCount + 1)
+            .Repeat(("artist", repeatedUuid), CatalogResolveRequestValidator.MaxReferenceCount)
             .ToArray();
-        var overflow = Enumerable.Range(1, CatalogResolveRequestValidator.MaxReferenceCount + 1)
-            .Select(index => ("artist", $"00000000-0000-0000-0000-{index:D12}"))
+        var overflow = Enumerable
+            .Repeat(("artist", repeatedUuid), CatalogResolveRequestValidator.MaxReferenceCount + 1)
             .ToArray();
 
         CatalogResolveRequestValidator.TryValidate(Request(accepted), out var deduplicated, out var acceptedError)

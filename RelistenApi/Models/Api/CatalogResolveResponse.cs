@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Relisten.Api.Models;
 
 namespace Relisten.Api.Models.Api
 {
@@ -21,12 +22,16 @@ namespace Relisten.Api.Models.Api
 
     public sealed class CatalogResolveEntities
     {
-        public IReadOnlyList<ResolvedArtist> artists { get; init; } = Array.Empty<ResolvedArtist>();
-        public IReadOnlyList<ResolvedShow> shows { get; init; } = Array.Empty<ResolvedShow>();
-        public IReadOnlyList<ResolvedSource> sources { get; init; } = Array.Empty<ResolvedSource>();
-        public IReadOnlyList<ResolvedSourceTrack> source_tracks { get; init; } = Array.Empty<ResolvedSourceTrack>();
-        public IReadOnlyList<ResolvedSong> songs { get; init; } = Array.Empty<ResolvedSong>();
-        public IReadOnlyList<ResolvedTour> tours { get; init; } = Array.Empty<ResolvedTour>();
-        public IReadOnlyList<ResolvedVenue> venues { get; init; } = Array.Empty<ResolvedVenue>();
+        public IReadOnlyList<ArtistWithCounts> artists { get; init; } = Array.Empty<ArtistWithCounts>();
+        public IReadOnlyList<Show> shows { get; init; } = Array.Empty<Show>();
+        public IReadOnlyList<SourceFull> sources { get; init; } = Array.Empty<SourceFull>();
+        public IReadOnlyList<SourceTrack> source_tracks { get; init; } = Array.Empty<SourceTrack>();
+        public IReadOnlyList<SetlistSongWithPlayCount> songs { get; init; } =
+            Array.Empty<SetlistSongWithPlayCount>();
+        public IReadOnlyList<TourWithShowCount> tours { get; init; } = Array.Empty<TourWithShowCount>();
+        public IReadOnlyList<VenueWithShowCount> venues { get; init; } =
+            Array.Empty<VenueWithShowCount>();
+        public IReadOnlyList<Year> years { get; init; } = Array.Empty<Year>();
+        public IReadOnlyList<SourceSet> source_sets { get; init; } = Array.Empty<SourceSet>();
     }
 }
