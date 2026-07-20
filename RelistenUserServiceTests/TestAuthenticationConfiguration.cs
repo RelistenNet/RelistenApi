@@ -78,6 +78,22 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void Production_can_explicitly_enable_startup_migrations()
+    {
+        var environment = new TestHostEnvironment(Environments.Production);
+        var options = new AccountsOptions
+        {
+            Issuer = "https://auth.relisten.test",
+            TrustedProxyNetworks = ["127.0.0.1/32"],
+            ApplyMigrationsOnStartup = true
+        };
+
+        var runtime = AccountsRuntimeConfiguration.Create(options, environment);
+
+        runtime.Options.ApplyMigrationsOnStartup.Should().BeTrue();
+    }
+
+    [Test]
     public void ReusesDevelopmentCertificatesAcrossServiceProviders()
     {
         using var firstProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);

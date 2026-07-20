@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Persistence;
@@ -13,12 +12,6 @@ public sealed class DevelopmentDatabaseInitializer(
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
         await using var scope = serviceProvider.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AccountsDbContext>();
-        if (runtime.Options.ApplyMigrationsOnStartup)
-        {
-            await dbContext.Database.MigrateAsync(cancellationToken);
-        }
-
         await SeedScopesAsync(scope.ServiceProvider, cancellationToken);
         await SeedClientAsync(
             scope.ServiceProvider,

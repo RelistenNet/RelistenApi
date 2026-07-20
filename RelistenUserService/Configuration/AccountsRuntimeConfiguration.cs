@@ -47,12 +47,6 @@ public sealed record AccountsRuntimeConfiguration(
             ValidateExternalProviders(options, isLoopback);
         }
 
-        if (options.ApplyMigrationsOnStartup && !environment.IsDevelopment())
-        {
-            throw new InvalidOperationException(
-                "Runtime migrations may only be enabled in the Development environment.");
-        }
-
         if (options.AllowInsecureHttp && !allowLoopbackHttp)
         {
             throw new InvalidOperationException(

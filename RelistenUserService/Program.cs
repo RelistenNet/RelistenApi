@@ -1,9 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using RelistenUserService.Authentication;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
+using RelistenUserService.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 var accountsOptions = builder.Configuration
@@ -26,10 +28,19 @@ builder.Services.AddRelistenAccounts(
     runtime);
 
 var app = builder.Build();
+if (runtime.Options.ApplyMigrationsOnStartup)
+{
+    // The first production rollout runs one no-surge replica, so schema installation
+    // completes before the pod accepts traffic. Move this back to an operator Job before
+    // scaling the service beyond one replica.
+    await app.Services.GetRequiredService<AccountsDatabaseMigrator>()
+        .MigrateAsync(app.Lifetime.ApplicationStopping);
+}
+
 if (runtime.Options.EnableDevelopmentPersonas)
 {
-    // Finish local schema and client setup before Data Protection's hosted
-    // service tries to load its database-backed key ring during app startup.
+    // Finish local client setup before Data Protection's hosted service tries to
+    // load its database-backed key ring during app startup.
     await app.Services.GetRequiredService<DevelopmentDatabaseInitializer>()
         .InitializeAsync(app.Lifetime.ApplicationStopping);
 }
@@ -51,6 +62,12 @@ if (runtime.Options.EnableDevelopmentPersonas)
 
 app.MapControllers();
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
+app.MapGet(
+    "/health/ready",
+    async (AccountsDbContext dbContext, CancellationToken cancellationToken) =>
+        await dbContext.Database.CanConnectAsync(cancellationToken)
+            ? Results.Ok(new { status = "ready" })
+            : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
 app.Run();
 
 public partial class Program;

@@ -141,6 +141,7 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();
+        services.AddSingleton<AccountsDatabaseMigrator>();
         return services;
     }
 
