@@ -46,6 +46,45 @@ public sealed class TestExternalIdentityProfileFactory
     }
 
     [Test]
+    public void Google_coalesces_equivalent_claims_from_id_token_and_user_info()
+    {
+        var principal = Principal(
+            "google-subject",
+            "listener@example.com",
+            emailVerified: "true");
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.AddClaim(new Claim(Claims.Subject, "google-subject"));
+        identity.AddClaim(new Claim(Claims.Email, "LISTENER@example.com"));
+        identity.AddClaim(new Claim(Claims.EmailVerified, "True"));
+
+        var profile = ExternalIdentityProfileFactory.Create(
+            AuthenticationConstants.GoogleProvider,
+            principal);
+
+        profile.Subject.Should().Be("google-subject");
+        profile.Email.Should().Be("listener@example.com");
+        profile.EmailVerified.Should().BeTrue();
+    }
+
+    [Test]
+    public void Conflicting_subject_claims_are_rejected()
+    {
+        var principal = Principal(
+            "google-subject",
+            "listener@example.com",
+            emailVerified: "true");
+        ((ClaimsIdentity)principal.Identity!).AddClaim(
+            new Claim(Claims.Subject, "different-google-subject"));
+
+        var action = () => ExternalIdentityProfileFactory.Create(
+            AuthenticationConstants.GoogleProvider,
+            principal);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*conflicting*'sub'*");
+    }
+
+    [Test]
     public void Missing_subject_is_rejected()
     {
         var action = () => ExternalIdentityProfileFactory.Create(
