@@ -9,7 +9,6 @@ namespace RelistenUserService.Library;
 public sealed class FavoriteMutationService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
-    CatalogAvailabilityValidator catalogValidator,
     LibraryStateStore stateStore,
     TimeProvider timeProvider)
 {
@@ -79,23 +78,14 @@ public sealed class FavoriteMutationService(
         var favorites = await dbContext.Favorites
             .Where(favorite => favorite.UserId == userId)
             .ToListAsync(cancellationToken);
-        var simulation = SimulateNewState(favorites.Select(ToReference), newMutations);
-        if (simulation.FinalCount > MaximumActiveFavorites)
+        var finalCount = CountFavoritesAfterMutations(
+            favorites.Select(ToReference),
+            newMutations);
+        if (finalCount > MaximumActiveFavorites)
         {
             return FavoriteMutationExecution.Failed(new(
                 FavoriteMutationFailureKind.QuotaExceeded,
                 $"An account may have at most {MaximumActiveFavorites:N0} active favorites."));
-        }
-
-        var unavailable = await catalogValidator.FindUnavailableAsync(
-            simulation.AdditionsToValidate,
-            cancellationToken);
-        if (unavailable.Count > 0)
-        {
-            return FavoriteMutationExecution.Failed(new(
-                FavoriteMutationFailureKind.CatalogUnavailable,
-                "One or more new favorites are unavailable in the catalog.",
-                UnavailableReferences: unavailable));
         }
 
         var activeByTarget = favorites.ToDictionary(ToReference);
@@ -217,22 +207,17 @@ public sealed class FavoriteMutationService(
         return conflicts.Length == 0 ? null : FavoriteUuidConflict(conflicts);
     }
 
-    private static FavoriteStateSimulation SimulateNewState(
+    private static int CountFavoritesAfterMutations(
         IEnumerable<CatalogReference> initialTargets,
         IReadOnlyList<FavoriteMutationCommand> mutations)
     {
         var currentTargets = initialTargets.ToHashSet();
-        var seenAdditions = new HashSet<CatalogReference>();
-        var additions = new List<CatalogReference>();
         foreach (var mutation in mutations)
         {
             var target = ToReference(mutation);
             if (IsAdd(mutation))
             {
-                if (currentTargets.Add(target) && seenAdditions.Add(target))
-                {
-                    additions.Add(target);
-                }
+                currentTargets.Add(target);
             }
             else
             {
@@ -240,7 +225,7 @@ public sealed class FavoriteMutationService(
             }
         }
 
-        return new(currentTargets.Count, additions);
+        return currentTargets.Count;
     }
 
     private static FavoriteMutationResult ToResult(FavoriteMutationReceipt receipt) => new(
@@ -272,8 +257,4 @@ public sealed class FavoriteMutationService(
         Guid UserId,
         string CatalogType,
         Guid CatalogUuid);
-
-    private sealed record FavoriteStateSimulation(
-        int FinalCount,
-        IReadOnlyList<CatalogReference> AdditionsToValidate);
 }

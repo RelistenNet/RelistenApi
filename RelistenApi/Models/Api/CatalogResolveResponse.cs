@@ -18,8 +18,8 @@ namespace Relisten.Api.Models.Api
         public string catalog_type { get; init; } = string.Empty;
         public Guid catalog_uuid { get; init; }
 
-        // This describes whether the resolver returned a complete mobile catalog graph. Favorite
-        // membership remains valid when a row is unavailable or temporarily cannot be hydrated.
+        // Availability says whether catalog_uuid appears in its target-type entity array at
+        // checked_at. It does not affect favorite membership or predict future resolution.
         public string availability { get; init; } = string.Empty;
     }
 

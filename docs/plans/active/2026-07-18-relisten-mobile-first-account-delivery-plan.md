@@ -175,7 +175,7 @@ The first internal TestFlight may focus on sign-in, sign-out, switch, and userna
 
 ### Slice 2: favorites
 
-Server scope: explicit UUIDv7 favorite rows, desired-state mutation receipts, library snapshot/change cursor, and typed catalog validation. Mobile scope: scoped favorite rows, anonymous-import choice, My Library, and CarPlay account scoping. Add only favorite and favorite-outbox Realm models.
+Server scope: explicit UUIDv7 favorite rows, desired-state mutation receipts, library snapshot/change cursor, catalog-type and UUID syntax validation, and best-effort catalog hydration. Mobile scope: scoped favorite rows, anonymous-import choice, My Library, and CarPlay account scoping. Add only favorite and favorite-outbox Realm models.
 
 ### Slice 3: qualified history
 

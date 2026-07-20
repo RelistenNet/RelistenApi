@@ -2,11 +2,9 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 
 WORKDIR /src
 
-COPY Relisten.Catalog/Relisten.Catalog.csproj Relisten.Catalog/
 COPY RelistenApi/RelistenApi.csproj RelistenApi/
 RUN dotnet restore RelistenApi/RelistenApi.csproj
 
-COPY Relisten.Catalog/ Relisten.Catalog/
 COPY RelistenApi/ RelistenApi/
 RUN dotnet publish RelistenApi/RelistenApi.csproj -c Release -o /app/publish --no-restore
 

@@ -136,7 +136,6 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<UsernameCommandService>();
         services.AddScoped<ExternalIdentityCompletionService>();
         services.AddScoped<NativePrincipalFactory>();
-        services.AddScoped<CatalogAvailabilityValidator>();
         services.AddScoped<FavoriteMutationService>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();

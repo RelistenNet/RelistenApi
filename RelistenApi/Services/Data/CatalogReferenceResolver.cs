@@ -31,7 +31,6 @@ namespace Relisten.Data
                     queryPlan.Sql,
                     new {catalog_types = catalogTypes, catalog_uuids = catalogUuids});
 
-                var resolvedReferences = (await results.ReadAsync<ResolvedCatalogReference>()).ToArray();
                 var artists = (await results.ReadAsync<ArtistWithCounts>()).ToArray();
                 var features = (await results.ReadAsync<Features>())
                     .ToDictionary(feature => feature.artist_id);
@@ -68,26 +67,57 @@ namespace Relisten.Data
                     sourceSet.tracks = [];
                 }
 
+                var entities = new CatalogResolveEntities
+                {
+                    artists = artists,
+                    shows = shows,
+                    sources = sources,
+                    source_tracks = sourceTracks,
+                    songs = songs,
+                    tours = tours,
+                    venues = venues,
+                    years = years,
+                    source_sets = sourceSets
+                };
+
                 return new CatalogResolveResponse
                 {
                     contract_version = CatalogResolveRequestValidator.ContractVersion,
                     checked_at = DateTime.UtcNow,
-                    references = resolvedReferences,
-                    entities = new CatalogResolveEntities
-                    {
-                        artists = artists,
-                        shows = shows,
-                        sources = sources,
-                        source_tracks = sourceTracks,
-                        songs = songs,
-                        tours = tours,
-                        venues = venues,
-                        years = years,
-                        source_sets = sourceSets
-                    }
+                    references = BuildResolvedReferences(references, entities),
+                    entities = entities
                 };
             });
         }
+
+        internal static IReadOnlyList<ResolvedCatalogReference> BuildResolvedReferences(
+            IReadOnlyList<CatalogReference> references,
+            CatalogResolveEntities entities)
+        {
+            var resolvedUuids = new Dictionary<string, HashSet<Guid>>(StringComparer.Ordinal)
+            {
+                ["artist"] = EntityUuids(entities.artists),
+                ["show"] = EntityUuids(entities.shows),
+                ["source"] = EntityUuids(entities.sources),
+                ["source_track"] = EntityUuids(entities.source_tracks),
+                ["song"] = EntityUuids(entities.songs),
+                ["tour"] = EntityUuids(entities.tours),
+                ["venue"] = EntityUuids(entities.venues)
+            };
+
+            return references.Select(reference => new ResolvedCatalogReference
+            {
+                catalog_type = reference.CatalogType,
+                catalog_uuid = reference.CatalogUuid,
+                availability = resolvedUuids[reference.CatalogType].Contains(reference.CatalogUuid)
+                    ? "available"
+                    : "unavailable"
+            }).ToArray();
+        }
+
+        private static HashSet<Guid> EntityUuids<T>(IEnumerable<T> entities)
+            where T : IHasPersistentIdentifier =>
+            entities.Select(entity => entity.uuid).ToHashSet();
 
         private static async Task<T[]> ReadIfIncluded<T>(
             SqlMapper.GridReader results,

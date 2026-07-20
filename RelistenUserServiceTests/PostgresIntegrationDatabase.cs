@@ -44,7 +44,6 @@ public sealed class PostgresIntegrationDatabase
         }.ConnectionString;
         await using var dbContext = CreateContext();
         await dbContext.Database.MigrateAsync();
-        await dbContext.Database.ExecuteSqlRawAsync(CatalogTablesSql);
     }
 
     public async Task StopAsync()
@@ -99,90 +98,4 @@ public sealed class PostgresIntegrationDatabase
         return userId;
     }
 
-    public async Task<Guid> CreateArtistAsync()
-    {
-        var artistUuid = Guid.NewGuid();
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = new NpgsqlCommand(
-            """
-            WITH artist AS (
-                INSERT INTO artists (uuid)
-                VALUES (@uuid)
-                RETURNING id
-            )
-            INSERT INTO features (artist_id)
-            SELECT id FROM artist;
-            """,
-            connection);
-        command.Parameters.AddWithValue("uuid", artistUuid);
-        await command.ExecuteNonQueryAsync();
-        return artistUuid;
-    }
-
-    private const string CatalogTablesSql = """
-        CREATE TABLE artists (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE
-        );
-        CREATE TABLE features (
-            artist_id bigint NOT NULL UNIQUE
-        );
-        CREATE TABLE years (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            artist_id bigint NOT NULL,
-            year text NOT NULL
-        );
-        CREATE TABLE shows (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            artist_id bigint NOT NULL,
-            year_id bigint NULL,
-            date date NOT NULL
-        );
-        CREATE TABLE show_source_information (
-            show_id bigint NOT NULL UNIQUE
-        );
-        CREATE TABLE sources (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            artist_id bigint NOT NULL,
-            show_id bigint NULL
-        );
-        CREATE TABLE source_sets (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            source_id bigint NOT NULL
-        );
-        CREATE TABLE source_tracks (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            source_id bigint NOT NULL,
-            source_set_id bigint NOT NULL,
-            mp3_url text NULL,
-            flac_url text NULL,
-            is_orphaned boolean NOT NULL DEFAULT false
-        );
-        CREATE TABLE setlist_songs (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            artist_id bigint NOT NULL
-        );
-        CREATE TABLE tours (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            artist_id bigint NOT NULL,
-            start_date date NULL,
-            end_date date NULL
-        );
-        CREATE TABLE venues (
-            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-            uuid uuid NOT NULL UNIQUE,
-            artist_id bigint NULL,
-            name text NULL,
-            location text NULL,
-            upstream_identifier text NULL,
-            slug text NULL
-        );
-        """;
 }

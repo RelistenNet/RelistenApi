@@ -259,7 +259,7 @@ This makes a future deployment split possible without changing clients. Until th
 flowchart LR
     Clients["Web, mobile, Sonos"] --> UserService["User Service"]
     Clients --> CatalogService["Catalog service"]
-    UserService -->|"validate UUIDs, availability,<br/>hydrate playlist projection"| CatalogSchema["catalog-owned public schema"]
+    UserService -->|"hydrate and validate<br/>playlist projections"| CatalogSchema["catalog-owned public schema"]
     CatalogService --> CatalogSchema
     UserService --> IdentitySchema["identity schema"]
     UserService --> UserSchema["user_data schema"]
@@ -630,7 +630,7 @@ The word `catalog` in this document means the catalog-owned tables currently in 
 flowchart LR
     UserApp["user_service_app"] -->|"read/write"| Identity["identity.*"]
     UserApp -->|"read/write"| UserData["user_data.*"]
-    UserApp -->|"validate selected rows by UUID"| Catalog["public.* catalog tables"]
+    UserApp -->|"read playlist projections by UUID"| Catalog["public.* catalog tables"]
 
     CatalogApp["catalog app role"] -->|"read/write"| Catalog
     CatalogApp -. "no privileges" .-> Identity
@@ -649,7 +649,7 @@ Runtime and migration roles are distinct:
 
 - `user_service_owner` is a `NOLOGIN` role that owns `identity` and `user_data`.
 - `user_service_migrator` applies reviewed EF Core migrations and receives `REFERENCES` on the specific catalog UUID columns used by foreign keys.
-- `user_service_app` receives DML on the two user schemas and `SELECT` on narrow catalog-owned projections required for UUID validation, availability, and playlist hydration. It receives no catalog DML.
+- `user_service_app` receives DML on the two user schemas and `SELECT` on the narrow catalog-owned projection required for playlist hydration. Favorite writes never read catalog tables: they validate only the catalog-type allowlist and UUID syntax, then preserve the listener's reference even when the catalog cannot currently resolve it. The role receives no catalog DML.
 - `user_service_worker` receives only the table and stored-command privileges needed by asynchronous activities. The worker references the same versioned application/domain assembly as the User Service and executes those commands directly against PostgreSQL; it does not call a privileged HTTP backdoor. External provider calls remain explicit worker activities with idempotency keys.
 - `user_service_backup` receives read access to `identity`, `user_data`, and the catalog objects included in the single-snapshot account recovery bundle; it cannot write application data.
 - The catalog runtime role receives no `USAGE` on `identity` or `user_data`.
@@ -704,9 +704,9 @@ The following is forbidden:
 user_data.playlist_items.source_track_id -> public.source_tracks.id
 ```
 
-Use physical cross-schema foreign keys for concrete types such as `source_track_uuid`. The delete action is `RESTRICT` or `NO ACTION`, never `CASCADE`. A catalog cleanup must not erase a listener's operation history or invalidate a sync cursor. A referenced source-track row remains under the same UUID and carries availability state when licensing or upstream removal prevents future use. The importer must treat a foreign-key violation as a retention signal, not bypass the constraint. Favorites lack a physical polymorphic FK, so the resolver can report an unavailable favorite by type and UUID even when no concrete FK exists.
+Use physical cross-schema foreign keys for concrete types such as `source_track_uuid`. The delete action is `RESTRICT` or `NO ACTION`, never `CASCADE`. A catalog cleanup must not erase a listener's operation history or invalidate a sync cursor. A referenced source-track row remains under the same UUID and carries availability state when licensing or upstream removal prevents future use. The importer must treat a foreign-key violation as a retention signal, not bypass the constraint. Favorites are deliberately different: they have no physical polymorphic FK, and their membership survives whether or not the catalog currently contains the referenced UUID.
 
-Favorites can refer to several catalog types. Store `(catalog_type, catalog_uuid)`, restrict `catalog_type` to an application allowlist, and validate the pair in the User Service. Do not create a synthetic universal catalog-entity table solely to obtain a polymorphic foreign key.
+Favorites can refer to several catalog types. Store `(catalog_type, catalog_uuid)` and restrict `catalog_type` to an application allowlist, but do not query the catalog or reject a favorite because the UUID is currently absent. Do not create a synthetic universal catalog-entity table solely to obtain a polymorphic foreign key.
 
 Initial `catalog_type` wire values are `artist`, `show`, `source`, `source_track`, `song`, `tour`, and `venue`. Removing or renaming a value is an API migration, not an enum refactor.
 
@@ -720,7 +720,7 @@ Catalog removal and a user-authored content removal are different states:
 
 Filtering is projection behavior, not a fan-out rewrite of every playlist. Catalog availability changes therefore do not generate one playlist operation per affected occurrence. Availability participates in the rendered projection revision and makes clients refresh a stale playlist response without rewriting user authorship history.
 
-The catalog introduces a monotonic, global `availability_revision` with the playlist slice, advancing it only when the remotely playable/unavailable state of a UUID changes. Hydrated playlist reads return it, and the playlist projection token combines playlist revision with `availability_revision`; clients compare that token for freshness rather than coordinating resolver chunks. Favorites do not need this machinery at launch: the standalone resolver reports status at `checked_at`, mobile preserves unavailable membership, and unresolved references are rechecked on later syncs. This keeps the favorites slice straightforward while preserving the no-fan-out removal contract needed by large playlists.
+The catalog introduces a monotonic, global `availability_revision` with the playlist slice, advancing it only when the remotely playable/unavailable state of a UUID changes. Hydrated playlist reads return it, and the playlist projection token combines playlist revision with `availability_revision`; clients compare that token for freshness rather than coordinating resolver chunks. Favorites do not need this machinery at launch. The standalone resolver runs only its ordinary UUID-targeted hydration queries, omits entities it cannot currently hydrate, and derives each requested reference's status from the target DTOs actually returned. It does not run a second SQL graph-validation pass. Mobile preserves membership and cached catalog objects, retries unresolved references only while they belong to an active favorite, and stops retrying after unfavorite. Refavoriting makes the reference eligible for hydration again. This keeps the favorites slice straightforward while preserving the no-fan-out removal contract needed by large playlists.
 
 ### Core entity relationships
 
@@ -1022,6 +1022,8 @@ Start with product concepts that exist in the clients. Avoid generic entity stor
 #### Favorites
 
 `user_data.favorites` is the materialized membership set. Every row has a UUIDv7 `id`; a unique constraint on `(user_id, catalog_type, catalog_uuid)` prevents duplicate membership. It also stores `created_at` and `updated_at`. `user_data.favorite_mutation_receipts` records the client-created UUIDv7 mutation ID, user, desired state, normalized payload hash, server receipt time, resulting favorite UUID when present, and resulting library revision. The launch limit is 10,000 active favorites per user.
+
+Favorite membership is user intent, not a materialized assertion that the catalog currently contains the target. A syntactically valid allowlisted reference is accepted even when its UUID is missing. Catalog absence never deletes or rejects membership. A fresh device may omit an unresolved favorite from catalog-backed presentation until hydration succeeds; a device with cached metadata keeps that cache. Neither case is an account-sync failure or a condition requiring user attention.
 
 A mutation says “this object should now be favorite” or “this object should not now be favorite”; it is not a blind toggle. A client creating a favorite supplies a provisional UUIDv7 `favorite_uuid`. If two clients concurrently add the same natural target, the first committed row ID becomes canonical. Every response and library delta returns that canonical ID, and a losing client remaps its provisional local ID before acknowledging the outbox item. Removal names the natural target and returns the canonical row ID it removed, if any. Under concurrent offline writes, server receipt order wins. Repeating one mutation ID with an identical normalized payload returns the original result. Reusing it with a different payload returns `409 idempotency_conflict`.
 
@@ -1776,7 +1778,7 @@ The current two PostgreSQL instances protect against one database pod/process fa
 - Provider availability is not part of readiness. A Google failure blocks new Google logins while existing sessions and account APIs keep working.
 - Sonos availability is not part of readiness. It affects connect and control operations only.
 - Temporal availability is not part of User Service readiness. It affects outbox age and asynchronous completion; synchronous domain commits remain available.
-- A catalog projection failure does not invalidate sessions. It may prevent a fresh hydrated playlist read, catalog validation for new mutations, or remote media handoff; a device may still show cached normalized rows and play existing downloads.
+- A catalog projection failure does not invalidate sessions. It may prevent a fresh hydrated playlist read, a catalog-dependent playlist mutation, or remote media handoff; a device may still show cached normalized rows and play existing downloads.
 - OTLP and Sentry exporters are never readiness dependencies.
 - Retry safe reads and idempotent writes with bounded backoff. Do not automatically retry a non-idempotent provider code exchange or playback-session creation without its protocol idempotency guarantee.
 

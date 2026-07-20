@@ -80,20 +80,6 @@ public sealed class LibraryController(
                 LibraryErrorCodes.FavoriteUuidConflict,
                 failure.Detail,
                 new() { ["conflicting_favorite_uuids"] = failure.ConflictingUuids }),
-            FavoriteMutationFailureKind.CatalogUnavailable => LibraryProblem(
-                StatusCodes.Status422UnprocessableEntity,
-                LibraryErrorCodes.CatalogUnavailable,
-                failure.Detail,
-                new()
-                {
-                    ["unavailable_references"] = failure.UnavailableReferences!
-                        .Select(reference => new
-                        {
-                            catalog_type = reference.CatalogType,
-                            catalog_uuid = reference.CatalogUuid
-                        })
-                        .ToArray()
-                }),
             FavoriteMutationFailureKind.QuotaExceeded => LibraryProblem(
                 StatusCodes.Status422UnprocessableEntity,
                 LibraryErrorCodes.QuotaExceeded,

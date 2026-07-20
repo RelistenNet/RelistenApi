@@ -17,13 +17,13 @@ public sealed class TestFavoriteLibraryIntegration
     private DirectoryInfo _dataProtectionDirectory = null!;
     private Guid _userA;
     private Guid _userB;
-    private Guid _artistUuid;
+    private Guid _catalogUuid;
 
     [OneTimeSetUp]
     public async Task SetUp()
     {
         await _database.StartAsync();
-        _artistUuid = await _database.CreateArtistAsync();
+        _catalogUuid = Guid.NewGuid();
         _dataProtectionDirectory = new(
             Path.Combine(Path.GetTempPath(), $"relisten-cursors-{Guid.NewGuid():N}"));
         _dataProtection = DataProtectionProvider.Create(_dataProtectionDirectory);
@@ -47,35 +47,51 @@ public sealed class TestFavoriteLibraryIntegration
     }
 
     [Test]
-    public async Task Unavailable_add_rejects_the_entire_batch()
+    public async Task Missing_catalog_uuid_can_be_favorited_and_unfavorited_through_sync()
     {
-        var mutations = new[]
-        {
-            Add(_artistUuid),
-            Add(Guid.NewGuid())
-        };
+        var missingCatalogUuid = Guid.NewGuid();
+        var cursorProtector = new LibraryCursorProtector(_dataProtection);
+        var before = await SnapshotAsync(_userA, cursorProtector);
+        var add = Add(missingCatalogUuid);
 
-        var execution = await ExecuteAsync(_userA, mutations);
+        var addExecution = await ExecuteAsync(_userA, [add]);
+        var addedSnapshot = await SnapshotAsync(_userA, cursorProtector);
+        var removeExecution = await ExecuteAsync(_userA, [Remove(missingCatalogUuid)]);
+        var currentSnapshot = await SnapshotAsync(_userA, cursorProtector);
+        var changes = await ChangesAsync(_userA, before.NextCursor, cursorProtector);
 
-        execution.Response.Should().BeNull();
-        execution.Failure!.Kind.Should().Be(FavoriteMutationFailureKind.CatalogUnavailable);
-        execution.Failure.UnavailableReferences.Should().ContainSingle()
-            .Which.CatalogUuid.Should().Be(mutations[1].CatalogUuid);
-        await using var dbContext = _database.CreateContext();
-        (await dbContext.Favorites.CountAsync(favorite => favorite.UserId == _userA))
-            .Should().Be(0);
-        (await dbContext.FavoriteMutationReceipts.CountAsync(receipt => receipt.UserId == _userA))
-            .Should().Be(0);
-        (await dbContext.LibraryChanges.CountAsync(change => change.UserId == _userA))
-            .Should().Be(0);
+        addExecution.Response!.Results.Should().ContainSingle().Which.Should()
+            .Match<FavoriteMutationResult>(result =>
+                result.Changed
+                && result.CanonicalFavoriteUuid == add.FavoriteUuid
+                && result.CatalogUuid == missingCatalogUuid);
+        addedSnapshot.Favorites.Should().ContainSingle().Which.Should()
+            .Match<FavoriteSnapshotItem>(favorite =>
+                favorite.FavoriteUuid == add.FavoriteUuid
+                && favorite.CatalogUuid == missingCatalogUuid);
+        removeExecution.Response!.Results.Should().ContainSingle().Which.Should()
+            .Match<FavoriteMutationResult>(result =>
+                result.Changed
+                && result.CanonicalFavoriteUuid == add.FavoriteUuid
+                && result.CatalogUuid == missingCatalogUuid);
+        currentSnapshot.Favorites.Should().BeEmpty();
+        changes.Response!.Changes.Should().SatisfyRespectively(
+            added => added.Should().Match<FavoriteLibraryChange>(change =>
+                change.ChangeType == FavoriteChangeTypes.Added
+                && change.FavoriteUuid == add.FavoriteUuid
+                && change.CatalogUuid == missingCatalogUuid),
+            removed => removed.Should().Match<FavoriteLibraryChange>(change =>
+                change.ChangeType == FavoriteChangeTypes.Removed
+                && change.FavoriteUuid == add.FavoriteUuid
+                && change.CatalogUuid == missingCatalogUuid));
     }
 
     [Test]
     public async Task Retry_is_exact_and_the_first_membership_uuid_is_canonical()
     {
-        var first = Add(_artistUuid);
+        var first = Add(_catalogUuid);
         var firstExecution = await ExecuteAsync(_userA, [first]);
-        var second = Add(_artistUuid);
+        var second = Add(_catalogUuid);
         var secondExecution = await ExecuteAsync(_userA, [second]);
         var replay = await ExecuteAsync(_userA, [second]);
 
@@ -112,9 +128,9 @@ public sealed class TestFavoriteLibraryIntegration
     [Test]
     public async Task Retry_preserves_its_original_response_after_an_intervening_mutation()
     {
-        var add = Add(_artistUuid);
+        var add = Add(_catalogUuid);
         var original = await ExecuteAsync(_userA, [add]);
-        var removal = await ExecuteAsync(_userA, [Remove(_artistUuid)]);
+        var removal = await ExecuteAsync(_userA, [Remove(_catalogUuid)]);
 
         var retry = await ExecuteAsync(_userA, [add]);
 
@@ -134,7 +150,7 @@ public sealed class TestFavoriteLibraryIntegration
     {
         var cursorProtector = new LibraryCursorProtector(_dataProtection);
         var before = await SnapshotAsync(_userA, cursorProtector);
-        var mutation = Add(_artistUuid);
+        var mutation = Add(_catalogUuid);
         var mutationResult = await ExecuteAsync(_userA, [mutation]);
 
         var changes = await ChangesAsync(_userA, before.NextCursor, cursorProtector);
@@ -144,7 +160,7 @@ public sealed class TestFavoriteLibraryIntegration
             .Match<FavoriteLibraryChange>(change =>
                 change.ChangeType == FavoriteChangeTypes.Added
                 && change.FavoriteUuid == mutation.FavoriteUuid
-                && change.CatalogUuid == _artistUuid);
+                && change.CatalogUuid == _catalogUuid);
 
         var crossAccountCursor = await ChangesAsync(_userB, before.NextCursor, cursorProtector);
         crossAccountCursor.CursorExpired.Should().BeTrue();
@@ -167,7 +183,7 @@ public sealed class TestFavoriteLibraryIntegration
             LibraryStateLockMode.SharedRead,
             CancellationToken.None);
 
-        var mutationTask = ExecuteAsync(_userA, [Add(_artistUuid)]);
+        var mutationTask = ExecuteAsync(_userA, [Add(_catalogUuid)]);
         await Task.Delay(100);
 
         mutationTask.IsCompleted.Should().BeFalse(
@@ -193,7 +209,6 @@ public sealed class TestFavoriteLibraryIntegration
         var service = new FavoriteMutationService(
             dbContext,
             new AdvisoryLockService(dbContext),
-            new CatalogAvailabilityValidator(dbContext),
             new LibraryStateStore(dbContext),
             TimeProvider.System);
         return await service.ExecuteAsync(userId, mutations, CancellationToken.None);

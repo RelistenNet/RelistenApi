@@ -3,12 +3,10 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY Relisten.Accounts.Contracts/Relisten.Accounts.Contracts.csproj Relisten.Accounts.Contracts/
-COPY Relisten.Catalog/Relisten.Catalog.csproj Relisten.Catalog/
 COPY RelistenUserService/RelistenUserService.csproj RelistenUserService/
 RUN dotnet restore RelistenUserService/RelistenUserService.csproj
 
 COPY Relisten.Accounts.Contracts/ Relisten.Accounts.Contracts/
-COPY Relisten.Catalog/ Relisten.Catalog/
 COPY RelistenUserService/ RelistenUserService/
 RUN dotnet publish RelistenUserService/RelistenUserService.csproj \
     -c Release \

@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using Relisten;
 using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
+using Relisten.Data;
 
 namespace RelistenApiTests;
 
@@ -62,6 +63,40 @@ public sealed class TestCatalogResolveResponseContract
         parsed.SelectToken("$.entities.artists[0].features").Should().NotBeNull();
         parsed.SelectToken("$.entities.years").Should().NotBeNull();
         parsed.SelectToken("$.entities.source_sets").Should().NotBeNull();
+    }
+
+    [Test]
+    public void Mixed_references_derive_availability_from_target_entity_dtos()
+    {
+        var existingArtistUuid = Guid.NewGuid();
+        var existingShowUuid = Guid.NewGuid();
+        var missingShowUuid = Guid.NewGuid();
+        var references = new CatalogReference[]
+        {
+            new("artist", existingArtistUuid),
+            new("show", existingShowUuid),
+            new("show", missingShowUuid)
+        };
+        var entities = new CatalogResolveEntities
+        {
+            artists =
+            [
+                new ArtistWithCounts {uuid = existingArtistUuid},
+                new ArtistWithCounts {uuid = missingShowUuid}
+            ],
+            shows = [new Show {uuid = existingShowUuid}]
+        };
+
+        var resolved = CatalogReferenceResolver.BuildResolvedReferences(references, entities);
+
+        resolved.Select(reference => (
+                reference.catalog_type,
+                reference.catalog_uuid,
+                reference.availability))
+            .Should().Equal(
+                ("artist", existingArtistUuid, "available"),
+                ("show", existingShowUuid, "available"),
+                ("show", missingShowUuid, "unavailable"));
     }
 
     private static Type ElementType(string propertyName) =>

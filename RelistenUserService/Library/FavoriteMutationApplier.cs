@@ -6,7 +6,7 @@ using RelistenUserService.Persistence;
 namespace RelistenUserService.Library;
 
 // Applies one already-validated command to EF's tracked membership graph. Transaction boundaries,
-// idempotency, catalog checks, and account-level serialization remain in FavoriteMutationService.
+// idempotency, quota enforcement, and account-level serialization remain in FavoriteMutationService.
 internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
 {
     public FavoriteMutationResult Apply(

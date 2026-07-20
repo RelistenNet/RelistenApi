@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Relisten.Api.Models.Api;
-using Relisten.Catalog;
 using Relisten.Data;
 
 namespace RelistenApiTests;
@@ -50,14 +49,13 @@ public sealed class TestCatalogReferenceQueryPlan
     }
 
     [Test]
-    public void AvailabilityQueryChecksOnlyRequestedTypes()
+    public void BuildsOnlyTargetedHydrationQueries()
     {
-        var sql = CatalogHydrationAvailabilitySql.BuildResolution(
-            new HashSet<string> {"artist"});
+        var plan = CatalogReferenceQueryPlan.Create([Reference("artist")]);
 
-        sql.Should().Contain("JOIN artists entity");
-        sql.Should().NotContain("JOIN shows entity");
-        sql.Should().NotContain("JOIN source_tracks entity");
+        plan.Sql.Should().Contain("FROM artists artist");
+        plan.Sql.Should().NotContain(" AS availability");
+        plan.Sql.Should().NotContain("LEFT JOIN available");
     }
 
     private static CatalogReference Reference(string catalogType) =>

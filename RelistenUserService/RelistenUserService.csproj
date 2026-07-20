@@ -20,6 +20,5 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Relisten.Accounts.Contracts\Relisten.Accounts.Contracts.csproj" />
-    <ProjectReference Include="..\Relisten.Catalog\Relisten.Catalog.csproj" />
   </ItemGroup>
 </Project>

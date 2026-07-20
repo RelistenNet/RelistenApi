@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Relisten.Api.Models.Api;
-using Relisten.Catalog;
 
 namespace Relisten.Data
 {
@@ -72,7 +71,6 @@ namespace Relisten.Data
             // beside the dependency map so adding one entity cannot silently shift Dapper's mapping.
             var statements = new List<string>
             {
-                CatalogHydrationAvailabilitySql.BuildResolution(requestedTypes),
                 CatalogReferenceArtistsSql.Query
             };
 
