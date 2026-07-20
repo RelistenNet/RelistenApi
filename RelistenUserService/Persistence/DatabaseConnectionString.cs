@@ -21,8 +21,11 @@ public static class DatabaseConnectionString
 
     public static string Resolve(IConfiguration configuration)
     {
-        var configured = configuration.GetConnectionString("Accounts")
-            ?? configuration["ACCOUNTS_DATABASE_URL"]
+        // Deployments provide ACCOUNTS_DATABASE_URL as a PostgreSQL URI. It must
+        // outrank file-based defaults so a local setting can never shadow the
+        // production Secret mounted by the deployment manifest.
+        var configured = configuration["ACCOUNTS_DATABASE_URL"]
+            ?? configuration.GetConnectionString("Accounts")
             ?? configuration["DATABASE_URL"];
 
         if (string.IsNullOrWhiteSpace(configured))

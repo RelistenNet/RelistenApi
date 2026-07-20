@@ -49,6 +49,26 @@ public sealed class TestDatabaseConnectionString
         resolve.Should().Throw<InvalidOperationException>();
     }
 
+    [Test]
+    public void AccountsDatabaseUrlOverridesFileConnectionString()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:Accounts"] =
+                    "Host=localhost;Database=local_accounts;Username=local;Password=local",
+                ["ACCOUNTS_DATABASE_URL"] =
+                    "postgresql://production:secret@accounts-db.internal/production_accounts"
+            })
+            .Build();
+
+        var resolved = DatabaseConnectionString.Resolve(configuration);
+        var builder = new NpgsqlConnectionStringBuilder(resolved);
+
+        builder.Host.Should().Be("accounts-db.internal");
+        builder.Database.Should().Be("production_accounts");
+    }
+
     private static IConfiguration BuildConfiguration(string connectionString) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
