@@ -366,7 +366,7 @@ The sign-in screen tells returning listeners to use the same provider they used 
 | Client | Type | Grant | Redirect | Refresh token |
 | --- | --- | --- | --- | --- |
 | `relisten-web` | Confidential server client | Authorization code + PKCE | `https://relisten.net/auth/session/callback` | No; web uses a Relisten session |
-| `relisten-ios` | Public native client | Authorization code + PKCE | `https://relisten.net/auth/mobile/ios/callback`; `net.relisten.mobile:/oauth2redirect/ios` in development | Yes |
+| `relisten-mobile-ios` | Public native client | Authorization code + PKCE | `net.relisten.mobile:/oauth2redirect/ios` | Yes |
 | `relisten-android` | Public native client | Authorization code + PKCE | `https://relisten.net/auth/mobile/android/callback`; `net.relisten.mobile:/oauth2redirect/android` in development | Yes |
 | `relisten-sonos-adapter` | Confidential service client | Client credentials for narrow internal endpoints | None | No |
 
@@ -467,7 +467,7 @@ Additional web rules:
 - Never put access or refresh tokens in local storage, React state, rendered props, or URLs.
 - Return `Cache-Control: private, no-store` from session, callback, CSRF, `/api/user/v1/*`, and the invitation-exchange response; configure Cloudflare to bypass caching for those paths. Next/browser fetches also use `cache: "no-store"`.
 - When the first credentialed web account slice ships, its UI fetches the same-origin facade from the browser. Next renders the surrounding page but does not hairpin session requests through Cloudflare or impersonate a public host internally.
-- Exclude `/auth/session/*` from both iOS and Android link capture. Claim only `/auth/mobile/ios/callback` on iOS and only `/auth/mobile/android/callback` on Android. Update both current Apple association artifacts or remove the legacy duplicate, and narrow Android intent filters before seeding clients.
+- The first mobile release returns through the collision-resistant `net.relisten.mobile` OAuth scheme and does not require a `relisten.net` callback route. A later universal-link migration adds the claimed HTTPS URI as a second registered redirect, proves its association files and routing on physical devices, then switches the app while retaining the custom scheme for at least one rollback release.
 - Normal web sign-out revokes the web session and its associated auth-host SSO session. “Switch account” does the same and starts a new authorization with provider account selection or fresh login instead of silently reusing SSO.
 
 ## Mobile authentication
@@ -491,7 +491,7 @@ sequenceDiagram
     S->>P: Provider login
     P-->>A: Provider callback
     A-->>S: Redirect with one-time Relisten code
-    S-->>M: Platform-specific claimed HTTPS callback
+    S-->>M: Platform-specific custom-scheme callback
     M->>M: Validate state
     M->>A: Exchange code + verifier
     A-->>M: Short access token + rotating refresh token
@@ -502,8 +502,8 @@ sequenceDiagram
 Mobile rules:
 
 - Register iOS and Android as separate public clients with no client secret.
-- Use the exact platform-specific claimed HTTPS callbacks in production. Use the collision-resistant `net.relisten.mobile` OAuth scheme only in development; keep `relisten://` for ordinary deep links, not OAuth.
-- On iOS, call `openAuthSessionAsync` with `preferUniversalLinks: true`; its default is false. Prove the callback on a physical device.
+- Use the exact collision-resistant `net.relisten.mobile` OAuth callback in development and the initial production release; keep `relisten://` for ordinary deep links, not OAuth.
+- On iOS, call `openAuthSessionAsync` with the custom-scheme callback and prove it on a release-signed physical device. Universal links are a later hardening step, not a launch dependency.
 - Validate `state` and PKCE. The app treats authenticated `/v1/me`, not an unvalidated decoded ID token, as its account identity.
 - Keep the access token in memory.
 - Store the refresh token with `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY` on iOS and the Android Keystore-backed equivalent. Exclude it from backup/restore and do not require biometrics, because background refresh must work.

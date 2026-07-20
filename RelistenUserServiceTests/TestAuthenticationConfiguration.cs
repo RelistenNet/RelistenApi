@@ -50,6 +50,34 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void External_providers_fail_closed_when_a_secret_is_missing()
+    {
+        var environment = new TestHostEnvironment(Environments.Production);
+        var options = new AccountsOptions
+        {
+            Issuer = "https://auth.relisten.test",
+            TrustedProxyNetworks = ["127.0.0.1/32"],
+            EnableExternalProviders = true,
+            Google = new()
+            {
+                ClientId = "google-client"
+            },
+            Apple = new()
+            {
+                ClientId = "apple-client",
+                TeamId = "apple-team",
+                KeyId = "apple-key",
+                PrivateKeyPath = "/run/secrets/apple.p8"
+            }
+        };
+
+        var action = () => AccountsRuntimeConfiguration.Create(options, environment);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Accounts:Google:ClientSecret*");
+    }
+
+    [Test]
     public void ReusesDevelopmentCertificatesAcrossServiceProviders()
     {
         using var firstProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);

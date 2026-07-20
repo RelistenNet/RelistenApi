@@ -10,8 +10,11 @@ public sealed class AccountsOptions
     public string AccountsHost { get; init; } = "accounts.relisten.net";
     public string[] TrustedProxyNetworks { get; init; } = [];
     public bool EnableDevelopmentPersonas { get; init; }
+    public bool EnableExternalProviders { get; init; }
     public bool AllowInsecureHttp { get; init; }
     public bool ApplyMigrationsOnStartup { get; init; }
+    public GoogleProviderOptions Google { get; init; } = new();
+    public AppleProviderOptions Apple { get; init; } = new();
     public string? SigningCertificatePath { get; init; }
     public string? SigningCertificatePassword { get; init; }
     public string? PreviousSigningCertificatePath { get; init; }

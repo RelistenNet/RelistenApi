@@ -36,6 +36,17 @@ public sealed record AccountsRuntimeConfiguration(
                 "Development personas require the Development environment and a loopback issuer.");
         }
 
+        if (options.EnableDevelopmentPersonas && options.EnableExternalProviders)
+        {
+            throw new InvalidOperationException(
+                "Development personas and external identity providers cannot both be enabled.");
+        }
+
+        if (options.EnableExternalProviders)
+        {
+            ValidateExternalProviders(options, isLoopback);
+        }
+
         if (options.ApplyMigrationsOnStartup && !environment.IsDevelopment())
         {
             throw new InvalidOperationException(
@@ -67,6 +78,30 @@ public sealed record AccountsRuntimeConfiguration(
             issuer,
             allowLoopbackHttp,
             trustedProxyNetworks);
+    }
+
+    private static void ValidateExternalProviders(AccountsOptions options, bool isLoopback)
+    {
+        if (isLoopback)
+        {
+            throw new InvalidOperationException(
+                "External identity providers require the registered HTTPS auth host.");
+        }
+
+        Require(options.Google.ClientId, "Accounts:Google:ClientId");
+        Require(options.Google.ClientSecret, "Accounts:Google:ClientSecret");
+        Require(options.Apple.ClientId, "Accounts:Apple:ClientId");
+        Require(options.Apple.TeamId, "Accounts:Apple:TeamId");
+        Require(options.Apple.KeyId, "Accounts:Apple:KeyId");
+        Require(options.Apple.PrivateKeyPath, "Accounts:Apple:PrivateKeyPath");
+    }
+
+    private static void Require(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"{name} is required when external providers are enabled.");
+        }
     }
 
     private static IPNetwork ParseNetwork(string value) =>

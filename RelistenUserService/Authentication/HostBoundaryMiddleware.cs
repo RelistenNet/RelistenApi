@@ -34,7 +34,9 @@ public sealed class HostBoundaryMiddleware(
 
         if (path.StartsWithSegments("/connect")
             || path.StartsWithSegments("/.well-known")
-            || path.StartsWithSegments("/development"))
+            || path.StartsWithSegments("/development")
+            || path == AuthenticationConstants.GoogleCallbackPath
+            || path == AuthenticationConstants.AppleCallbackPath)
         {
             return new HostString(runtime.Options.AuthHost);
         }

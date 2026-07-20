@@ -237,6 +237,8 @@ Only local issuer/client configuration and a working database block Slice 1 deve
 
 Record owners and exact production/preview redirect URIs for Apple, Google, and Sonos without committing secret values. Confirm `relisten.net` as canonical and redirect `www.relisten.net` before setting a session. Register separate public iOS and Android clients, a confidential web client, and an internal Sonos-adapter client.
 
+The initial production identity registrations are Google web client `403146132454-qg2pm8eofsidj29tkqaldclvn2pjm88p.apps.googleusercontent.com` with callback `https://auth.relisten.net/signin-google`, and Apple Services ID `net.relisten.auth`, Team ID `HT7ELV3Q35`, Key ID `379MK9D59A`, with callback `https://auth.relisten.net/signin-apple`. Those identifiers are non-secret. The Google client secret and Apple `.p8` remain mounted runtime secrets. The initial iOS OpenIddict client is `relisten-mobile-ios` with `net.relisten.mobile:/oauth2redirect/ios`; the universal-link callback is intentionally deferred.
+
 In the Sonos Dev Portal, record the active service ID, test service ID, partner contact, authenticated-SMAPI/account-matching access, Direct Control access, Cloud Queue version, reporting support, and upgrade protocol. Treat the official v2.1 play-audio endpoints as the minimum shape to investigate; target v2.3 `reportId` reporting only if approved for Relisten. No production date may assume an unresolved capability.
 
 Create an external inventory for OpenIddict signing/encryption certificates, Data Protection wrapping material, Apple/Google credentials, Sonos credentials, and token-envelope keys. Document owners, versions, rotation, and recovery locations, never values.
@@ -261,7 +263,7 @@ Add liveness, readiness, problem details, OpenTelemetry, request limits, host fi
 
 - `auth.relisten.net` for discovery, authorization, providers, and callbacks;
 - `accounts.relisten.net` for bearer `/v1/*` resources plus one public-playlist read and the explicitly anonymous, no-store collaborator-invitation exchange;
-- `relisten.net` as a reserved User Service path boundary. The mobile auth slice adds only exact claimed mobile callback handling; Slice 5 adds the same-origin public-playlist path and Slice 6 the invitation exchange. `/auth/session/*` and allowlisted `/api/user/v1/*` session-backed adapters wait for the first credentialed web product slice.
+- `relisten.net` as a reserved future User Service path boundary. Mobile initially returns through its custom OAuth scheme, so Slice 5's public-playlist path is the first required route there. `/auth/session/*` and allowlisted `/api/user/v1/*` session-backed adapters wait for the first credentialed web product slice.
 
 In Development only, the configured loopback origin such as `http://localhost:5443` exposes both the auth routes and bearer Accounts API routes needed by simulator/emulator clients. It does not expose the `relisten.net` browser-session facade. Keep the loopback host and port on an explicit allowlist and keep production host routing unchanged; do not make local development work by disabling host filtering globally. A developer testing the web facade instead uses the local HTTPS proxy with explicit development auth, accounts, and web hostnames.
 

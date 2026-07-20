@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -5,6 +6,7 @@ using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Validation.AspNetCore;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity;
@@ -66,8 +68,8 @@ public static class AuthenticationServiceCollectionExtensions
                 .UnprotectKeysWithAnyCertificate(certificates);
         }
 
-        services.AddOpenIddict()
-            .AddCore(options => options.UseEntityFrameworkCore()
+        var openIddict = services.AddOpenIddict();
+        openIddict.AddCore(options => options.UseEntityFrameworkCore()
                 .UseDbContext<AccountsDbContext>()
                 .ReplaceDefaultEntities<Guid>())
             .AddServer(options => ConfigureServer(options, environment, runtime))
@@ -76,6 +78,12 @@ public static class AuthenticationServiceCollectionExtensions
                 options.UseLocalServer();
                 options.UseAspNetCore();
             });
+
+        if (runtime.Options.EnableExternalProviders)
+        {
+            openIddict.AddClient(options =>
+                ConfigureExternalProviders(options, environment, runtime));
+        }
 
         services.AddAuthentication(options =>
         {
@@ -92,6 +100,12 @@ public static class AuthenticationServiceCollectionExtensions
                 options => ConfigureDevelopmentCookie(options));
             services.AddAntiforgery();
             services.AddSingleton<DevelopmentDatabaseInitializer>();
+        }
+        else if (runtime.Options.EnableExternalProviders)
+        {
+            services.AddAuthentication().AddCookie(
+                AuthenticationConstants.ExternalIdentityScheme,
+                ConfigureExternalIdentityCookie);
         }
 
         services.AddAuthorization(options =>
@@ -128,6 +142,86 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();
         return services;
+    }
+
+    private static void ConfigureExternalProviders(
+        OpenIddictClientBuilder options,
+        IHostEnvironment environment,
+        AccountsRuntimeConfiguration runtime)
+    {
+        options.AllowAuthorizationCodeFlow();
+        if (environment.IsDevelopment() && OperatingSystem.IsMacOS())
+        {
+            // Preview/tunnel authentication must remain safe to run on macOS. Reuse the
+            // checkout-local raw keys instead of importing PKCS#12 into the login Keychain.
+            options.AddSigningKey(DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
+                .AddEncryptionKey(
+                    DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment));
+        }
+        else if (environment.IsDevelopment())
+        {
+            options.AddSigningCertificate(
+                    DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
+                .AddEncryptionCertificate(
+                    DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
+        }
+        else
+        {
+            options.AddSigningCertificates(LoadCertificateSet(
+                runtime.Options.SigningCertificatePath,
+                runtime.Options.SigningCertificatePassword,
+                runtime.Options.PreviousSigningCertificatePath,
+                runtime.Options.PreviousSigningCertificatePassword,
+                "signing"))
+            .AddEncryptionCertificates(LoadCertificateSet(
+                runtime.Options.EncryptionCertificatePath,
+                runtime.Options.EncryptionCertificatePassword,
+                runtime.Options.PreviousEncryptionCertificatePath,
+                runtime.Options.PreviousEncryptionCertificatePassword,
+                "encryption"));
+        }
+
+        options.UseAspNetCore()
+            .EnableRedirectionEndpointPassthrough();
+        options.UseSystemNetHttp();
+
+        var providers = options.UseWebProviders();
+        providers.AddGoogle(google =>
+            google.SetClientId(runtime.Options.Google.ClientId)
+                .SetClientSecret(runtime.Options.Google.ClientSecret)
+                .SetRegistrationId(AuthenticationConstants.GoogleProvider)
+                .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
+                .AddScopes(Scopes.Email, Scopes.Profile));
+        providers.AddApple(apple =>
+            apple.SetClientId(runtime.Options.Apple.ClientId)
+                .SetTeamId(runtime.Options.Apple.TeamId)
+                .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
+                .SetRegistrationId(AuthenticationConstants.AppleProvider)
+                .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
+                .AddScopes(Scopes.Email));
+    }
+
+    private static ECDsaSecurityKey LoadAppleSigningKey(AppleProviderOptions options)
+    {
+        if (!File.Exists(options.PrivateKeyPath))
+        {
+            throw new InvalidOperationException(
+                $"The Apple private key file '{options.PrivateKeyPath}' does not exist.");
+        }
+
+        var algorithm = ECDsa.Create();
+        try
+        {
+            // Apple's .p8 is a PEM-encoded PKCS#8 key. Importing it directly keeps the
+            // provider credential out of certificate stores and the macOS login Keychain.
+            algorithm.ImportFromPem(File.ReadAllText(options.PrivateKeyPath));
+            return new ECDsaSecurityKey(algorithm) { KeyId = options.KeyId };
+        }
+        catch
+        {
+            algorithm.Dispose();
+            throw;
+        }
     }
 
     private static void ConfigureServer(
@@ -258,6 +352,19 @@ public static class AuthenticationServiceCollectionExtensions
         options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
         options.LoginPath = "/development/sign-in";
         options.ReturnUrlParameter = "return_url";
+        options.SlidingExpiration = false;
+    }
+
+    private static void ConfigureExternalIdentityCookie(CookieAuthenticationOptions options)
+    {
+        // This is a short bridge between an upstream callback and /connect/authorize,
+        // not the mobile session. AuthorizationController deletes it after issuing a code.
+        options.Cookie.Name = "__Host-relisten_auth";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.Path = "/";
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
         options.SlidingExpiration = false;
     }
 

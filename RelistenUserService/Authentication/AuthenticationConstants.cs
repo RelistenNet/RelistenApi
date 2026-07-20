@@ -3,6 +3,13 @@ namespace RelistenUserService.Authentication;
 public static class AuthenticationConstants
 {
     public const string DevelopmentIdentityScheme = "Relisten.DevelopmentIdentity";
+    public const string ExternalIdentityScheme = "Relisten.ExternalIdentity";
+    public const string GoogleProvider = "google";
+    public const string AppleProvider = "apple";
+    public const string GoogleIssuer = "https://accounts.google.com";
+    public const string AppleIssuer = "https://appleid.apple.com";
+    public const string GoogleCallbackPath = "/signin-google";
+    public const string AppleCallbackPath = "/signin-apple";
     public const string UserReadPolicy = "user.read";
     public const string LibraryReadPolicy = "library.read";
     public const string LibraryWritePolicy = "library.write";
