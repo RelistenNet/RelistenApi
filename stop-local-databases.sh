@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
-cd "$(dirname "$(realpath "$0")")"
+set -Eeuo pipefail
 
-docker-compose -f local-dev/docker-compose.yml down
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+compose_file="$script_dir/local-dev/docker-compose.yml"
+
+docker compose -f "$compose_file" down

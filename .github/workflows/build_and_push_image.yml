@@ -1,6 +1,16 @@
 name: Build and publish GHCR image
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Image and deployment to publish
+        required: true
+        default: api
+        type: choice
+        options:
+          - api
+          - user-service
 
 permissions:
   contents: read
@@ -8,7 +18,9 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: relistennet/relistenapi
+  IMAGE_NAME: ${{ inputs.component == 'user-service' && 'relistennet/relisten-user-service' || 'relistennet/relistenapi' }}
+  DOCKERFILE: ${{ inputs.component == 'user-service' && 'RelistenUserService/Dockerfile' || 'Dockerfile' }}
+  DEPLOYMENTS: ${{ inputs.component == 'user-service' && 'relisten-user-service' || 'relistenapi relistenapi-worker' }}
   REGISTRY: ghcr.io
   KEEP_GHCR_SHA_VERSIONS: "5"
 
@@ -44,6 +56,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: ${{ env.DOCKERFILE }}
           platforms: linux/amd64
           tags: |
             ${{ steps.meta.outputs.image }}:latest
@@ -131,9 +144,15 @@ jobs:
       - name: Restart relisten3 deployments
         run: |
           set -euo pipefail
-          for deployment in relistenapi relistenapi-worker; do
-            kubectl -n default rollout restart "deployment/$deployment"
+          for deployment in $DEPLOYMENTS; do
+            if kubectl -n default get "deployment/$deployment" >/dev/null 2>&1; then
+              kubectl -n default rollout restart "deployment/$deployment"
+            else
+              echo "Deployment $deployment does not exist yet; image publication is complete."
+            fi
           done
-          for deployment in relistenapi relistenapi-worker; do
-            kubectl -n default rollout status "deployment/$deployment" --timeout=10m
+          for deployment in $DEPLOYMENTS; do
+            if kubectl -n default get "deployment/$deployment" >/dev/null 2>&1; then
+              kubectl -n default rollout status "deployment/$deployment" --timeout=10m
+            fi
           done

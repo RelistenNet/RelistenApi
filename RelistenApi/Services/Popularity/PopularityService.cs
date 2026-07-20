@@ -30,12 +30,15 @@ namespace Relisten.Services.Popularity
 
         private readonly DbService db;
         private readonly PopularityCacheService cache;
+        private readonly IBackgroundJobClient backgroundJobs;
         private readonly ILogger<PopularityService> logger;
 
-        public PopularityService(DbService db, PopularityCacheService cache, ILogger<PopularityService> logger)
+        public PopularityService(DbService db, PopularityCacheService cache,
+            IBackgroundJobClient backgroundJobs, ILogger<PopularityService> logger)
         {
             this.db = db;
             this.cache = cache;
+            this.backgroundJobs = backgroundJobs;
             this.logger = logger;
         }
 
@@ -43,7 +46,7 @@ namespace Relisten.Services.Popularity
         {
             var key = "popularity:artists:map:30d-48h";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds, ComputeArtistPopularityMap,
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshArtistPopularityMap()),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshArtistPopularityMap()),
                 allowStale);
         }
 
@@ -60,7 +63,7 @@ namespace Relisten.Services.Popularity
             var key = $"popularity:artist:{artistUuid}:years:map:30d-48h";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputeYearPopularityMapForArtist(artistUuid),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshYearPopularityMapForArtist(artistUuid)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshYearPopularityMapForArtist(artistUuid)),
                 allowStale);
         }
 
@@ -69,7 +72,7 @@ namespace Relisten.Services.Popularity
             var key = $"popularity:artists:hot:30d:{limit}";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputePopularArtists(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshPopularArtists(limit)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularArtists(limit)),
                 allowStale);
         }
 
@@ -78,7 +81,7 @@ namespace Relisten.Services.Popularity
             var key = $"popularity:artists:trending:48h:{limit}";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputeTrendingArtists(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshTrendingArtists(limit)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingArtists(limit)),
                 allowStale);
         }
 
@@ -88,7 +91,7 @@ namespace Relisten.Services.Popularity
             var key = GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow);
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputePopularShows(limit, sortWindow),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshPopularShows(limit, sortWindow)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularShows(limit, sortWindow)),
                 allowStale);
         }
 
@@ -98,7 +101,7 @@ namespace Relisten.Services.Popularity
             var key = GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow);
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputeTrendingShows(limit, sortWindow),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshTrendingShows(limit, sortWindow)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingShows(limit, sortWindow)),
                 allowStale);
         }
 
@@ -211,7 +214,7 @@ namespace Relisten.Services.Popularity
             var key = $"popularity:years:hot:30d:{limit}";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputePopularYears(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshPopularYears(limit)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularYears(limit)),
                 allowStale);
         }
 
@@ -220,7 +223,7 @@ namespace Relisten.Services.Popularity
             var key = $"popularity:years:trending:48h:{limit}";
             return await GetOrRefresh(key, DefaultStaleAfterSeconds,
                 () => ComputeTrendingYears(limit),
-                () => BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshTrendingYears(limit)),
+                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingYears(limit)),
                 allowStale);
         }
 
@@ -330,7 +333,7 @@ namespace Relisten.Services.Popularity
 
                 if (allowStale)
                 {
-                    BackgroundJob.Enqueue<PopularityJobs>(job => job.RefreshShowPopularityMapForArtist(artistUuid));
+                    backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshShowPopularityMapForArtist(artistUuid));
                     return cached.Entry.data;
                 }
             }

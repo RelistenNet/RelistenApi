@@ -298,6 +298,7 @@ namespace Relisten
             services.AddScoped<PopularityJobs, PopularityJobs>();
             services.AddScoped<ScheduledService, ScheduledService>();
             services.AddScoped<SearchService, SearchService>();
+            services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
         }
@@ -317,7 +318,10 @@ namespace Relisten
                 options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
                 {
                     diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
-                    diagnosticContext.Set("RemoteIP", httpContext.Connection.RemoteIpAddress);
+                    if (httpContext.Connection.RemoteIpAddress is { } remoteIpAddress)
+                    {
+                        diagnosticContext.Set("RemoteIP", remoteIpAddress);
+                    }
                 };
             });
 
