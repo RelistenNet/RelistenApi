@@ -186,11 +186,18 @@ namespace Relisten.Import
                 await tracksByShow.AsyncForEachWithProgress(prog, processGroup);
             }
 
-            ctx?.WriteLine("Rebuilding shows...");
-            await RebuildShows(artist);
+            if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
+            {
+                ctx?.WriteLine("Rebuilding shows...");
+                await RebuildShows(artist);
 
-            ctx?.WriteLine("Rebuilding years...");
-            await RebuildYears(artist);
+                ctx?.WriteLine("Rebuilding years...");
+                await RebuildYears(artist);
+            }
+            else
+            {
+                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+            }
 
             return stats;
         }
