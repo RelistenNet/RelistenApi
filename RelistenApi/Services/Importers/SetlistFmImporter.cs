@@ -111,16 +111,25 @@ namespace Relisten.Import
                 stats += result.Item2;
             } while (result != null && result.Item1);
 
-            if (artist.features.tours)
+            if (artist.features.tours && tourToStartDate.Count > 0)
             {
+                stats.Updated += tourToStartDate.Count;
                 await UpdateTourStartEndDates(artist);
             }
 
-            // update shows
-            await RebuildShows(artist);
+            ctx?.WriteLine($"Import stats: {stats}");
 
-            // update years
-            await RebuildYears(artist);
+            if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
+            {
+                ctx?.WriteLine("Rebuilding shows and years...");
+                await RebuildShows(artist);
+                await RebuildYears(artist);
+                ctx?.WriteLine("--> rebuilt!");
+            }
+            else
+            {
+                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+            }
 
             return stats;
         }

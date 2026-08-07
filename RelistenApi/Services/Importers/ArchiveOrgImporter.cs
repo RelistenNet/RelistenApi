@@ -299,18 +299,24 @@ namespace Relisten.Import
                     await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
             }
 
-            ctx?.WriteLine("Rebuilding shows...");
+            ctx?.WriteLine($"Import stats: {stats}");
 
-            // update shows
-            await RebuildShows(artist);
+            if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
+            {
+                ctx?.WriteLine("Rebuilding shows...");
+                await RebuildShows(artist);
 
-            ctx?.WriteLine("--> rebuilt shows!");
-            ctx?.WriteLine("Rebuilding years...");
+                ctx?.WriteLine("--> rebuilt shows!");
+                ctx?.WriteLine("Rebuilding years...");
 
-            // update years
-            await RebuildYears(artist);
+                await RebuildYears(artist);
 
-            ctx?.WriteLine("--> rebuilt years!");
+                ctx?.WriteLine("--> rebuilt years!");
+            }
+            else
+            {
+                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+            }
 
             return stats;
         }
