@@ -113,9 +113,19 @@ namespace Relisten.Import
             ctx?.WriteLine("Processing Shows");
             stats += await ProcessShows(artist, src, ctx);
 
-            ctx?.WriteLine("Rebuilding");
-            await RebuildShows(artist);
-            await RebuildYears(artist);
+            ctx?.WriteLine($"Import stats: {stats}");
+
+            if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
+            {
+                ctx?.WriteLine("Rebuilding shows and years...");
+                await RebuildShows(artist);
+                await RebuildYears(artist);
+                ctx?.WriteLine("--> rebuilt!");
+            }
+            else
+            {
+                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+            }
 
             return stats;
         }

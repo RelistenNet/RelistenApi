@@ -121,6 +121,8 @@ namespace Relisten.Import
                 await UpdateTourStartEndDates(artist);
             }
 
+            ctx?.WriteLine($"Import stats: {stats}");
+
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
                 ctx?.WriteLine("Rebuilding shows and years");
@@ -334,9 +336,18 @@ namespace Relisten.Import
                 await files.AsyncForEachWithProgress(prog, processBackfill);
             }
 
-            ctx?.WriteLine("Rebuilding shows and years");
-            await RebuildShows(artist);
-            await RebuildYears(artist);
+            ctx?.WriteLine($"Import stats: {stats}");
+
+            if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
+            {
+                ctx?.WriteLine("Rebuilding shows and years");
+                await RebuildShows(artist);
+                await RebuildYears(artist);
+            }
+            else
+            {
+                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+            }
 
             stats.Removed += await db.WithWriteConnection(con => con.ExecuteAsync(@"
                 WITH orphaned AS (

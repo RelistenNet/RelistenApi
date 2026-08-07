@@ -186,6 +186,8 @@ namespace Relisten.Import
                 await tracksByShow.AsyncForEachWithProgress(prog, processGroup);
             }
 
+            ctx?.WriteLine($"Import stats: {stats}");
+
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
                 ctx?.WriteLine("Rebuilding shows...");

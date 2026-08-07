@@ -299,6 +299,8 @@ namespace Relisten.Import
                     await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
             }
 
+            ctx?.WriteLine($"Import stats: {stats}");
+
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
                 ctx?.WriteLine("Rebuilding shows...");
