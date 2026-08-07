@@ -111,8 +111,9 @@ namespace Relisten.Import
                 stats += result.Item2;
             } while (result != null && result.Item1);
 
-            if (artist.features.tours)
+            if (artist.features.tours && tourToStartDate.Count > 0)
             {
+                stats.Updated += tourToStartDate.Count;
                 await UpdateTourStartEndDates(artist);
             }
 

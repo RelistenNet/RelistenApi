@@ -116,8 +116,9 @@ namespace Relisten.Import
                 await files.AsyncForEachWithProgress(prog, processFile);
             }
 
-            if (artist.features.tours)
+            if (artist.features.tours && tourToStartDate.Count > 0)
             {
+                stats.Updated += tourToStartDate.Count;
                 await UpdateTourStartEndDates(artist);
             }
 
