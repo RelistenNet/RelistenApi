@@ -352,25 +352,20 @@ namespace Relisten.Import
             return stats;
         }
 
-        private int SetIndexForIdentifier(string ident)
+        private Dictionary<string, int> BuildSetIndexMap(IEnumerable<PhishinShowTrack> tracks)
         {
-            if (ident == "S") { return 0; }
+            var map = new Dictionary<string, int>();
+            var nextIndex = 0;
 
-            if (ident == "1") { return 1; }
+            foreach (var track in tracks)
+            {
+                if (!map.ContainsKey(track.set))
+                {
+                    map[track.set] = nextIndex++;
+                }
+            }
 
-            if (ident == "2") { return 2; }
-
-            if (ident == "3") { return 3; }
-
-            if (ident == "4") { return 4; }
-
-            if (ident == "E") { return 5; }
-
-            if (ident == "E2") { return 6; }
-
-            if (ident == "E3") { return 7; }
-
-            return 8;
+            return map;
         }
 
         private async Task ProcessSetlistShow(ImportStats stats, PhishinShow show, Artist artist,
@@ -437,6 +432,7 @@ namespace Relisten.Import
             dbSource.has_jamcharts = fullShow.tags.Count(t => t.name == "Jamcharts") > 0;
             dbSource = await _sourceService.Save(dbSource);
 
+            var setIndexMap = BuildSetIndexMap(fullShow.tracks);
             var sets = new Dictionary<string, SourceSet?>();
 
             foreach (var track in fullShow.tracks)
@@ -448,7 +444,7 @@ namespace Relisten.Import
                     set = new SourceSet
                     {
                         source_id = dbSource.id,
-                        index = SetIndexForIdentifier(track.set),
+                        index = setIndexMap[track.set],
                         name = track.set_name,
                         is_encore = track.set[0] == 'E',
                         updated_at = dbSource.updated_at
@@ -475,7 +471,7 @@ namespace Relisten.Import
 
             foreach (var track in tracksWithMp3s)
             {
-                var set = setMaps[SetIndexForIdentifier(track.set)];
+                var set = setMaps[setIndexMap[track.set]];
                 set.tracks.Add(new SourceTrack
                 {
                     source_set_id = set.id,
