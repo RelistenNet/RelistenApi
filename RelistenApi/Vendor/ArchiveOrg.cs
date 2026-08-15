@@ -240,7 +240,7 @@ namespace Relisten.Vendor.ArchiveOrg
         public DateTime? reviewdate { get; set; }
         public DateTime? indexdate { get; set; }
 
-        public DateTime _iguana_index_date
+        public DateTime max_review_date
         {
             get
             {
@@ -254,7 +254,7 @@ namespace Relisten.Vendor.ArchiveOrg
             }
         }
 
-        public DateTime _iguana_updated_at
+        public DateTime max_updated_at
         {
             get
             {
