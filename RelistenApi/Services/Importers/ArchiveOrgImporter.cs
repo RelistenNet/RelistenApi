@@ -151,18 +151,27 @@ namespace Relisten.Import
                     var maxSourceInformation = existingSourceReviewInformation.GetValue(doc.identifier);
                     var isNew = dbShow == null;
                     var needsToUpdateReviews = maxSourceInformation != null &&
-                                               doc._iguana_index_date > maxSourceInformation.review_max_updated_at;
+                                               doc.max_review_date > maxSourceInformation.review_max_updated_at;
 
                     var cleanedApiDate = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date, doc.identifier);
                     var needsDateUpdate = dbShow != null &&
                         cleanedApiDate != null &&
                         dbShow.display_date != cleanedApiDate;
 
-                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate)
+                    var recentCutoff = CurrentImportOptions.RescrapeRecentDays.HasValue
+                        ? DateTime.UtcNow.AddDays(-CurrentImportOptions.RescrapeRecentDays.Value)
+                        : (DateTime?)null;
+                    var recentlyAdded = recentCutoff.HasValue &&
+                        dbShow != null &&
+                        doc.addeddate.HasValue &&
+                        doc.addeddate.Value > recentCutoff.Value;
+
+                    if (currentIsTargetedShow || isNew || needsToUpdateReviews || needsDateUpdate || recentlyAdded)
                     {
                         var reason = isNew ? "new_source"
                             : needsToUpdateReviews ? "reviews_updated"
                             : needsDateUpdate ? "date_updated"
+                            : recentlyAdded ? "recently_added"
                             : "targeted_show";
 
                         using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
@@ -386,7 +395,7 @@ namespace Relisten.Import
                         location = string.IsNullOrEmpty(meta.coverage) ? "Unknown Location" : meta.coverage,
                         upstream_identifier = venueUpstreamId,
                         slug = Slugify(venueName),
-                        updated_at = searchDoc._iguana_updated_at
+                        updated_at = searchDoc.max_updated_at
                     });
                 }
             }
@@ -545,7 +554,7 @@ namespace Relisten.Import
                 taper = meta.taper.EmptyIfNull(),
                 transferrer = meta.transferer.EmptyIfNull(),
                 lineage = meta.lineage.EmptyIfNull(),
-                updated_at = searchDoc._iguana_updated_at,
+                updated_at = searchDoc.max_updated_at,
                 venue_id = dbVenue?.id,
                 display_date = properDisplayDate,
                 flac_type = flac_type
