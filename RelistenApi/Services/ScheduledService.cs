@@ -346,7 +346,7 @@ namespace Relisten
             {
                 artistsCurrentlySyncing[artist.id] = true;
 
-                var options = new ImportOptions { OnlyYear = DateTime.UtcNow.Year, RescrapeRecentDays = 7 };
+                var options = new ImportOptions { OnlyYear = DateTime.UtcNow.Year };
                 var artistStats = await _importerService.Import(artist, null, options, ctx);
 
                 ctx?.WriteLine($"--> Thin scrape imported {artist.name}! " + artistStats);

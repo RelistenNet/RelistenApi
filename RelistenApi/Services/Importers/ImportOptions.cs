@@ -7,6 +7,6 @@ namespace Relisten.Import
         public int? OnlyYear { get; init; }
         public bool IsThinScrape => OnlyYear.HasValue;
 
-        public int? RescrapeRecentDays { get; init; }
+        public int? RescrapeRecentDays { get; init; } = 7;
     }
 }
