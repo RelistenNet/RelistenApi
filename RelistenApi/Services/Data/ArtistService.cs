@@ -222,7 +222,9 @@ namespace Relisten.Data
 				    JOIN artists a on a.id = aus.artist_id
 				WHERE
 					aus.artist_id = ANY(@artistIds)
-			", (ArtistUpstreamSource aus, UpstreamSource src) =>
+				ORDER BY
+					aus.upstream_source_id ASC
+", (ArtistUpstreamSource aus, UpstreamSource src) =>
             {
                 aus.upstream_source = src;
                 return aus;
