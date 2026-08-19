@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
@@ -10,6 +9,7 @@ using Hangfire.Server;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor;
@@ -30,8 +30,11 @@ namespace Relisten.Import
         private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
 
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
-        private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
-        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
+        private IDictionary<string, Tour?> existingToursBySlug = new Dictionary<string, Tour?>();
+        private IDictionary<string, Tour?> existingToursByName = new Dictionary<string, Tour?>();
+        private IDictionary<string, VenueWithShowCount?> existingVenuesBySlug = new Dictionary<string, VenueWithShowCount?>();
+        private IDictionary<string, VenueWithShowCount?> existingVenuesByNameLocation = new Dictionary<string, VenueWithShowCount?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongsBySlug = new Dictionary<string, SetlistSong?>();
 
         public PhishinImporter(
             DbService db,
@@ -63,9 +66,6 @@ namespace Relisten.Import
             _sourceSetService = sourceSetService;
             _eraService = eraService;
             _configuration = configuration;
-
-            http.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", configuration["PHISHIN_KEY"]!);
         }
 
         protected SourceService _sourceService { get; set; }
@@ -136,9 +136,10 @@ namespace Relisten.Import
             return Task.FromResult(new ImportStats());
         }
 
+        private static string VenueKey(string name, string? location) => $"{name}\0{location ?? ""}";
+
         private async Task PreloadData(Artist artist)
         {
-            // Use primary database to ensure read-after-write consistency during full refresh
             existingSources = (await _sourceService.AllForArtistFromPrimary(artist))
                 .GroupBy(venue => venue.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
@@ -146,12 +147,27 @@ namespace Relisten.Import
             existingEras = (await _eraService.AllForArtist(artist)).GroupBy(era => era.name)
                 .ToDictionary(grp => grp.Key, grp => (Era?)grp.First());
 
-            existingVenues = (await _venueService.AllIncludingUnusedForArtist(artist))
-                .GroupBy(venue => venue.upstream_identifier)
+            var allVenues = (await _venueService.AllIncludingUnusedForArtist(artist)).ToList();
+
+            existingVenuesBySlug = allVenues
+                .Where(v => v != null)
+                .GroupBy(v => v.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
-            existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
+            existingVenuesByNameLocation = allVenues
+                .Where(v => v != null)
+                .GroupBy(v => VenueKey(v.name, v.location))
+                .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
+
+            var allTours = (await _tourService.AllForArtist(artist)).ToList();
+
+            existingToursBySlug = allTours
+                .GroupBy(tour => tour.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
+
+            existingToursByName = allTours
+                .GroupBy(t => t.name)
+                .ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
                 .GroupBy(show => show.upstream_identifier)
@@ -160,30 +176,89 @@ namespace Relisten.Import
             existingSetlistSongs = (await _setlistSongService.AllForArtist(artist))
                 .GroupBy(song => song.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
+
+            existingSetlistSongsBySlug = existingSetlistSongs.Values
+                .Where(s => s != null)
+                .GroupBy(s => s!.slug)
+                .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
         }
 
-        private string PhishinApiUrl(string api, string? sort_attr = null, int per_page = 99999, int? page = null)
+        private string PhishinApiUrl(string resource, string? sort = null, int per_page = 1000, int? page = null)
         {
-            return
-                $"https://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
+            var url = $"https://phish.in/api/v2/{resource}?per_page={per_page}";
+            if (sort != null) url += $"&sort={sort}";
+            if (page != null) url += $"&page={page.Value}";
+            return url;
         }
 
-        private async Task<PhishinRootObject<T>> PhishinApiRequest<T>(string apiRoute, PerformContext? ctx,
-            string? sort_attr = null, int per_page = 99999, int? page = null)
+        private async Task<(List<T> data, int totalPages, int totalEntries)> PhishinApiPagedRequest<T>(
+            string resource, string dataKey, PerformContext? ctx,
+            string? sort = null, int per_page = 1000, int? page = null,
+            string? extraParams = null)
         {
-            var url = PhishinApiUrl(apiRoute, sort_attr, per_page, page);
+            var url = PhishinApiUrl(resource, sort, per_page, page);
+            if (extraParams != null) url += extraParams;
             ctx?.WriteLine($"Requesting {url}");
             var resp = await http.GetAsync(url);
-            return JsonConvert.DeserializeObject<PhishinRootObject<T>>(await resp.Content.ReadAsStringAsync())!;
+            var json = await resp.Content.ReadAsStringAsync();
+            var obj = JObject.Parse(json);
+            var data = obj[dataKey]!.ToObject<List<T>>()!;
+            var totalPages = obj.Value<int>("total_pages");
+            var totalEntries = obj.Value<int>("total_entries");
+            return (data, totalPages, totalEntries);
+        }
+
+        private async Task<List<T>> PhishinApiAllPages<T>(
+            string resource, string dataKey, PerformContext? ctx,
+            string? sort = null, int per_page = 1000)
+        {
+            var allData = new List<T>();
+            var currentPage = 1;
+            var totalPages = 1;
+
+            while (currentPage <= totalPages)
+            {
+                var (data, pages, _) = await PhishinApiPagedRequest<T>(
+                    resource, dataKey, ctx, sort, per_page, currentPage);
+                totalPages = pages;
+                allData.AddRange(data);
+                currentPage++;
+            }
+
+            return allData;
+        }
+
+        private async Task<T> PhishinApiGet<T>(string resource, PerformContext? ctx)
+        {
+            var url = $"https://phish.in/api/v2/{resource}";
+            ctx?.WriteLine($"Requesting {url}");
+            var resp = await http.GetAsync(url);
+            var json = await resp.Content.ReadAsStringAsync();
+            return JsonConvert.DeserializeObject<T>(json)!;
+        }
+
+        private Tour? FindTour(string? tourName)
+        {
+            if (tourName == null) return null;
+            return existingToursBySlug.GetValue(tourName) ?? existingToursByName.GetValue(tourName);
+        }
+
+        private VenueWithShowCount? FindVenue(PhishinSmallVenue venue)
+        {
+            return existingVenuesBySlug.GetValue(venue.slug)
+                   ?? existingVenuesByNameLocation.GetValue(VenueKey(venue.name, venue.location));
         }
 
         public async Task<ImportStats> ProcessTours(Artist artist, PerformContext? ctx)
         {
             var stats = new ImportStats();
 
-            foreach (var tour in (await PhishinApiRequest<IEnumerable<PhishinSmallTour>>("tours", ctx)).data)
+            var tours = await PhishinApiAllPages<PhishinSmallTour>("tours", "tours", ctx);
+
+            foreach (var tour in tours)
             {
-                Tour? dbTour = existingTours.GetValue(tour.id.ToString());
+                Tour? dbTour = FindTour(tour.name)
+                               ?? existingToursBySlug.GetValue(tour.slug);
 
                 if (dbTour == null)
                 {
@@ -195,10 +270,11 @@ namespace Relisten.Import
                         end_date = DateTime.Parse(tour.ends_on),
                         name = tour.name,
                         slug = Slugify(tour.name),
-                        upstream_identifier = tour.id.ToString()
+                        upstream_identifier = tour.slug
                     });
 
-                    existingTours[dbTour.upstream_identifier] = dbTour!;
+                    existingToursBySlug[dbTour.upstream_identifier] = dbTour!;
+                    existingToursByName[dbTour.name] = dbTour!;
 
                     stats.Created++;
                 }
@@ -210,9 +286,15 @@ namespace Relisten.Import
 
                     dbTour = await _tourService.Save(dbTour);
 
-                    existingTours[dbTour.upstream_identifier] = dbTour!;
+                    existingToursBySlug[dbTour.upstream_identifier] = dbTour!;
+                    existingToursByName[dbTour.name] = dbTour!;
 
                     stats.Updated++;
+                }
+                else
+                {
+                    existingToursBySlug[tour.slug] = dbTour!;
+                    existingToursByName[dbTour.name] = dbTour!;
                 }
             }
 
@@ -223,17 +305,25 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
+            var years = await PhishinApiGet<List<PhishinYear>>("years", ctx);
+
+            var eraGroups = years
+                .GroupBy(y => y.era)
+                .OrderBy(g => g.Key);
+
             var order = 0;
 
-            foreach (var era in (await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", ctx)).data)
+            foreach (var eraGroup in eraGroups)
             {
-                Era? dbEra = existingEras.GetValue(era.Key);
+                var eraName = eraGroup.Key;
+
+                Era? dbEra = existingEras.GetValue(eraName);
 
                 if (dbEra == null)
                 {
                     dbEra = await _eraService.Save(new Era
                     {
-                        artist_id = artist.id, name = era.Key, order = order, updated_at = DateTime.Now
+                        artist_id = artist.id, name = eraName, order = order, updated_at = DateTime.Now
                     });
 
                     existingEras[dbEra.name] = dbEra;
@@ -241,9 +331,9 @@ namespace Relisten.Import
                     stats.Created++;
                 }
 
-                foreach (var year in era.Value)
+                foreach (var year in eraGroup)
                 {
-                    yearToEraMapping[year] = dbEra!;
+                    yearToEraMapping[year.period] = dbEra!;
                 }
 
                 order++;
@@ -257,14 +347,14 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var songsToSave = new List<SetlistSong>();
-            var songs = (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data;
+            var songs = await PhishinApiAllPages<PhishinSmallSong>("songs", "songs", ctx);
 
             foreach (var song in songs)
             {
-                SetlistSong? dbSong = existingSetlistSongs.GetValue(song.id.ToString());
+                SetlistSong? dbSong = existingSetlistSongs.GetValue(song.slug)
+                                      ?? existingSetlistSongsBySlug.GetValue(song.slug);
 
-                // skip aliases for now
-                if (dbSong == null && song.alias_for.HasValue == false)
+                if (dbSong == null && song.alias == null)
                 {
                     songsToSave.Add(new SetlistSong
                     {
@@ -272,8 +362,12 @@ namespace Relisten.Import
                         artist_id = artist.id,
                         name = song.title,
                         slug = song.slug,
-                        upstream_identifier = song.id.ToString()
+                        upstream_identifier = song.slug
                     });
+                }
+                else if (dbSong != null)
+                {
+                    existingSetlistSongsBySlug[song.slug] = dbSong;
                 }
             }
 
@@ -290,6 +384,7 @@ namespace Relisten.Import
                     foreach (var song in group)
                     {
                         existingSetlistSongs[song.upstream_identifier] = dbSong;
+                        existingSetlistSongsBySlug[song.slug] = dbSong;
                     }
                 }
             }
@@ -303,9 +398,13 @@ namespace Relisten.Import
         {
             var stats = new ImportStats();
 
-            foreach (var venue in (await PhishinApiRequest<IEnumerable<PhishinSmallVenue>>("venues", ctx)).data)
+            var venues = await PhishinApiAllPages<PhishinSmallVenue>("venues", "venues", ctx);
+
+            foreach (var venue in venues)
             {
-                VenueWithShowCount? dbVenue = existingVenues.GetValue(venue.id.ToString());
+                var pastNames = venue.other_names != null ? string.Join(", ", venue.other_names) : null;
+
+                VenueWithShowCount? dbVenue = FindVenue(venue);
 
                 if (dbVenue == null)
                 {
@@ -318,19 +417,18 @@ namespace Relisten.Import
                         slug = Slugify(venue.name),
                         latitude = venue.latitude,
                         longitude = venue.longitude,
-                        past_names = venue.past_names,
-                        upstream_identifier = venue.id.ToString()
+                        past_names = pastNames,
+                        upstream_identifier = venue.slug
                     };
 
                     var createdDb = await _venueService.Save(sc);
 
                     sc.id = createdDb.id;
 
-                    existingVenues[sc.upstream_identifier] = sc;
+                    existingVenuesBySlug[sc.upstream_identifier] = sc;
+                    existingVenuesByNameLocation[VenueKey(sc.name, sc.location)] = sc;
 
                     stats.Created++;
-
-                    dbVenue = sc;
                 }
                 else if (venue.updated_at > dbVenue.updated_at)
                 {
@@ -338,14 +436,20 @@ namespace Relisten.Import
                     dbVenue.location = venue.location;
                     dbVenue.longitude = venue.longitude;
                     dbVenue.latitude = venue.latitude;
-                    dbVenue.past_names = venue.past_names;
+                    dbVenue.past_names = pastNames;
                     dbVenue.updated_at = venue.updated_at;
 
                     await _venueService.Save(dbVenue);
 
-                    existingVenues[dbVenue.upstream_identifier] = dbVenue!;
+                    existingVenuesBySlug[dbVenue.upstream_identifier] = dbVenue!;
+                    existingVenuesByNameLocation[VenueKey(dbVenue.name, dbVenue.location)] = dbVenue!;
 
                     stats.Updated++;
+                }
+                else
+                {
+                    existingVenuesBySlug[venue.slug] = dbVenue!;
+                    existingVenuesByNameLocation[VenueKey(dbVenue.name, dbVenue.location)] = dbVenue!;
                 }
             }
 
@@ -359,9 +463,9 @@ namespace Relisten.Import
 
             foreach (var track in tracks)
             {
-                if (!map.ContainsKey(track.set))
+                if (!map.ContainsKey(track.set_name))
                 {
-                    map[track.set] = nextIndex++;
+                    map[track.set_name] = nextIndex++;
                 }
             }
 
@@ -375,6 +479,13 @@ namespace Relisten.Import
 
             var addSongs = false;
 
+            var venueId = FindVenue(show.venue)!.id;
+
+            var tourId = FindTour(show.tour_name)?.id;
+
+            var eraId = yearToEraMapping
+                .GetValue(show.date.Substring(0, 4), yearToEraMapping.Values.FirstOrDefault())?.id;
+
             if (dbShow == null)
             {
                 dbShow = await _setlistShowService.Save(new SetlistShow
@@ -382,10 +493,9 @@ namespace Relisten.Import
                     artist_id = artist.id,
                     upstream_identifier = show.date,
                     date = DateTime.Parse(show.date),
-                    venue_id = existingVenues[show.venue.id.ToString()]!.id,
-                    tour_id = existingTours[show.tour_id.ToString()]!.id,
-                    era_id = yearToEraMapping
-                        .GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]!)!.id,
+                    venue_id = venueId,
+                    tour_id = tourId ?? 0,
+                    era_id = eraId ?? 0,
                     updated_at = dbSource.updated_at
                 });
 
@@ -396,10 +506,9 @@ namespace Relisten.Import
             else if (show.updated_at > dbShow.updated_at)
             {
                 dbShow.date = DateTime.Parse(show.date);
-                dbShow.venue_id = existingVenues[show.venue.id.ToString()]!.id;
-                dbShow.tour_id = existingTours[show.tour_id.ToString()]!.id;
-                dbShow.era_id = yearToEraMapping
-                    .GetValue(show.date.Substring(0, 4), yearToEraMapping["1983-1987"]!)!.id;
+                dbShow.venue_id = venueId;
+                dbShow.tour_id = tourId ?? dbShow.tour_id;
+                dbShow.era_id = eraId ?? dbShow.era_id;
                 dbShow.updated_at = dbSource.updated_at;
 
                 dbShow = await _setlistShowService.Save(dbShow);
@@ -409,12 +518,13 @@ namespace Relisten.Import
                 addSongs = true;
             }
 
-            if (addSongs)
+            if (addSongs && show.tracks != null)
             {
                 var dbSongs = show.tracks
                         .SelectMany(phishinTrack =>
-                            phishinTrack.song_ids.Select(song_id =>
-                                existingSetlistSongs.GetValue(song_id.ToString())))
+                            phishinTrack.songs.Select(song =>
+                                existingSetlistSongs.GetValue(song.slug)
+                                ?? existingSetlistSongsBySlug.GetValue(song.slug)))
                         .Where(t => t != null)
                         .Select(t => t!)
                         .GroupBy(t => t.upstream_identifier)
@@ -432,28 +542,29 @@ namespace Relisten.Import
             dbSource.has_jamcharts = fullShow.tags.Count(t => t.name == "Jamcharts") > 0;
             dbSource = await _sourceService.Save(dbSource);
 
-            var setIndexMap = BuildSetIndexMap(fullShow.tracks);
+            var tracks = fullShow.tracks ?? new List<PhishinShowTrack>();
+
+            var setIndexMap = BuildSetIndexMap(tracks);
             var sets = new Dictionary<string, SourceSet?>();
 
-            foreach (var track in fullShow.tracks)
+            foreach (var track in tracks)
             {
-                SourceSet? set = sets.GetValue(track.set);
+                SourceSet? set = sets.GetValue(track.set_name);
 
                 if (set == null)
                 {
                     set = new SourceSet
                     {
                         source_id = dbSource.id,
-                        index = setIndexMap[track.set],
+                        index = setIndexMap[track.set_name],
                         name = track.set_name,
-                        is_encore = track.set[0] == 'E',
+                        is_encore = track.set_name.StartsWith("Encore", StringComparison.OrdinalIgnoreCase),
                         updated_at = dbSource.updated_at
                     };
 
-                    // this needs to be set after loading from the db
                     set.tracks = new List<SourceTrack>();
 
-                    sets[track.set] = set;
+                    sets[track.set_name] = set;
                 }
             }
 
@@ -466,12 +577,11 @@ namespace Relisten.Import
                 kvp.Value.tracks = new List<SourceTrack>();
             }
 
-            // shows with incomplete=true won't have mp3s for every track. we don't care about those.
-            var tracksWithMp3s = fullShow.tracks.Where(t => t.mp3 != null);
+            var tracksWithMp3s = tracks.Where(t => t.mp3_url != null);
 
             foreach (var track in tracksWithMp3s)
             {
-                var set = setMaps[setIndexMap[track.set]];
+                var set = setMaps[setIndexMap[track.set_name]];
                 set.tracks.Add(new SourceTrack
                 {
                     source_set_id = set.id,
@@ -479,9 +589,8 @@ namespace Relisten.Import
                     title = track.title,
                     duration = track.duration / 1000,
                     track_position = track.position,
-                    // Phish.in slugs could stay the same when the track changes
                     slug = SlugifyTrack(track.title) + "-" + track.id.ToString(CultureInfo.InvariantCulture),
-                    mp3_url = track.mp3.Replace("http:", "https:"),
+                    mp3_url = track.mp3_url.Replace("http:", "https:"),
                     updated_at = track.updated_at ?? dbSource.updated_at,
                     artist_id = artist.id
                 });
@@ -503,52 +612,27 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var prog = ctx?.WriteProgressBar();
-            var pageSize = 20;
+            var pageSize = 200;
 
             var isThinScrape = CurrentImportOptions.IsThinScrape;
-            var yearCutoff = isThinScrape ? $"{CurrentImportOptions.OnlyYear}-01-01" : null;
+            var sort = "date:asc";
+            var yearFilter = isThinScrape ? $"&year={CurrentImportOptions.OnlyYear}" : null;
 
-            var pages = 80;
+            var currentPage = 1;
+            var totalPages = 1;
+            var processedCount = 0;
+            var totalEntries = 0;
 
-            if (isThinScrape)
+            while (currentPage <= totalPages)
             {
-                // Fetch page 1 just to learn total_pages, then start from the last page
-                var firstPage = await PhishinApiRequest<IEnumerable<PhishinShow>>("shows", ctx, "date", pageSize, 1);
-                pages = firstPage.total_pages;
-            }
+                var (shows, pages, entries) = await PhishinApiPagedRequest<PhishinShow>(
+                    "shows", "shows", ctx, sort, pageSize, currentPage, yearFilter);
 
-            // For thin scrapes: iterate last page → first (newest shows first, since pages are date ASC)
-            // For full imports: iterate first page → last (all shows)
-            var startPage = isThinScrape ? pages : 1;
-            var pageStep = isThinScrape ? -1 : 1;
-            var allShowsBeforeCutoff = false;
+                totalPages = pages;
+                totalEntries = entries;
 
-            for (var currentPage = startPage;
-                 !allShowsBeforeCutoff && (isThinScrape ? currentPage >= 1 : currentPage <= pages);
-                 currentPage += pageStep)
-            {
-                var apiShows =
-                    await PhishinApiRequest<IEnumerable<PhishinShow>>("shows", ctx, "date", pageSize, currentPage);
-
-                if (!isThinScrape)
+                foreach (var show in shows)
                 {
-                    pages = apiShows.total_pages;
-                }
-
-                var shows = apiShows.data.ToList();
-                var processedAnyOnPage = false;
-
-                foreach (var (idx, show) in shows.Select((s, i) => (i, s)))
-                {
-                    // Within each page, shows are date ASC. Skip pre-cutoff shows but
-                    // keep processing — later shows on the same page may be in range.
-                    if (isThinScrape && string.Compare(show.date, yearCutoff, StringComparison.Ordinal) < 0)
-                    {
-                        continue;
-                    }
-
-                    processedAnyOnPage = true;
-
                     try
                     {
                         await processShow(show);
@@ -564,16 +648,11 @@ namespace Relisten.Import
                         SentrySdk.CaptureException(e);
                     }
 
-                    prog?.SetValue(100.0 * (((currentPage - 1) * pageSize) + idx + 1) / apiShows.total_entries);
+                    processedCount++;
+                    prog?.SetValue(100.0 * processedCount / totalEntries);
                 }
 
-                // If we're doing a thin scrape and an entire page had no shows in range,
-                // all remaining pages (earlier dates) won't either
-                if (isThinScrape && !processedAnyOnPage)
-                {
-                    ctx?.WriteLine($"Thin scrape: no shows on page {currentPage} matched year {CurrentImportOptions.OnlyYear}, stopping");
-                    allShowsBeforeCutoff = true;
-                }
+                currentPage++;
             }
 
             async Task processShow(PhishinShow show)
@@ -584,18 +663,25 @@ namespace Relisten.Import
 
                 Source? dbSource = existingSources.GetValue(show.id.ToString());
 
+                var venueId = FindVenue(show.venue)!.id;
+
+                var isSbd = show.tags?.Any(t => t.name == "SBD") ?? false;
+                var isRemaster = show.tags?.Any(t => t.name == "RMSTR") ?? false;
+
                 if (dbSource == null)
                 {
-                    dbSource = await ProcessShow(stats, artist, show, src,
+                    var fullShow = await PhishinApiGet<PhishinShow>($"shows/{show.date}", ctx);
+
+                    dbSource = await ProcessShow(stats, artist, fullShow, src,
                         new Source
                         {
                             updated_at = show.updated_at,
                             artist_id = artist.id,
-                            venue_id = existingVenues[show.venue.id.ToString()]!.id,
+                            venue_id = venueId,
                             display_date = show.date,
                             upstream_identifier = show.id.ToString(),
-                            is_soundboard = show.sbd,
-                            is_remaster = show.remastered,
+                            is_soundboard = isSbd,
+                            is_remaster = isRemaster,
                             description = "",
                             taper_notes = show.taper_notes
                         }, ctx);
@@ -621,16 +707,18 @@ namespace Relisten.Import
                 }
                 else if (show.updated_at > dbSource.updated_at)
                 {
+                    var fullShow = await PhishinApiGet<PhishinShow>($"shows/{show.date}", ctx);
+
                     dbSource.updated_at = show.updated_at;
-                    dbSource.venue_id = existingVenues[show.venue.id.ToString()]!.id;
+                    dbSource.venue_id = venueId;
                     dbSource.display_date = show.date;
                     dbSource.upstream_identifier = show.id.ToString();
-                    dbSource.is_soundboard = show.sbd;
-                    dbSource.is_remaster = show.remastered;
+                    dbSource.is_soundboard = isSbd;
+                    dbSource.is_remaster = isRemaster;
                     dbSource.description = "";
                     dbSource.taper_notes = show.taper_notes;
 
-                    dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
+                    dbSource = await ProcessShow(stats, artist, fullShow, src, dbSource, ctx);
 
                     existingSources[dbSource.upstream_identifier] = dbSource!;
 
