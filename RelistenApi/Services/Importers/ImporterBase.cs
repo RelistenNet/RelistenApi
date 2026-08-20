@@ -195,6 +195,7 @@ namespace Relisten.Import
 
         private const string IncrementalShowVenueRefreshSql = @"
 -- Incremental refresh of show source info for this artist
+WITH changed_show_source_information AS (
 INSERT INTO
 	show_source_information
 	(show_id, max_updated_at, max_created_at, source_count, artist_id, max_avg_rating_weighted, has_soundboard_source, has_flac)
@@ -233,6 +234,12 @@ WHERE
 		EXCLUDED.has_soundboard_source,
 		EXCLUDED.has_flac
 	)
+RETURNING show_id
+)
+UPDATE shows sh
+SET updated_at = GREATEST(sh.updated_at, statement_timestamp())
+FROM changed_show_source_information changed
+WHERE sh.id = changed.show_id
 ;
 
 -- Incremental refresh of venue show counts for this artist
@@ -425,7 +432,8 @@ WHERE
 UPDATE
 	shows s
 SET
-	year_id = y.id
+	year_id = y.id,
+	updated_at = GREATEST(s.updated_at, statement_timestamp())
 FROM
 	years y
 WHERE
@@ -504,7 +512,9 @@ INSERT INTO
 			ELSE to_date(LEFT(MIN(source.display_date), 10), 'YYYY-MM-DD')
 		END) as date,
 		MIN(source.display_date) as display_date,
-		MAX(source.updated_at) as updated_at,
+		-- Show.updated_at is catalog freshness. Upstream source freshness is retained
+		-- separately in show_source_information.max_updated_at.
+		statement_timestamp() as updated_at,
 		MAX(setlist_show.tour_id) as tour_id,
 		MAX(setlist_show.era_id) as era_id,
 		COALESCE(MAX(setlist_show.venue_id), MAX(source.venue_id)) as venue_id,
@@ -524,7 +534,7 @@ ON CONFLICT ON CONSTRAINT shows_uuid_key
 DO
 	UPDATE SET -- don't update artist_id or display_date since uuid is based on those
 		date = EXCLUDED.date,
-		updated_at = EXCLUDED.updated_at,
+		updated_at = GREATEST(shows.updated_at, statement_timestamp()),
 		tour_id = EXCLUDED.tour_id,
 		era_id = EXCLUDED.era_id,
 		venue_id = EXCLUDED.venue_id,
@@ -532,14 +542,12 @@ DO
 WHERE
 	(
 		shows.date,
-		shows.updated_at,
 		shows.tour_id,
 		shows.era_id,
 		shows.venue_id,
 		shows.avg_duration
 	) IS DISTINCT FROM (
 		EXCLUDED.date,
-		EXCLUDED.updated_at,
 		EXCLUDED.tour_id,
 		EXCLUDED.era_id,
 		EXCLUDED.venue_id,
@@ -720,7 +728,6 @@ WITH rating_ranks AS (
 	SELECT
 		sh.id as show_id,
 		s.avg_rating,
-		s.updated_at as updated_at,
 		s.num_reviews,
 		s.avg_rating_weighted,
 		RANK() OVER (PARTITION BY sh.id ORDER BY s.avg_rating_weighted DESC) as rank
@@ -732,8 +739,7 @@ WITH rating_ranks AS (
 ), max_rating AS (
 	SELECT
 		show_id,
-		AVG(avg_rating) as avg_rating,
-		MAX(updated_at) as updated_at
+		AVG(avg_rating)::real as avg_rating
 	FROM
 		rating_ranks
 	WHERE
@@ -746,12 +752,13 @@ UPDATE
 	shows s
 SET
 	avg_rating = r.avg_rating,
-	updated_at = r.updated_at
+	-- A changed aggregate is a catalog change even when no upstream source timestamp moved.
+	updated_at = GREATEST(s.updated_at, statement_timestamp())
 FROM max_rating r
 WHERE
 	r.show_id = s.id
 	AND s.artist_id = @id
-	AND (s.avg_rating, s.updated_at) IS DISTINCT FROM (r.avg_rating, r.updated_at)
+	AND s.avg_rating IS DISTINCT FROM r.avg_rating
     ;
 
 -- delete shows without

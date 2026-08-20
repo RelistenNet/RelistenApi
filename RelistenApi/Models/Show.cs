@@ -7,6 +7,8 @@ namespace Relisten.Api.Models
 {
     public class Show : BaseRelistenModel, IHasPersistentIdentifier
     {
+        // The inherited updated_at is the last time API-visible catalog data for this show changed.
+        // Upstream source recency is exposed separately as most_recent_source_updated_at.
         [V2JsonOnly] [Required] public int artist_id { get; set; }
         [Required] public Guid artist_uuid { get; set; }
         [V2JsonOnly] public int? venue_id { get; set; }
