@@ -7,11 +7,6 @@ using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
-    internal sealed class SourceWithUpstreamOwnership : Source
-    {
-        public bool is_owned_by_upstream_source { get; set; }
-    }
-
     public class EntityOneToManyMapper<TP, TC, TPk> where TPk : notnull
     {
         private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
@@ -248,25 +243,6 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        internal async Task<IEnumerable<SourceWithUpstreamOwnership>>
-            AllForArtistWithUpstreamOwnershipFromPrimary(
-            Artist artist,
-            int upstreamSourceId)
-        {
-            return await db.WithWriteConnection(con => con.QueryAsync<SourceWithUpstreamOwnership>(@"
-                SELECT
-                    s.*
-                    , l.source_id IS NOT NULL AS is_owned_by_upstream_source
-                FROM
-                    sources s
-                    LEFT JOIN links l
-                        ON l.source_id = s.id
-                        AND l.upstream_source_id = @upstreamSourceId
-                WHERE
-                    s.artist_id = @id
-            ", new {artist.id, upstreamSourceId}));
-        }
-
         /// <summary>
         /// Same as AllSourceReviewInformationForArtist but reads from the primary database.
         /// </summary>
@@ -302,7 +278,7 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(int artistId, int upstreamSourceId,
+        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(int artistId,
             IEnumerable<string> upstreamIdentifiers)
         {
             return await db.WithWriteConnection(con => con.ExecuteAsync(@"
@@ -311,46 +287,13 @@ namespace Relisten.Data
                     FROM sources
                     WHERE upstream_identifier = ANY(@upstreamIdentifiers)
                         AND artist_id = @artistId
-                        AND EXISTS (
-                            SELECT 1
-                            FROM links l
-                            WHERE l.source_id = sources.id
-                                AND l.upstream_source_id = @upstreamSourceId
-                        )
                 ), deleted_review_counts AS (
                     DELETE FROM source_review_counts
                     WHERE source_id IN (SELECT id FROM source_ids)
                 )
                 DELETE FROM sources
                 WHERE id IN (SELECT id FROM source_ids)
-            ", new {artistId, upstreamSourceId, upstreamIdentifiers = upstreamIdentifiers.ToList()}));
-        }
-
-        public async Task<int> RestoreDisplayDates(int artistId,
-            IReadOnlyDictionary<int, string> displayDatesBySourceId)
-        {
-            var sourceDisplayDates = displayDatesBySourceId.ToList();
-            if (sourceDisplayDates.Count == 0)
-            {
-                return 0;
-            }
-
-            return await db.WithWriteConnection(con => con.ExecuteAsync(@"
-                UPDATE sources s
-                SET display_date = restored.display_date
-                FROM UNNEST(
-                    @sourceIds::int[],
-                    @displayDates::text[]
-                ) AS restored(source_id, display_date)
-                WHERE s.id = restored.source_id
-                    AND s.artist_id = @artistId
-                    AND s.display_date IS DISTINCT FROM restored.display_date
-            ", new
-            {
-                artistId,
-                sourceIds = sourceDisplayDates.Select(pair => pair.Key).ToArray(),
-                displayDates = sourceDisplayDates.Select(pair => pair.Value).ToArray()
-            }));
+            ", new {artistId, upstreamIdentifiers = upstreamIdentifiers.ToList()}));
         }
 
         public async Task<Source> Save(Source source)

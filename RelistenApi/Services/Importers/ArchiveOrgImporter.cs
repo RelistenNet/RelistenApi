@@ -20,15 +20,10 @@ using Sentry;
 
 namespace Relisten.Import
 {
-    internal sealed record ArchiveOrgDeletionPlan(
-        IReadOnlyList<string> SourceIdentifiers,
-        IReadOnlyList<string> ShowDisplayDates,
-        IReadOnlyDictionary<int, string> DisplayDatesToRestore);
-
     public class ArchiveOrgImporter : ImporterBase
     {
         public const string DataSourceName = "archive.org";
-        private const int MaxShowsDeletedPerSync = 5;
+        private const int MaxSourcesDeletedPerSync = 5;
 
         private static readonly ActivitySource ActivitySource = new("Relisten.Import");
 
@@ -39,8 +34,6 @@ namespace Relisten.Import
             new Dictionary<string, SourceReviewInformation?>();
 
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
-        private IReadOnlyList<Source> sourcesBeforeSync = Array.Empty<Source>();
-        private IReadOnlySet<int> archiveSourceIdsBeforeSync = new HashSet<int>();
 
         public ArchiveOrgImporter(
             DbService db,
@@ -96,7 +89,7 @@ namespace Relisten.Import
         public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
             string? showIdentifier, PerformContext? ctx)
         {
-            await PreloadData(artist, src.upstream_source_id);
+            await PreloadData(artist);
 
             var url = SearchUrlForArtist(artist, src);
             ctx?.WriteLine($"All shows URL: {url}");
@@ -258,30 +251,21 @@ namespace Relisten.Import
                             return;
                         }
 
-                        Source? importedSource = null;
-                        using (var scope = new TransactionScope(TransactionScopeOption.Required,
-                                   new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
-                                   TransactionScopeAsyncFlowOption.Enabled))
-                        {
-                            try
-                            {
-                                var importResult = await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
-                                    properDate, ctx);
-                                stats += importResult.Stats;
-                                importedSource = importResult.Source;
-                            }
-                            catch (NoVBRMp3FilesException)
-                            {
-                                identifiersWithoutMP3s.Add(doc.identifier);
-                            }
+                        using var scope = new TransactionScope(TransactionScopeOption.Required,
+                            new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                            TransactionScopeAsyncFlowOption.Enabled);
 
-                            scope.Complete();
+                        try
+                        {
+                            stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                                properDate, ctx);
+                        }
+                        catch (NoVBRMp3FilesException)
+                        {
+                            identifiersWithoutMP3s.Add(doc.identifier);
                         }
 
-                        if (importedSource != null)
-                        {
-                            existingSources[importedSource.upstream_identifier] = importedSource;
-                        }
+                        scope.Complete();
                     }
                 }
                 catch (Exception e)
@@ -311,55 +295,39 @@ namespace Relisten.Import
             if (!CurrentImportOptions.IsThinScrape)
             {
                 // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-                var identifiersToKeep = root.response.docs
+                var sourcesToKeep = root.response.docs
                     .Select(d => d.identifier)
-                    .Except(identifiersWithoutMP3s)
-                    .ToHashSet(StringComparer.Ordinal);
+                    .Except(identifiersWithoutMP3s);
+                var deletedSourceUpstreamIdentifiers = existingSources
+                    .Select(kvp => kvp.Key)
+                    .Except(sourcesToKeep)
+                    .ToList();
 
-                var currentSources = existingSources.Values.OfType<Source>().ToList();
-                var archiveSources = currentSources
-                    .Where(source => archiveSourceIdsBeforeSync.Contains(source.id));
-                var deletionPlan = BuildDeletionPlan(
-                    sourcesBeforeSync,
-                    currentSources,
-                    archiveSources,
-                    identifiersToKeep);
-
-                if (ExceedsDeletionLimit(deletionPlan))
+                if (ExceedsDeletionLimit(deletedSourceUpstreamIdentifiers.Count))
                 {
                     var message =
-                        $"🛑 Archive.org deletion guard blocked {deletionPlan.ShowDisplayDates.Count} show " +
-                        $"deletions for {artist.name} ({artist.slug}); planned changes included " +
-                        $"{deletionPlan.SourceIdentifiers.Count} source deletions and " +
-                        $"{deletionPlan.DisplayDatesToRestore.Count} source date moves. Threshold is " +
-                        $"{MaxShowsDeletedPerSync}. No sources or shows were deleted.";
+                        $"🛑 Archive.org deletion guard blocked {deletedSourceUpstreamIdentifiers.Count} source " +
+                        $"deletions for {artist.name} ({artist.slug}); threshold is " +
+                        $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
 
                     ctx?.WriteLine(message);
                     Log.Warning(
-                        "Archive.org deletion guard blocked {ShowCount} show deletions for {ArtistName} " +
-                        "({ArtistSlug}); planned changes included {SourceDeletionCount} source deletions and " +
-                        "{SourceDateMoveCount} source date moves; threshold is {DeletionThreshold}",
-                        deletionPlan.ShowDisplayDates.Count,
+                        "Archive.org deletion guard blocked {SourceDeletionCount} source deletions for " +
+                        "{ArtistName} ({ArtistSlug}); threshold is {DeletionThreshold}",
+                        deletedSourceUpstreamIdentifiers.Count,
                         artist.name,
                         artist.slug,
-                        deletionPlan.SourceIdentifiers.Count,
-                        deletionPlan.DisplayDatesToRestore.Count,
-                        MaxShowsDeletedPerSync);
-
-                    await _sourceService.RestoreDisplayDates(
-                        artist.id,
-                        deletionPlan.DisplayDatesToRestore);
+                        MaxSourcesDeletedPerSync);
                     await discordWebhookNotifier.SendAsync(message);
                 }
-                else if (deletionPlan.SourceIdentifiers.Count > 0)
+                else if (deletedSourceUpstreamIdentifiers.Count > 0)
                 {
-                    ctx?.WriteLine($"Removing {deletionPlan.SourceIdentifiers.Count} sources " +
+                    ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
                                    $"that are in the database but no longer on Archive.org: " +
-                                   string.Join(',', deletionPlan.SourceIdentifiers));
+                                   string.Join(',', deletedSourceUpstreamIdentifiers));
                     stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
                         artist.id,
-                        src.upstream_source_id,
-                        deletionPlan.SourceIdentifiers);
+                        deletedSourceUpstreamIdentifiers);
                 }
             }
 
@@ -385,54 +353,12 @@ namespace Relisten.Import
             return stats;
         }
 
-        internal static ArchiveOrgDeletionPlan BuildDeletionPlan(
-            IEnumerable<Source> sourcesBeforeSync,
-            IEnumerable<Source> currentSources,
-            IEnumerable<Source> deletionEligibleSources,
-            IReadOnlySet<string> identifiersToKeep)
+        internal static bool ExceedsDeletionLimit(int sourceCount)
         {
-            var beforeSources = sourcesBeforeSync.ToList();
-            var currentSourceList = currentSources.ToList();
-            var candidateSources = deletionEligibleSources
-                .Where(source => !identifiersToKeep.Contains(source.upstream_identifier))
-                .ToList();
-            var candidateSourceIds = candidateSources
-                .Select(source => source.id)
-                .ToHashSet();
-            var postSyncDisplayDates = currentSourceList
-                .Where(source => !candidateSourceIds.Contains(source.id))
-                .Select(source => source.display_date)
-                .ToHashSet(StringComparer.Ordinal);
-
-            var sourceIdentifiers = candidateSources
-                .Select(source => source.upstream_identifier)
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(identifier => identifier, StringComparer.Ordinal)
-                .ToList();
-            var showDisplayDates = beforeSources
-                .Select(source => source.display_date)
-                .Where(displayDate => !postSyncDisplayDates.Contains(displayDate))
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(displayDate => displayDate, StringComparer.Ordinal)
-                .ToList();
-
-            var beforeSourcesById = beforeSources.ToDictionary(source => source.id);
-            var displayDatesToRestore = currentSourceList
-                .Where(source => beforeSourcesById.TryGetValue(source.id, out var beforeSource) &&
-                                 beforeSource.display_date != source.display_date)
-                .ToDictionary(
-                    source => source.id,
-                    source => beforeSourcesById[source.id].display_date);
-
-            return new ArchiveOrgDeletionPlan(sourceIdentifiers, showDisplayDates, displayDatesToRestore);
+            return sourceCount > MaxSourcesDeletedPerSync;
         }
 
-        internal static bool ExceedsDeletionLimit(ArchiveOrgDeletionPlan deletionPlan)
-        {
-            return deletionPlan.ShowDisplayDates.Count > MaxShowsDeletedPerSync;
-        }
-
-        private async Task<(ImportStats Stats, Source Source)> ImportSingleIdentifier(
+        private async Task<ImportStats> ImportSingleIdentifier(
             Artist artist,
             Source? dbSource,
             SearchDoc searchDoc,
@@ -518,6 +444,8 @@ namespace Relisten.Import
                 dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc,
                     properDisplayDate, dbVenue));
                 stats.Created++;
+
+                existingSources[dbSource.upstream_identifier] = dbSource;
             }
 
             stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
@@ -544,7 +472,7 @@ namespace Relisten.Import
 
             ResetTrackSlugCounts();
 
-            return (stats, dbSource);
+            return stats;
         }
 
         private IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
@@ -740,20 +668,12 @@ namespace Relisten.Import
             };
         }
 
-        private async Task PreloadData(Artist artist, int upstreamSourceId)
+        private async Task PreloadData(Artist artist)
         {
             // Use primary database methods to ensure read-after-write consistency.
             // This is important when content has been deleted before import (full refresh),
             // as the read replica may have replication lag.
-            var sourceSnapshot = (await _sourceService.AllForArtistWithUpstreamOwnershipFromPrimary(
-                artist,
-                upstreamSourceId)).ToList();
-            sourcesBeforeSync = sourceSnapshot;
-            archiveSourceIdsBeforeSync = sourceSnapshot
-                .Where(source => source.is_owned_by_upstream_source)
-                .Select(source => source.id)
-                .ToHashSet();
-            existingSources = sourceSnapshot
+            existingSources = (await _sourceService.AllForArtistFromPrimary(artist))
                 .GroupBy(source => source.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 
