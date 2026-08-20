@@ -278,20 +278,22 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(IEnumerable<string> upstreamIdentifiers)
+        public async Task<int> RemoveSourcesWithUpstreamIdentifiers(int artistId,
+            IEnumerable<string> upstreamIdentifiers)
         {
             return await db.WithWriteConnection(con => con.ExecuteAsync(@"
                 WITH source_ids AS MATERIALIZED (
                     SELECT id
                     FROM sources
                     WHERE upstream_identifier = ANY(@upstreamIdentifiers)
+                        AND artist_id = @artistId
                 ), deleted_review_counts AS (
                     DELETE FROM source_review_counts
                     WHERE source_id IN (SELECT id FROM source_ids)
                 )
                 DELETE FROM sources
                 WHERE id IN (SELECT id FROM source_ids)
-            ", new {upstreamIdentifiers = upstreamIdentifiers.ToList()}));
+            ", new {artistId, upstreamIdentifiers = upstreamIdentifiers.ToList()}));
         }
 
         public async Task<Source> Save(Source source)

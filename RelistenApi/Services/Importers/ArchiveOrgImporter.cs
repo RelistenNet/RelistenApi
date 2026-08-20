@@ -11,6 +11,7 @@ using Hangfire.Server;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Services.Notifications;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
@@ -22,10 +23,12 @@ namespace Relisten.Import
     public class ArchiveOrgImporter : ImporterBase
     {
         public const string DataSourceName = "archive.org";
+        private const int MaxSourcesDeletedPerSync = 5;
 
         private static readonly ActivitySource ActivitySource = new("Relisten.Import");
 
         private readonly LinkService linkService;
+        private readonly IDiscordWebhookNotifier discordWebhookNotifier;
 
         private IDictionary<string, SourceReviewInformation?> existingSourceReviewInformation =
             new Dictionary<string, SourceReviewInformation?>();
@@ -41,10 +44,12 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            RedisService redisService
+            RedisService redisService,
+            IDiscordWebhookNotifier discordWebhookNotifier
         ) : base(db, redisService)
         {
             this.linkService = linkService;
+            this.discordWebhookNotifier = discordWebhookNotifier;
             _sourceService = sourceService;
             _venueService = venueService;
             _tourService = tourService;
@@ -290,22 +295,40 @@ namespace Relisten.Import
             if (!CurrentImportOptions.IsThinScrape)
             {
                 // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-                var showsToKeep = root.response.docs
-                        .Select(d => d.identifier)
-                        .Except(identifiersWithoutMP3s)
-                    ;
-
-                // find sources that no longer exist
+                var sourcesToKeep = root.response.docs
+                    .Select(d => d.identifier)
+                    .Except(identifiersWithoutMP3s);
                 var deletedSourceUpstreamIdentifiers = existingSources
-                        .Select(kvp => kvp.Key)
-                        .Except(showsToKeep)
-                        .ToList()
-                    ;
+                    .Select(kvp => kvp.Key)
+                    .Except(sourcesToKeep)
+                    .ToList();
 
-                ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
-                               $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
-                stats.Removed +=
-                    await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+                if (ExceedsDeletionLimit(deletedSourceUpstreamIdentifiers.Count))
+                {
+                    var message =
+                        $"🛑 Archive.org deletion guard blocked {deletedSourceUpstreamIdentifiers.Count} source " +
+                        $"deletions for {artist.name} ({artist.slug}); threshold is " +
+                        $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
+
+                    ctx?.WriteLine(message);
+                    Log.Warning(
+                        "Archive.org deletion guard blocked {SourceDeletionCount} source deletions for " +
+                        "{ArtistName} ({ArtistSlug}); threshold is {DeletionThreshold}",
+                        deletedSourceUpstreamIdentifiers.Count,
+                        artist.name,
+                        artist.slug,
+                        MaxSourcesDeletedPerSync);
+                    await discordWebhookNotifier.SendAsync(message);
+                }
+                else if (deletedSourceUpstreamIdentifiers.Count > 0)
+                {
+                    ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
+                                   $"that are in the database but no longer on Archive.org: " +
+                                   string.Join(',', deletedSourceUpstreamIdentifiers));
+                    stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
+                        artist.id,
+                        deletedSourceUpstreamIdentifiers);
+                }
             }
 
             ctx?.WriteLine($"Import stats: {stats}");
@@ -328,6 +351,11 @@ namespace Relisten.Import
             }
 
             return stats;
+        }
+
+        internal static bool ExceedsDeletionLimit(int sourceCount)
+        {
+            return sourceCount > MaxSourcesDeletedPerSync;
         }
 
         private async Task<ImportStats> ImportSingleIdentifier(
@@ -410,7 +438,6 @@ namespace Relisten.Import
                 dbSource.venue = dbVenue;
 
                 stats.Updated++;
-                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
             else
             {
@@ -419,9 +446,9 @@ namespace Relisten.Import
                 stats.Created++;
 
                 existingSources[dbSource.upstream_identifier] = dbSource;
-
-                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
+
+            stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
 
             stats.Created +=
                 (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
