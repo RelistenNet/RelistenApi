@@ -11,6 +11,7 @@ using Hangfire.Server;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Services.Notifications;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
@@ -19,18 +20,26 @@ using Sentry;
 
 namespace Relisten.Import
 {
+    internal sealed record ArchiveOrgDeletionPlan(
+        IReadOnlyList<string> SourceIdentifiers,
+        IReadOnlyList<string> ShowDisplayDates,
+        IReadOnlyDictionary<int, string> DisplayDatesToRestore);
+
     public class ArchiveOrgImporter : ImporterBase
     {
         public const string DataSourceName = "archive.org";
+        private const int MaxShowsDeletedPerSync = 5;
 
         private static readonly ActivitySource ActivitySource = new("Relisten.Import");
 
         private readonly LinkService linkService;
+        private readonly IDiscordWebhookNotifier discordWebhookNotifier;
 
         private IDictionary<string, SourceReviewInformation?> existingSourceReviewInformation =
             new Dictionary<string, SourceReviewInformation?>();
 
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
+        private IReadOnlyList<Source> sourcesBeforeSync = Array.Empty<Source>();
 
         public ArchiveOrgImporter(
             DbService db,
@@ -41,10 +50,12 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            RedisService redisService
+            RedisService redisService,
+            IDiscordWebhookNotifier discordWebhookNotifier
         ) : base(db, redisService)
         {
             this.linkService = linkService;
+            this.discordWebhookNotifier = discordWebhookNotifier;
             _sourceService = sourceService;
             _venueService = venueService;
             _tourService = tourService;
@@ -290,22 +301,58 @@ namespace Relisten.Import
             if (!CurrentImportOptions.IsThinScrape)
             {
                 // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-                var showsToKeep = root.response.docs
-                        .Select(d => d.identifier)
-                        .Except(identifiersWithoutMP3s)
-                    ;
+                var identifiersToKeep = root.response.docs
+                    .Select(d => d.identifier)
+                    .Except(identifiersWithoutMP3s)
+                    .ToHashSet(StringComparer.Ordinal);
 
-                // find sources that no longer exist
-                var deletedSourceUpstreamIdentifiers = existingSources
-                        .Select(kvp => kvp.Key)
-                        .Except(showsToKeep)
-                        .ToList()
-                    ;
+                // Reload after processing so sources added or moved during this sync are included in the plan.
+                var currentSources = (await _sourceService.AllForArtistFromPrimary(artist)).ToList();
+                var archiveSources = await _sourceService.AllForArtistAndUpstreamSourceFromPrimary(
+                    artist,
+                    src.upstream_source_id);
+                var deletionPlan = BuildDeletionPlan(
+                    sourcesBeforeSync,
+                    currentSources,
+                    archiveSources,
+                    identifiersToKeep);
 
-                ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
-                               $"that are in the database but no longer on Archive.org: {string.Join(',', deletedSourceUpstreamIdentifiers)}");
-                stats.Removed +=
-                    await _sourceService.RemoveSourcesWithUpstreamIdentifiers(deletedSourceUpstreamIdentifiers);
+                if (ExceedsDeletionLimit(deletionPlan))
+                {
+                    var message =
+                        $"🛑 Archive.org deletion guard blocked {deletionPlan.ShowDisplayDates.Count} show " +
+                        $"deletions for {artist.name} ({artist.slug}); planned changes included " +
+                        $"{deletionPlan.SourceIdentifiers.Count} source deletions and " +
+                        $"{deletionPlan.DisplayDatesToRestore.Count} source date moves. Threshold is " +
+                        $"{MaxShowsDeletedPerSync}. No sources or shows were deleted.";
+
+                    ctx?.WriteLine(message);
+                    Log.Warning(
+                        "Archive.org deletion guard blocked {ShowCount} show deletions for {ArtistName} " +
+                        "({ArtistSlug}); planned changes included {SourceDeletionCount} source deletions and " +
+                        "{SourceDateMoveCount} source date moves; threshold is {DeletionThreshold}",
+                        deletionPlan.ShowDisplayDates.Count,
+                        artist.name,
+                        artist.slug,
+                        deletionPlan.SourceIdentifiers.Count,
+                        deletionPlan.DisplayDatesToRestore.Count,
+                        MaxShowsDeletedPerSync);
+
+                    await _sourceService.RestoreDisplayDates(
+                        artist.id,
+                        deletionPlan.DisplayDatesToRestore);
+                    await discordWebhookNotifier.SendAsync(message);
+                }
+                else if (deletionPlan.SourceIdentifiers.Count > 0)
+                {
+                    ctx?.WriteLine($"Removing {deletionPlan.SourceIdentifiers.Count} sources " +
+                                   $"that are in the database but no longer on Archive.org: " +
+                                   string.Join(',', deletionPlan.SourceIdentifiers));
+                    stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
+                        artist.id,
+                        src.upstream_source_id,
+                        deletionPlan.SourceIdentifiers);
+                }
             }
 
             ctx?.WriteLine($"Import stats: {stats}");
@@ -328,6 +375,53 @@ namespace Relisten.Import
             }
 
             return stats;
+        }
+
+        internal static ArchiveOrgDeletionPlan BuildDeletionPlan(
+            IEnumerable<Source> sourcesBeforeSync,
+            IEnumerable<Source> currentSources,
+            IEnumerable<Source> deletionEligibleSources,
+            IReadOnlySet<string> identifiersToKeep)
+        {
+            var beforeSources = sourcesBeforeSync.ToList();
+            var currentSourceList = currentSources.ToList();
+            var candidateSources = deletionEligibleSources
+                .Where(source => !identifiersToKeep.Contains(source.upstream_identifier))
+                .ToList();
+            var candidateSourceIds = candidateSources
+                .Select(source => source.id)
+                .ToHashSet();
+            var postSyncDisplayDates = currentSourceList
+                .Where(source => !candidateSourceIds.Contains(source.id))
+                .Select(source => source.display_date)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var sourceIdentifiers = candidateSources
+                .Select(source => source.upstream_identifier)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(identifier => identifier, StringComparer.Ordinal)
+                .ToList();
+            var showDisplayDates = beforeSources
+                .Select(source => source.display_date)
+                .Where(displayDate => !postSyncDisplayDates.Contains(displayDate))
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(displayDate => displayDate, StringComparer.Ordinal)
+                .ToList();
+
+            var beforeSourcesById = beforeSources.ToDictionary(source => source.id);
+            var displayDatesToRestore = currentSourceList
+                .Where(source => beforeSourcesById.TryGetValue(source.id, out var beforeSource) &&
+                                 beforeSource.display_date != source.display_date)
+                .ToDictionary(
+                    source => source.id,
+                    source => beforeSourcesById[source.id].display_date);
+
+            return new ArchiveOrgDeletionPlan(sourceIdentifiers, showDisplayDates, displayDatesToRestore);
+        }
+
+        internal static bool ExceedsDeletionLimit(ArchiveOrgDeletionPlan deletionPlan)
+        {
+            return deletionPlan.ShowDisplayDates.Count > MaxShowsDeletedPerSync;
         }
 
         private async Task<ImportStats> ImportSingleIdentifier(
@@ -646,7 +740,8 @@ namespace Relisten.Import
             // Use primary database methods to ensure read-after-write consistency.
             // This is important when content has been deleted before import (full refresh),
             // as the read replica may have replication lag.
-            existingSources = (await _sourceService.AllForArtistFromPrimary(artist))
+            sourcesBeforeSync = (await _sourceService.AllForArtistFromPrimary(artist)).ToList();
+            existingSources = sourcesBeforeSync
                 .GroupBy(source => source.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 

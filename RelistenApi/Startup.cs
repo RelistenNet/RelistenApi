@@ -32,6 +32,7 @@ using Relisten.Import;
 using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
 using Relisten.Services.Health;
+using Relisten.Services.Notifications;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
 using Serilog;
@@ -102,7 +103,14 @@ namespace Relisten
                             };
                         })
                         .AddNpgsql()
-                        .AddHttpClientInstrumentation()
+                        .AddHttpClientInstrumentation(options =>
+                        {
+                            options.FilterHttpRequestMessage = request =>
+                                !request.Options.TryGetValue(
+                                    DiscordWebhookNotifier.SuppressTracingKey,
+                                    out var suppressTracing) ||
+                                !suppressTracing;
+                        })
                         .AddHangfireInstrumentation()
                         .AddSource("Relisten.Import")
                         .AddOtlpExporter(otlpOptions =>
@@ -301,6 +309,9 @@ namespace Relisten
             services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
+            services.AddHttpClient<IDiscordWebhookNotifier, DiscordWebhookNotifier>(client =>
+                    client.Timeout = TimeSpan.FromSeconds(10))
+                .RemoveAllLoggers();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
