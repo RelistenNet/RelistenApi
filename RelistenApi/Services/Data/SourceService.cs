@@ -7,6 +7,11 @@ using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
+    internal sealed class SourceWithUpstreamOwnership : Source
+    {
+        public bool is_owned_by_upstream_source { get; set; }
+    }
+
     public class EntityOneToManyMapper<TP, TC, TPk> where TPk : notnull
     {
         private readonly IDictionary<TPk, TP> _lookup = new Dictionary<TPk, TP>();
@@ -243,23 +248,22 @@ namespace Relisten.Data
             ", new {artist.id}));
         }
 
-        public async Task<IEnumerable<Source>> AllForArtistAndUpstreamSourceFromPrimary(
+        internal async Task<IEnumerable<SourceWithUpstreamOwnership>>
+            AllForArtistWithUpstreamOwnershipFromPrimary(
             Artist artist,
             int upstreamSourceId)
         {
-            return await db.WithWriteConnection(con => con.QueryAsync<Source>(@"
+            return await db.WithWriteConnection(con => con.QueryAsync<SourceWithUpstreamOwnership>(@"
                 SELECT
                     s.*
+                    , l.source_id IS NOT NULL AS is_owned_by_upstream_source
                 FROM
                     sources s
+                    LEFT JOIN links l
+                        ON l.source_id = s.id
+                        AND l.upstream_source_id = @upstreamSourceId
                 WHERE
                     s.artist_id = @id
-                    AND EXISTS (
-                        SELECT 1
-                        FROM links l
-                        WHERE l.source_id = s.id
-                            AND l.upstream_source_id = @upstreamSourceId
-                    )
             ", new {artist.id, upstreamSourceId}));
         }
 

@@ -40,6 +40,7 @@ namespace Relisten.Import
 
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
         private IReadOnlyList<Source> sourcesBeforeSync = Array.Empty<Source>();
+        private IReadOnlySet<int> archiveSourceIdsBeforeSync = new HashSet<int>();
 
         public ArchiveOrgImporter(
             DbService db,
@@ -95,7 +96,7 @@ namespace Relisten.Import
         public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
             string? showIdentifier, PerformContext? ctx)
         {
-            await PreloadData(artist);
+            await PreloadData(artist, src.upstream_source_id);
 
             var url = SearchUrlForArtist(artist, src);
             ctx?.WriteLine($"All shows URL: {url}");
@@ -257,21 +258,30 @@ namespace Relisten.Import
                             return;
                         }
 
-                        using var scope = new TransactionScope(TransactionScopeOption.Required,
-                            new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
-                            TransactionScopeAsyncFlowOption.Enabled);
-
-                        try
+                        Source? importedSource = null;
+                        using (var scope = new TransactionScope(TransactionScopeOption.Required,
+                                   new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                                   TransactionScopeAsyncFlowOption.Enabled))
                         {
-                            stats += await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
-                                properDate, ctx);
-                        }
-                        catch (NoVBRMp3FilesException)
-                        {
-                            identifiersWithoutMP3s.Add(doc.identifier);
+                            try
+                            {
+                                var importResult = await ImportSingleIdentifier(artist, dbShow, doc, detailsRoot, src,
+                                    properDate, ctx);
+                                stats += importResult.Stats;
+                                importedSource = importResult.Source;
+                            }
+                            catch (NoVBRMp3FilesException)
+                            {
+                                identifiersWithoutMP3s.Add(doc.identifier);
+                            }
+
+                            scope.Complete();
                         }
 
-                        scope.Complete();
+                        if (importedSource != null)
+                        {
+                            existingSources[importedSource.upstream_identifier] = importedSource;
+                        }
                     }
                 }
                 catch (Exception e)
@@ -306,11 +316,9 @@ namespace Relisten.Import
                     .Except(identifiersWithoutMP3s)
                     .ToHashSet(StringComparer.Ordinal);
 
-                // Reload after processing so sources added or moved during this sync are included in the plan.
-                var currentSources = (await _sourceService.AllForArtistFromPrimary(artist)).ToList();
-                var archiveSources = await _sourceService.AllForArtistAndUpstreamSourceFromPrimary(
-                    artist,
-                    src.upstream_source_id);
+                var currentSources = existingSources.Values.OfType<Source>().ToList();
+                var archiveSources = currentSources
+                    .Where(source => archiveSourceIdsBeforeSync.Contains(source.id));
                 var deletionPlan = BuildDeletionPlan(
                     sourcesBeforeSync,
                     currentSources,
@@ -424,7 +432,7 @@ namespace Relisten.Import
             return deletionPlan.ShowDisplayDates.Count > MaxShowsDeletedPerSync;
         }
 
-        private async Task<ImportStats> ImportSingleIdentifier(
+        private async Task<(ImportStats Stats, Source Source)> ImportSingleIdentifier(
             Artist artist,
             Source? dbSource,
             SearchDoc searchDoc,
@@ -504,18 +512,15 @@ namespace Relisten.Import
                 dbSource.venue = dbVenue;
 
                 stats.Updated++;
-                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
             else
             {
                 dbSource = await _sourceService.Save(CreateSourceForMetadata(artist, detailsRoot, searchDoc,
                     properDisplayDate, dbVenue));
                 stats.Created++;
-
-                existingSources[dbSource.upstream_identifier] = dbSource;
-
-                stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
             }
+
+            stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
 
             stats.Created +=
                 (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
@@ -539,7 +544,7 @@ namespace Relisten.Import
 
             ResetTrackSlugCounts();
 
-            return stats;
+            return (stats, dbSource);
         }
 
         private IEnumerable<Link> LinksForSource(Artist artist, Source dbSource, ArtistUpstreamSource src)
@@ -735,13 +740,20 @@ namespace Relisten.Import
             };
         }
 
-        private async Task PreloadData(Artist artist)
+        private async Task PreloadData(Artist artist, int upstreamSourceId)
         {
             // Use primary database methods to ensure read-after-write consistency.
             // This is important when content has been deleted before import (full refresh),
             // as the read replica may have replication lag.
-            sourcesBeforeSync = (await _sourceService.AllForArtistFromPrimary(artist)).ToList();
-            existingSources = sourcesBeforeSync
+            var sourceSnapshot = (await _sourceService.AllForArtistWithUpstreamOwnershipFromPrimary(
+                artist,
+                upstreamSourceId)).ToList();
+            sourcesBeforeSync = sourceSnapshot;
+            archiveSourceIdsBeforeSync = sourceSnapshot
+                .Where(source => source.is_owned_by_upstream_source)
+                .Select(source => source.id)
+                .ToHashSet();
+            existingSources = sourceSnapshot
                 .GroupBy(source => source.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (Source?)grp.First());
 
