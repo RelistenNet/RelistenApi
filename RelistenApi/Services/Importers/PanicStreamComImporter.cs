@@ -283,7 +283,8 @@ namespace Relisten.Import
                     })).Count();
             }
 
-            var dbSet = await _sourceSetService.Update(dbSource,
+            var dbSet = await _sourceSetService.Update(
+                dbSource,
                 new SourceSet
                 {
                     source_id = dbSource.id,
@@ -291,7 +292,8 @@ namespace Relisten.Import
                     is_encore = false,
                     name = "Default Set",
                     updated_at = panicUpdatedAt
-                });
+                },
+                SourceSetUuidVersion.V1);
             stats.Created++;
 
             var trackIndex = 0;

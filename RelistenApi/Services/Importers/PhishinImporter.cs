@@ -457,7 +457,10 @@ namespace Relisten.Import
                 }
             }
 
-            var setMaps = (await _sourceSetService.UpdateAll(dbSource, sets.Values.Where(s => s != null).Select(s => s!)))
+            var setMaps = (await _sourceSetService.UpdateAll(
+                    dbSource,
+                    sets.Values.Where(s => s != null).Select(s => s!),
+                    SourceSetUuidVersion.V2))
                 .GroupBy(s => s.index)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Single());
 

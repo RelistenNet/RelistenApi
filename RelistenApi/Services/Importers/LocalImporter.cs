@@ -307,7 +307,10 @@ namespace Relisten.Import
 
             var taperNotes = new List<string>();
 
-            var setMaps = (await _sourceSetService.UpdateAll(dbSource, sets.Values))
+            var setMaps = (await _sourceSetService.UpdateAll(
+                    dbSource,
+                    sets.Values,
+                    SourceSetUuidVersion.V1))
                 .GroupBy(s => s.index)
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Single());
 

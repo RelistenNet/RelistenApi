@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -6,6 +7,12 @@ using Relisten.Api.Models;
 
 namespace Relisten.Data
 {
+    public enum SourceSetUuidVersion
+    {
+        V1,
+        V2
+    }
+
     public class SourceSetService : RelistenDataServiceBase
     {
         public SourceSetService(DbService db) : base(db) { }
@@ -22,19 +29,21 @@ namespace Relisten.Data
             ", new {source_ids}));
         }
 
-        public async Task<SourceSet?> Update(Source source, SourceSet set)
+        public async Task<SourceSet?> Update(Source source, SourceSet set, SourceSetUuidVersion uuidVersion)
         {
             var l = new List<SourceSet>();
             l.Add(set);
 
-            return (await UpdateAll(source, l)).FirstOrDefault();
+            return (await UpdateAll(source, l, uuidVersion)).FirstOrDefault();
         }
 
-        public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets)
+        public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets,
+            SourceSetUuidVersion uuidVersion)
         {
             return await db.WithWriteConnection(async con =>
             {
                 var inserted = new List<SourceSet>();
+                var sourceSetUuidNamespace = UuidNamespaceFor(uuidVersion);
 
                 foreach (var set in sets)
                 {
@@ -46,7 +55,8 @@ namespace Relisten.Data
                         set.is_encore,
                         set.name,
                         set.updated_at,
-                        sourceUuid = source.uuid
+                        sourceUuid = source.uuid,
+                        sourceSetUuidNamespace
                     };
 
                     inserted.Add(await con.QuerySingleAsync<SourceSet>(@"
@@ -68,7 +78,7 @@ namespace Relisten.Data
                                 @is_encore,
                                 @name,
                                 @updated_at,
-                                md5(@sourceUuid || '::source_set::' || @index)::uuid
+                                md5(@sourceUuid || @sourceSetUuidNamespace || @index)::uuid
                             )
                         ON CONFLICT ON CONSTRAINT source_sets_source_id_index_key
                         DO
@@ -91,6 +101,16 @@ namespace Relisten.Data
 
                 return inserted;
             });
+        }
+
+        internal static string UuidNamespaceFor(SourceSetUuidVersion uuidVersion)
+        {
+            return uuidVersion switch
+            {
+                SourceSetUuidVersion.V1 => "::source_set::",
+                SourceSetUuidVersion.V2 => "::source_set:v2::",
+                _ => throw new ArgumentOutOfRangeException(nameof(uuidVersion), uuidVersion, null)
+            };
         }
     }
 }

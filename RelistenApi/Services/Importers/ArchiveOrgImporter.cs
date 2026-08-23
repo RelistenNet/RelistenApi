@@ -454,7 +454,10 @@ namespace Relisten.Import
                 (await linkService.AddLinksForSource(dbSource, LinksForSource(artist, dbSource, upstreamSrc)))
                 .Count();
 
-            var dbSet = (await _sourceSetService.UpdateAll(dbSource, new[] { CreateSetForSource(dbSource) }))
+            var dbSet = (await _sourceSetService.UpdateAll(
+                    dbSource,
+                    new[] { CreateSetForSource(dbSource) },
+                    SourceSetUuidVersion.V1))
                 .First();
             stats.Created++;
 
