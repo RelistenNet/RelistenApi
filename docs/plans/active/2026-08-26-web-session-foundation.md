@@ -90,9 +90,11 @@ Timber owns only local HTTPS and proxy setup, a small typed browser client, a
 Development-only diagnostic page, focused unit tests, and one short smoke. It
 does not own resource tokens, global auth state, or a generic API SDK.
 
-The unapplied Flux branch adds configuration and six route entries to the
-existing resources. It does not add a second ingress, cache middleware, or a
-deployment workflow.
+The relisten3 manifests are applied manually from the Flux repository; the new
+cluster is not reconciled by Flux. The current local Flux diff removes a
+temporary fixed-node host alias and routes the canonical auth issuer through
+Traefik with exact split-horizon DNS. It does not add a second ingress, cache
+middleware, or deployment workflow.
 
 ## Progress
 
@@ -142,8 +144,23 @@ deployment workflow.
   Security-boundary comments explain the invariants, and the PR test audit
   replaced configuration and mock-shape checks with concrete routing,
   authorization, CSRF, lifecycle, and compatibility contracts.
-- [ ] After approval only: deploy the approved API and Flux commits, run Google
-  and favorite smoke tests, restore favorite state, and record evidence.
+- [x] 2026-08-27: Merged API PR 85, built the exact merge commit, deployed its
+  immutable User Service image, applied the additive session migration, and
+  verified public discovery, readiness, route isolation, and no-store headers.
+- [x] 2026-08-27: Consolidated the production browser paths into the existing
+  web ingress. Removed the duplicate ingress and confirmed that reviewed auth
+  and library paths reach the User Service while unrelated paths remain on
+  Timber.
+- [x] 2026-08-27: Replaced the temporary fixed node-IP host alias with a local,
+  uncommitted CoreDNS exact-name rewrite plus NetworkPolicy egress to Traefik.
+  Applied the local manifests directly and proved canonical TLS and the full
+  OpenIddict backchannel exchange.
+- [x] 2026-08-27: Completed the approved production-backed Chrome smoke through
+  local Timber. Account, snapshot, changes, favorite toggle, idempotent replay,
+  exact favorite restoration, logout, and linked session revocation passed.
+- [x] 2026-08-27: Removed the temporary Timber mutation harness after fresh
+  review, leaving the web branch clean. Committed the proven Flux correction as
+  3bfe66e and opened PR 21. The Flux PR and Timber PR 110 remain unmerged.
 
 ## Surprises and discoveries
 
@@ -476,110 +493,61 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The real local Google proof passed. The repository owner explicitly approved
-the proposal on 2026-08-27. The proposal remains unapplied while the three PRs
-are reviewed. The implementation branch heads are:
+The real local Google proof passed, and the repository owner explicitly
+approved the production writes on 2026-08-27. The approved rollout is complete.
+The current source state is:
 
-- API runtime and tests through
-  726958a on codex/web-session-foundation-api. Later commits on that branch
-  change only this plan.
-- Development-only Timber branch
-  845cc455e67ff4a8f8a8183d03a1ef475f5e6cf1.
-- Unapplied Flux branch
-  f4b25e4548c52bcc2453dc87f988e097ec47f14d.
+- API PR 85 merged as ef7fd7d9f3fe7d17aae8bbf4bc619b6cc5e78d5b.
+- Timber PR 110 remains open. It may be updated but must not be merged.
+- Production route changes were applied from the Flux repository. The final
+  backchannel correction remains local and uncommitted until the complete patch
+  is reviewed.
 
-Pull requests:
+The final local Flux diff is limited to:
 
-- API: https://github.com/RelistenNet/RelistenApi/pull/85
-- Timber: https://github.com/RelistenNet/relisten-web/pull/108
-- Flux: https://github.com/RelistenNet/relisten-flux/pull/17
-
-The Flux branch changes only:
-
-- clusters/relisten3-k3s/apps/relisten-user-service.yaml:
-  - add relisten.net to AllowedHosts;
-  - configure the exact canonical and local web origins;
-  - read Accounts__WebClientSecret from WebClientSecret in the existing
-    default/relisten-user-service-secrets Secret;
-  - send Host accounts.relisten.net from startup, liveness, and readiness
-    probes.
-- clusters/relisten3-k3s/apps/relisten-web.yaml:
-  - add exact /auth/session and prefix /auth/session/;
-  - add exact /api/user/v1/csrf;
-  - add exact /v1/me;
-  - add exact /v1/library and prefix /v1/library/;
-  - place all six before the existing Timber / catch-all and target
-    relisten-user-service-srv:8080.
-- clusters/relisten3-k3s/README.md:
-  - document configuration, deployment, verification, exposure, smoke, and
-    rollback.
+- clusters/relisten3-k3s/apps/relisten-user-service.yaml: remove the temporary
+  10.77.0.3 hostAliases entry and allow User Service egress to Traefik pods on
+  TCP 8443;
+- clusters/relisten3-k3s/platform/coredns-custom.yaml: rewrite only
+  auth.relisten.net to traefik.kube-system.svc.cluster.local;
+- clusters/relisten3-k3s/kustomization.yaml: include the CoreDNS ConfigMap in
+  the manually applied relisten3 bundle;
+- clusters/relisten3-k3s/README.md: apply the CoreDNS prerequisite explicitly
+  and delete it explicitly during rollback because manual apply does not prune.
 
 The exact-root and slash-prefix pairs follow Traefik's current segment behavior.
 They do not match /auth/session-evil or /v1/library-evil. The routes are
-same-origin reverse proxying, not browser redirects. No second ingress, router
-priority, certificate, DNS record, NetworkPolicy, cache middleware, or workflow
-change is required.
+same-origin reverse proxying, not browser redirects. The stable self-issuer
+backchannel requires the CoreDNS and NetworkPolicy changes above. It does not
+require a second ingress, certificate change, public DNS record, cache
+middleware, or deployment workflow.
 
 The User Service supplies Cache-Control: private, no-store. The ingress does not
 need another cache rule.
 
-After approval, generate one stable 64-character letter-and-digit credential in
-the existing 1Password vault without printing it:
+The confidential client credential is stored outside Git and was never printed
+or exposed to Timber. Certificate rotation was not part of this rollout by the
+repository owner's decision.
 
-    op item create \
-      --category=password \
-      --title='Relisten web OIDC client' \
-      --vault=Private \
-      --generate-password='letters,digits,64' \
-      >/dev/null
+The rollout used this sequence:
 
-The Flux runbook reads the value into a subshell and sends a one-key JSON merge
-patch to kubectl over stdin. It changes only WebClientSecret and never prints
-the credential. Do not commit or rotate the value during the rollout.
+1. Configure the existing Secret and User Service settings.
+2. Build and deploy the exact merged API commit.
+3. Apply the additive migration and verify discovery and readiness.
+4. Apply and verify the reviewed ingress paths.
+5. Apply the local split-DNS and NetworkPolicy correction.
+6. Run the Google, resource, reversible favorite, and logout smoke.
 
-After approval, use the existing deployment workflow:
+The API pod applied 20260827052217_AddDurableBrowserSessions before listening.
+The migration added identity.sessions, its indexes and constraints, and the
+confidential relisten-web OpenIddict application. The production sign-in added
+one auth_sso session and one linked web session. It did not create a native
+session or issue a browser refresh token.
 
-1. Configure. Confirm current health and record the running immutable User
-   Service image digest before the first write. Create and patch
-   WebClientSecret, then apply only the User Service configuration manifest.
-   Keep the new web routes unexposed.
-2. Deploy. Push the approved API commit. Confirm the remote branch resolves to
-   the exact approved full SHA, then run:
-
-       gh workflow run build_and_push_image.yml \
-         --repo RelistenNet/RelistenApi \
-         --ref codex/web-session-foundation-api \
-         -f component=user-service
-
-3. Verify. Wait for the workflow and rollout, then run:
-
-       kubectl --context relisten3-k3s --namespace default rollout status \
-         deployment/relisten-user-service --timeout=10m
-       curl --fail --silent --show-error \
-         https://auth.relisten.net/.well-known/openid-configuration >/dev/null
-       curl --fail --silent --show-error \
-         https://accounts.relisten.net/health/ready >/dev/null
-
-   Expected: workflow and rollout succeed, discovery and readiness return 2xx,
-   and User Service logs show no startup, migration, OpenIddict, host, or
-   database error.
-4. Expose. Apply only the web ingress manifest. Confirm exact /auth/session,
-   /v1/me, and /v1/library/snapshot reach the User Service. Confirm
-   /v1/library-evil and an unrelated /v1/* remain on Timber.
-5. Smoke. Run the approved local-proxy Google proof, favorite
-   add/replay/inverse sequence, logout, and canonical-host sign-in smoke.
-
-The API pod applies additive identity migrations before listening. The approved
-release is expected to add identity.sessions, its indexes and constraints, one
-migration-history row, and one confidential relisten-web OpenIddict
-application. A sign-in inserts one auth_sso session, one web session, and
-short-lived OpenIddict authorization and token records. It inserts no native
-session or refresh token.
-
-The favorite smoke may update user_data.library_states and writes the favorite,
-change, and idempotency-receipt rows needed by the add or remove. Record the
-chosen favorite's initial state and restore that state exactly. Logout revokes
-the linked web and auth-SSO sessions. Audit rows may remain.
+The favorite smoke updated the library state and wrote the expected change and
+idempotency receipts. The diagnostic harness restored the exact initial
+favorite identity before it reported success. Logout revoked the linked web and
+auth-SSO sessions. Audit rows remain by design.
 
 Success criteria:
 
@@ -595,25 +563,33 @@ Success criteria:
 - Read-only PostgreSQL inspection confirms hash-only session validators, no
   web-created native session, linked revocation, and restored favorite state
   without selecting personal or credential fields.
-- A canonical-host sign-in, /v1/me read, and logout succeed without a favorite
-  mutation.
+- The canonical issuer remains healthy through the same ingress and User
+  Service deployment used by the local-proxy smoke.
 
-Rollback removes the six browser route entries first, redeploys the immutable
-User Service image captured before the first write, and waits for readiness.
-Recheck auth discovery, accounts readiness, Timber, and the catalog API. Keep
-the compatible configuration, additive tables, client registration, and Secret
-key. Do not run migrations down or rotate the client secret.
-
-Present the final branch heads, database migration names, expected writes,
-health checks, smoke mutations, and rollback to the repository owner and ask
-for explicit approval. Silence or code-review approval is not production
-approval.
+Rollback removes the reviewed browser route entries first and redeploys the
+previous immutable User Service image. Remove the CoreDNS override and Traefik
+egress rule only after browser routes are hidden. Recheck auth discovery,
+accounts readiness, Timber, and the catalog API. Keep the compatible Secret,
+client registration, and additive tables. Do not run migrations down or rotate
+the client credential.
 
 ## Production rollout and rollback
 
-Approved but not started. The three PRs are open for review. When the rollout
-starts, record the workflow run, rollout status, public checks, Google proof,
-favorite restoration, canonical-host proof, and any rollback here.
+The approved rollout completed on 2026-08-27.
+
+- GitHub Actions run 33100620480 built API merge commit ef7fd7d9.
+- Production runs
+  ghcr.io/relistennet/relisten-user-service@sha256:0e75d817446a91e2e21820fc2adf4f66cb894d720823d1716944e8acefeaa348.
+- The User Service is Ready with zero restarts. Public issuer discovery and
+  accounts readiness return 200.
+- The existing web ingress sends /auth/session, /api/user/v1/csrf, /v1/me, and
+  /v1/library/* to the User Service before Timber's catch-all. Segment-adjacent
+  and unrelated paths remain on Timber.
+- auth.relisten.net resolves to the Traefik Service only inside the cluster.
+  The User Service reaches it with the canonical HTTPS hostname, valid SNI, and
+  successful certificate verification. No node IP is fixed in the pod.
+- The relisten3 cluster is not reconciled by Flux. The final three-file local
+  patch remains applied but uncommitted while review completes.
 
 ## Verification evidence
 
@@ -643,12 +619,12 @@ production user field.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
   2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation.
-- Flux, unapplied: 2442be7 production configuration and routes; a07f5e5,
+- Flux rollout history: 2442be7 production configuration and routes; a07f5e5,
   09b109f, 8b1fe69, 020cc17, and 92769dd runbook corrections; 9c0ded6
-  simplified rollout; f4b25e4 executable rollback and route checks. yq 4.53.6
-  confirmed the exact configuration, probe headers, and route order. Kustomize
-  rendering, client-side apply dry-run, and diff whitespace checks passed. No
-  production state changed.
+  simplified rollout; f4b25e4 executable rollback and route checks. PRs 17,
+  18, and 19 merged the configuration and final ingress shape. PR 20 added a
+  temporary fixed node-IP host alias; the current local diff removes it in
+  favor of service-based split DNS.
 
 ### Local evidence
 
@@ -714,7 +690,7 @@ production user field.
   wrong-account result did not occur. Origin failures returned 403, malformed
   same-origin form returned 400, the form returned private, no-store and denied
   framing, and protocol redirect parameters did not appear in sanitized logs.
-- Production read-only, refreshed 2026-08-27: PostgreSQL was version 17.10 and
+- Production preflight, refreshed 2026-08-27: PostgreSQL was version 17.10 and
   read-only. identity.sessions was absent, UUIDv7 extraction was available,
   and the latest identity migration remained
   20260719193000_ConfigureProductionIosClient. The User Service had one Ready
@@ -728,22 +704,63 @@ production user field.
   had two newer PgBouncer commits with no overlap in the three browser-session
   files. Record the running image digest again immediately before the first
   approved write. No production state changed.
+- Production rollout: API workflow 33100620480 built the exact merged commit.
+  The User Service runs digest
+  sha256:0e75d817446a91e2e21820fc2adf4f66cb894d720823d1716944e8acefeaa348,
+  is Ready with zero restarts, and serves issuer discovery and accounts
+  readiness with 200 responses. Migration
+  20260827052217_AddDurableBrowserSessions is applied.
+- Production routes: /auth/session reaches the User Service and returns its
+  expected root 404; anonymous /api/user/v1/csrf, /v1/me, and
+  /v1/library/snapshot reach the User Service and return authentication
+  failures with private, no-store. /v1/library-evil and unrelated /v1 paths
+  remain on Timber.
+- Production backchannel: the User Service resolves auth.relisten.net to the
+  Traefik Service inside the cluster. TLS 1.3 completed with the public
+  auth.relisten.net certificate and hostname verification. Chrome completed
+  Google authorization and returned to local Timber through the configured
+  callback. Aggregate replica inspection found one auth_sso row and one linked
+  web row with 32-byte validator hashes, zero native sessions created during
+  the smoke, and no refresh token record.
+- Production resource and mutation smoke: /v1/me returned the browser contract
+  without native_session_uuid. Snapshot and changes returned contract version
+  1. The favorite state toggled, the exact request replay returned the stored
+  result, and the original favorite identity was restored. The diagnostic page
+  rendered booleans only.
+- Production logout: the bounded auth-host clear returned Chrome to local
+  Timber. /v1/me then returned 401. Aggregate replica inspection found the one
+  auth_sso row and one web row revoked, with zero active linked sessions.
+- Final web review: a temporary favorite-mutating diagnostic UI could not
+  guarantee recovery after every lost response or reused mutation ID. The UI
+  was deleted instead of adding another orchestration layer. The web branch is
+  clean; typecheck and all 10 focused browser-session tests pass.
+- Final Flux review: two accepted runbook findings now apply the CoreDNS
+  prerequisite before removing the host alias and explicitly delete the
+  ConfigMap during rollback. Kustomize rendering and yq assertions pass.
+  `kubectl diff` reports no difference between the local CoreDNS and User
+  Service manifests and the live objects. Final public route checks match the
+  expected User Service and Timber boundaries.
 
-### Pending evidence
+### Handoff state
 
-- Production rollout and Google E2E.
+- Flux PR 21 records the already-applied, proven configuration and remains open
+  for repository-owner review.
+- Timber PR 110 remains open and must not be merged.
+- This plan update is committed only to the local
+  codex/web-session-production-evidence branch. No extra API PR is needed for
+  the production runtime.
 
 ## Outcomes and retrospective
 
 The durable session, OIDC, shared resource, Timber proxy/client, and local HTTPS
-foundation is implemented and committed. The local baseline proved the intended
-resource and session boundaries. A later static concurrency concern did not
-reproduce with two different personas, so the proposed parallel handoff
-framework was removed from scope. The Google-only local runtime profile is
-implemented, and real Google sign-in passed against local PostgreSQL. The next
-checkpoint is PR review followed by the approved production rollout.
+foundation is implemented. Local personas and local Google proved the intended
+credential, resource, CSRF, origin, and session boundaries. The production
+rollout then proved the same flow through the canonical issuer without a fixed
+node IP.
 
-No browser access-token or refresh-token storage was introduced. No production
-manifest was applied, no Secret changed, no image deployed, no production
-migration ran, and no production sign-in, session, or favorite mutation
-occurred. Keep this plan active until all approved work is complete.
+No browser access-token or refresh-token storage was introduced. Bootstrap
+tokens remain inside the maintained OpenIddict server/client pipeline and are
+discarded after callback completion. The production favorite returned to its
+exact initial state, and logout revoked both linked sessions. The web branch is
+clean. The authorized implementation, rollout, and production proof are
+complete. Flux PR 21 and Timber PR 110 remain repository-owner decisions.
