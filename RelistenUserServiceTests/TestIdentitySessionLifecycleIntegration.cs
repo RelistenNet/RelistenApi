@@ -1,7 +1,10 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Browser;
 using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
@@ -192,6 +195,49 @@ public sealed class TestIdentitySessionLifecycleIntegration
     }
 
     [Test]
+    public async Task Auth_cookie_clear_requires_the_linked_logout_to_revoke_its_session()
+    {
+        var authSso = await CreateAuthSsoAsync();
+        var web = await CreateWebAsync(authSso.SessionId);
+
+        var active = await ClearAuthSsoAsync(
+            authSso.CookieValue,
+            AuthenticationConstants.LocalWebOrigin);
+        active.Result.Should().BeOfType<RedirectResult>();
+        active.SetCookieHeaders.Should().BeEmpty();
+
+        await using (var dbContext = _database.CreateContext())
+        {
+            await Lifecycle(dbContext).RevokeWebAndParentAsync(
+                web.SessionId,
+                CancellationToken.None);
+        }
+
+        var wrongOrigin = await ClearAuthSsoAsync(
+            authSso.CookieValue,
+            AuthenticationConstants.CanonicalWebOrigin);
+        wrongOrigin.SetCookieHeaders.Should().BeEmpty();
+
+        var changedCookie = authSso.CookieValue.ToCharArray();
+        changedCookie[^1] = changedCookie[^1] == 'A' ? 'B' : 'A';
+        var wrongValidator = await ClearAuthSsoAsync(
+            new string(changedCookie),
+            AuthenticationConstants.LocalWebOrigin);
+        wrongValidator.SetCookieHeaders.Should().BeEmpty();
+
+        var revoked = await ClearAuthSsoAsync(
+            authSso.CookieValue,
+            AuthenticationConstants.LocalWebOrigin);
+        revoked.Result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be(
+                AuthenticationConstants.LocalWebOrigin + "/library");
+        revoked.SetCookieHeaders.Should().Contain(header =>
+            header.StartsWith(
+                AuthenticationConstants.AuthSsoCookie + "=",
+                StringComparison.Ordinal));
+    }
+
+    [Test]
     public async Task Database_rejects_cross_user_parent_links_and_raw_validator_columns_do_not_exist()
     {
         var authSso = await CreateAuthSsoAsync();
@@ -287,6 +333,29 @@ public sealed class TestIdentitySessionLifecycleIntegration
             cookieValue,
             purpose,
             CancellationToken.None);
+    }
+
+    private async Task<(IActionResult Result, string[] SetCookieHeaders)>
+        ClearAuthSsoAsync(string cookieValue, string webOrigin)
+    {
+        await using var dbContext = _database.CreateContext();
+        var context = new DefaultHttpContext();
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.AuthSsoCookie}={cookieValue}";
+        var controller = new AuthSsoCookieController(
+            _runtime,
+            Lifecycle(dbContext),
+            new SessionCookieManager())
+        {
+            ControllerContext = new ControllerContext { HttpContext = context }
+        };
+        var result = await controller.Clear(
+            webOrigin,
+            "/library",
+            CancellationToken.None);
+        return (result, context.Response.Headers.SetCookie
+            .Select(header => header!)
+            .ToArray());
     }
 
     private IdentitySessionLifecycle Lifecycle(

@@ -228,15 +228,39 @@ public sealed class TestWebRequestBoundaries
             .Should().Be(AuthenticationConstants.GoogleProvider);
     }
 
+    [Test]
+    public async Task Auth_cookie_clear_is_idempotent_after_another_tab_clears_the_cookie()
+    {
+        var context = Context("/auth/sso/clear", "auth.relisten.net");
+        var controller = new AuthSsoCookieController(
+            Runtime(),
+            null!,
+            new SessionCookieManager())
+        {
+            ControllerContext = new ControllerContext { HttpContext = context }
+        };
+
+        var result = await controller.Clear(
+            AuthenticationConstants.LocalWebOrigin,
+            "/library",
+            CancellationToken.None);
+
+        result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be(
+                AuthenticationConstants.LocalWebOrigin + "/library");
+        context.Response.Headers.SetCookie.Should().BeEmpty();
+    }
+
     [TestCase("/auth/session/callback", true)]
     [TestCase("/api/user/v1/csrf", true)]
     [TestCase("/v1/me", true)]
     [TestCase("/v1/library/new-read-model", true)]
+    [TestCase("/v1/new-account-route", true)]
     [TestCase("/api/user/v1/me", false)]
-    [TestCase("/v1/playback", false)]
+    [TestCase("/v1evil", false)]
     [TestCase("/auth/session-evil", false)]
     [TestCase("/api/user/v10/me", false)]
-    public async Task No_store_applies_only_to_the_reviewed_prefixes(
+    public async Task No_store_applies_to_account_and_browser_session_families(
         string path,
         bool expected)
     {

@@ -219,6 +219,54 @@ public sealed class IdentitySessionLifecycle(
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task<bool> CanClearRevokedAuthSsoAsync(
+        string? cookieValue,
+        string webOrigin,
+        CancellationToken cancellationToken)
+    {
+        if (!credentialCodec.TryParse(cookieValue, out var credential)
+            || credential is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            var session = await dbContext.Sessions
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    candidate => candidate.Id == credential.SessionId,
+                    cancellationToken);
+            if (session is null
+                || session.Purpose != IdentitySessionPurposes.AuthSso
+                || !credentialCodec.ValidatorMatches(
+                    credential.ValidatorHash,
+                    session.ValidatorHash)
+                || session.RevokedAt is null
+                || session.AuthSsoSessionId is not null
+                || session.WebOrigin is not null
+                || session.Capabilities != IdentitySessionCapabilities.None)
+            {
+                return false;
+            }
+
+            return await dbContext.Sessions
+                .AsNoTracking()
+                .AnyAsync(candidate =>
+                    candidate.AuthSsoSessionId == session.Id
+                    && candidate.UserId == session.UserId
+                    && candidate.Purpose == IdentitySessionPurposes.Web
+                    && candidate.WebOrigin == webOrigin
+                    && candidate.Capabilities == IdentitySessionCapabilities.AllWeb
+                    && candidate.RevokedAt == session.RevokedAt,
+                    cancellationToken);
+        }
+        finally
+        {
+            credential.Clear();
+        }
+    }
+
     private async Task<IssuedIdentitySession> CreateAsync(
         IdentitySession session,
         CancellationToken cancellationToken)

@@ -179,13 +179,15 @@ public sealed class WebSessionController(
 [ApiController]
 public sealed class AuthSsoCookieController(
     AccountsRuntimeConfiguration runtime,
+    IdentitySessionLifecycle sessions,
     SessionCookieManager cookies)
     : ControllerBase
 {
     [HttpGet("/auth/sso/clear")]
-    public IActionResult Clear(
+    public async Task<IActionResult> Clear(
         [FromQuery(Name = "web_origin")] string? webOrigin,
-        [FromQuery(Name = "return_to")] string? returnTo)
+        [FromQuery(Name = "return_to")] string? returnTo,
+        CancellationToken cancellationToken)
     {
         if (webOrigin is null
             || !runtime.WebOrigins.Contains(webOrigin, StringComparer.Ordinal)
@@ -194,8 +196,19 @@ public sealed class AuthSsoCookieController(
             return BadRequest();
         }
 
-        cookies.ClearAuthSso(Response);
-        cookies.ClearCsrf(Response);
+        var authCookie = Request.Cookies[AuthenticationConstants.AuthSsoCookie];
+        // The logout POST revokes the auth SSO session before this auth-host request.
+        // An active __Host-relisten_auth cookie cannot authorize its own deletion.
+        if (authCookie is not null
+            && await sessions.CanClearRevokedAuthSsoAsync(
+                authCookie,
+                webOrigin,
+                cancellationToken))
+        {
+            cookies.ClearAuthSso(Response);
+            cookies.ClearCsrf(Response);
+        }
+
         return Redirect(webOrigin + returnPath);
     }
 }
