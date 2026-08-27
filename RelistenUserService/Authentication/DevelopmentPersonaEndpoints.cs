@@ -1,10 +1,7 @@
 using System.Net;
-using System.Security.Claims;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
 using RelistenUserService.Identity;
-using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserService.Authentication;
 
@@ -74,7 +71,7 @@ public static class DevelopmentPersonaEndpoints
         HttpContext context,
         IAntiforgery antiforgery,
         ExternalIdentityCompletionService identities,
-        TimeProvider timeProvider,
+        AuthSsoSignInService authSso,
         CancellationToken cancellationToken)
     {
         await antiforgery.ValidateRequestAsync(context);
@@ -92,17 +89,7 @@ public static class DevelopmentPersonaEndpoints
         }
 
         var user = await identities.CompleteAsync(persona.Profile, cancellationToken);
-        var identity = new ClaimsIdentity(AuthenticationConstants.DevelopmentIdentityScheme);
-        identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString("D")));
-        await context.SignInAsync(
-            AuthenticationConstants.DevelopmentIdentityScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties
-            {
-                AllowRefresh = false,
-                IsPersistent = false,
-                ExpiresUtc = timeProvider.GetUtcNow().AddMinutes(10)
-            });
+        await authSso.SignInAsync(context.Response, user, cancellationToken);
 
         return Results.LocalRedirect(returnUrl);
     }

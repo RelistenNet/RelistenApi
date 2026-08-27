@@ -17,7 +17,7 @@ public sealed class NativeSessionAuthorizationResultHandler
         var currentAccount = context.RequestServices.GetRequiredService<CurrentAccountContext>();
         if (authorizeResult.Forbidden
             && policy.Requirements.OfType<NativeSessionRequirement>().Any()
-            && !currentAccount.IsLoaded)
+            && !currentAccount.IsNative)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             context.Response.Headers.WWWAuthenticate = "Bearer";

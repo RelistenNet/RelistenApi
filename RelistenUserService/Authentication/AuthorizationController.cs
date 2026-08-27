@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using OpenIddict.Client.WebIntegration;
 using OpenIddict.Server.AspNetCore;
+using Microsoft.AspNetCore.WebUtilities;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
@@ -18,6 +19,8 @@ public sealed class AuthorizationController(
     IOpenIddictApplicationManager applicationManager,
     IOpenIddictAuthorizationManager authorizationManager,
     NativePrincipalFactory principalFactory,
+    WebBootstrapPrincipalFactory webPrincipalFactory,
+    SessionCookieManager cookies,
     TimeProvider timeProvider)
     : Controller
 {
@@ -40,11 +43,8 @@ public sealed class AuthorizationController(
                 });
         }
 
-        var identityScheme = runtime.Options.EnableDevelopmentPersonas
-            ? AuthenticationConstants.DevelopmentIdentityScheme
-            : AuthenticationConstants.ExternalIdentityScheme;
         var authentication = await HttpContext.AuthenticateAsync(
-            identityScheme);
+            AuthenticationConstants.AuthSsoScheme);
         if (!authentication.Succeeded
             || !Guid.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId))
         {
@@ -53,21 +53,34 @@ public sealed class AuthorizationController(
                 return ChallengeExternalProvider(request);
             }
 
-            return Challenge(
-                new AuthenticationProperties
-                {
-                    RedirectUri = Request.PathBase + Request.Path + Request.QueryString
-                },
-                AuthenticationConstants.DevelopmentIdentityScheme);
+            return Redirect(QueryHelpers.AddQueryString(
+                "/development/sign-in",
+                "return_url",
+                Request.PathBase + Request.Path + Request.QueryString));
         }
 
         var user = await dbContext.Users.SingleOrDefaultAsync(
             item => item.Id == userId && item.Status == UserStatuses.Active,
             cancellationToken);
-        if (user is null || string.IsNullOrWhiteSpace(request.ClientId))
+        if (user is null
+            || string.IsNullOrWhiteSpace(request.ClientId)
+            || !Guid.TryParse(
+                authentication.Principal?.GetClaim(RelistenClaims.SessionId),
+                out var authSsoSessionId))
         {
-            await HttpContext.SignOutAsync(identityScheme);
+            cookies.ClearAuthSso(Response);
             return Forbid();
+        }
+
+        if (request.ClientId == AuthenticationConstants.WebClientId)
+        {
+            var webPrincipal = webPrincipalFactory.Create(
+                user,
+                authSsoSessionId,
+                request.GetScopes());
+            return SignIn(
+                webPrincipal,
+                OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
         var now = timeProvider.GetUtcNow();
@@ -109,7 +122,6 @@ public sealed class AuthorizationController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        await HttpContext.SignOutAsync(identityScheme);
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 

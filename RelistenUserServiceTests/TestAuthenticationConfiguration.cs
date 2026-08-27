@@ -7,6 +7,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using OpenIddict.Client;
 using OpenIddict.Server;
 using RelistenUserService.Authentication;
 using RelistenUserService.Configuration;
@@ -50,14 +51,50 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void Registers_two_exact_confidential_web_callbacks_with_query_and_s256()
+    {
+        using var provider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+
+        var options = provider.GetRequiredService<IOptions<OpenIddictClientOptions>>().Value;
+        var registrations = options.Registrations
+            .Where(registration => registration.ClientId == AuthenticationConstants.WebClientId)
+            .OrderBy(registration => registration.RegistrationId)
+            .ToArray();
+
+        registrations.Should().HaveCount(2);
+        registrations.Select(registration => new
+        {
+            registration.RegistrationId,
+            RedirectUri = registration.RedirectUri!.AbsoluteUri
+        }).Should().BeEquivalentTo(
+        [
+            new
+            {
+                RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
+                RedirectUri = AuthenticationConstants.CanonicalWebCallback
+            },
+            new
+            {
+                RegistrationId = AuthenticationConstants.LocalWebRegistration,
+                RedirectUri = AuthenticationConstants.LocalWebCallback
+            }
+        ]);
+        registrations.Should().OnlyContain(registration =>
+            HasExactWebProtocolShape(registration));
+    }
+
+    [Test]
     public void External_providers_fail_closed_when_a_secret_is_missing()
     {
         var environment = new TestHostEnvironment(Environments.Production);
         var options = new AccountsOptions
         {
-            Issuer = "https://auth.relisten.test",
+            Issuer = "https://auth.relisten.net",
+            AuthHost = "auth.relisten.net",
+            AccountsHost = "accounts.relisten.net",
             TrustedProxyNetworks = ["127.0.0.1/32"],
             EnableExternalProviders = true,
+            WebClientSecret = "test-web-client-secret",
             Google = new()
             {
                 ClientId = "google-client"
@@ -83,8 +120,11 @@ public sealed class TestAuthenticationConfiguration
         var environment = new TestHostEnvironment(Environments.Production);
         var options = new AccountsOptions
         {
-            Issuer = "https://auth.relisten.test",
+            Issuer = "https://auth.relisten.net",
+            AuthHost = "auth.relisten.net",
+            AccountsHost = "accounts.relisten.net",
             TrustedProxyNetworks = ["127.0.0.1/32"],
+            WebClientSecret = "test-web-client-secret",
             ApplyMigrationsOnStartup = true
         };
 
@@ -99,12 +139,14 @@ public sealed class TestAuthenticationConfiguration
         var environment = new TestHostEnvironment(Environments.Development);
         var options = new AccountsOptions
         {
-            Issuer = "http://localhost:5443",
+            Issuer = "https://auth.relisten.localhost:5443",
             Audience = "https://accounts.relisten.test",
-            AuthHost = "localhost",
-            AccountsHost = "localhost",
+            AuthHost = "auth.relisten.localhost:5443",
+            AccountsHost = "accounts.relisten.localhost:5443",
             EnableDevelopmentPersonas = true,
-            AllowInsecureHttp = true,
+            DevelopmentCertificateAuthorityPath =
+                CreateCertificateAuthority("unsupported-origin-ca.pem"),
+            WebClientSecret = "test-web-client-secret",
             WebOrigins = ["https://preview.relisten.localhost:5173"]
         };
 
@@ -136,11 +178,12 @@ public sealed class TestAuthenticationConfiguration
         var current = CreateCertificate("current.pfx", DateTimeOffset.UtcNow.AddYears(1));
         var options = new AccountsOptions
         {
-            Issuer = "https://auth.relisten.test",
+            Issuer = "https://auth.relisten.net",
             Audience = "https://accounts.relisten.test",
-            AuthHost = "auth.relisten.test",
-            AccountsHost = "accounts.relisten.test",
+            AuthHost = "auth.relisten.net",
+            AccountsHost = "accounts.relisten.net",
             TrustedProxyNetworks = ["127.0.0.1/32"],
+            WebClientSecret = "test-web-client-secret",
             SigningCertificatePath = current,
             SigningCertificatePassword = CertificatePassword,
             PreviousSigningCertificatePath = previous,
@@ -184,6 +227,20 @@ public sealed class TestAuthenticationConfiguration
         return services.BuildServiceProvider();
     }
 
+    private static bool HasExactWebProtocolShape(OpenIddictClientRegistration registration) =>
+        registration.ClientType
+            == OpenIddict.Abstractions.OpenIddictConstants.ClientTypes.Confidential
+        && registration.CodeChallengeMethods.SetEquals(
+            new[] { OpenIddict.Abstractions.OpenIddictConstants.CodeChallengeMethods.Sha256 })
+        && registration.ResponseModes.SetEquals(
+            new[] { OpenIddict.Abstractions.OpenIddictConstants.ResponseModes.Query })
+        && registration.Scopes.SetEquals(
+            new[]
+            {
+                OpenIddict.Abstractions.OpenIddictConstants.Scopes.OpenId,
+                OpenIddict.Abstractions.OpenIddictConstants.Scopes.Profile
+            });
+
     private string CreateCertificate(string fileName, DateTimeOffset notAfter)
     {
         using var rsa = RSA.Create(2048);
@@ -205,14 +262,41 @@ public sealed class TestAuthenticationConfiguration
         return path;
     }
 
-    private static AccountsOptions CreateDevelopmentOptions() => new()
+    private string CreateCertificateAuthority(string fileName)
     {
-        Issuer = "http://localhost:5443",
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=Relisten test development CA",
+            rsa,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
+            certificateAuthority: true,
+            hasPathLengthConstraint: false,
+            pathLengthConstraint: 0,
+            critical: true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+            critical: true));
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddYears(1));
+        var path = Path.Combine(_certificateDirectory, fileName);
+        File.WriteAllText(path, certificate.ExportCertificatePem());
+        return path;
+    }
+
+    private AccountsOptions CreateDevelopmentOptions() => new()
+    {
+        Issuer = "https://auth.relisten.localhost:5443",
         Audience = "https://accounts.relisten.test",
-        AuthHost = "localhost",
-        AccountsHost = "localhost",
+        AuthHost = "auth.relisten.localhost:5443",
+        AccountsHost = "accounts.relisten.localhost:5443",
+        WebOrigins = ["https://web.relisten.localhost:5173"],
         EnableDevelopmentPersonas = true,
-        AllowInsecureHttp = true
+        DevelopmentCertificateAuthorityPath =
+            CreateCertificateAuthority($"development-ca-{Guid.NewGuid():N}.pem"),
+        WebClientSecret = "test-web-client-secret"
     };
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment

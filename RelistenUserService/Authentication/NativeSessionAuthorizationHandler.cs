@@ -46,7 +46,7 @@ public sealed class NativeSessionAuthorizationHandler(
             return;
         }
 
-        currentAccount.Set(session.User, session);
+        currentAccount.SetNative(session.User, session.Id);
         context.Succeed(requirement);
     }
 }

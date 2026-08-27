@@ -31,6 +31,38 @@ public sealed class TestHostBoundaryMiddleware
         context.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
+    [TestCase("/auth/session/start", "accounts.relisten.net", true)]
+    [TestCase("/auth/session/start", "relisten.net", true)]
+    [TestCase("/api/user/v1/me", "accounts.relisten.net", true)]
+    [TestCase("/api/user/v1/me", "evil.example", false)]
+    [TestCase("/auth/session/start", "relisten.net:8443", false)]
+    [TestCase("/v1/me", "accounts.relisten.net:8443", false)]
+    public async Task Browser_and_native_routes_use_exact_host_and_port_boundaries(
+        string path,
+        string host,
+        bool expectedToReachApplication)
+    {
+        var reachedApplication = false;
+        var middleware = new HostBoundaryMiddleware(
+            _ =>
+            {
+                reachedApplication = true;
+                return Task.CompletedTask;
+            },
+            Runtime());
+        var context = new DefaultHttpContext();
+        context.Request.Host = new HostString(host);
+        context.Request.Path = path;
+
+        await middleware.InvokeAsync(context);
+
+        reachedApplication.Should().Be(expectedToReachApplication);
+        if (!expectedToReachApplication)
+        {
+            context.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
+        }
+    }
+
     private static AccountsRuntimeConfiguration Runtime() => new(
         new AccountsOptions
         {

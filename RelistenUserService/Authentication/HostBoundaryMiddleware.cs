@@ -8,8 +8,7 @@ public sealed class HostBoundaryMiddleware(
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        var expectedHost = GetExpectedHost(context.Request.Path);
-        if (expectedHost is not null && !Matches(context.Request.Host, expectedHost.Value))
+        if (!MatchesExpectedHost(context.Request.Path, context.Request.Host))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
@@ -18,33 +17,37 @@ public sealed class HostBoundaryMiddleware(
         await next(context);
     }
 
-    private HostString? GetExpectedHost(PathString path)
+    private bool MatchesExpectedHost(PathString path, HostString actual)
     {
-        if (runtime.Issuer.IsLoopback)
-        {
-            return runtime.Issuer.IsDefaultPort
-                ? new HostString(runtime.Issuer.Host)
-                : new HostString(runtime.Issuer.Host, runtime.Issuer.Port);
-        }
-
         if (path.StartsWithSegments("/v1"))
         {
-            return new HostString(runtime.Options.AccountsHost);
+            return Matches(actual, new HostString(runtime.Options.AccountsHost));
         }
 
         if (path.StartsWithSegments("/connect")
             || path.StartsWithSegments("/.well-known")
             || path.StartsWithSegments("/development")
+            || path.StartsWithSegments("/auth/sso")
             || path == AuthenticationConstants.GoogleCallbackPath
             || path == AuthenticationConstants.AppleCallbackPath)
         {
-            return new HostString(runtime.Options.AuthHost);
+            return Matches(actual, new HostString(runtime.Options.AuthHost));
         }
 
-        return null;
+        if (WebRoutePrefixes.Contains(path))
+        {
+            return Matches(actual, new HostString(runtime.Options.AccountsHost))
+                || runtime.WebOrigins
+                    .Select(origin => new Uri(origin))
+                    .Any(origin => Matches(actual, HostString.FromUriComponent(origin)));
+        }
+
+        return true;
     }
 
     private static bool Matches(HostString actual, HostString expected) =>
         string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase)
-        && (expected.Port is null or 0 || actual.Port == expected.Port);
+        && EffectiveHttpsPort(actual) == EffectiveHttpsPort(expected);
+
+    private static int EffectiveHttpsPort(HostString host) => host.Port ?? 443;
 }

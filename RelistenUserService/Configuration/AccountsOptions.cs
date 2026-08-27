@@ -18,6 +18,8 @@ public sealed class AccountsOptions
     public bool EnableExternalProviders { get; init; }
     public bool AllowInsecureHttp { get; init; }
     public bool ApplyMigrationsOnStartup { get; init; }
+    public string WebClientSecret { get; init; } = "";
+    public string DevelopmentCertificateAuthorityPath { get; init; } = "";
     public GoogleProviderOptions Google { get; init; } = new();
     public AppleProviderOptions Apple { get; init; } = new();
     public string? SigningCertificatePath { get; init; }

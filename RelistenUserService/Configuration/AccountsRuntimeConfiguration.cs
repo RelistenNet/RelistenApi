@@ -26,23 +26,20 @@ public sealed record AccountsRuntimeConfiguration(
             throw new InvalidOperationException("Accounts:Issuer must be an absolute URI.");
         }
 
-        var isLoopback = issuer.IsLoopback;
-        var allowLoopbackHttp = environment.IsDevelopment()
-            && isLoopback
-            && issuer.Scheme == Uri.UriSchemeHttp
-            && options.AllowInsecureHttp;
-
-        if (issuer.Scheme != Uri.UriSchemeHttps && !allowLoopbackHttp)
+        if (issuer.Scheme != Uri.UriSchemeHttps)
         {
             throw new InvalidOperationException(
-                "The Relisten issuer must use HTTPS except for a Development loopback issuer.");
+                "The Relisten issuer must use HTTPS in every runtime profile.");
         }
 
         if (options.EnableDevelopmentPersonas
-            && (!environment.IsDevelopment() || !isLoopback))
+            && (!environment.IsDevelopment()
+                || issuer != new Uri("https://auth.relisten.localhost:5443")
+                || options.AuthHost != "auth.relisten.localhost:5443"
+                || options.AccountsHost != "accounts.relisten.localhost:5443"))
         {
             throw new InvalidOperationException(
-                "Development personas require the Development environment and a loopback issuer.");
+                "Development personas require the exact local HTTPS auth and accounts hosts.");
         }
 
         if (options.EnableDevelopmentPersonas && options.EnableExternalProviders)
@@ -51,21 +48,35 @@ public sealed record AccountsRuntimeConfiguration(
                 "Development personas and external identity providers cannot both be enabled.");
         }
 
-        if (options.EnableExternalProviders)
+        if (options.EnableDevelopmentPersonas)
         {
-            ValidateExternalProviders(options, isLoopback);
+            Require(
+                options.DevelopmentCertificateAuthorityPath,
+                "Accounts:DevelopmentCertificateAuthorityPath");
         }
-
-        if (options.AllowInsecureHttp && !allowLoopbackHttp)
+        else if (!string.IsNullOrWhiteSpace(options.DevelopmentCertificateAuthorityPath))
         {
             throw new InvalidOperationException(
-                "Accounts:AllowInsecureHttp requires Development and an HTTP loopback issuer.");
+                "Accounts:DevelopmentCertificateAuthorityPath is allowed only for development personas.");
+        }
+
+        if (options.EnableExternalProviders)
+        {
+            ValidateExternalProviders(options, issuer, environment);
+        }
+
+        if (options.AllowInsecureHttp)
+        {
+            throw new InvalidOperationException(
+                "Accounts:AllowInsecureHttp is not supported by browser-session profiles.");
         }
 
         if (string.IsNullOrWhiteSpace(options.Audience))
         {
             throw new InvalidOperationException("Accounts:Audience is required.");
         }
+
+        Require(options.WebClientSecret, "Accounts:WebClientSecret");
 
         var trustedProxyNetworks = options.TrustedProxyNetworks
             .Select(ParseNetwork)
@@ -89,19 +100,25 @@ public sealed record AccountsRuntimeConfiguration(
         return new AccountsRuntimeConfiguration(
             options,
             issuer,
-            allowLoopbackHttp,
+            AllowLoopbackHttp: false,
             trustedProxyNetworks)
         {
             WebOrigins = webOrigins
         };
     }
 
-    private static void ValidateExternalProviders(AccountsOptions options, bool isLoopback)
+    private static void ValidateExternalProviders(
+        AccountsOptions options,
+        Uri issuer,
+        IHostEnvironment environment)
     {
-        if (isLoopback)
+        if (environment.IsProduction()
+            && (issuer != new Uri("https://auth.relisten.net")
+                || options.AuthHost != "auth.relisten.net"
+                || options.AccountsHost != "accounts.relisten.net"))
         {
             throw new InvalidOperationException(
-                "External identity providers require the registered HTTPS auth host.");
+                "Production external identity providers require the exact Relisten hosts.");
         }
 
         Require(options.Google.ClientId, "Accounts:Google:ClientId");
@@ -116,7 +133,7 @@ public sealed record AccountsRuntimeConfiguration(
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException($"{name} is required when external providers are enabled.");
+            throw new InvalidOperationException($"{name} is required.");
         }
     }
 

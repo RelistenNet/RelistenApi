@@ -37,6 +37,9 @@ if (runtime.Options.ApplyMigrationsOnStartup)
         .MigrateAsync(app.Lifetime.ApplicationStopping);
 }
 
+await app.Services.GetRequiredService<WebClientApplicationInitializer>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
+
 if (runtime.Options.EnableDevelopmentPersonas)
 {
     // Finish local client setup before Data Protection's hosted service tries to
@@ -48,8 +51,10 @@ if (runtime.Options.EnableDevelopmentPersonas)
 // TLS terminates at the cluster ingress. Only configured ingress networks may tell
 // OpenIddict that the original request was HTTPS or select a public Relisten host.
 app.UseForwardedHeaders();
+app.UseMiddleware<PrivateNoStoreMiddleware>();
 app.UseExceptionHandler();
 app.UseMiddleware<HostBoundaryMiddleware>();
+app.UseMiddleware<WebOriginRelayMiddleware>();
 app.UseRouting();
 app.UseMiddleware<RefreshTokenReplayMiddleware>();
 app.UseAuthentication();

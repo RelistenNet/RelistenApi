@@ -141,6 +141,44 @@ public sealed class IdentitySessionLifecycle(
         }
     }
 
+    public async Task<AuthenticatedIdentitySession?> ValidateAuthSsoBootstrapAsync(
+        Guid sessionId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var session = await dbContext.Sessions
+            .AsNoTracking()
+            .Include(candidate => candidate.User)
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == sessionId && candidate.UserId == userId,
+                cancellationToken);
+        if (session is null
+            || session.Purpose != IdentitySessionPurposes.AuthSso
+            || session.RevokedAt is not null
+            || session.SlidingExpiresAt <= now
+            || session.AbsoluteExpiresAt <= now
+            || session.User.Status != UserStatuses.Active
+            || session.SecurityVersion != session.User.SecurityVersion
+            || session.AuthSsoSessionId is not null
+            || session.WebOrigin is not null
+            || session.Capabilities != IdentitySessionCapabilities.None)
+        {
+            return null;
+        }
+
+        return new AuthenticatedIdentitySession(
+            session.Id,
+            session.User,
+            session.Purpose,
+            session.AuthenticatedAt,
+            null,
+            null,
+            session.Capabilities,
+            WasTouched: false,
+            session.SlidingExpiresAt);
+    }
+
     public async Task RevokeWebAndParentAsync(
         Guid webSessionId,
         CancellationToken cancellationToken)

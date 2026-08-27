@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Client.AspNetCore;
@@ -10,7 +9,7 @@ namespace RelistenUserService.Authentication;
 
 public sealed class ExternalIdentityCallbackController(
     ExternalIdentityCompletionService identities,
-    TimeProvider timeProvider)
+    AuthSsoSignInService authSso)
     : Controller
 {
     [AcceptVerbs("GET", "POST", Route = "~/signin-google")]
@@ -56,17 +55,7 @@ public sealed class ExternalIdentityCallbackController(
             return StatusCode(StatusCodes.Status403Forbidden);
         }
 
-        var identity = new ClaimsIdentity(AuthenticationConstants.ExternalIdentityScheme);
-        identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString("D")));
-        await HttpContext.SignInAsync(
-            AuthenticationConstants.ExternalIdentityScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties
-            {
-                AllowRefresh = false,
-                IsPersistent = false,
-                ExpiresUtc = timeProvider.GetUtcNow().AddMinutes(10)
-            });
+        await authSso.SignInAsync(Response, user, cancellationToken);
 
         return LocalRedirect(returnUrl!);
     }

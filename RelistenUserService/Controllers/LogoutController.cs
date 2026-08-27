@@ -21,7 +21,7 @@ public sealed class LogoutController(
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var session = await dbContext.NativeSessions.SingleAsync(
-            item => item.Id == currentAccount.NativeSession.Id,
+            item => item.Id == currentAccount.NativeSessionId,
             cancellationToken);
         var now = timeProvider.GetUtcNow();
         session.RevokedAt ??= now;
