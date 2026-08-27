@@ -5,7 +5,6 @@ namespace RelistenUserService.Configuration;
 public sealed record AccountsRuntimeConfiguration(
     AccountsOptions Options,
     Uri Issuer,
-    bool AllowLoopbackHttp,
     IReadOnlyList<IPNetwork> TrustedProxyNetworks)
 {
     private static readonly HashSet<string> SupportedWebOrigins = new(
@@ -100,7 +99,6 @@ public sealed record AccountsRuntimeConfiguration(
         return new AccountsRuntimeConfiguration(
             options,
             issuer,
-            AllowLoopbackHttp: false,
             trustedProxyNetworks)
         {
             WebOrigins = webOrigins

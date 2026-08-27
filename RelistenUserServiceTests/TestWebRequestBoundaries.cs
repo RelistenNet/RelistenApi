@@ -179,12 +179,6 @@ public sealed class TestWebRequestBoundaries
         var expires = DateTimeOffset.UtcNow.AddDays(30);
         var session = new IssuedIdentitySession(
             Guid.CreateVersion7(),
-            Guid.CreateVersion7(),
-            IdentitySessionPurposes.Web,
-            DateTimeOffset.UtcNow,
-            Guid.CreateVersion7(),
-            "https://web.relisten.localhost:5173",
-            IdentitySessionCapabilities.AllWeb,
             expires,
             "opaque-test-value");
 
@@ -259,24 +253,21 @@ public sealed class TestWebRequestBoundaries
             expected ? "private, no-store" : "public, max-age=60");
     }
 
-    [TestCase("GET", "/auth/session/start", true)]
-    [TestCase("POST", "/auth/session/new-mutation", true)]
-    [TestCase("GET", "/api/user/v1/csrf", true)]
-    [TestCase("GET", "/v1/me", true)]
-    [TestCase("PATCH", "/v1/me", true)]
-    [TestCase("GET", "/v1/library/new-read-model", true)]
-    [TestCase("DELETE", "/v1/library/new-mutation", true)]
-    [TestCase("GET", "/auth/session-evil", false)]
-    [TestCase("GET", "/api/user/v1/me", false)]
-    [TestCase("GET", "/v1/playback", false)]
-    [TestCase("GET", "/v1/me/", false)]
+    [TestCase("/auth/session/start", true)]
+    [TestCase("/auth/session/new-mutation", true)]
+    [TestCase("/api/user/v1/csrf", true)]
+    [TestCase("/v1/me", true)]
+    [TestCase("/v1/library/new-read-model", true)]
+    [TestCase("/v1/library/new-mutation", true)]
+    [TestCase("/auth/session-evil", false)]
+    [TestCase("/api/user/v1/me", false)]
+    [TestCase("/v1/playback", false)]
+    [TestCase("/v1/me/", false)]
     public void Relay_boundary_uses_reviewed_route_families(
-        string method,
         string path,
         bool expected)
     {
         var context = Context(path, "accounts.relisten.net");
-        context.Request.Method = method;
 
         BrowserRouteBoundary.CanRelay(context.Request.Path).Should().Be(expected);
     }
@@ -359,7 +350,6 @@ public sealed class TestWebRequestBoundaries
             AccountsHost = "accounts.relisten.net"
         },
         new Uri("https://auth.relisten.net"),
-        AllowLoopbackHttp: false,
         TrustedProxyNetworks: []);
 
     private sealed class EndpointConventionProbe : IEndpointConventionBuilder

@@ -125,9 +125,6 @@ public sealed class IdentitySessionLifecycle(
             return new AuthenticatedIdentitySession(
                 session!.Id,
                 session.User,
-                session.Purpose,
-                session.AuthenticatedAt,
-                session.AuthSsoSessionId,
                 session.WebOrigin,
                 session.Capabilities,
                 touched,
@@ -170,9 +167,6 @@ public sealed class IdentitySessionLifecycle(
         return new AuthenticatedIdentitySession(
             session.Id,
             session.User,
-            session.Purpose,
-            session.AuthenticatedAt,
-            null,
             null,
             session.Capabilities,
             WasTouched: false,
@@ -235,12 +229,6 @@ public sealed class IdentitySessionLifecycle(
         await dbContext.SaveChangesAsync(cancellationToken);
         return new IssuedIdentitySession(
             session.Id,
-            session.UserId,
-            session.Purpose,
-            session.AuthenticatedAt,
-            session.AuthSsoSessionId,
-            session.WebOrigin,
-            session.Capabilities,
             session.SlidingExpiresAt,
             credential.CookieValue);
     }
@@ -342,22 +330,10 @@ public sealed class IdentitySessionLifecycle(
 
 public sealed class IssuedIdentitySession(
     Guid sessionId,
-    Guid userId,
-    string purpose,
-    DateTimeOffset authenticatedAt,
-    Guid? authSsoSessionId,
-    string? webOrigin,
-    IdentitySessionCapabilities capabilities,
     DateTimeOffset expiresAt,
     string cookieValue)
 {
     public Guid SessionId { get; } = sessionId;
-    public Guid UserId { get; } = userId;
-    public string Purpose { get; } = purpose;
-    public DateTimeOffset AuthenticatedAt { get; } = authenticatedAt;
-    public Guid? AuthSsoSessionId { get; } = authSsoSessionId;
-    public string? WebOrigin { get; } = webOrigin;
-    public IdentitySessionCapabilities Capabilities { get; } = capabilities;
     public DateTimeOffset ExpiresAt { get; } = expiresAt;
     public string CookieValue { get; } = cookieValue;
 }
@@ -365,9 +341,6 @@ public sealed class IssuedIdentitySession(
 public sealed record AuthenticatedIdentitySession(
     Guid SessionId,
     User User,
-    string Purpose,
-    DateTimeOffset AuthenticatedAt,
-    Guid? AuthSsoSessionId,
     string? WebOrigin,
     IdentitySessionCapabilities Capabilities,
     bool WasTouched,

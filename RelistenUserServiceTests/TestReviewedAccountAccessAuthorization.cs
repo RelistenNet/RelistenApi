@@ -31,7 +31,6 @@ public sealed class TestReviewedAccountAccessAuthorization
         _runtime = new AccountsRuntimeConfiguration(
             new AccountsOptions { Audience = "https://accounts.relisten.test" },
             new Uri("https://auth.relisten.test"),
-            AllowLoopbackHttp: false,
             TrustedProxyNetworks: []);
     }
 

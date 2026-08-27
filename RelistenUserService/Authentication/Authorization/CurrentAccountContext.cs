@@ -9,7 +9,7 @@ public sealed class CurrentAccountContext
     public Guid SessionId { get; private set; }
     public string? WebOrigin { get; private set; }
     public IdentitySessionCapabilities WebCapabilities { get; private set; }
-    public bool IsLoaded { get; private set; }
+    public bool IsLoaded => CredentialKind != AccountCredentialKind.None;
     public bool IsNative => IsLoaded && CredentialKind == AccountCredentialKind.Native;
     public bool IsWeb => IsLoaded && CredentialKind == AccountCredentialKind.Web;
 
@@ -28,7 +28,6 @@ public sealed class CurrentAccountContext
         SessionId = nativeSessionId;
         WebOrigin = null;
         WebCapabilities = IdentitySessionCapabilities.None;
-        IsLoaded = true;
     }
 
     public void SetWeb(
@@ -42,7 +41,6 @@ public sealed class CurrentAccountContext
         SessionId = webSessionId;
         WebOrigin = webOrigin;
         WebCapabilities = capabilities;
-        IsLoaded = true;
     }
 }
 

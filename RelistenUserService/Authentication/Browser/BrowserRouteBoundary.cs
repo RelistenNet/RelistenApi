@@ -19,9 +19,4 @@ public static class BrowserRouteBoundary
 
     public static bool IsCsrfPath(PathString path) =>
         path == "/api/user/v1/csrf";
-
-    public static bool IsPrivatePath(PathString path) =>
-        IsSessionLifecyclePath(path)
-        || IsCsrfPath(path)
-        || IsSharedResourcePath(path);
 }

@@ -21,7 +21,7 @@ public sealed class HostBoundaryMiddleware(
     {
         var path = request.Path;
         var actual = request.Host;
-        if (BrowserRouteBoundary.IsSharedResourcePath(path))
+        if (BrowserRouteBoundary.CanRelay(path))
         {
             return MatchesAccountsOrWeb(actual);
         }
@@ -39,11 +39,6 @@ public sealed class HostBoundaryMiddleware(
             || path == AuthenticationConstants.AppleCallbackPath)
         {
             return Matches(actual, new HostString(runtime.Options.AuthHost));
-        }
-
-        if (BrowserRouteBoundary.CanRelay(path))
-        {
-            return MatchesAccountsOrWeb(actual);
         }
 
         return MatchesAccountsOrWeb(actual)

@@ -25,7 +25,6 @@ public sealed class TestIdentitySessionLifecycleIntegration
         _runtime = new AccountsRuntimeConfiguration(
             new AccountsOptions(),
             new Uri("https://auth.relisten.net"),
-            AllowLoopbackHttp: false,
             TrustedProxyNetworks: []);
     }
 

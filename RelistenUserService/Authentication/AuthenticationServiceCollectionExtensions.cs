@@ -378,13 +378,9 @@ public static class AuthenticationServiceCollectionExtensions
                     "encryption"));
         }
 
-        var aspNetCore = options.UseAspNetCore()
+        options.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
             .EnableTokenEndpointPassthrough();
-        if (runtime.AllowLoopbackHttp)
-        {
-            aspNetCore.DisableTransportSecurityRequirement();
-        }
     }
 
     private static X509Certificate2 LoadCertificate(
