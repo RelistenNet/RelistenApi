@@ -133,8 +133,10 @@ deployment workflow.
 - [x] 2026-08-27: Removed the temporary localhost callback from the existing
   Google client after the proof. The repository owner had already removed the
   unused Authorized JavaScript origins.
-- [ ] After the local Google proof, refresh the exact proposal and receive
-  explicit production approval.
+- [x] 2026-08-27: Presented the exact production proposal. The repository owner
+  explicitly approved its Secret, manifest, deployment, migration, Google,
+  session, reversible favorite, and logout writes. Opened API PR 85, Timber PR
+  108, and Flux PR 17. No production write occurred while opening the PRs.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
 
@@ -460,9 +462,9 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The real local Google proof passed. The proposal below remains unapplied.
-Refresh its commit identifiers after this evidence commit, then present it for
-explicit approval. The implementation branch heads are:
+The real local Google proof passed. The repository owner explicitly approved
+the proposal on 2026-08-27. The proposal remains unapplied while the three PRs
+are reviewed. The implementation branch heads are:
 
 - API runtime and tests through
   dcfcca04bede38f24486d9b1dd1ca6757d407ecf on
@@ -472,6 +474,12 @@ explicit approval. The implementation branch heads are:
   845cc455e67ff4a8f8a8183d03a1ef475f5e6cf1.
 - Unapplied Flux branch
   f4b25e4548c52bcc2453dc87f988e097ec47f14d.
+
+Pull requests:
+
+- API: https://github.com/RelistenNet/RelistenApi/pull/85
+- Timber: https://github.com/RelistenNet/relisten-web/pull/108
+- Flux: https://github.com/RelistenNet/relisten-flux/pull/17
 
 The Flux branch changes only:
 
@@ -590,10 +598,9 @@ approval.
 
 ## Production rollout and rollback
 
-Blocked pending explicit approval. After approval, record the workflow run,
-rollout status, public checks, Google proof, favorite restoration,
-canonical-host proof, and any rollback here. If approval is not received, leave
-all local work committed and report production E2E as pending.
+Approved but not started. The three PRs are open for review. When the rollout
+starts, record the workflow run, rollout status, public checks, Google proof,
+favorite restoration, canonical-host proof, and any rollback here.
 
 ## Verification evidence
 
@@ -617,7 +624,8 @@ production user field.
   Development form concurrency; 9185ea0 rollout plan; 7c0c638 redirect log
   suppression; 0e1f290 antiforgery priming; bf8cf80 plan reduction; 5cabb8c
   removal of the unproven handoff design; c563a17 expiry and inactive-user
-  regression coverage; dcfcca0 local Google runtime.
+  regression coverage; dcfcca0 local Google runtime; 659436d local Google
+  setup evidence; 25579c5 local Google proof; f8b8dcc production baseline.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
   2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation.
@@ -701,7 +709,6 @@ production user field.
 
 ### Pending evidence
 
-- Explicit production approval.
 - Production rollout and Google E2E.
 
 ## Outcomes and retrospective
@@ -712,7 +719,7 @@ resource and session boundaries. A later static concurrency concern did not
 reproduce with two different personas, so the proposed parallel handoff
 framework was removed from scope. The Google-only local runtime profile is
 implemented, and real Google sign-in passed against local PostgreSQL. The next
-checkpoint is the refreshed production approval request.
+checkpoint is PR review followed by the approved production rollout.
 
 No browser access-token or refresh-token storage was introduced. No production
 manifest was applied, no Secret changed, no image deployed, no production
