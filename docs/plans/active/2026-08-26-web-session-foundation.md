@@ -122,7 +122,7 @@ deployment workflow.
   reviews found no runtime defect. One accepted regression gap added focused
   expiry and disabled-user tests. The code-simplifier pass found no safe
   production-code reduction.
-- [ ] Present the final production proposal and receive explicit approval.
+- [ ] Receive explicit production approval for the exact proposal below.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
 
@@ -426,7 +426,17 @@ commit bodies, status updates, and final handoff.
 ## Production approval checkpoint
 
 The final local checks and fresh reviews are complete. The currently unapplied
-Flux branch changes only:
+proposal uses:
+
+- API runtime and tests through c563a17 on
+  codex/web-session-foundation-api. Later commits on that branch change only
+  this plan.
+- Development-only Timber branch
+  2aeb1a6b3846ad9144ae940824be6314f332c15c.
+- Unapplied Flux branch
+  9c0ded6a00cd4af0fa7a835777906dcfa09d54a8.
+
+The Flux branch changes only:
 
 - clusters/relisten3-k3s/apps/relisten-user-service.yaml:
   - add relisten.net to AllowedHosts;
@@ -573,7 +583,9 @@ production user field.
   2aeb1a6 smoke-test ownership.
 - Flux, unapplied: 2442be7 production configuration and routes; a07f5e5,
   09b109f, 8b1fe69, 020cc17, and 92769dd runbook corrections; 9c0ded6
-  simplified rollout. No production state changed.
+  simplified rollout. yq 4.53.6 confirmed the exact configuration, probe
+  headers, and route order. Kustomize rendering, client-side apply dry-run, and
+  diff whitespace checks passed. No production state changed.
 
 ### Local evidence
 
@@ -614,9 +626,11 @@ production user field.
   framing, and protocol redirect parameters did not appear in sanitized logs.
 - Production read-only: PostgreSQL was version 17.10 and read-only;
   identity.sessions was absent; UUIDv7 extraction was available; the User
-  Service had one Ready replica; WebClientSecret was absent without reading any
-  Secret value; Traefik 3.7.4 used non-strict prefix matching; the existing
-  certificate covered relisten.net; and public /v1/me still reached Timber.
+  Service had one Ready replica on the existing latest image; WebClientSecret
+  was absent without reading any Secret value; Traefik 3.7.4 used non-strict
+  prefix matching; the existing certificate covered relisten.net; and the live
+  relisten.net ingress still contained only Timber's / route. The latest
+  identity migration remained 20260719193000_ConfigureProductionIosClient.
   No production state changed.
 
 ### Pending evidence
