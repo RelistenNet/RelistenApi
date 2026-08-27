@@ -1,5 +1,9 @@
 namespace RelistenUserService.Authentication.Browser;
 
+/// <summary>
+/// Defines segment-safe routes that browser hosts and origin reconstruction may reach.
+/// This list does not authorize a request. Endpoint policies and capabilities remain authoritative.
+/// </summary>
 public static class BrowserRouteBoundary
 {
     public static bool CanRelay(PathString path) =>

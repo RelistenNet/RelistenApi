@@ -3,6 +3,12 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 
 namespace RelistenUserService.Authentication.Browser;
 
+/// <summary>
+/// Applies method-aware account authorization to every segment-safe library action.
+/// Session lifecycle and CSRF actions receive the web-profile policy.
+/// Routes outside these families receive no browser policy from this convention.
+/// Cookie-authenticated mutations still pass through the global CSRF and Origin middleware.
+/// </summary>
 public static class ReviewedBrowserEndpointConvention
 {
     public static IEndpointConventionBuilder RequireReviewedBrowserAuthorization(

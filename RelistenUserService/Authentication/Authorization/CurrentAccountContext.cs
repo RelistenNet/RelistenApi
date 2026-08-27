@@ -2,6 +2,10 @@ using RelistenUserService.Identity.Entities;
 
 namespace RelistenUserService.Authentication.Authorization;
 
+/// <summary>
+/// Carries one authenticated account while preserving credential-specific session metadata.
+/// A web credential exposes its origin and capabilities and never fabricates a native session ID.
+/// </summary>
 public sealed class CurrentAccountContext
 {
     public User User { get; private set; } = null!;

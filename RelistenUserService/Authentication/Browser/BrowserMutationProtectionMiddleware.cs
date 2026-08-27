@@ -3,6 +3,10 @@ using RelistenUserService.Authentication.Authorization;
 
 namespace RelistenUserService.Authentication.Browser;
 
+/// <summary>
+/// Protects every unsafe request that carries <c>__Host-relisten_session</c>.
+/// A global boundary prevents a new mutation from omitting browser protections.
+/// </summary>
 public sealed class BrowserMutationProtectionMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(
@@ -20,6 +24,8 @@ public sealed class BrowserMutationProtectionMiddleware(RequestDelegate next)
 
         var origins = context.Request.Headers.Origin;
         var csrfHeaders = context.Request.Headers[AuthenticationConstants.CsrfHeader];
+        // Exact Origin matching pins the browser to the site recorded on the session.
+        // The additional-data provider pins the antiforgery token to the session ID.
         if (!currentAccount.IsWeb
             || currentAccount.WebOrigin is null
             || origins.Count != 1

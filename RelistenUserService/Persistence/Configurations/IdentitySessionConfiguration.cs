@@ -54,10 +54,6 @@ public sealed class IdentitySessionConfiguration : IEntityTypeConfiguration<Iden
                 OR (
                     auth_sso_session_id IS NOT NULL
                     AND web_origin IS NOT NULL
-                    AND web_origin IN (
-                        'https://relisten.net',
-                        'https://web.relisten.localhost:5173'
-                    )
                     AND capabilities = 7
                 )
                 """);

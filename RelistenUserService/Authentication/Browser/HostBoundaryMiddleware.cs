@@ -2,6 +2,12 @@ using RelistenUserService.Configuration;
 
 namespace RelistenUserService.Authentication.Browser;
 
+/// <summary>
+/// Keeps protocol, provider, and auth-SSO routes on the auth host.
+/// Unreviewed <c>/v1/*</c> routes stay on the accounts host.
+/// Only reviewed browser routes may also use an exact configured web host.
+/// Endpoint authentication and authorization remain authoritative after this reachability check.
+/// </summary>
 public sealed class HostBoundaryMiddleware(
     RequestDelegate next,
     AccountsRuntimeConfiguration runtime)

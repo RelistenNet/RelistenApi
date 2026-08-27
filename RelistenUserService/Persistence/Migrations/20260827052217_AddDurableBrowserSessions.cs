@@ -42,7 +42,7 @@ namespace RelistenUserService.Persistence.Migrations
                     table.CheckConstraint("ck_sessions_security_version", "security_version > 0");
                     table.CheckConstraint("ck_sessions_timestamps", "authenticated_at <= created_at\nAND created_at <= last_seen_at\nAND last_seen_at <= updated_at\nAND created_at < sliding_expires_at\nAND sliding_expires_at <= absolute_expires_at\nAND (\n    revoked_at IS NULL\n    OR (\n        created_at <= revoked_at\n        AND revoked_at <= updated_at\n    )\n)");
                     table.CheckConstraint("ck_sessions_validator_hash", "octet_length(validator_hash) = 32");
-                    table.CheckConstraint("ck_sessions_web_shape", "purpose <> 'web'\nOR (\n    auth_sso_session_id IS NOT NULL\n    AND web_origin IS NOT NULL\n    AND web_origin IN (\n        'https://relisten.net',\n        'https://web.relisten.localhost:5173'\n    )\n    AND capabilities = 7\n)");
+                    table.CheckConstraint("ck_sessions_web_shape", "purpose <> 'web'\nOR (\n    auth_sso_session_id IS NOT NULL\n    AND web_origin IS NOT NULL\n    AND capabilities = 7\n)");
                     table.ForeignKey(
                         name: "FK_sessions_sessions_auth_sso_session_id_user_id",
                         columns: x => new { x.auth_sso_session_id, x.user_id },

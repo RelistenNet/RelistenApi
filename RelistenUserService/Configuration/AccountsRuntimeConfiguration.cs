@@ -135,13 +135,6 @@ public sealed record AccountsRuntimeConfiguration(
                 "At least one external identity provider must be enabled.");
         }
 
-        if (environment.IsProduction()
-            && (!options.Google.Enabled || !options.Apple.Enabled))
-        {
-            throw new InvalidOperationException(
-                "Production external sign-in requires both Google and Apple.");
-        }
-
         if (options.Google.Enabled)
         {
             Require(options.Google.ClientId, "Accounts:Google:ClientId");

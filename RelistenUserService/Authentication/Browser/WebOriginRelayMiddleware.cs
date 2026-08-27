@@ -3,6 +3,11 @@ using RelistenUserService.Configuration;
 
 namespace RelistenUserService.Authentication.Browser;
 
+/// <summary>
+/// Reconstructs a browser-visible origin only for reviewed browser routes.
+/// A relay hint is accepted only on an expected backend with one exact configured origin.
+/// The relay header grants no authority.
+/// </summary>
 public sealed class WebOriginRelayMiddleware(
     RequestDelegate next,
     AccountsRuntimeConfiguration runtime)
@@ -14,6 +19,8 @@ public sealed class WebOriginRelayMiddleware(
             out var relayedOrigins);
         if (!BrowserRouteBoundary.CanRelay(context.Request.Path))
         {
+            // A relay hint on another route could make caller-supplied host data affect
+            // a native or auth-host request.
             if (hasRelay)
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;

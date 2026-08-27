@@ -466,7 +466,7 @@ namespace RelistenUserService.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_sessions_validator_hash", "octet_length(validator_hash) = 32");
 
-                            t.HasCheckConstraint("ck_sessions_web_shape", "purpose <> 'web'\nOR (\n    auth_sso_session_id IS NOT NULL\n    AND web_origin IS NOT NULL\n    AND web_origin IN (\n        'https://relisten.net',\n        'https://web.relisten.localhost:5173'\n    )\n    AND capabilities = 7\n)");
+                            t.HasCheckConstraint("ck_sessions_web_shape", "purpose <> 'web'\nOR (\n    auth_sso_session_id IS NOT NULL\n    AND web_origin IS NOT NULL\n    AND capabilities = 7\n)");
                         });
                 });
 
