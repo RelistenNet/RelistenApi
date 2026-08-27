@@ -4,6 +4,7 @@ using Hangfire;
 
 namespace Relisten.Services.Popularity
 {
+    [SuccessExpiration(5)]
     public class PopularityJobs
     {
         private readonly PopularityService popularityService;

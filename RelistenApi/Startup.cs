@@ -242,7 +242,11 @@ namespace Relisten
                 // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
                 hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions),
-                    new RedisStorageOptions { InvisibilityTimeout = TimeSpan.FromHours(4) });
+                    new RedisStorageOptions
+                    {
+                        InvisibilityTimeout = TimeSpan.FromHours(4),
+                        ExpiryCheckInterval = TimeSpan.FromMinutes(1)
+                    });
                 hangfire.UseConsole();
                 hangfire.UseRecurringJob(typeof(ScheduledService));
             });
