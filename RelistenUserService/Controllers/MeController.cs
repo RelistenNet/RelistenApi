@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Relisten.Accounts.Contracts.Accounts;
 using Relisten.Accounts.Contracts.Errors;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Identity;
 using RelistenUserService.Identity.Usernames;
 
@@ -50,7 +51,7 @@ public sealed class MeController(
             currentAccount.User.Id,
             request,
             cancellationToken);
-        var profile = AccountProfileFactory.Create(result.User, currentAccount.NativeSession.Id);
+        var profile = AccountProfileFactory.Create(result.User, currentAccount.NativeSessionId);
         if (result.Status == UsernameCommandStatus.Success)
         {
             SetEtag(profile.UsernameVersion);
@@ -87,7 +88,7 @@ public sealed class MeController(
 
     private AccountProfileResponse CreateProfile() => AccountProfileFactory.Create(
         currentAccount.User,
-        currentAccount.NativeSession.Id);
+        currentAccount.IsNative ? currentAccount.NativeSessionId : null);
 
     private ObjectResult AccountProblem(
         int status,

@@ -1,17 +1,16 @@
-using System.Globalization;
 using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using RelistenUserService.Identity.Entities;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.OpenIdConnect;
 
-public sealed class NativePrincipalFactory(Configuration.AccountsRuntimeConfiguration runtime)
+public sealed class WebBootstrapPrincipalFactory
 {
     public ClaimsPrincipal Create(
         User user,
-        NativeSession session,
+        Guid authSsoSessionId,
         IEnumerable<string> scopes)
     {
         var identity = new ClaimsIdentity(
@@ -20,25 +19,19 @@ public sealed class NativePrincipalFactory(Configuration.AccountsRuntimeConfigur
             Claims.Role);
         identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString("D")));
         identity.AddClaim(new Claim(Claims.Name, user.Username));
-        identity.AddClaim(new Claim(RelistenClaims.SessionId, session.Id.ToString("D")));
-        identity.AddClaim(new Claim(Claims.ClientId, session.ClientId));
         identity.AddClaim(new Claim(
-            RelistenClaims.SecurityVersion,
-            user.SecurityVersion.ToString(CultureInfo.InvariantCulture)));
+            RelistenClaims.SessionId,
+            authSsoSessionId.ToString("D")));
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(scopes);
-        principal.SetResources(runtime.Options.Audience);
-        principal.SetAuthorizationId(session.AuthorizationId.ToString("D"));
         principal.SetDestinations(claim => claim.Type switch
         {
             Claims.Subject => [Destinations.AccessToken, Destinations.IdentityToken],
             Claims.Name when principal.HasScope(Scopes.Profile) => [Destinations.IdentityToken],
-            RelistenClaims.SessionId or Claims.ClientId or RelistenClaims.SecurityVersion =>
-                [Destinations.AccessToken],
+            RelistenClaims.SessionId => [Destinations.IdentityToken],
             _ => []
         });
-
         return principal;
     }
 }

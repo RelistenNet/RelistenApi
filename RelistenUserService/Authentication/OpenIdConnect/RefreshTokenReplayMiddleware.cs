@@ -4,7 +4,7 @@ using OpenIddict.Abstractions;
 using RelistenUserService.Persistence;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.OpenIdConnect;
 
 public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
 {

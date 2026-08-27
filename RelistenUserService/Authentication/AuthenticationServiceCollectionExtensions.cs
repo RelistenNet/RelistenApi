@@ -1,15 +1,24 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OpenIddict.Client;
+using OpenIddict.Client.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Authentication.Browser;
+using RelistenUserService.Authentication.Development;
+using RelistenUserService.Authentication.OpenIdConnect;
+using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity;
+using RelistenUserService.Identity.Entities;
 using RelistenUserService.Identity.Usernames;
 using RelistenUserService.Library;
 using RelistenUserService.Persistence;
@@ -36,8 +45,12 @@ public static class AuthenticationServiceCollectionExtensions
             options.ForwardedHeaders = ForwardedHeaders.XForwardedHost
                 | ForwardedHeaders.XForwardedProto;
             options.ForwardLimit = 1;
-            options.AllowedHosts.Add(runtime.Options.AuthHost);
-            options.AllowedHosts.Add(runtime.Options.AccountsHost);
+            options.AllowedHosts.Add(new HostString(runtime.Options.AuthHost).Host);
+            options.AllowedHosts.Add(new HostString(runtime.Options.AccountsHost).Host);
+            foreach (var origin in runtime.WebOrigins.Select(value => new Uri(value)))
+            {
+                options.AllowedHosts.Add(origin.Host);
+            }
             foreach (var network in runtime.TrustedProxyNetworks)
             {
                 options.KnownIPNetworks.Add(network);
@@ -79,11 +92,8 @@ public static class AuthenticationServiceCollectionExtensions
                 options.UseAspNetCore();
             });
 
-        if (runtime.Options.EnableExternalProviders)
-        {
-            openIddict.AddClient(options =>
-                ConfigureExternalProviders(options, environment, runtime));
-        }
+        openIddict.AddClient(options =>
+            ConfigureClients(options, environment, runtime));
 
         services.AddAuthentication(options =>
         {
@@ -91,42 +101,75 @@ public static class AuthenticationServiceCollectionExtensions
                 OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
             options.DefaultChallengeScheme =
                 OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-        });
+        })
+            .AddScheme<AuthenticationSchemeOptions, AuthSsoAuthenticationHandler>(
+                AuthenticationConstants.AuthSsoScheme,
+                _ => { })
+            .AddScheme<AuthenticationSchemeOptions, WebSessionAuthenticationHandler>(
+                AuthenticationConstants.WebSessionScheme,
+                _ => { })
+            .AddScheme<AuthenticationSchemeOptions,
+                RejectedAccountCredentialAuthenticationHandler>(
+                AuthenticationConstants.RejectedAccountCredentialScheme,
+                _ => { })
+            .AddPolicyScheme(
+                AuthenticationConstants.AccountCredentialScheme,
+                displayName: null,
+                options => options.ForwardDefaultSelector =
+                    AccountCredentialSelector.SelectScheme);
 
         if (runtime.Options.EnableDevelopmentPersonas)
         {
-            services.AddAuthentication().AddCookie(
-                AuthenticationConstants.DevelopmentIdentityScheme,
-                options => ConfigureDevelopmentCookie(options));
-            services.AddAntiforgery();
             services.AddSingleton<DevelopmentDatabaseInitializer>();
         }
-        else if (runtime.Options.EnableExternalProviders)
+
+        services.AddAntiforgery(options =>
         {
-            services.AddAuthentication().AddCookie(
-                AuthenticationConstants.ExternalIdentityScheme,
-                ConfigureExternalIdentityCookie);
-        }
+            options.Cookie.Name = AuthenticationConstants.CsrfCookie;
+            options.Cookie.HttpOnly = true;
+            options.Cookie.Path = "/";
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+            options.HeaderName = AuthenticationConstants.CsrfHeader;
+        });
 
         services.AddAuthorization(options =>
         {
-            AddPolicy(options, AuthenticationConstants.UserReadPolicy, RelistenScopes.UserRead);
-            AddPolicy(
+            AddReviewedAccountPolicy(
                 options,
-                AuthenticationConstants.LibraryReadPolicy,
-                RelistenScopes.LibraryRead);
-            AddPolicy(
+                AuthenticationConstants.UserReadPolicy,
+                RelistenScopes.UserRead,
+                IdentitySessionCapabilities.AccountProfileRead);
+            AddReviewedAccountPolicy(
                 options,
-                AuthenticationConstants.LibraryWritePolicy,
-                RelistenScopes.LibraryWrite);
+                AuthenticationConstants.LibraryAccessPolicy,
+                new ReviewedAccountAccessRule(
+                    RelistenScopes.LibraryRead,
+                    IdentitySessionCapabilities.LibraryRead),
+                new ReviewedAccountAccessRule(
+                    RelistenScopes.LibraryWrite,
+                    IdentitySessionCapabilities.FavoriteMutation));
             AddPolicy(
                 options,
                 AuthenticationConstants.AccountManagePolicy,
                 RelistenScopes.AccountManage);
+            AddWebPolicy(
+                options,
+                AuthenticationConstants.BrowserProfileReadPolicy,
+                IdentitySessionCapabilities.AccountProfileRead);
         });
 
         services.AddScoped<CurrentAccountContext>();
+        services.AddSingleton<SessionCredentialCodec>();
+        services.AddScoped<IdentitySessionLifecycle>();
+        services.AddSingleton<SessionCookieManager>();
+        services.AddScoped<AuthSsoSignInService>();
+        services.AddSingleton<IAntiforgeryAdditionalDataProvider,
+            WebSessionAntiforgeryAdditionalDataProvider>();
+        services.AddScoped<NativeSessionAuthenticator>();
         services.AddScoped<IAuthorizationHandler, NativeSessionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ReviewedAccountAccessAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, WebCapabilityAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler,
             NativeSessionAuthorizationResultHandler>();
@@ -136,20 +179,23 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<UsernameCommandService>();
         services.AddScoped<ExternalIdentityCompletionService>();
         services.AddScoped<NativePrincipalFactory>();
+        services.AddSingleton<WebBootstrapPrincipalFactory>();
         services.AddScoped<FavoriteMutationService>();
         services.AddScoped<LibraryStateStore>();
         services.AddScoped<LibraryReadService>();
         services.AddSingleton<LibraryCursorProtector>();
         services.AddSingleton<AccountsDatabaseMigrator>();
+        services.AddSingleton<WebClientApplicationInitializer>();
         return services;
     }
 
-    private static void ConfigureExternalProviders(
+    private static void ConfigureClients(
         OpenIddictClientBuilder options,
         IHostEnvironment environment,
         AccountsRuntimeConfiguration runtime)
     {
-        options.AllowAuthorizationCodeFlow();
+        options.AllowAuthorizationCodeFlow()
+            .SetStateTokenLifetime(TimeSpan.FromMinutes(15));
         if (environment.IsDevelopment() && OperatingSystem.IsMacOS())
         {
             // Preview/tunnel authentication must remain safe to run on macOS. Reuse the
@@ -181,24 +227,75 @@ public static class AuthenticationServiceCollectionExtensions
                 "encryption"));
         }
 
+        options.AddRegistration(new OpenIddictClientRegistration
+        {
+            RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
+            Issuer = runtime.Issuer,
+            ClientId = AuthenticationConstants.WebClientId,
+            ClientSecret = runtime.Options.WebClientSecret,
+            ClientType = ClientTypes.Confidential,
+            RedirectUri = new Uri(AuthenticationConstants.CanonicalWebCallback),
+            Scopes = { Scopes.OpenId, Scopes.Profile },
+            CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
+            ResponseModes = { ResponseModes.Query }
+        });
+        options.AddRegistration(new OpenIddictClientRegistration
+        {
+            RegistrationId = AuthenticationConstants.LocalWebRegistration,
+            Issuer = runtime.Issuer,
+            ClientId = AuthenticationConstants.WebClientId,
+            ClientSecret = runtime.Options.WebClientSecret,
+            ClientType = ClientTypes.Confidential,
+            RedirectUri = new Uri(AuthenticationConstants.LocalWebCallback),
+            Scopes = { Scopes.OpenId, Scopes.Profile },
+            CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
+            ResponseModes = { ResponseModes.Query }
+        });
+
         options.UseAspNetCore()
             .EnableRedirectionEndpointPassthrough();
-        options.UseSystemNetHttp();
+        var systemNetHttp = options.UseSystemNetHttp();
+        if (environment.IsDevelopment()
+            && !string.IsNullOrWhiteSpace(
+                runtime.Options.DevelopmentCertificateAuthorityPath))
+        {
+            var trust = new DevelopmentBackchannelCertificateTrust(
+                runtime.Issuer,
+                runtime.Options.DevelopmentCertificateAuthorityPath);
+            systemNetHttp.ConfigureHttpClientHandler((registration, handler) =>
+            {
+                if (registration.RegistrationId is AuthenticationConstants.CanonicalWebRegistration
+                    or AuthenticationConstants.LocalWebRegistration)
+                {
+                    handler.ServerCertificateCustomValidationCallback = trust.Validate;
+                }
+            });
+        }
 
-        var providers = options.UseWebProviders();
-        providers.AddGoogle(google =>
-            google.SetClientId(runtime.Options.Google.ClientId)
-                .SetClientSecret(runtime.Options.Google.ClientSecret)
-                .SetRegistrationId(AuthenticationConstants.GoogleProvider)
-                .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
-                .AddScopes(Scopes.Email, Scopes.Profile));
-        providers.AddApple(apple =>
-            apple.SetClientId(runtime.Options.Apple.ClientId)
-                .SetTeamId(runtime.Options.Apple.TeamId)
-                .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
-                .SetRegistrationId(AuthenticationConstants.AppleProvider)
-                .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
-                .AddScopes(Scopes.Email));
+        if (runtime.Options.EnableExternalProviders)
+        {
+            var providers = options.UseWebProviders();
+            if (runtime.Options.Google.Enabled)
+            {
+                providers.AddGoogle(google =>
+                    google.SetClientId(runtime.Options.Google.ClientId)
+                        .SetClientSecret(runtime.Options.Google.ClientSecret)
+                        .SetRegistrationId(AuthenticationConstants.GoogleProvider)
+                        .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
+                        .AddScopes(Scopes.Email, Scopes.Profile));
+            }
+
+            if (runtime.Options.Apple.Enabled)
+            {
+                providers.AddApple(apple =>
+                    apple.SetClientId(runtime.Options.Apple.ClientId)
+                        .SetTeamId(runtime.Options.Apple.TeamId)
+                        .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
+                        .SetRegistrationId(AuthenticationConstants.AppleProvider)
+                        .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
+                        .AddScopes(Scopes.Email));
+            }
+        }
     }
 
     private static ECDsaSecurityKey LoadAppleSigningKey(AppleProviderOptions options)
@@ -290,13 +387,9 @@ public static class AuthenticationServiceCollectionExtensions
                     "encryption"));
         }
 
-        var aspNetCore = options.UseAspNetCore()
+        options.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
             .EnableTokenEndpointPassthrough();
-        if (runtime.AllowLoopbackHttp)
-        {
-            aspNetCore.DisableTransportSecurityRequirement();
-        }
     }
 
     private static X509Certificate2 LoadCertificate(
@@ -343,31 +436,6 @@ public static class AuthenticationServiceCollectionExtensions
         ];
     }
 
-    private static void ConfigureDevelopmentCookie(CookieAuthenticationOptions options)
-    {
-        options.Cookie.Name = "Relisten.DevelopmentIdentity";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
-        options.LoginPath = "/development/sign-in";
-        options.ReturnUrlParameter = "return_url";
-        options.SlidingExpiration = false;
-    }
-
-    private static void ConfigureExternalIdentityCookie(CookieAuthenticationOptions options)
-    {
-        // This is a short bridge between an upstream callback and /connect/authorize,
-        // not the mobile session. AuthorizationController deletes it after issuing a code.
-        options.Cookie.Name = "__Host-relisten_auth";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.Path = "/";
-        options.Cookie.SameSite = SameSiteMode.Lax;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
-        options.SlidingExpiration = false;
-    }
-
     private static void AddPolicy(
         AuthorizationOptions options,
         string name,
@@ -383,6 +451,47 @@ public static class AuthenticationServiceCollectionExtensions
             {
                 policy.AddRequirements(new ScopeRequirement(scope));
             }
+        });
+    }
+
+    private static void AddWebPolicy(
+        AuthorizationOptions options,
+        string name,
+        IdentitySessionCapabilities capability)
+    {
+        options.AddPolicy(name, policy =>
+        {
+            policy.AuthenticationSchemes.Add(AuthenticationConstants.WebSessionScheme);
+            policy.RequireAuthenticatedUser();
+            policy.AddRequirements(new WebCapabilityRequirement(capability));
+        });
+    }
+
+    private static void AddReviewedAccountPolicy(
+        AuthorizationOptions options,
+        string name,
+        string nativeScope,
+        IdentitySessionCapabilities webCapability)
+    {
+        AddReviewedAccountPolicy(
+            options,
+            name,
+            new ReviewedAccountAccessRule(nativeScope, webCapability));
+    }
+
+    private static void AddReviewedAccountPolicy(
+        AuthorizationOptions options,
+        string name,
+        ReviewedAccountAccessRule defaultRule,
+        ReviewedAccountAccessRule? mutationRule = null)
+    {
+        options.AddPolicy(name, policy =>
+        {
+            policy.AuthenticationSchemes.Add(AuthenticationConstants.AccountCredentialScheme);
+            policy.RequireAuthenticatedUser();
+            policy.AddRequirements(new ReviewedAccountAccessRequirement(
+                defaultRule,
+                mutationRule));
         });
     }
 }

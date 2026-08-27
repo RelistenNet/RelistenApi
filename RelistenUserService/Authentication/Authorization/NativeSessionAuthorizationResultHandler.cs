@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Authorization;
 
 public sealed class NativeSessionAuthorizationResultHandler
     : IAuthorizationMiddlewareResultHandler
@@ -15,9 +15,14 @@ public sealed class NativeSessionAuthorizationResultHandler
         PolicyAuthorizationResult authorizeResult)
     {
         var currentAccount = context.RequestServices.GetRequiredService<CurrentAccountContext>();
+        var nativeCredentialIsInvalid =
+            policy.Requirements.OfType<NativeSessionRequirement>().Any()
+            && !currentAccount.IsNative;
+        var reviewedCredentialIsInvalid =
+            policy.Requirements.OfType<ReviewedAccountAccessRequirement>().Any()
+            && !currentAccount.IsLoaded;
         if (authorizeResult.Forbidden
-            && policy.Requirements.OfType<NativeSessionRequirement>().Any()
-            && !currentAccount.IsLoaded)
+            && (nativeCredentialIsInvalid || reviewedCredentialIsInvalid))
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             context.Response.Headers.WWWAuthenticate = "Bearer";

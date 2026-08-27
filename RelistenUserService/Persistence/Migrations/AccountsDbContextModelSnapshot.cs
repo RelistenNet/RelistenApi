@@ -377,6 +377,99 @@ namespace RelistenUserService.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("RelistenUserService.Identity.Entities.IdentitySession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AbsoluteExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("absolute_expires_at");
+
+                    b.Property<Guid?>("AuthSsoSessionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("auth_sso_session_id");
+
+                    b.Property<DateTimeOffset>("AuthenticatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("authenticated_at");
+
+                    b.Property<int>("Capabilities")
+                        .HasColumnType("integer")
+                        .HasColumnName("capabilities");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("purpose");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<int>("SecurityVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("security_version");
+
+                    b.Property<DateTimeOffset>("SlidingExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sliding_expires_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<byte[]>("ValidatorHash")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("validator_hash");
+
+                    b.Property<string>("WebOrigin")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("web_origin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthSsoSessionId", "RevokedAt");
+
+                    b.HasIndex("AuthSsoSessionId", "UserId");
+
+                    b.HasIndex("UserId", "RevokedAt", "AbsoluteExpiresAt");
+
+                    b.ToTable("sessions", "identity", t =>
+                        {
+                            t.HasCheckConstraint("ck_sessions_auth_sso_shape", "purpose <> 'auth_sso'\nOR (\n    auth_sso_session_id IS NULL\n    AND web_origin IS NULL\n    AND capabilities = 0\n    AND sliding_expires_at = absolute_expires_at\n)");
+
+                            t.HasCheckConstraint("ck_sessions_id_uuid_v7", "uuid_extract_version(id) IS NOT DISTINCT FROM 7");
+
+                            t.HasCheckConstraint("ck_sessions_purpose", "purpose IN ('auth_sso', 'web')");
+
+                            t.HasCheckConstraint("ck_sessions_security_version", "security_version > 0");
+
+                            t.HasCheckConstraint("ck_sessions_timestamps", "authenticated_at <= created_at\nAND created_at <= last_seen_at\nAND last_seen_at <= updated_at\nAND created_at < sliding_expires_at\nAND sliding_expires_at <= absolute_expires_at\nAND (\n    revoked_at IS NULL\n    OR (\n        created_at <= revoked_at\n        AND revoked_at <= updated_at\n    )\n)");
+
+                            t.HasCheckConstraint("ck_sessions_validator_hash", "octet_length(validator_hash) = 32");
+
+                            t.HasCheckConstraint("ck_sessions_web_shape", "purpose <> 'web'\nOR (\n    auth_sso_session_id IS NOT NULL\n    AND web_origin IS NOT NULL\n    AND capabilities = 7\n)");
+                        });
+                });
+
             modelBuilder.Entity("RelistenUserService.Identity.Entities.NativeSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -845,6 +938,25 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("RelistenUserService.Identity.Entities.IdentitySession", b =>
+                {
+                    b.HasOne("RelistenUserService.Identity.Entities.User", "User")
+                        .WithMany("IdentitySessions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("RelistenUserService.Identity.Entities.IdentitySession", "AuthSsoSession")
+                        .WithMany("WebSessions")
+                        .HasForeignKey("AuthSsoSessionId", "UserId")
+                        .HasPrincipalKey("Id", "UserId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("AuthSsoSession");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("RelistenUserService.Identity.Entities.NativeSession", b =>
                 {
                     b.HasOne("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization<System.Guid>", null)
@@ -928,9 +1040,16 @@ namespace RelistenUserService.Persistence.Migrations
                     b.Navigation("Tokens");
                 });
 
+            modelBuilder.Entity("RelistenUserService.Identity.Entities.IdentitySession", b =>
+                {
+                    b.Navigation("WebSessions");
+                });
+
             modelBuilder.Entity("RelistenUserService.Identity.Entities.User", b =>
                 {
                     b.Navigation("ExternalIdentities");
+
+                    b.Navigation("IdentitySessions");
 
                     b.Navigation("NativeSessions");
                 });

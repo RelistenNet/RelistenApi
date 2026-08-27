@@ -6,7 +6,7 @@ namespace RelistenUserService.Identity;
 
 public static class AccountProfileFactory
 {
-    public static AccountProfileResponse Create(User user, Guid nativeSessionId)
+    public static AccountProfileResponse Create(User user, Guid? nativeSessionId)
     {
         DateTimeOffset? changeAvailableAt = user.UsernameChangedAt is null
             ? null

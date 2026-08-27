@@ -3,7 +3,7 @@ using RelistenUserService.Configuration;
 using RelistenUserService.Persistence;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Development;
 
 public sealed class DevelopmentDatabaseInitializer(
     IServiceProvider serviceProvider,

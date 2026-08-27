@@ -3,6 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <UserSecretsId>RelistenUserService-4d3c1af6-9f41-4f74-b8dd-2b6ab8eac2e2</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

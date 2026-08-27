@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Development;
 
 internal static class DevelopmentOpenIddictCertificateStore
 {

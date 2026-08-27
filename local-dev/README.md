@@ -108,19 +108,21 @@ Run the User Service in another terminal:
 dotnet run --project RelistenUserService/RelistenUserService.csproj
 ```
 
-The catalog API listens on `http://localhost:3823`; the development User Service
-listens on `http://localhost:5443`. Development startup applies the checked-in
-identity and user-data migrations, seeds the local mobile clients, and offers a
-small fixed set of Apple and Google personas. Those personas exercise the real
-authorization-code, PKCE, token, session, account, and favorites paths without
-requiring contributor-owned provider secrets. The loopback issuer, runtime
-migrations, and fixed identities are rejected outside `Development`; production
-migrations remain an explicit deployment operation.
+The catalog API listens on `http://localhost:3823`. The development User Service
+listens on `https://127.0.0.1:5443` and serves the exact
+`auth.relisten.localhost:5443` and `accounts.relisten.localhost:5443` hosts. Run
+`pnpm setup:browser-session` once from the sibling `relisten-web` checkout before
+starting the User Service. That command creates and trusts the local certificate
+outside Git and writes its paths through .NET Secret Manager.
 
-The development issuer creates ephemeral OpenIddict signing and encryption keys.
-Restarting the User Service therefore invalidates its local access and refresh
-tokens; sign in with the fixed persona again after a restart. Production uses
-configured certificates, so normal service restarts do not invalidate sessions.
+Development startup applies the checked-in identity and user-data migrations,
+seeds the local clients, and offers fixed Apple and Google personas. The
+personas exercise the real authorization-code, PKCE, token, session, account,
+and favorites paths without contributor-owned provider secrets. Development
+signing and encryption keys persist under the ignored
+`RelistenUserService/.local-openiddict` directory, so ordinary issuer restarts
+do not invalidate local credentials. Development personas and runtime
+migrations remain disabled outside `Development`.
 
 With the User Service running, check its account/session security invariants:
 

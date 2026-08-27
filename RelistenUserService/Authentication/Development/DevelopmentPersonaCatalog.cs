@@ -1,6 +1,6 @@
 using RelistenUserService.Identity;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Development;
 
 public sealed record DevelopmentPersona(
     string Id,

@@ -2,7 +2,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Development;
 
 /// <summary>
 /// Persists local OpenIddict RSA keys without importing private keys through

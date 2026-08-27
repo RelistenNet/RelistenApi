@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Controllers;
@@ -21,7 +22,7 @@ public sealed class LogoutController(
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var session = await dbContext.NativeSessions.SingleAsync(
-            item => item.Id == currentAccount.NativeSession.Id,
+            item => item.Id == currentAccount.NativeSessionId,
             cancellationToken);
         var now = timeProvider.GetUtcNow();
         session.RevokedAt ??= now;

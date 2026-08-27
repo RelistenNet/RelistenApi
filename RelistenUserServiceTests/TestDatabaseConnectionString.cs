@@ -69,6 +69,28 @@ public sealed class TestDatabaseConnectionString
         builder.Database.Should().Be("production_accounts");
     }
 
+    [Test]
+    public void AccountsLockDatabaseUrlOverridesFileConnectionString()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:AccountsLock"] =
+                    "Host=stale.example;Database=stale_accounts;Username=stale;Password=stale",
+                ["ACCOUNTS_LOCK_DATABASE_URL"] =
+                    "Host=127.0.0.1;Database=local_accounts;Username=local;Password=local"
+            })
+            .Build();
+
+        var resolved = DatabaseConnectionString.ResolveRefreshTokenLocks(
+            configuration,
+            null!);
+        var builder = new NpgsqlConnectionStringBuilder(resolved);
+
+        builder.Host.Should().Be("127.0.0.1");
+        builder.Database.Should().Be("local_accounts");
+    }
+
     private static IConfiguration BuildConfiguration(string connectionString) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>

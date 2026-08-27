@@ -4,15 +4,18 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.OpenIdConnect;
 
 public sealed class TokenController(
     AccountsDbContext dbContext,
     NativePrincipalFactory principalFactory,
+    WebBootstrapPrincipalFactory webPrincipalFactory,
+    IdentitySessionLifecycle identitySessions,
     TimeProvider timeProvider)
     : Controller
 {
@@ -31,8 +34,18 @@ public sealed class TokenController(
             OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         var source = authentication.Principal;
         if (!authentication.Succeeded
-            || source is null
-            || !Guid.TryParse(source.GetClaim(RelistenClaims.SessionId), out var sessionId))
+            || source is null)
+        {
+            return InvalidGrant("The authorization code or refresh token is invalid.");
+        }
+
+
+        if (request.ClientId == AuthenticationConstants.WebClientId)
+        {
+            return await ExchangeWebAsync(request, source, cancellationToken);
+        }
+
+        if (!Guid.TryParse(source.GetClaim(RelistenClaims.SessionId), out var sessionId))
         {
             return InvalidGrant("The authorization code or refresh token is invalid.");
         }
@@ -57,6 +70,34 @@ public sealed class TokenController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var principal = principalFactory.Create(session.User, session, source.GetScopes());
+        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    private async Task<IActionResult> ExchangeWebAsync(
+        OpenIddictRequest request,
+        System.Security.Claims.ClaimsPrincipal source,
+        CancellationToken cancellationToken)
+    {
+        if (!request.IsAuthorizationCodeGrantType()
+            || !Guid.TryParse(source.GetClaim(Claims.Subject), out var userId)
+            || !Guid.TryParse(source.GetClaim(RelistenClaims.SessionId), out var authSsoSessionId))
+        {
+            return InvalidGrant("The web authorization code is invalid.");
+        }
+
+        var authSso = await identitySessions.ValidateAuthSsoBootstrapAsync(
+            authSsoSessionId,
+            userId,
+            cancellationToken);
+        if (authSso is null)
+        {
+            return InvalidGrant("The web authentication session is no longer active.");
+        }
+
+        var principal = webPrincipalFactory.Create(
+            authSso.User,
+            authSso.SessionId,
+            source.GetScopes());
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 

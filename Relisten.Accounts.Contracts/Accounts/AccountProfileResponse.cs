@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Relisten.Accounts.Contracts.Accounts;
 
 public sealed record AccountProfileResponse(
@@ -8,4 +10,5 @@ public sealed record AccountProfileResponse(
     bool UsernameReviewNeeded,
     DateTimeOffset? UsernameReviewedAt,
     DateTimeOffset? UsernameChangeAvailableAt,
-    Guid NativeSessionUuid);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    Guid? NativeSessionUuid);

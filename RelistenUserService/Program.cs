@@ -3,6 +3,10 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Authentication.Browser;
+using RelistenUserService.Authentication.Development;
+using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Http;
 using RelistenUserService.Persistence;
@@ -37,6 +41,9 @@ if (runtime.Options.ApplyMigrationsOnStartup)
         .MigrateAsync(app.Lifetime.ApplicationStopping);
 }
 
+await app.Services.GetRequiredService<WebClientApplicationInitializer>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
+
 if (runtime.Options.EnableDevelopmentPersonas)
 {
     // Finish local client setup before Data Protection's hosted service tries to
@@ -48,19 +55,23 @@ if (runtime.Options.EnableDevelopmentPersonas)
 // TLS terminates at the cluster ingress. Only configured ingress networks may tell
 // OpenIddict that the original request was HTTPS or select a public Relisten host.
 app.UseForwardedHeaders();
+app.UseMiddleware<PrivateNoStoreMiddleware>();
 app.UseExceptionHandler();
 app.UseMiddleware<HostBoundaryMiddleware>();
+app.UseMiddleware<WebOriginRelayMiddleware>();
+app.UseMiddleware<AccountCredentialAmbiguityMiddleware>();
 app.UseRouting();
 app.UseMiddleware<RefreshTokenReplayMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<BrowserMutationProtectionMiddleware>();
 
 if (runtime.Options.EnableDevelopmentPersonas)
 {
     app.MapDevelopmentPersonaEndpoints();
 }
 
-app.MapControllers();
+app.MapControllers().RequireReviewedBrowserAuthorization();
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet(
     "/health/ready",

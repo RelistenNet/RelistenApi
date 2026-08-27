@@ -1,32 +1,32 @@
 using System.Net;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.WebUtilities;
+using RelistenUserService.Authentication.Sessions;
+using RelistenUserService.Configuration;
 using RelistenUserService.Identity;
-using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.Development;
 
 public static class DevelopmentPersonaEndpoints
 {
     public static void MapDevelopmentPersonaEndpoints(this WebApplication app)
     {
-        app.MapGet("/development/sign-in", ShowAsync);
+        app.MapGet("/development/sign-in", Show);
         app.MapPost("/development/sign-in", SignInAsync);
     }
 
-    private static Task<IResult> ShowAsync(
-        HttpContext context,
-        IAntiforgery antiforgery)
+    private static IResult Show(HttpContext context)
     {
+        // The persona form embeds the protected authorization request.
+        // Framing or caching the form would expose or replay that request.
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers.XFrameOptions = "DENY";
+
         var returnUrl = context.Request.Query["return_url"].ToString();
         if (!TryGetProvider(returnUrl, out var provider))
         {
-            return Task.FromResult(Results.BadRequest());
+            return Results.BadRequest();
         }
 
-        var tokens = antiforgery.GetAndStoreTokens(context);
         var personas = DevelopmentPersonaCatalog.All.Where(persona => persona.Provider == provider);
         var buttons = string.Join("", personas.Select(persona => $"""
             <button type="submit" name="persona" value="{WebUtility.HtmlEncode(persona.Id)}">
@@ -59,25 +59,38 @@ public static class DevelopmentPersonaEndpoints
                 authorization-code, PKCE, token, session, and account code.</p>
               <form method="post">
                 <input type="hidden" name="return_url" value="{{WebUtility.HtmlEncode(returnUrl)}}">
-                <input type="hidden" name="{{tokens.FormFieldName}}"
-                  value="{{WebUtility.HtmlEncode(tokens.RequestToken)}}">
                 {{buttons}}
               </form>
             </main></body>
             </html>
             """;
 
-        return Task.FromResult(Results.Content(html, "text/html; charset=utf-8"));
+        return Results.Content(html, "text/html; charset=utf-8");
     }
 
     private static async Task<IResult> SignInAsync(
         HttpContext context,
-        IAntiforgery antiforgery,
+        AccountsRuntimeConfiguration runtime,
         ExternalIdentityCompletionService identities,
-        TimeProvider timeProvider,
+        AuthSsoSignInService authSso,
         CancellationToken cancellationToken)
     {
-        await antiforgery.ValidateRequestAsync(context);
+        var origins = context.Request.Headers.Origin;
+        // The exact auth origin blocks cross-site Development-persona selection.
+        // __Host-relisten_csrf cannot protect two forms that race before its first write.
+        if (origins.Count != 1
+            || !string.Equals(
+                origins[0],
+                runtime.Issuer.GetLeftPart(UriPartial.Authority),
+                StringComparison.Ordinal))
+        {
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+        if (!context.Request.HasFormContentType)
+        {
+            return Results.BadRequest();
+        }
+
         var form = await context.Request.ReadFormAsync(cancellationToken);
         var returnUrl = form["return_url"].ToString();
         if (!TryGetProvider(returnUrl, out var provider))
@@ -92,17 +105,7 @@ public static class DevelopmentPersonaEndpoints
         }
 
         var user = await identities.CompleteAsync(persona.Profile, cancellationToken);
-        var identity = new ClaimsIdentity(AuthenticationConstants.DevelopmentIdentityScheme);
-        identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString("D")));
-        await context.SignInAsync(
-            AuthenticationConstants.DevelopmentIdentityScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties
-            {
-                AllowRefresh = false,
-                IsPersistent = false,
-                ExpiresUtc = timeProvider.GetUtcNow().AddMinutes(10)
-            });
+        await authSso.SignInAsync(context.Response, user, cancellationToken);
 
         return Results.LocalRedirect(returnUrl);
     }

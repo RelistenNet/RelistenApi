@@ -16,6 +16,7 @@ public sealed class User
 
     public ICollection<ExternalIdentity> ExternalIdentities { get; } = [];
     public ICollection<NativeSession> NativeSessions { get; } = [];
+    public ICollection<IdentitySession> IdentitySessions { get; } = [];
 }
 
 public static class UserStatuses

@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using Relisten.Accounts.Contracts.Errors;
 using Relisten.Accounts.Contracts.Library;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Library;
 
 namespace RelistenUserService.Controllers;
 
 [ApiController]
 [Route("v1/library")]
+[Authorize(Policy = AuthenticationConstants.LibraryAccessPolicy)]
 public sealed class LibraryController(
     CurrentAccountContext currentAccount,
     FavoriteMutationService mutationService,
@@ -16,13 +18,11 @@ public sealed class LibraryController(
     : ControllerBase
 {
     [HttpGet("snapshot")]
-    [Authorize(Policy = AuthenticationConstants.LibraryReadPolicy)]
     public async Task<ActionResult<FavoriteLibrarySnapshot>> Snapshot(
         CancellationToken cancellationToken) =>
         Ok(await readService.GetSnapshotAsync(currentAccount.User.Id, cancellationToken));
 
     [HttpGet("changes")]
-    [Authorize(Policy = AuthenticationConstants.LibraryReadPolicy)]
     public async Task<ActionResult<FavoriteLibraryChanges>> Changes(
         [FromQuery] string? after,
         CancellationToken cancellationToken)
@@ -41,7 +41,6 @@ public sealed class LibraryController(
     }
 
     [HttpPost("favorite-mutations:batch")]
-    [Authorize(Policy = AuthenticationConstants.LibraryWritePolicy)]
     [RequestSizeLimit(256 * 1024)]
     public async Task<ActionResult<FavoriteMutationBatchResponse>> MutateFavorites(
         [FromBody] FavoriteMutationBatchRequest? request,

@@ -5,9 +5,28 @@
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
-      "applicationUrl": "http://localhost:5443",
+      "applicationUrl": "https://127.0.0.1:5443",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "RelistenUserService.LocalGoogle": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "https://127.0.0.1:5443",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "AllowedHosts": "localhost;accounts.relisten.localhost",
+        "Accounts__Issuer": "https://localhost:5443",
+        "Accounts__AuthHost": "localhost:5443",
+        "Accounts__AccountsHost": "accounts.relisten.localhost:5443",
+        "Accounts__EnableDevelopmentPersonas": "false",
+        "Accounts__EnableExternalProviders": "true",
+        "Accounts__Google__Enabled": "true",
+        "Accounts__Apple__Enabled": "false",
+        "ACCOUNTS_DATABASE_URL": "Host=127.0.0.1;Port=15432;Database=relisten_db;Username=relisten;Password=local_dev_password",
+        "ACCOUNTS_LOCK_DATABASE_URL": "Host=127.0.0.1;Port=15432;Database=relisten_db;Username=relisten;Password=local_dev_password"
       }
     }
   }

@@ -3,7 +3,7 @@ using OpenIddict.Abstractions;
 using RelistenUserService.Identity;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
-namespace RelistenUserService.Authentication;
+namespace RelistenUserService.Authentication.OpenIdConnect;
 
 internal static class ExternalIdentityProfileFactory
 {
