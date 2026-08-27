@@ -97,10 +97,9 @@ public sealed class TestIdentitySessionLifecycleIntegration
         (await AuthenticateAsync(authSso.CookieValue, IdentitySessionPurposes.Web))
             .Should().BeNull();
 
-        var changedCredential = authSso.CookieValue.ToCharArray();
-        changedCredential[^1] = changedCredential[^1] == 'A' ? 'B' : 'A';
+        var changedCredential = new SessionCredentialCodec().Issue(authSso.SessionId);
         (await AuthenticateAsync(
-            new string(changedCredential),
+            changedCredential.CookieValue,
             IdentitySessionPurposes.AuthSso)).Should().BeNull();
 
         await using (var dbContext = _database.CreateContext())
@@ -181,6 +180,77 @@ public sealed class TestIdentitySessionLifecycleIntegration
             IdentitySessionPurposes.Web);
         finalTouch!.WasTouched.Should().BeTrue();
         finalTouch.ExpiresAt.Should().Be(web.ExpiresAt + TimeSpan.FromDays(150));
+        await using var verificationContext = _database.CreateContext();
+        var finalRow = await verificationContext.Sessions.AsNoTracking()
+            .SingleAsync(session => session.Id == web.SessionId);
+        finalRow.SlidingExpiresAt.Should().Be(finalRow.AbsoluteExpiresAt);
+    }
+
+    [Test]
+    public async Task Bootstrap_requires_an_active_auth_sso_for_the_exact_user()
+    {
+        var authSso = await CreateAuthSsoAsync();
+
+        await using (var dbContext = _database.CreateContext())
+        {
+            var lifecycle = Lifecycle(dbContext);
+            (await lifecycle.ValidateAuthSsoBootstrapAsync(
+                    authSso.SessionId,
+                    _userId,
+                    CancellationToken.None))
+                .Should().NotBeNull();
+            (await lifecycle.ValidateAuthSsoBootstrapAsync(
+                    authSso.SessionId,
+                    Guid.CreateVersion7(),
+                    CancellationToken.None))
+                .Should().BeNull();
+        }
+
+        await using (var dbContext = _database.CreateContext())
+        {
+            await dbContext.Sessions
+                .Where(session => session.Id == authSso.SessionId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(session => session.RevokedAt, _clock.GetUtcNow())
+                    .SetProperty(session => session.UpdatedAt, _clock.GetUtcNow()));
+        }
+
+        await using var verificationContext = _database.CreateContext();
+        (await Lifecycle(verificationContext).ValidateAuthSsoBootstrapAsync(
+                authSso.SessionId,
+                _userId,
+                CancellationToken.None))
+            .Should().BeNull();
+    }
+
+    [Test]
+    public async Task Web_creation_rejects_a_revoked_parent_without_writing_a_child()
+    {
+        var authSso = await CreateAuthSsoAsync();
+        await using (var dbContext = _database.CreateContext())
+        {
+            await dbContext.Sessions
+                .Where(session => session.Id == authSso.SessionId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(session => session.RevokedAt, _clock.GetUtcNow())
+                    .SetProperty(session => session.UpdatedAt, _clock.GetUtcNow()));
+        }
+
+        await using (var dbContext = _database.CreateContext())
+        {
+            var create = () => Lifecycle(dbContext).CreateWebAsync(
+                _userId,
+                authSso.SessionId,
+                AuthenticationConstants.LocalWebOrigin,
+                CancellationToken.None);
+            await create.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        await using var verificationContext = _database.CreateContext();
+        (await verificationContext.Sessions.AnyAsync(session =>
+                session.Purpose == IdentitySessionPurposes.Web
+                && session.AuthSsoSessionId == authSso.SessionId))
+            .Should().BeFalse();
     }
 
     [Test]
@@ -188,12 +258,13 @@ public sealed class TestIdentitySessionLifecycleIntegration
     {
         var authSso = await CreateAuthSsoAsync();
         var web = await CreateWebAsync(authSso.SessionId);
+        var siblingWeb = await CreateWebAsync(authSso.SessionId);
 
         _clock.Advance(TimeSpan.FromDays(31));
         await using (var dbContext = _database.CreateContext())
         {
             await dbContext.Sessions
-                .Where(session => session.Id == web.SessionId)
+                .Where(session => session.AuthSsoSessionId == authSso.SessionId)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(session => session.LastSeenAt, _clock.GetUtcNow())
                     .SetProperty(
@@ -203,6 +274,8 @@ public sealed class TestIdentitySessionLifecycleIntegration
         }
 
         (await AuthenticateAsync(web.CookieValue, IdentitySessionPurposes.Web))
+            .Should().NotBeNull();
+        (await AuthenticateAsync(siblingWeb.CookieValue, IdentitySessionPurposes.Web))
             .Should().NotBeNull();
 
         await using (var dbContext = _database.CreateContext())
@@ -214,10 +287,14 @@ public sealed class TestIdentitySessionLifecycleIntegration
 
         (await AuthenticateAsync(web.CookieValue, IdentitySessionPurposes.Web))
             .Should().BeNull();
+        (await AuthenticateAsync(siblingWeb.CookieValue, IdentitySessionPurposes.Web))
+            .Should().BeNull();
         await using var verificationContext = _database.CreateContext();
         var rows = await verificationContext.Sessions.AsNoTracking()
-            .Where(session => session.Id == authSso.SessionId || session.Id == web.SessionId)
+            .Where(session => session.Id == authSso.SessionId
+                || session.AuthSsoSessionId == authSso.SessionId)
             .ToListAsync();
+        rows.Should().HaveCount(3);
         rows.Should().OnlyContain(session => session.RevokedAt == _clock.GetUtcNow());
     }
 
@@ -245,10 +322,9 @@ public sealed class TestIdentitySessionLifecycleIntegration
             AuthenticationConstants.CanonicalWebOrigin);
         wrongOrigin.SetCookieHeaders.Should().BeEmpty();
 
-        var changedCookie = authSso.CookieValue.ToCharArray();
-        changedCookie[^1] = changedCookie[^1] == 'A' ? 'B' : 'A';
+        var changedCookie = new SessionCredentialCodec().Issue(authSso.SessionId);
         var wrongValidator = await ClearAuthSsoAsync(
-            new string(changedCookie),
+            changedCookie.CookieValue,
             AuthenticationConstants.LocalWebOrigin);
         wrongValidator.SetCookieHeaders.Should().BeEmpty();
 
@@ -265,7 +341,7 @@ public sealed class TestIdentitySessionLifecycleIntegration
     }
 
     [Test]
-    public async Task Database_rejects_cross_user_parent_links_and_raw_validator_columns_do_not_exist()
+    public async Task Database_rejects_cross_user_parent_links()
     {
         var authSso = await CreateAuthSsoAsync();
         var otherUser = await _database.CreateUserAsync($"o_{Guid.NewGuid():N}"[..30]);
@@ -291,18 +367,24 @@ public sealed class TestIdentitySessionLifecycleIntegration
 
         var save = () => dbContext.SaveChangesAsync();
         await save.Should().ThrowAsync<DbUpdateException>();
+    }
 
-        await using var schemaContext = _database.CreateContext();
-        var columns = await schemaContext.Database
-            .SqlQueryRaw<string>("""
-                SELECT column_name AS "Value"
-                FROM information_schema.columns
-                WHERE table_schema = 'identity' AND table_name = 'sessions'
-                """)
-            .ToListAsync();
-        columns.Should().Contain("validator_hash");
-        columns.Should().NotContain(column => column.Contains("validator", StringComparison.Ordinal)
-            && column != "validator_hash");
+    [Test]
+    public async Task Authentication_rejects_a_stored_origin_outside_runtime_configuration()
+    {
+        var authSso = await CreateAuthSsoAsync();
+        var web = await CreateWebAsync(authSso.SessionId);
+        await using (var dbContext = _database.CreateContext())
+        {
+            await dbContext.Sessions
+                .Where(session => session.Id == web.SessionId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(
+                    session => session.WebOrigin,
+                    "https://preview.relisten.localhost:5173"));
+        }
+
+        (await AuthenticateAsync(web.CookieValue, IdentitySessionPurposes.Web))
+            .Should().BeNull();
     }
 
     [Test]

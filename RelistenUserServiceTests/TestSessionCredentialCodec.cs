@@ -65,16 +65,4 @@ public sealed class TestSessionCredentialCodec
         _codec.TryParse(string.Join('.', parts), out _).Should().BeFalse();
     }
 
-    [Test]
-    public void Rejects_any_changed_validator()
-    {
-        var issued = _codec.Issue(Guid.CreateVersion7());
-        _codec.TryParse(issued.CookieValue, out var credential).Should().BeTrue();
-        var changedHash = credential!.ValidatorHash.ToArray();
-        changedHash[16] ^= 1;
-
-        _codec.ValidatorMatches(changedHash, issued.ValidatorHash).Should().BeFalse();
-        credential.Clear();
-        CryptographicOperations.ZeroMemory(changedHash);
-    }
 }

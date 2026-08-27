@@ -66,10 +66,22 @@ public sealed class TestReviewedAccountAccessAuthorization
 
         missingScope.HasSucceeded.Should().BeFalse();
         missingScopeAccount.IsNative.Should().BeTrue();
+
+        session.RevokedAt = DateTimeOffset.UtcNow;
+        session.UpdatedAt = session.RevokedAt.Value;
+        await dbContext.SaveChangesAsync();
+        var revokedSessionAccount = new CurrentAccountContext();
+        var revokedSession = AuthorizationContext(
+            requirement,
+            NativePrincipal(user, session, [RelistenScopes.UserRead]));
+        await Handler(dbContext, revokedSessionAccount).HandleAsync(revokedSession);
+
+        revokedSession.HasSucceeded.Should().BeFalse();
+        revokedSessionAccount.IsLoaded.Should().BeFalse();
     }
 
     [Test]
-    public async Task Web_access_requires_the_persisted_web_capability()
+    public async Task Web_access_uses_capabilities_and_ignores_native_scopes()
     {
         await using var dbContext = _database.CreateContext();
         var user = await dbContext.Users.SingleAsync(item => item.Id == _userId);

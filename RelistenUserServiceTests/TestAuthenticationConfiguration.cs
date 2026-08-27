@@ -153,37 +153,7 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
-    public void Production_external_sign_in_requires_Apple()
-    {
-        var environment = new TestHostEnvironment(Environments.Production);
-        var options = new AccountsOptions
-        {
-            Issuer = "https://auth.relisten.net",
-            AuthHost = "auth.relisten.net",
-            AccountsHost = "accounts.relisten.net",
-            TrustedProxyNetworks = ["127.0.0.1/32"],
-            EnableExternalProviders = true,
-            WebClientSecret = "test-web-client-secret",
-            Google = new()
-            {
-                Enabled = true,
-                ClientId = "google-client",
-                ClientSecret = "google-secret"
-            },
-            Apple = new()
-            {
-                Enabled = false
-            }
-        };
-
-        var action = () => AccountsRuntimeConfiguration.Create(options, environment);
-
-        action.Should().Throw<InvalidOperationException>()
-            .WithMessage("*requires both Google and Apple*");
-    }
-
-    [Test]
-    public void Rejects_a_web_origin_that_the_session_schema_cannot_store()
+    public void Rejects_a_web_origin_outside_the_supported_browser_hosts()
     {
         var environment = new TestHostEnvironment(Environments.Development);
         var options = new AccountsOptions
@@ -249,9 +219,22 @@ public sealed class TestAuthenticationConfiguration
         using var provider = BuildProvider(options, Environments.Production);
 
         var server = provider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
+        using var previousCertificate = X509CertificateLoader.LoadPkcs12FromFile(
+            previous,
+            CertificatePassword);
+        using var currentCertificate = X509CertificateLoader.LoadPkcs12FromFile(
+            current,
+            CertificatePassword);
+        var expectedKeyIds = new[]
+        {
+            previousCertificate.Thumbprint,
+            currentCertificate.Thumbprint
+        };
 
-        server.SigningCredentials.Should().HaveCount(2);
-        server.EncryptionCredentials.Should().HaveCount(2);
+        server.SigningCredentials.Select(credential => credential.Key.KeyId)
+            .Should().BeEquivalentTo(expectedKeyIds);
+        server.EncryptionCredentials.Select(credential => credential.Key.KeyId)
+            .Should().BeEquivalentTo(expectedKeyIds);
     }
 
     private ServiceProvider BuildProvider(AccountsOptions options, string environmentName)

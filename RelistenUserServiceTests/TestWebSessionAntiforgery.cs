@@ -56,14 +56,11 @@ public sealed class TestWebSessionAntiforgery
     }
 
     [Test]
-    public async Task Native_mutation_does_not_require_browser_csrf_or_origin()
+    public async Task Bearer_only_mutation_bypasses_browser_csrf_and_origin()
     {
-        var currentAccount = new CurrentAccountContext();
-        currentAccount.SetNative(
-            new User { Id = Guid.CreateVersion7() },
-            Guid.CreateVersion7());
         var context = new DefaultHttpContext();
         context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Authorization = "Bearer native-credential";
         var reachedApplication = false;
 
         await new BrowserMutationProtectionMiddleware(_ =>
@@ -71,20 +68,24 @@ public sealed class TestWebSessionAntiforgery
                 reachedApplication = true;
                 return Task.CompletedTask;
             })
-            .InvokeAsync(context, currentAccount, null!);
+            .InvokeAsync(context, new CurrentAccountContext(), null!);
 
         reachedApplication.Should().BeTrue();
     }
 
-    [Test]
-    public async Task Web_mutation_requires_the_exact_origin_and_a_valid_token()
+    [TestCase("POST")]
+    [TestCase("PUT")]
+    [TestCase("PATCH")]
+    [TestCase("DELETE")]
+    public async Task Every_web_mutation_requires_the_exact_origin_and_a_valid_token(
+        string method)
     {
         using var provider = BuildProvider();
         var sessionId = Guid.CreateVersion7();
         var tokens = CreateTokens(provider, sessionId);
         using var scope = provider.CreateScope();
         var context = Context(scope, sessionId);
-        context.Request.Method = HttpMethods.Post;
+        context.Request.Method = method;
         context.Request.Headers.Origin = AuthenticationConstants.LocalWebOrigin;
         context.Request.Headers.Cookie =
             $"{AuthenticationConstants.WebSessionCookie}=opaque; "
@@ -101,6 +102,28 @@ public sealed class TestWebSessionAntiforgery
                 context,
                 scope.ServiceProvider.GetRequiredService<CurrentAccountContext>(),
                 scope.ServiceProvider.GetRequiredService<IAntiforgery>());
+
+        reachedApplication.Should().BeTrue();
+    }
+
+    [TestCase("GET")]
+    [TestCase("HEAD")]
+    [TestCase("OPTIONS")]
+    [TestCase("TRACE")]
+    public async Task Safe_methods_bypass_browser_mutation_protection(string method)
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Method = method;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque";
+        var reachedApplication = false;
+
+        await new BrowserMutationProtectionMiddleware(_ =>
+            {
+                reachedApplication = true;
+                return Task.CompletedTask;
+            })
+            .InvokeAsync(context, new CurrentAccountContext(), null!);
 
         reachedApplication.Should().BeTrue();
     }
@@ -127,6 +150,58 @@ public sealed class TestWebSessionAntiforgery
 
         await new BrowserMutationProtectionMiddleware(_ => Task.CompletedTask)
             .InvokeAsync(context, currentAccount, null!);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [TestCase(null)]
+    [TestCase("not-an-antiforgery-token")]
+    public async Task Web_mutation_rejects_a_missing_or_invalid_csrf_header(
+        string? requestToken)
+    {
+        using var provider = BuildProvider();
+        var sessionId = Guid.CreateVersion7();
+        var tokens = CreateTokens(provider, sessionId);
+        using var scope = provider.CreateScope();
+        var context = Context(scope, sessionId);
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Origin = AuthenticationConstants.LocalWebOrigin;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque; "
+            + $"{AuthenticationConstants.CsrfCookie}={tokens.CookieToken}";
+        if (requestToken is not null)
+        {
+            context.Request.Headers[AuthenticationConstants.CsrfHeader] = requestToken;
+        }
+
+        await new BrowserMutationProtectionMiddleware(_ => Task.CompletedTask)
+            .InvokeAsync(
+                context,
+                scope.ServiceProvider.GetRequiredService<CurrentAccountContext>(),
+                scope.ServiceProvider.GetRequiredService<IAntiforgery>());
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Test]
+    public async Task Web_mutation_rejects_a_token_from_a_previous_session()
+    {
+        using var provider = BuildProvider();
+        var tokens = CreateTokens(provider, Guid.CreateVersion7());
+        using var scope = provider.CreateScope();
+        var context = Context(scope, Guid.CreateVersion7());
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Origin = AuthenticationConstants.LocalWebOrigin;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque; "
+            + $"{AuthenticationConstants.CsrfCookie}={tokens.CookieToken}";
+        context.Request.Headers[AuthenticationConstants.CsrfHeader] = tokens.RequestToken;
+
+        await new BrowserMutationProtectionMiddleware(_ => Task.CompletedTask)
+            .InvokeAsync(
+                context,
+                scope.ServiceProvider.GetRequiredService<CurrentAccountContext>(),
+                scope.ServiceProvider.GetRequiredService<IAntiforgery>());
 
         context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
     }

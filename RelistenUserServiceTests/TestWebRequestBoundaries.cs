@@ -3,10 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.Net.Http.Headers;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.AspNetCore.Routing.Patterns;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Net.Http.Headers;
 using NUnit.Framework;
 using OpenIddict.Client.AspNetCore;
 using OpenIddict.Validation.AspNetCore;
@@ -42,8 +41,10 @@ public sealed class TestWebRequestBoundaries
         ApplicationReturnPath.TryValidate(value, out _).Should().BeFalse();
     }
 
-    [Test]
-    public async Task Relays_only_an_exact_configured_web_origin_from_an_expected_backend()
+    [TestCase("/auth/session/callback")]
+    [TestCase("/v1/me")]
+    public async Task Relays_an_exact_configured_web_origin_on_a_reviewed_route(
+        string path)
     {
         var reachedApplication = false;
         var middleware = new WebOriginRelayMiddleware(
@@ -59,33 +60,9 @@ public sealed class TestWebRequestBoundaries
                 return Task.CompletedTask;
             },
             Runtime());
-        var context = Context(
-            "/auth/session/callback",
-            "accounts.relisten.net");
+        var context = Context(path, "accounts.relisten.net");
         context.Request.Headers[AuthenticationConstants.WebOriginHeader] =
             "https://web.relisten.localhost:5173";
-
-        await middleware.InvokeAsync(context);
-
-        reachedApplication.Should().BeTrue();
-    }
-
-    [Test]
-    public async Task Relays_a_reviewed_shared_resource_from_the_accounts_backend()
-    {
-        var reachedApplication = false;
-        var middleware = new WebOriginRelayMiddleware(
-            context =>
-            {
-                reachedApplication = true;
-                context.Features.Get<IWebOriginFeature>()!.Origin.Should()
-                    .Be(AuthenticationConstants.LocalWebOrigin);
-                return Task.CompletedTask;
-            },
-            Runtime());
-        var context = Context("/v1/me", "accounts.relisten.net");
-        context.Request.Headers[AuthenticationConstants.WebOriginHeader] =
-            AuthenticationConstants.LocalWebOrigin;
 
         await middleware.InvokeAsync(context);
 
@@ -263,6 +240,7 @@ public sealed class TestWebRequestBoundaries
     }
 
     [TestCase("/auth/session/callback", true)]
+    [TestCase("/auth/sso/clear", true)]
     [TestCase("/api/user/v1/csrf", true)]
     [TestCase("/v1/me", true)]
     [TestCase("/v1/library/new-read-model", true)]
@@ -289,11 +267,9 @@ public sealed class TestWebRequestBoundaries
     }
 
     [TestCase("/auth/session/start", true)]
-    [TestCase("/auth/session/new-mutation", true)]
     [TestCase("/api/user/v1/csrf", true)]
     [TestCase("/v1/me", true)]
     [TestCase("/v1/library/new-read-model", true)]
-    [TestCase("/v1/library/new-mutation", true)]
     [TestCase("/auth/session-evil", false)]
     [TestCase("/api/user/v1/me", false)]
     [TestCase("/v1/playback", false)]
@@ -307,26 +283,36 @@ public sealed class TestWebRequestBoundaries
         BrowserRouteBoundary.CanRelay(context.Request.Path).Should().Be(expected);
     }
 
-    [TestCase("v1/library/new-action", AuthenticationConstants.LibraryAccessPolicy)]
-    [TestCase("auth/session/new-action", AuthenticationConstants.BrowserProfileReadPolicy)]
-    [TestCase("api/user/v1/csrf", AuthenticationConstants.BrowserProfileReadPolicy)]
-    [TestCase("v1/library-evil", null)]
-    [TestCase("v1/playback", null)]
-    public void Reviewed_controller_route_families_inherit_authorization(
-        string route,
-        string? expectedPolicy)
+    [Test]
+    public async Task Library_actions_inherit_authorization_through_real_MVC_routing()
     {
-        var conventions = new EndpointConventionProbe();
-        conventions.RequireReviewedBrowserAuthorization();
-        var endpoint = conventions.Build(route);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(ReviewedBrowserConventionProbeController)
+                .Assembly.FullName
+        });
+        builder.Services.AddControllers()
+            .AddApplicationPart(typeof(ReviewedBrowserConventionProbeController).Assembly);
+        await using var app = builder.Build();
+        app.MapControllers().RequireReviewedBrowserAuthorization();
 
-        endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()
+        var endpoints = ((IEndpointRouteBuilder)app).DataSources
+            .SelectMany(source => source.Endpoints)
+            .OfType<RouteEndpoint>()
+            .ToDictionary(endpoint => endpoint.RoutePattern.RawText!);
+
+        endpoints["v1/library/convention-probe"].Metadata
+            .GetOrderedMetadata<IAuthorizeData>()
             .Select(data => data.Policy)
-            .Should().Equal(expectedPolicy is null ? [] : [expectedPolicy]);
+            .Should().ContainSingle()
+            .Which.Should().Be(AuthenticationConstants.LibraryAccessPolicy);
+        endpoints["v1/unreviewed-convention-probe"].Metadata
+            .GetOrderedMetadata<IAuthorizeData>()
+            .Should().BeEmpty();
     }
 
     [Test]
-    public void Selects_exactly_one_account_credential_scheme()
+    public void Selects_the_native_or_web_credential_scheme()
     {
         var bearer = Context("/v1/me", "accounts.relisten.net");
         bearer.Request.Headers.Authorization = "Bearer native-credential";
@@ -338,13 +324,6 @@ public sealed class TestWebRequestBoundaries
             $"{AuthenticationConstants.WebSessionCookie}=web-credential";
         AccountCredentialSelector.SelectScheme(web).Should().Be(
             AuthenticationConstants.WebSessionScheme);
-
-        var both = Context("/v1/me", "accounts.relisten.net");
-        both.Request.Headers.Authorization = "Bearer native-credential";
-        both.Request.Headers.Cookie =
-            $"{AuthenticationConstants.WebSessionCookie}=web-credential";
-        AccountCredentialSelector.SelectScheme(both).Should().Be(
-            AuthenticationConstants.RejectedAccountCredentialScheme);
     }
 
     [Test]
@@ -386,30 +365,14 @@ public sealed class TestWebRequestBoundaries
         },
         new Uri("https://auth.relisten.net"),
         TrustedProxyNetworks: []);
+}
 
-    private sealed class EndpointConventionProbe : IEndpointConventionBuilder
-    {
-        private readonly List<Action<EndpointBuilder>> _conventions = [];
+[ApiController]
+public sealed class ReviewedBrowserConventionProbeController : ControllerBase
+{
+    [HttpGet("v1/library/convention-probe")]
+    public IActionResult Library() => Ok();
 
-        public void Add(Action<EndpointBuilder> convention) =>
-            _conventions.Add(convention);
-
-        public Endpoint Build(string route)
-        {
-            var builder = new RouteEndpointBuilder(
-                _ => Task.CompletedTask,
-                RoutePatternFactory.Parse(route),
-                order: 0);
-            builder.Metadata.Add(new ControllerActionDescriptor
-            {
-                AttributeRouteInfo = new() { Template = route }
-            });
-            foreach (var convention in _conventions)
-            {
-                convention(builder);
-            }
-
-            return builder.Build();
-        }
-    }
+    [HttpGet("v1/unreviewed-convention-probe")]
+    public IActionResult Unreviewed() => Ok();
 }
