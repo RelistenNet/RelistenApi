@@ -684,14 +684,20 @@ production user field.
   wrong-account result did not occur. Origin failures returned 403, malformed
   same-origin form returned 400, the form returned private, no-store and denied
   framing, and protocol redirect parameters did not appear in sanitized logs.
-- Production read-only: PostgreSQL was version 17.10 and read-only;
-  identity.sessions was absent; UUIDv7 extraction was available; the User
-  Service had one Ready replica on the existing latest image; WebClientSecret
-  was absent without reading any Secret value; Traefik 3.7.4 used non-strict
-  prefix matching; the existing certificate covered relisten.net; and the live
-  relisten.net ingress still contained only Timber's / route. The latest
-  identity migration remained 20260719193000_ConfigureProductionIosClient.
-  No production state changed.
+- Production read-only, refreshed 2026-08-27: PostgreSQL was version 17.10 and
+  read-only. identity.sessions was absent, UUIDv7 extraction was available,
+  and the latest identity migration remained
+  20260719193000_ConfigureProductionIosClient. The User Service had one Ready
+  replica on image digest
+  sha256:7682323baf6a3f8c8a294359a4c52476ca43da8edf52f43fe681d30d73894f47.
+  Auth discovery and accounts readiness returned 200. The WebClientSecret key
+  was absent without reading any Secret value. The live relisten.net ingress
+  still contained only Timber's / route. /auth/session and /v1/me returned
+  Timber HTML. /v1/library/snapshot returned Timber's HTML 404.
+  /v1/library-evil and /v1/not-reviewed remained on Timber. Flux origin/main
+  had two newer PgBouncer commits with no overlap in the three browser-session
+  files. Record the running image digest again immediately before the first
+  approved write. No production state changed.
 
 ### Pending evidence
 
