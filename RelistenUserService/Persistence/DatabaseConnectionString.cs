@@ -41,8 +41,8 @@ public static class DatabaseConnectionString
         IConfiguration configuration,
         IHostEnvironment environment)
     {
-        var configured = configuration.GetConnectionString("AccountsLock")
-            ?? configuration["ACCOUNTS_LOCK_DATABASE_URL"];
+        var configured = configuration["ACCOUNTS_LOCK_DATABASE_URL"]
+            ?? configuration.GetConnectionString("AccountsLock");
         if (string.IsNullOrWhiteSpace(configured))
         {
             if (environment.IsDevelopment())

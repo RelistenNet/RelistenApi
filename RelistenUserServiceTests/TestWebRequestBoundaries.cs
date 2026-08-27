@@ -202,15 +202,26 @@ public sealed class TestWebRequestBoundaries
         metadata.SameSite.ToString().Should().Be("Lax");
     }
 
-    [Test]
-    public void Session_start_selects_the_local_registration_and_google_provider()
+    [TestCase(true, AuthenticationConstants.GoogleProvider)]
+    [TestCase(false, AuthenticationConstants.AppleProvider)]
+    public void Session_start_selects_the_local_registration_and_enabled_provider(
+        bool googleEnabled,
+        string expectedProvider)
     {
         var context = Context(
             "/auth/session/start",
             "web.relisten.localhost:5173");
         context.Features.Set<IWebOriginFeature>(new WebOriginFeature(
             AuthenticationConstants.LocalWebOrigin));
-        var controller = new WebSessionController(null!, null!, null!, null!, null!)
+        var runtime = new AccountsRuntimeConfiguration(
+            new AccountsOptions
+            {
+                Google = new() { Enabled = googleEnabled },
+                Apple = new() { Enabled = !googleEnabled }
+            },
+            new Uri("https://auth.relisten.test"),
+            []);
+        var controller = new WebSessionController(runtime, null!, null!, null!, null!)
         {
             ControllerContext = new ControllerContext { HttpContext = context }
         };
@@ -225,7 +236,7 @@ public sealed class TestWebRequestBoundaries
             OpenIddictClientAspNetCoreConstants.Properties.RegistrationId]
             .Should().Be(AuthenticationConstants.LocalWebRegistration);
         challenge.Properties.Parameters["provider"]
-            .Should().Be(AuthenticationConstants.GoogleProvider);
+            .Should().Be(expectedProvider);
     }
 
     [Test]

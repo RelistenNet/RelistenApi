@@ -113,10 +113,12 @@ public sealed class TestAuthenticationConfiguration
             WebClientSecret = "test-web-client-secret",
             Google = new()
             {
+                Enabled = true,
                 ClientId = "google-client"
             },
             Apple = new()
             {
+                Enabled = true,
                 ClientId = "apple-client",
                 TeamId = "apple-team",
                 KeyId = "apple-key",
@@ -128,6 +130,56 @@ public sealed class TestAuthenticationConfiguration
 
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("*Accounts:Google:ClientSecret*");
+    }
+
+    [Test]
+    public void Local_Google_registers_without_loading_Apple_credentials()
+    {
+        using var provider = BuildProvider(
+            CreateLocalGoogleOptions(),
+            Environments.Development);
+
+        var registrations = provider
+            .GetRequiredService<IOptions<OpenIddictClientOptions>>()
+            .Value
+            .Registrations;
+
+        registrations.Should().ContainSingle(
+            registration => registration.RegistrationId
+                == AuthenticationConstants.GoogleProvider);
+        registrations.Should().NotContain(
+            registration => registration.RegistrationId
+                == AuthenticationConstants.AppleProvider);
+    }
+
+    [Test]
+    public void Production_external_sign_in_requires_Apple()
+    {
+        var environment = new TestHostEnvironment(Environments.Production);
+        var options = new AccountsOptions
+        {
+            Issuer = "https://auth.relisten.net",
+            AuthHost = "auth.relisten.net",
+            AccountsHost = "accounts.relisten.net",
+            TrustedProxyNetworks = ["127.0.0.1/32"],
+            EnableExternalProviders = true,
+            WebClientSecret = "test-web-client-secret",
+            Google = new()
+            {
+                Enabled = true,
+                ClientId = "google-client",
+                ClientSecret = "google-secret"
+            },
+            Apple = new()
+            {
+                Enabled = false
+            }
+        };
+
+        var action = () => AccountsRuntimeConfiguration.Create(options, environment);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*requires both Google and Apple*");
     }
 
     [Test]
@@ -294,6 +346,29 @@ public sealed class TestAuthenticationConfiguration
         DevelopmentCertificateAuthorityPath =
             CreateCertificateAuthority($"development-ca-{Guid.NewGuid():N}.pem"),
         WebClientSecret = "test-web-client-secret"
+    };
+
+    private AccountsOptions CreateLocalGoogleOptions() => new()
+    {
+        Issuer = "https://localhost:5443",
+        Audience = "https://accounts.relisten.test",
+        AuthHost = "localhost:5443",
+        AccountsHost = "accounts.relisten.localhost:5443",
+        WebOrigins = ["https://web.relisten.localhost:5173"],
+        EnableExternalProviders = true,
+        DevelopmentCertificateAuthorityPath =
+            CreateCertificateAuthority($"google-development-ca-{Guid.NewGuid():N}.pem"),
+        WebClientSecret = "test-web-client-secret",
+        Google = new()
+        {
+            Enabled = true,
+            ClientId = "local-google-client",
+            ClientSecret = "local-google-secret"
+        },
+        Apple = new()
+        {
+            Enabled = false
+        }
     };
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment

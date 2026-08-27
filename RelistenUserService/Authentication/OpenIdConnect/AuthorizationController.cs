@@ -130,9 +130,11 @@ public sealed class AuthorizationController(
     {
         var scheme = request.GetParameter("provider").ToString() switch
         {
-            AuthenticationConstants.GoogleProvider =>
+            AuthenticationConstants.GoogleProvider
+                when runtime.Options.Google.Enabled =>
                 OpenIddictClientWebIntegrationConstants.Providers.Google,
-            AuthenticationConstants.AppleProvider =>
+            AuthenticationConstants.AppleProvider
+                when runtime.Options.Apple.Enabled =>
                 OpenIddictClientWebIntegrationConstants.Providers.Apple,
             _ => null
         };

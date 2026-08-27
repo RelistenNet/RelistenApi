@@ -255,7 +255,9 @@ public static class AuthenticationServiceCollectionExtensions
         options.UseAspNetCore()
             .EnableRedirectionEndpointPassthrough();
         var systemNetHttp = options.UseSystemNetHttp();
-        if (environment.IsDevelopment() && runtime.Options.EnableDevelopmentPersonas)
+        if (environment.IsDevelopment()
+            && !string.IsNullOrWhiteSpace(
+                runtime.Options.DevelopmentCertificateAuthorityPath))
         {
             var trust = new DevelopmentBackchannelCertificateTrust(
                 runtime.Issuer,
@@ -273,19 +275,26 @@ public static class AuthenticationServiceCollectionExtensions
         if (runtime.Options.EnableExternalProviders)
         {
             var providers = options.UseWebProviders();
-            providers.AddGoogle(google =>
-                google.SetClientId(runtime.Options.Google.ClientId)
-                    .SetClientSecret(runtime.Options.Google.ClientSecret)
-                    .SetRegistrationId(AuthenticationConstants.GoogleProvider)
-                    .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
-                    .AddScopes(Scopes.Email, Scopes.Profile));
-            providers.AddApple(apple =>
-                apple.SetClientId(runtime.Options.Apple.ClientId)
-                    .SetTeamId(runtime.Options.Apple.TeamId)
-                    .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
-                    .SetRegistrationId(AuthenticationConstants.AppleProvider)
-                    .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
-                    .AddScopes(Scopes.Email));
+            if (runtime.Options.Google.Enabled)
+            {
+                providers.AddGoogle(google =>
+                    google.SetClientId(runtime.Options.Google.ClientId)
+                        .SetClientSecret(runtime.Options.Google.ClientSecret)
+                        .SetRegistrationId(AuthenticationConstants.GoogleProvider)
+                        .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
+                        .AddScopes(Scopes.Email, Scopes.Profile));
+            }
+
+            if (runtime.Options.Apple.Enabled)
+            {
+                providers.AddApple(apple =>
+                    apple.SetClientId(runtime.Options.Apple.ClientId)
+                        .SetTeamId(runtime.Options.Apple.TeamId)
+                        .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
+                        .SetRegistrationId(AuthenticationConstants.AppleProvider)
+                        .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
+                        .AddScopes(Scopes.Email));
+            }
         }
     }
 

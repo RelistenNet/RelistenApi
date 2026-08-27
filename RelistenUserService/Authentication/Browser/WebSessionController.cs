@@ -61,7 +61,9 @@ public sealed class WebSessionController(
         {
             properties.Parameters[Parameters.Prompt] = PromptValues.SelectAccount;
         }
-        properties.Parameters["provider"] = AuthenticationConstants.GoogleProvider;
+        properties.Parameters["provider"] = runtime.Options.Google.Enabled
+            ? AuthenticationConstants.GoogleProvider
+            : AuthenticationConstants.AppleProvider;
 
         return Challenge(
             properties,

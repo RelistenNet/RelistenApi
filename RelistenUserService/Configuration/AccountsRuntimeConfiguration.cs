@@ -7,6 +7,10 @@ public sealed record AccountsRuntimeConfiguration(
     Uri Issuer,
     IReadOnlyList<IPNetwork> TrustedProxyNetworks)
 {
+    private static readonly Uri DevelopmentPersonaIssuer =
+        new("https://auth.relisten.localhost:5443");
+    private static readonly Uri LocalGoogleIssuer = new("https://localhost:5443");
+
     private static readonly HashSet<string> SupportedWebOrigins = new(
         [
             "https://relisten.net",
@@ -33,7 +37,7 @@ public sealed record AccountsRuntimeConfiguration(
 
         if (options.EnableDevelopmentPersonas
             && (!environment.IsDevelopment()
-                || issuer != new Uri("https://auth.relisten.localhost:5443")
+                || issuer != DevelopmentPersonaIssuer
                 || options.AuthHost != "auth.relisten.localhost:5443"
                 || options.AccountsHost != "accounts.relisten.localhost:5443"))
         {
@@ -47,7 +51,13 @@ public sealed record AccountsRuntimeConfiguration(
                 "Development personas and external identity providers cannot both be enabled.");
         }
 
-        if (options.EnableDevelopmentPersonas)
+        var isLocalDevelopmentProfile = environment.IsDevelopment()
+            && options.AccountsHost == "accounts.relisten.localhost:5443"
+            && ((issuer == DevelopmentPersonaIssuer
+                    && options.AuthHost == "auth.relisten.localhost:5443")
+                || (issuer == LocalGoogleIssuer
+                    && options.AuthHost == "localhost:5443"));
+        if (isLocalDevelopmentProfile)
         {
             Require(
                 options.DevelopmentCertificateAuthorityPath,
@@ -56,7 +66,7 @@ public sealed record AccountsRuntimeConfiguration(
         else if (!string.IsNullOrWhiteSpace(options.DevelopmentCertificateAuthorityPath))
         {
             throw new InvalidOperationException(
-                "Accounts:DevelopmentCertificateAuthorityPath is allowed only for development personas.");
+                "Accounts:DevelopmentCertificateAuthorityPath is allowed only for exact local Development profiles.");
         }
 
         if (options.EnableExternalProviders)
@@ -119,12 +129,32 @@ public sealed record AccountsRuntimeConfiguration(
                 "Production external identity providers require the exact Relisten hosts.");
         }
 
-        Require(options.Google.ClientId, "Accounts:Google:ClientId");
-        Require(options.Google.ClientSecret, "Accounts:Google:ClientSecret");
-        Require(options.Apple.ClientId, "Accounts:Apple:ClientId");
-        Require(options.Apple.TeamId, "Accounts:Apple:TeamId");
-        Require(options.Apple.KeyId, "Accounts:Apple:KeyId");
-        Require(options.Apple.PrivateKeyPath, "Accounts:Apple:PrivateKeyPath");
+        if (!options.Google.Enabled && !options.Apple.Enabled)
+        {
+            throw new InvalidOperationException(
+                "At least one external identity provider must be enabled.");
+        }
+
+        if (environment.IsProduction()
+            && (!options.Google.Enabled || !options.Apple.Enabled))
+        {
+            throw new InvalidOperationException(
+                "Production external sign-in requires both Google and Apple.");
+        }
+
+        if (options.Google.Enabled)
+        {
+            Require(options.Google.ClientId, "Accounts:Google:ClientId");
+            Require(options.Google.ClientSecret, "Accounts:Google:ClientSecret");
+        }
+
+        if (options.Apple.Enabled)
+        {
+            Require(options.Apple.ClientId, "Accounts:Apple:ClientId");
+            Require(options.Apple.TeamId, "Accounts:Apple:TeamId");
+            Require(options.Apple.KeyId, "Accounts:Apple:KeyId");
+            Require(options.Apple.PrivateKeyPath, "Accounts:Apple:PrivateKeyPath");
+        }
     }
 
     private static void Require(string value, string name)
