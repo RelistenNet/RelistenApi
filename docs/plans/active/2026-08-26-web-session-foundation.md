@@ -130,6 +130,10 @@ now, but it receives no manifest edit before approval.
   and global cookie-mutation protection. The final focused slice passed 83
   tests; the full User Service project passed 140 tests; and the solution build
   passed with no warnings.
+- [x] (2026-08-27) Organized `RelistenUserService/Authentication` into
+  `Authorization`, `Browser`, `Development`, `OpenIdConnect`, and `Sessions`
+  folders with matching C# namespaces. Explicit imports show the few places
+  where one authentication responsibility depends on another.
 - [ ] Remove the abandoned comprehensive E2E and shell runner. Keep only the
   Timber HTTPS/proxy/client foundation and high-value smoke coverage.
 - [ ] Make trusted local HTTPS and the confidential local client secret
@@ -841,6 +845,11 @@ production user field.
   predicates between reachability and authorization, and exercised both read
   and write policy branches. Post-simplification focused and full checks passed.
   The final cross-repository simplification pass remains pending.
+- Authentication folder organization: `dotnet test
+  RelistenUserServiceTests/RelistenUserServiceTests.csproj --no-restore` passed
+  all 140 tests. `dotnet build RelistenUserService/RelistenUserService.csproj
+  --no-restore` passed with no warnings or errors. Each folder now has the
+  matching `RelistenUserService.Authentication.*` namespace.
 - Production read-only inspection: pending until local/local proof passes.
 - Production approval: not requested yet.
 - Production rollout and Google E2E: pending explicit approval.

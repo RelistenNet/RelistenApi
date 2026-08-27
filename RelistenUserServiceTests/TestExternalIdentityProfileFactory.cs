@@ -3,6 +3,7 @@ using FluentAssertions;
 using NUnit.Framework;
 using OpenIddict.Abstractions;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.OpenIdConnect;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserServiceTests;

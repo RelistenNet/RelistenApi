@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 

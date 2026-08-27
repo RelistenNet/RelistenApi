@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using NUnit.Framework;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Browser;
 using RelistenUserService.Configuration;
 
 namespace RelistenUserServiceTests;

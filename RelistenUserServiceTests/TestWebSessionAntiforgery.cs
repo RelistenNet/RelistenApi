@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Authentication.Browser;
 using RelistenUserService.Identity.Entities;
 
 namespace RelistenUserServiceTests;

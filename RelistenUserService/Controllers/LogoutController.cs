@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Controllers;

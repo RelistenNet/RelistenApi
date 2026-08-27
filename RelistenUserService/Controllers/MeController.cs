@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Relisten.Accounts.Contracts.Accounts;
 using Relisten.Accounts.Contracts.Errors;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Identity;
 using RelistenUserService.Identity.Usernames;
 

@@ -7,6 +7,8 @@ using NUnit.Framework;
 using OpenIddict.Abstractions;
 using OpenIddict.EntityFrameworkCore.Models;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Persistence;

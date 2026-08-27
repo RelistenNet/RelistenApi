@@ -6,6 +6,8 @@ using NUnit.Framework;
 using OpenIddict.Abstractions;
 using Relisten.Accounts.Contracts.Accounts;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
+using RelistenUserService.Authentication.OpenIdConnect;
 using RelistenUserService.Controllers;
 using RelistenUserService.Identity.Entities;
 using static OpenIddict.Abstractions.OpenIddictConstants;

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using FluentAssertions;
 using NUnit.Framework;
-using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Sessions;
 
 namespace RelistenUserServiceTests;
 

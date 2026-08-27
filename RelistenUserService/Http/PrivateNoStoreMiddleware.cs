@@ -1,4 +1,5 @@
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Browser;
 
 namespace RelistenUserService.Http;
 

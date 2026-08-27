@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Relisten.Accounts.Contracts.Errors;
 using Relisten.Accounts.Contracts.Library;
 using RelistenUserService.Authentication;
+using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Library;
 
 namespace RelistenUserService.Controllers;
