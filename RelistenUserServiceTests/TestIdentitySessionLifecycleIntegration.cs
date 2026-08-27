@@ -118,6 +118,33 @@ public sealed class TestIdentitySessionLifecycleIntegration
     }
 
     [Test]
+    public async Task Rejects_an_expired_session()
+    {
+        var authSso = await CreateAuthSsoAsync();
+
+        _clock.Advance(IdentitySessionLifecycle.AuthSsoLifetime);
+
+        (await AuthenticateAsync(authSso.CookieValue, IdentitySessionPurposes.AuthSso))
+            .Should().BeNull();
+    }
+
+    [Test]
+    public async Task Rejects_a_disabled_user()
+    {
+        var authSso = await CreateAuthSsoAsync();
+        await using (var dbContext = _database.CreateContext())
+        {
+            await dbContext.Users
+                .Where(user => user.Id == _userId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(user => user.Status, UserStatuses.Disabled));
+        }
+
+        (await AuthenticateAsync(authSso.CookieValue, IdentitySessionPurposes.AuthSso))
+            .Should().BeNull();
+    }
+
+    [Test]
     public async Task Touches_at_most_once_per_hour_and_caps_web_sliding_expiry()
     {
         var authSso = await CreateAuthSsoAsync();
