@@ -159,8 +159,11 @@ middleware, or deployment workflow.
   local Timber. Account, snapshot, changes, favorite toggle, idempotent replay,
   exact favorite restoration, logout, and linked session revocation passed.
 - [x] 2026-08-27: Removed the temporary Timber mutation harness after fresh
-  review, leaving the web branch clean. Flux PR 21 now ends at abc9da7. The Flux
-  PR and Timber PR 110 remain unmerged.
+  review. Merged Flux PR 21 and deleted its local and remote feature branches.
+  Timber PR 110 remains open and must not be merged.
+- [x] 2026-08-27: Split production-backed Timber setup from full-local API
+  setup. Production testers now need only Node.js, pnpm, and mkcert. Commit
+  360c079 updates the existing Timber PR 110 without merging it.
 
 ## Surprises and discoveries
 
@@ -364,6 +367,17 @@ localhost, web.relisten.localhost, auth.relisten.localhost, and
 accounts.relisten.localhost. It stores certificates and the confidential local
 client secret under Library/Application Support outside Git and writes User
 Service configuration through .NET Secret Manager.
+
+Production-backed Timber needs no local User Service configuration:
+
+    cd /Users/alecgorge/code/relisten/relisten-web
+    pnpm install --frozen-lockfile
+    pnpm setup:browser-session:production
+    env RELISTEN_WEB_SESSION_TARGET=production pnpm dev
+
+This path needs only Node.js, pnpm, and mkcert. It creates the trusted local TLS
+certificate but does not inspect an API checkout, invoke dotnet, create a local
+client secret, or configure a local database or User Service.
 
 Vite serves exactly https://web.relisten.localhost:5173 with strictPort enabled
 and exact Host middleware. The Development proxy uses segment-safe matches for:
@@ -619,13 +633,14 @@ production user field.
   f3bc6d2 reviewed security boundaries; 726958a focused security contracts.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
-  2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation.
+  2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation;
+  360c079 production-only TLS setup.
 - Flux rollout history: 2442be7 production configuration and routes; a07f5e5,
   09b109f, 8b1fe69, 020cc17, and 92769dd runbook corrections; 9c0ded6
   simplified rollout; f4b25e4 executable rollback and route checks. PRs 17,
   18, and 19 merged the configuration and final ingress shape. PR 20 added a
-  temporary fixed node-IP host alias; the current local diff removes it in
-  favor of service-based split DNS.
+  temporary fixed node-IP host alias; PR 21 replaced it with service-based
+  split DNS and merged the proven configuration.
 
 ### Local evidence
 
@@ -646,6 +661,11 @@ production user field.
   pre-existing warnings outside changed files. The build retained existing
   React-compiler and chunk warnings plus Vite's current extensionless-config
   warning; the compatible default config loader builds successfully.
+- Production-only Timber setup passed with dotnet absent from PATH, a
+  nonexistent RelistenApi checkout, and a temporary TLS directory. It created
+  only the certificate and private key. Typecheck, all 11 focused
+  browser-session tests, lint, and build passed. Lint and build retained only
+  the pre-existing warnings described above.
 - Local setup: the repository owner ran pnpm setup:browser-session. mkcert
   issued and trusted the exact four-host certificate outside Git. File modes
   were 0700 for its directory, 0600 for private files, and 0644 for public
@@ -745,8 +765,8 @@ production user field.
 
 ### Handoff state
 
-- Flux PR 21 records the already-applied, proven configuration and remains open
-  for repository-owner review.
+- Flux PR 21 merged as 2bb5bb7. Its local and remote feature branches are
+  deleted, and the Flux checkout is clean on main.
 - Timber PR 110 remains open and must not be merged.
 - This plan update is committed only to the local
   codex/web-session-production-evidence branch. No extra API PR is needed for
@@ -765,4 +785,5 @@ tokens remain inside the maintained OpenIddict server/client pipeline and are
 discarded after callback completion. The production favorite returned to its
 exact initial state, and logout revoked both linked sessions. The web branch is
 clean. The authorized implementation, rollout, and production proof are
-complete. Flux PR 21 and Timber PR 110 remain repository-owner decisions.
+complete. Flux PR 21 is merged. Timber PR 110 remains open for the web team and
+must not be merged as part of this work.
