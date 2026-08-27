@@ -126,8 +126,13 @@ deployment workflow.
   User Service and local PostgreSQL. Focused configuration tests and a startup
   check proved that the profile does not load Apple credentials or production
   database configuration.
-- [ ] Create a separate Google development OAuth client and run the real Google
-  flow through Chrome against local PostgreSQL.
+- [x] 2026-08-27: Completed the real Google flow through Chrome against the
+  local User Service and local PostgreSQL. The repository owner temporarily
+  authorized the localhost callback on the existing Google client and stored
+  its existing secret through .NET Secret Manager.
+- [x] 2026-08-27: Removed the temporary localhost callback from the existing
+  Google client after the proof. The repository owner had already removed the
+  unused Authorized JavaScript origins.
 - [ ] After the local Google proof, refresh the exact proposal and receive
   explicit production approval.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
@@ -196,11 +201,13 @@ deployment workflow.
 - 2026-08-27: Use the existing web Ingress and image workflow. After approval,
   configure, deploy, verify, expose, and smoke. Production writes remain
   approval-gated.
-- 2026-08-27: Prove Google before the production approval request. Use a
-  separate Web OAuth client with the exact
-  https://localhost:5443/signin-google redirect, the local User Service, and
-  local PostgreSQL. Apple cannot use localhost; an Apple development proof
-  would require a registered public development hostname and secure tunnel.
+- 2026-08-27: Prove Google before the production approval request. The
+  preferred durable setup is a separate development client. For this one-time
+  proof, the repository owner chose the existing Google client and temporarily
+  added https://localhost:5443/signin-google. The User Service and all Relisten
+  writes remained local. Apple cannot use localhost; an Apple development
+  proof would require a registered public development hostname and secure
+  tunnel.
 
 ## API milestones
 
@@ -453,9 +460,9 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The proposal below remains unapplied. Refresh its commit identifiers and
-present it for approval only after the real local Google proof passes. The
-current local-proof branch heads are:
+The real local Google proof passed. The proposal below remains unapplied.
+Refresh its commit identifiers after this evidence commit, then present it for
+explicit approval. The implementation branch heads are:
 
 - API runtime and tests through
   dcfcca04bede38f24486d9b1dd1ca6757d407ecf on
@@ -644,6 +651,18 @@ production user field.
   tests and all 148 User Service tests passed, as did the solution build and
   Timber checks. Lint retained five pre-existing warnings outside changed
   files.
+- Real local Google proof: normal Chrome completed Google authorization with
+  S256 PKCE and the exact https://localhost:5443/signin-google callback, then
+  returned to /browser-session-development on Timber. /v1/me, snapshot,
+  changes, and CSRF returned 200 with private, no-store. The web account omitted
+  native_session_uuid. Aggregate read-only PostgreSQL inspection found one
+  auth_sso row and one linked web row, two 32-byte validator hashes, valid
+  purpose shapes, and no recent native session. Logout revoked both rows,
+  returned to Timber, and made /v1/me return 401. No favorite was changed.
+- The successful Chrome flow reproduced a macOS Kestrel HTTP/2 connection-close
+  error with `Bad address`. The error did not affect any request or health
+  result, and logged database parameters remained redacted. Treat it as local
+  transport noise unless a request fails.
 - Browser baseline: the real Development-persona OIDC flow returned to Timber;
   /v1/me, snapshot, and changes returned 200 with private, no-store; web /v1/me
   omitted native_session_uuid; simultaneous credentials failed; unreviewed
@@ -676,9 +695,6 @@ production user field.
 
 ### Pending evidence
 
-- Real Google sign-in through Chrome against the local User Service and local
-  PostgreSQL. The repository owner must first create the separate development
-  OAuth client and store its two values in .NET Secret Manager.
 - Explicit production approval.
 - Production rollout and Google E2E.
 
@@ -689,9 +705,8 @@ foundation is implemented and committed. The local baseline proved the intended
 resource and session boundaries. A later static concurrency concern did not
 reproduce with two different personas, so the proposed parallel handoff
 framework was removed from scope. The Google-only local runtime profile is
-implemented and has passed focused startup checks. The next checkpoint is a
-real Google proof against local PostgreSQL, followed by the refreshed production
-approval request.
+implemented, and real Google sign-in passed against local PostgreSQL. The next
+checkpoint is the refreshed production approval request.
 
 No browser access-token or refresh-token storage was introduced. No production
 manifest was applied, no Secret changed, no image deployed, no production
