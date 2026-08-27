@@ -134,6 +134,10 @@ now, but it receives no manifest edit before approval.
   `Authorization`, `Browser`, `Development`, `OpenIdConnect`, and `Sessions`
   folders with matching C# namespaces. Explicit imports show the few places
   where one authentication responsibility depends on another.
+- [x] (2026-08-27) Added the API-side local HTTPS foundation: a stable .NET
+  user-secrets ID, a loopback-only HTTPS launch profile, and exact
+  environment-specific Host Filtering values. No secret value appears in
+  tracked configuration.
 - [ ] Remove the abandoned comprehensive E2E and shell runner. Keep only the
   Timber HTTPS/proxy/client foundation and high-value smoke coverage.
 - [ ] Make trusted local HTTPS and the confidential local client secret
@@ -850,6 +854,11 @@ production user field.
   all 140 tests. `dotnet build RelistenUserService/RelistenUserService.csproj
   --no-restore` passed with no warnings or errors. Each folder now has the
   matching `RelistenUserService.Authentication.*` namespace.
+- Local HTTPS API configuration: the full User Service test project passed all
+  140 tests after adding the user-secrets ID, HTTPS launch binding, and exact
+  Host Filtering values. The pending Timber setup command writes the local
+  certificate paths and confidential client secret through .NET Secret
+  Manager without terminal output.
 - Production read-only inspection: pending until local/local proof passes.
 - Production approval: not requested yet.
 - Production rollout and Google E2E: pending explicit approval.
