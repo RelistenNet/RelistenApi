@@ -118,8 +118,10 @@ deployment workflow.
   produced one matching auth-SSO and web session for each account. The alleged
   account mix-up did not reproduce, so no handoff table, credential, cookie, or
   migration was added.
-- [ ] Run the final focused and broad checks after the antiforgery callback
-  change, then complete fresh API and Timber reviews.
+- [x] 2026-08-27: Ran final focused and broad API and Timber checks. Fresh
+  reviews found no runtime defect. One accepted regression gap added focused
+  expiry and disabled-user tests. The code-simplifier pass found no safe
+  production-code reduction.
 - [ ] Present the final production proposal and receive explicit approval.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
@@ -379,16 +381,15 @@ Focused API tests must prove:
 5. Unsafe cookie requests require exact Origin and session-bound antiforgery.
    Native bearer mutations do not acquire browser CSRF.
 6. Favorite replay is idempotent and changes are observable.
-7. Protected callback replay and missing correlation fail. Two preloaded
-   different-persona flows complete with web sessions for both selected
-   accounts.
-8. Authentication cookies have their exact secure attributes.
+7. Authentication cookies have their exact secure attributes.
 
 The short Playwright smoke proves browser-visible Development sign-in, one
 browser-safe authenticated read, and logout.
 
-Agent-driven Browser or Chrome plus direct read-only PostgreSQL inspection must
-prove the complete local flow, /v1/me, snapshot, changes, favorite
+The maintained callback spike and agent-driven Browser or Chrome proof own the
+full OpenIddict flow, callback replay and correlation failures, and concurrent
+different-persona completion. Browser inspection plus direct read-only
+PostgreSQL inspection also prove /v1/me, snapshot, changes, favorite
 add/replay/remove with initial state restored, CSRF failures, route isolation,
 linked revocation, hash-only persistence, no web-created native session, and no
 token in app-origin storage, rendered data, visible URLs, or sanitized logs.
@@ -400,7 +401,7 @@ personal field.
 From /Users/alecgorge/code/relisten/RelistenApi:
 
     dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj --no-restore \
-      --filter "FullyQualifiedName~TestSessionCredentialCodec|FullyQualifiedName~TestIdentitySessionLifecycleIntegration|FullyQualifiedName~TestAuthorizationHandoff|FullyQualifiedName~TestWebSessionAntiforgery|FullyQualifiedName~TestWebRequestBoundaries|FullyQualifiedName~TestBrowserFacadeBoundary|FullyQualifiedName~TestReviewedAccountAccessAuthorization|FullyQualifiedName~TestFavoriteLibraryIntegration|FullyQualifiedName~TestHostBoundaryMiddleware|FullyQualifiedName~TestRefreshTokenEndpointBoundary"
+      --filter "FullyQualifiedName~TestSessionCredentialCodec|FullyQualifiedName~TestIdentitySessionLifecycleIntegration|FullyQualifiedName~TestWebSessionAntiforgery|FullyQualifiedName~TestWebRequestBoundaries|FullyQualifiedName~TestBrowserFacadeBoundary|FullyQualifiedName~TestReviewedAccountAccessAuthorization|FullyQualifiedName~TestFavoriteLibraryIntegration|FullyQualifiedName~TestHostBoundaryMiddleware|FullyQualifiedName~TestRefreshTokenEndpointBoundary"
     dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj
     dotnet ef migrations has-pending-model-changes \
       --project RelistenUserService/RelistenUserService.csproj \
@@ -424,9 +425,8 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The production proposal is not ready for approval until the final local checks
-and fresh reviews are complete. The currently unapplied Flux branch changes
-only:
+The final local checks and fresh reviews are complete. The currently unapplied
+Flux branch changes only:
 
 - clusters/relisten3-k3s/apps/relisten-user-service.yaml:
   - add relisten.net to AllowedHosts;
@@ -565,7 +565,9 @@ production user field.
   2b7b114 canonical Host; dbb24c1 simplification; 708ec6a SSO clear binding;
   a8e637f local checkpoint; 270ef0b source-of-truth alignment; 3f31f93
   Development form concurrency; 9185ea0 rollout plan; 7c0c638 redirect log
-  suppression; 0e1f290 antiforgery priming.
+  suppression; 0e1f290 antiforgery priming; bf8cf80 plan reduction; 5cabb8c
+  removal of the unproven handoff design; c563a17 expiry and inactive-user
+  regression coverage.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
   2aeb1a6 smoke-test ownership.
@@ -575,16 +577,15 @@ production user field.
 
 ### Local evidence
 
-- API baseline: the focused security filter passed 105 tests; all 141 User
-  Service tests passed; EF reported no pending model changes; the solution
-  build passed with no warnings or errors; and the native refresh-replay smoke
-  passed through the exact local hosts. The final broad checks must be
-  refreshed after commit 0e1f290.
-- Timber: two Vitest files and 10 tests passed. Playwright discovery found one
-  smoke. typecheck, lint, and build exited 0; lint retained five pre-existing
-  warnings outside changed files. The packaged Timber graph command failed on
-  its data-URL/fileURLToPath defect; the running graph endpoint classified the
-  diagnostic route without poisoning or graph errors.
+- Final API checks: the focused browser-session filter passed 108 tests; all
+  144 User Service tests passed; EF reported no pending model changes; and the
+  solution build passed with no warnings or errors. The native refresh-replay
+  smoke also passed through the exact local hosts.
+- Final Timber checks: two Vitest files and 10 tests passed; the one Playwright
+  smoke passed; typecheck, lint, and build exited 0. Lint retained five
+  pre-existing warnings outside changed files. The build retained existing
+  React-compiler and chunk warnings plus Vite's current extensionless-config
+  warning; the compatible default config loader builds successfully.
 - Local setup: the repository owner ran pnpm setup:browser-session. mkcert
   issued and trusted the exact three-host certificate outside Git. File modes
   were 0700 for its directory, 0600 for private files, and 0644 for public
@@ -620,8 +621,6 @@ production user field.
 
 ### Pending evidence
 
-- Refreshed full API checks after commit 0e1f290.
-- Final API and Timber reviews.
 - Explicit production approval.
 - Production rollout and Google E2E.
 
@@ -631,8 +630,9 @@ The durable session, OIDC, shared resource, Timber proxy/client, and local HTTPS
 foundation is implemented and committed. The local baseline proved the intended
 resource and session boundaries. A later static concurrency concern did not
 reproduce with two different personas, so the proposed parallel handoff
-framework was removed from scope. Final broad checks and fresh reviews remain
-before the production approval checkpoint.
+framework was removed from scope. Final broad checks, the short browser smoke,
+fresh reviews, code simplification, and documentation cleanup are complete.
+The work is at the production approval checkpoint.
 
 No browser access-token or refresh-token storage was introduced. No production
 manifest was applied, no Secret changed, no image deployed, no production
