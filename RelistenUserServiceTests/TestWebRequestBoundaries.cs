@@ -210,7 +210,7 @@ public sealed class TestWebRequestBoundaries
             "web.relisten.localhost:5173");
         context.Features.Set<IWebOriginFeature>(new WebOriginFeature(
             AuthenticationConstants.LocalWebOrigin));
-        var controller = new WebSessionController(null!, null!, null!, null!)
+        var controller = new WebSessionController(null!, null!, null!, null!, null!)
         {
             ControllerContext = new ControllerContext { HttpContext = context }
         };

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
@@ -19,6 +20,7 @@ public sealed class WebSessionController(
     AccountsRuntimeConfiguration runtime,
     IdentitySessionLifecycle sessions,
     SessionCookieManager cookies,
+    IAntiforgery antiforgery,
     CurrentAccountContext currentAccount)
     : ControllerBase
 {
@@ -121,7 +123,9 @@ public sealed class WebSessionController(
         }
 
         cookies.SetWeb(Response, session);
-        cookies.ClearCsrf(Response);
+        // The callback ensures one antiforgery cookie exists before concurrent tabs request tokens.
+        // Each request token binds the reused cookie to the new web session ID.
+        _ = antiforgery.GetAndStoreTokens(HttpContext);
         return LocalRedirect(returnPath);
     }
 

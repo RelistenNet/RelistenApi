@@ -25,6 +25,37 @@ public sealed class TestWebSessionAntiforgery
     }
 
     [Test]
+    public async Task A_preissued_cookie_keeps_concurrent_request_tokens_compatible()
+    {
+        using var provider = BuildProvider();
+        string cookieToken;
+        using (var scope = provider.CreateScope())
+        {
+            var context = new DefaultHttpContext
+            {
+                RequestServices = scope.ServiceProvider
+            };
+            var tokens = scope.ServiceProvider
+                .GetRequiredService<IAntiforgery>()
+                .GetAndStoreTokens(context);
+            tokens.CookieToken.Should().NotBeNull();
+            cookieToken = tokens.CookieToken!;
+            context.Response.Headers.SetCookie.Should().ContainSingle();
+        }
+
+        var sessionId = Guid.CreateVersion7();
+        var first = CreateRequestToken(provider, sessionId, cookieToken);
+        var second = CreateRequestToken(provider, sessionId, cookieToken);
+
+        first.SetCookieHeaders.Should().BeEmpty();
+        second.SetCookieHeaders.Should().BeEmpty();
+        (await IsValidAsync(provider, sessionId, cookieToken, first.RequestToken))
+            .Should().BeTrue();
+        (await IsValidAsync(provider, sessionId, cookieToken, second.RequestToken))
+            .Should().BeTrue();
+    }
+
+    [Test]
     public async Task Native_mutation_does_not_require_browser_csrf_or_origin()
     {
         var currentAccount = new CurrentAccountContext();
@@ -146,15 +177,46 @@ public sealed class TestWebSessionAntiforgery
         Guid sessionId,
         AntiforgeryTokenSet tokens)
     {
+        tokens.CookieToken.Should().NotBeNull();
+        tokens.RequestToken.Should().NotBeNull();
+        return await IsValidAsync(
+            provider,
+            sessionId,
+            tokens.CookieToken!,
+            tokens.RequestToken!);
+    }
+
+    private static async Task<bool> IsValidAsync(
+        ServiceProvider provider,
+        Guid sessionId,
+        string cookieToken,
+        string requestToken)
+    {
         using var scope = provider.CreateScope();
         var context = Context(scope, sessionId);
         context.Request.Method = HttpMethods.Post;
         context.Request.Headers.Cookie =
-            $"{AuthenticationConstants.CsrfCookie}={tokens.CookieToken}";
-        context.Request.Headers[AuthenticationConstants.CsrfHeader] = tokens.RequestToken;
+            $"{AuthenticationConstants.CsrfCookie}={cookieToken}";
+        context.Request.Headers[AuthenticationConstants.CsrfHeader] = requestToken;
         return await scope.ServiceProvider
             .GetRequiredService<IAntiforgery>()
             .IsRequestValidAsync(context);
+    }
+
+    private static (string RequestToken, string?[] SetCookieHeaders) CreateRequestToken(
+        ServiceProvider provider,
+        Guid sessionId,
+        string cookieToken)
+    {
+        using var scope = provider.CreateScope();
+        var context = Context(scope, sessionId);
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.CsrfCookie}={cookieToken}";
+        var tokens = scope.ServiceProvider
+            .GetRequiredService<IAntiforgery>()
+            .GetAndStoreTokens(context);
+        tokens.RequestToken.Should().NotBeNull();
+        return (tokens.RequestToken!, context.Response.Headers.SetCookie.ToArray());
     }
 
     private static DefaultHttpContext Context(IServiceScope scope, Guid sessionId)
