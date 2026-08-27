@@ -8,6 +8,11 @@ public sealed class AccountsOptions
     public string Audience { get; init; } = "https://accounts.relisten.net";
     public string AuthHost { get; init; } = "auth.relisten.net";
     public string AccountsHost { get; init; } = "accounts.relisten.net";
+    public string[] WebOrigins { get; init; } =
+    [
+        "https://relisten.net",
+        "https://web.relisten.localhost:5173"
+    ];
     public string[] TrustedProxyNetworks { get; init; } = [];
     public bool EnableDevelopmentPersonas { get; init; }
     public bool EnableExternalProviders { get; init; }

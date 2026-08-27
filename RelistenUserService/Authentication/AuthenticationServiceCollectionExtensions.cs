@@ -126,6 +126,8 @@ public static class AuthenticationServiceCollectionExtensions
         });
 
         services.AddScoped<CurrentAccountContext>();
+        services.AddSingleton<SessionCredentialCodec>();
+        services.AddScoped<IdentitySessionLifecycle>();
         services.AddScoped<IAuthorizationHandler, NativeSessionAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler,

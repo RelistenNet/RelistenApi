@@ -94,6 +94,27 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void Rejects_a_web_origin_that_the_session_schema_cannot_store()
+    {
+        var environment = new TestHostEnvironment(Environments.Development);
+        var options = new AccountsOptions
+        {
+            Issuer = "http://localhost:5443",
+            Audience = "https://accounts.relisten.test",
+            AuthHost = "localhost",
+            AccountsHost = "localhost",
+            EnableDevelopmentPersonas = true,
+            AllowInsecureHttp = true,
+            WebOrigins = ["https://preview.relisten.localhost:5173"]
+        };
+
+        var action = () => AccountsRuntimeConfiguration.Create(options, environment);
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*unsupported exact HTTPS origin*");
+    }
+
+    [Test]
     public void ReusesDevelopmentCertificatesAcrossServiceProviders()
     {
         using var firstProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);

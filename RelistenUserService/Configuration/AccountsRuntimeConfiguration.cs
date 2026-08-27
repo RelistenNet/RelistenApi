@@ -8,6 +8,15 @@ public sealed record AccountsRuntimeConfiguration(
     bool AllowLoopbackHttp,
     IReadOnlyList<IPNetwork> TrustedProxyNetworks)
 {
+    private static readonly HashSet<string> SupportedWebOrigins = new(
+        [
+            "https://relisten.net",
+            "https://web.relisten.localhost:5173"
+        ],
+        StringComparer.Ordinal);
+
+    public IReadOnlyList<string> WebOrigins { get; init; } = Options.WebOrigins;
+
     public static AccountsRuntimeConfiguration Create(
         AccountsOptions options,
         IHostEnvironment environment)
@@ -67,11 +76,24 @@ public sealed record AccountsRuntimeConfiguration(
                 "Accounts:TrustedProxyNetworks must contain the cluster ingress CIDR outside Development.");
         }
 
+        var webOrigins = options.WebOrigins
+            .Select(ParseWebOrigin)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (webOrigins.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "Accounts:WebOrigins must contain at least one exact HTTPS origin.");
+        }
+
         return new AccountsRuntimeConfiguration(
             options,
             issuer,
             allowLoopbackHttp,
-            trustedProxyNetworks);
+            trustedProxyNetworks)
+        {
+            WebOrigins = webOrigins
+        };
     }
 
     private static void ValidateExternalProviders(AccountsOptions options, bool isLoopback)
@@ -103,4 +125,25 @@ public sealed record AccountsRuntimeConfiguration(
             ? network
             : throw new InvalidOperationException(
                 $"Accounts:TrustedProxyNetworks contains invalid CIDR '{value}'.");
+
+    private static string ParseWebOrigin(string value)
+    {
+        if (!SupportedWebOrigins.Contains(value)
+            || !Uri.TryCreate(value, UriKind.Absolute, out var origin)
+            || origin.Scheme != Uri.UriSchemeHttps
+            || !string.IsNullOrEmpty(origin.UserInfo)
+            || origin.AbsolutePath != "/"
+            || !string.IsNullOrEmpty(origin.Query)
+            || !string.IsNullOrEmpty(origin.Fragment)
+            || !string.Equals(
+                value,
+                origin.GetLeftPart(UriPartial.Authority),
+                StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Accounts:WebOrigins contains unsupported exact HTTPS origin '{value}'.");
+        }
+
+        return value;
+    }
 }

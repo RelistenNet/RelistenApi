@@ -14,6 +14,7 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<User> Users => Set<User>();
     public DbSet<ExternalIdentity> ExternalIdentities => Set<ExternalIdentity>();
     public DbSet<NativeSession> NativeSessions => Set<NativeSession>();
+    public DbSet<IdentitySession> Sessions => Set<IdentitySession>();
     public DbSet<UsernameHold> UsernameHolds => Set<UsernameHold>();
     public DbSet<UsernameCommandReceipt> UsernameCommandReceipts =>
         Set<UsernameCommandReceipt>();
