@@ -159,8 +159,8 @@ middleware, or deployment workflow.
   local Timber. Account, snapshot, changes, favorite toggle, idempotent replay,
   exact favorite restoration, logout, and linked session revocation passed.
 - [x] 2026-08-27: Removed the temporary Timber mutation harness after fresh
-  review, leaving the web branch clean. Committed the proven Flux correction as
-  3bfe66e and opened PR 21. The Flux PR and Timber PR 110 remain unmerged.
+  review, leaving the web branch clean. Flux PR 21 now ends at abc9da7. The Flux
+  PR and Timber PR 110 remain unmerged.
 
 ## Surprises and discoveries
 
@@ -512,8 +512,9 @@ The final local Flux diff is limited to:
   auth.relisten.net to traefik.kube-system.svc.cluster.local;
 - clusters/relisten3-k3s/kustomization.yaml: include the CoreDNS ConfigMap in
   the manually applied relisten3 bundle;
-- clusters/relisten3-k3s/README.md: apply the CoreDNS prerequisite explicitly
-  and delete it explicitly during rollback because manual apply does not prune.
+- clusters/relisten3-k3s/README.md: describe the deployed topology, secret
+  ownership, and normal deploy and verification commands without rollout
+  history or rollback ceremony.
 
 The exact-root and slash-prefix pairs follow Traefik's current segment behavior.
 They do not match /auth/session-evil or /v1/library-evil. The routes are
@@ -734,9 +735,10 @@ production user field.
   guarantee recovery after every lost response or reused mutation ID. The UI
   was deleted instead of adding another orchestration layer. The web branch is
   clean; typecheck and all 10 focused browser-session tests pass.
-- Final Flux review: two accepted runbook findings now apply the CoreDNS
-  prerequisite before removing the host alias and explicitly delete the
-  ConfigMap during rollback. Kustomize rendering and yq assertions pass.
+- Final Flux review confirmed the CoreDNS rewrite, Traefik selectors, port, and
+  root Kustomization. The repository owner then chose fix-forward operations and
+  removed the staged rollout and rollback transcript from the README.
+  Kustomize rendering and yq assertions pass.
   `kubectl diff` reports no difference between the local CoreDNS and User
   Service manifests and the live objects. Final public route checks match the
   expected User Service and Timber boundaries.
