@@ -16,6 +16,7 @@ using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
 using RelistenUserService.Http;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace RelistenUserServiceTests;
 
@@ -203,7 +204,7 @@ public sealed class TestWebRequestBoundaries
             ControllerContext = new ControllerContext { HttpContext = context }
         };
 
-        var result = controller.Start("/library");
+        var result = controller.Start("/library", selectAccount: true);
 
         var challenge = result.Should().BeOfType<ChallengeResult>().Subject;
         challenge.AuthenticationSchemes.Should().Equal(
@@ -214,6 +215,8 @@ public sealed class TestWebRequestBoundaries
             .Should().Be(AuthenticationConstants.LocalWebRegistration);
         challenge.Properties.Parameters["provider"]
             .Should().Be(expectedProvider);
+        challenge.Properties.Parameters[Parameters.Prompt]
+            .Should().Be(PromptValues.SelectAccount);
     }
 
     [Test]

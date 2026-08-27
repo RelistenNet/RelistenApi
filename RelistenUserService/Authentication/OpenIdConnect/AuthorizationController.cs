@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
@@ -44,8 +45,9 @@ public sealed class AuthorizationController(
                 });
         }
 
-        var authentication = await HttpContext.AuthenticateAsync(
-            AuthenticationConstants.AuthSsoScheme);
+        var authentication = request.HasPromptValue(PromptValues.SelectAccount)
+            ? AuthenticateResult.NoResult()
+            : await HttpContext.AuthenticateAsync(AuthenticationConstants.AuthSsoScheme);
         if (!authentication.Succeeded
             || !Guid.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId))
         {
@@ -57,7 +59,7 @@ public sealed class AuthorizationController(
             return Redirect(QueryHelpers.AddQueryString(
                 "/development/sign-in",
                 "return_url",
-                Request.PathBase + Request.Path + Request.QueryString));
+                AuthorizationReturnUrl(request)));
         }
 
         var user = await dbContext.Users.SingleOrDefaultAsync(
@@ -149,7 +151,7 @@ public sealed class AuthorizationController(
 
         var properties = new AuthenticationProperties
         {
-            RedirectUri = Request.PathBase + Request.Path + Request.QueryString
+            RedirectUri = AuthorizationReturnUrl(request)
         };
         if (scheme == OpenIddictClientWebIntegrationConstants.Providers.Google
             && request.HasPromptValue(PromptValues.SelectAccount))
@@ -160,5 +162,36 @@ public sealed class AuthorizationController(
         }
 
         return Challenge(properties, scheme);
+    }
+
+    private string AuthorizationReturnUrl(OpenIddictRequest request)
+    {
+        if (!request.HasPromptValue(PromptValues.SelectAccount))
+        {
+            return Request.PathBase + Request.Path + Request.QueryString;
+        }
+
+        var query = new QueryBuilder();
+        foreach (var parameter in Request.Query)
+        {
+            if (string.Equals(parameter.Key, Parameters.Prompt, StringComparison.Ordinal))
+            {
+                var remainingPrompts = request.GetPromptValues()
+                    .Where(value => value != PromptValues.SelectAccount);
+                var prompt = string.Join(' ', remainingPrompts);
+                if (prompt.Length > 0)
+                {
+                    query.Add(Parameters.Prompt, prompt);
+                }
+                continue;
+            }
+
+            foreach (var value in parameter.Value)
+            {
+                query.Add(parameter.Key, value ?? string.Empty);
+            }
+        }
+
+        return Request.PathBase + Request.Path + query.ToQueryString();
     }
 }
