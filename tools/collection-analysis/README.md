@@ -24,6 +24,8 @@ python3 fetch_collection.py taperssection
 python3 fetch_collection.py aadamjacobs
 
 # Step 2: Pull existing Relisten artists from production
+# Requires Tailscale and the relisten3-k3s kubectl context. The script uses
+# the direct read-only replica and fetches the current password from Kubernetes.
 python3 fetch_relisten_artists.py
 
 # Step 3: Run the analysis

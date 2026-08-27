@@ -1,8 +1,9 @@
 """
 Fetch all artists from the Relisten production database and save locally.
 
-Uses the production read-only Postgres connection. Requires kubectl access
-to fetch the database password.
+Uses the relisten3 production read-only Postgres connection. Requires
+Tailscale access and the relisten3-k3s kubectl context to fetch the current
+database password.
 
 Usage:
     python3 fetch_relisten_artists.py
@@ -15,10 +16,11 @@ from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
 
-DB_HOST = "relisten2.tail09dbf.ts.net"
-DB_PORT = "32095"
+DB_HOST = "relisten-db-ro.tail09dbf.ts.net"
+DB_PORT = "5432"
 DB_USER = "app"
 DB_NAME = "app"
+KUBE_CONTEXT = "relisten3-k3s"
 
 
 def get_db_password() -> str:
@@ -26,6 +28,8 @@ def get_db_password() -> str:
     result = subprocess.run(
         [
             "kubectl",
+            "--context",
+            KUBE_CONTEXT,
             "-n",
             "default",
             "get",
@@ -53,6 +57,8 @@ def fetch_artists(password: str) -> list[dict]:
         user=DB_USER,
         password=password,
         dbname=DB_NAME,
+        sslmode="require",
+        options="-c default_transaction_read_only=on",
     )
 
     try:
@@ -123,6 +129,8 @@ def fetch_artists_via_psql(password: str) -> list[dict]:
 
     env = os.environ.copy()
     env["PGPASSWORD"] = password
+    env["PGSSLMODE"] = "require"
+    env["PGOPTIONS"] = "-c default_transaction_read_only=on"
 
     query = """
     SELECT json_agg(row_to_json(t))
@@ -148,6 +156,9 @@ def fetch_artists_via_psql(password: str) -> list[dict]:
     result = subprocess.run(
         [
             "psql",
+            "-X",
+            "-v",
+            "ON_ERROR_STOP=1",
             "-h",
             DB_HOST,
             "-p",

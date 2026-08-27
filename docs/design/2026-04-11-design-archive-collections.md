@@ -802,12 +802,12 @@ Index both collections, expose collection browse API, and ship mobile collection
 ## Appendix
 
 ### Evidence Commands
-Representative commands used while drafting:
+Current equivalents of the commands used while drafting:
 
 ```bash
 curl -sS 'https://archive.org/advancedsearch.php?q=collection%3Aaadamjacobs&fl%5B%5D=identifier&fl%5B%5D=creator&fl%5B%5D=year&fl%5B%5D=collection&rows=50000&page=1&output=json'
 curl -sS 'https://archive.org/advancedsearch.php?q=collection%3Ataperssection&fl%5B%5D=identifier&fl%5B%5D=creator&fl%5B%5D=year&fl%5B%5D=collection&rows=50000&page=1&output=json'
-PGPASSWORD="$(kubectl -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode)" psql -h relisten2.tail09dbf.ts.net -p 32095 -U app -d app
+PGPASSWORD="$(kubectl --context relisten3-k3s -n default get secret relisten-db-app -o jsonpath='{.data.password}' | base64 --decode)" PGSSLMODE=require PGOPTIONS='-c default_transaction_read_only=on' psql -X -v ON_ERROR_STOP=1 -h relisten-db-ro.tail09dbf.ts.net -p 5432 -U app -d app
 ```
 
 ### Relevant Existing Files
