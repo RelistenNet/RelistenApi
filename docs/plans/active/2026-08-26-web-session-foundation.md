@@ -137,6 +137,11 @@ deployment workflow.
   explicitly approved its Secret, manifest, deployment, migration, Google,
   session, reversible favorite, and logout writes. Opened API PR 85, Timber PR
   108, and Flux PR 17. No production write occurred while opening the PRs.
+- [x] 2026-08-27: Addressed API PR review. PostgreSQL now enforces durable
+  origin shape while runtime configuration owns exact origin membership.
+  Security-boundary comments explain the invariants, and the PR test audit
+  replaced configuration and mock-shape checks with concrete routing,
+  authorization, CSRF, lifecycle, and compatibility contracts.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
 
@@ -194,6 +199,14 @@ deployment workflow.
 - 2026-08-27: Retain a test only when it names a concrete failure mode or
   compatibility contract. Playwright remains a short smoke, not a cross-layer
   orchestrator.
+- 2026-08-27: Keep the fixed web capability grant in the session constraint,
+  but keep the deployment origin allowlist in runtime configuration. The
+  database requires a non-null origin without duplicating environment policy.
+- 2026-08-27: Remove tests that reconstruct static host configuration, inspect
+  column names, count credentials without checking identity, or mock endpoint
+  builders. Retain configuration-facing tests only when they protect a
+  protocol, certificate-rotation, provider, origin, or database-routing
+  contract.
 - 2026-08-27: Use one idempotent local setup command. Store trusted local
   certificates and client secrets outside Git.
 - 2026-08-27: Do not add an authorization-handoff table, credential, cookie, or
@@ -219,8 +232,9 @@ identity.sessions contains UUIDv7 identity, user ownership, purpose,
 validator_hash, captured security_version, authentication and activity times,
 sliding and absolute expiry, revocation, parent auth-SSO identity, exact web
 origin, and fixed capabilities. Database constraints enforce purpose-specific
-shape, 32-byte hashes, timestamp order, exact origin, and same-user parent
-linkage.
+shape, 32-byte hashes, timestamp order, required origin, fixed capabilities,
+and same-user parent linkage. Runtime configuration and lifecycle validation
+enforce the exact supported origin allowlist.
 
 SessionCredentialCodec owns credential generation, strict versioned parsing,
 SHA-256 hashing, and constant-time comparison. IdentitySessionLifecycle owns
@@ -467,9 +481,8 @@ the proposal on 2026-08-27. The proposal remains unapplied while the three PRs
 are reviewed. The implementation branch heads are:
 
 - API runtime and tests through
-  dcfcca04bede38f24486d9b1dd1ca6757d407ecf on
-  codex/web-session-foundation-api. Later commits on that branch change only
-  this plan.
+  726958a on codex/web-session-foundation-api. Later commits on that branch
+  change only this plan.
 - Development-only Timber branch
   845cc455e67ff4a8f8a8183d03a1ef475f5e6cf1.
 - Unapplied Flux branch
@@ -625,7 +638,8 @@ production user field.
   suppression; 0e1f290 antiforgery priming; bf8cf80 plan reduction; 5cabb8c
   removal of the unproven handoff design; c563a17 expiry and inactive-user
   regression coverage; dcfcca0 local Google runtime; 659436d local Google
-  setup evidence; 25579c5 local Google proof; f8b8dcc production baseline.
+  setup evidence; 25579c5 local Google proof; f8b8dcc production baseline;
+  f3bc6d2 reviewed security boundaries; 726958a focused security contracts.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
   2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation.
@@ -642,6 +656,14 @@ production user field.
   144 User Service tests passed; EF reported no pending model changes; and the
   solution build passed with no warnings or errors. The native refresh-replay
   smoke also passed through the exact local hosts.
+- API PR review checks: 107 focused browser, session, authorization, and host
+  tests passed; all 151 User Service tests passed; EF reported no pending model
+  changes; and the solution build passed with no warnings or errors. The audit
+  removed static configuration reconstruction, an information_schema column
+  scan, a fake endpoint builder, and a thin validator wrapper test. Real MVC
+  endpoint metadata now proves default library authorization. PostgreSQL tests
+  prove unsupported-origin rejection, active-parent creation, expiry caps,
+  linked sibling revocation, and revoked native-session rejection.
 - Final Timber checks: two Vitest files and 10 tests passed; the one Playwright
   smoke passed; typecheck, lint, and build exited 0. Lint retained five
   pre-existing warnings outside changed files. The build retained existing
