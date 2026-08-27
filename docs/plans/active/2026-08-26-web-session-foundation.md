@@ -27,10 +27,11 @@ will prove the complete local path:
       -> opaque PostgreSQL-backed web session
 
 Focused API tests own session, credential, authorization, antiforgery, and data
-invariants. Short Playwright tests own browser-visible regression coverage.
-Agent-driven Browser or Chrome inspection and direct read-only PostgreSQL
-queries own the local cross-layer proof. No browser test parses a credential,
-queries PostgreSQL, supervises services, or reimplements UUIDv7.
+invariants. Vitest owns the pure client and proxy tests. One short Playwright
+test owns browser-visible regression coverage. Agent-driven Browser or Chrome
+inspection and direct read-only PostgreSQL queries own the local cross-layer
+proof. No browser test parses a credential, queries PostgreSQL, supervises
+services, or reimplements UUIDv7.
 
 After that local proof passes, this plan will name the exact production Flux
 changes and rollback steps. Production remains read-only until the repository
@@ -119,8 +120,9 @@ remains unchanged.
   responsibility and completed the loopback HTTPS, Host Filtering, and .NET
   Secret Manager setup.
 - [x] (2026-08-27) Added Timber's fixed HTTPS origin, exact proxy families,
-  typed browser client, one-command certificate setup, ten focused tests, and
-  one short Playwright smoke. No cross-layer test orchestrator remains.
+  typed browser client, one-command certificate setup, ten focused Vitest
+  tests, and one short Playwright smoke. No cross-layer test orchestrator
+  remains.
 - [x] (2026-08-27) Completed the local Browser and read-only PostgreSQL proof.
   The proof covered sign-in, `/v1/me`, library reads, favorite add/replay/remove,
   CSRF failures, route isolation, session revocation, and token-storage absence.
@@ -206,16 +208,17 @@ remains unchanged.
 
 ### A1. Maintained callback-state proof
 
-Focused OpenIddict tests use these exact callbacks:
+The web client uses these exact callbacks:
 
     https://relisten.net/auth/session/callback
     https://web.relisten.localhost:5173/auth/session/callback
 
-The tests prove protected relative `return_to` restoration, exact registration
-selection, one-time state redemption, replay rejection, and independent
-concurrent correlation cookies. OpenIddict owns the correlation cookie, PKCE
-verifier, nonce, code exchange, and 15-minute state-token lifetime. Redirect
-validation and client token storage remain enabled.
+A completed local HTTPS spike proved callback completion, protected relative
+`return_to` restoration, exact registration selection, and replay rejection.
+Checked-in configuration tests preserve the exact confidential-client and S256
+PKCE registrations. OpenIddict owns the correlation cookie, PKCE verifier,
+nonce, code exchange, and 15-minute state-token lifetime. Redirect validation
+and client token storage remain enabled.
 
 ### A2. Persist and authenticate durable sessions
 
@@ -446,8 +449,8 @@ credentials or personal data. Do not add product favorites UI or login styling.
 
 ### W4. Keep browser automation small
 
-Browser automation consists of focused proxy/client tests and one short
-Playwright smoke for development-persona sign-in, one authenticated read, and
+Vitest runs the pure client and proxy suites in Node. Playwright runs only one
+short smoke for development-persona sign-in, one authenticated read, and
 logout. Playwright uses already-running services. It does not supervise
 services, query PostgreSQL, parse credentials, implement UUIDv7, intercept
 callbacks, or scan logs.
@@ -508,7 +511,9 @@ Google; neither seeds a web session.
 
 ### Behavioral acceptance criteria and proof ownership
 
-Focused API tests must establish these durable invariants:
+Focused API tests establish the durable API invariants below. The completed
+local HTTPS spike supplies the maintained callback-state evidence named in item
+9.
 
 1. Session credentials use UUIDv7 plus a random 256-bit validator, PostgreSQL
    stores only the 32-byte hash, and comparisons use the production codec.
@@ -527,8 +532,9 @@ Focused API tests must establish these durable invariants:
    mutations do not acquire that requirement.
 8. Favorite replay is idempotent, library changes are observable, and logout
    revokes the linked sessions.
-9. Maintained OpenIddict state rejects missing correlation and replay while
-   concurrent challenges remain independent.
+9. The maintained OpenIddict pipeline completes a protected-state callback and
+   rejects callback replay. OpenIddict retains ownership of correlation, PKCE,
+   nonce, state lifetime, code exchange, and redirect validation.
 10. Authentication cookies use the exact names, Secure, HttpOnly,
     SameSite=Lax, Path `/`, and no Domain. Antiforgery uses the exact cookie and
     request-header names.
@@ -571,10 +577,10 @@ Run from `/Users/alecgorge/code/relisten/relisten-web`:
     pnpm test:browser-session
     pnpm test:smoke:browser-session
 
-`pnpm test:browser-session` runs the focused client and proxy tests without
-services. `pnpm test:smoke:browser-session` runs one short smoke against
-already-running services. Each command must exit `0`. Record test counts and
-relevant assertions without recording credentials or personal data.
+`pnpm test:browser-session` runs the focused Vitest client and proxy suites
+without services. `pnpm test:smoke:browser-session` runs one short Playwright
+smoke against already-running services. Each command must exit `0`. Record test
+counts and relevant assertions without recording credentials or personal data.
 
 After focused checks pass, request two fresh read-only reviews. One review must
 cover API authentication, OpenIddict, session, CSRF, facade authorization, and
@@ -593,9 +599,8 @@ bodies, status updates, and the final handoff.
 The local proof, final reviews, production read-only inspection, and unapplied
 Flux authoring are complete. The proposed production artifacts are the API
 branch whose runtime code ends at `708ec6a` and the Flux branch through
-`92769dd`.
-The web commits are development-only for this rollout; no production Timber
-image or product UI change is required.
+`92769dd`. The web commits are development-only; this rollout does not require
+a Timber image or product UI change.
 
 Flux commit `2442be7` changes exactly these files:
 
@@ -612,10 +617,9 @@ Flux commit `2442be7` changes exactly these files:
   `/auth/session`, prefix `/auth/session/`, exact `/api/user/v1/csrf`, exact
   `/v1/me`, exact `/v1/library`, and prefix `/v1/library/`. Every new path
   targets `relisten-user-service-srv:8080`.
-- `clusters/relisten3-k3s/README.md` documents the route ownership, one-key
-  confidential Secret patch, existing workflow invocation, health checks, and
-  approval gate. Follow-up commits through `92769dd` correct the runbook
-  without changing a manifest.
+- `clusters/relisten3-k3s/README.md` documents route ownership, the one-key
+  confidential Secret patch, the existing image workflow, health checks, and
+  rollback.
 
 The route changes create same-origin reverse routing; they do not return a
 redirect to the browser. The exact-root and slash-prefix pairs are required by
@@ -624,12 +628,10 @@ the live Traefik `strictPrefixMatching=false` setting. They do not match
 TLS certificate, DNS record, NetworkPolicy, cache middleware, or workflow file
 changes.
 
-The User Service owns cache policy. `PrivateNoStoreMiddleware` overwrites the
-response with `Cache-Control: private, no-store` for the segment-safe `/v1`
-account family, `/auth/session/*`, `/api/user/v1/csrf`, and `/auth/sso/*`.
-Cloudflare currently reports these uncached anonymous checks as dynamic. The
-rollout adds no Traefik response-header middleware because such middleware on
-the combined Ingress could also affect Timber's `/` catch-all.
+The User Service already owns cache policy. It returns `Cache-Control: private,
+no-store` for the account API and browser lifecycle responses. The Flux branch
+adds no Traefik cache middleware, and Cloudflare currently reports anonymous
+account checks as dynamic.
 
 The confidential client accepts only these compiled callback URIs:
 
@@ -643,63 +645,52 @@ Service accepts that header only on the reviewed paths, when the actual backend
 Host is configured, and when the complete HTTPS origin matches the allowlist.
 
 After approval, create one stable 64-character letter-and-digit credential in
-the existing 1Password vault with output redirected to `/dev/null`. Read the
-credential inside the documented fail-fast subshell, require exactly 64 ASCII
-letters and digits, and transform it into a one-key JSON merge patch over
-stdin. The command updates only `WebClientSecret` in
-`default/relisten-user-service-secrets`; it does not read, rebuild, print, or
-write the unrelated provider and certificate credentials. The subshell drops
-the variable when it exits. Do not rotate this credential on later rollouts
-because the startup initializer rejects a mismatch with the persisted
-`relisten-web` application.
+the existing 1Password vault. The command suppresses its output:
 
-Use this rollout order after approval. The User Service runs one no-surge
-replica. Applying its configuration and then deploying the new image each
-restart that replica. The browser routes stay closed until the new image is
-healthy.
+    op item create \
+      --category=password \
+      --title='Relisten web OIDC client' \
+      --vault=Private \
+      --generate-password='letters,digits,64' \
+      >/dev/null
 
-1. Record the current User Service image ID, pod health, auth discovery
-   response, accounts readiness response, and anonymous Timber/catalog health.
-   Record the complete `ghcr.io/...@sha256:...` pull reference as the rollback
-   image.
+Create the item only once. The runbook reads it into a subshell and sends a
+one-key JSON merge patch to `kubectl` over stdin. That command updates only
+`WebClientSecret` in `default/relisten-user-service-secrets`; it does not print
+the credential or rebuild unrelated Secret keys. Do not rotate the credential
+on later rollouts because the persisted OpenIddict client must keep the same
+secret.
 
-   Capture and validate the rollback image before any production write:
+After approval, use the existing deployment workflow in this order:
 
-       (
-         set -euo pipefail
-         RELISTEN_PREVIOUS_USER_SERVICE_IMAGE="$(
-           kubectl --context relisten3-k3s --namespace default get pods \
-             --selector app=relisten-user-service \
-             --field-selector status.phase=Running \
-             --output jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.name=="relisten-user-service")]}{.imageID}{"\n"}{end}{end}'
-         )"
-         if [[ ! "$RELISTEN_PREVIOUS_USER_SERVICE_IMAGE" =~ ^ghcr\.io/relistennet/relisten-user-service@sha256:[0-9a-f]{64}$ ]]; then
-           echo 'Expected one resolved User Service image digest.' >&2
-           exit 1
-         fi
-         printf 'Record this rollback image: %s\n' "$RELISTEN_PREVIOUS_USER_SERVICE_IMAGE"
-       )
+1. **Configure.** Record current health and the running User Service image ID.
+   Create `WebClientSecret`, patch that one Secret key, and apply only
+   `clusters/relisten3-k3s/apps/relisten-user-service.yaml`. Do not expose the
+   new `relisten.net` paths yet.
+2. **Deploy.** Push the approved API commit and run the unchanged workflow:
 
-2. Create and store `WebClientSecret`, then update the existing Kubernetes
-   Secret without printing a value.
-3. Verify that local branch `codex/web-session-foundation-api` is at the
-   approved full SHA. Push that branch, then require `git ls-remote --heads` to
-   return the same SHA.
-4. From Flux branch commit `92769dd`, apply only
-   `clusters/relisten3-k3s/apps/relisten-user-service.yaml`. Do not apply
-   `relisten-web.yaml` yet. Wait for the current-image rollout and recheck
-   native auth and accounts health.
-5. Run the unchanged
-   `.github/workflows/build_and_push_image.yml` with `--ref
-   codex/web-session-foundation-api -f component=user-service`. The
-   workflow publishes the normal `latest` and short-SHA tags and restarts only
-   `deployment/relisten-user-service`. List the new workflow run, confirm that
-   its `headSha` equals the approved SHA, and watch it with `gh run watch
-   <run-id> --exit-status`. Wait for the new-image rollout and repeat the
-   public health checks.
-6. Apply `clusters/relisten3-k3s/apps/relisten-web.yaml` from Flux commit
-   `92769dd`. The Ingress change does not alter the Timber pod template. Begin
-   Google sign-in only after the public route checks below pass.
+       gh workflow run build_and_push_image.yml \
+         --repo RelistenNet/RelistenApi \
+         --ref codex/web-session-foundation-api \
+         -f component=user-service
+
+   Watch that workflow with `gh run watch <run-id> --exit-status`. The workflow
+   builds the normal User Service image and restarts only its Deployment.
+3. **Verify.** Wait for the rollout and check the existing public hosts:
+
+       kubectl --context relisten3-k3s --namespace default rollout status \
+         deployment/relisten-user-service --timeout=10m
+       curl --fail --silent --show-error \
+         https://auth.relisten.net/.well-known/openid-configuration >/dev/null
+       curl --fail --silent --show-error \
+         https://accounts.relisten.net/health/ready >/dev/null
+
+4. **Expose.** Apply only
+   `clusters/relisten3-k3s/apps/relisten-web.yaml`. Confirm that `/v1/me` and
+   `/v1/library/snapshot` now reach the User Service, while
+   `/v1/library-evil` and unrelated `/v1/*` paths remain on Timber.
+5. **Smoke.** Run the approved local-proxy Google proof, the favorite
+   add/replay/inverse sequence, logout, and the canonical-host sign-in smoke.
 
 The Deployment runs one replica with `maxSurge: 0`, `maxUnavailable: 1`, and
 `Accounts__ApplyMigrationsOnStartup=true`. The new pod connects to the direct
@@ -731,9 +722,9 @@ write these rows:
   audit change or receipt rows.
 - Each logout sets `revoked_at` on its linked auth-SSO and web pair.
 
-After rollout, anonymous checks must show Ready pods, healthy auth discovery
-and accounts readiness, working Timber and catalog pages, and these route
-results:
+After route exposure, anonymous checks must show Ready pods, healthy auth
+discovery and accounts readiness, working Timber and catalog pages, and these
+route results:
 
 - `https://relisten.net/v1/me` and
   `https://relisten.net/v1/library/snapshot` reach the User Service, reject the
@@ -758,16 +749,13 @@ credentials. After the local-callback proof, complete a second sign-in through
 the canonical callback, verify `/v1/me`, and log out. The canonical proof does
 not mutate a favorite.
 
-Rollback starts by removing browser reachability. Apply the parent
-`2442be7^` version of `clusters/relisten3-k3s/apps/relisten-web.yaml`. Then
-render the parent `relisten-user-service.yaml` with `yq`, replacing its
-Deployment image with the recorded prior `ghcr.io/...@sha256:...` reference,
-and pipe that one manifest to `kubectl apply -f -`. The single apply restores
-the prior image and configuration together, so the new binary never starts
-without `Accounts__WebClientSecret`. Wait for readiness, then recheck auth
-discovery, accounts health, Timber, catalog API, and that `/v1/me` again reaches
-the Timber catch-all. Keep the additive session table, client registration, and
-Secret key. Do not run the migration down or rotate the client secret.
+Rollback starts by removing browser reachability with the parent
+`2442be7^` version of `clusters/relisten3-k3s/apps/relisten-web.yaml`. Apply the
+parent User Service manifest, restore the recorded prior image to the User
+Service Deployment, and wait for readiness. Recheck auth discovery, accounts
+health, Timber, catalog API, and that `/v1/me` again reaches Timber. Keep the
+additive session table, client registration, and Secret key. Do not run the
+migration down or rotate the client secret.
 
 Present the completed proposal to the repository owner and ask for explicit
 approval. Do not interpret silence, review comments, or approval of local code
@@ -777,14 +765,9 @@ committed, report production E2E as pending approval, and keep the goal active.
 ## Production rollout and rollback
 
 This section remains blocked until explicit approval. The approved operator must
-follow the checkpoint order exactly: configure, deploy, verify, expose, then
-smoke test. Record the workflow run, Kubernetes rollout, public checks, Google
-proof, favorite restoration, canonical-host proof, and rollback evidence here.
-
-If rollback is required, remove the six browser routes first. Apply the rendered
-parent User Service manifest with the recorded prior image and parent
-configuration together. Keep the additive session table, client registration,
-and Secret key. Do not run the migration down or rotate the client secret.
+follow the checkpoint order: configure, deploy, verify, expose, then smoke.
+Record the workflow run, Kubernetes rollout, public checks, Google proof,
+favorite restoration, canonical-host proof, and any rollback here.
 
 ## Verification evidence
 
@@ -815,30 +798,32 @@ organization; `1209443` local HTTPS configuration; `2b7b114` canonical Host;
 
 Committed Timber slices: `c463bf6` HTTPS, proxy, and client; `eb86da6` short
 browser smoke; `c5b417c` development documentation; `86359c1` callback failure
-redaction; and `9d20af1` first-run setup.
+redaction; `9d20af1` first-run setup; and `2aeb1a6` Vitest and Playwright test
+ownership.
 
 Committed, unapplied Flux slices: `2442be7` exact configuration and six routes;
-`a07f5e5` rollout order; `09b109f` one-key Secret patch; `8b1fe69` input and
-health gates; `020cc17` branch publication, workflow observation, delayed route
-exposure, and atomic rollback; and `92769dd` resolved rollback-image capture.
-The Flux source assertions, Kustomize render, client-side apply dry-run, shell
-syntax, `yq` image substitution, live read-only image-ID shape check, and `git
-diff --check` passed. No production state changed.
+runbook corrections `a07f5e5`, `09b109f`, `8b1fe69`, `020cc17`, and
+`92769dd`. Source assertions, Kustomize render, client-side apply dry-run, shell
+syntax, and `git diff --check` passed. No production state changed.
 
 - Final API validation: the exact security filter above passed 105 tests; all
   141 User Service tests passed; EF reported no pending model changes; and
   `dotnet build RelistenApi.sln --no-restore` passed with no warnings or
   errors.
+- Maintained callback-state spike: the local HTTPS authorization completed,
+  restored the protected relative return path, selected the exact client
+  registration, and rejected callback replay. Checked-in tests preserve the
+  exact callback registrations and S256 requirement.
 - Timber graph: `npx timber graph
   'src/app/(bare)/browser-session-development/page.tsx' --json` hit Timber's
   packaged data-URL/`fileURLToPath` defect. The running graph endpoint
   classified the diagnostic page as an RSC route with no poisoning or graph
   error.
-- Timber focused and broad checks: `pnpm test:browser-session` passed 10 tests;
-  `pnpm typecheck` exited `0`; `pnpm lint` exited `0` with five pre-existing
-  warnings outside changed files; and `pnpm build` exited `0` with pre-existing
-  React compiler and chunk warnings. Targeted `oxlint` and `oxfmt --check`
-  passed for the setup, proxy, client, smoke, diagnostic route, and docs.
+- Timber focused and broad checks: Vitest passed two files and 10 tests;
+  Playwright discovery listed only the one smoke; `pnpm typecheck` exited `0`;
+  `pnpm lint` exited `0` with five pre-existing warnings outside changed files;
+  and `pnpm build` exited `0` with pre-existing React compiler and chunk
+  warnings. Targeted `oxlint` and `oxfmt --check` passed for changed files.
 - Local setup: the repository owner ran `pnpm setup:browser-session`. `mkcert`
   installed the local CA and issued one certificate for exactly
   `web.relisten.localhost`, `auth.relisten.localhost`, and
@@ -870,12 +855,9 @@ diff --check` passed. No production state changed.
   no access-token, refresh-token, or ID-token URL parameter or log match. No
   cookie value, validator, callback query, token, or personal field was read or
   retained.
-- Fresh API, web, E2E, and Flux reviews named concrete failure modes and
-  independently validated each accepted finding. The accepted fixes are in the
-  commit ledger above. The required `code-simplifier` pass removed duplicate
-  predicates, unused branches, and brittle test scaffolding. No final reviewer
-  found a remaining concrete regression; production Google behavior remains
-  approval-gated.
+- Fresh API, web, E2E, and Flux reviews named concrete failure modes. Accepted
+  fixes are in the commit ledger above. The `code-simplifier` pass removed
+  duplicate predicates, unused branches, and brittle test scaffolding.
 - Production read-only inspection: PostgreSQL `17.10` was read-only;
   `identity.sessions` was absent; UUIDv7 extraction was available; and the
   latest identity migration was `20260719193000_ConfigureProductionIosClient`.
