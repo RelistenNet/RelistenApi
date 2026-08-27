@@ -4,6 +4,9 @@ public static class AuthenticationConstants
 {
     public const string AuthSsoScheme = "Relisten.AuthSso";
     public const string WebSessionScheme = "Relisten.WebSession";
+    public const string AccountCredentialScheme = "Relisten.AccountCredential";
+    public const string RejectedAccountCredentialScheme =
+        "Relisten.RejectedAccountCredential";
     public const string AuthSsoCookie = "__Host-relisten_auth";
     public const string WebSessionCookie = "__Host-relisten_session";
     public const string CsrfCookie = "__Host-relisten_csrf";
@@ -25,12 +28,9 @@ public static class AuthenticationConstants
     public const string GoogleCallbackPath = "/signin-google";
     public const string AppleCallbackPath = "/signin-apple";
     public const string UserReadPolicy = "user.read";
-    public const string LibraryReadPolicy = "library.read";
-    public const string LibraryWritePolicy = "library.write";
+    public const string LibraryAccessPolicy = "library.access";
     public const string AccountManagePolicy = "account.manage";
     public const string BrowserProfileReadPolicy = "browser.profile.read";
-    public const string BrowserLibraryReadPolicy = "browser.library.read";
-    public const string BrowserFavoriteMutationPolicy = "browser.favorite.mutate";
     public static readonly TimeSpan NativeSessionAbsoluteLifetime = TimeSpan.FromDays(180);
     public static readonly TimeSpan NativeSessionInactivityLimit = TimeSpan.FromDays(90);
 }

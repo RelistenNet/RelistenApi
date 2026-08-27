@@ -11,6 +11,8 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace RelistenUserService.Authentication;
 
 [ApiController]
+[Route("auth/session")]
+[Authorize(Policy = AuthenticationConstants.BrowserProfileReadPolicy)]
 public sealed class WebSessionController(
     AccountsRuntimeConfiguration runtime,
     IdentitySessionLifecycle sessions,
@@ -18,7 +20,8 @@ public sealed class WebSessionController(
     CurrentAccountContext currentAccount)
     : ControllerBase
 {
-    [HttpGet("/auth/session/start")]
+    [HttpGet("start")]
+    [AllowAnonymous]
     public IActionResult Start(
         [FromQuery(Name = "return_to")] string? returnTo,
         [FromQuery(Name = "select_account")] bool selectAccount = false)
@@ -61,7 +64,8 @@ public sealed class WebSessionController(
             OpenIddictClientAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    [HttpGet("/auth/session/callback")]
+    [HttpGet("callback")]
+    [AllowAnonymous]
     public async Task<IActionResult> Callback(CancellationToken cancellationToken)
     {
         var result = await HttpContext.AuthenticateAsync(
@@ -119,9 +123,7 @@ public sealed class WebSessionController(
         return LocalRedirect(returnPath);
     }
 
-    [HttpPost("/auth/session/logout")]
-    [Authorize(Policy = AuthenticationConstants.BrowserProfileReadPolicy)]
-    [ServiceFilter<BrowserMutationProtectionFilter>]
+    [HttpPost("logout")]
     public async Task<ActionResult<SessionNavigationResponse>> Logout(
         CancellationToken cancellationToken)
     {
@@ -133,9 +135,7 @@ public sealed class WebSessionController(
         return Ok(new SessionNavigationResponse(AuthCookieClearUrl("/")));
     }
 
-    [HttpPost("/auth/session/switch-account")]
-    [Authorize(Policy = AuthenticationConstants.BrowserProfileReadPolicy)]
-    [ServiceFilter<BrowserMutationProtectionFilter>]
+    [HttpPost("switch-account")]
     public async Task<ActionResult<SessionNavigationResponse>> SwitchAccount(
         [FromQuery(Name = "return_to")] string? returnTo,
         CancellationToken cancellationToken)
@@ -193,6 +193,7 @@ public sealed class AuthSsoCookieController(
         }
 
         cookies.ClearAuthSso(Response);
+        cookies.ClearCsrf(Response);
         return Redirect(webOrigin + returnPath);
     }
 }

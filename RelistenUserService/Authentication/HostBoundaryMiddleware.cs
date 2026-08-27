@@ -8,7 +8,7 @@ public sealed class HostBoundaryMiddleware(
 {
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!MatchesExpectedHost(context.Request.Path, context.Request.Host))
+        if (!MatchesExpectedHost(context.Request))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
@@ -17,8 +17,15 @@ public sealed class HostBoundaryMiddleware(
         await next(context);
     }
 
-    private bool MatchesExpectedHost(PathString path, HostString actual)
+    private bool MatchesExpectedHost(HttpRequest request)
     {
+        var path = request.Path;
+        var actual = request.Host;
+        if (BrowserRouteBoundary.IsSharedResourcePath(path))
+        {
+            return MatchesAccountsOrWeb(actual);
+        }
+
         if (path.StartsWithSegments("/v1"))
         {
             return Matches(actual, new HostString(runtime.Options.AccountsHost));
@@ -34,16 +41,20 @@ public sealed class HostBoundaryMiddleware(
             return Matches(actual, new HostString(runtime.Options.AuthHost));
         }
 
-        if (WebRoutePrefixes.Contains(path))
+        if (BrowserRouteBoundary.CanRelay(path))
         {
-            return Matches(actual, new HostString(runtime.Options.AccountsHost))
-                || runtime.WebOrigins
-                    .Select(origin => new Uri(origin))
-                    .Any(origin => Matches(actual, HostString.FromUriComponent(origin)));
+            return MatchesAccountsOrWeb(actual);
         }
 
-        return true;
+        return MatchesAccountsOrWeb(actual)
+            || Matches(actual, new HostString(runtime.Options.AuthHost));
     }
+
+    private bool MatchesAccountsOrWeb(HostString actual) =>
+        Matches(actual, new HostString(runtime.Options.AccountsHost))
+        || runtime.WebOrigins
+            .Select(origin => new Uri(origin))
+            .Any(origin => Matches(actual, HostString.FromUriComponent(origin)));
 
     private static bool Matches(HostString actual, HostString expected) =>
         string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase)

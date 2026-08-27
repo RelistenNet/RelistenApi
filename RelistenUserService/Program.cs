@@ -55,17 +55,19 @@ app.UseMiddleware<PrivateNoStoreMiddleware>();
 app.UseExceptionHandler();
 app.UseMiddleware<HostBoundaryMiddleware>();
 app.UseMiddleware<WebOriginRelayMiddleware>();
+app.UseMiddleware<AccountCredentialAmbiguityMiddleware>();
 app.UseRouting();
 app.UseMiddleware<RefreshTokenReplayMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<BrowserMutationProtectionMiddleware>();
 
 if (runtime.Options.EnableDevelopmentPersonas)
 {
     app.MapDevelopmentPersonaEndpoints();
 }
 
-app.MapControllers();
+app.MapControllers().RequireReviewedBrowserAuthorization();
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
 app.MapGet(
     "/health/ready",

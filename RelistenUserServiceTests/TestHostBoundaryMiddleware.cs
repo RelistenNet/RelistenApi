@@ -31,13 +31,26 @@ public sealed class TestHostBoundaryMiddleware
         context.Response.StatusCode.Should().Be(StatusCodes.Status404NotFound);
     }
 
-    [TestCase("/auth/session/start", "accounts.relisten.net", true)]
-    [TestCase("/auth/session/start", "relisten.net", true)]
-    [TestCase("/api/user/v1/me", "accounts.relisten.net", true)]
-    [TestCase("/api/user/v1/me", "evil.example", false)]
-    [TestCase("/auth/session/start", "relisten.net:8443", false)]
-    [TestCase("/v1/me", "accounts.relisten.net:8443", false)]
+    [TestCase("GET", "/auth/session/start", "accounts.relisten.net", true)]
+    [TestCase("GET", "/auth/session/start", "relisten.net", true)]
+    [TestCase("GET", "/api/user/v1/csrf", "accounts.relisten.net", true)]
+    [TestCase("GET", "/v1/me", "accounts.relisten.net", true)]
+    [TestCase("GET", "/v1/me", "relisten.net", true)]
+    [TestCase("GET", "/v1/me", "web.relisten.localhost:5173", true)]
+    [TestCase("PATCH", "/v1/me", "accounts.relisten.net", true)]
+    [TestCase("PATCH", "/v1/me", "web.relisten.localhost:5173", true)]
+    [TestCase("GET", "/v1/library/new-action", "web.relisten.localhost:5173", true)]
+    [TestCase("GET", "/v1/library-evil", "web.relisten.localhost:5173", false)]
+    [TestCase("POST", "/v1/logout", "web.relisten.localhost:5173", false)]
+    [TestCase("GET", "/v1/not-reviewed", "web.relisten.localhost:5173", false)]
+    [TestCase("GET", "/auth/session/start", "relisten.net:8443", false)]
+    [TestCase("GET", "/v1/me", "accounts.relisten.net:8443", false)]
+    [TestCase("GET", "/health/live", "accounts.relisten.net", true)]
+    [TestCase("GET", "/health/live", "evil.example", false)]
+    [TestCase("GET", "/future-route", "auth.relisten.net", true)]
+    [TestCase("GET", "/future-route", "evil.example", false)]
     public async Task Browser_and_native_routes_use_exact_host_and_port_boundaries(
+        string method,
         string path,
         string host,
         bool expectedToReachApplication)
@@ -51,6 +64,7 @@ public sealed class TestHostBoundaryMiddleware
             },
             Runtime());
         var context = new DefaultHttpContext();
+        context.Request.Method = method;
         context.Request.Host = new HostString(host);
         context.Request.Path = path;
 

@@ -78,6 +78,9 @@ public sealed class TestIdentitySessionLifecycleIntegration
         webRow.AbsoluteExpiresAt.Should().Be(_clock.GetUtcNow() + TimeSpan.FromDays(180));
         webRow.ValidatorHash.Should().Equal(parsed!.ValidatorHash);
         webRow.ValidatorHash.Should().HaveCount(32);
+        (await verificationContext.NativeSessions
+                .AnyAsync(session => session.UserId == _userId))
+            .Should().BeFalse();
         parsed.Clear();
     }
 

@@ -53,12 +53,19 @@ public sealed class WebSessionAuthenticationHandler(
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Context.Features.Get<IWebOriginFeature>() is not { } webOrigin)
+        {
+            return AuthenticateResult.NoResult();
+        }
+
         var cookieValue = Request.Cookies[AuthenticationConstants.WebSessionCookie];
         var session = await sessions.AuthenticateAsync(
             cookieValue,
             IdentitySessionPurposes.Web,
             Context.RequestAborted);
-        if (session is null || session.WebOrigin is null)
+        if (session is null
+            || session.WebOrigin is null
+            || !string.Equals(session.WebOrigin, webOrigin.Origin, StringComparison.Ordinal))
         {
             return AuthenticateResult.NoResult();
         }

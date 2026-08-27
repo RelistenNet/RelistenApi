@@ -12,7 +12,7 @@ public sealed class WebOriginRelayMiddleware(
         var hasRelay = context.Request.Headers.TryGetValue(
             AuthenticationConstants.WebOriginHeader,
             out var relayedOrigins);
-        if (!WebRoutePrefixes.Contains(context.Request.Path))
+        if (!BrowserRouteBoundary.CanRelay(context.Request.Path))
         {
             if (hasRelay)
             {
@@ -38,6 +38,12 @@ public sealed class WebOriginRelayMiddleware(
         else if (runtime.WebOrigins.Contains(backendOrigin, StringComparer.Ordinal))
         {
             webOrigin = backendOrigin;
+        }
+        else if (BrowserRouteBoundary.IsSharedResourcePath(context.Request.Path)
+            && IsAccountsBackend(backendOrigin))
+        {
+            await next(context);
+            return;
         }
         else
         {
@@ -77,11 +83,17 @@ public sealed class WebOriginRelayMiddleware(
     }
 
     private bool IsExpectedBackend(string origin) =>
-        string.Equals(
-            origin,
-            $"https://{new HostString(runtime.Options.AccountsHost).ToUriComponent()}",
-            StringComparison.Ordinal)
+        IsAccountsBackend(origin)
         || runtime.WebOrigins.Contains(origin, StringComparer.Ordinal);
+
+    private bool IsAccountsBackend(string origin) =>
+        Uri.TryCreate(origin, UriKind.Absolute, out var actual)
+        && string.Equals(actual.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+        && Matches(actual, new HostString(runtime.Options.AccountsHost));
+
+    private static bool Matches(Uri actual, HostString expected) =>
+        string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase)
+        && actual.Port == (expected.Port ?? 443);
 
     private static string CurrentOrigin(HttpRequest request) =>
         $"{request.Scheme}://{request.Host.ToUriComponent()}";

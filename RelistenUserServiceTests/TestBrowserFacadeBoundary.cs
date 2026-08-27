@@ -1,10 +1,7 @@
-using System.Reflection;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Controllers;
-using Microsoft.AspNetCore.Mvc.Infrastructure;
-using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using OpenIddict.Abstractions;
 using Relisten.Accounts.Contracts.Accounts;
@@ -19,38 +16,35 @@ namespace RelistenUserServiceTests;
 public sealed class TestBrowserFacadeBoundary
 {
     [Test]
-    public void Browser_profile_has_no_native_session_identifier()
+    public void Native_me_response_includes_the_native_session_uuid()
     {
-        var properties = typeof(BrowserAccountProfileResponse)
-            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-            .Select(property => JsonNamingPolicy.SnakeCaseLower.ConvertName(property.Name));
+        var user = User();
+        var nativeSessionId = Guid.CreateVersion7();
+        var currentAccount = new CurrentAccountContext();
+        currentAccount.SetNative(user, nativeSessionId);
 
-        properties.Should().NotContain("native_session_uuid");
+        var json = SerializeMe(currentAccount);
+
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.GetProperty("native_session_uuid").GetGuid()
+            .Should().Be(nativeSessionId);
     }
 
     [Test]
-    public void Facade_exposes_only_the_five_reviewed_method_and_path_pairs()
+    public void Web_me_response_omits_the_native_session_uuid()
     {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddControllers()
-            .AddApplicationPart(typeof(BrowserMeController).Assembly);
-        using var provider = services.BuildServiceProvider();
-        var actions = provider.GetRequiredService<IActionDescriptorCollectionProvider>()
-            .ActionDescriptors.Items
-            .OfType<ControllerActionDescriptor>()
-            .Where(action => action.AttributeRouteInfo?.Template?
-                .StartsWith("api/user/v1", StringComparison.Ordinal) == true)
-            .Select(action => $"{action.ActionConstraints!.OfType<Microsoft.AspNetCore.Mvc.ActionConstraints.HttpMethodActionConstraint>().Single().HttpMethods.Single()} /{action.AttributeRouteInfo!.Template}")
-            .Order()
-            .ToArray();
+        var currentAccount = new CurrentAccountContext();
+        currentAccount.SetWeb(
+            User(),
+            Guid.CreateVersion7(),
+            AuthenticationConstants.LocalWebOrigin,
+            IdentitySessionCapabilities.AllWeb);
 
-        actions.Should().Equal(
-            "GET /api/user/v1/csrf",
-            "GET /api/user/v1/library/changes",
-            "GET /api/user/v1/library/snapshot",
-            "GET /api/user/v1/me",
-            "POST /api/user/v1/library/favorite-mutations:batch");
+        var json = SerializeMe(currentAccount);
+
+        using var document = JsonDocument.Parse(json);
+        document.RootElement.TryGetProperty("native_session_uuid", out _)
+            .Should().BeFalse();
     }
 
     [Test]
@@ -78,4 +72,25 @@ public sealed class TestBrowserFacadeBoundary
             .GetDestinations()
             .Should().Equal(Destinations.IdentityToken);
     }
+
+    private static string SerializeMe(CurrentAccountContext currentAccount)
+    {
+        var context = new DefaultHttpContext();
+        var controller = new MeController(currentAccount, null!)
+        {
+            ControllerContext = new ControllerContext { HttpContext = context }
+        };
+        var result = controller.Get().Result.Should().BeOfType<OkObjectResult>().Subject;
+        return JsonSerializer.Serialize(result.Value, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        });
+    }
+
+    private static User User() => new()
+    {
+        Id = Guid.CreateVersion7(),
+        Username = "browser_user",
+        SecurityVersion = 7
+    };
 }

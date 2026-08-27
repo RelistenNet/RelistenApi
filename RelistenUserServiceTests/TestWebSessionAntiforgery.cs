@@ -22,6 +22,96 @@ public sealed class TestWebSessionAntiforgery
         (await IsValidAsync(provider, Guid.NewGuid(), tokens)).Should().BeFalse();
     }
 
+    [Test]
+    public async Task Native_mutation_does_not_require_browser_csrf_or_origin()
+    {
+        var currentAccount = new CurrentAccountContext();
+        currentAccount.SetNative(
+            new User { Id = Guid.CreateVersion7() },
+            Guid.CreateVersion7());
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        var reachedApplication = false;
+
+        await new BrowserMutationProtectionMiddleware(_ =>
+            {
+                reachedApplication = true;
+                return Task.CompletedTask;
+            })
+            .InvokeAsync(context, currentAccount, null!);
+
+        reachedApplication.Should().BeTrue();
+    }
+
+    [Test]
+    public async Task Web_mutation_requires_the_exact_origin_and_a_valid_token()
+    {
+        using var provider = BuildProvider();
+        var sessionId = Guid.CreateVersion7();
+        var tokens = CreateTokens(provider, sessionId);
+        using var scope = provider.CreateScope();
+        var context = Context(scope, sessionId);
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Origin = AuthenticationConstants.LocalWebOrigin;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque; "
+            + $"{AuthenticationConstants.CsrfCookie}={tokens.CookieToken}";
+        context.Request.Headers[AuthenticationConstants.CsrfHeader] = tokens.RequestToken;
+        var reachedApplication = false;
+
+        await new BrowserMutationProtectionMiddleware(_ =>
+            {
+                reachedApplication = true;
+                return Task.CompletedTask;
+            })
+            .InvokeAsync(
+                context,
+                scope.ServiceProvider.GetRequiredService<CurrentAccountContext>(),
+                scope.ServiceProvider.GetRequiredService<IAntiforgery>());
+
+        reachedApplication.Should().BeTrue();
+    }
+
+    [TestCase(null)]
+    [TestCase("https://wrong.example")]
+    public async Task Web_mutation_rejects_a_missing_or_incorrect_origin(string? origin)
+    {
+        var currentAccount = new CurrentAccountContext();
+        currentAccount.SetWeb(
+            new User { Id = Guid.CreateVersion7() },
+            Guid.CreateVersion7(),
+            AuthenticationConstants.LocalWebOrigin,
+            IdentitySessionCapabilities.AllWeb);
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque";
+        if (origin is not null)
+        {
+            context.Request.Headers.Origin = origin;
+        }
+        context.Request.Headers[AuthenticationConstants.CsrfHeader] = "present";
+
+        await new BrowserMutationProtectionMiddleware(_ => Task.CompletedTask)
+            .InvokeAsync(context, currentAccount, null!);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
+    [Test]
+    public async Task Cookie_mutation_fails_when_no_web_session_was_authenticated()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Method = HttpMethods.Post;
+        context.Request.Headers.Cookie =
+            $"{AuthenticationConstants.WebSessionCookie}=opaque";
+
+        await new BrowserMutationProtectionMiddleware(_ => Task.CompletedTask)
+            .InvokeAsync(context, new CurrentAccountContext(), null!);
+
+        context.Response.StatusCode.Should().Be(StatusCodes.Status403Forbidden);
+    }
+
     private static ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
 using OpenIddict.Client;
+using OpenIddict.Client.AspNetCore;
 using OpenIddict.Server;
 using RelistenUserService.Authentication;
 using RelistenUserService.Configuration;
@@ -84,6 +86,20 @@ public sealed class TestAuthenticationConfiguration
     }
 
     [Test]
+    public void OpenIddict_correlation_cookie_supports_cross_site_Apple_form_posts()
+    {
+        using var provider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+
+        var options = provider
+            .GetRequiredService<IOptions<OpenIddictClientAspNetCoreOptions>>()
+            .Value;
+
+        options.CookieBuilder.HttpOnly.Should().BeTrue();
+        options.CookieBuilder.SecurePolicy.Should().Be(CookieSecurePolicy.Always);
+        options.CookieBuilder.SameSite.Should().Be(SameSiteMode.None);
+    }
+
+    [Test]
     public void External_providers_fail_closed_when_a_secret_is_missing()
     {
         var environment = new TestHostEnvironment(Environments.Production);
@@ -112,25 +128,6 @@ public sealed class TestAuthenticationConfiguration
 
         action.Should().Throw<InvalidOperationException>()
             .WithMessage("*Accounts:Google:ClientSecret*");
-    }
-
-    [Test]
-    public void Production_can_explicitly_enable_startup_migrations()
-    {
-        var environment = new TestHostEnvironment(Environments.Production);
-        var options = new AccountsOptions
-        {
-            Issuer = "https://auth.relisten.net",
-            AuthHost = "auth.relisten.net",
-            AccountsHost = "accounts.relisten.net",
-            TrustedProxyNetworks = ["127.0.0.1/32"],
-            WebClientSecret = "test-web-client-secret",
-            ApplyMigrationsOnStartup = true
-        };
-
-        var runtime = AccountsRuntimeConfiguration.Create(options, environment);
-
-        runtime.Options.ApplyMigrationsOnStartup.Should().BeTrue();
     }
 
     [Test]

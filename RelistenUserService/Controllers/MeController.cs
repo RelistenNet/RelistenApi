@@ -87,7 +87,7 @@ public sealed class MeController(
 
     private AccountProfileResponse CreateProfile() => AccountProfileFactory.Create(
         currentAccount.User,
-        currentAccount.NativeSessionId);
+        currentAccount.IsNative ? currentAccount.NativeSessionId : null);
 
     private ObjectResult AccountProblem(
         int status,

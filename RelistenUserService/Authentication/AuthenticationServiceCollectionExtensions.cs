@@ -102,7 +102,16 @@ public static class AuthenticationServiceCollectionExtensions
                 _ => { })
             .AddScheme<AuthenticationSchemeOptions, WebSessionAuthenticationHandler>(
                 AuthenticationConstants.WebSessionScheme,
-                _ => { });
+                _ => { })
+            .AddScheme<AuthenticationSchemeOptions,
+                RejectedAccountCredentialAuthenticationHandler>(
+                AuthenticationConstants.RejectedAccountCredentialScheme,
+                _ => { })
+            .AddPolicyScheme(
+                AuthenticationConstants.AccountCredentialScheme,
+                displayName: null,
+                options => options.ForwardDefaultSelector =
+                    AccountCredentialSelector.SelectScheme);
 
         if (runtime.Options.EnableDevelopmentPersonas)
         {
@@ -121,15 +130,20 @@ public static class AuthenticationServiceCollectionExtensions
 
         services.AddAuthorization(options =>
         {
-            AddPolicy(options, AuthenticationConstants.UserReadPolicy, RelistenScopes.UserRead);
-            AddPolicy(
+            AddReviewedAccountPolicy(
                 options,
-                AuthenticationConstants.LibraryReadPolicy,
-                RelistenScopes.LibraryRead);
-            AddPolicy(
+                AuthenticationConstants.UserReadPolicy,
+                RelistenScopes.UserRead,
+                IdentitySessionCapabilities.AccountProfileRead);
+            AddReviewedAccountPolicy(
                 options,
-                AuthenticationConstants.LibraryWritePolicy,
-                RelistenScopes.LibraryWrite);
+                AuthenticationConstants.LibraryAccessPolicy,
+                new ReviewedAccountAccessRule(
+                    RelistenScopes.LibraryRead,
+                    IdentitySessionCapabilities.LibraryRead),
+                new ReviewedAccountAccessRule(
+                    RelistenScopes.LibraryWrite,
+                    IdentitySessionCapabilities.FavoriteMutation));
             AddPolicy(
                 options,
                 AuthenticationConstants.AccountManagePolicy,
@@ -138,14 +152,6 @@ public static class AuthenticationServiceCollectionExtensions
                 options,
                 AuthenticationConstants.BrowserProfileReadPolicy,
                 IdentitySessionCapabilities.AccountProfileRead);
-            AddWebPolicy(
-                options,
-                AuthenticationConstants.BrowserLibraryReadPolicy,
-                IdentitySessionCapabilities.LibraryRead);
-            AddWebPolicy(
-                options,
-                AuthenticationConstants.BrowserFavoriteMutationPolicy,
-                IdentitySessionCapabilities.FavoriteMutation);
         });
 
         services.AddScoped<CurrentAccountContext>();
@@ -153,10 +159,11 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<IdentitySessionLifecycle>();
         services.AddSingleton<SessionCookieManager>();
         services.AddScoped<AuthSsoSignInService>();
-        services.AddScoped<BrowserMutationProtectionFilter>();
         services.AddSingleton<IAntiforgeryAdditionalDataProvider,
             WebSessionAntiforgeryAdditionalDataProvider>();
+        services.AddScoped<NativeSessionAuthenticator>();
         services.AddScoped<IAuthorizationHandler, NativeSessionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, ReviewedAccountAccessAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, WebCapabilityAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
         services.AddSingleton<IAuthorizationMiddlewareResultHandler,
@@ -241,13 +248,7 @@ public static class AuthenticationServiceCollectionExtensions
         });
 
         options.UseAspNetCore()
-            .EnableRedirectionEndpointPassthrough()
-            .Configure(client =>
-            {
-                client.CookieBuilder.HttpOnly = true;
-                client.CookieBuilder.SameSite = SameSiteMode.Lax;
-                client.CookieBuilder.SecurePolicy = CookieSecurePolicy.Always;
-            });
+            .EnableRedirectionEndpointPassthrough();
         var systemNetHttp = options.UseSystemNetHttp();
         if (environment.IsDevelopment() && runtime.Options.EnableDevelopmentPersonas)
         {
@@ -453,6 +454,34 @@ public static class AuthenticationServiceCollectionExtensions
             policy.AuthenticationSchemes.Add(AuthenticationConstants.WebSessionScheme);
             policy.RequireAuthenticatedUser();
             policy.AddRequirements(new WebCapabilityRequirement(capability));
+        });
+    }
+
+    private static void AddReviewedAccountPolicy(
+        AuthorizationOptions options,
+        string name,
+        string nativeScope,
+        IdentitySessionCapabilities webCapability)
+    {
+        AddReviewedAccountPolicy(
+            options,
+            name,
+            new ReviewedAccountAccessRule(nativeScope, webCapability));
+    }
+
+    private static void AddReviewedAccountPolicy(
+        AuthorizationOptions options,
+        string name,
+        ReviewedAccountAccessRule defaultRule,
+        ReviewedAccountAccessRule? mutationRule = null)
+    {
+        options.AddPolicy(name, policy =>
+        {
+            policy.AuthenticationSchemes.Add(AuthenticationConstants.AccountCredentialScheme);
+            policy.RequireAuthenticatedUser();
+            policy.AddRequirements(new ReviewedAccountAccessRequirement(
+                defaultRule,
+                mutationRule));
         });
     }
 }
