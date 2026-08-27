@@ -7,28 +7,29 @@ using RelistenUserService.Library;
 namespace RelistenUserService.Controllers;
 
 [ApiController]
-[Route("v1/library")]
-public sealed class LibraryController(
+[Route("api/user/v1/library")]
+public sealed class BrowserLibraryController(
     CurrentAccountContext currentAccount,
     FavoriteMutationService mutationService,
     LibraryReadService readService)
     : FavoriteLibraryControllerBase(currentAccount, mutationService, readService)
 {
     [HttpGet("snapshot")]
-    [Authorize(Policy = AuthenticationConstants.LibraryReadPolicy)]
+    [Authorize(Policy = AuthenticationConstants.BrowserLibraryReadPolicy)]
     public Task<ActionResult<FavoriteLibrarySnapshot>> Snapshot(
         CancellationToken cancellationToken) =>
         GetSnapshotAsync(cancellationToken);
 
     [HttpGet("changes")]
-    [Authorize(Policy = AuthenticationConstants.LibraryReadPolicy)]
+    [Authorize(Policy = AuthenticationConstants.BrowserLibraryReadPolicy)]
     public Task<ActionResult<FavoriteLibraryChanges>> Changes(
         [FromQuery] string? after,
         CancellationToken cancellationToken) =>
-        GetChangesAsync(after, "/v1/library/snapshot", cancellationToken);
+        GetChangesAsync(after, "/api/user/v1/library/snapshot", cancellationToken);
 
     [HttpPost("favorite-mutations:batch")]
-    [Authorize(Policy = AuthenticationConstants.LibraryWritePolicy)]
+    [Authorize(Policy = AuthenticationConstants.BrowserFavoriteMutationPolicy)]
+    [ServiceFilter<BrowserMutationProtectionFilter>]
     [RequestSizeLimit(256 * 1024)]
     public Task<ActionResult<FavoriteMutationBatchResponse>> MutateFavorites(
         [FromBody] FavoriteMutationBatchRequest? request,

@@ -22,4 +22,20 @@ public static class AccountProfileFactory
             changeAvailableAt,
             nativeSessionId);
     }
+
+    public static BrowserAccountProfileResponse CreateBrowser(User user)
+    {
+        DateTimeOffset? changeAvailableAt = user.UsernameChangedAt is null
+            ? null
+            : user.UsernameChangedAt.Value + UsernamePolicy.ChangeCooldown;
+
+        return new BrowserAccountProfileResponse(
+            1,
+            user.Id,
+            user.Username,
+            user.UsernameVersion,
+            user.UsernameReviewedAt is null,
+            user.UsernameReviewedAt,
+            changeAvailableAt);
+    }
 }
