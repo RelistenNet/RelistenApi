@@ -113,10 +113,13 @@ deployment workflow.
   route isolation, logout, hash-only persistence, and token-storage absence.
 - [x] 2026-08-27: Fixed Development-persona form concurrency, redirect URL
   logging, and first-token antiforgery concurrency.
-- [ ] Implement and validate a single-use authorization handoff so two initial
-  sign-ins for different accounts cannot select the account from the
-  last-written global auth cookie.
-- [ ] Rerun the affected local Browser proof and final focused/broad checks.
+- [x] 2026-08-27: Tested the proposed different-account race before adding new
+  persistence. Two preloaded tabs selected different personas concurrently and
+  produced one matching auth-SSO and web session for each account. The alleged
+  account mix-up did not reproduce, so no handoff table, credential, cookie, or
+  migration was added.
+- [ ] Run the final focused and broad checks after the antiforgery callback
+  change, then complete fresh API and Timber reviews.
 - [ ] Present the final production proposal and receive explicit approval.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
@@ -139,10 +142,11 @@ deployment workflow.
 - Priming antiforgery only on the first CSRF request let two concurrent requests
   issue incompatible cookie and token pairs. The session callback now primes
   the cookie before returning to Timber.
-- A global auth-SSO cookie cannot identify two different accounts selected in
-  concurrent initial login tabs. The remaining fix is a short-lived,
-  single-use authorization handoff that wins over global SSO for its known
-  protected flow.
+- Static inspection suggested that two identity completions might race on the
+  global auth-SSO cookie. The current local Browser path did not expose that
+  interleaving: concurrent different-persona selections created distinct,
+  correctly linked web sessions. A new credential and table are not justified
+  without a deterministic failure.
 - The User Service already sends private, no-store for browser lifecycle and
   account responses. No ingress cache component is needed.
 - Production PostgreSQL 17.10 supports UUIDv7 inspection and currently has no
@@ -176,14 +180,10 @@ deployment workflow.
   orchestrator.
 - 2026-08-27: Use one idempotent local setup command. Store trusted local
   certificates and client secrets outside Git.
-- 2026-08-27: Use a dedicated identity.authorization_handoffs row with its own
-  short-lived opaque credential for each completed external identity flow.
-  Identify the protected flow by a hash of OpenIddict state, also compare a hash
-  of the exact authorization request, consume once, and fail closed for every
-  known-flow mismatch, expiry, replay, or missing cookie. Create the durable
-  auth-SSO session only during successful consumption, then set the global SSO
-  cookie. This avoids copying a 30-day SSO credential into a transient cookie
-  or leaving an abandoned durable SSO credential active.
+- 2026-08-27: Do not add an authorization-handoff table, credential, cookie, or
+  lifecycle for a race that the real two-persona Browser path did not
+  reproduce. Revisit flow-specific binding only after a deterministic failing
+  case shows account confusion.
 - 2026-08-27: Use the existing web Ingress and image workflow. After approval,
   configure, deploy, verify, expose, and smoke. Production writes remain
   approval-gated.
@@ -212,39 +212,21 @@ update at most hourly, and stop at 180 days. Auth SSO lasts 30 days.
 
 Migration 20260827052217_AddDurableBrowserSessions contains no client secret.
 
-### A2. Complete external identity with a single-use handoff
+### A2. Complete external identity without a parallel flow framework
 
-Both Google/Apple completion and Development persona completion use the same
-service. The service must:
+Google/Apple completion and Development persona completion use the same
+external-identity service, create the same durable auth-SSO session, set the
+same host-only auth cookie, and redirect the exact protected
+/connect/authorize target. OpenIddict continues to own the protected client
+state and callback correlation. Relisten does not parse or rebuild those
+protocol values.
 
-1. Validate the protected local /connect/authorize return target and extract
-   the exact OpenIddict state value.
-2. Insert one UUIDv7 authorization handoff with user ownership, captured
-   security_version and authentication time, unique state hash, exact-request
-   hash, a 32-byte validator hash, and 15-minute expiry.
-3. Set one short-lived dynamic handoff cookie. The cookie contains only the
-   handoff ID and raw validator and is Secure, HttpOnly, SameSite=Lax, Path /,
-   and host-only.
-4. Redirect to the exact protected return target without manually rebuilding
-   OIDC parameters.
-
-At /connect/authorize, resolve a known state hash before global SSO. Require the
-matching exact-request hash and handoff cookie, compare validators in constant
-time, reload the active user, verify security_version, and consume under one
-transaction. The same transaction creates a fresh auth_sso session. Only then
-set __Host-relisten_auth and continue the existing native-versus-web branch.
-
-An expired, consumed, missing-cookie, wrong-cookie, request-mismatch, or
-concurrently consumed known handoff is a hard failure. It never falls back to
-the global cookie. Retain consumed rows as tombstones so callback replay cannot
-become a global-SSO authorization. A request with no known handoff retains the
-existing global-SSO path.
-
-High-value tests must prove two different accounts remain attached to their
-original concurrent flows, only one concurrent consume succeeds, replay and
-known-flow mismatch fail closed, global SSO without a handoff remains
-compatible, revoked or security-version-changed users fail, and native/web
-principal issuance remains unchanged.
+The local scope test preloaded two authorization tabs, selected Alice and
+Shared Google concurrently, and observed one auth_sso plus one linked web row
+for each persona. Since no account confusion occurred, keep the existing
+straight-line completion path. Do not add flow-specific persistence or cookies
+unless a deterministic failing case proves the current path loses the selected
+identity.
 
 ### A3. Preserve native issuance and add web lifecycle
 
@@ -397,10 +379,10 @@ Focused API tests must prove:
 5. Unsafe cookie requests require exact Origin and session-bound antiforgery.
    Native bearer mutations do not acquire browser CSRF.
 6. Favorite replay is idempotent and changes are observable.
-7. Protected callback replay, missing correlation, and a known authorization
-   handoff replay fail. Two different concurrent account selections remain
-   attached to their original OIDC flows.
-8. Authentication and handoff cookies have their exact secure attributes.
+7. Protected callback replay and missing correlation fail. Two preloaded
+   different-persona flows complete with web sessions for both selected
+   accounts.
+8. Authentication cookies have their exact secure attributes.
 
 The short Playwright smoke proves browser-visible Development sign-in, one
 browser-safe authenticated read, and logout.
@@ -442,9 +424,9 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The production proposal is not ready for approval until the authorization
-handoff fix and local revalidation are committed. The currently unapplied Flux
-branch changes only:
+The production proposal is not ready for approval until the final local checks
+and fresh reviews are complete. The currently unapplied Flux branch changes
+only:
 
 - clusters/relisten3-k3s/apps/relisten-user-service.yaml:
   - add relisten.net to AllowedHosts;
@@ -518,11 +500,11 @@ After approval, use the existing deployment workflow:
    add/replay/inverse sequence, logout, and canonical-host sign-in smoke.
 
 The API pod applies additive identity migrations before listening. The approved
-release is expected to add identity.sessions, identity.authorization_handoffs,
-their indexes and constraints, migration-history rows, and one confidential
-relisten-web OpenIddict application. A sign-in inserts one consumed handoff,
-one auth_sso session, one web session, and short-lived OpenIddict authorization
-and token records. It inserts no native session or refresh token.
+release is expected to add identity.sessions, its indexes and constraints, one
+migration-history row, and one confidential relisten-web OpenIddict
+application. A sign-in inserts one auth_sso session, one web session, and
+short-lived OpenIddict authorization and token records. It inserts no native
+session or refresh token.
 
 The favorite smoke may update user_data.library_states and writes the favorite,
 change, and idempotency-receipt rows needed by the add or remove. Record the
@@ -539,9 +521,9 @@ Success criteria:
 - Local Timber can complete Google through production routes, then /v1/me,
   snapshot, changes, favorite add/replay/inverse, and logout all work.
 - Relisten app-origin storage contains no bearer, refresh, or ID token.
-- Read-only PostgreSQL inspection confirms hash-only session and handoff
-  validators, no web-created native session, linked revocation, and restored
-  favorite state without selecting personal or credential fields.
+- Read-only PostgreSQL inspection confirms hash-only session validators, no
+  web-created native session, linked revocation, and restored favorite state
+  without selecting personal or credential fields.
 - A canonical-host sign-in, /v1/me read, and logout succeed without a favorite
   mutation.
 
@@ -596,8 +578,8 @@ production user field.
 - API baseline: the focused security filter passed 105 tests; all 141 User
   Service tests passed; EF reported no pending model changes; the solution
   build passed with no warnings or errors; and the native refresh-replay smoke
-  passed through the exact local hosts. These counts predate the pending
-  authorization-handoff change and must be refreshed.
+  passed through the exact local hosts. The final broad checks must be
+  refreshed after commit 0e1f290.
 - Timber: two Vitest files and 10 tests passed. Playwright discovery found one
   smoke. typecheck, lint, and build exited 0; lint retained five pre-existing
   warnings outside changed files. The packaged Timber graph command failed on
@@ -622,11 +604,13 @@ production user field.
   revocation, and no web-created native session. Browser-visible network,
   console, storage, rendered data, and sanitized logs contained no browser
   token.
-- Development concurrency follow-up: two preloaded persona pages completed
-  independently for the same persona. Origin failures returned 403, malformed
+- Development concurrency proof: two preloaded persona pages selected Alice
+  and Shared Google concurrently and both returned to Timber. Read-only
+  PostgreSQL inspection found exactly four new session rows: one auth_sso and
+  one web row for each persona, with two distinct web accounts. The alleged
+  wrong-account result did not occur. Origin failures returned 403, malformed
   same-origin form returned 400, the form returned private, no-store and denied
   framing, and protocol redirect parameters did not appear in sanitized logs.
-  This does not prove different-account binding; that proof remains pending.
 - Production read-only: PostgreSQL was version 17.10 and read-only;
   identity.sessions was absent; UUIDv7 extraction was available; the User
   Service had one Ready replica; WebClientSecret was absent without reading any
@@ -636,9 +620,8 @@ production user field.
 
 ### Pending evidence
 
-- Authorization-handoff focused tests, refreshed full API checks, and
-  different-account concurrent Browser proof.
-- Final API and Timber reviews after the handoff change.
+- Refreshed full API checks after commit 0e1f290.
+- Final API and Timber reviews.
 - Explicit production approval.
 - Production rollout and Google E2E.
 
@@ -646,10 +629,10 @@ production user field.
 
 The durable session, OIDC, shared resource, Timber proxy/client, and local HTTPS
 foundation is implemented and committed. The local baseline proved the intended
-resource and session boundaries, but the final API review found a real
-different-account concurrency bug in initial SSO completion. The
-authorization-handoff fix and affected revalidation remain before the
-production approval checkpoint.
+resource and session boundaries. A later static concurrency concern did not
+reproduce with two different personas, so the proposed parallel handoff
+framework was removed from scope. Final broad checks and fresh reviews remain
+before the production approval checkpoint.
 
 No browser access-token or refresh-token storage was introduced. No production
 manifest was applied, no Secret changed, no image deployed, no production
