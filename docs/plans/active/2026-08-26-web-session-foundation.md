@@ -123,12 +123,13 @@ now, but it receives no manifest edit before approval.
 - [x] (2026-08-26) Added and tested the confidential web OIDC client and session endpoints.
 - [x] (2026-08-26) Committed the initial browser facade and focused library
   behavior before the later decision to consolidate it with `/v1/*`.
-- [ ] Finish and commit the default-secure `/v1` consolidation. The current
-  worktree has the credential-neutral `/me` contract, simultaneous-credential
-  rejection, route-family boundary, method-aware library authorization, and
-  global cookie-mutation protection. The final focused slice passed 83 tests;
-  the full User Service project passed 140 tests; and the solution build passed
-  with no warnings. The coherent commit is pending.
+- [x] (2026-08-27) Committed the default-secure `/v1` consolidation as
+  `38c17d3f3abf46dd538457bfa46fab03b150467f`. It includes the
+  credential-neutral `/me` contract, simultaneous-credential rejection,
+  route-family authorization convention, method-aware library authorization,
+  and global cookie-mutation protection. The final focused slice passed 83
+  tests; the full User Service project passed 140 tests; and the solution build
+  passed with no warnings.
 - [ ] Remove the abandoned comprehensive E2E and shell runner. Keep only the
   Timber HTTPS/proxy/client foundation and high-value smoke coverage.
 - [ ] Make trusted local HTTPS and the confidential local client secret
@@ -808,6 +809,12 @@ production user field.
   profile, library, favorite, and CSRF facade. Focused profile/library tests and
   the full User Service test project passed before the later shared-`/v1`
   consolidation decision.
+- `38c17d3f3abf46dd538457bfa46fab03b150467f`: consolidated the reviewed
+  resources onto `/v1`, added credential ambiguity rejection, applied
+  method-aware native-scope or web-capability authorization, and enforced
+  cookie mutation protection globally. The affected suite passed 83 tests, the
+  full User Service project passed 140 tests, and the solution build passed
+  with no warnings.
 - Shared-`/v1` authorization test: `TestReviewedAccountAccessAuthorization`
   now passes 3 tests. The final affected boundary filter passed 83 tests. The
   full User Service project passed 140 tests. `dotnet build RelistenApi.sln
@@ -840,12 +847,12 @@ production user field.
 
 ## Outcomes and retrospective
 
-The three feature branches exist. The API branch contains four logical commits
-for the plan, durable persistence, OIDC lifecycle, and initial browser facade.
-The API and web worktrees currently contain uncommitted consolidation and
-development work. No production Flux manifest edit, Secret change, deployment,
-production migration, production sign-in, production session, or production
-favorite mutation has occurred.
+The three feature branches exist. The API branch contains five logical commits
+for the plan, durable persistence, OIDC lifecycle, initial browser facade, and
+default-secure shared resources. The API worktree is clean. The web worktree
+contains uncommitted development work. No production Flux manifest edit, Secret
+change, deployment, production migration, production sign-in, production
+session, or production favorite mutation has occurred.
 
 Replace this paragraph with the final outcome, residual risks, lessons, and
 remaining UI work after all authorized work is complete. Move the plan only when
