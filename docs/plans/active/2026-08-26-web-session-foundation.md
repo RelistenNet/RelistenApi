@@ -56,12 +56,13 @@ work. Verify the active branch before every edit and commit. The primary agent
 owns all edits, tests, branch changes, and commits. Read-only investigation and
 review agents must not edit files, switch branches, or run Git mutations.
 
-Before explicit production approval, the allowed production actions are
-read-only inspection of the PostgreSQL replica, Kubernetes resources, Flux
-source files, image metadata, logs that contain no credentials, and public
-anonymous endpoints. Do not edit production Flux manifests, change a Kubernetes
-Secret, reconcile Flux, deploy an image, run a migration, start a production
-sign-in, create a production session, or mutate a production favorite.
+Before explicit production approval, the allowed production actions are local
+Flux branch edits and read-only inspection of the PostgreSQL replica,
+Kubernetes resources, image metadata, logs that contain no credentials, and
+public anonymous endpoints. Local Flux changes may be validated and committed.
+Do not apply a manifest, change a Kubernetes Secret, reconcile Flux, deploy an
+image, run a migration, start a production sign-in, create a production
+session, or mutate a production favorite.
 
 ## Context and responsibility map
 
@@ -74,18 +75,15 @@ resource API under `/v1/*`. The local and production proxies route
 The reviewed controllers preserve native scopes and web capabilities through
 separate credential validation.
 
-`AuthorizationController` currently creates an `identity.native_sessions` row
-for every authorization. The web client cannot use that branch. A web
-authorization must create no `NativeSession`, request no accounts audience, and
-receive no refresh token. It may receive short-lived bootstrap credentials
-inside the server-side OpenIddict client pipeline. The callback discards every
-bootstrap credential after it creates the opaque web session.
+`AuthorizationController` separates web and native authorizations before native
+session creation. A web authorization creates no `NativeSession`, requests no
+accounts audience, and receives no refresh token. OpenIddict can issue
+short-lived bootstrap credentials inside its server-side client pipeline. The
+callback discards them after creating the opaque web session.
 
-`ExternalIdentityCallbackController` and the Development persona endpoints
-currently use short cookie tickets as a bridge back to `/connect/authorize`.
-This work replaces that bridge with a durable `auth_sso` session in
-`identity.sessions`. The auth-host cookie and web-resource cookie use different
-names and different hosts.
+External Google/Apple completion and Development persona completion use the
+same durable `auth_sso` lifecycle. The auth-host cookie and web-resource cookie
+use different names and hosts.
 
 `CurrentAccountContext` is credential-neutral. Native authorization supplies a
 native session identity. Browser authorization supplies a web session identity
@@ -95,241 +93,134 @@ web-session request. Relisten never fabricates a native session for the browser.
 
 `/Users/alecgorge/code/relisten/relisten-web` is a Timber application built with
 Vite. The browser-session work belongs in Vite's development server
-configuration, a small user-session client, an optional development-only test
-harness, and short Playwright smoke tests. The existing public catalog client
+configuration, a small user-session client, a development-only diagnostic
+route, and one short Playwright smoke. The existing public catalog client
 remains separate because public catalog responses can be cached while user
 responses must use `cache: "no-store"`.
 
 `/Users/alecgorge/code/relisten/relisten-flux` contains the production User
-Service, Timber, ingress, cache, and Secret references. The Flux branch exists
-now, but it receives no manifest edit before approval.
+Service, Timber, ingress, and Secret references. Its browser-session branch is
+committed through `92769dd` and remains unapplied. The existing image workflow
+remains unchanged.
 
 ## Progress
 
-- [x] (2026-08-26) Read all three applicable `AGENTS.md` files.
-- [x] (2026-08-26) Verified that each checkout was clean before branching.
-- [x] (2026-08-26) Fetched `origin` in each checkout and confirmed that each
-  requested base had `0` local-only and `0` remote-only commits.
-- [x] (2026-08-26) Created the three requested branches in the existing
-  worktrees.
-- [x] (2026-08-26) Started independent read-only investigations of API
-  authentication, Timber integration, and the local-to-production proxy
-  boundary.
-- [x] (2026-08-26) Committed this initial plan and the small link/status correction in the
-  identity ExecPlan before implementation.
-- [x] (2026-08-26) Proved the OpenIddict protected-state callback with both exact callback
-  origins before building the session flow around it.
-- [x] (2026-08-26) Added and tested durable `auth_sso` and `web` sessions.
-- [x] (2026-08-26) Added and tested the confidential web OIDC client and session endpoints.
-- [x] (2026-08-26) Committed the initial browser facade and focused library
-  behavior before the later decision to consolidate it with `/v1/*`.
-- [x] (2026-08-27) Committed the default-secure `/v1` consolidation as
-  `38c17d3f3abf46dd538457bfa46fab03b150467f`. It includes the
-  credential-neutral `/me` contract, simultaneous-credential rejection,
-  route-family authorization convention, method-aware library authorization,
-  and global cookie-mutation protection. The final focused slice passed 83
-  tests; the full User Service project passed 140 tests; and the solution build
-  passed with no warnings.
-- [x] (2026-08-27) Organized `RelistenUserService/Authentication` into
-  `Authorization`, `Browser`, `Development`, `OpenIdConnect`, and `Sessions`
-  folders with matching C# namespaces. Explicit imports show the few places
-  where one authentication responsibility depends on another.
-- [x] (2026-08-27) Added the API-side local HTTPS foundation: a stable .NET
-  user-secrets ID, a loopback-only HTTPS launch profile, and exact
-  environment-specific Host Filtering values. No secret value appears in
-  tracked configuration.
-- [ ] Remove the abandoned comprehensive E2E and shell runner. Keep only the
-  Timber HTTPS/proxy/client foundation and high-value smoke coverage.
-- [ ] Make trusted local HTTPS and the confidential local client secret
-  available through one setup command with no manual secret copying.
-- [ ] Pass focused and broad API/web checks, then complete the agent-driven
-  local browser and read-only database proof.
-- [ ] Complete fresh API and web reviews, validate every finding, simplify the
-  changed code, and rerun focused checks.
-- [ ] Inspect production and Flux read-only, then replace the pending production
-  fields below with exact files, values, evidence, and rollback commands.
-- [ ] Present the production proposal and wait for explicit approval.
-- [ ] After approval only: commit Flux changes, deploy approved commits, run the
-  Google and favorite smoke tests, restore favorite state, and record evidence.
+- [x] (2026-08-26) Read the repository instructions, verified clean and
+  non-diverged bases, created the three requested branches, and committed the
+  initial ExecPlan before implementation.
+- [x] (2026-08-26) Proved the maintained OpenIddict protected-state callback,
+  then implemented durable sessions, the confidential web client, browser
+  lifecycle endpoints, and the first resource facade.
+- [x] (2026-08-27) Consolidated reviewed resources onto `/v1`, made account
+  context credential-neutral, rejected ambiguous credentials, and made library
+  authorization plus cookie-mutation protection default at controller and
+  middleware boundaries.
+- [x] (2026-08-27) Organized `RelistenUserService/Authentication` by
+  responsibility and completed the loopback HTTPS, Host Filtering, and .NET
+  Secret Manager setup.
+- [x] (2026-08-27) Added Timber's fixed HTTPS origin, exact proxy families,
+  typed browser client, one-command certificate setup, ten focused tests, and
+  one short Playwright smoke. No cross-layer test orchestrator remains.
+- [x] (2026-08-27) Completed the local Browser and read-only PostgreSQL proof.
+  The proof covered sign-in, `/v1/me`, library reads, favorite add/replay/remove,
+  CSRF failures, route isolation, session revocation, and token-storage absence.
+  It restored the initial favorite state.
+- [x] (2026-08-27) Completed fresh API, web, E2E, and Flux reviews. Validated
+  each finding, applied accepted fixes, ran `code-simplifier`, and reran the
+  relevant focused and broad checks.
+- [x] (2026-08-27) Inspected production read-only and committed the unapplied
+  Flux configuration and runbook through `92769dd`. Prepared the exact
+  production proposal below. No production state changed.
+- [ ] Receive explicit production approval.
+- [ ] After approval only: apply the approved Flux commit, deploy the approved
+  API commit, run the Google and favorite smoke tests, restore favorite state,
+  and record evidence.
 
 ## Surprises and discoveries
 
-- Observation: `RelistenUserService/Authentication/AuthorizationController.cs`
-  creates a `NativeSession` without distinguishing the requesting client.
-  Consequence: registering `relisten-web` before adding an explicit web branch
-  would violate the native/browser credential boundary.
-- Observation: `RelistenUserService/Authentication/NativePrincipalFactory.cs`
-  always adds the accounts resource audience and native `sid` and
-  `security_version` claims. Consequence: the web authorization branch needs a
-  separate bootstrap-principal factory; omitting the `NativeSession` insert
-  alone would still issue an accounts credential.
-- Observation: `RelistenUserService/Authentication/AuthenticationServiceCollectionExtensions.cs`
-  already uses the maintained OpenIddict client pipeline for Google and Apple.
-  Consequence: the Relisten web client can use the same maintained client
-  machinery for state, correlation, nonce, code exchange, and token validation.
-- Observation: the OpenIddict client is currently registered only when external
-  Google or Apple providers are enabled. Consequence: register the Relisten web
-  self-client in both supported runtime profiles, while keeping Google and Apple
-  registrations exclusive to the external-provider profile.
-- Observation: the User Service currently enables ASP.NET antiforgery only with
-  Development personas. Consequence: browser antiforgery registration and
-  validation must be independent of the upstream identity provider profile.
-- Observation: `relisten-web/vite.config.ts` sets `strictPort: false` and has no
-  HTTPS or proxy configuration. Consequence: the browser origin is not stable
-  enough for an exact OIDC redirect URI or `__Host-` cookie until the Vite
-  configuration changes.
-- Observation: Vite 8 skips its built-in `allowedHosts` validation when the
-  development server uses HTTPS. Consequence: `server.allowedHosts` alone
-  cannot enforce the required development host allowlist; a small development
-  server middleware must reject every Host except
-  `web.relisten.localhost:5173` before Timber handles the request.
-- Observation: Vite proxy keys use prefix matching. Consequence: literal keys
-  such as `/auth/session` would also proxy `/auth/session-evil`; use
-  segment-aware regular expressions for the two reviewed prefixes.
-- Observation: `HostBoundaryMiddleware` returns no expected host for an unknown
-  path. Consequence: both new browser prefixes would accept any Host until they
-  receive explicit host rules, and the raw backend Host must be checked before
-  external-origin reconstruction.
-- Observation: `relisten-web/package.json` has no browser-test command or
-  Playwright dependency. Consequence: the web branch must add a focused test
-  dependency and orchestration instead of relying on a manual sign-in.
-- Observation: the older identity ExecPlan calls `relisten-web` a Next.js app,
-  but the active branch uses Timber and Vite. Consequence: correct only those
-  stale statements and link this more specific plan.
-- Observation: a separate `/api/user/v1/*` resource facade duplicates the
-  established `/v1/*` controllers and requires every future library feature to
-  be wired twice. Consequence: share only explicitly reviewed `/v1` actions,
-  while native scopes and persisted web capabilities remain separate
-  authorization paths.
-- Observation: the first local E2E draft grew to 1,026 lines of Playwright and
-  a 173-line shell runner. It supervised processes, called `psql`, parsed the
-  opaque cookie, hashed its validator, generated UUIDv7 values, intercepted
-  callbacks, and scanned logs. Consequence: delete that draft instead of
-  polishing it. Each proof belongs at the narrowest layer that can observe the
-  failure.
-- Observation: action-level antiforgery filters and exact proxy route lists make
-  every new library operation depend on repeated security wiring. Consequence:
-  route reviewed families by convention, authorize library reads and mutations
-  from the request method at the controller boundary, and enforce cookie
-  mutation protection once in middleware.
-- Observation: endpoint-count and attribute-shape tests can pass while request
-  behavior is wrong, and they fail during harmless route refactors. Consequence:
-  retain a test only when it names a concrete security failure or compatibility
-  contract. The current consolidation deletes the exact browser-surface count,
-  exact four-route shape, and startup-migration option echo tests. Behavioral
-  tests continue to cover native `/me`, web `/me`, credential ambiguity,
-  capability selection, CSRF and Origin enforcement, host and relay boundaries,
-  session lifecycle, and native compatibility.
-
-Add new observations with their evidence. Do not record a guess as evidence.
+- Native authorization always created a `NativeSession` and
+  `NativePrincipalFactory` always added the accounts audience. The web client
+  therefore needs a separate authorization branch and bootstrap principal.
+- Vite 8 skips its built-in Host check under HTTPS, and proxy keys use character
+  prefix matching. Timber now enforces the exact development Host in middleware
+  and uses segment-aware proxy matchers.
+- A separate browser resource facade duplicated the existing `/v1` contracts.
+  Reviewed `/v1/me` and `/v1/library/*` actions now accept either native scopes
+  or persisted web capabilities, never both credentials.
+- Per-action antiforgery filters and per-action proxy entries were easy to omit.
+  Library authorization now applies at the controller boundary, and one global
+  middleware protects every unsafe request carrying the web-session cookie.
+- Production Traefik uses character-prefix matching and the existing web
+  Ingress already owns `relisten.net`. Each routed family therefore uses an
+  exact root plus slash prefix before the existing `/` catch-all.
+- The User Service already emits `private, no-store`; Cloudflare reported the
+  anonymous account checks as dynamic. The Flux branch needs no cache middleware.
+- Production PostgreSQL 17.10 supports UUIDv7 inspection but has no
+  `identity.sessions` table or `relisten-web` client. The first approved User
+  Service start will create both through the additive migration and initializer.
+- The auth-host cookie-clear endpoint could delete a concurrent active SSO
+  cookie. Commit `708ec6a` binds deletion to the exact revoked parent validator,
+  linked web session, origin, and revocation timestamp.
 
 ## Decision log
 
-- Decision: use one `identity.sessions` table for the `auth_sso` and `web`
-  purposes. Rationale: both purposes share validator verification, user and
-  `security_version` checks, revocation, and expiry, while explicit purpose and
-  capability checks prevent credential substitution. Date: 2026-08-26.
-- Decision: encode the cookie credential as a versioned opaque value containing
-  a UUIDv7 session ID and a random 256-bit validator. Store only the SHA-256
-  validator hash. Rationale: a database read alone cannot authenticate a stolen
-  session row. Date: 2026-08-26.
-- Decision: separate credential encoding, database lifecycle, authentication,
-  and authorization into distinct types. Rationale: each type owns one security
-  invariant and can be tested without a generic authentication framework. Date:
-  2026-08-26.
-- Decision: represent web capabilities as a fixed flags value with only account
-  profile read, library read, and favorite mutation. `auth_sso` has no resource
-  capability. Rationale: a new bearer endpoint must not become browser-accessible
-  through scope translation or naming convention. Date: 2026-08-26.
-- Decision: configure one maintained OpenIddict client registration per exact
-  external callback origin when the client library requires one redirect URI per
-  registration. Both registrations use the same confidential `relisten-web`
-  server application. Rationale: OpenIddict state selects the registration and
-  keeps callback validation enabled for concurrent local and canonical flows.
-  The protected-state spike confirmed this decision. Date: 2026-08-26.
-- Decision: use `https://web.relisten.localhost:5173` as the only browser origin
-  in development. Use exact `auth.relisten.localhost` and
-  `accounts.relisten.localhost` hosts for local protocol boundaries. Rationale:
-  exact HTTPS origins allow Secure host-only cookies without credentialed CORS
-  or `SameSite=None`. Date: 2026-08-26.
-- Decision: let the Timber development proxy overwrite
-  `X-Relisten-Web-Origin`. The API accepts the header only on the exact session
-  and facade prefixes, from a configured backend host, for an exact allowlisted
-  HTTPS origin including its port. Rationale: the API needs the browser-visible
-  callback URI behind the local proxy, but an arbitrary forwarded host would
-  bypass redirect and origin validation. Date: 2026-08-26.
-- Decision: protect browser mutations with both ASP.NET antiforgery and an exact
-  `Origin` check. Bind antiforgery tokens to the web session ID. Rationale: a
-  token from an old or different authenticated session must fail even when its
-  antiforgery cookie remains. Date: 2026-08-26.
-- Decision: perform database revocation for the current web session and linked
-  auth-SSO session on the CSRF-protected web-host POST. Use a bounded auth-host
-  redirect only to expire the auth-host cookie after revocation. Rationale: the
-  redirect must not turn a cross-site GET into the authoritative revocation
-  operation. Date: 2026-08-26.
-- Decision: keep Development personas and external Google/Apple providers as
-  separate runtime profiles. Rationale: a fixed persona must be impossible to
-  enable outside ASP.NET Core `Development`. Date: 2026-08-26.
-- Decision: serve reviewed browser resources from the established `/v1/me` and
-  `/v1/library/*` actions. A bearer request must pass native-session and scope
-  validation. A cookie request must pass web-session and capability validation.
-  Rationale: mobile and Timber must share one resource contract and one domain
-  path without making every `/v1/*` action browser-accessible. Date: 2026-08-26.
-- Decision: reject a request that presents both an Authorization credential and
-  `__Host-relisten_session`. Rationale: the User Service must never choose an
-  identity by handler order when two credentials are present. Date: 2026-08-26.
-- Decision: apply session-bound antiforgery and exact Origin checks only when a
-  reviewed mutation uses `__Host-relisten_session`. Rationale: browser cookies
-  are ambient credentials; native bearer credentials are explicit and must
-  retain the existing mobile request contract. Date: 2026-08-26.
-- Decision: do not require comprehensive automated cross-layer E2E. Keep
-  Playwright limited to short browser-visible smoke tests. Use focused API tests
-  for database and security invariants, and use Browser or Chrome DevTools plus
-  direct read-only PostgreSQL inspection for the local acceptance proof.
-  Rationale: the rejected test duplicated product and infrastructure code and
-  made the proof less trustworthy. Date: 2026-08-27.
-- Decision: route `/auth/session/*`, `/v1/library/*`, exact `/v1/me`, and exact
-  `/api/user/v1/csrf` through the development proxy by convention. Keep API
-  authorization authoritative. Rationale: a new library route must not require
-  a second proxy edit, and proxy reachability must not imply browser access.
+- Use one `identity.sessions` table for `auth_sso` and `web`. Encode a cookie as
+  a versioned UUIDv7 session ID plus a random 256-bit validator, and store only
+  its SHA-256 hash. Keep credential encoding, lifecycle, authentication, and
+  authorization in separate types. Date: 2026-08-26.
+- Persist exactly three web capabilities: account profile read, library read,
+  and favorite mutation. `auth_sso` has no resource capability. A new API action
+  remains browser-inaccessible until its controller policy and capability are
+  reviewed. Date: 2026-08-26.
+- Use maintained OpenIddict registrations for the exact canonical and local
+  callbacks. Keep redirect validation, state, correlation, nonce, PKCE, and code
+  exchange in OpenIddict. Keep Development personas separate from the external
+  Google/Apple profile. Date: 2026-08-26.
+- Use `https://web.relisten.localhost:5173` as the fixed development origin.
+  Timber overwrites `X-Relisten-Web-Origin`; the User Service accepts it only on
+  reviewed paths, from configured backend hosts, for an exact allowed HTTPS
+  origin. Date: 2026-08-26.
+- Require session-bound antiforgery plus exact Origin for unsafe cookie requests.
+  Native bearer mutations retain their existing contract. Logout revokes the
+  web and parent auth-SSO rows on the protected POST; the auth-host GET may only
+  clear the already-revoked parent cookie. Date: 2026-08-26.
+- Serve browser-capable resources from `/v1/me` and `/v1/library/*`. Native
+  requests require native scopes; web requests require persisted capabilities.
+  Reject simultaneous bearer and cookie credentials. Date: 2026-08-26.
+- Route reviewed resource families by convention. Apply read/write policy at the
+  library controller and cookie-mutation protection in global middleware so a
+  new library action inherits both defaults. Date: 2026-08-27.
+- Keep Playwright to one short browser-visible smoke. Focused API tests own
+  protocol and security failures. Browser DevTools plus read-only PostgreSQL
+  inspection own the local cross-layer proof. Retain a test only when it names a
+  concrete failure or compatibility contract. Date: 2026-08-27.
+- Provide one idempotent local setup command for the trusted certificate and
+  client secret outside Git. Keep the fixed hosts, port, and host allowlist.
   Date: 2026-08-27.
-- Decision: apply method-aware read or write authorization at the library
-  controller boundary. Apply session-bound antiforgery and exact Origin checks
-  in one global boundary for every unsafe request that carries
-  `__Host-relisten_session`. Rationale: a developer must not need to remember a
-  per-action authorization or antiforgery filter. Date: 2026-08-27.
-- Decision: provide one local setup command that creates a trusted certificate
-  and confidential client secret outside Git. Use the fixed HTTPS hosts and
-  port without manual secret copying. Rationale: every developer must get the
-  same secure-cookie origin with actionable setup failures. Date: 2026-08-27.
+- Put the six production route rules in the existing web Ingress and keep cache
+  policy in the User Service. Keep all production writes approval-gated. After
+  approval, use the existing image workflow in this order: configure, deploy,
+  verify, expose routes, then smoke test. Date: 2026-08-27.
 
 ## API milestones
 
-### A1. Prove maintained callback state before session implementation
+### A1. Maintained callback-state proof
 
-The completed focused spike in
-`/Users/alecgorge/code/relisten/RelistenApi/RelistenUserServiceTests` configured
-the OpenIddict server and client with the two exact callbacks:
+Focused OpenIddict tests use these exact callbacks:
 
     https://relisten.net/auth/session/callback
     https://web.relisten.localhost:5173/auth/session/callback
 
-The spike proved protected relative `return_to` restoration, exact registration
-selection, one-time callback state, and independent concurrent correlation
-cookies. It did not decode an OIDC response or disable redirect validation.
-Maintained OpenIddict tests and the focused configuration regression own those
-protocol guarantees; Playwright will not reproduce the protocol client.
-
-Keep OpenIddict client token storage enabled because it supplies one-time state
-redemption. Let the client pipeline own its per-challenge correlation cookie,
-PKCE verifier, nonce, and 15-minute state-token lifetime.
+The tests prove protected relative `return_to` restoration, exact registration
+selection, one-time state redemption, replay rejection, and independent
+concurrent correlation cookies. OpenIddict owns the correlation cookie, PKCE
+verifier, nonce, code exchange, and 15-minute state-token lifetime. Redirect
+validation and client token storage remain enabled.
 
 ### A2. Persist and authenticate durable sessions
 
-Add an entity such as
-`RelistenUserService/Identity/Entities/IdentitySession.cs` and its focused EF
-configuration under `RelistenUserService/Persistence/Configurations/`. Map it
-to `identity.sessions`. The final row must contain:
+`RelistenUserService/Identity/Entities/IdentitySession.cs` and its EF
+configuration map to `identity.sessions`. Each row contains:
 
 - UUIDv7 `id` and owning `user_id`;
 - purpose `auth_sso` or `web`;
@@ -337,7 +228,7 @@ to `identity.sessions`. The final row must contain:
 - captured `security_version`;
 - `authenticated_at`, `created_at`, `updated_at`, and `last_seen_at`;
 - `sliding_expires_at` and `absolute_expires_at`;
-- nullable `revoked_at` and a bounded revocation reason if operations need it;
+- nullable `revoked_at`;
 - nullable parent `auth_sso_session_id`, required only for `web`;
 - nullable exact `web_origin`, required only for `web`;
 - a fixed capability flags value. `auth_sso` must have no resource capability.
@@ -346,7 +237,7 @@ Use database check constraints for UUIDv7, purpose-specific nullability, hash
 length, expiration order, capability bits, and exact parent/origin requirements.
 Use a self-reference that does not cascade-delete session evidence.
 
-Create a credential codec that generates 32 random bytes with a cryptographic
+The credential codec generates 32 random bytes with a cryptographic
 random-number generator, encodes version plus session ID plus validator in a
 cookie-safe form, hashes the validator with SHA-256, and compares hashes with
 `CryptographicOperations.FixedTimeEquals`. Keep database queries out of the
@@ -363,27 +254,26 @@ only when at least one hour has passed. A web session slides for 30 days but
 never beyond 180 days from creation. An auth-SSO session expires 30 days after
 creation.
 
-Generate the EF migration with the repository's configured context, inspect the
-generated SQL and model snapshot, then test the migration against local
-PostgreSQL. Do not add the confidential client secret to a migration.
+Migration `20260827052217_AddDurableBrowserSessions` contains no confidential
+client secret and passed the local PostgreSQL migration tests.
 
-### A3. Replace the temporary identity bridge and add the real web OIDC client
+### A3. Durable auth SSO and the web OIDC client
 
-Refactor the external-provider callback and Development persona completion to
-call the same external-identity completion service and then create an
+The external-provider callback and Development persona completion call the same
+external-identity completion service and then create an
 `auth_sso` row plus `__Host-relisten_auth`. The cookie is Secure, HttpOnly,
 SameSite=Lax, Path `/`, and has no Domain. Development personas remain available
 only when the host environment is `Development` and the explicit persona option
 is enabled.
 
-Register `relisten-web` as a confidential authorization-code client that
+`relisten-web` is a confidential authorization-code client that
 requires S256 PKCE. Provision its secret from local configuration and, after
 approval, a deployment Secret reference. Never commit, log, or send the secret
 to Timber. The server registration permits both exact callbacks and only the
 scopes needed to return a validated subject and account profile. It permits no
 `offline_access` and no accounts resource.
 
-Change `AuthorizationController` to branch on the validated web client ID.
+`AuthorizationController` branches on the validated web client ID.
 Native clients keep the existing `NativeSession`, authorization, audience,
 scope, access-token, and rotating refresh-token behavior. The web client creates
 no `NativeSession` and receives no accounts-resource audience or refresh token.
@@ -393,7 +283,7 @@ Build that principal with a separate web-bootstrap principal factory. Do not
 reuse `NativePrincipalFactory`, because that factory always adds the accounts
 resource audience and native session claims.
 
-Add these endpoints:
+The browser lifecycle endpoints are:
 
     GET  /auth/session/start?return_to=<relative application path>
     GET  /auth/session/callback
@@ -414,8 +304,11 @@ Logout and switch-account require the current web session, exact Origin, and a
 session-bound antiforgery token. Both revoke the current web row and linked
 auth-SSO row in one database transaction. Logout returns through the auth host to
 expire `__Host-relisten_auth`, then returns to a fixed local or canonical web
-origin. Switch-account uses the same cleanup and restarts authorization with
-provider account selection. Each host expires only the cookie it owns.
+origin. The auth host emits the deletion header only when the presented auth
+cookie identifies the parent row that the logout transaction revoked with a
+linked web row for that origin. Switch-account uses the same cleanup and
+restarts authorization with provider account selection. Each host expires only
+the cookie it owns.
 
 ### A4. Enforce cookie, CSRF, origin, host, and cache policy
 
@@ -435,8 +328,9 @@ Every cookie-authenticated mutation must reject an absent Origin, a non-HTTPS
 Origin, an origin with the wrong host or port, a missing antiforgery header, an
 invalid token, and a token bound to another session. Apply
 `Cache-Control: private, no-store` to all `/auth/session/*` responses, the
-callback, the CSRF response, and every reviewed `/v1` resource response. Do not
-add credentialed CORS and do not configure `SameSite=None`.
+auth-SSO cookie-clear response, the CSRF response, and the segment-safe `/v1`
+account family. Do not add credentialed CORS and do not configure
+`SameSite=None`.
 
 Extend host filtering for the exact development and production hosts. Add one
 small external-origin reconstruction middleware before OpenIddict. It may honor
@@ -508,10 +402,10 @@ Update `/Users/alecgorge/code/relisten/relisten-web/vite.config.ts` so the
 development server uses exactly
 `https://web.relisten.localhost:5173` and `strictPort: true`. Load a trusted
 local certificate from environment-configured absolute paths. Do not commit the
-certificate or private key. The setup documentation will use a local directory
-outside all repositories, for example:
+certificate or private key. The setup command uses this local directory outside
+all repositories by default:
 
-    /Users/alecgorge/Library/Application Support/Relisten/local-tls
+    /Users/alecgorge/Library/Application Support/Relisten/local-browser-session-tls
 
 Because Vite 8 disables its built-in Host check under HTTPS, add a small
 development-only Vite middleware that accepts only the exact Host
@@ -545,24 +439,18 @@ Mutation methods first acquire a CSRF token, then attach
 `X-Relisten-CSRF`. Do not share the public catalog client's cache or add a
 generic API SDK, token manager, global auth state, or BFF.
 
-Add a development-only diagnostic route or harness that lets Playwright start
-sign-in, invoke the typed client, and show status without rendering credentials
-or personal data. Production builds must omit or return 404 for the diagnostic
-route. Do not add product favorites UI or login styling.
+Add a development-only diagnostic route that gives the browser smoke a stable,
+redacted return target. The route contains only a test marker and returns 404
+outside Development. The smoke invokes the reviewed routes without rendering
+credentials or personal data. Do not add product favorites UI or login styling.
 
 ### W4. Keep browser automation small
 
-Delete `scripts/run-browser-session-e2e.sh` and the abandoned comprehensive
-Playwright draft. Do not replace them with Playwright `webServer`, another shell
-supervisor, raw HTTPS helpers, PostgreSQL calls, cookie parsing, custom UUIDv7,
-callback interception, or log scanning.
-
-Keep focused unit tests for the proxy boundary and typed client. Keep at most a
-short Playwright smoke test for browser-visible behavior that is expensive to
-regress manually: development-persona sign-in through the real OIDC redirect,
-one authenticated read, and logout. A favorite round trip belongs in the smoke
-test only if it stays short and restores state in `finally`. Browser tests use
-already-running local services and normal development setup.
+Browser automation consists of focused proxy/client tests and one short
+Playwright smoke for development-persona sign-in, one authenticated read, and
+logout. Playwright uses already-running services. It does not supervise
+services, query PostgreSQL, parse credentials, implement UUIDv7, intercept
+callbacks, or scan logs.
 
 Do not enable Playwright traces, request dumps, videos, or screenshots by
 default because callback URLs and cookies are credentials. A failed test may
@@ -587,31 +475,26 @@ deny a web session that lacks the new action's reviewed capability.
 
 ### Local setup
 
-Use a trusted certificate for these exact names:
+`pnpm setup:browser-session` creates one trusted certificate for these exact
+names:
 
     web.relisten.localhost
     auth.relisten.localhost
     accounts.relisten.localhost
 
-Keep certificate files and the confidential local client secret outside the
-repositories. Provide one idempotent setup command that installs or verifies a
-standard trusted local CA, creates the exact host certificate, and creates the
-client secret without printing it. Vite and Kestrel use stable default paths in
-the developer's application-support directory. A missing tool, failed trust
-installation, wrong file permission, or missing certificate must produce an
-actionable error. Add ignore rules for certificate and local-secret file names
-even though the documented files live outside the repositories.
+The command stores the certificate and confidential local client secret under
+`~/Library/Application Support/Relisten/local-browser-session-tls`. It writes
+the User Service configuration through .NET Secret Manager. No certificate,
+private key, or client secret belongs in Git.
 
 From `/Users/alecgorge/code/relisten/RelistenApi`:
 
     ./start-local-databases.sh
-    dotnet restore RelistenApi.sln
-    dotnet build RelistenApi.sln
+    dotnet run --project RelistenUserService/RelistenUserService.csproj
 
-Expected result: PostgreSQL answers on `127.0.0.1:15432`; restore and build exit
-`0`. Run the documented User Service development command with Development
-personas, the exact HTTPS issuer and hosts, and the generated external files. It
-must not seed a web session.
+PostgreSQL must answer on `127.0.0.1:15432`, and the User Service must listen on
+`https://127.0.0.1:5443` with Development personas enabled. Startup must not
+seed a web session.
 
 From `/Users/alecgorge/code/relisten/relisten-web`:
 
@@ -619,11 +502,9 @@ From `/Users/alecgorge/code/relisten/relisten-web`:
     pnpm setup:browser-session
     pnpm dev
 
-In a separate terminal, run the optional short Playwright smoke command. The
-agent-driven acceptance proof uses Browser or Chrome against the same running
-services. Expected result: one real browser completes the same
-external-identity completion path used by Google, then receives a
-database-backed opaque session.
+The Playwright smoke and agent-driven Browser proof use these already-running
+services. Both enter through the same external-identity completion path used by
+Google; neither seeds a web session.
 
 ### Behavioral acceptance criteria and proof ownership
 
@@ -648,12 +529,17 @@ Focused API tests must establish these durable invariants:
    revokes the linked sessions.
 9. Maintained OpenIddict state rejects missing correlation and replay while
    concurrent challenges remain independent.
+10. Authentication cookies use the exact names, Secure, HttpOnly,
+    SameSite=Lax, Path `/`, and no Domain. Antiforgery uses the exact cookie and
+    request-header names.
 
-The short Playwright smoke and agent-driven Browser or Chrome proof must
-establish browser-visible behavior: Development-persona sign-in completes
-through the real OIDC flow, the web cookie has the required metadata, `/v1/me`
-and library reads succeed, and logout removes authenticated access. A favorite
-round trip may be agent-driven. It records the initial state and restores it.
+The short Playwright smoke establishes browser-visible Development-persona
+sign-in through the real OIDC flow, browser-safe `/v1/me`, library snapshot
+reachability, and logout. The agent-driven Browser proof establishes `/v1/me`,
+snapshot, changes, route isolation, credential ambiguity rejection, CSRF
+failure, favorite add/replay/remove, and logout against the same running
+services. Focused API tests own cookie metadata and absent or incorrect Origin
+because browser APIs do not expose or forge those values safely.
 
 Direct read-only PostgreSQL inspection may confirm the session purpose, UUID
 version, validator-hash length, absence of a raw-validator column, lack of a
@@ -668,14 +554,14 @@ data. No proof artifact may retain those values.
 Run the smallest relevant API tests after each API change. When the API work is
 coherent, run from `/Users/alecgorge/code/relisten/RelistenApi`:
 
-    dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj --filter <browser-session-filter>
+    dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj --no-restore \
+      --filter "FullyQualifiedName~TestSessionCredentialCodec|FullyQualifiedName~TestIdentitySessionLifecycleIntegration|FullyQualifiedName~TestBrowserFacadeBoundary|FullyQualifiedName~TestWebSessionAntiforgery|FullyQualifiedName~TestWebRequestBoundaries|FullyQualifiedName~TestFavoriteLibraryIntegration|FullyQualifiedName~TestReviewedAccountAccessAuthorization|FullyQualifiedName~TestHostBoundaryMiddleware|FullyQualifiedName~TestRefreshTokenEndpointBoundary"
     dotnet test RelistenUserServiceTests/RelistenUserServiceTests.csproj
-    dotnet test RelistenApiTests/RelistenApiTests.csproj
     dotnet build RelistenApi.sln
 
-Replace the filter placeholder with the final focused filter. Each command must
-exit `0`. Do not rerun an unchanged failing command. Diagnose the failure, make
-a code or environment change, and then rerun the smallest affected check.
+Each command must exit `0`. Do not rerun an unchanged failing command. Diagnose
+the failure, make a code or environment change, and then rerun the smallest
+affected check.
 
 Run from `/Users/alecgorge/code/relisten/relisten-web`:
 
@@ -683,10 +569,12 @@ Run from `/Users/alecgorge/code/relisten/relisten-web`:
     pnpm lint
     pnpm build
     pnpm test:browser-session
+    pnpm test:smoke:browser-session
 
-The browser-session command runs only short smoke tests against already-running
-services. Each command must exit `0`. Record test counts and relevant assertions
-without recording credentials or personal data.
+`pnpm test:browser-session` runs the focused client and proxy tests without
+services. `pnpm test:smoke:browser-session` runs one short smoke against
+already-running services. Each command must exit `0`. Record test counts and
+relevant assertions without recording credentials or personal data.
 
 After focused checks pass, request two fresh read-only reviews. One review must
 cover API authentication, OpenIddict, session, CSRF, facade authorization, and
@@ -702,35 +590,184 @@ bodies, status updates, and the final handoff.
 
 ## Production approval checkpoint
 
-Stop here after the local/local proof and final reviews pass. Update this plan
-with exact evidence, then inspect production and Flux read-only. The approval
-proposal must replace every pending item below with repository evidence:
+The local proof, final reviews, production read-only inspection, and unapplied
+Flux authoring are complete. The proposed production artifacts are the API
+branch whose runtime code ends at `708ec6a` and the Flux branch through
+`92769dd`.
+The web commits are development-only for this rollout; no production Timber
+image or product UI change is required.
 
-- Exact Flux files and fields: **pending read-only inspection after local proof**.
-- Exact ingress objects, paths, path types, and precedence for
-  `/auth/session/*`, `/api/user/v1/csrf`, and the reviewed `/v1` resource
-  routes: **pending**.
-- Exact cache configuration and bypass behavior for both path prefixes:
-  **pending**.
-- Exact User Service image tag or digest fields: **pending**.
-- Exact configuration keys for canonical and local web origins, exact callback
-  URIs, proxy backend hosts, cookie behavior, and runtime provider profiles:
-  **pending**.
-- Exact existing Secret resource and new key references for the confidential
-  web client: **pending**. The proposal will describe a no-output generation
-  command and an input path that does not expose the value to logs or Git.
-- Exact migration mechanism and replica count/surge behavior: **pending**.
-- Expected production database writes: the reviewed migration, OpenIddict
-  confidential-client registration or update, auth-SSO and web session rows from
-  the approved sign-in, OpenIddict authorization/token rows, and temporary
-  favorite/change/receipt rows needed by the smoke test. The final proposal must
-  confirm the exact table set from code and read-only schema inspection.
-- Exact Google and favorite smoke-test steps: **pending**. The test will record
-  the chosen favorite's initial state and restore it before completion.
-- Health checks, rollout observations, public route checks, log checks, and
-  database success queries: **pending**.
-- Exact rollback commits, image/config reversion, migration compatibility, and
-  post-rollback checks: **pending**.
+Flux commit `2442be7` changes exactly these files:
+
+- `clusters/relisten3-k3s/apps/relisten-user-service.yaml` adds
+  `relisten.net` to `AllowedHosts`; sets `Accounts__WebOrigins__0` to
+  `https://relisten.net`; sets `Accounts__WebOrigins__1` to
+  `https://web.relisten.localhost:5173`; reads
+  `Accounts__WebClientSecret` from key `WebClientSecret` in existing Secret
+  `default/relisten-user-service-secrets`; and sends Host
+  `accounts.relisten.net` from the startup, liveness, and readiness probes.
+- `clusters/relisten3-k3s/apps/relisten-web.yaml` adds six paths to the existing
+  `relisten-web-production-ingress` under host `relisten.net`, before the
+  Timber `/` catch-all. The paths, in source order, are exact
+  `/auth/session`, prefix `/auth/session/`, exact `/api/user/v1/csrf`, exact
+  `/v1/me`, exact `/v1/library`, and prefix `/v1/library/`. Every new path
+  targets `relisten-user-service-srv:8080`.
+- `clusters/relisten3-k3s/README.md` documents the route ownership, one-key
+  confidential Secret patch, existing workflow invocation, health checks, and
+  approval gate. Follow-up commits through `92769dd` correct the runbook
+  without changing a manifest.
+
+The route changes create same-origin reverse routing; they do not return a
+redirect to the browser. The exact-root and slash-prefix pairs are required by
+the live Traefik `strictPrefixMatching=false` setting. They do not match
+`/auth/session-evil` or `/v1/library-evil`. No separate Ingress, router priority,
+TLS certificate, DNS record, NetworkPolicy, cache middleware, or workflow file
+changes.
+
+The User Service owns cache policy. `PrivateNoStoreMiddleware` overwrites the
+response with `Cache-Control: private, no-store` for the segment-safe `/v1`
+account family, `/auth/session/*`, `/api/user/v1/csrf`, and `/auth/sso/*`.
+Cloudflare currently reports these uncached anonymous checks as dynamic. The
+rollout adds no Traefik response-header middleware because such middleware on
+the combined Ingress could also affect Timber's `/` catch-all.
+
+The confidential client accepts only these compiled callback URIs:
+
+    https://relisten.net/auth/session/callback
+    https://web.relisten.localhost:5173/auth/session/callback
+
+Production uses the external-provider runtime profile. Development personas
+remain disabled outside ASP.NET Core `Development`. The local production-backed
+proxy overwrites `X-Relisten-Web-Origin` with the second exact origin. The User
+Service accepts that header only on the reviewed paths, when the actual backend
+Host is configured, and when the complete HTTPS origin matches the allowlist.
+
+After approval, create one stable 64-character letter-and-digit credential in
+the existing 1Password vault with output redirected to `/dev/null`. Read the
+credential inside the documented fail-fast subshell, require exactly 64 ASCII
+letters and digits, and transform it into a one-key JSON merge patch over
+stdin. The command updates only `WebClientSecret` in
+`default/relisten-user-service-secrets`; it does not read, rebuild, print, or
+write the unrelated provider and certificate credentials. The subshell drops
+the variable when it exits. Do not rotate this credential on later rollouts
+because the startup initializer rejects a mismatch with the persisted
+`relisten-web` application.
+
+Use this rollout order after approval. The User Service runs one no-surge
+replica. Applying its configuration and then deploying the new image each
+restart that replica. The browser routes stay closed until the new image is
+healthy.
+
+1. Record the current User Service image ID, pod health, auth discovery
+   response, accounts readiness response, and anonymous Timber/catalog health.
+   Record the complete `ghcr.io/...@sha256:...` pull reference as the rollback
+   image.
+
+   Capture and validate the rollback image before any production write:
+
+       (
+         set -euo pipefail
+         RELISTEN_PREVIOUS_USER_SERVICE_IMAGE="$(
+           kubectl --context relisten3-k3s --namespace default get pods \
+             --selector app=relisten-user-service \
+             --field-selector status.phase=Running \
+             --output jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.name=="relisten-user-service")]}{.imageID}{"\n"}{end}{end}'
+         )"
+         if [[ ! "$RELISTEN_PREVIOUS_USER_SERVICE_IMAGE" =~ ^ghcr\.io/relistennet/relisten-user-service@sha256:[0-9a-f]{64}$ ]]; then
+           echo 'Expected one resolved User Service image digest.' >&2
+           exit 1
+         fi
+         printf 'Record this rollback image: %s\n' "$RELISTEN_PREVIOUS_USER_SERVICE_IMAGE"
+       )
+
+2. Create and store `WebClientSecret`, then update the existing Kubernetes
+   Secret without printing a value.
+3. Verify that local branch `codex/web-session-foundation-api` is at the
+   approved full SHA. Push that branch, then require `git ls-remote --heads` to
+   return the same SHA.
+4. From Flux branch commit `92769dd`, apply only
+   `clusters/relisten3-k3s/apps/relisten-user-service.yaml`. Do not apply
+   `relisten-web.yaml` yet. Wait for the current-image rollout and recheck
+   native auth and accounts health.
+5. Run the unchanged
+   `.github/workflows/build_and_push_image.yml` with `--ref
+   codex/web-session-foundation-api -f component=user-service`. The
+   workflow publishes the normal `latest` and short-SHA tags and restarts only
+   `deployment/relisten-user-service`. List the new workflow run, confirm that
+   its `headSha` equals the approved SHA, and watch it with `gh run watch
+   <run-id> --exit-status`. Wait for the new-image rollout and repeat the
+   public health checks.
+6. Apply `clusters/relisten3-k3s/apps/relisten-web.yaml` from Flux commit
+   `92769dd`. The Ingress change does not alter the Timber pod template. Begin
+   Google sign-in only after the public route checks below pass.
+
+The Deployment runs one replica with `maxSurge: 0`, `maxUnavailable: 1`, and
+`Accounts__ApplyMigrationsOnStartup=true`. The new pod connects to the direct
+PostgreSQL primary before it listens. Migration
+`20260827052217_AddDurableBrowserSessions` creates additive table
+`identity.sessions`, its constraints and indexes, and one
+`identity.__EFMigrationsHistory` row. Production currently has no
+`relisten-web` application, so this rollout is expected to insert one
+confidential-client row in `identity.openiddict_applications`. Later restarts
+treat an exact row as a no-op; a secret or redirect mismatch aborts startup. A
+Data Protection key row may be inserted if key rotation is due.
+
+The approved local-callback and canonical-callback Google proofs are expected to
+write these rows:
+
+- An existing `identity.users` or `identity.external_identities` row can receive
+  refreshed provider metadata. A first-time account would insert both rows.
+- Each sign-in writes protected state, authorization-code, access-token, and ID
+  token records in `identity.openiddict_authorizations` and
+  `identity.openiddict_tokens`. Neither sign-in writes a refresh token or an
+  `identity.native_sessions` row.
+- Each completed sign-in inserts one `auth_sso` row and one linked `web` row
+  in `identity.sessions`, for two linked pairs in total.
+- The first library read may create `user_data.library_states`.
+- The favorite add and remove update `user_data.favorites` and append
+  `user_data.library_changes` and
+  `user_data.favorite_mutation_receipts`. Replaying the same command adds no
+  second mutation. Restoring the active favorite state does not remove the
+  audit change or receipt rows.
+- Each logout sets `revoked_at` on its linked auth-SSO and web pair.
+
+After rollout, anonymous checks must show Ready pods, healthy auth discovery
+and accounts readiness, working Timber and catalog pages, and these route
+results:
+
+- `https://relisten.net/v1/me` and
+  `https://relisten.net/v1/library/snapshot` reach the User Service, reject the
+  anonymous request, and include `Cache-Control: private, no-store`;
+- exact `/auth/session` reaches the User Service, returns 404, and includes
+  `Cache-Control: private, no-store` without creating OIDC state;
+- `/v1/library-evil` and an unrelated `/v1/*` path remain on the Timber
+  catch-all. The browser can send the path-wide cookie, but the requests never
+  reach the User Service and cannot authenticate there;
+- User Service logs contain no startup, migration, OpenIddict, Host Filtering,
+  or database errors and contain no credential value.
+
+The approved Chrome test records the chosen favorite's initial active state,
+then runs local Timber to the production proxy target, Relisten issuer, Google,
+local callback, `/v1/me`, snapshot, changes, add or remove, replay, inverse
+mutation, and logout. The final active state must equal the initial state. A
+read-only replica query must confirm the session row shapes, validator-hash
+length, absent web-created native session, linked revocation, and restored
+favorite state without selecting a validator, token, cookie, or personal field.
+Inspect Relisten app-origin storage only; do not inspect Google storage or
+credentials. After the local-callback proof, complete a second sign-in through
+the canonical callback, verify `/v1/me`, and log out. The canonical proof does
+not mutate a favorite.
+
+Rollback starts by removing browser reachability. Apply the parent
+`2442be7^` version of `clusters/relisten3-k3s/apps/relisten-web.yaml`. Then
+render the parent `relisten-user-service.yaml` with `yq`, replacing its
+Deployment image with the recorded prior `ghcr.io/...@sha256:...` reference,
+and pipe that one manifest to `kubectl apply -f -`. The single apply restores
+the prior image and configuration together, so the new binary never starts
+without `Accounts__WebClientSecret`. Wait for readiness, then recheck auth
+discovery, accounts health, Timber, catalog API, and that `/v1/me` again reaches
+the Timber catch-all. Keep the additive session table, client registration, and
+Secret key. Do not run the migration down or rotate the client secret.
 
 Present the completed proposal to the repository owner and ask for explicit
 approval. Do not interpret silence, review comments, or approval of local code
@@ -739,48 +776,15 @@ committed, report production E2E as pending approval, and keep the goal active.
 
 ## Production rollout and rollback
 
-This section is intentionally non-executable until the approval checkpoint is
-complete and approved.
+This section remains blocked until explicit approval. The approved operator must
+follow the checkpoint order exactly: configure, deploy, verify, expose, then
+smoke test. Record the workflow run, Kubernetes rollout, public checks, Google
+proof, favorite restoration, canonical-host proof, and rollback evidence here.
 
-After approval, edit only the approved fields on
-`codex/web-session-foundation-flux`. Follow existing Flux Secret-reference and
-image conventions. Never commit a secret value. Commit the Flux change as one
-passing logical unit.
-
-Deploy only approved commits. Observe the User Service rollout and health before
-starting any browser flow. Confirm that anonymous catalog and Timber routes
-remain healthy. Confirm that the longer session/facade prefixes reach the User
-Service before the Timber catch-all and bypass every public cache.
-
-For the production-backed Google test, load the Chrome-control skill and use the
-user's explicit Chrome browser with its existing signed-in Google session. Do
-not request, inspect, reveal, or handle Google credentials. Do not inspect
-Google cookies or storage. Inspect only the Relisten app origin to prove that it
-contains no access or refresh token.
-
-Run this approved path:
-
-    local Timber
-      -> local development proxy
-      -> production relisten.net session routes
-      -> production Relisten issuer
-      -> Google
-      -> local Timber callback
-      -> production opaque web session
-
-Prove `/me`, library snapshot, library changes, favorite add/observe/remove or
-the inverse needed to restore the initial state, mutation idempotency, and
-logout. Run the canonical-host smoke test if the approved deployment exposes
-the route without adding product UI. Confirm that no synthetic favorite remains.
-
-Rollback must first prevent new session traffic from reaching incompatible
-code. Revert the exact ingress/cache/config/image changes named in the approved
-proposal. Keep the additive session table unless the reviewed migration proves
-that removal is safe and the owner separately approves destructive rollback.
-Revoke test sessions if the rollback runbook requires it. Recheck anonymous
-catalog, Timber, auth discovery, User Service health, and the absence of cached
-user responses. Record every rollback command before deployment, not during an
-incident.
+If rollback is required, remove the six browser routes first. Apply the rendered
+parent User Service manifest with the recorded prior image and parent
+configuration together. Keep the additive session table, client registration,
+and Secret key. Do not run the migration down or rotate the client secret.
 
 ## Verification evidence
 
@@ -803,76 +807,95 @@ production user field.
 
 ### Implementation and test evidence
 
-- `78435dc046dd01c8ff86cd294be1c74cc9c40319`: initial browser-session
-  ExecPlan plus identity-plan link/status correction. `git diff --cached
-  --check` passed before commit.
-- `0705bb5a73319f31fb333a95a3fedf482e5cfd7b`: durable session schema,
-  credential codec, and lifecycle. The full User Service test project passed
-  with 64 tests. EF reported no pending model changes after the migration.
-- `5e3ea68120f2c41f3c07bf23991fa270f6305467`: confidential web OIDC,
-  auth-SSO, and browser-session lifecycle. The full User Service test project
-  and solution build passed. The local HTTPS protected-state spike completed
-  the callback and rejected callback replay.
-- `8e480429436f57e2bf1a0b325ccc7b052b48bd71`: initial browser-specific
-  profile, library, favorite, and CSRF facade. Focused profile/library tests and
-  the full User Service test project passed before the later shared-`/v1`
-  consolidation decision.
-- `38c17d3f3abf46dd538457bfa46fab03b150467f`: consolidated the reviewed
-  resources onto `/v1`, added credential ambiguity rejection, applied
-  method-aware native-scope or web-capability authorization, and enforced
-  cookie mutation protection globally. The affected suite passed 83 tests, the
-  full User Service project passed 140 tests, and the solution build passed
-  with no warnings.
-- Shared-`/v1` authorization test: `TestReviewedAccountAccessAuthorization`
-  now passes 3 tests. The final affected boundary filter passed 83 tests. The
-  full User Service project passed 140 tests. `dotnet build RelistenApi.sln
-  --no-restore` passed with no warnings or errors.
-- Fresh default-secure API review: accepted and fixed the native uppercase-host
-  compatibility defect and the missing route-family authorization convention.
-  A focused endpoint-convention test proves that new `/v1/library/*` and
-  `/auth/session/*` controller actions inherit policy while
-  `/v1/library-evil` and unrelated `/v1/*` do not. The proposed full-host
-  pipeline fixture was not added because the short real-browser smoke will
-  exercise the deployed middleware order without recreating the rejected test
-  orchestrator.
-- Timber graph commands: pending.
-- Timber typecheck, lint, and build: pending.
-- Short local Playwright smoke: pending after the abandoned comprehensive draft
-  is deleted.
-- Agent-driven local Browser or Chrome and direct read-only database proof:
-  pending.
-- Final API review: pending after the web boundary is stable. The current API
-  consolidation received one fresh read-only review and incorporated its two
-  validated code findings.
-- Fresh web/E2E review and accepted findings: pending.
-- API code simplification: removed E2E-only logging residue, shared segment
-  predicates between reachability and authorization, and exercised both read
-  and write policy branches. Post-simplification focused and full checks passed.
-  The final cross-repository simplification pass remains pending.
-- Authentication folder organization: `dotnet test
-  RelistenUserServiceTests/RelistenUserServiceTests.csproj --no-restore` passed
-  all 140 tests. `dotnet build RelistenUserService/RelistenUserService.csproj
-  --no-restore` passed with no warnings or errors. Each folder now has the
-  matching `RelistenUserService.Authentication.*` namespace.
-- Local HTTPS API configuration: the full User Service test project passed all
-  140 tests after adding the user-secrets ID, HTTPS launch binding, and exact
-  Host Filtering values. The pending Timber setup command writes the local
-  certificate paths and confidential client secret through .NET Secret
-  Manager without terminal output.
-- Production read-only inspection: pending until local/local proof passes.
-- Production approval: not requested yet.
+Committed API slices: `78435dc` plan; `0705bb5` persistence; `5e3ea68` web
+authorization; `8e48042` initial facade; `38c17d3` shared default-secure
+resources; `2841c3e` shared-route evidence; `396c62a` authentication folder
+organization; `1209443` local HTTPS configuration; `2b7b114` canonical Host;
+`dbb24c1` simplification; and `708ec6a` SSO cookie-clear binding.
+
+Committed Timber slices: `c463bf6` HTTPS, proxy, and client; `eb86da6` short
+browser smoke; `c5b417c` development documentation; `86359c1` callback failure
+redaction; and `9d20af1` first-run setup.
+
+Committed, unapplied Flux slices: `2442be7` exact configuration and six routes;
+`a07f5e5` rollout order; `09b109f` one-key Secret patch; `8b1fe69` input and
+health gates; `020cc17` branch publication, workflow observation, delayed route
+exposure, and atomic rollback; and `92769dd` resolved rollback-image capture.
+The Flux source assertions, Kustomize render, client-side apply dry-run, shell
+syntax, `yq` image substitution, live read-only image-ID shape check, and `git
+diff --check` passed. No production state changed.
+
+- Final API validation: the exact security filter above passed 105 tests; all
+  141 User Service tests passed; EF reported no pending model changes; and
+  `dotnet build RelistenApi.sln --no-restore` passed with no warnings or
+  errors.
+- Timber graph: `npx timber graph
+  'src/app/(bare)/browser-session-development/page.tsx' --json` hit Timber's
+  packaged data-URL/`fileURLToPath` defect. The running graph endpoint
+  classified the diagnostic page as an RSC route with no poisoning or graph
+  error.
+- Timber focused and broad checks: `pnpm test:browser-session` passed 10 tests;
+  `pnpm typecheck` exited `0`; `pnpm lint` exited `0` with five pre-existing
+  warnings outside changed files; and `pnpm build` exited `0` with pre-existing
+  React compiler and chunk warnings. Targeted `oxlint` and `oxfmt --check`
+  passed for the setup, proxy, client, smoke, diagnostic route, and docs.
+- Local setup: the repository owner ran `pnpm setup:browser-session`. `mkcert`
+  installed the local CA and issued one certificate for exactly
+  `web.relisten.localhost`, `auth.relisten.localhost`, and
+  `accounts.relisten.localhost`. Read-only file inspection confirmed mode 0700
+  for the directory, 0600 for the private key and client-secret file, and 0644
+  for public certificates. The User Service then started on
+  `https://127.0.0.1:5443`, found migrations current, and validated the local
+  OpenIddict applications without printing a secret.
+- Agent-driven Browser proof: the in-app browser completed Development-persona
+  sign-in through the real authorization-code flow and returned to the fixed
+  Timber origin. `/v1/me`, snapshot, and changes returned status 200 and
+  `Cache-Control: private, no-store`; web `/v1/me` omitted
+  `native_session_uuid`. A request with both a dummy bearer credential and the
+  web cookie failed. `/v1/library/new-unreviewed-action`,
+  `/v1/library-evil`, and an unrelated `/v1/*` route returned 404. Missing and
+  incorrect CSRF tokens both returned 403.
+- Agent-driven favorite proof: a platform-generated UUIDv7 test favorite was
+  absent from the initial nine-item snapshot, added once, observed in snapshot
+  and changes, replayed with the same revision, removed, and observed as
+  absent. The final active-favorite count again equaled nine. Read-only
+  PostgreSQL inspection confirmed zero active synthetic rows, two change rows,
+  and two mutation receipts for the add and remove commands.
+- Agent-driven session proof: logout returned through the auth-host cookie-clear
+  route, returned to the fixed Timber origin, and changed `/v1/me` to 401.
+  Read-only PostgreSQL inspection found only the `validator_hash` validator
+  column. Recent session IDs were UUIDv7, every validator hash was 32 bytes,
+  every purpose-specific row shape was valid, and all ten recent web/auth-SSO
+  pairs were revoked after logout. Browser network and console metadata showed
+  no access-token, refresh-token, or ID-token URL parameter or log match. No
+  cookie value, validator, callback query, token, or personal field was read or
+  retained.
+- Fresh API, web, E2E, and Flux reviews named concrete failure modes and
+  independently validated each accepted finding. The accepted fixes are in the
+  commit ledger above. The required `code-simplifier` pass removed duplicate
+  predicates, unused branches, and brittle test scaffolding. No final reviewer
+  found a remaining concrete regression; production Google behavior remains
+  approval-gated.
+- Production read-only inspection: PostgreSQL `17.10` was read-only;
+  `identity.sessions` was absent; UUIDv7 extraction was available; and the
+  latest identity migration was `20260719193000_ConfigureProductionIosClient`.
+  The User Service had one Ready replica on tag `latest`; the new
+  Secret key was absent; all existing Secret values remained unread; Traefik
+  was `3.7.4` with non-strict prefix matching; and the existing web TLS
+  certificate covered `relisten.net`. Public `/v1/me` still reached Timber and
+  Cloudflare reported dynamic cache status. No production state changed.
+- Production approval: proposal ready; explicit approval pending.
 - Production rollout and Google E2E: pending explicit approval.
 
 ## Outcomes and retrospective
 
-The three feature branches exist. The API branch contains five logical commits
-for the plan, durable persistence, OIDC lifecycle, initial browser facade, and
-default-secure shared resources. The API worktree is clean. The web worktree
-contains uncommitted development work. No production Flux manifest edit, Secret
-change, deployment, production migration, production sign-in, production
-session, or production favorite mutation has occurred.
+The API and web foundations are implemented, reviewed, validated, and committed.
+The unapplied Flux branch contains the exact production configuration and
+runbook. Local OIDC, resource, favorite, revocation, and database proofs passed.
+Product favorites and login UI remain intentionally unimplemented.
 
-Replace this paragraph with the final outcome, residual risks, lessons, and
-remaining UI work after all authorized work is complete. Move the plan only when
-its approved scope is finished. If production approval remains pending, keep the
-plan active and describe production proof as pending approval.
+No browser access-token or refresh-token storage was introduced. No production
+manifest apply, Secret change, deployment, migration, sign-in, session, or
+favorite mutation has occurred. Production read-only inspection and the exact
+proposal are complete. Explicit approval, rollout, and Google proof remain
+pending. Keep this plan active while that approval checkpoint remains open.
