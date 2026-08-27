@@ -1,5 +1,8 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
 using RelistenUserService.Authentication;
 using RelistenUserService.Authentication.Browser;
@@ -10,6 +13,35 @@ namespace RelistenUserServiceTests;
 [TestFixture]
 public sealed class TestHostBoundaryMiddleware
 {
+    [Test]
+    public async Task Production_host_filter_allows_the_canonical_browser_host()
+    {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(TestContext.CurrentContext.TestDirectory)
+            .AddJsonFile("appsettings.json")
+            .Build();
+        var allowedHosts = configuration["AllowedHosts"]!
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        using var services = new ServiceCollection()
+            .AddLogging()
+            .AddHostFiltering(options => options.AllowedHosts = allowedHosts)
+            .BuildServiceProvider();
+        var reachedApplication = false;
+        var app = new ApplicationBuilder(services);
+        app.UseHostFiltering();
+        app.Run(_ =>
+        {
+            reachedApplication = true;
+            return Task.CompletedTask;
+        });
+        var context = new DefaultHttpContext { RequestServices = services };
+        context.Request.Host = new HostString("relisten.net");
+
+        await app.Build()(context);
+
+        reachedApplication.Should().BeTrue();
+    }
+
     [TestCase("/signin-google")]
     [TestCase("/signin-apple")]
     public async Task Provider_callbacks_are_rejected_on_the_accounts_host(string path)
