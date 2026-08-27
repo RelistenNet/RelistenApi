@@ -122,7 +122,14 @@ deployment workflow.
   reviews found no runtime defect. One accepted regression gap added focused
   expiry and disabled-user tests. The code-simplifier pass found no safe
   production-code reduction.
-- [ ] Receive explicit production approval for the exact proposal below.
+- [x] 2026-08-27: Added a Google-only Development profile that uses the local
+  User Service and local PostgreSQL. Focused configuration tests and a startup
+  check proved that the profile does not load Apple credentials or production
+  database configuration.
+- [ ] Create a separate Google development OAuth client and run the real Google
+  flow through Chrome against local PostgreSQL.
+- [ ] After the local Google proof, refresh the exact proposal and receive
+  explicit production approval.
 - [ ] After approval only: deploy the approved API and Flux commits, run Google
   and favorite smoke tests, restore favorite state, and record evidence.
 
@@ -189,6 +196,11 @@ deployment workflow.
 - 2026-08-27: Use the existing web Ingress and image workflow. After approval,
   configure, deploy, verify, expose, and smoke. Production writes remain
   approval-gated.
+- 2026-08-27: Prove Google before the production approval request. Use a
+  separate Web OAuth client with the exact
+  https://localhost:5443/signin-google redirect, the local User Service, and
+  local PostgreSQL. Apple cannot use localhost; an Apple development proof
+  would require a registered public development hostname and secure tunnel.
 
 ## API milestones
 
@@ -308,7 +320,7 @@ Run once:
     pnpm setup:browser-session
 
 The setup command generates and trusts one local certificate for exactly
-web.relisten.localhost, auth.relisten.localhost, and
+localhost, web.relisten.localhost, auth.relisten.localhost, and
 accounts.relisten.localhost. It stores certificates and the confidential local
 client secret under Library/Application Support outside Git and writes User
 Service configuration through .NET Secret Manager.
@@ -369,6 +381,19 @@ Start Timber:
 
 Expected: Timber listens only on https://web.relisten.localhost:5173.
 
+For the real Google proof, create a separate Google Web OAuth client with the
+exact https://localhost:5443/signin-google redirect. Store only its client ID
+and client secret in .NET Secret Manager as documented in
+relisten-web/docs/browser-session-development.md. Then run:
+
+    cd /Users/alecgorge/code/relisten/RelistenApi
+    dotnet run --project RelistenUserService/RelistenUserService.csproj \
+      --launch-profile RelistenUserService.LocalGoogle
+
+Expected: the User Service uses the local PostgreSQL connections pinned by the
+launch profile, enables Google, disables Apple and Development personas, and
+accepts the Google callback only on https://localhost:5443/signin-google.
+
 ### Behavioral acceptance criteria and proof ownership
 
 Focused API tests must prove:
@@ -428,14 +453,16 @@ commit bodies, status updates, and final handoff.
 
 ## Production approval checkpoint
 
-The final local checks and fresh reviews are complete. The currently unapplied
-proposal uses:
+The proposal below remains unapplied. Refresh its commit identifiers and
+present it for approval only after the real local Google proof passes. The
+current local-proof branch heads are:
 
-- API runtime and tests through c563a17 on
+- API runtime and tests through
+  dcfcca04bede38f24486d9b1dd1ca6757d407ecf on
   codex/web-session-foundation-api. Later commits on that branch change only
   this plan.
 - Development-only Timber branch
-  2aeb1a6b3846ad9144ae940824be6314f332c15c.
+  845cc455e67ff4a8f8a8183d03a1ef475f5e6cf1.
 - Unapplied Flux branch
   f4b25e4548c52bcc2453dc87f988e097ec47f14d.
 
@@ -583,10 +610,10 @@ production user field.
   Development form concurrency; 9185ea0 rollout plan; 7c0c638 redirect log
   suppression; 0e1f290 antiforgery priming; bf8cf80 plan reduction; 5cabb8c
   removal of the unproven handoff design; c563a17 expiry and inactive-user
-  regression coverage.
+  regression coverage; dcfcca0 local Google runtime.
 - Web: c463bf6 HTTPS, proxy, and client; eb86da6 browser smoke; c5b417c
   development docs; 86359c1 failure redaction; 9d20af1 first-run setup;
-  2aeb1a6 smoke-test ownership.
+  2aeb1a6 smoke-test ownership; 845cc45 local Google setup and documentation.
 - Flux, unapplied: 2442be7 production configuration and routes; a07f5e5,
   09b109f, 8b1fe69, 020cc17, and 92769dd runbook corrections; 9c0ded6
   simplified rollout; f4b25e4 executable rollback and route checks. yq 4.53.6
@@ -606,10 +633,17 @@ production user field.
   React-compiler and chunk warnings plus Vite's current extensionless-config
   warning; the compatible default config loader builds successfully.
 - Local setup: the repository owner ran pnpm setup:browser-session. mkcert
-  issued and trusted the exact three-host certificate outside Git. File modes
+  issued and trusted the exact four-host certificate outside Git. File modes
   were 0700 for its directory, 0600 for private files, and 0644 for public
   certificates. The User Service validated local migrations and OIDC clients
   without printing the secret.
+- Local Google profile: a startup check with placeholder provider metadata
+  reached Ready on local PostgreSQL without loading Apple credentials. Issuer
+  discovery and accounts readiness returned 200; /signin-google was confined
+  to localhost and rejected missing state. After fresh review fixes, 61 focused
+  tests and all 148 User Service tests passed, as did the solution build and
+  Timber checks. Lint retained five pre-existing warnings outside changed
+  files.
 - Browser baseline: the real Development-persona OIDC flow returned to Timber;
   /v1/me, snapshot, and changes returned 200 with private, no-store; web /v1/me
   omitted native_session_uuid; simultaneous credentials failed; unreviewed
@@ -642,6 +676,9 @@ production user field.
 
 ### Pending evidence
 
+- Real Google sign-in through Chrome against the local User Service and local
+  PostgreSQL. The repository owner must first create the separate development
+  OAuth client and store its two values in .NET Secret Manager.
 - Explicit production approval.
 - Production rollout and Google E2E.
 
@@ -651,9 +688,10 @@ The durable session, OIDC, shared resource, Timber proxy/client, and local HTTPS
 foundation is implemented and committed. The local baseline proved the intended
 resource and session boundaries. A later static concurrency concern did not
 reproduce with two different personas, so the proposed parallel handoff
-framework was removed from scope. Final broad checks, the short browser smoke,
-fresh reviews, code simplification, and documentation cleanup are complete.
-The work is at the production approval checkpoint.
+framework was removed from scope. The Google-only local runtime profile is
+implemented and has passed focused startup checks. The next checkpoint is a
+real Google proof against local PostgreSQL, followed by the refreshed production
+approval request.
 
 No browser access-token or refresh-token storage was introduced. No production
 manifest was applied, no Secret changed, no image deployed, no production
