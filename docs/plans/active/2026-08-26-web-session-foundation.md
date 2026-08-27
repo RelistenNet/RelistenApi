@@ -291,8 +291,11 @@ Browser-capable resource actions:
 The library controller applies method-aware read/write authorization to every
 action. A global cookie-mutation boundary supplies CSRF and Origin protection.
 Unreviewed /v1/*, Sonos, adapter, internal, and playback-control routes remain
-bearer-only. New /v1/library/* actions reach the API through the proxy but stay
-unavailable to web sessions until their policy and capability are reviewed.
+bearer-only. New segment-safe /v1/library/* actions reach the API and inherit
+the library policy by convention. Safe methods require library-read authority.
+Unsafe methods require favorite-mutation authority plus the global cookie CSRF
+and Origin boundary. Authority outside those fixed capabilities requires an
+explicit policy and capability review.
 
 ## Timber milestones
 
@@ -331,9 +334,9 @@ The typed client uses relative URLs, credentials: include, and cache: no-store.
 Mutation methods acquire a CSRF request token and attach X-Relisten-CSRF. The
 public catalog client remains separate.
 
-The Development-only diagnostic route contains only redacted test controls.
+The Development-only diagnostic route is a static callback-return marker.
 Vitest covers client and proxy behavior. Playwright covers Development-persona
-sign-in, one authenticated read, and logout against services the developer
+sign-in, account and library reads, and logout against services the developer
 already started. It does not supervise services or emit traces, videos,
 screenshots, request dumps, callback URLs, credentials, tokens, or personal
 data.
@@ -383,8 +386,8 @@ Focused API tests must prove:
 6. Favorite replay is idempotent and changes are observable.
 7. Authentication cookies have their exact secure attributes.
 
-The short Playwright smoke proves browser-visible Development sign-in, one
-browser-safe authenticated read, and logout.
+The short Playwright smoke proves browser-visible Development sign-in,
+browser-safe account and library reads, and logout.
 
 The maintained callback spike and agent-driven Browser or Chrome proof own the
 full OpenIddict flow, callback replay and correlation failures, and concurrent
@@ -434,7 +437,7 @@ proposal uses:
 - Development-only Timber branch
   2aeb1a6b3846ad9144ae940824be6314f332c15c.
 - Unapplied Flux branch
-  9c0ded6a00cd4af0fa7a835777906dcfa09d54a8.
+  f4b25e4548c52bcc2453dc87f988e097ec47f14d.
 
 The Flux branch changes only:
 
@@ -481,10 +484,12 @@ the credential. Do not commit or rotate the value during the rollout.
 
 After approval, use the existing deployment workflow:
 
-1. Configure. Confirm current health, create and patch WebClientSecret, and
-   apply only the User Service configuration manifest. Keep the new web routes
-   unexposed.
-2. Deploy. Push the approved API commit and run:
+1. Configure. Confirm current health and record the running immutable User
+   Service image digest before the first write. Create and patch
+   WebClientSecret, then apply only the User Service configuration manifest.
+   Keep the new web routes unexposed.
+2. Deploy. Push the approved API commit. Confirm the remote branch resolves to
+   the exact approved full SHA, then run:
 
        gh workflow run build_and_push_image.yml \
          --repo RelistenNet/RelistenApi \
@@ -503,9 +508,9 @@ After approval, use the existing deployment workflow:
    Expected: workflow and rollout succeed, discovery and readiness return 2xx,
    and User Service logs show no startup, migration, OpenIddict, host, or
    database error.
-4. Expose. Apply only the web ingress manifest. Confirm /v1/me and
-   /v1/library/snapshot reach the User Service, while /v1/library-evil and an
-   unrelated /v1/* remain on Timber.
+4. Expose. Apply only the web ingress manifest. Confirm exact /auth/session,
+   /v1/me, and /v1/library/snapshot reach the User Service. Confirm
+   /v1/library-evil and an unrelated /v1/* remain on Timber.
 5. Smoke. Run the approved local-proxy Google proof, favorite
    add/replay/inverse sequence, logout, and canonical-host sign-in smoke.
 
@@ -526,8 +531,9 @@ Success criteria:
 - User Service is Ready and public discovery/readiness stay healthy.
 - Anonymous /v1/me and /v1/library/snapshot reach the User Service, return an
   authentication failure, and include private, no-store.
-- Exact /auth/session reaches the User Service without creating OIDC state.
-- /v1/library-evil and unrelated /v1/* remain on Timber.
+- Exact /auth/session returns the User Service 404 without Set-Cookie or OIDC
+  state.
+- /v1/library-evil and unrelated /v1/* retain Timber HTML responses.
 - Local Timber can complete Google through production routes, then /v1/me,
   snapshot, changes, favorite add/replay/inverse, and logout all work.
 - Relisten app-origin storage contains no bearer, refresh, or ID token.
@@ -537,11 +543,11 @@ Success criteria:
 - A canonical-host sign-in, /v1/me read, and logout succeed without a favorite
   mutation.
 
-Rollback removes the six browser route entries first, redeploys the last
-known-good SHA-tagged User Service image, and waits for readiness. Recheck auth
-discovery, accounts readiness, Timber, and the catalog API. Keep the compatible
-configuration, additive tables, client registration, and Secret key. Do not run
-migrations down or rotate the client secret.
+Rollback removes the six browser route entries first, redeploys the immutable
+User Service image captured before the first write, and waits for readiness.
+Recheck auth discovery, accounts readiness, Timber, and the catalog API. Keep
+the compatible configuration, additive tables, client registration, and Secret
+key. Do not run migrations down or rotate the client secret.
 
 Present the final branch heads, database migration names, expected writes,
 health checks, smoke mutations, and rollback to the repository owner and ask
@@ -583,9 +589,10 @@ production user field.
   2aeb1a6 smoke-test ownership.
 - Flux, unapplied: 2442be7 production configuration and routes; a07f5e5,
   09b109f, 8b1fe69, 020cc17, and 92769dd runbook corrections; 9c0ded6
-  simplified rollout. yq 4.53.6 confirmed the exact configuration, probe
-  headers, and route order. Kustomize rendering, client-side apply dry-run, and
-  diff whitespace checks passed. No production state changed.
+  simplified rollout; f4b25e4 executable rollback and route checks. yq 4.53.6
+  confirmed the exact configuration, probe headers, and route order. Kustomize
+  rendering, client-side apply dry-run, and diff whitespace checks passed. No
+  production state changed.
 
 ### Local evidence
 
