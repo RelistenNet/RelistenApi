@@ -2,7 +2,8 @@
 
 set -Eeuo pipefail
 
-readonly service_url="${RELISTEN_USER_SERVICE_URL:-http://localhost:5443}"
+readonly auth_url="${RELISTEN_USER_SERVICE_AUTH_URL:-https://auth.relisten.localhost:5443}"
+readonly accounts_url="${RELISTEN_USER_SERVICE_ACCOUNTS_URL:-https://accounts.relisten.localhost:5443}"
 readonly verifier="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abc"
 readonly challenge="dYSqskoTcWrpu8GYY0XpWlzOc0c5rd9YO3uAgh_zmV4"
 smoke_tmp_dir="$(mktemp -d)"
@@ -19,9 +20,9 @@ sign_in() {
   local run_name="$1"
   local cookie_jar="$smoke_tmp_dir/$run_name.cookies"
   local sign_in_page="$smoke_tmp_dir/$run_name.html"
-  local sign_in_url anti_token return_url authorize_return callback_url code
+  local sign_in_url return_url authorize_return callback_url code
 
-  sign_in_url="$(curl --silent --show-error --get "$service_url/connect/authorize" \
+  sign_in_url="$(curl --silent --show-error --get "$auth_url/connect/authorize" \
     --data-urlencode 'client_id=relisten-mobile-ios-dev' \
     --data-urlencode 'redirect_uri=net.relisten.mobile:/oauth2redirect/ios' \
     --data-urlencode 'response_type=code' \
@@ -38,9 +39,6 @@ sign_in() {
     "$sign_in_url" \
     --output "$sign_in_page"
 
-  anti_token="$(sed -n \
-    '/name="__RequestVerificationToken"/{n;s/.*value="\([^"]*\)".*/\1/p;}' \
-    "$sign_in_page")"
   return_url="$(sed -n \
     's/.*name="return_url" value="\([^"]*\)".*/\1/p' \
     "$sign_in_page" | sed 's/&amp;/\&/g')"
@@ -48,8 +46,8 @@ sign_in() {
   authorize_return="$(curl --silent --show-error \
     --cookie "$cookie_jar" \
     --cookie-jar "$cookie_jar" \
-    --request POST "$service_url/development/sign-in" \
-    --data-urlencode "__RequestVerificationToken=$anti_token" \
+    --request POST "$auth_url/development/sign-in" \
+    --header "Origin: $auth_url" \
     --data-urlencode "return_url=$return_url" \
     --data-urlencode 'persona=google-alice' \
     --write-out '%{redirect_url}' \
@@ -62,7 +60,7 @@ sign_in() {
   code="$(printf '%s' "$callback_url" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p')"
 
   curl --fail --silent --show-error \
-    --request POST "$service_url/connect/token" \
+    --request POST "$auth_url/connect/token" \
     --data-urlencode 'grant_type=authorization_code' \
     --data-urlencode 'client_id=relisten-mobile-ios-dev' \
     --data-urlencode 'redirect_uri=net.relisten.mobile:/oauth2redirect/ios' \
@@ -75,7 +73,7 @@ logout_access="$(printf '%s' "$logout_tokens" | jq -r '.access_token')"
 logout_refresh="$(printf '%s' "$logout_tokens" | jq -r '.refresh_token')"
 
 invalid_uuid_status="$(curl --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data '{"contract_version":1,"client_command_uuid":"not-a-uuid","expected_username_version":1,"username":"listener"}' \
@@ -85,7 +83,7 @@ assert_equal "$invalid_uuid_status" "422"
 assert_equal "$(jq -r '.code' "$smoke_tmp_dir/invalid-uuid.json")" "invalid_command_uuid"
 
 invalid_contract_status="$(curl --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data '{"contract_version":"one","client_command_uuid":"019f76c8-7c76-7680-ad2f-248b877f3581","expected_username_version":1,"username":"listener"}' \
@@ -95,7 +93,7 @@ assert_equal "$invalid_contract_status" "422"
 assert_equal "$(jq -r '.code' "$smoke_tmp_dir/invalid-contract.json")" "invalid_contract_version"
 
 unmapped_status="$(curl --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data '{"contract_version":1,"client_command_uuid":"019f76c8-7c76-7680-ad2f-248b877f3581","expected_username_version":1,"username":"listener","extra":true}' \
@@ -105,7 +103,7 @@ assert_equal "$unmapped_status" "400"
 assert_equal "$(jq -r '.code' "$smoke_tmp_dir/unmapped.json")" "invalid_request"
 
 profile="$(curl --fail --silent --show-error \
-  "$service_url/v1/me" \
+  "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access")"
 username="$(printf '%s' "$profile" | jq -r '.username')"
 username_version="$(printf '%s' "$profile" | jq -r '.username_version')"
@@ -118,12 +116,12 @@ username_command="$(jq --null-input --compact-output \
   '{contract_version:1,client_command_uuid:$command_uuid,expected_username_version:$username_version,username:$username}')"
 
 username_result="$(curl --fail --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data "$username_command")"
 username_replay="$(curl --fail --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data "$username_command")"
@@ -132,7 +130,7 @@ assert_equal "$(printf '%s' "$username_replay" | jq --sort-keys --compact-output
 
 changed_replay="$(printf '%s' "$username_command" | jq --compact-output '.username=" bad "')"
 changed_replay_status="$(curl --silent --show-error \
-  --request PATCH "$service_url/v1/me" \
+  --request PATCH "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --header 'Content-Type: application/json' \
   --data "$changed_replay" \
@@ -142,21 +140,21 @@ assert_equal "$changed_replay_status" "409"
 assert_equal "$(jq -r '.code' "$smoke_tmp_dir/changed-replay.json")" "idempotency_conflict"
 
 logout_status="$(curl --silent --show-error \
-  --request POST "$service_url/v1/logout" \
+  --request POST "$accounts_url/v1/logout" \
   --header "Authorization: Bearer $logout_access" \
   --output /dev/null \
   --write-out '%{http_code}')"
 assert_equal "$logout_status" "204"
 
 logout_access_status="$(curl --silent --show-error \
-  "$service_url/v1/me" \
+  "$accounts_url/v1/me" \
   --header "Authorization: Bearer $logout_access" \
   --output /dev/null \
   --write-out '%{http_code}')"
 assert_equal "$logout_access_status" "401"
 
 logout_refresh_status="$(curl --silent --show-error \
-  --request POST "$service_url/connect/token" \
+  --request POST "$auth_url/connect/token" \
   --data-urlencode 'grant_type=refresh_token' \
   --data-urlencode 'client_id=relisten-mobile-ios-dev' \
   --data-urlencode "refresh_token=$logout_refresh" \
@@ -172,7 +170,7 @@ initial_refresh="$(printf '%s' "$initial" | jq -r '.refresh_token')"
 refresh_once() {
   local slot="$1"
   curl --silent --show-error \
-    --request POST "$service_url/connect/token" \
+    --request POST "$auth_url/connect/token" \
     --data-urlencode 'grant_type=refresh_token' \
     --data-urlencode 'client_id=relisten-mobile-ios-dev' \
     --data-urlencode "refresh_token=$initial_refresh" \
@@ -202,7 +200,7 @@ for slot in 1 2; do
 done
 
 access_status="$(curl --silent --show-error \
-  "$service_url/v1/me" \
+  "$accounts_url/v1/me" \
   --header "Authorization: Bearer $initial_access" \
   --output /dev/null \
   --write-out '%{http_code}')"
@@ -213,14 +211,14 @@ for slot in 1 2; do
     rotated_access="$(jq -r '.access_token' "$smoke_tmp_dir/refresh-$slot.json")"
     rotated_refresh="$(jq -r '.refresh_token' "$smoke_tmp_dir/refresh-$slot.json")"
     rotated_access_status="$(curl --silent --show-error \
-      "$service_url/v1/me" \
+      "$accounts_url/v1/me" \
       --header "Authorization: Bearer $rotated_access" \
       --output /dev/null \
       --write-out '%{http_code}')"
     assert_equal "$rotated_access_status" "401"
 
     family_status="$(curl --silent --show-error \
-      --request POST "$service_url/connect/token" \
+      --request POST "$auth_url/connect/token" \
       --data-urlencode 'grant_type=refresh_token' \
       --data-urlencode 'client_id=relisten-mobile-ios-dev' \
       --data-urlencode "refresh_token=$rotated_refresh" \

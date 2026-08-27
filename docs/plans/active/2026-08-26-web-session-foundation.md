@@ -33,10 +33,10 @@ inspection and direct read-only PostgreSQL queries own the local cross-layer
 proof. No browser test parses a credential, queries PostgreSQL, supervises
 services, or reimplements UUIDv7.
 
-After that local proof passes, this plan will name the exact production Flux
-changes and rollback steps. Production remains read-only until the repository
-owner approves that proposal. A Google sign-in is a production write because it
-creates session rows, so production Google testing also waits for approval.
+The local proof has passed, and the exact production proposal is recorded below.
+Production remains read-only until the repository owner approves that proposal.
+A Google sign-in is a production write because it creates session rows, so
+production Google testing also waits for approval.
 
 ## Authority and repository boundaries
 
@@ -109,13 +109,11 @@ remains unchanged.
 - [x] (2026-08-26) Read the repository instructions, verified clean and
   non-diverged bases, created the three requested branches, and committed the
   initial ExecPlan before implementation.
-- [x] (2026-08-26) Proved the maintained OpenIddict protected-state callback,
-  then implemented durable sessions, the confidential web client, browser
-  lifecycle endpoints, and the first resource facade.
-- [x] (2026-08-27) Consolidated reviewed resources onto `/v1`, made account
-  context credential-neutral, rejected ambiguous credentials, and made library
-  authorization plus cookie-mutation protection default at controller and
-  middleware boundaries.
+- [x] (2026-08-27) Proved the maintained OpenIddict callback, implemented
+  durable sessions and browser lifecycle endpoints, then exposed reviewed
+  resources through shared `/v1` controllers. The final design keeps account
+  context credential-neutral, rejects ambiguous credentials, and applies
+  library authorization plus cookie-mutation protection by default.
 - [x] (2026-08-27) Organized `RelistenUserService/Authentication` by
   responsibility and completed the loopback HTTPS, Host Filtering, and .NET
   Secret Manager setup.
@@ -127,6 +125,9 @@ remains unchanged.
   The proof covered sign-in, `/v1/me`, library reads, favorite add/replay/remove,
   CSRF failures, route isolation, session revocation, and token-storage absence.
   It restored the initial favorite state.
+- [x] (2026-08-27) Removed the Development-persona antiforgery bootstrap race.
+  Two preloaded login tabs now complete independently, and local callback query
+  parameters no longer appear in Development request logs.
 - [x] (2026-08-27) Completed fresh API, web, E2E, and Flux reviews. Validated
   each finding, applied accepted fixes, ran `code-simplifier`, and reran the
   relevant focused and broad checks.
@@ -163,6 +164,10 @@ remains unchanged.
 - The auth-host cookie-clear endpoint could delete a concurrent active SSO
   cookie. Commit `708ec6a` binds deletion to the exact revoked parent validator,
   linked web session, origin, and revocation timestamp.
+- Two initial Development-persona pages could mint different
+  `__Host-relisten_csrf` cookies before either response reached the shared
+  browser jar. One form then failed until reload. The Development-only form now
+  requires the exact auth Origin instead of a shared antiforgery cookie.
 
 ## Decision log
 
@@ -199,6 +204,9 @@ remains unchanged.
 - Provide one idempotent local setup command for the trusted certificate and
   client secret outside Git. Keep the fixed hosts, port, and host allowlist.
   Date: 2026-08-27.
+- Protect the Development-persona POST with the exact local auth Origin. Preserve
+  no-store and framing protection on its form, and keep production web-session
+  antiforgery unchanged. Date: 2026-08-27.
 - Put the six production route rules in the existing web Ingress and keep cache
   policy in the User Service. Keep all production writes approval-gated. After
   approval, use the existing image workflow in this order: configure, deploy,
@@ -215,6 +223,8 @@ The web client uses these exact callbacks:
 
 A completed local HTTPS spike proved callback completion, protected relative
 `return_to` restoration, exact registration selection, and replay rejection.
+An agent-driven Browser proof preloaded two authorization challenges and
+completed both through independent callbacks.
 Checked-in configuration tests preserve the exact confidential-client and S256
 PKCE registrations. OpenIddict owns the correlation cookie, PKCE verifier,
 nonce, code exchange, and 15-minute state-token lifetime. Redirect validation
@@ -532,9 +542,10 @@ local HTTPS spike supplies the maintained callback-state evidence named in item
    mutations do not acquire that requirement.
 8. Favorite replay is idempotent, library changes are observable, and logout
    revokes the linked sessions.
-9. The maintained OpenIddict pipeline completes a protected-state callback and
-   rejects callback replay. OpenIddict retains ownership of correlation, PKCE,
-   nonce, state lifetime, code exchange, and redirect validation.
+9. The maintained OpenIddict pipeline completes a protected-state callback,
+   rejects callback replay, and keeps concurrent challenges independent.
+   OpenIddict retains ownership of correlation, PKCE, nonce, state lifetime,
+   code exchange, and redirect validation.
 10. Authentication cookies use the exact names, Secure, HttpOnly,
     SameSite=Lax, Path `/`, and no Domain. Antiforgery uses the exact cookie and
     request-header names.
@@ -597,10 +608,10 @@ bodies, status updates, and the final handoff.
 ## Production approval checkpoint
 
 The local proof, final reviews, production read-only inspection, and unapplied
-Flux authoring are complete. The proposed production artifacts are the API
-branch whose runtime code ends at `708ec6a` and the Flux branch through
-`92769dd`. The web commits are development-only; this rollout does not require
-a Timber image or product UI change.
+Flux authoring are complete. The proposed production artifacts are the API and
+Flux branches named above. The web commits are development-only; this rollout
+does not require a Timber image or product UI change. The approval request will
+name the exact branch heads after the remaining local commits are complete.
 
 Flux commit `2442be7` changes exactly these files:
 
@@ -794,7 +805,8 @@ Committed API slices: `78435dc` plan; `0705bb5` persistence; `5e3ea68` web
 authorization; `8e48042` initial facade; `38c17d3` shared default-secure
 resources; `2841c3e` shared-route evidence; `396c62a` authentication folder
 organization; `1209443` local HTTPS configuration; `2b7b114` canonical Host;
-`dbb24c1` simplification; and `708ec6a` SSO cookie-clear binding.
+`dbb24c1` simplification; `708ec6a` SSO cookie-clear binding; `a8e637f` local
+checkpoint; and `270ef0b` source-of-truth alignment.
 
 Committed Timber slices: `c463bf6` HTTPS, proxy, and client; `eb86da6` short
 browser smoke; `c5b417c` development documentation; `86359c1` callback failure
@@ -806,14 +818,21 @@ runbook corrections `a07f5e5`, `09b109f`, `8b1fe69`, `020cc17`, and
 `92769dd`. Source assertions, Kustomize render, client-side apply dry-run, shell
 syntax, and `git diff --check` passed. No production state changed.
 
-- Final API validation: the exact security filter above passed 105 tests; all
-  141 User Service tests passed; EF reported no pending model changes; and
-  `dotnet build RelistenApi.sln --no-restore` passed with no warnings or
-  errors.
 - Maintained callback-state spike: the local HTTPS authorization completed,
   restored the protected relative return path, selected the exact client
   registration, and rejected callback replay. Checked-in tests preserve the
   exact callback registrations and S256 requirement.
+- Concurrent-tab proof: two tabs reached the Development persona page before
+  either identity was selected, and both later returned to the Timber harness.
+  Missing, wrong, and duplicate persona POST Origins returned 403; a same-origin
+  malformed form returned 400. The persona page returned `private, no-store`
+  and `X-Frame-Options: DENY`. Development request logging suppressed callback
+  query parameters. The focused security filter passed 59 tests, all 141 User
+  Service tests passed, and the solution build passed with no warnings or
+  errors. The native refresh-replay smoke passed through the exact local auth
+  and accounts hosts after the Development form change. Before that follow-up,
+  the full security filter passed 105 tests and EF reported no pending model
+  changes.
 - Timber graph: `npx timber graph
   'src/app/(bare)/browser-session-development/page.tsx' --json` hit Timber's
   packaged data-URL/`fileURLToPath` defect. The running graph endpoint
