@@ -101,7 +101,7 @@ responses must use `cache: "no-store"`.
 
 `/Users/alecgorge/code/relisten/relisten-flux` contains the production User
 Service, Timber, ingress, and Secret references. Its browser-session branch is
-committed through `92769dd` and remains unapplied. The existing image workflow
+committed through `9c0ded6` and remains unapplied. The existing image workflow
 remains unchanged.
 
 ## Progress
@@ -132,7 +132,7 @@ remains unchanged.
   each finding, applied accepted fixes, ran `code-simplifier`, and reran the
   relevant focused and broad checks.
 - [x] (2026-08-27) Inspected production read-only and committed the unapplied
-  Flux configuration and runbook through `92769dd`. Prepared the exact
+  Flux configuration and runbook through `9c0ded6`. Prepared the exact
   production proposal below. No production state changed.
 - [ ] Receive explicit production approval.
 - [ ] After approval only: apply the approved Flux commit, deploy the approved
@@ -674,8 +674,8 @@ secret.
 
 After approval, use the existing deployment workflow in this order:
 
-1. **Configure.** Record current health and the running User Service image ID.
-   Create `WebClientSecret`, patch that one Secret key, and apply only
+1. **Configure.** Confirm current health. Create `WebClientSecret`, patch that
+   one Secret key, and apply only
    `clusters/relisten3-k3s/apps/relisten-user-service.yaml`. Do not expose the
    new `relisten.net` paths yet.
 2. **Deploy.** Push the approved API commit and run the unchanged workflow:
@@ -760,13 +760,13 @@ credentials. After the local-callback proof, complete a second sign-in through
 the canonical callback, verify `/v1/me`, and log out. The canonical proof does
 not mutate a favorite.
 
-Rollback starts by removing browser reachability with the parent
-`2442be7^` version of `clusters/relisten3-k3s/apps/relisten-web.yaml`. Apply the
-parent User Service manifest, restore the recorded prior image to the User
-Service Deployment, and wait for readiness. Recheck auth discovery, accounts
-health, Timber, catalog API, and that `/v1/me` again reaches Timber. Keep the
-additive session table, client registration, and Secret key. Do not run the
-migration down or rotate the client secret.
+Rollback starts by removing browser reachability with the parent `2442be7^`
+version of `clusters/relisten3-k3s/apps/relisten-web.yaml`. Redeploy the last
+known-good SHA-tagged User Service image and wait for readiness. Recheck auth
+discovery, accounts health, Timber, catalog API, and that `/v1/me` again reaches
+Timber. Keep the compatible User Service configuration, additive session table,
+client registration, and Secret key. Do not run the migration down or rotate
+the client secret.
 
 Present the completed proposal to the repository owner and ask for explicit
 approval. Do not interpret silence, review comments, or approval of local code
@@ -806,7 +806,8 @@ authorization; `8e48042` initial facade; `38c17d3` shared default-secure
 resources; `2841c3e` shared-route evidence; `396c62a` authentication folder
 organization; `1209443` local HTTPS configuration; `2b7b114` canonical Host;
 `dbb24c1` simplification; `708ec6a` SSO cookie-clear binding; `a8e637f` local
-checkpoint; and `270ef0b` source-of-truth alignment.
+checkpoint; `270ef0b` source-of-truth alignment; and `3f31f93` concurrent
+Development sign-in isolation.
 
 Committed Timber slices: `c463bf6` HTTPS, proxy, and client; `eb86da6` short
 browser smoke; `c5b417c` development documentation; `86359c1` callback failure
@@ -814,9 +815,10 @@ redaction; `9d20af1` first-run setup; and `2aeb1a6` Vitest and Playwright test
 ownership.
 
 Committed, unapplied Flux slices: `2442be7` exact configuration and six routes;
-runbook corrections `a07f5e5`, `09b109f`, `8b1fe69`, `020cc17`, and
-`92769dd`. Source assertions, Kustomize render, client-side apply dry-run, shell
-syntax, and `git diff --check` passed. No production state changed.
+runbook corrections `a07f5e5`, `09b109f`, `8b1fe69`, `020cc17`, and `92769dd`;
+and `9c0ded6` simplified the final rollout sequence. Source assertions,
+Kustomize render, client-side apply dry-run, shell syntax, and diff whitespace
+checks passed. No production state changed.
 
 - Maintained callback-state spike: the local HTTPS authorization completed,
   restored the protected relative return path, selected the exact client
