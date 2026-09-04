@@ -341,6 +341,9 @@ namespace Relisten
                 {
                     options.Title = "Relisten API";
                     options.OpenApiRoutePattern = "/api-docs/{documentName}/swagger.json";
+                    options
+                        .AddDocument("v2", title: "Relisten API v2")
+                        .AddDocument("v3", title: "Relisten API v3");
                 });
             });
         }
