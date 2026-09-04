@@ -161,6 +161,8 @@ namespace Relisten
                 c.SchemaFilter<SwaggerSkipV2PropertyFilter>();
             });
 
+            services.AddSwaggerGenNewtonsoftSupport();
+
             SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
             SqlMapper.AddTypeHandler(new DateTimeHandler());
 

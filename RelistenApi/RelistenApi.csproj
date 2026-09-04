@@ -44,6 +44,7 @@
     <PackageReference Include="Serilog.Enrichers.Thread" Version="4.0.0" />
     <PackageReference Include="Serilog.Enrichers.Process" Version="3.0.0" />
     <PackageReference Include="Serilog.Sinks.Async" Version="2.1.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Newtonsoft" Version="10.1.0" />
   </ItemGroup>
   <ItemGroup>
     <Content Update="appsettings.json">
