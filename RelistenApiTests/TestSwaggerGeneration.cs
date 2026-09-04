@@ -6,7 +6,7 @@ using Relisten.Api.Models.Api;
 namespace RelistenApiTests;
 
 [TestFixture]
-public class SwaggerGenerationTest
+public class TestSwaggerGeneration
 {
     [Test]
     public async Task V2_OpenApi_Doc_Can_Be_Generated()
