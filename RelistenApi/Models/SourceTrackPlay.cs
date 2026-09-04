@@ -57,6 +57,7 @@ namespace Relisten.Api.Models
 
         [Required]
         [JsonConverter(typeof(StringEnumConverter))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
         public SourceTrackPlayAppType app_type_description => app_type;
 
         public PlayedSourceTrack? track { get; set; }

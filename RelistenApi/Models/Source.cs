@@ -76,6 +76,7 @@ namespace Relisten.Api.Models
 
         [Required]
         [JsonConverter(typeof(StringEnumConverter))]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
         public FlacType flac_type { get; set; }
     }
 
