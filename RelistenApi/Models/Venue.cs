@@ -19,7 +19,6 @@ namespace Relisten.Api.Models
         [Required] public string slug { get; set; } = null!;
         public string? past_names { get; set; }
 
-        [Required]
         public string sortName
         {
             get
