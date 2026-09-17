@@ -104,7 +104,7 @@ namespace Relisten.Import
                 : "";
 
             return
-                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}{yearFilter}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=*&page=1&output=json&save=yes";
+                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}{yearFilter}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=10000&page=1&output=json&save=yes";
         }
 
         private static string DetailsUrlForIdentifier(string identifier)
@@ -122,6 +122,13 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             var json = await res.Content.ReadAsStringAsync();
+
+            if (!res.IsSuccessStatusCode)
+            {
+                ctx?.WriteLine($"archive.org returned HTTP {(int)res.StatusCode}. Body: {json.Substring(0, Math.Min(json.Length, 512))}");
+                return stats;
+            }
+
             var root = JsonConvert.DeserializeObject<SearchRootObject>(
                 json.Replace("\"0000-01-01T00:00:00Z\"", "null") /* serious...wtf archive */,
                 new TolerantArchiveDateTimeConverter()
