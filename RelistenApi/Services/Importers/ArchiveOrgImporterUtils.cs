@@ -100,7 +100,7 @@ public static class ArchiveOrgImporterUtils
         }
 
         // 1970-03-XX or 1970-XX-XX which is okay because it is handled by the rebuild
-        if (date.Contains('X'))
+        if (date.Contains('X', StringComparison.OrdinalIgnoreCase))
         {
             return date;
         }

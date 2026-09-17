@@ -65,6 +65,14 @@ public class TestArchiveOrgFixDisplayDate
     }
 
     [Test]
+    public void FixDisplayDate_ShouldPassThroughLowercaseXxDates()
+    {
+        InvokeFixDisplayDate("1963-xx-xx").Should().Be("1963-xx-xx");
+        InvokeFixDisplayDate("1997-xx-05").Should().Be("1997-xx-05");
+        InvokeFixDisplayDate("1997-05-xx").Should().Be("1997-05-xx");
+    }
+
+    [Test]
     public void FixDisplayDate_ShouldStripTimeComponentFromIso8601Dates()
     {
         // Standard ISO 8601 with UTC timezone
