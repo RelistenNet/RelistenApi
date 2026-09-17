@@ -312,10 +312,27 @@ namespace Relisten.Import
 
                 if (ExceedsDeletionLimit(deletedSourceUpstreamIdentifiers.Count))
                 {
+                    foreach (var identifier in deletedSourceUpstreamIdentifiers)
+                    {
+                        Log.Warning(
+                            "Archive.org deletion guard: would have deleted source " +
+                            "{Identifier} (https://archive.org/details/{Identifier}) for {ArtistName} ({ArtistSlug})",
+                            identifier,
+                            identifier,
+                            artist.name,
+                            artist.slug);
+                    }
+
                     var message =
                         $"🛑 Archive.org deletion guard blocked {deletedSourceUpstreamIdentifiers.Count} source " +
                         $"deletions for {artist.name} ({artist.slug}); threshold is " +
                         $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
+
+                    var jobId = ctx?.BackgroundJob.Id;
+                    if (jobId != null)
+                    {
+                        message += $"\n\nHangfire job: /relisten-admin/hangfire/jobs/details/{jobId}";
+                    }
 
                     ctx?.WriteLine(message);
                     Log.Warning(
