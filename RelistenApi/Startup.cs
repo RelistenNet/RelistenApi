@@ -18,8 +18,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi;
 using Newtonsoft.Json;
+using Scalar.AspNetCore;
 using Npgsql;
 using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
@@ -64,10 +64,7 @@ namespace Relisten
             SetupAuthentication(services);
 
             // Add framework services.
-            services.AddMvc(mvcOptions =>
-            {
-                mvcOptions.EnableEndpointRouting = false;
-            }).AddNewtonsoftJson();
+            services.AddMvc().AddNewtonsoftJson();
 
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
             if (otlpEndpoint != null)
@@ -130,38 +127,14 @@ namespace Relisten
             }
 
 
-            services.AddSwaggerGen(c =>
+            services.AddOpenApi("v2", options =>
             {
-                c.SwaggerDoc("v2",
-                    new OpenApiInfo
-                    {
-                        Version = "v2",
-                        Title = "Relisten API",
-                        Contact =
-                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
-                        License = new OpenApiLicense
-                        {
-                            Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
-                        }
-                    });
-
-                c.SwaggerDoc("v3",
-                    new OpenApiInfo
-                    {
-                        Version = "v3",
-                        Title = "Relisten API",
-                        Contact =
-                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
-                        License = new OpenApiLicense
-                        {
-                            Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
-                        }
-                    });
-
-                c.SchemaFilter<SwaggerSkipV2PropertyFilter>();
+                options.AddSchemaTransformer<SkipV2PropertySchemaTransformer>();
             });
-
-            services.AddSwaggerGenNewtonsoftSupport();
+            services.AddOpenApi("v3", options =>
+            {
+                options.AddSchemaTransformer<SkipV2PropertySchemaTransformer>();
+            });
 
             SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
             SqlMapper.AddTypeHandler(new DateTimeHandler());
@@ -347,10 +320,12 @@ namespace Relisten
                 .WithOrigins("*")
                 .AllowAnyMethod());
 
-            app.UseAuthentication();
             app.UseStaticFiles();
 
-            app.UseMvc();
+            app.UseRouting();
+
+            app.UseAuthentication();
+            app.UseAuthorization();
 
             if (!env.IsDevelopment())
             {
@@ -358,25 +333,19 @@ namespace Relisten
                     new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
             }
 
-            app.UseSwagger(c =>
+            app.UseEndpoints(endpoints =>
             {
-                c.RouteTemplate = "api-docs/{documentName}/swagger.json";
+                endpoints.MapControllers();
+                endpoints.MapOpenApi("/api-docs/{documentName}/swagger.json");
+                endpoints.MapScalarApiReference("/api-docs", options =>
+                {
+                    options.Title = "Relisten API";
+                    options.OpenApiRoutePattern = "/api-docs/{documentName}/swagger.json";
+                    options
+                        .AddDocument("v2", title: "Relisten API v2")
+                        .AddDocument("v3", title: "Relisten API v3");
+                });
             });
-
-            app.UseSwaggerUI(ctx =>
-            {
-                ctx.RoutePrefix = "api-docs";
-                ctx.SwaggerEndpoint("/api-docs/v2/swagger.json", "Relisten API v2");
-            });
-
-            app.UseSwaggerUI(ctx =>
-            {
-                ctx.RoutePrefix = "api-docs-v3";
-                ctx.SwaggerEndpoint("/api-docs/v3/swagger.json", "Relisten API v3");
-            });
-
-            app.UseCors(builder =>
-                builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
         }
 
         public void SetupAuthentication(IServiceCollection services)

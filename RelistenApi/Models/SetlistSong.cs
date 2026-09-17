@@ -13,7 +13,6 @@ namespace Relisten.Api.Models
         [Required] public string slug { get; set; } = null!;
         [Required] public string upstream_identifier { get; set; } = null!;
 
-        [Required]
         public string sortName
         {
             get

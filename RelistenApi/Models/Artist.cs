@@ -193,7 +193,9 @@ namespace Relisten.Api.Models
 
         [Required] public string credit_line { get; set; } = null!;
 
-        [JsonIgnore] public ImporterBase? importer { get; set; }
+        [JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public ImporterBase? importer { get; set; }
     }
 
     public class SlimArtistUpstreamSource
