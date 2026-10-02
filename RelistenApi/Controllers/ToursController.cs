@@ -53,8 +53,28 @@ namespace Relisten.Controllers
         public async Task<IActionResult> ToursWithShowsV3(string artistIdOrSlug, string tourIdOrSlug)
         {
             var id = new Identifier(tourIdOrSlug);
-            return await ApiRequest(artistIdOrSlug,
-                art => _tourService.ForIdWithShows(art, id.Id, id.Guid, id.Slug));
+            return await ApiRequest(artistIdOrSlug, async art =>
+            {
+                // Tour names commonly start with a year. Prefer that complete slug
+                // before interpreting it as a legacy numeric-id-and-slug URL.
+                if (id.Id.HasValue && id.Slug != null)
+                {
+                    var tour = await _tourService.ForIdWithShows(art, null, slug: tourIdOrSlug);
+                    if (tour != null)
+                    {
+                        return tour;
+                    }
+                }
+
+                var matchedTour = await _tourService.ForIdWithShows(art, id.Id, id.Guid, id.Slug);
+                if (matchedTour == null && id.Id.HasValue && id.Slug == null)
+                {
+                    // Preserve bare numeric IDs, but allow numeric tour names such as "2012".
+                    return await _tourService.ForIdWithShows(art, null, slug: tourIdOrSlug);
+                }
+
+                return matchedTour;
+            });
         }
     }
 }
