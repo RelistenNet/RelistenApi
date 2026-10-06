@@ -234,6 +234,15 @@ namespace Relisten.Import
         protected DbService db { get; set; }
         protected HttpClient http { get; set; }
 
+        /// <summary>Installs an activity-scoped HTTP client while retaining the provider's existing headers.</summary>
+        public virtual void UseIngestionHttpClient(HttpClient client)
+        {
+            foreach (var header in http.DefaultRequestHeaders)
+                client.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+            http.Dispose();
+            http = client;
+        }
+
         public abstract string ImporterName { get; }
 
         private IDictionary<string, int> trackSlugCounts { get; } = new Dictionary<string, int>();

@@ -34,3 +34,7 @@ Record implementation departures, completed commits and meaningful test results 
 
 - Foundation: added the standalone .NET host, pinned Temporal SDK 1.20.0 and shared catalog registrations without API/Hangfire startup. Removed PanicStream registration and ignore unsupported provider mappings.
 - Baseline and foundation checks: worker build passed; existing API suite passed (93 passed, 24 existing database-dependent tests skipped). Existing OpenTelemetry.Resources.Host dependency reports NU1903; not introduced by Temporal.
+
+- Workflow core: shared artist/item composition, PostgreSQL staging/transactional receipts, bounded history rollover, and Archive discovery/fetch/apply/deletion-verification boundaries compile. Three real local Temporal tests passed: partial failures, shared item composition, and 180-item rollover with no repeated completed items.
+- Implementation detail: staged pages are written atomically with bulk item inserts; this avoids one network database round-trip per discovery item.
+- Remaining: finish provider adapters and maintenance, wire worker/API/schedules, add local PostgreSQL integration and operator documentation.

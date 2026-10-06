@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -21,7 +21,7 @@ using InvalidDataException = System.IO.InvalidDataException;
 
 namespace Relisten.Import
 {
-    public class ArchiveOrgImporter : ImporterBase
+    public partial class ArchiveOrgImporter : ImporterBase
     {
         public const string DataSourceName = "archive.org";
         private const int MaxSourcesDeletedPerSync = 5;
