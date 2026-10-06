@@ -1,0 +1,105 @@
+Timing is on.
+BEGIN
+Time: 111.585 ms
+SET
+Time: 90.417 ms
+          measured_at          | replica 
+-------------------------------+---------
+ 2026-10-06 15:32:21.018251+00 | t
+(1 row)
+
+Time: 87.351 ms
+ artists 
+---------
+    4374
+(1 row)
+
+Time: 84.621 ms
+       name       | artist_provider_mappings | artists 
+------------------+--------------------------+---------
+ archive.org      |                     4372 |    4372
+ phantasytour.com |                        2 |       2
+ local            |                        1 |       1
+ jerrygarcia.com  |                        1 |       1
+ phish.in         |                        1 |       1
+ phish.net        |                        1 |       1
+ setlist.fm       |                        1 |       1
+(7 rows)
+
+Time: 105.217 ms
+    relname    | estimated_rows | last_analyze | last_autoanalyze 
+---------------+----------------+--------------+------------------
+ sources       |              0 |              | 
+ shows         |              0 |              | 
+ source_tracks |              0 |              | 
+(3 rows)
+
+Time: 156.141 ms
+ sources 
+---------
+  289718
+(1 row)
+
+Time: 157.026 ms
+ shows  
+--------
+ 213218
+(1 row)
+
+Time: 92.473 ms
+ sources_per_artist_p50_p95_p99 | max_sources_per_artist 
+--------------------------------+------------------------
+ {16,234,902}                   |                  18200
+(1 row)
+
+Time: 548.441 ms
+      slug      | sources | distinct_shows 
+----------------+---------+----------------
+ grateful-dead  |   18200 |           2081
+ moe            |    4551 |           2008
+ wsp            |    4468 |           2556
+ umphreys       |    3346 |           1780
+ max-creek      |    3110 |           2098
+ phil-lesh      |    2861 |            788
+ yes            |    2251 |           1413
+ railroad-earth |    2210 |           1245
+ yonder         |    2183 |           1407
+ sci            |    2098 |           1294
+(10 rows)
+
+Time: 468.957 ms
+ active_artists_last_7_days 
+----------------------------
+                         37
+(1 row)
+
+Time: 98.878 ms
+      created_day       | current_sources_created 
+------------------------+-------------------------
+ 2026-09-29 00:00:00+00 |                      38
+ 2026-09-30 00:00:00+00 |                      33
+ 2026-10-01 00:00:00+00 |                      33
+ 2026-10-02 00:00:00+00 |                      18
+ 2026-10-03 00:00:00+00 |                      26
+ 2026-10-04 00:00:00+00 |                      20
+ 2026-10-05 00:00:00+00 |                      40
+ 2026-10-06 00:00:00+00 |                      36
+(8 rows)
+
+Time: 204.806 ms
+   tablename   |                                                    indexdef                                                    
+---------------+----------------------------------------------------------------------------------------------------------------
+ shows         | CREATE UNIQUE INDEX shows_pkey ON public.shows USING btree (id)
+ shows         | CREATE UNIQUE INDEX shows_uuid_key ON public.shows USING btree (uuid)
+ shows         | CREATE UNIQUE INDEX shows_artist_id_display_date_key ON public.shows USING btree (artist_id, display_date)
+ source_tracks | CREATE UNIQUE INDEX source_tracks_pkey ON public.source_tracks USING btree (id)
+ source_tracks | CREATE UNIQUE INDEX source_tracks_uuid_key ON public.source_tracks USING btree (uuid)
+ source_tracks | CREATE UNIQUE INDEX unique_artist_id_mp3_url ON public.source_tracks USING btree (artist_id, mp3_url)
+ sources       | CREATE UNIQUE INDEX sources_pkey ON public.sources USING btree (id)
+ sources       | CREATE UNIQUE INDEX sources_uuid_key ON public.sources USING btree (uuid)
+ sources       | CREATE UNIQUE INDEX source_uniq_artist_upstream ON public.sources USING btree (artist_id, upstream_identifier)
+(9 rows)
+
+Time: 81.741 ms
+COMMIT
+Time: 79.048 ms

@@ -1,0 +1,79 @@
+       current_timestamp       |          current_setting           | pg_is_in_recovery 
+-------------------------------+------------------------------------+-------------------
+ 2026-10-06 15:31:06.156044+00 | 17.10 (Ubuntu 17.10-1.pgdg22.04+1) | t
+(1 row)
+
+        table_name        |     column_name     |        data_type         
+--------------------------+---------------------+--------------------------
+ artists                  | id                  | integer
+ artists                  | musicbrainz_id      | text
+ artists                  | created_at          | timestamp with time zone
+ artists                  | updated_at          | timestamp with time zone
+ artists                  | name                | text
+ artists                  | featured            | integer
+ artists                  | slug                | text
+ artists                  | sort_name           | text
+ artists                  | uuid                | uuid
+ artists_upstream_sources | upstream_source_id  | integer
+ artists_upstream_sources | artist_id           | integer
+ artists_upstream_sources | upstream_identifier | text
+ shows                    | id                  | bigint
+ shows                    | artist_id           | integer
+ shows                    | tour_id             | bigint
+ shows                    | year_id             | bigint
+ shows                    | era_id              | bigint
+ shows                    | date                | date
+ shows                    | avg_rating          | real
+ shows                    | avg_duration        | real
+ shows                    | display_date        | text
+ shows                    | created_at          | timestamp with time zone
+ shows                    | updated_at          | timestamp with time zone
+ shows                    | venue_id            | integer
+ shows                    | uuid                | uuid
+ source_tracks            | id                  | bigint
+ source_tracks            | source_id           | bigint
+ source_tracks            | source_set_id       | bigint
+ source_tracks            | track_position      | integer
+ source_tracks            | duration            | integer
+ source_tracks            | title               | text
+ source_tracks            | slug                | text
+ source_tracks            | mp3_url             | text
+ source_tracks            | mp3_md5             | text
+ source_tracks            | created_at          | timestamp with time zone
+ source_tracks            | updated_at          | timestamp with time zone
+ source_tracks            | flac_md5            | text
+ source_tracks            | flac_url            | text
+ source_tracks            | artist_id           | integer
+ source_tracks            | uuid                | uuid
+ source_tracks            | is_orphaned         | boolean
+ sources                  | id                  | bigint
+ sources                  | show_id             | bigint
+ sources                  | is_soundboard       | boolean
+ sources                  | is_remaster         | boolean
+ sources                  | avg_rating          | real
+ sources                  | num_reviews         | integer
+ sources                  | upstream_identifier | text
+ sources                  | has_jamcharts       | boolean
+ sources                  | description         | text
+ sources                  | taper_notes         | text
+ sources                  | source              | text
+ sources                  | taper               | text
+ sources                  | transferrer         | text
+ sources                  | lineage             | text
+ sources                  | created_at          | timestamp with time zone
+ sources                  | updated_at          | timestamp with time zone
+ sources                  | artist_id           | integer
+ sources                  | avg_rating_weighted | real
+ sources                  | duration            | real
+ sources                  | venue_id            | bigint
+ sources                  | display_date        | text
+ sources                  | num_ratings         | integer
+ sources                  | flac_type           | integer
+ sources                  | uuid                | uuid
+ upstream_sources         | id                  | integer
+ upstream_sources         | name                | text
+ upstream_sources         | url                 | text
+ upstream_sources         | description         | text
+ upstream_sources         | credit_line         | text
+(70 rows)
+
