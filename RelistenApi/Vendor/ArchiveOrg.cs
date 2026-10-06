@@ -333,6 +333,8 @@ namespace Relisten.Vendor.ArchiveOrg.Metadata
 
     public class RootObject
     {
+        public string? error { get; set; }
+        public int? errcode { get; set; }
         public int created { get; set; }
         public bool? is_dark { get; set; }
         public string d1 { get; set; } = null!;
