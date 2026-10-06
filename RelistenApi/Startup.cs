@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -129,10 +130,17 @@ namespace Relisten
 
             services.AddOpenApi("v2", options =>
             {
+                // Property-level converters can give the same enum both numeric and string contracts.
+                options.CreateSchemaReferenceId = typeInfo => typeInfo.Type.IsEnum
+                    ? null : OpenApiOptions.CreateDefaultSchemaReferenceId(typeInfo);
+                options.AddDocumentTransformer<RelistenOpenApiDocumentTransformer>();
                 options.AddSchemaTransformer<SkipV2PropertySchemaTransformer>();
             });
             services.AddOpenApi("v3", options =>
             {
+                options.CreateSchemaReferenceId = typeInfo => typeInfo.Type.IsEnum
+                    ? null : OpenApiOptions.CreateDefaultSchemaReferenceId(typeInfo);
+                options.AddDocumentTransformer<RelistenOpenApiDocumentTransformer>();
                 options.AddSchemaTransformer<SkipV2PropertySchemaTransformer>();
             });
 

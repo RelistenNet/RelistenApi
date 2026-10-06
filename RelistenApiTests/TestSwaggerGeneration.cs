@@ -29,6 +29,9 @@ public sealed class TestSwaggerGeneration
             .AddNewtonsoftJson();
         builder.Services.AddOpenApi(version, options =>
         {
+            options.CreateSchemaReferenceId = typeInfo => typeInfo.Type.IsEnum
+                ? null : OpenApiOptions.CreateDefaultSchemaReferenceId(typeInfo);
+            options.AddDocumentTransformer<RelistenOpenApiDocumentTransformer>();
             options.AddSchemaTransformer<SkipV2PropertySchemaTransformer>();
         });
 
@@ -43,9 +46,19 @@ public sealed class TestSwaggerGeneration
         var json = JObject.Parse(output.ToString());
 
         json["info"]!["version"]!.Value<string>().Should().Be(version);
+        json["info"]!["title"]!.Value<string>().Should().Be("Relisten API");
         json["paths"]![$"/api/{version}/artists"]!["get"].Should().NotBeNull();
+        json["paths"]!["/api/v3/popular/artists"]!["get"].Should().NotBeNull();
+        json["paths"]!["/relisten-admin/login"].Should().BeNull();
+        json["paths"]!["/api/v2/artists"]!["post"].Should().BeNull();
         var artistProperties = (JObject)json["components"]!["schemas"]!["ArtistWithCounts"]!["properties"]!;
         artistProperties.ContainsKey("uuid").Should().BeTrue();
         artistProperties.ContainsKey("id").Should().Be(includesNumericIds);
+
+        var playProperties = json["components"]!["schemas"]!["SourceTrackPlay"]!["properties"]!;
+        playProperties["app_type"]!["type"]!.Value<string>().Should().Be("integer");
+        playProperties["app_type_description"]!["enum"]!.Values<string>().Should().Contain("Web");
+        json["components"]!["schemas"]!["SourceFull"]!["properties"]!["flac_type"]!["enum"]!
+            .Values<string>().Should().Contain("Flac16Bit");
     }
 }

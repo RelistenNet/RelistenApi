@@ -36,6 +36,22 @@ namespace Relisten.Api.Models.Api
         }
     }
 
+    public sealed class RelistenOpenApiDocumentTransformer : IOpenApiDocumentTransformer
+    {
+        public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context,
+            CancellationToken cancellationToken)
+        {
+            document.Info = new OpenApiInfo
+            {
+                Version = context.DocumentName,
+                Title = "Relisten API",
+                Contact = new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
+                License = new OpenApiLicense { Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT") }
+            };
+            return Task.CompletedTask;
+        }
+    }
+
     public sealed class SkipV2PropertySchemaTransformer : IOpenApiSchemaTransformer
     {
         public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context,
