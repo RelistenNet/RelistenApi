@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Import;
 
@@ -20,13 +19,14 @@ public record ProviderPage(
 /// <summary>One item's fetched dependency; Done ends its fetch sequence.</summary>
 public record ProviderFetch(string Body, bool Done = true, DateTime? ModifiedAt = null);
 
-/// <summary>Activity-local context; mutable importer instances are scoped to one call.</summary>
+/// <summary>Activity-local context. PreviousFetch is the preceding committed dependency when advancing a fetch sequence.</summary>
 public record ProviderContext(
     Artist Artist,
     ArtistUpstreamSource Source,
     ArtistImportRequest Request,
     ImportRunRepository Store,
-    CancellationToken CancellationToken
+    CancellationToken CancellationToken,
+    ProviderFetch? PreviousFetch = null
 );
 
 /// <summary>Provider-specific parsing and catalog writes reused by Temporal activity composition.</summary>

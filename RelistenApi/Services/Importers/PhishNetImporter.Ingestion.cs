@@ -8,13 +8,18 @@ using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Import.PhishNet;
 using Relisten.Ingestion;
-using Relisten.Vendor;
 
 namespace Relisten.Import;
 
 public partial class PhishNetImporter : IProviderIngestion
 {
     private record SourceInput(Source Source, PhishNetApiShow? Show);
+
+    private record FetchedInput(
+        PhishNetScrapeResults? Ratings = null,
+        string? RedirectUrl = null,
+        PhishNetApiReview[]? Reviews = null
+    );
 
     public override void UseIngestionHttpClient(HttpClient client)
     {
@@ -57,16 +62,43 @@ public partial class PhishNetImporter : IProviderIngestion
     )
     {
         var source = JsonConvert.DeserializeObject<SourceInput>(item.Body)!.Source;
-        if (part == 0)
+        var previous =
+            context.PreviousFetch == null
+                ? null
+                : JsonConvert.DeserializeObject<FetchedInput>(context.PreviousFetch.Body);
+        if (part == 0 || previous?.RedirectUrl != null)
         {
-            var ratings = await ScrapePhishNetForSource(source, null);
+            if (part >= 50)
+                throw new System.IO.InvalidDataException("Phish.net ratings redirect loop.");
+            var url =
+                previous?.RedirectUrl
+                ?? PhishNetRatingsScraper.PhishNetUrlForSource(source.display_date);
+            using var response = await http.GetAsync(url, context.CancellationToken);
+            // The date lookup redirects to the canonical show page. Each hop is
+            // staged so the next request uses another activity/queue slot.
+            if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location != null)
+            {
+                var destination = new Uri(
+                    response.RequestMessage!.RequestUri!,
+                    response.Headers.Location
+                );
+                return new ProviderFetch(
+                    JsonConvert.SerializeObject(
+                        new FetchedInput(RedirectUrl: destination.ToString())
+                    ),
+                    false
+                );
+            }
+            response.EnsureSuccessStatusCode();
+            var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
+            var ratings = new PhishNetRatingsExtractor(body).ExtractRatings();
             return new ProviderFetch(
-                JsonConvert.SerializeObject(ratings),
+                JsonConvert.SerializeObject(new FetchedInput(Ratings: ratings)),
                 !ratings.RatingMatched || source.num_reviews == ratings.NumberOfReviewsWritten
             );
         }
-        var reviews = await phishNetApiClient.Reviews(source.display_date, null);
-        return new ProviderFetch(JsonConvert.SerializeObject(reviews));
+        var reviews = (await phishNetApiClient.Reviews(source.display_date, null)).ToArray();
+        return new ProviderFetch(JsonConvert.SerializeObject(new FetchedInput(Reviews: reviews)));
     }
 
     /// <inheritdoc />
@@ -87,16 +119,18 @@ public partial class PhishNetImporter : IProviderIngestion
             input.Show == null
                 ? new List<PhishNetApiShow>()
                 : new List<PhishNetApiShow> { input.Show };
-        var ratings = JsonConvert.DeserializeObject<PhishNetScrapeResults>(fetched[0].Body)!;
+        var inputs = fetched
+            .Select(f => JsonConvert.DeserializeObject<FetchedInput>(f.Body)!)
+            .ToArray();
+        var ratings = inputs.Single(f => f.Ratings != null).Ratings!;
         var reviews =
-            fetched.Length > 1
-                ? JsonConvert.DeserializeObject<PhishNetApiReview[]>(fetched[1].Body)!
-                : Array.Empty<PhishNetApiReview>();
+            inputs.SingleOrDefault(f => f.Reviews != null)?.Reviews
+            ?? Array.Empty<PhishNetApiReview>();
         return await ProcessSource(
             context.Artist,
             context.Source,
             source,
-            shows!,
+            shows,
             null,
             ratings,
             reviews

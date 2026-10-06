@@ -10,6 +10,7 @@ internal sealed class FixtureHttpServer : IDisposable
     private readonly HttpListener listener = new();
     public Uri Address { get; }
     public Func<Uri, string> Respond { get; set; } = _ => "{}";
+    public Dictionary<string, string> Redirects { get; } = new();
     public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
     public TimeSpan? RetryAfter { get; set; }
     public int Requests { get; private set; }
@@ -34,8 +35,13 @@ internal sealed class FixtureHttpServer : IDisposable
             {
                 var context = await listener.GetContextAsync();
                 Requests++;
-                var bytes = Encoding.UTF8.GetBytes(Respond(context.Request.Url!));
-                context.Response.StatusCode = (int)Status;
+                var redirect = Redirects.GetValueOrDefault(context.Request.Url!.AbsolutePath);
+                var bytes = Encoding.UTF8.GetBytes(
+                    redirect == null ? Respond(context.Request.Url) : ""
+                );
+                context.Response.StatusCode = redirect == null ? (int)Status : 302;
+                if (redirect != null)
+                    context.Response.RedirectLocation = redirect;
                 if (RetryAfter.HasValue)
                     context.Response.Headers["Retry-After"] = (
                         (int)RetryAfter.Value.TotalSeconds

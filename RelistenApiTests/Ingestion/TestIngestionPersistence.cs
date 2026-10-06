@@ -78,6 +78,7 @@ public class TestIngestionPersistence
     [SetUp]
     public async Task SeedArtist()
     {
+        upstream.Redirects.Clear();
         requestId = Guid.NewGuid().ToString();
         artistUuid = Guid.NewGuid();
         artistId = await db.WithWriteConnection(c =>
@@ -252,6 +253,8 @@ public class TestIngestionPersistence
         if (provider == "phish.net")
             await Import(); // Enrichment needs an existing recording.
         await ConfigureProvider(provider, providerId);
+        if (provider == "phish.net")
+            upstream.Redirects["/setlists/"] = "/setlists/fixture-canonical.html";
         if (provider != "archive.org")
             upstream.Respond = uri => ProviderFixtures.Response(provider, uri);
         Dictionary<string, string[]> expected;

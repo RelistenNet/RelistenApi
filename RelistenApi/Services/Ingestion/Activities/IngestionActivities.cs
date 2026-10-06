@@ -75,6 +75,14 @@ public sealed class IngestionActivities(
             return previous.Done;
         var (context, importer) = await Context(item.Request, item.Provider);
         var input = await Input(item);
+        if (part > 0)
+            context = context with
+            {
+                PreviousFetch = await store.ReadAsync<ProviderFetch>(
+                    item.Request.RequestId,
+                    ItemKey(item) + "/fetch/" + (part - 1)
+                ),
+            };
         var fetched = await ((IProviderIngestion)importer).FetchAsync(context, input, part);
         await store.SaveAsync(item.Request.RequestId, key, fetched);
         // A timed-out attempt may have committed first. Return the stored version.
