@@ -13,12 +13,12 @@ using Relisten.Import.PhishNet;
 
 namespace Relisten.Import
 {
-    public class PhishNetImporter : ImporterBase
+    public partial class PhishNetImporter : ImporterBase
     {
         public const string DataSourceName = "phish.net";
 
         readonly LinkService linkService;
-        readonly PhishNetApiClient phishNetApiClient;
+        PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
             DbService db,
@@ -134,12 +134,14 @@ namespace Relisten.Import
             ArtistUpstreamSource src,
             Source dbSource,
             IList<PhishNetApiShow> phishNetApiShows,
-            PerformContext? ctx
+            PerformContext? ctx,
+            PhishNetScrapeResults? stagedRatings = null,
+            IEnumerable<PhishNetApiReview>? stagedReviews = null
         )
         {
             var stats = new ImportStats();
 
-            var ratings = await ScrapePhishNetForSource(dbSource, ctx);
+            var ratings = stagedRatings ?? await ScrapePhishNetForSource(dbSource, ctx);
             var dirty = false;
 
             if (!ratings.RatingMatched)
@@ -171,7 +173,9 @@ namespace Relisten.Import
                     ctx?.WriteLine(
                         $"{dbSource.display_date} reviews changed: {dbSource.num_reviews} → {ratings.NumberOfReviewsWritten}"
                     );
-                    var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
+                    var reviews =
+                        stagedReviews
+                        ?? await phishNetApiClient.Reviews(dbSource.display_date, ctx);
 
                     var dbReviews = reviews
                         .Select(rev => new SourceReview
@@ -196,7 +200,10 @@ namespace Relisten.Import
                 pnetShow.showdate == dbSource.display_date
             );
 
-            if (!dbSource.description.Contains(phishNetApiShow!.setlist_notes))
+            if (
+                phishNetApiShow?.setlist_notes is { } notes
+                && !dbSource.description.Contains(notes)
+            )
             {
                 ctx?.WriteLine(
                     $"{dbSource.display_date} setlist_notes changed: [{dbSource.description.Length} chars] → [{phishNetApiShow.setlist_notes.Length} chars]"

@@ -23,7 +23,7 @@ using Venue = Relisten.Api.Models.Venue;
 
 namespace Relisten.Import
 {
-    public class SetlistFmImporter : ImporterBase
+    public partial class SetlistFmImporter : ImporterBase
     {
         public const string DataSourceName = "setlist.fm";
 

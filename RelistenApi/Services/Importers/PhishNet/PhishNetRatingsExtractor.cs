@@ -15,7 +15,8 @@ public class PhishNetRatingsScraper(HttpClient httpClient, string displayDate)
     public async Task<PhishNetScrapeResults> ScrapeRatings()
     {
         var url = PhishNetUrlForSource(displayDate);
-        var resp = await httpClient.GetAsync(url);
+        using var resp = await httpClient.GetAsync(url);
+        resp.EnsureSuccessStatusCode();
         var page = await resp.Content.ReadAsStringAsync();
 
         var extractor = new PhishNetRatingsExtractor(page);

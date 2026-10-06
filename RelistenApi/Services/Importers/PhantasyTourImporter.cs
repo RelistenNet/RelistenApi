@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,7 +16,7 @@ using Relisten.Vendor.PhantasyTour;
 
 namespace Relisten.Import
 {
-    public class PhantasyTourImporter : ImporterBase
+    public partial class PhantasyTourImporter : ImporterBase
     {
         public const string DataSourceName = "phantasytour.com";
 
@@ -276,6 +276,17 @@ namespace Relisten.Import
             ctx?.WriteLine($"Result: [{res.StatusCode}]: {body.Length}");
             res.EnsureSuccessStatusCode();
 
+            await ApplyShowBody(artist, stats, ctx, showId, body);
+        }
+
+        private async Task ApplyShowBody(
+            Artist artist,
+            ImportStats stats,
+            PerformContext? ctx,
+            int showId,
+            string body
+        )
+        {
             var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data;
 
             var now = DateTime.UtcNow;

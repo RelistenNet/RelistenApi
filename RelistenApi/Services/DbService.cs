@@ -132,7 +132,10 @@ namespace Relisten
                     );
                 }
                 catch (NpgsqlException ex)
-                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                    when (System.Transactions.Transaction.Current == null
+                        && IsSerializationConflict(ex)
+                        && attempts < MaxSerializationRetries
+                    )
                 {
                     // Retry serialization/deadlock conflicts with a small backoff.
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
@@ -183,7 +186,10 @@ namespace Relisten
                     );
                 }
                 catch (NpgsqlException ex)
-                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                    when (System.Transactions.Transaction.Current == null
+                        && IsSerializationConflict(ex)
+                        && attempts < MaxSerializationRetries
+                    )
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
                 }
@@ -234,7 +240,10 @@ namespace Relisten
                     );
                 }
                 catch (NpgsqlException ex)
-                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                    when (System.Transactions.Transaction.Current == null
+                        && IsSerializationConflict(ex)
+                        && attempts < MaxSerializationRetries
+                    )
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
                 }

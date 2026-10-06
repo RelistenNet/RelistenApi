@@ -44,6 +44,9 @@ public static class IngestionServiceRegistration
         services.AddScoped<ArchiveOrgArtistIndexer, ArchiveOrgArtistIndexer>();
         services.AddScoped<PopularityCacheService, PopularityCacheService>();
         services.AddScoped<PopularityService, PopularityService>();
+        services.AddScoped(sp => new Lazy<PopularityService>(
+            sp.GetRequiredService<PopularityService>
+        ));
         services.AddScoped<PopularityJobs, PopularityJobs>();
         services.AddScoped<ScheduledService, ScheduledService>();
         services.AddScoped<SearchService, SearchService>();

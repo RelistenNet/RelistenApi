@@ -60,6 +60,8 @@ namespace Relisten.Vendor.ArchiveOrg
         )
         {
             var token = JToken.Load(reader);
+            if (token.Type == JTokenType.Null)
+                return null;
             if (token.Type == JTokenType.Array)
             {
                 return token.ToObject<List<T>>();

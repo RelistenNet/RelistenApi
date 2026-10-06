@@ -26,15 +26,19 @@ public class PhishNetApiClient(HttpClient httpClient)
         const string url = "https://api.phish.net/v5/shows?apikey=C60F490D1358FBBE31DA";
         ctx?.WriteLine($"Requesting {url}");
 
-        var resp = await httpClient.GetAsync(url);
+        using var resp = await httpClient.GetAsync(url);
+        resp.EnsureSuccessStatusCode();
         var page = await resp.Content.ReadAsStringAsync();
 
         var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(
             CleanPhishNetString(page)
         );
 
-        return shows?.data?.Where(show => show.artist_name == "Phish").ToList()
-            ?? new List<PhishNetApiShow>();
+        if (shows == null || shows.error || shows.data == null)
+            throw new System.IO.InvalidDataException(
+                "Phish.net returned an invalid show response."
+            );
+        return shows.data.Where(show => show.artist_name == "Phish").ToList();
     }
 
     string PhishNetApiReviewsUrlForDate(string displayDate)
@@ -49,20 +53,19 @@ public class PhishNetApiClient(HttpClient httpClient)
     {
         var url = PhishNetApiReviewsUrlForDate(displayDate);
         ctx?.WriteLine($"Requesting {url}");
-        var resp = await httpClient.GetAsync(url);
+        using var resp = await httpClient.GetAsync(url);
+        resp.EnsureSuccessStatusCode();
         var page = await resp.Content.ReadAsStringAsync();
-
-        // some shows have no reviews
-        if (page.Length == 0 || page[0] == '{')
-        {
-            return new List<PhishNetApiReview>();
-        }
 
         var reviews = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(
             CleanPhishNetString(page)
         );
 
-        return reviews?.data ?? new List<PhishNetApiReview>();
+        if (reviews == null || reviews.error || reviews.data == null)
+            throw new System.IO.InvalidDataException(
+                "Phish.net returned an invalid review response."
+            );
+        return reviews.data;
     }
 }
 

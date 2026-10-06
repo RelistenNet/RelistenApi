@@ -56,21 +56,47 @@ public class TestIngestionWorkflows
 
     private async Task<ImportResult> Run(RecordingActivities activities, bool singleItem)
     {
-        using var workflowWorker = new TemporalWorker(environment.Client,
+        using var workflowWorker = new TemporalWorker(
+            environment.Client,
             new TemporalWorkerOptions(IngestionQueues.Workflows)
-                .AddWorkflow<ArtistRefreshWorkflow>().AddWorkflow<ReimportItemWorkflow>());
-        using var dbWorker = new TemporalWorker(environment.Client,
-            new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(activities));
-        using var fetchWorker = new TemporalWorker(environment.Client,
-            new TemporalWorkerOptions(IngestionQueues.Providers["archive.org"]).AddAllActivities(activities));
-        var request = new ArtistImportRequest("artist", Guid.NewGuid().ToString(), Item: singleItem ? "one" : null);
-        return await workflowWorker.ExecuteAsync(() => dbWorker.ExecuteAsync(() => fetchWorker.ExecuteAsync(async () =>
-        {
-            var options = new WorkflowOptions("test/" + request.RequestId, IngestionQueues.Workflows);
-            return singleItem
-                ? await environment.Client.ExecuteWorkflowAsync((ReimportItemWorkflow w) => w.RunAsync(request, null), options)
-                : await environment.Client.ExecuteWorkflowAsync((ArtistRefreshWorkflow w) => w.RunAsync(request, null), options);
-        })));
+                .AddWorkflow<ArtistRefreshWorkflow>()
+                .AddWorkflow<ReimportItemWorkflow>()
+        );
+        using var dbWorker = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(activities)
+        );
+        using var fetchWorker = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Providers["archive.org"]).AddAllActivities(
+                activities
+            )
+        );
+        var request = new ArtistImportRequest(
+            "artist",
+            Guid.NewGuid().ToString(),
+            Item: singleItem ? "one" : null
+        );
+        return await workflowWorker.ExecuteAsync(() =>
+            dbWorker.ExecuteAsync(() =>
+                fetchWorker.ExecuteAsync(async () =>
+                {
+                    var options = new WorkflowOptions(
+                        "test/" + request.RequestId,
+                        IngestionQueues.Workflows
+                    );
+                    return singleItem
+                        ? await environment.Client.ExecuteWorkflowAsync(
+                            (ReimportItemWorkflow w) => w.RunAsync(request, null),
+                            options
+                        )
+                        : await environment.Client.ExecuteWorkflowAsync(
+                            (ArtistRefreshWorkflow w) => w.RunAsync(request, null),
+                            options
+                        );
+                })
+            )
+        );
     }
 
     // These activities model observable provider behavior. They do not mock workflow internals.
@@ -88,17 +114,26 @@ public class TestIngestionWorkflows
             Preparations++;
             return Task.FromResult(new ArtistImportPlan("artist", ["archive.org"]));
         }
+
         [Activity("Ingestion.Discover")]
-        public Task<ImportPage> Discover(ArtistImportRequest request, string provider, string? cursor) =>
-            Task.FromResult(new ImportPage("page", count, null));
+        public Task<ImportPage> Discover(
+            ArtistImportRequest request,
+            string provider,
+            string? cursor
+        ) => Task.FromResult(new ImportPage("page", count, null));
+
         [Activity("Ingestion.Fetch")]
         public Task<bool> Fetch(ImportItemRef item, int part)
         {
             Fetches.Add((item.Index, part));
             if (item.Index == failedIndex)
-                throw new ApplicationFailureException("Invalid provider metadata", nonRetryable: true);
+                throw new ApplicationFailureException(
+                    "Invalid provider metadata",
+                    nonRetryable: true
+                );
             return Task.FromResult(part == 1);
         }
+
         [Activity("Ingestion.Apply")]
         public Task<ImportStats> Apply(ImportItemRef item)
         {
@@ -106,18 +141,26 @@ public class TestIngestionWorkflows
             Applied.Add(item.Index);
             return Task.FromResult(new ImportStats { Created = 1 });
         }
+
         [Activity("Ingestion.RecordFailure")]
         public Task RecordFailure(ImportItemRef item, string reason)
         {
             Failures.Add(item.Index);
             return Task.CompletedTask;
         }
+
         [Activity("Ingestion.Candidates")]
-        public Task<string[]> Candidates(ArtistImportRequest request, string provider) => Task.FromResult(Array.Empty<string>());
+        public Task<string[]> Candidates(ArtistImportRequest request, string provider) =>
+            Task.FromResult(Array.Empty<string>());
+
         [Activity("Ingestion.Verify")]
-        public Task Verify(ArtistImportRequest request, string provider, string key) => Task.CompletedTask;
+        public Task Verify(ArtistImportRequest request, string provider, string key) =>
+            Task.CompletedTask;
+
         [Activity("Ingestion.FinishProvider")]
-        public Task<ImportStats> FinishProvider(ArtistImportRequest request, string provider) => Task.FromResult(new ImportStats());
+        public Task<ImportStats> FinishProvider(ArtistImportRequest request, string provider) =>
+            Task.FromResult(new ImportStats());
+
         [Activity("Ingestion.FinishArtist")]
         public Task FinishArtist(ArtistImportRequest request, ImportResult result)
         {

@@ -16,7 +16,7 @@ using Relisten.Vendor;
 
 namespace Relisten.Import
 {
-    public class JerryGarciaComImporter : ImporterBase
+    public partial class JerryGarciaComImporter : ImporterBase
     {
         public const string DataSourceName = "jerrygarcia.com";
         private IDictionary<string, SetlistShow?> existingSetlistShows =
@@ -351,27 +351,13 @@ namespace Relisten.Import
                 var pageResp = await http.GetAsync(url);
                 var pageContents = await pageResp.Content.ReadAsStringAsync();
 
-                var parsedPage = ParseShowPage(pageContents);
-                if (parsedPage == null)
-                {
-                    return;
-                }
-
-                var venueResult = await EnsureVenue(
+                await ApplyVenueBackfill(
+                    stats,
                     artist,
-                    parsedPage,
+                    f,
+                    pageContents,
                     pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow
                 );
-                var dbVenue = venueResult.venue;
-                stats.Created += venueResult.created ? 1 : 0;
-
-                if (dbShow.venue_id != dbVenue.id)
-                {
-                    dbShow.venue_id = dbVenue.id;
-                    dbShow.updated_at = DateTime.UtcNow;
-                    await _setlistShowService.Save(dbShow);
-                    stats.Updated++;
-                }
             };
 
             if (prog == null)
@@ -399,7 +385,14 @@ namespace Relisten.Import
                 ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
             }
 
-            stats.Removed += await db.WithWriteConnection(con =>
+            stats.Removed += await RemoveOrphanVenues(artist);
+
+            return stats;
+        }
+
+        internal async Task<int> RemoveOrphanVenues(Artist artist)
+        {
+            return await db.WithWriteConnection(con =>
                 con.ExecuteAsync(
                     @"
                 WITH orphaned AS (
@@ -426,8 +419,35 @@ namespace Relisten.Import
                     new { artistId = artist.id }
                 )
             );
+        }
 
-            return stats;
+        private async Task ApplyVenueBackfill(
+            ImportStats stats,
+            Artist artist,
+            FileMetaObject f,
+            string pageContents,
+            DateTime updatedAt
+        )
+        {
+            if (!existingSetlistShows.TryGetValue(f.Identifier, out var dbShow) || dbShow == null)
+                return;
+            var parsedPage = ParseShowPage(pageContents);
+            if (parsedPage == null)
+            {
+                return;
+            }
+
+            var venueResult = await EnsureVenue(artist, parsedPage, updatedAt);
+            var dbVenue = venueResult.venue;
+            stats.Created += venueResult.created ? 1 : 0;
+
+            if (dbShow!.venue_id != dbVenue.id)
+            {
+                dbShow!.venue_id = dbVenue.id;
+                dbShow!.updated_at = DateTime.UtcNow;
+                await _setlistShowService.Save(dbShow);
+                stats.Updated++;
+            }
         }
 
         private static string BuildVenueLocation(string venueCityOrCityState, string venueCountry)

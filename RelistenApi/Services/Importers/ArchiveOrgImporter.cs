@@ -608,7 +608,7 @@ namespace Relisten.Import
                     properDisplayDate
                 );
                 src.id = dbSource!.id;
-                src.venue_id = dbVenue!.id;
+                src.venue_id = dbVenue?.id;
 
                 dbSource = await _sourceService.Save(src);
                 dbSource.venue = dbVenue;
