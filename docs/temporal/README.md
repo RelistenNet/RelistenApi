@@ -1,8 +1,8 @@
 # Move Relisten ingestion to Temporal
 
-**Provisional recommendation · 6 October 2026 · for Alec and Switz**
+**Implementation · 6 October 2026 · for Alec and Switz**
 
-Use self-hosted Temporal with PostgreSQL. Compose shared activities through `ArtistRefreshWorkflow` and `ReimportItemWorkflow`. Use provider-specific task-queue rate limits; do not build a distributed limiter. The daily refresh starts a bounded number of artist child workflows. Keep the existing importer rules, database IDs, API responses, and schedules.
+Use self-hosted Temporal with PostgreSQL. Compose shared activities through `ArtistRefreshWorkflow` and `ReimportItemWorkflow`. Use native worker concurrency and optional provider task-queue rate limits; do not build a distributed limiter. The daily refresh starts a bounded number of artist child workflows. Keep the existing importer rules, database IDs, API responses, and schedules.
 
 An Archive item is a recording source, not a Relisten show. A show groups sources for an artist and display date. Start with **source activities**, because the current operation is a fetch followed by a database transaction. A source child workflow becomes useful when that operation actually needs several independently recoverable steps. Future additions do not need to be built now.
 
@@ -12,19 +12,20 @@ Use ten-concurrent provider workers and ten artists per normal batch; leave arbi
 
 Read the detail in this order:
 
-1. [Concrete implementation plan](implementation-plan.md): local setup, implementation stages, verification gates and later rollout.
-2. [Importer contracts](importer-workflows.md): the seven active providers, current behavior and proposed activity composition.
-3. [Task-queue throttling](upstream-throttling.md): queues, rates, retries and operator-controlled Hangfire handoff.
-4. [Decision memo](decision.md): boundaries, existing behavior, retries, manual runs, and PostgreSQL operations.
-5. [Capacity and evidence](capacity-and-evidence.md): measured counts, reproducible assumptions, code references, and official Temporal sources.
+1. [Operator instructions](operations.md) and [local setup](../../local-dev/temporal/README.md): run, verify, switch engines and recover.
+2. [Concrete implementation plan](implementation-plan.md): local setup, implementation stages, verification gates and later rollout.
+3. [Importer contracts](importer-workflows.md): the seven active providers, current behavior and proposed activity composition.
+4. [Task-queue throttling](upstream-throttling.md): queues, rates, retries and operator-controlled Hangfire handoff.
+5. [Decision memo](decision.md): boundaries, existing behavior, retries, manual runs, and PostgreSQL operations.
+6. [Capacity and evidence](capacity-and-evidence.md): measured counts, reproducible assumptions, code references, and official Temporal sources.
 
 
 ## Scope and status
 
 Alec confirmed **self-hosting only**, acceptable ingestion downtime, and **migration of existing ingestion first**. AI normalization, embeddings, search indexing, identity redesign, and a new review platform are outside this plan. They were examples of future uses for finer ingestion units.
 
-The investigation and local-first implementation plan are complete. Alec selected native task queues, ten-concurrent workers and a simple operator-controlled Hangfire-to-Temporal switch. PanicStream is disabled and excluded. The exact workflow boundary remains a recommendation for Alec to accept or revise; this document is not approval to implement or deploy it. Only planning documents and supporting evidence were added on `codex/temporal-ingestion-plan` in the main API checkout. No product code, infrastructure, production data, deployment, or running job was changed. Research used pinned local source snapshots and bounded queries on the production read-only replica. PR89 deployment and recovery remain owned by the other task.
+The agreed plan is implemented on `codex/temporal-ingestion-plan`, with a separate worker, shared provider activities, API handoff and local integration tests. PanicStream is disabled and excluded. [The persistent goal](GOAL.md) records scope, standards and verification. Production deployment and the PR89/reindex work remain separate. The catalog measurements below are historical observations, not a deployment capacity guarantee.
 
-## Working recommendation
+## Workflow boundaries
 
 Use artist workflows and shared activities, with a separate manual item entry point. Per-item child workflows remain an option if independent control becomes a concrete requirement. The plan preserves existing full/thin behavior; it identifies unsupported targeted/year operations without silently adding them. Temporal is added alongside Hangfire and tested locally before any production deployment.

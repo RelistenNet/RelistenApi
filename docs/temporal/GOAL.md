@@ -23,18 +23,42 @@ The separate worker builds and starts independently of the API/Hangfire host. Wo
 
 ## Progress
 
-- Planning and evidence complete; implementation started.
-- Main checkout is on the intended branch with only this task's planning artifacts present.
-- Read repository instructions and the requested deslop/code-simplifier skills.
-- Next: inspect shared importer/DI boundaries, establish a baseline build/test, and implement the worker plus first end-to-end import.
+- Standalone worker, shared provider adapters, API handoff, schedules and maintenance entry points are implemented.
+- All seven active providers have local legacy/Temporal catalog comparisons. Other checks cover receipts, rollback, overlapping attempts, cancellation, worker replacement, history replay/rollover, Archive evidence, API admission and maintenance.
+- The worker publishes and starts independently against local Temporal, then stops cleanly on SIGINT. Local schedule registration and migration 13 were also exercised.
+- Implementation and verification are complete and committed in logical chunks. No production deployment or production data changes occurred.
 
-## Decisions and verification
+## Decisions and implementation departures
 
-Record implementation departures, completed commits and meaningful test results here as work proceeds.
+- Use application PostgreSQL for raw inputs and receipts initially. This keeps Temporal histories small without adding object storage. Retention is explicit operator work; [operations.md](operations.md) explains what can be removed and what must remain for recovery.
+- The historical migrations contain manual-operation markers and cannot rebuild the current catalog. The isolated local stack therefore includes a schema-only fixture from the read-only replica and an explicit local baseline of 12 before migration 13. It contains no production rows or credentials.
+- Fetch and apply are separate activities for Archive as well as the other providers. Native queues control upstream requests; catalog writes and receipts share a transaction. Bulk page staging avoids one database round-trip per discovered item.
+- Reuse existing parsers with a null Hangfire progress context. Temporal activities and persisted results provide progress/error visibility; a new progress-adapter abstraction was unnecessary.
+- Artist, item and rebuild starts share an artist UUID workflow ID. Cancellation leaves a durable `needs-finalize` marker when item changes committed. Resume is an operator action before newer work for that artist, not an additional ownership/fencing service.
+- Temporal exact-item imports suppress unrelated absence reconciliation. The legacy Archive targeted path could run artist-wide cleanup. Full imports retain verified reconciliation; a narrow reimport now changes only its selected item. The compatibility tradeoff is documented in the operator instructions.
+- Debug and destructive reimports remain on the legacy path. While Temporal is selected they return 409; stop ingestion and select Hangfire to use them. Normal import responses retain their status and shape and return a Temporal workflow ID.
+- Fixes exposed by verification: Phish.net discarded normal review envelopes; Archive nullable list fields did not round-trip through staging; source updates assumed every artist used per-source venues; discovery held overlapping database connections and promoted its transaction unnecessarily. These fixes preserve catalog intent and have contract coverage.
+- API-only popularity dependencies are lazy so the worker can use catalog writes without constructing a Hangfire client. Hangfire remains responsible for unrelated popularity/cache jobs.
+- A public HTTP status check confirmed that Phish.net's date-based ratings URL redirects. Redirects are now staged and followed in separate fetch activities, preserving both the old URL behavior and one-request queue accounting.
+- `deslop` was applied to the goal/runbook and commit messages. `code-simplifier` removed redundant legacy guards, shared fixture setup, cleaned extraction residue and kept provider parsing in existing methods.
 
-- Foundation: added the standalone .NET host, pinned Temporal SDK 1.20.0 and shared catalog registrations without API/Hangfire startup. Removed PanicStream registration and ignore unsupported provider mappings.
-- Baseline and foundation checks: worker build passed; existing API suite passed (93 passed, 24 existing database-dependent tests skipped). Existing OpenTelemetry.Resources.Host dependency reports NU1903; not introduced by Temporal.
+## Verification evidence
 
-- Workflow core: shared artist/item composition, PostgreSQL staging/transactional receipts, bounded history rollover, and Archive discovery/fetch/apply/deletion-verification boundaries compile. Three real local Temporal tests passed: partial failures, shared item composition, and 180-item rollover with no repeated completed items.
-- Implementation detail: staged pages are written atomically with bulk item inserts; this avoids one network database round-trip per discovery item.
-- Remaining: finish provider adapters and maintenance, wire worker/API/schedules, add local PostgreSQL integration and operator documentation.
+- Baseline: 93 passed, 24 pre-existing database-dependent skips.
+- Complete suite: 126 passed, 24 pre-existing skips. After the final rolling-batch change, all eight workflow tests passed again, including batch history replay. After the Phish.net redirect fix, all seven provider comparisons and five HTTP tests passed again.
+- Provider/discovery/maintenance regression set: 11 passed after the connection-lifetime fix.
+- Synthetic 18,386-item discovery: 0.32 seconds to stage on this local machine, 4,456,759 stored payload bytes, 56-character page reference returned. This uses tiny synthetic documents and excludes indexes/WAL; it is not a production capacity estimate.
+- Worker Release publish, independent startup/shutdown, local schema migration and explicit schedule creation succeeded.
+- Existing `OpenTelemetry.Resources.Host` 1.15.1-beta.1 reports NU1903. It predates this work. No live-provider load test, production rollout, backup setup or infrastructure creation was performed.
+
+## Commits
+
+- `7b5ad9c`: goal and planning documents.
+- `0f6fb1a`: independent host and shared catalog registration.
+- `5637d06`: durable artist/item workflow core, staging and receipts.
+- `db6dc86`: active provider extraction and catalog fixes.
+- `0af1d55`: API handoff, worker commands, scheduling and recovery.
+- `d94294c`: isolated stack, contract tests and rolling ten-artist batches.
+- `71d7b36`: Phish.net redirects as individually queued fetches.
+
+[Operator instructions](operations.md) · [Local setup](../../local-dev/temporal/README.md)

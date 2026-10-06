@@ -22,10 +22,10 @@ The queue's optional rate setting is server-controlled; pollers on the same queu
 
 ## Activity boundaries
 
-An upstream fetch activity makes one request per attempt. Archive can fetch and apply one item in the same activity. A list-page activity stages its results and returns a reference. Multi-request operations use a shared workflow helper:
+An upstream fetch activity makes one request per attempt. Archive fetches metadata and applies its staged result in separate activities. A list-page activity stages its results and returns a reference. Multi-request operations use a shared workflow helper:
 
 - Phish.in: fetch each prerequisite and show-list page, then apply staged shows.
-- Phish.net: fetch ratings, optionally fetch reviews, then apply enrichment.
+- Phish.net: fetch the ratings date URL, follow each staged redirect in another activity, optionally fetch reviews, then apply enrichment.
 - Local: fetch each directory's metadata, then apply the merged date group.
 
 This makes a configured queue rate useful without inventing a separate HTTP limiter. Remove nested HTTP/Polly retries from extracted paths; Temporal retries the activity. Use normal remote activities, disable eager execution for the HTTP registrations, and avoid automatic redirects that hide extra requests.
