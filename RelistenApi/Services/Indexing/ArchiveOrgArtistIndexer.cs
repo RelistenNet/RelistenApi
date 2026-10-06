@@ -140,17 +140,21 @@ public class ArchiveOrgArtistIndexer
         CancellationToken cancellationToken = default
     )
     {
-        var upstreamSource = await upstreamSourceLookup.FindUpstreamSourceByName(
-            ArchiveOrgImporter.DataSourceName
-        );
-        if (upstreamSource == null)
-        {
-            throw new InvalidOperationException("archive.org upstream source was not found.");
-        }
+        var items = await indexClient.FetchCollectionsAsync(DefaultScrapeCount, cancellationToken);
+        return await ApplyCollectionsAsync(items, context, minItemCount, cancellationToken);
+    }
 
-        var items = (
-            await indexClient.FetchCollectionsAsync(DefaultScrapeCount, cancellationToken)
-        ).ToList();
+    /// <summary>Applies an already fetched collection page, preserving the existing artist defaults and matching rules.</summary>
+    public async Task<ArchiveOrgArtistIndexResult> ApplyCollectionsAsync(
+        IReadOnlyList<ArchiveOrgCollectionIndexItem> items,
+        PerformContext? context = null,
+        int minItemCount = DefaultItemCountThreshold,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var upstreamSource =
+            await upstreamSourceLookup.FindUpstreamSourceByName(ArchiveOrgImporter.DataSourceName)
+            ?? throw new InvalidOperationException("archive.org upstream source was not found.");
         context?.WriteLine($"archive.org collections fetched: {items.Count}");
         var existingArtists = await repository.LoadExistingArtists();
         var existingSlugs = new HashSet<string>(

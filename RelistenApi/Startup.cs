@@ -282,7 +282,14 @@ namespace Relisten
                     }
                 );
                 hangfire.UseConsole();
-                hangfire.UseRecurringJob(typeof(ScheduledService));
+                if (
+                    !string.Equals(
+                        Configuration["Ingestion:Engine"],
+                        "Temporal",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+                    hangfire.UseRecurringJob(typeof(ScheduledService));
             });
 
             if (!HostEnvironment.IsDevelopment())
@@ -292,13 +299,22 @@ namespace Relisten
                     && Configuration["ENABLE_HANGFIRE_SERVER"] != "false"
                 )
                 {
-                    services.AddHangfireServer(options =>
+                    if (
+                        !string.Equals(
+                            Configuration["Ingestion:Engine"],
+                            "Temporal",
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
                     {
-                        options.Queues = ["artist_import"];
-                        options.ServerName =
-                            $"relistenapi:artist_import ({Environment.MachineName})";
-                        options.WorkerCount = 10;
-                    });
+                        services.AddHangfireServer(options =>
+                        {
+                            options.Queues = ["artist_import"];
+                            options.ServerName =
+                                $"relistenapi:artist_import ({Environment.MachineName})";
+                            options.WorkerCount = 10;
+                        });
+                    }
 
                     services.AddHangfireServer(options =>
                     {
@@ -318,6 +334,7 @@ namespace Relisten
                 .SetApplicationName("RelistenApi");
 
             services.AddRelistenCatalogServices();
+            services.AddTemporalIngestionClient(Configuration);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

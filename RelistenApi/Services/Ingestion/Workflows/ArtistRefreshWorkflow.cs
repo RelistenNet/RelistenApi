@@ -36,6 +36,8 @@ internal static class ImportComposition
         new()
         {
             TaskQueue = queue,
+            // Keep the artist workflow open until its current activity has stopped writing.
+            CancellationType = ActivityCancellationType.WaitCancellationCompleted,
             StartToCloseTimeout = TimeSpan.FromMinutes(5),
             ScheduleToCloseTimeout = TimeSpan.FromHours(6),
             RetryPolicy = new RetryPolicy
@@ -75,6 +77,10 @@ internal static class ImportComposition
                 var itemIndex = providerIndex == state.ProviderIndex ? state.ItemIndex : 0;
                 do
                 {
+                    if (calls >= 500 || Workflow.ContinueAsNewSuggested)
+                        Continue(
+                            new ImportCheckpoint(providerIndex, cursor, itemIndex, failures, stats)
+                        );
                     var page = await Workflow.ExecuteActivityAsync(
                         (IIngestionActivities a) => a.Discover(request, provider, cursor),
                         http
@@ -87,28 +93,42 @@ internal static class ImportComposition
                         {
                             for (var part = 0; ; part++)
                             {
+                                calls++;
                                 var done = await Workflow.ExecuteActivityAsync(
                                     (IIngestionActivities a) => a.Fetch(item, part),
                                     http
                                 );
-                                calls++;
                                 if (done)
                                     break;
                             }
+                            calls++;
                             stats += await Workflow.ExecuteActivityAsync(
                                 (IIngestionActivities a) => a.Apply(item),
                                 db
                             );
-                            calls++;
                         }
                         catch (ActivityFailureException error)
                             when (!TemporalException.IsCanceledException(error))
                         {
                             failures++;
+                            calls++;
                             await Workflow.ExecuteActivityAsync(
-                                (IIngestionActivities a) => a.RecordFailure(item, error.Message),
+                                (IIngestionActivities a) =>
+                                    a.RecordFailure(
+                                        item,
+                                        error.InnerException == null
+                                            ? error.Message
+                                            : error.InnerException.Message
+                                    ),
                                 db
                             );
+                            if (
+                                error.InnerException is ApplicationFailureException
+                                {
+                                    ErrorType: "IngestionPrerequisiteFailure"
+                                }
+                            )
+                                throw;
                         }
                         // Finish the item before rollover; a restarted run reads the same staged page.
                         if (calls >= 500 || Workflow.ContinueAsNewSuggested)
@@ -120,27 +140,25 @@ internal static class ImportComposition
                                 failures,
                                 stats
                             );
-                            if (singleItem)
-                                throw Workflow.CreateContinueAsNewException(
-                                    (ReimportItemWorkflow w) => w.RunAsync(request, next)
-                                );
-                            throw Workflow.CreateContinueAsNewException(
-                                (ArtistRefreshWorkflow w) => w.RunAsync(request, next)
-                            );
+                            Continue(next);
                         }
                     }
                     cursor = page.NextCursor;
                     itemIndex = 0;
                 } while (cursor != null);
+                calls += 2;
                 var candidates = await Workflow.ExecuteActivityAsync(
                     (IIngestionActivities a) => a.Candidates(request, provider),
                     db
                 );
                 foreach (var key in candidates)
+                {
+                    calls++;
                     await Workflow.ExecuteActivityAsync(
                         (IIngestionActivities a) => a.Verify(request, provider, key),
                         http
                     );
+                }
                 stats += await Workflow.ExecuteActivityAsync(
                     (IIngestionActivities a) => a.FinishProvider(request, provider),
                     db
@@ -148,10 +166,20 @@ internal static class ImportComposition
             }
         }
         var result = new ImportResult(request.RequestId, stats, failures);
-        await Workflow.ExecuteActivityAsync(
+        return await Workflow.ExecuteActivityAsync(
             (IIngestionActivities a) => a.FinishArtist(request, result),
             db
         );
-        return result;
+
+        void Continue(ImportCheckpoint next)
+        {
+            if (singleItem)
+                throw Workflow.CreateContinueAsNewException(
+                    (ReimportItemWorkflow w) => w.RunAsync(request, next)
+                );
+            throw Workflow.CreateContinueAsNewException(
+                (ArtistRefreshWorkflow w) => w.RunAsync(request, next)
+            );
+        }
     }
 }

@@ -46,7 +46,15 @@ internal sealed class IngestionHttpHandler(CancellationToken activityCancellatio
             );
         }
         // Buffer while the activity cancellation token is still in scope.
-        await response.Content.LoadIntoBufferAsync(64 * 1024 * 1024, linked.Token);
-        return response;
+        try
+        {
+            await response.Content.LoadIntoBufferAsync(64 * 1024 * 1024, linked.Token);
+            return response;
+        }
+        catch
+        {
+            response.Dispose();
+            throw;
+        }
     }
 }

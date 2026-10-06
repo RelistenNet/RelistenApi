@@ -22,6 +22,13 @@ public sealed class IngestionActivities(
     [Activity("Ingestion.Prepare")]
     public async Task<ArtistImportPlan> Prepare(ArtistImportRequest request)
     {
+        await store.SaveAsync(request.RequestId, "request", request);
+        var recorded = await store.ReadAsync<ArtistImportRequest>(request.RequestId, "request");
+        if (recorded != request)
+            throw new ApplicationFailureException(
+                "Request ID already belongs to a different import.",
+                nonRetryable: true
+            );
         var previous = await store.ReadAsync<ArtistImportPlan>(request.RequestId, "plan");
         if (previous != null)
             return previous;
@@ -33,10 +40,14 @@ public sealed class IngestionActivities(
             .Where(IngestionQueues.Providers.ContainsKey)
             .Where(p => request.Provider == null || p == request.Provider)
             .ToArray();
+        if (request.Provider != null && providers.Length == 0)
+            throw new ApplicationFailureException(
+                "Artist has no enabled mapping for the requested provider.",
+                nonRetryable: true
+            );
         var plan = new ArtistImportPlan(artist.uuid.ToString(), providers);
-        await store.SaveAsync(request.RequestId, "request", request);
         await store.SaveAsync(request.RequestId, "plan", plan);
-        return plan;
+        return (await store.ReadAsync<ArtistImportPlan>(request.RequestId, "plan"))!;
     }
 
     [Activity("Ingestion.Discover")]
@@ -66,7 +77,8 @@ public sealed class IngestionActivities(
         var input = await Input(item);
         var fetched = await ((IProviderIngestion)importer).FetchAsync(context, input, part);
         await store.SaveAsync(item.Request.RequestId, key, fetched);
-        return fetched.Done;
+        // A timed-out attempt may have committed first. Return the stored version.
+        return (await store.ReadAsync<ProviderFetch>(item.Request.RequestId, key))!.Done;
     }
 
     [Activity("Ingestion.Apply")]
@@ -86,11 +98,33 @@ public sealed class IngestionActivities(
             if (result.Done)
                 break;
         }
-        return await store.ApplyOnceAsync(
-            item.Request.RequestId,
-            ItemKey(item) + "/receipt",
-            () => ((IProviderIngestion)importer).ApplyAsync(context, input, fetched.ToArray())
-        );
+        try
+        {
+            return await store.ApplyOnceAsync(
+                item.Request.RequestId,
+                ItemKey(item) + "/receipt",
+                async () =>
+                {
+                    var stats = await ((IProviderIngestion)importer).ApplyAsync(
+                        context,
+                        input,
+                        fetched.ToArray()
+                    );
+                    await MarkForFinalization(item.Request, stats);
+                    return stats;
+                }
+            );
+        }
+        catch (Exception error) when (input.Key.StartsWith("catalog/", StringComparison.Ordinal))
+        {
+            // Shows depend on these lookups. Stop after retries instead of importing
+            // against a partially updated venue/song/era catalog.
+            throw new ApplicationFailureException(
+                "Provider catalog prerequisite failed.",
+                errorType: "IngestionPrerequisiteFailure",
+                inner: error
+            );
+        }
     }
 
     [Activity("Ingestion.RecordFailure")]
@@ -125,28 +159,58 @@ public sealed class IngestionActivities(
             request.RequestId,
             provider + "/finished",
             async () =>
-                importer is ArchiveOrgImporter archive
+            {
+                var stats = importer is ArchiveOrgImporter archive
                     ? await archive.FinishIngestion(context)
-                    : new ImportStats()
+                    : new ImportStats();
+                await MarkForFinalization(request, stats);
+                return stats;
+            }
         );
     }
 
     [Activity("Ingestion.FinishArtist")]
-    public async Task FinishArtist(ArtistImportRequest request, ImportResult result)
+    public async Task<ImportResult> FinishArtist(ArtistImportRequest request, ImportResult result)
     {
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
-        await store.ApplyOnceAsync(
+        return await store.ApplyOnceAsync(
             request.RequestId,
             "finished",
             async () =>
             {
-                await importers.Rebuild(artist, null);
+                var alwaysRebuild = artist.upstream_sources.Any(s =>
+                    (request.Provider == null || request.Provider == s.upstream_source.name)
+                    && s.upstream_source.name is "phish.net" or "phantasytour.com" or "local"
+                );
+                if (
+                    request.RebuildOnly
+                    || alwaysRebuild
+                    || result.Stats.Created + result.Stats.Updated + result.Stats.Removed > 0
+                )
+                    await importers.Rebuild(artist, null);
+                if (request.BackfillJerryVenues && result.FailedItems == 0)
+                {
+                    var jerry = artist
+                        .upstream_sources.Select(s => s.upstream_source.importer)
+                        .OfType<JerryGarciaComImporter>()
+                        .Single();
+                    result.Stats.Removed += await jerry.RemoveOrphanVenues(artist);
+                }
                 return result;
             }
         );
     }
+
+    private Task MarkForFinalization(ArtistImportRequest request, ImportStats stats) =>
+        stats.Created + stats.Updated + stats.Removed == 0
+            ? Task.CompletedTask
+            : store.SaveAsync(
+                request.RequestId,
+                "needs-finalize",
+                new { reason = "Catalog changes committed" }
+            );
 
     private static string ItemKey(ImportItemRef item) => item.Page + "/item/" + item.Index;
 

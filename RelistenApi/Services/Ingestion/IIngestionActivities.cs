@@ -41,5 +41,5 @@ public interface IIngestionActivities
 
     /// <summary>Rebuilds catalog aggregates from committed items and marks the request complete or partial.</summary>
     [Activity("Ingestion.FinishArtist")]
-    Task FinishArtist(ArtistImportRequest request, ImportResult result);
+    Task<ImportResult> FinishArtist(ArtistImportRequest request, ImportResult result);
 }

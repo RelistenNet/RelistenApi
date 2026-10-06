@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -40,6 +40,13 @@ namespace Relisten
             _showService = showService;
         }
 
+        private bool TemporalOwnsIngestion =>
+            string.Equals(
+                _config["Ingestion:Engine"],
+                "Temporal",
+                StringComparison.OrdinalIgnoreCase
+            );
+
         private ImporterService _importerService { get; }
         private ArtistService _artistService { get; }
         private ArchiveOrgArtistIndexer _archiveOrgArtistIndexer { get; }
@@ -55,6 +62,9 @@ namespace Relisten
         [DisplayName("Index archive.org Artists")]
         public async Task IndexArchiveOrgArtists(PerformContext? context, bool allowedInDev = false)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
                 context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
@@ -71,6 +81,9 @@ namespace Relisten
         [DisplayName("Refresh All Artists")]
         public async Task RefreshAllArtists(PerformContext? context, bool allowedInDev = false)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
                 context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
@@ -95,6 +108,9 @@ namespace Relisten
         [DisplayName("Rebuild All Artists Shows/Years")]
         public async Task RebuildAllArtists(PerformContext? context)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             if (_config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
                 context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
@@ -214,6 +230,9 @@ namespace Relisten
             PerformContext? ctx
         )
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
             if (artist == null)
@@ -281,6 +300,9 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         public async Task BackfillJerryGarciaVenues(string artistSlug, PerformContext? ctx)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
 
             if (artist == null)
@@ -313,6 +335,9 @@ namespace Relisten
         [DisplayName("Refresh Active Artists (Thin Scrape)")]
         public async Task RefreshActiveArtists(PerformContext? context, bool allowedInDev = false)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             if (!allowedInDev && _config["ASPNETCORE_ENVIRONMENT"] != "Production")
             {
                 context?.WriteLine($"Not running in {_config["ASPNETCORE_ENVIRONMENT"]}");
@@ -348,6 +373,9 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         public async Task RefreshArtistThinScrape(string idOrSlug, PerformContext? ctx)
         {
+            if (TemporalOwnsIngestion)
+                return;
+
             var artist = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
 
             if (artist == null)

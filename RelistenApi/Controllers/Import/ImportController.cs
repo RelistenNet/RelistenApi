@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Relisten.Api;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Ingestion;
 
 namespace Relisten.Controllers
 {
@@ -19,15 +21,18 @@ namespace Relisten.Controllers
             ArtistService artistService,
             ImporterService importer,
             ScheduledService scheduledService,
-            IConfiguration configuration
+            IConfiguration configuration,
+            TemporalIngestionClient temporal
         )
             : base(redis, db, artistService)
         {
             _configuration = configuration;
+            _temporal = temporal;
             _scheduledService = scheduledService;
             _importer = importer;
         }
 
+        private readonly TemporalIngestionClient _temporal;
         private readonly ImporterService _importer;
         private readonly ScheduledService _scheduledService;
         private readonly IConfiguration _configuration;
@@ -42,9 +47,17 @@ namespace Relisten.Controllers
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
-                );
+                if (_temporal.Enabled && deleteOldContent)
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
+                    );
+                var jobId = _temporal.Enabled
+                    ? await _temporal.StartArtistAsync(
+                        new ArtistImportRequest(art.uuid.ToString(), Guid.NewGuid().ToString())
+                    )
+                    : BackgroundJob.Enqueue(() =>
+                        _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
+                    );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -62,6 +75,10 @@ namespace Relisten.Controllers
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
+                if (_temporal.Enabled)
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
+                    );
                 await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
 
                 return StatusCode(201, "done!");
@@ -71,7 +88,7 @@ namespace Relisten.Controllers
         }
 
         [HttpPost("phishin")]
-        public IActionResult JustRefreshPhishin()
+        public async Task<IActionResult> JustRefreshPhishin()
         {
             if (
                 !Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key)
@@ -81,6 +98,22 @@ namespace Relisten.Controllers
                 return Unauthorized();
             }
 
+            if (_temporal.Enabled)
+            {
+                var artist = await _artistService.FindArtistWithIdOrSlug("phish");
+                if (artist == null)
+                    return JsonNotFound(false);
+                return StatusCode(
+                    201,
+                    await _temporal.StartArtistAsync(
+                        new ArtistImportRequest(
+                            artist.uuid.ToString(),
+                            Guid.NewGuid().ToString(),
+                            Provider: "phish.in"
+                        )
+                    )
+                );
+            }
             return StatusCode(
                 201,
                 BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null))
@@ -89,11 +122,13 @@ namespace Relisten.Controllers
 
         [HttpPost("all-years-and-shows")]
         [Authorize]
-        public IActionResult AllYearsAndShows()
+        public async Task<IActionResult> AllYearsAndShows()
         {
             return StatusCode(
                 201,
-                BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
+                _temporal.Enabled
+                    ? await _temporal.StartBatchAsync("rebuild")
+                    : BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
             );
         }
 
@@ -108,14 +143,26 @@ namespace Relisten.Controllers
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(
-                        idOrSlug,
-                        showIdentifier,
-                        deleteOldContent,
-                        null
+                if (_temporal.Enabled && deleteOldContent)
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
+                    );
+                var jobId = _temporal.Enabled
+                    ? await _temporal.StartArtistAsync(
+                        new ArtistImportRequest(
+                            art.uuid.ToString(),
+                            Guid.NewGuid().ToString(),
+                            Item: showIdentifier
+                        )
                     )
-                );
+                    : BackgroundJob.Enqueue(() =>
+                        _scheduledService.RefreshArtist(
+                            idOrSlug,
+                            showIdentifier,
+                            deleteOldContent,
+                            null
+                        )
+                    );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -134,6 +181,10 @@ namespace Relisten.Controllers
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
+                if (_temporal.Enabled)
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
+                    );
                 await _scheduledService.RefreshArtist(
                     idOrSlug,
                     showIdentifier,

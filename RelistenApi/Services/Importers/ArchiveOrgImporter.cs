@@ -611,7 +611,8 @@ namespace Relisten.Import
                 src.venue_id = dbVenue?.id;
 
                 dbSource = await _sourceService.Save(src);
-                dbSource.venue = dbVenue;
+                if (dbVenue != null)
+                    dbSource.venue = dbVenue;
 
                 stats.Updated++;
             }

@@ -398,9 +398,8 @@ namespace Relisten.Data
             string upstreamIdentifier
         )
         {
-            return await db.WithConnection(async con =>
-            {
-                var artist = await con.QueryAsync(
+            var artist = await db.WithConnection(con =>
+                con.QueryAsync(
                     @"
                     SELECT
                         a.*, f.*
@@ -412,13 +411,15 @@ namespace Relisten.Data
                         aus.upstream_source_id = @upstreamSourceId
                         AND aus.upstream_identifier = @upstreamIdentifier
                     LIMIT 1
-                ",
+            ",
                     joiner,
                     new { upstreamSourceId, upstreamIdentifier }
-                );
+                )
+            );
 
-                return (await FillInUpstreamSources(artist)).FirstOrDefault();
-            });
+            // Close the first connection before enrichment. Discovery's ambient
+            // transaction can reuse it without promoting to a distributed transaction.
+            return (await FillInUpstreamSources(artist)).FirstOrDefault();
         }
 
         string UpdateFieldsForFeatures(Features features)

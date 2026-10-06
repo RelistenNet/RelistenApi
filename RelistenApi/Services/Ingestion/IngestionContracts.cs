@@ -11,7 +11,8 @@ public record ArtistImportRequest(
     string? Provider = null,
     string? Item = null,
     int? Year = null,
-    bool RebuildOnly = false
+    bool RebuildOnly = false,
+    bool BackfillJerryVenues = false
 );
 
 /// <summary>Small workflow checkpoint. Upstream payloads stay in application storage.</summary>
@@ -54,3 +55,21 @@ public static class IngestionQueues
         ["local"] = "ingest-local",
     };
 }
+
+/// <summary>A scheduled or manual catalog operation; a request ID identifies its stable artist selection.</summary>
+public record ImportBatchRequest(
+    string Mode,
+    string? RequestId = null,
+    int Offset = 0,
+    int Completed = 0,
+    int Failed = 0
+);
+
+/// <summary>Bounded artist identifiers for a batch run.</summary>
+public record ArtistBatchPage(string[] Artists, int? NextOffset);
+
+/// <summary>Batch summary including artist workflows that failed or were already running.</summary>
+public record ImportBatchResult(int Completed, int Failed);
+
+/// <summary>Cursor-only result of one Archive collection-discovery page.</summary>
+public record DiscoveryPage(string? NextCursor, int Count);

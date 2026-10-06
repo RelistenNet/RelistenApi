@@ -32,8 +32,13 @@ public record ProviderContext(
 /// <summary>Provider-specific parsing and catalog writes reused by Temporal activity composition.</summary>
 public interface IProviderIngestion
 {
+    /// <summary>Reads one upstream page. A null next cursor ends discovery.</summary>
     Task<ProviderPage> DiscoverAsync(ProviderContext context, string? cursor);
+
+    /// <summary>Reads at most one dependency. Parts start at zero and stop when Done is true.</summary>
     Task<ProviderFetch> FetchAsync(ProviderContext context, ProviderItem item, int part);
+
+    /// <summary>Applies staged inputs within the caller's transaction; must not fetch upstream data.</summary>
     Task<ImportStats> ApplyAsync(
         ProviderContext context,
         ProviderItem item,
