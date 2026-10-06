@@ -57,7 +57,6 @@ namespace Relisten.Import
             PhishinImporter _phishin,
             PhishNetImporter _phishnet,
             JerryGarciaComImporter _jerry,
-            PanicStreamComImporter _panic,
             PhantasyTourImporter _phantasy,
             LocalImporter _local
         )
@@ -66,7 +65,6 @@ namespace Relisten.Import
             {
                 _setlistFm,
                 _archiveOrg,
-                _panic,
                 _jerry,
                 _phishin,
                 _phishnet,
@@ -86,12 +84,14 @@ namespace Relisten.Import
 
         public IEnumerable<ImporterBase> ImportersForArtist(Artist art)
         {
-            return art.upstream_sources.Select(s => importers[s.upstream_source.name]);
+            return art
+                .upstream_sources.Where(s => importers.ContainsKey(s.upstream_source.name))
+                .Select(s => importers[s.upstream_source.name]);
         }
 
-        public ImporterBase ImporterForUpstreamSource(UpstreamSource source)
+        public ImporterBase? ImporterForUpstreamSource(UpstreamSource source)
         {
-            return importers[source.name];
+            return importers.TryGetValue(source.name, out var importer) ? importer : null;
         }
 
         public Task<ImportStats> Import(
@@ -115,7 +115,9 @@ namespace Relisten.Import
 
         public async Task<ImportStats> Rebuild(Artist artist, PerformContext? ctx)
         {
-            var importer = artist.upstream_sources.First().upstream_source.importer!;
+            var importer = ImportersForArtist(artist).FirstOrDefault();
+            if (importer == null)
+                return new ImportStats();
 
             ctx?.WriteLine("Rebuilding Shows");
             var stats = await importer.RebuildShows(artist);
@@ -149,7 +151,9 @@ namespace Relisten.Import
             var stats = new ImportStats();
             var importOptions = options ?? ImportOptions.Default;
 
-            var srcs = artist.upstream_sources.ToList();
+            var srcs = artist
+                .upstream_sources.Where(s => s.upstream_source.importer != null)
+                .ToList();
 
             ctx?.WriteLine(
                 $"Found {srcs.Count} valid importers.{(importOptions.IsThinScrape ? $" (thin scrape, year={importOptions.OnlyYear})" : "")}"

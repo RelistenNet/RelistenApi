@@ -31,3 +31,6 @@ The separate worker builds and starts independently of the API/Hangfire host. Wo
 ## Decisions and verification
 
 Record implementation departures, completed commits and meaningful test results here as work proceeds.
+
+- Foundation: added the standalone .NET host, pinned Temporal SDK 1.20.0 and shared catalog registrations without API/Hangfire startup. Removed PanicStream registration and ignore unsupported provider mappings.
+- Baseline and foundation checks: worker build passed; existing API suite passed (93 passed, 24 existing database-dependent tests skipped). Existing OpenTelemetry.Resources.Host dependency reports NU1903; not introduced by Temporal.
