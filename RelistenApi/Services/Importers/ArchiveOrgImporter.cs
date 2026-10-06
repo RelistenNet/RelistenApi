@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Net.Http;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
@@ -16,6 +17,7 @@ using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
 using Serilog;
 using Sentry;
+using InvalidDataException = System.IO.InvalidDataException;
 
 namespace Relisten.Import
 {
@@ -99,7 +101,7 @@ namespace Relisten.Import
 
         private static string DetailsUrlForIdentifier(string identifier)
         {
-            return $"http://archive.org/metadata/{identifier}";
+            return $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}";
         }
 
         private async Task<ImportStats> ProcessIdentifiers(Artist artist, IList<SearchDoc> docs,
@@ -163,17 +165,33 @@ namespace Relisten.Import
 
                         ctx?.WriteLine("Pulling https://archive.org/metadata/{0} because '{1}'", doc.identifier, reason);
 
-                        var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
+                        using var detailRes = await http.GetAsync(DetailsUrlForIdentifier(doc.identifier));
+                        detailRes.EnsureSuccessStatusCode();
                         var detailsJson = await detailRes.Content.ReadAsStringAsync();
                         var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
                             detailsJson,
                             new TolerantStringConverter()
                         );
 
-                        if (detailsRoot!.is_dark ?? false)
+                        if (detailsRoot == null)
+                        {
+                            throw new InvalidDataException("Archive.org returned empty item metadata.");
+                        }
+
+                        if (detailsRoot.is_dark ?? false)
                         {
                             ctx?.WriteLine("\tis_dark == true, skipping...");
                             return;
+                        }
+
+                        if (!string.IsNullOrEmpty(detailsRoot.error) || detailsRoot.errcode.HasValue)
+                        {
+                            throw new InvalidDataException("Archive.org returned an item metadata error.");
+                        }
+
+                        if (detailsRoot.metadata?.identifier != doc.identifier)
+                        {
+                            throw new InvalidDataException("Archive.org returned missing or mismatched item metadata.");
                         }
 
                         // in the future it might be better to retry intead of skipping
@@ -281,7 +299,14 @@ namespace Relisten.Import
                     .Except(sourcesToKeep)
                     .ToList();
 
-                if (ExceedsDeletionLimit(deletedSourceUpstreamIdentifiers.Count))
+                var verification = await VerifyDeletionCandidatesAsync(
+                    deletedSourceUpstreamIdentifiers, identifiersWithoutMP3s, http, message =>
+                    {
+                        ctx?.WriteLine(message);
+                        Log.Information("{ArchiveDeletionVerification}", message);
+                    });
+
+                if (verification.Guarded)
                 {
                     foreach (var identifier in deletedSourceUpstreamIdentifiers)
                     {
@@ -315,14 +340,14 @@ namespace Relisten.Import
                         MaxSourcesDeletedPerSync);
                     await discordWebhookNotifier.SendAsync(message);
                 }
-                else if (deletedSourceUpstreamIdentifiers.Count > 0)
+                else if (verification.Identifiers.Count > 0)
                 {
-                    ctx?.WriteLine($"Removing {deletedSourceUpstreamIdentifiers.Count} sources " +
-                                   $"that are in the database but no longer on Archive.org: " +
-                                   string.Join(',', deletedSourceUpstreamIdentifiers));
+                    ctx?.WriteLine($"Removing {verification.Identifiers.Count} sources " +
+                                   $"confirmed deleted upstream or without VBR MP3 files: " +
+                                   string.Join(',', verification.Identifiers));
                     stats.Removed += await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
                         artist.id,
-                        deletedSourceUpstreamIdentifiers);
+                        verification.Identifiers);
                 }
             }
 
@@ -346,6 +371,49 @@ namespace Relisten.Import
             }
 
             return stats;
+        }
+
+        internal static async Task<(bool Guarded, List<string> Identifiers)> VerifyDeletionCandidatesAsync(
+            IReadOnlyCollection<string> candidates, ISet<string> identifiersWithoutMP3s,
+            HttpClient httpClient, Action<string> log)
+        {
+            // Preserve the bulk guard before making any additional upstream requests.
+            if (ExceedsDeletionLimit(candidates.Count))
+            {
+                return (true, new List<string>());
+            }
+
+            var verified = new List<string>();
+            var metadataClient = new ArchiveOrgMetadataClient(httpClient);
+            foreach (var identifier in candidates)
+            {
+                // This separate eligibility decision already came from item metadata.
+                if (identifiersWithoutMP3s.Contains(identifier))
+                {
+                    verified.Add(identifier);
+                    log($"Archive.org deletion check {identifier}: confirmed no VBR MP3 files");
+                    continue;
+                }
+
+                var result = await metadataClient.CheckAsync(identifier);
+                log($"Archive.org deletion check {identifier}: {result.Status} ({result.Reason})");
+                if (result.Status == ArchiveOrgItemStatus.Deleted)
+                {
+                    verified.Add(identifier);
+                }
+            }
+
+            return (false, verified);
+        }
+
+        internal static bool HasNoVbrMp3Files(RootObject details)
+        {
+            if (details.files == null)
+            {
+                throw new InvalidDataException("Archive.org item metadata is missing its files array.");
+            }
+
+            return !details.files.Any(file => file?.format == "VBR MP3");
         }
 
         internal static bool ExceedsDeletionLimit(int sourceCount)
@@ -374,7 +442,7 @@ namespace Relisten.Import
             var flacFiles = detailsRoot.files?.Where(file => file?.format == "Flac" || file?.format == "24bit Flac")
                             ?? Enumerable.Empty<File>();
 
-            if (!mp3Files.Any())
+            if (HasNoVbrMp3Files(detailsRoot))
             {
                 ctx?.WriteLine("\tNo VBR MP3 files found for {0}", searchDoc.identifier);
 

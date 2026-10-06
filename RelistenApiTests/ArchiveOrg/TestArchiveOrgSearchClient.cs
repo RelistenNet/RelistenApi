@@ -10,46 +10,21 @@ namespace RelistenApiTests.ArchiveOrg;
 public class TestArchiveOrgSearchClient
 {
     [Test]
-    public async Task FetchesCollectionAboveTenThousandInOneRequest()
+    public async Task FetchesLargeCollectionInOneWildcardRequest()
     {
-        using var handler = new SearchHandler(Response(18385, 18385));
-        using var http = new HttpClient(handler);
-
-        var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync("GratefulDead", null);
-
-        docs.Should().HaveCount(18385);
-        docs.Last().identifier.Should().Be("recording-18384");
-        var uri = handler.Requests.Single();
-        Rows(uri).Should().Be(30000);
-        uri.Scheme.Should().Be("https");
-        var query = QueryHelpers.ParseQuery(uri.Query);
-        query["q"].ToString().Should().Be("collection:GratefulDead");
-        query.Keys.Should().NotContain(key => key.StartsWith("page") || key.StartsWith("sort"));
-    }
-
-    [Test]
-    public async Task ExpandsOnceToTheAdvertisedTotalWhenTheCollectionExceedsThirtyThousand()
-    {
-        using var handler = new SearchHandler(Response(30000, 35000), Response(35000, 35000));
+        using var handler = new SearchHandler(Response(35000, 35000));
         using var http = new HttpClient(handler);
 
         var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync("GratefulDead", null);
 
         docs.Should().HaveCount(35000);
-        handler.Requests.Select(Rows).Should().Equal(30000, 35000);
-    }
-
-    [TestCase(30000, 35000)] // The service still caps the second response.
-    [TestCase(35000, 35001)] // The collection grows again: do not make a third request.
-    public async Task FailsIfTheSecondResponseIsStillIncomplete(int count, int total)
-    {
-        using var handler = new SearchHandler(Response(30000, 35000), Response(count, total));
-        using var http = new HttpClient(handler);
-
-        var act = () => new ArchiveOrgSearchClient(http).FetchAllAsync("GratefulDead", null);
-
-        await act.Should().ThrowAsync<InvalidDataException>().WithMessage("*incomplete*");
-        handler.Requests.Should().HaveCount(2);
+        docs.Last().identifier.Should().Be("recording-34999");
+        var uri = handler.Requests.Single();
+        uri.Scheme.Should().Be("https");
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        query["q"].ToString().Should().Be("collection:GratefulDead");
+        query["rows"].ToString().Should().Be("*");
+        query.Keys.Should().NotContain(key => key.StartsWith("page") || key.StartsWith("sort"));
     }
 
     [TestCase(null)]
@@ -109,8 +84,6 @@ public class TestArchiveOrgSearchClient
         response = new { numFound = total, start = 0,
             docs = Enumerable.Range(0, count).Select(index => new { identifier = $"recording-{index:D5}" }) }
     });
-
-    private static int Rows(Uri uri) => int.Parse(QueryHelpers.ParseQuery(uri.Query)["rows"].ToString());
 
     private sealed class SearchHandler(params string[] responses) : HttpMessageHandler
     {
