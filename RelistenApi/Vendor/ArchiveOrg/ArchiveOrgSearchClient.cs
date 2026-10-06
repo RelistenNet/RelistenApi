@@ -27,13 +27,7 @@ public sealed class ArchiveOrgSearchClient
             query += $" AND year:{year.Value}";
         }
 
-        // Fetch current large collections in one call, with at most one expansion if needed.
-        var rows = 30000;
-        var result = await FetchAsync(query, rows, log);
-        if (result.docs.Count == rows && result.numFound > rows)
-        {
-            result = await FetchAsync(query, result.numFound, log);
-        }
+        var result = await FetchAsync(query, log);
 
         if (result.docs.Count != result.numFound)
         {
@@ -44,13 +38,14 @@ public sealed class ArchiveOrgSearchClient
         return result.docs;
     }
 
-    private async Task<SearchResponse> FetchAsync(string query, int rows, Action<string>? log)
+    private async Task<SearchResponse> FetchAsync(string query, Action<string>? log)
     {
-        // Omitting page and sort permits results beyond the 10,000 deep-paging limit.
+        // Let Archive choose the retrieval path from the hit count; a large numeric rows
+        // value forces scrolling even for small collections. Omit page/sort to avoid deep paging.
         var url = $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString(query)}" +
                   "&fl[]=date&fl[]=identifier&fl[]=year&fl[]=addeddate&fl[]=reviewdate" +
                   "&fl[]=indexdate&fl[]=publicdate&fl[]=updatedate" +
-                  $"&rows={rows}&output=json";
+                  "&rows=*&output=json";
         log?.Invoke($"All shows URL: {url}");
 
         using var response = await httpClient.GetAsync(url);
@@ -72,7 +67,6 @@ public sealed class ArchiveOrgSearchClient
 
         var result = root.response;
         if (result.start != 0 || result.numFound < 0 || result.docs.Count > result.numFound ||
-            result.docs.Count > rows ||
             result.docs.Any(doc => string.IsNullOrWhiteSpace(doc?.identifier)) ||
             result.docs.Select(doc => doc.identifier).Distinct(StringComparer.Ordinal).Count() != result.docs.Count)
         {
