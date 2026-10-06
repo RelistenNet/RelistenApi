@@ -88,10 +88,11 @@ namespace Relisten.Import
         public override async Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
             string? showIdentifier, PerformContext? ctx)
         {
-            // Validate the complete upstream set before loading or mutating local source state.
+            await PreloadData(artist);
+
+            // Require a complete upstream result before importing or reconciling any sources.
             var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync(
                 src.upstream_identifier, CurrentImportOptions.OnlyYear, message => ctx?.WriteLine(message));
-            await PreloadData(artist);
 
             return await ProcessIdentifiers(artist, docs, src, showIdentifier, ctx);
         }
@@ -269,12 +270,16 @@ namespace Relisten.Import
                 await docs.AsyncForEachWithProgress(prog, processDoc);
             }
 
-            string? deletionGuardMessage = null;
             if (!CurrentImportOptions.IsThinScrape)
             {
                 // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-                var deletedSourceUpstreamIdentifiers = SourceIdentifiersToDelete(
-                    existingSources.Keys, docs, identifiersWithoutMP3s);
+                var sourcesToKeep = docs
+                    .Select(d => d.identifier)
+                    .Except(identifiersWithoutMP3s);
+                var deletedSourceUpstreamIdentifiers = existingSources
+                    .Select(kvp => kvp.Key)
+                    .Except(sourcesToKeep)
+                    .ToList();
 
                 if (ExceedsDeletionLimit(deletedSourceUpstreamIdentifiers.Count))
                 {
@@ -309,7 +314,6 @@ namespace Relisten.Import
                         artist.slug,
                         MaxSourcesDeletedPerSync);
                     await discordWebhookNotifier.SendAsync(message);
-                    deletionGuardMessage = message;
                 }
                 else if (deletedSourceUpstreamIdentifiers.Count > 0)
                 {
@@ -341,21 +345,7 @@ namespace Relisten.Import
                 ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
             }
 
-            // Imports above commit independently. Finish rebuilding their derived data before
-            // failing the job so a blocked reconciliation cannot be reported as a successful sync.
-            if (deletionGuardMessage != null)
-            {
-                throw new InvalidOperationException(deletionGuardMessage);
-            }
-
             return stats;
-        }
-
-        internal static List<string> SourceIdentifiersToDelete(IEnumerable<string> existingIdentifiers,
-            IEnumerable<SearchDoc> completeSearchResults, IEnumerable<string> identifiersWithoutMP3s)
-        {
-            var sourcesToKeep = completeSearchResults.Select(doc => doc.identifier).Except(identifiersWithoutMP3s);
-            return existingIdentifiers.Except(sourcesToKeep).ToList();
         }
 
         internal static bool ExceedsDeletionLimit(int sourceCount)
