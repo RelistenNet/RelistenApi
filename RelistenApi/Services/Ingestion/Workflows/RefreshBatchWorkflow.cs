@@ -1,5 +1,5 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
@@ -20,12 +20,17 @@ public class RefreshBatchWorkflow
         );
         var completed = request.Completed;
         var failed = request.Failed;
-        foreach (var group in page.Artists.Chunk(10))
+        var active = new List<Task<bool>>();
+        foreach (var artist in page.Artists)
         {
-            var outcomes = await Workflow.WhenAllAsync(group.Select(ImportArtist));
-            completed += outcomes.Count(ok => ok);
-            failed += outcomes.Count(ok => !ok);
+            active.Add(ImportArtist(artist));
+            if (active.Count == 10)
+                await FinishOne();
         }
+        // Drain before rollover, but keep replacing finished artists while there
+        // is work. A slow artist must not leave nine provider slots idle.
+        while (active.Count > 0)
+            await FinishOne();
         if (page.NextOffset.HasValue)
         {
             var next = request with
@@ -39,6 +44,16 @@ public class RefreshBatchWorkflow
             );
         }
         return new ImportBatchResult(completed, failed);
+
+        async Task FinishOne()
+        {
+            var finished = await Workflow.WhenAnyAsync(active);
+            active.Remove(finished);
+            if (await finished)
+                completed++;
+            else
+                failed++;
+        }
 
         async Task<bool> ImportArtist(string artist)
         {
