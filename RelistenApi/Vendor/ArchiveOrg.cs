@@ -215,6 +215,7 @@ namespace Relisten.Vendor.ArchiveOrg
 
     public class SearchResponseHeader
     {
+        [JsonProperty(Required = Required.Always)]
         public int status { get; set; }
         public int QTime { get; set; }
 
@@ -276,13 +277,16 @@ namespace Relisten.Vendor.ArchiveOrg
 
     public class SearchResponse
     {
+        [JsonProperty(Required = Required.Always)]
         public int numFound { get; set; }
+        [JsonProperty(Required = Required.Always)]
         public int start { get; set; }
         public IList<SearchDoc> docs { get; set; } = null!;
     }
 
     public class SearchRootObject
     {
+        public string? error { get; set; }
         public SearchResponseHeader responseHeader { get; set; } = null!;
         public SearchResponse response { get; set; } = null!;
     }

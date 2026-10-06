@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
@@ -91,20 +90,11 @@ namespace Relisten.Import
         {
             await PreloadData(artist);
 
-            var url = SearchUrlForArtist(artist, src);
-            ctx?.WriteLine($"All shows URL: {url}");
+            // Require a complete upstream result before importing or reconciling any sources.
+            var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync(
+                src.upstream_identifier, CurrentImportOptions.OnlyYear, message => ctx?.WriteLine(message));
 
-            return await ProcessIdentifiers(artist, await http.GetAsync(url), src, showIdentifier, ctx);
-        }
-
-        private string SearchUrlForArtist(Artist artist, ArtistUpstreamSource src)
-        {
-            var yearFilter = CurrentImportOptions.IsThinScrape
-                ? $"+AND+year%3A{CurrentImportOptions.OnlyYear}"
-                : "";
-
-            return
-                $"http://archive.org/advancedsearch.php?q=collection%3A{src.upstream_identifier}{yearFilter}&fl%5B%5D=date&fl%5B%5D=identifier&fl%5B%5D=year&fl%5B%5D=addeddate&fl%5B%5D=reviewdate&fl%5B%5D=indexdate&fl%5B%5D=publicdate&fl%5B%5D=updatedate&sort%5B%5D=year+asc&sort%5B%5D=&sort%5B%5D=&rows=10000&page=1&output=json&save=yes";
+            return await ProcessIdentifiers(artist, docs, src, showIdentifier, ctx);
         }
 
         private static string DetailsUrlForIdentifier(string identifier)
@@ -112,7 +102,7 @@ namespace Relisten.Import
             return $"http://archive.org/metadata/{identifier}";
         }
 
-        private async Task<ImportStats> ProcessIdentifiers(Artist artist, HttpResponseMessage res,
+        private async Task<ImportStats> ProcessIdentifiers(Artist artist, IList<SearchDoc> docs,
             ArtistUpstreamSource src, string? showIdentifier, PerformContext? ctx)
         {
             using var artistActivity = ActivitySource.StartActivity($"import-artist:{artist.slug}");
@@ -121,27 +111,8 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
-            var json = await res.Content.ReadAsStringAsync();
-
-            if (!res.IsSuccessStatusCode)
-            {
-                ctx?.WriteLine($"archive.org returned HTTP {(int)res.StatusCode}. Body: {json.Substring(0, Math.Min(json.Length, 512))}");
-                return stats;
-            }
-
-            var root = JsonConvert.DeserializeObject<SearchRootObject>(
-                json.Replace("\"0000-01-01T00:00:00Z\"", "null") /* serious...wtf archive */,
-                new TolerantArchiveDateTimeConverter()
-            );
-
-            if (root?.response?.docs == null)
-            {
-                ctx?.WriteLine($"No results found. json={json}");
-                return stats;
-            }
-
-            artistActivity?.SetTag("source_count", root.response.docs.Count);
-            ctx?.WriteLine($"Checking {root.response.docs.Count} archive.org results");
+            artistActivity?.SetTag("source_count", docs.Count);
+            ctx?.WriteLine($"Checking {docs.Count} archive.org results");
 
             var prog = ctx?.WriteProgressBar();
 
@@ -289,20 +260,20 @@ namespace Relisten.Import
 
             if (prog == null)
             {
-                foreach (var doc in root.response.docs)
+                foreach (var doc in docs)
                 {
                     await processDoc(doc);
                 }
             }
             else
             {
-                await root.response.docs.AsyncForEachWithProgress(prog, processDoc);
+                await docs.AsyncForEachWithProgress(prog, processDoc);
             }
 
             if (!CurrentImportOptions.IsThinScrape)
             {
                 // we want to keep all the shows from this import--aside from ones that no longer have MP3s
-                var sourcesToKeep = root.response.docs
+                var sourcesToKeep = docs
                     .Select(d => d.identifier)
                     .Except(identifiersWithoutMP3s);
                 var deletedSourceUpstreamIdentifiers = existingSources
