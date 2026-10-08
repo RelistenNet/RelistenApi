@@ -6,7 +6,7 @@ namespace Relisten.Vendor.PhantasyTour
     public class PhantasyTourShowListing
     {
         public int id { get; set; }
-        public DateTime dateTime { get; set; }
+        public DateTimeOffset dateTime { get; set; }
         public string url { get; set; } = null!;
         public PhantasyTourBand band { get; set; } = null!;
         public PhantasyTourVenue venue { get; set; } = null!;
@@ -70,7 +70,7 @@ namespace Relisten.Vendor.PhantasyTour
         public object name { get; set; } = null!;
         public string url { get; set; } = null!;
         public DateTime dateTimeUtc { get; set; }
-        public DateTime dateTime { get; set; }
+        public DateTimeOffset dateTime { get; set; }
         public string timezoneStandard { get; set; } = null!;
         public string timezone { get; set; } = null!;
         public object openers { get; set; } = null!;

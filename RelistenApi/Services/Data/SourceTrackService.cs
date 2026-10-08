@@ -105,6 +105,7 @@ namespace Relisten.Data
                     ON CONFLICT ON CONSTRAINT source_tracks_uuid_key
                     DO
                         UPDATE SET
+                            is_orphaned = FALSE,
                             source_id = EXCLUDED.source_id,
                             source_set_id = EXCLUDED.source_set_id,
                             track_position = EXCLUDED.track_position,

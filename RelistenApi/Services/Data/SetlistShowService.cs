@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -20,6 +21,28 @@ namespace Relisten.Data
     public class SetlistShowService : RelistenDataServiceBase
     {
         public SetlistShowService(DbService db) : base(db) { }
+
+        // Correct dates by provider identity, never by the old date: neighboring shows may
+        // all be shifted, or may legitimately share a date. Apply the whole listing together.
+        public Task<int> UpdateDates(Artist artist, IReadOnlyDictionary<string, DateTime> dates)
+        {
+            if (dates.Count == 0) return Task.FromResult(0);
+
+            var rows = dates.ToArray();
+            return db.WithWriteConnection(con => con.ExecuteAsync(@"
+                UPDATE setlist_shows s
+                SET date = incoming.date, updated_at = statement_timestamp()
+                FROM UNNEST(@identifiers::text[], @dates::date[]) AS incoming(identifier, date)
+                WHERE s.artist_id = @artistId
+                    AND s.upstream_identifier = incoming.identifier
+                    AND s.date IS DISTINCT FROM incoming.date
+            ", new
+            {
+                artistId = artist.id,
+                identifiers = rows.Select(row => row.Key).ToArray(),
+                dates = rows.Select(row => DateOnly.FromDateTime(row.Value)).ToArray()
+            }));
+        }
 
         public async Task<IEnumerable<SetlistShow>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)
         {
