@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -25,9 +26,7 @@ namespace Relisten.Import
         private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
 
         private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
-        private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
-
-        private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
+        private readonly Dictionary<string, DateTime> listedDates = new();
 
         public PhantasyTourImporter(
             DbService db,
@@ -91,20 +90,7 @@ namespace Relisten.Import
                 .GroupBy(song => song.upstream_identifier)
                 .ToDictionary(grp => grp.Key, grp => (SetlistSong?)grp.First());
 
-            var tours = await _tourService.AllForArtist(artist);
-
-            foreach (var t in tours)
-            {
-                if (t.start_date.HasValue)
-                {
-                    tourToStartDate[t.upstream_identifier] = t.start_date.Value;
-                }
-
-                if (t.end_date.HasValue)
-                {
-                    tourToEndDate[t.upstream_identifier] = t.end_date.Value;
-                }
-            }
+            listedDates.Clear();
         }
 
         private string UpstreamIdentifierForPhantasyTourId(int phantasyTour)
@@ -131,6 +117,12 @@ namespace Relisten.Import
                 ctx?.WriteLine($"Requesting page #{page}");
             }
 
+            // The listing carries local dates even for known shows. Repair historical UTC
+            // truncation only after every page succeeds, before rebuilding date-based joins.
+            var correctedDates = await _setlistShowService.UpdateDates(artist, listedDates);
+            stats.Updated += correctedDates;
+            ctx?.WriteLine($"Corrected {correctedDates} Phantasy Tour setlist dates");
+
             ctx?.WriteLine("Updating tour start/end dates");
             await UpdateTourStartEndDates(artist);
 
@@ -152,35 +144,35 @@ namespace Relisten.Import
         private async Task<bool> ImportPage(Artist artist, ImportStats stats, PerformContext? ctx,
             HttpResponseMessage res)
         {
+            res.EnsureSuccessStatusCode();
             var body = await res.Content.ReadAsStringAsync();
             var json = JsonConvert.DeserializeObject<IList<PhantasyTourShowListing>>(body);
 
             if (json == null)
             {
-                ctx?.WriteLine("Improper response from phantasytour.com: " + body);
-                ctx?.WriteLine(
-                    $"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
-                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
-                var requestHeaders = res.RequestMessage?.Headers != null
-                    ? string.Join("\n", res.RequestMessage.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))
-                    : "<unknown>";
-                ctx?.WriteLine($"Request url: {requestUri}. Headers: {requestHeaders}");
-                return false;
+                throw new InvalidDataException("Phantasy Tour returned an empty show listing.");
             }
 
             var prog = ctx?.WriteProgressBar();
 
             Func<PhantasyTourShowListing, Task> processShow = async show =>
             {
-                if (show.dateTime.ToUniversalTime() > DateTime.UtcNow)
+                if (show.id <= 0 || show.dateTime == default)
+                    throw new InvalidDataException("Phantasy Tour returned a show without an ID or local date.");
+
+                if (show.dateTime > DateTimeOffset.UtcNow)
                 {
                     // future shows can't have recordings
                     return;
                 }
 
                 var showId = UpstreamIdentifierForPhantasyTourId(show.id);
+                var localDate = show.dateTime.Date;
+                if (listedDates.TryGetValue(showId, out var previousDate) && previousDate != localDate)
+                    throw new InvalidDataException($"Phantasy Tour returned conflicting dates for {showId}.");
+                listedDates[showId] = localDate;
 
-                // we have no way to tell if things get updated, so just pull once
+                // Existing dates are reconciled from the listing; fetch full setlists only once.
                 if (!existingSetlistShows.ContainsKey(showId))
                 {
                     await ImportSingle(artist, stats, ctx, show.id);
@@ -219,6 +211,7 @@ namespace Relisten.Import
             ctx?.WriteLine($"Requesting page for show id {showId}");
 
             var res = await http.GetAsync(UrlForShow(showId));
+            res.EnsureSuccessStatusCode();
 
             var body = await res.Content.ReadAsStringAsync();
 
@@ -228,10 +221,9 @@ namespace Relisten.Import
 
             var now = DateTime.UtcNow;
 
-            if (json == null)
+            if (json == null || json.id != showId || json.dateTime == default)
             {
-                ctx?.WriteLine($"Improper response for show id {showId}: {body}");
-                return;
+                throw new InvalidDataException($"Phantasy Tour returned invalid details for show {showId}.");
             }
 
             Venue? dbVenue = existingVenues.GetValue(UpstreamIdentifierForPhantasyTourId(json.venue.id));
@@ -288,7 +280,7 @@ namespace Relisten.Import
             }
 
             var dbShow = existingSetlistShows.GetValue(UpstreamIdentifierForPhantasyTourId(json.id));
-            var date = json.dateTimeUtc.Date;
+            var date = json.dateTime.Date;
 
             if (dbShow == null)
             {
@@ -305,27 +297,6 @@ namespace Relisten.Import
                 existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
                 stats.Created++;
-            }
-
-            // phantasy tour doesn't provide much info about tours so we need to find the start
-            // and end date ourselves.
-            if (artist.features.tours &&
-                (dbTour!.start_date == null
-                 || dbTour.end_date == null
-                 || dbShow!.date < dbTour.start_date
-                 || dbShow.date > dbTour.end_date))
-            {
-                if (!tourToStartDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow!.date < tourToStartDate[dbTour.upstream_identifier])
-                {
-                    tourToStartDate[dbTour.upstream_identifier] = dbShow.date;
-                }
-
-                if (!tourToEndDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow!.date > tourToEndDate[dbTour.upstream_identifier])
-                {
-                    tourToEndDate[dbTour.upstream_identifier] = dbShow.date;
-                }
             }
 
             var songs = json.sets.SelectMany(set => set.songs)
@@ -366,27 +337,17 @@ namespace Relisten.Import
         private async Task UpdateTourStartEndDates(Artist artist)
         {
             await db.WithWriteConnection(con => con.ExecuteAsync(@"
-                UPDATE
-                    tours
-                SET
-                    start_date = @startDate,
-                    end_date = @endDate
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstream_identifier
-            ", tourToStartDate.Keys.Select(tourUpstreamId =>
-            {
-                return new
-                {
-                    startDate = tourToStartDate[tourUpstreamId],
-                    endDate = tourToEndDate[tourUpstreamId],
-                    artistId = artist.id,
-                    upstream_identifier = tourUpstreamId
-                };
-            })));
-
-            tourToStartDate = new Dictionary<string, DateTime>();
-            tourToEndDate = new Dictionary<string, DateTime>();
+                UPDATE tours t
+                SET start_date = dates.start_date, end_date = dates.end_date
+                FROM (
+                    SELECT tour_id, MIN(date) AS start_date, MAX(date) AS end_date
+                    FROM setlist_shows
+                    WHERE artist_id = @artistId AND tour_id IS NOT NULL
+                    GROUP BY tour_id
+                ) dates
+                WHERE t.id = dates.tour_id AND t.artist_id = @artistId
+                    AND (t.start_date, t.end_date) IS DISTINCT FROM (dates.start_date, dates.end_date)
+            ", new { artistId = artist.id }));
         }
     }
 }
