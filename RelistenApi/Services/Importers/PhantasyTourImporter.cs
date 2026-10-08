@@ -144,13 +144,25 @@ namespace Relisten.Import
         private async Task<bool> ImportPage(Artist artist, ImportStats stats, PerformContext? ctx,
             HttpResponseMessage res)
         {
-            res.EnsureSuccessStatusCode();
             var body = await res.Content.ReadAsStringAsync();
-            var json = JsonConvert.DeserializeObject<IList<PhantasyTourShowListing>>(body);
-
-            if (json == null)
+            IList<PhantasyTourShowListing> json;
+            try
             {
-                throw new InvalidDataException("Phantasy Tour returned an empty show listing.");
+                res.EnsureSuccessStatusCode();
+                json = JsonConvert.DeserializeObject<IList<PhantasyTourShowListing>>(body)
+                    ?? throw new InvalidDataException("Phantasy Tour returned an empty show listing.");
+            }
+            catch
+            {
+                ctx?.WriteLine("Improper response from phantasytour.com: " + body);
+                ctx?.WriteLine(
+                    $"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}");
+                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
+                var requestHeaders = res.RequestMessage?.Headers != null
+                    ? string.Join("\n", res.RequestMessage.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))
+                    : "<unknown>";
+                ctx?.WriteLine($"Request url: {requestUri}. Headers: {requestHeaders}");
+                throw;
             }
 
             var prog = ctx?.WriteProgressBar();
@@ -211,11 +223,11 @@ namespace Relisten.Import
             ctx?.WriteLine($"Requesting page for show id {showId}");
 
             var res = await http.GetAsync(UrlForShow(showId));
-            res.EnsureSuccessStatusCode();
 
             var body = await res.Content.ReadAsStringAsync();
 
             ctx?.WriteLine($"Result: [{res.StatusCode}]: {body.Length}");
+            res.EnsureSuccessStatusCode();
 
             var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data;
 
@@ -223,6 +235,7 @@ namespace Relisten.Import
 
             if (json == null || json.id != showId || json.dateTime == default)
             {
+                ctx?.WriteLine($"Improper response for show id {showId}: {body}");
                 throw new InvalidDataException($"Phantasy Tour returned invalid details for show {showId}.");
             }
 
