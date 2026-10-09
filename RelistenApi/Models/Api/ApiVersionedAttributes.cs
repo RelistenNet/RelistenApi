@@ -1,10 +1,12 @@
 using System;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Relisten.Api.Models.Api
 {
@@ -24,7 +26,6 @@ namespace Relisten.Api.Models.Api
         {
             var property = base.CreateProperty(member, serialization);
 
-            // Check if the property has a JsonRestricted attribute
             var v2JsonOnlyAttribute = member.GetCustomAttribute<V2JsonOnlyAttribute>();
             if (v2JsonOnlyAttribute != null)
             {
@@ -35,16 +36,33 @@ namespace Relisten.Api.Models.Api
         }
     }
 
-    public class SwaggerSkipV2PropertyFilter : ISchemaFilter
+    public sealed class RelistenOpenApiDocumentTransformer : IOpenApiDocumentTransformer
     {
-        public void Apply(IOpenApiSchema schema, SchemaFilterContext context)
+        public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context,
+            CancellationToken cancellationToken)
         {
-            if (schema?.Properties == null || context.DocumentName == "v2")
+            document.Info = new OpenApiInfo
             {
-                return;
+                Version = context.DocumentName,
+                Title = "Relisten API",
+                Contact = new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
+                License = new OpenApiLicense { Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT") }
+            };
+            return Task.CompletedTask;
+        }
+    }
+
+    public sealed class SkipV2PropertySchemaTransformer : IOpenApiSchemaTransformer
+    {
+        public Task TransformAsync(OpenApiSchema schema, OpenApiSchemaTransformerContext context,
+            CancellationToken cancellationToken)
+        {
+            if (schema.Properties == null || context.DocumentName == "v2")
+            {
+                return Task.CompletedTask;
             }
 
-            var skipProperties = context.Type.GetProperties()
+            var skipProperties = context.JsonTypeInfo.Type.GetProperties()
                 .Where(t => t.GetCustomAttribute<V2JsonOnlyAttribute>() != null);
 
             foreach (var skipProperty in skipProperties)
@@ -57,6 +75,8 @@ namespace Relisten.Api.Models.Api
                     schema.Properties.Remove(propertyToSkip);
                 }
             }
+
+            return Task.CompletedTask;
         }
     }
 }

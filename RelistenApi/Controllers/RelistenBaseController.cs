@@ -14,6 +14,7 @@ namespace Relisten.Api
 {
     [ApiV3Formatting]
     [ApiCacheControl]
+    [ApiExplorerSettings(IgnoreApi = false)]
     public class RelistenBaseController : Controller
     {
         public RelistenBaseController(RedisService redis, DbService db, ArtistService artistService)

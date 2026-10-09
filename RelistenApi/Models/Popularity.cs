@@ -14,9 +14,9 @@ namespace Relisten.Api.Models
 
     public class PopularityWindows
     {
-        [JsonProperty("48h")] [V3JsonOnly] public PopularityWindowMetrics hours_48h { get; set; } = new();
-        [JsonProperty("7d")] [V3JsonOnly] public PopularityWindowMetrics days_7d { get; set; } = new();
-        [JsonProperty("30d")] [V3JsonOnly] public PopularityWindowMetrics days_30d { get; set; } = new();
+        [JsonProperty("48h")] [System.Text.Json.Serialization.JsonPropertyName("48h")] [V3JsonOnly] public PopularityWindowMetrics hours_48h { get; set; } = new();
+        [JsonProperty("7d")] [System.Text.Json.Serialization.JsonPropertyName("7d")] [V3JsonOnly] public PopularityWindowMetrics days_7d { get; set; } = new();
+        [JsonProperty("30d")] [System.Text.Json.Serialization.JsonPropertyName("30d")] [V3JsonOnly] public PopularityWindowMetrics days_30d { get; set; } = new();
     }
 
     public class PopularityMetrics
@@ -24,8 +24,8 @@ namespace Relisten.Api.Models
         [V3JsonOnly] [JsonConverter(typeof(FourDecimalDoubleConverter))] public double momentum_score { get; set; }
         [V3JsonOnly] [JsonConverter(typeof(FourDecimalDoubleConverter))] public double trend_ratio { get; set; }
         [V3JsonOnly] public PopularityWindows windows { get; set; } = new();
-        [JsonIgnore] public long plays_6h { get; set; }
-        [JsonIgnore] public long plays_90d { get; set; }
+        [JsonIgnore] [System.Text.Json.Serialization.JsonIgnore] public long plays_6h { get; set; }
+        [JsonIgnore] [System.Text.Json.Serialization.JsonIgnore] public long plays_90d { get; set; }
     }
 
     public class FourDecimalDoubleConverter : JsonConverter<double>
