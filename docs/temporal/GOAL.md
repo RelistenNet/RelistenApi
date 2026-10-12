@@ -1,74 +1,29 @@
-# Goal: run Relisten ingestion in a separate Temporal worker
+# Goal: make Temporal ingestion understandable and maintainable
 
-Implement the agreed Temporal ingestion design in a standalone `RelistenIngestionWorker` .NET entry point. Share existing importer services and catalog code with the API. Support the seven active providers, recurring artist discovery/full/thin imports, manual artist/item work, rebuilds and existing maintenance operations. Preserve catalog identities, API contracts and Archive deletion verification. Exclude PanicStream.
+Implement the agreed readability redesign on `codex/temporal-ingestion-plan`. This branch has never been deployed. Replace its internal interfaces, workflows, migrations, and recovery commands freely; do not retain compatibility layers for the first implementation.
 
-Use self-hosted Temporal with PostgreSQL, native provider task queues, ten-concurrent provider workers and ten active artists per batch. Keep rate caps configurable without arbitrary low defaults. Compose shared activities through artist and manual-item workflows. Keep histories bounded and retries safe. Retain Hangfire for unrelated jobs and a simple operator-controlled ingestion handoff/rollback. Do not add distributed rate limiters, write-ownership infrastructure, HA, AI/search work or a staged deployment program.
+The separate worker must support the seven active providers, scheduled and manual artist imports, targeted Archive reimports, rebuilds, and existing maintenance operations. Exclude PanicStream. Preserve catalog identities, public API contracts, upstream behavior, and independent Archive completeness/deletion verification. Use native provider queues with ten concurrent activities and ten active artist children per batch. Do not deploy or mutate production.
 
-Implementation is authorized. Production deployment and production mutations are not part of this work. Work in the main RelistenApi checkout on `codex/temporal-ingestion-plan`, based on master; preserve unrelated work and running release/reindex jobs.
+## Intended end state
 
-## Current direction after readability review
-
-The branch is rebased onto `codex/csharpier-format`. Follow its `AGENTS.md`, repository-local CSharpier version, `.editorconfig`, and format/check commands before committing or pushing.
-
-The earlier completion statement below describes the first implementation and its historical tests. The readability review reopened the design. A passing test suite does not establish that the workflow is understandable.
-
-HTTP GETs may be composed within one activity. There is no requirement for one activity per request. Choose separate activities when the expense or recovery behavior justifies an independent retry. Do not persist every upstream response indefinitely in PostgreSQL. Any retained artifact needs a concrete consumer, bounded retention, automatic cleanup, and defined behavior after expiry.
-
-The [updated recommendation](readability-review.md) proposes the structural changes. This rebase adopts formatting and fixes the Phantasy Tour call site for the new base; it does not implement the proposed activity/storage redesign.
+- Workflow entrypoints show prepare, provider imports, and final rebuild. Named methods own pagination, item failures, and history rollover.
+- One item activity normally fetches related GET inputs, parses them, and commits catalog changes. Split an operation only when its cost or recovery needs justify it. Remove numbered fetch parts and the one-HTTP-request rule.
+- Prerequisite catalogs and reconciliation are explicit provider operations, not fake items or hidden string-key protocols.
+- Keep fetched item responses in memory. Retain stable discovery/catalog snapshots only where repeated enumeration is expensive or the payload is too large. Retain compact transactional receipts for atomic retry results. Give retained data automatic cleanup and a bounded lifetime enforced by execution, so expired data cannot silently restart an old operation.
+- Temporal owns execution progress and recovery. Remove the application request/progress/failure journal and the custom resume-from-PostgreSQL mechanism. Retry interrupted work through Temporal or start a fresh import.
+- Carry the rebased Phantasy Tour existing-date repair into provider finalization after complete enumeration.
 
 ## Working standards
 
-- Use the plan as guidance and adapt when code or verification reveals a better approach. Record consequential departures and their tradeoffs here.
-- Finish correctness and maintainability issues exposed by the implementation when they affect the intended outcome.
-- Commit logical chunks with a title and body explaining the change and its reason for readers without this conversation.
-- Prefer direct, readable code. Apply single responsibility and DRY where they clarify real responsibilities; avoid frameworks and abstractions without a concrete consumer.
-- Document public interfaces. Add file-level context and intent/constraint/tradeoff comments where code alone is insufficient.
-- Test observable behavior through public interfaces and contract boundaries. Do not use string/configuration assertions or tests that copy implementation logic as substitutes for behavior tests.
-- Write documentation, comments, commits and PR descriptions for their readers. Use plain language and ASD-STE100 where useful.
-- Apply the local `deslop` skill to substantive writing and `code-simplifier` after focused validation of nontrivial code changes. Rerun affected checks after cleanup.
+Follow repository `AGENTS.md`, `.editorconfig`, and pinned CSharpier. Run its formatting check before every commit and push. Add braces, conceptual whitespace, and clear names where a formatter cannot identify intent.
 
-## Completion criteria
+Favor straightforward, readable code. Apply single responsibility and DRY where they clarify responsibilities. Avoid speculative frameworks. Document public interfaces and explain local constraints and trade-offs when the code cannot. Write documentation, comments, and commit messages for readers without this conversation; use plain language and ASD-STE100 where useful.
 
-The separate worker builds and starts independently of the API/Hangfire host. Workflows and provider activities run against an isolated local Temporal/PostgreSQL environment. API/manual and recurring admission can select Temporal while legacy ingestion remains available for handoff. Tests verify provider behavior, duplicate/retry handling, interruption/resume, cancellation, Archive deletion policy and history rollover. Local setup and operator handoff/rollback instructions are reproducible. All implementation work is committed, with remaining external/environment limitations reported explicitly.
+Use the plan as guidance and adapt when implementation or verification reveals a better approach. Finish issues that affect correctness or maintainability and record consequential departures. Apply the local `deslop` and `code-simplifier` skills throughout.
+
+Commit logical chunks, each with a title and body explaining what changed and why. Verify observable behavior through public interfaces and contract boundaries. Cover retries, cancellation, workflow rollover/replay, provider output, Archive deletion evidence, and Phantasy Tour date repair. Do not substitute string/configuration checks or tests that mirror the implementation.
 
 ## Progress
 
-- Standalone worker, shared provider adapters, API handoff, schedules and maintenance entry points are implemented.
-- All seven active providers have local legacy/Temporal catalog comparisons. Other checks cover receipts, rollback, overlapping attempts, cancellation, worker replacement, history replay/rollover, Archive evidence, API admission and maintenance.
-- The worker publishes and starts independently against local Temporal, then stops cleanly on SIGINT. Local schedule registration and migration 13 were also exercised.
-- Implementation and verification are complete and committed in logical chunks. No production deployment or production data changes occurred.
-
-## Decisions and implementation departures
-
-- Use application PostgreSQL for raw inputs and receipts initially. This keeps Temporal histories small without adding object storage. Retention is explicit operator work; [operations.md](operations.md) explains what can be removed and what must remain for recovery.
-- The historical migrations contain manual-operation markers and cannot rebuild the current catalog. The isolated local stack therefore includes a schema-only fixture from the read-only replica and an explicit local baseline of 12 before migration 13. It contains no production rows or credentials.
-- Fetch and apply are separate activities for Archive as well as the other providers. Native queues control upstream requests; catalog writes and receipts share a transaction. Bulk page staging avoids one database round-trip per discovered item.
-- Reuse existing parsers with a null Hangfire progress context. Temporal activities and persisted results provide progress/error visibility; a new progress-adapter abstraction was unnecessary.
-- Artist, item and rebuild starts share an artist UUID workflow ID. Cancellation leaves a durable `needs-finalize` marker when item changes committed. Resume is an operator action before newer work for that artist, not an additional ownership/fencing service.
-- Temporal exact-item imports suppress unrelated absence reconciliation. The legacy Archive targeted path could run artist-wide cleanup. Full imports retain verified reconciliation; a narrow reimport now changes only its selected item. The compatibility tradeoff is documented in the operator instructions.
-- Debug and destructive reimports remain on the legacy path. While Temporal is selected they return 409; stop ingestion and select Hangfire to use them. Normal import responses retain their status and shape and return a Temporal workflow ID.
-- Fixes exposed by verification: Phish.net discarded normal review envelopes; Archive nullable list fields did not round-trip through staging; source updates assumed every artist used per-source venues; discovery held overlapping database connections and promoted its transaction unnecessarily. These fixes preserve catalog intent and have contract coverage.
-- API-only popularity dependencies are lazy so the worker can use catalog writes without constructing a Hangfire client. Hangfire remains responsible for unrelated popularity/cache jobs.
-- A public HTTP status check confirmed that Phish.net's date-based ratings URL redirects. Redirects are now staged and followed in separate fetch activities, preserving both the old URL behavior and one-request queue accounting.
-- `deslop` was applied to the goal/runbook and commit messages. `code-simplifier` removed redundant legacy guards, shared fixture setup, cleaned extraction residue and kept provider parsing in existing methods.
-
-## Verification evidence
-
-- Baseline: 93 passed, 24 pre-existing database-dependent skips.
-- Complete suite: 126 passed, 24 pre-existing skips. After the final rolling-batch change, all eight workflow tests passed again, including batch history replay. After the Phish.net redirect fix, all seven provider comparisons and five HTTP tests passed again.
-- Provider/discovery/maintenance regression set: 11 passed after the connection-lifetime fix.
-- Synthetic 18,386-item discovery: 0.32 seconds to stage on this local machine, 4,456,759 stored payload bytes, 56-character page reference returned. This uses tiny synthetic documents and excludes indexes/WAL; it is not a production capacity estimate.
-- Worker Release publish, independent startup/shutdown, local schema migration and explicit schedule creation succeeded.
-- Existing `OpenTelemetry.Resources.Host` 1.15.1-beta.1 reports NU1903. It predates this work. No live-provider load test, production rollout, backup setup or infrastructure creation was performed.
-
-## Commits
-
-- `7b5ad9c`: goal and planning documents.
-- `0f6fb1a`: independent host and shared catalog registration.
-- `5637d06`: durable artist/item workflow core, staging and receipts.
-- `db6dc86`: active provider extraction and catalog fixes.
-- `0af1d55`: API handoff, worker commands, scheduling and recovery.
-- `d94294c`: isolated stack, contract tests and rolling ten-artist batches.
-- `71d7b36`: Phish.net redirects as individually queued fetches.
-
-[Operator instructions](operations.md) · [Local setup](../../local-dev/temporal/README.md)
+- Formatting rebase is complete. The first implementation is the starting point, not the accepted end state.
+- Readability redesign is in progress. Current verification and remaining issues will be recorded as each chunk completes.
