@@ -6,6 +6,16 @@ Use self-hosted Temporal with PostgreSQL, native provider task queues, ten-concu
 
 Implementation is authorized. Production deployment and production mutations are not part of this work. Work in the main RelistenApi checkout on `codex/temporal-ingestion-plan`, based on master; preserve unrelated work and running release/reindex jobs.
 
+## Current direction after readability review
+
+The branch is rebased onto `codex/csharpier-format`. Follow its `AGENTS.md`, repository-local CSharpier version, `.editorconfig`, and format/check commands before committing or pushing.
+
+The earlier completion statement below describes the first implementation and its historical tests. The readability review reopened the design. A passing test suite does not establish that the workflow is understandable.
+
+HTTP GETs may be composed within one activity. There is no requirement for one activity per request. Choose separate activities when the expense or recovery behavior justifies an independent retry. Do not persist every upstream response indefinitely in PostgreSQL. Any retained artifact needs a concrete consumer, bounded retention, automatic cleanup, and defined behavior after expiry.
+
+The [updated recommendation](readability-review.md) proposes the structural changes. This rebase adopts formatting and fixes the Phantasy Tour call site for the new base; it does not implement the proposed activity/storage redesign.
+
 ## Working standards
 
 - Use the plan as guidance and adapt when code or verification reveals a better approach. Record consequential departures and their tradeoffs here.
