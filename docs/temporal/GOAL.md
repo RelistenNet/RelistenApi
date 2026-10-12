@@ -20,13 +20,15 @@ Follow repository `AGENTS.md`, `.editorconfig`, and pinned CSharpier. Check form
 
 Use the plan as guidance. Resolve correctness and maintainability issues revealed by implementation and verification. Record consequential departures and their trade-offs. Use `deslop` for writing and `code-simplifier` after focused validation. Apply ASD-STE100 selectively where its direct wording helps.
 
+Source readability is an acceptance criterion separate from tests and formatting. Workflow entrypoints must show named domain phases; helpers own iteration, durable state transitions, and finalization. Use braced control flow, conceptual blank lines, and comments explaining non-obvious policy. A fresh source reader must be able to trace success, partial failure, cancellation, and continuation without reconstructing a long mixed-responsibility function. The [readability follow-up](readability-follow-up.md) records the review and corrections.
+
 Commit logical chunks. Every commit needs a title and body explaining what changed and why. Verify observable behavior through stable interfaces and contract boundaries. Tests must protect behavior rather than repeat configuration, search for strings, or mirror implementation details. Finish with an independent review for correctness, regressions, and missing tests.
 
 ## Current progress and verification
 
 The typed commands, provider workflows, shared catalog steps, receipt-free transaction runner, payload codec, and updated API/CLI adapters are present on the branch. The guides describe these interfaces and operating constraints. The implementation plan owns the detailed progress and verification record.
 
-**Implementation and verification complete.** The clean-stack suite passed 245 tests with zero failures and 24 unrelated opt-in tour skips. Solution build, API and worker Release publishes, formatting, whitespace, and documentation links passed. Fresh review findings were fixed and tested. See [the verification record](evidence/provider-workflow-verification.md) for reproduction steps and limits. No production verification or deployment has occurred.
+**Implementation and follow-up review complete.** The current local-stack suite passed 250 tests with zero failures and 24 unrelated opt-in tour skips. Solution build, worker Release publish, CLI rejection checks, formatting, whitespace, and documentation links passed. Independent correctness and source-reading reviews were completed; validated findings were fixed and tested. See [the readability follow-up](readability-follow-up.md) for the current changes and checks. The earlier [245-test verification record](evidence/provider-workflow-verification.md) preserves reproduction steps and baseline evidence, including the API Release publish. No production verification or deployment has occurred.
 
 ## Historical work on this undeployed branch
 

@@ -45,3 +45,12 @@
 - Helpful tables: `artists`, `features`, `artists_upstream_sources`, `upstream_sources` (archive.org is `upstream_source_id = 1`).
 - Example query to inspect archive.org artists:\n  `select a.id, a.name, a.slug, a.featured, aus.upstream_identifier from artists a join artists_upstream_sources aus on aus.artist_id=a.id where aus.upstream_source_id=1;`
 - It is MUCH better to inspect the schema using psql than to rely on the migration files to learn about the schema.  
+
+## Readability acceptance
+
+- Treat source readability as a deliverable for new or substantially changed code. A formatter pass and passing tests do not establish it.
+- Keep orchestration entrypoints at one level of detail. Name the domain phases in execution order; put pagination, item processing, checkpoint advancement, and finalization in methods with clear responsibilities. A single-caller helper is useful when it exposes a coherent phase or invariant. Do not create forwarding layers just to shorten a method.
+- Use braces for control-flow bodies. Separate setup, guards, domain operations, state transitions, and returns with blank lines where they form distinct thoughts. Inspect the formatted source; formatting tools do not choose these groups.
+- Explain non-obvious ownership, durable state, retry/cancellation behavior, and domain policy near the code that implements them. Comments should supply context a maintainer needs, not narrate assignments.
+- Preserve this standard in subagent tasks and reviews. Before completion, use a fresh reader to trace a representative success, partial failure, and recovery path from the entrypoints. Fix places that require mentally executing a long method or reconstructing an undocumented protocol. Review readability separately from correctness.
+- Prefer clear names, cohesive methods, and direct data flow over minimum line count. Do not replace dense methods with arbitrary wrappers, excessive parameters, a generic framework, or comments that disguise mixed responsibilities.

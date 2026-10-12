@@ -2,7 +2,7 @@
 
 > Historical planning record. The implemented design is documented in [architecture.md](architecture.md) and [operations.md](operations.md); these supersede activity, persistence, and recovery proposals below.
 
-This is a recommendation for the next revision, not a description of changes already implemented. The rebase adopts `codex/csharpier-format`, including its catalog fixes, CSharpier 1.3.0, and repository instructions. Formatting now passes. The nested workflow, numbered fetch protocol, and indefinite input storage still need redesign.
+The code-reading criteria below remain current. See the [implementation follow-up](readability-follow-up.md) for their enforcement and verification. The remaining text records the recommendation at the formatting rebase, not the final implementation. The rebase adopts `codex/csharpier-format`, including its catalog fixes, CSharpier 1.3.0, and repository instructions. Formatting now passes. The nested workflow, numbered fetch protocol, and indefinite input storage still need redesign.
 
 ## Put the execution sequence in the workflow
 

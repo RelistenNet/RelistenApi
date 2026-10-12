@@ -12,6 +12,8 @@ Temporal owns execution progress. PostgreSQL owns catalog rows. A Redis payload 
 
 This branch has never been deployed. Its earlier workflow protocols and draft migration have been replaced directly. Production infrastructure, deployment, AI processing, and search indexing remain outside this work.
 
+The [readability follow-up](readability-follow-up.md) records the full-branch review, code-reading acceptance criteria, and copy-ready prompt-template changes.
+
 ## Earlier research
 
 [Capacity evidence](capacity-and-evidence.md) contains historical October 6 measurements. [The API proposal](api-proposal.md) records earlier alternatives; the plan and contracts supersede it where they differ. Older migration and implementation proposals are research history, not current setup instructions.
