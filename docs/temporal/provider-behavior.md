@@ -1,60 +1,49 @@
 # Provider behavior and logging
 
-Temporal and Hangfire share catalog parsers and writes. They have different execution and failure handling. The tests compare all seven providers against the legacy catalog output; they do not prove every upstream response has equivalent behavior.
+Provider workflows expose the sequence of import operations. Their activities call the existing importer parsers and catalog methods through `ProviderActivityRunner`. Each item runs sequentially within its provider. Only the artist coordinator rebuilds derived shows, years, and the cache after provider work completes.
 
-## Where Archive's `processDoc` went
+The provider directories contain contracts, workflows, and activities together. Each activity delegates to the matching `*Importer.Ingestion.cs` domain method; parsing and catalog writes shared with Hangfire remain ordinary importer methods.
 
-The old Hangfire lambda combined selection, HTTP, metadata validation, a transaction, exception handling, and diagnostics. The first Temporal version bypassed it and called `ImportSingleIdentifier` directly. That kept the write logic but duplicated selection/validation and omitted wrapper diagnostics.
-
-The current paths share the domain decisions:
-
-```mermaid
-flowchart TD
-    H[Hangfire ProcessDocument] --> Reason[Shared ImportReason]
-    D[Temporal DiscoverAsync] --> Reason
-    D --> Selection[Typed ArchiveImportItem: document + reason]
-    Selection --> T[Temporal ImportItemAsync]
-    H --> Fetch[Shared FetchItemMetadata]
-    T --> Fetch
-    Fetch --> Validate[Dark/error/identity/date validation and diagnostics]
-    Validate --> Write[Shared ImportSingleIdentifier]
-```
-
-[ArchiveOrgImporter.Item.cs](../../RelistenApi/Services/Importers/ArchiveOrgImporter.Item.cs) owns selection reasons, metadata validation, date repair diagnostics, and deletion-guard reporting. Hangfire's `ProcessDocument` calls those helpers inside its loop. Temporal stores the selected document and reason, then calls the same metadata helper and catalog writer inside an item activity. Its write runs through the receipt transaction.
-
-Both engines also call `VerifyDeletionCandidatesAsync`. Missing listing entries require direct metadata evidence. The five-candidate guard, Present/Deleted/Unknown policy, no-MP3 eligibility rule, and existing operator alert remain separate from Temporal execution success.
-
-## Shared provider operations
-
-| Provider | Typed item | Shared processing and write methods |
+| Provider workflow | Visible activity sequence | Domain implementation and catalog result |
 |---|---|---|
-| Archive | `ArchiveImportItem` (`SearchDoc` plus reason) | `ImportReason`, `FetchItemMetadata`, `ImportSingleIdentifier`, `VerifyDeletionCandidatesAsync` |
-| Phish.in | `PhishinShow` | `ProcessEras`, `ProcessTours`, `ProcessSongs`, `ProcessVenues`, `ProcessOneShow` |
-| Phish.net | `SourceInput` (source ID plus matching API show) | `ProcessSource`, supplied with fetched ratings/reviews |
-| Setlist.fm | `Setlist` | `ProcessSetlist`; retain committed tour bounds between activities |
-| Phantasy Tour | `PhantasyTourShowListing` | `ApplyShowBody`; repair listed local dates and derive tour bounds after complete discovery |
-| Jerry mirror | `FileMetaObject` | `ProcessPage` or `ApplyVenueBackfill`; shared venue cleanup service |
-| Local | `LocalShow[]` for one date | `ProcessVenues`, `ProcessOneDay`, supplied with directory metadata |
+| [ArchiveWorkflow](../../RelistenApi/Services/Ingestion/Providers/Archive/ArchiveWorkflows.cs) | `DiscoverRecordings` → `ImportItem` for each selected recording → `VerifyDeletionCandidates` → `ApplyVerifiedDeletions` | [Archive importer](../../RelistenApi/Services/Importers/ArchiveOrgImporter.Ingestion.cs) shares `ImportReason`, `FetchItemMetadata`, `ImportSingleIdentifier`, and deletion verification. Each successful item returns its source ID. |
+| [PhishInWorkflow](../../RelistenApi/Services/Ingestion/Providers/PhishIn/PhishInWorkflows.cs) | `PrepareCatalogs` → `ReadShowPage` → `ImportShow` | [Phish.in importer](../../RelistenApi/Services/Importers/PhishinImporter.Ingestion.cs) shares era, tour, song, venue, and show processing. Prepared mappings are separate typed inputs. Each show returns source and setlist IDs. |
+| [PhishNetWorkflow](../../RelistenApi/Services/Ingestion/Providers/PhishNet/PhishNetWorkflows.cs) | `SelectSources` → `EnrichSource` | [Phish.net importer](../../RelistenApi/Services/Importers/PhishNetImporter.Ingestion.cs) fetches ratings and required reviews, reloads the current source under the catalog lock, and enriches that source. |
+| [SetlistFmWorkflow](../../RelistenApi/Services/Ingestion/Providers/SetlistFm/SetlistFmWorkflows.cs) | `ReadSetlistPage` → `ImportSetlist` | [Setlist.fm importer](../../RelistenApi/Services/Importers/SetlistFmImporter.Ingestion.cs) shares `ProcessSetlist`, excludes setlists with no sets, and preserves existing tour bounds. Each item returns a setlist ID. |
+| [PhantasyTourWorkflow](../../RelistenApi/Services/Ingestion/Providers/PhantasyTour/PhantasyTourWorkflows.cs) | `ReadShowPage` → `ImportShow` for missing shows → `RepairListedDates` | [Phantasy Tour importer](../../RelistenApi/Services/Importers/PhantasyTourImporter.Ingestion.cs) shares `ApplyShowBody`. Existing shows need no detail GET. Complete listing evidence drives date and tour-bound repair. Each imported show returns a setlist ID. |
+| [JerryWorkflow and JerryVenueRepairProviderWorkflow](../../RelistenApi/Services/Ingestion/Providers/Jerry/JerryWorkflows.cs) | Refresh: `SelectMissingPages` → `ImportPage`. Repair: `SelectExistingPages` → `RepairVenue` → `FinishVenueRepair` | [Jerry importer](../../RelistenApi/Services/Importers/JerryGarciaComImporter.Ingestion.cs) shares `ProcessPage` and venue backfill behavior. Each item returns a setlist ID. |
+| [LocalWorkflow](../../RelistenApi/Services/Ingestion/Providers/Local/LocalWorkflows.cs) | `FetchRootAndPrepareVenues` → `SelectChangedDates` → `ImportDate` | [Local importer](../../RelistenApi/Services/Importers/LocalImporter.Ingestion.cs) retains the fetched root for selection, fetches each selected directory's metadata, and merges all directories for one date into one source. |
 
-The workflow's artist, provider, page, item, and reconciliation sequence is in [the architecture guide](architecture.md). The provider partial files show the concrete types and domain operations; the generic base owns snapshot paging and typed item loading.
+[The contract reference](provider-workflow-contracts.md#3-concrete-provider-sequences-and-ownership) defines the typed inputs, cursors, checkpoint evidence, and result fields. Upstream JSON/HTML parsing retains its existing behavior; Temporal serialization uses System.Text.Json and does not inherit Newtonsoft attributes.
 
-## Diagnostics
+## Archive selection and deletion
 
-Shared importer messages go to `ILogger` and to the Hangfire console when a `PerformContext` is present. Temporal no longer loses those messages merely because it passes a null Hangfire context. Archive selection reasons, dark/missing-date skips, date repairs, deletion checks, and guard alerts are available from both engines.
+Hangfire's `ProcessDocument` and Temporal's item activity share selection reasons, metadata validation, date repair, and `ImportSingleIdentifier`. [ArchiveOrgImporter.Item.cs](../../RelistenApi/Services/Importers/ArchiveOrgImporter.Item.cs) contains those shared decisions and diagnostics. Archive skip results distinguish invalid or missing metadata, a dark item, an unrepaired date, and no VBR MP3.
 
-Temporal activity logs include request ID, artist, provider, item identifier, workflow ID, activity ID, and attempt. Lifecycle messages report discovered counts, reused receipts, item results, reconciliation, and final rebuild counts. The worker console includes scopes. HTTP diagnostics report the upstream path and status; query parameters are excluded because some APIs put credentials there. The Temporal UI supplies activity state, retries, cancellation, and failed workflow details. It does not reproduce Hangfire's console progress bars.
+A full refresh records the complete listing's observed IDs. Verification loads current catalog candidates and checks missing-listing items directly. Only upstream errcode 104 proves deletion. A 404, empty response, or dark flag alone does not. No-VBR-MP3 evidence comes from successful metadata validation; an exhausted item failure cannot manufacture that evidence.
 
-The existing Sentry calls in shared parser code remain. The standalone worker does not initialize a Sentry integration; standard worker logs and Temporal failures are the available error-reporting channels unless that integration is configured separately. The API/Hangfire host already has its own Sentry setup.
+The existing five-candidate guard remains independent of workflow success. The provider keeps at most six no-MP3 IDs because six already trips that guard. Verification returns an overall allowed, guarded, or not-applicable result. Transactional deletion applies only the fixed verified decisions; it does not enumerate new candidates on retry. Guard notifications are best effort and may repeat after an activity retry.
 
-## Intentional execution differences
+Targeted Archive imports call the same `ImportItem` activity with a requested identifier. They do not enumerate or reconcile unrelated sources. An item outside the artist's Archive collection fails explicitly. Exact-year Archive imports also omit reconciliation. Other providers cannot accept targeted item commands.
 
-- Temporal retries a failed item activity, then counts an exhausted item and continues. The legacy importers have provider-specific catch/retry behavior. Cancellation propagates instead of becoming a skipped item.
-- Preparation or discovery failure stops the Temporal workflow before reconciliation. Archive still needs positive deletion evidence after a complete listing, and Jerry orphan cleanup requires a successful backfill.
-- Temporal uses immutable discovery selections and transactional receipts. Related GET responses remain in memory and may be refetched on retry.
-- A targeted Archive Temporal import does not reconcile other sources. Other providers retain their existing targeted-import no-op behavior.
-- Temporal rebuilds artist aggregates at the end even when no item changed, so it can repair aggregates left by an interrupted import. Rebuild retains its own transactions and is safe to repeat.
-- Temporal uses the documented seven-day execution deadline and ten-way provider concurrency. Hangfire's progress display and execution lifetime are different.
+## Provider-specific constraints
 
-## Verification
+- Phish.in runs before Phish.net. A Phish.in year is a lower bound; Phish.net and Archive years are exact filters. A filtered artist command preserves the other providers' unfiltered refreshes.
+- Phish.net distinguishes reviews not fetched from a fetched empty list. If current catalog state requires reviews absent from the fetched inputs, `EnrichmentInputsChanged` rolls back and retries the activity with fresh HTTP inputs. It does not erase existing reviews based on an omitted fetch.
+- Phantasy Tour retains local calendar dates for every listed past show and rejects conflicting dates for one ID. Date/tour repair runs only after complete enumeration, including when a missing-show detail import failed. A listing failure suppresses repair.
+- Jerry venue repair preserves successful item changes if another item fails. It refreshes tour bounds, but removes orphan venues only when all repair items succeeded. The existing no-Last-Modified fallback remains; its timestamp is not an exactly-once identity.
+- Local imports preserve the upstream date key and catalog UUID formulas. All directories for the date produce one source, its set, and its tracks. The activity fetches directory metadata before its write transaction.
 
-Local fixtures compare sources, tracks, shows, setlists, songs, tours, and reviews, including stable IDs where those objects exist. Additional tests exercise shared Archive skip diagnostics, corrected dates, selection reasons, correlated Temporal logs, and guard alerts captured by a fake notification sink. No test sends an operator notification externally. Existing tests cover retry receipts, rollback, cancellation, history rollover/replay, worker replacement, targeted imports, and Phantasy Tour date repair.
+## Results and diagnostics
+
+`Applied` and `Unchanged` include the current catalog identity. Supported `Skipped` results include a provider-specific reason. Artist summaries expose completed, skipped, and failed counts; completed includes applied and unchanged. Attempt-local created/updated/removed diagnostics are not exact per-execution totals because an acknowledged retry can observe an earlier committed attempt.
+
+Shared importer messages use `ILogger` and also the Hangfire console when a `PerformContext` exists. Passing a null Hangfire context does not suppress Archive validation, date-repair, or guard diagnostics. Provider activity scopes identify execution, artist, provider, workflow, activity, and attempt. Typed item inputs/results and bounded failure samples remain in workflow history.
+
+HTTP logs omit query parameters because some providers put credentials there. The standalone worker does not initialize a separate Sentry integration; existing parser calls and API/Hangfire configuration remain unchanged. Temporal UI supplies retries, cancellation state, and workflow failures. Large offloaded inputs appear as Redis references unless inspected with the configured converter.
+
+## Shared behavior and verification
+
+Hangfire and Temporal share catalog identity and parser rules. Temporal adds bounded activity retries, explicit partial results, current-state transaction locking, typed workflow state, and a finite execution deadline. Fetched item metadata, HTML, ratings, and redirects stay in activity memory and may be fetched again on retry. Stable selections and prerequisite catalogs remain recorded Temporal inputs, with oversized bytes held by the codec.
+
+Use the verification record in [the implementation plan](provider-workflow-plan.md) for current test results. Provider comparisons must check catalog content and stable identities through data-service interfaces, together with cancellation, retry, deletion evidence, and incomplete-listing behavior. Test notifications use a fake sink; tests must not send real operator alerts.

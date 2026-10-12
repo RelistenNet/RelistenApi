@@ -11,7 +11,7 @@ Use Temporal's native controls. **Start with ten concurrent activities per provi
 | `ingest-phantasytour` | Band pages and show blobs | 10 |
 | `ingest-jerry` | Mirror index and HTML pages | 10 |
 | `ingest-local` | Root and directory metadata | 10 |
-| `ingest-db` | Artist preparation, batch selection and rebuilds | 10 |
+| `ingest-db` | Artist preparation, batch selection, collection-page application, and rebuilds | 10 |
 | `ingest-workflows` | Orchestration | 10 active artist children per normal batch |
 
 **PanicStream is disabled and excluded.** Do not register its activities, create a queue or migrate/test its importer.
@@ -22,7 +22,7 @@ The queue's optional rate setting is server-controlled; pollers on the same queu
 
 ## Activity boundaries
 
-Activities follow domain operations: prepare provider catalogs, discover items, import an item, and reconcile. An item activity can issue several sequential GETs and follow redirects before its catalog transaction. Phish.net ratings/reviews and Local directory groups use this composition. There is no one-request assertion or numbered fetch-part protocol.
+Concrete provider activities follow domain operations: prepare provider catalogs, select or page through items, import an item, and perform provider-specific finalization. An item activity can issue several sequential GETs and follow redirects before its catalog transaction. Phish.net ratings/reviews and Local directory groups use this composition. There is no one-request assertion or numbered fetch-part protocol.
 
 The optional queue rate limits activities per second. It does not count HTTP requests. Native concurrency remains useful because item activities do not fan requests out internally. Disable eager activity execution so provider work uses the configured queue. Temporal retries the item operation; its safe GETs may repeat.
 
@@ -34,4 +34,4 @@ Keep Hangfire installed while building and testing Temporal. For rollout, disabl
 
 Rollback is the reverse: stop Temporal ingestion, then re-enable Hangfire. Use the same procedure for an exceptional legacy debug import. Alec controls these rollouts, so no cross-scheduler write-ownership protocol is needed. Do not run both ingestion systems against the same catalog at once.
 
-Locally verify the configured concurrency, activity retries and optional queue rate against the fake upstream. A second worker is useful to check rate behavior if that deployment becomes relevant; it is not a migration gate. Keep recovery/idempotency tests focused on interrupted activities and committed writes.
+Locally verify the configured concurrency, activity retries and optional queue rate against the fake upstream. A second worker is useful to check rate behavior if that deployment becomes relevant; it is not a migration gate. Keep recovery/idempotency tests focused on interrupted activities, current catalog identities, and committed writes. There are no commit receipts. Multiple attempts for the same artist serialize catalog transactions under an advisory lock; each attempt checks cancellation and the inherited deadline before commit.

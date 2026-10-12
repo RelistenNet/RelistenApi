@@ -1,89 +1,39 @@
-# Goal: make Temporal ingestion understandable and maintainable
+# Goal: typed provider workflows with reliable catalog retries
 
-## Current goal: implement the typed provider plan
+## Current implementation objective
 
-The [provider workflow plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md) define the next intended outcome. These supersede the older snapshot, receipt, and universal-importer requirements below; the remaining sections record previous work rather than the new implementation contract.
+Implement the [provider workflow plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md). Make each provider's sequence understandable in its own workflow. Use named commands, typed provider keys and cursors, shared item activity composition, and reusable catalog rebuild activities. Preserve the seven active providers, catalog identities, listener API contracts, and independent Archive deletion verification. Keep PanicStream disabled.
 
-Make each provider's execution sequence clear in its own workflow. Use explicit typed operations, provider keys/cursors/results, shared item activity composition, and reusable catalog rebuild activities. Preserve seven active providers, catalog identity and listener API contracts, native queue controls, the separate worker, and independent Archive deletion verification. Keep PanicStream disabled. Reject overlapping manual artist operations with an explicit conflict containing the active workflow ID.
+All artist operations must share one admission rule. An overlapping manual request reports a conflict and the active workflow ID. Batches retain one artist selection and UTC filter year, replace completed children up to ten active artists, and distinguish partial, failed, and conflicting results. Providers retain their own pagination and finalization rules. Only an artist coordinator schedules its final shows → years → cache rebuild.
 
-Use the existing StackExchange.Redis client for transparent oversized Temporal payloads. Keep small payloads inline; Temporal's event history remains in PostgreSQL. Redis loss can require a fresh import. Remove application snapshots and commit receipts after receipt-free transactions, overlap serialization, and lost-acknowledgement retry tests prove catalog convergence. Do not promise exact mutation counts. Related GETs stay together where that makes the provider easier to follow.
+Use the existing Redis connection for oversized Temporal payloads. Keep complete payloads up to 256 KiB inline, reject those above 64 MiB, and retain offloaded bytes for 15 days from each successful encode or reuse. Preserve immutable selections separately from changing progress. Every execution and its children share a seven-day deadline. Redis loss can require a fresh import.
 
-Write for Alec, Switz, and engineers who know the Relisten app but may not know the technical stack. Explain the concepts, contracts, ownership, failures, and reasons needed to implement without this conversation. Use plain language, selective ASD-STE100, deslop, and progressive disclosure. Keep SQL in data services and fixture transport in tests. Reuse the established formatting and implementation standards below; use grill-me if new evidence creates a consequential product decision.
+Remove the earlier application snapshots, commit receipts, and resume mechanism. Catalog transactions serialize overlapping attempts, reload current data, and preserve existing identities. Retries must converge after a lost acknowledgement without claiming exact mutation counts. Related GETs remain together when they serve one item operation. Rebuild SQL retains its own transaction ownership.
 
-The current planning task must validate assumptions, specify executable steps and verification, and finish a fresh feasibility/decision/complexity review. The plan lives in this existing `docs/temporal/` directory, per Alec's October 12 clarification. No production mutations, deployment, AI processing, or indexing rollout are included. Future implementation must update the plan's progress and record evidence; the plan's existence is not implementation completion.
+This branch has never been deployed. Replace its draft workflow protocols and migration directly; no compatibility layer is required for them. Do not deploy, mutate production, add AI processing, or roll out search indexing.
 
-## Previous implementation record
+## Readers and working standards
 
-Implement the agreed readability redesign on `codex/temporal-ingestion-plan`. This branch has never been deployed. Replace its internal interfaces, workflows, migrations, and recovery commands freely; do not retain compatibility layers for the first implementation.
+Write for Alec, Switz, and engineers who know Relisten as an app but may not know its whole technical stack. Explain responsibility, ownership, failure behavior, and the reasons behind decisions. Keep [the overview](README.md), [code map](architecture.md), [provider guide](provider-behavior.md), and [operator instructions](operations.md) usable without this conversation.
 
-The separate worker must support the seven active providers, scheduled and manual artist imports, targeted Archive reimports, rebuilds, and existing maintenance operations. Exclude PanicStream. Preserve catalog identities, public API contracts, upstream behavior, and independent Archive completeness/deletion verification. Use native provider queues with ten concurrent activities and ten active artist children per batch. Do not deploy or mutate production.
+Follow repository `AGENTS.md`, `.editorconfig`, and pinned CSharpier. Check formatting before every commit and push. Prefer straightforward code, concrete interfaces, and direct data flow. Apply single responsibility and DRY where they clarify the code. Document public interfaces and explain constraints or trade-offs that code alone cannot express.
 
-## Intended end state
+Use the plan as guidance. Resolve correctness and maintainability issues revealed by implementation and verification. Record consequential departures and their trade-offs. Use `deslop` for writing and `code-simplifier` after focused validation. Apply ASD-STE100 selectively where its direct wording helps.
 
-- Workflow entrypoints show prepare, provider imports, and final rebuild. Named methods own pagination, item failures, and history rollover.
-- One item activity normally fetches related GET inputs, parses them, and commits catalog changes. Split an operation only when its cost or recovery needs justify it. Remove numbered fetch parts and the one-HTTP-request rule.
-- Prerequisite catalogs and reconciliation are explicit provider operations, not fake items or hidden string-key protocols.
-- Keep fetched item responses in memory. Retain stable discovery/catalog snapshots only where repeated enumeration is expensive or the payload is too large. Retain compact transactional receipts for atomic retry results. Give retained data automatic cleanup and a bounded lifetime enforced by execution, so expired data cannot silently restart an old operation.
-- Temporal owns execution progress and recovery. Remove the application request/progress/failure journal and the custom resume-from-PostgreSQL mechanism. Retry interrupted work through Temporal or start a fresh import.
-- Carry the rebased Phantasy Tour existing-date repair into provider finalization after complete enumeration.
+Commit logical chunks. Every commit needs a title and body explaining what changed and why. Verify observable behavior through stable interfaces and contract boundaries. Tests must protect behavior rather than repeat configuration, search for strings, or mirror implementation details. Finish with an independent review for correctness, regressions, and missing tests.
 
-## Working standards
+## Current progress and verification
 
-Follow repository `AGENTS.md`, `.editorconfig`, and pinned CSharpier. Run its formatting check before every commit and push. Add braces, conceptual whitespace, and clear names where a formatter cannot identify intent.
+The typed commands, provider workflows, shared catalog steps, receipt-free transaction runner, payload codec, and updated API/CLI adapters are present on the branch. The guides describe these interfaces and operating constraints. The implementation plan owns the detailed progress and verification record.
 
-Favor straightforward, readable code. Apply single responsibility and DRY where they clarify responsibilities. Avoid speculative frameworks. Document public interfaces and explain local constraints and trade-offs when the code cannot. Write documentation, comments, and commit messages for readers without this conversation; use plain language and ASD-STE100 where useful.
+**Implementation and verification complete.** The clean-stack suite passed 245 tests with zero failures and 24 unrelated opt-in tour skips. Solution build, API and worker Release publishes, formatting, whitespace, and documentation links passed. Fresh review findings were fixed and tested. See [the verification record](evidence/provider-workflow-verification.md) for reproduction steps and limits. No production verification or deployment has occurred.
 
-Use the plan as guidance and adapt when implementation or verification reveals a better approach. Finish issues that affect correctness or maintainability and record consequential departures. Apply the local `deslop` and `code-simplifier` skills throughout.
+## Historical work on this undeployed branch
 
-Commit logical chunks, each with a title and body explaining what changed and why. Verify observable behavior through public interfaces and contract boundaries. Cover retries, cancellation, workflow rollover/replay, provider output, Archive deletion evidence, and Phantasy Tour date repair. Do not substitute string/configuration checks or tests that mirror the implementation.
+Earlier revisions used a generic importer protocol, PostgreSQL discovery snapshots, and transactional result receipts. A readability pass replaced numbered fetch parts and the application resume journal with domain activities, then added typed discovery helpers and shared importer diagnostics. Those designs were useful intermediate steps; their storage and interface rules have been superseded by the current plan.
 
-## Completion and verification
+Recorded checks for those earlier revisions included an isolated suite with 135 passing tests, a provider-identifier follow-up with 149 passing tests, and a typed importer/behavior follow-up with 157 passing tests. Each full run recorded 24 unrelated opt-in skips. Earlier Release worker publishes and CSharpier checks also passed. These are historical results, not verification of the current implementation.
 
-The readability redesign is implemented on October 12, 2026. The branch is rebased on `codex/csharpier-format`; CSharpier and scoped explicit-brace rules cover the ingestion code. The separate worker, seven provider adapters, artist/item entrypoints, bounded batches, and cleanup service use the revised contracts. PanicStream remains excluded.
+The retained decisions from that work are stable catalog identities, unchanged provider string values, shared Hangfire/Temporal domain behavior, independent Archive evidence checks, and importer SQL owned by data services. Test HTTP routing remains in the test project. The worker keeps standard diagnostics without requiring a Hangfire context or adding PII-enabled Sentry configuration.
 
-The local `deslop` and `code-simplifier` passes removed the generic fetch protocol, fake catalog items, duplicated item-failure handling, and application resume journal. The [execution graph and code map](architecture.md) describe the final design. [Operations](operations.md) describes commands, recovery, handoff, and storage retention.
-
-Verification against the isolated local Temporal/PostgreSQL/Redis stack:
-
-- `RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test RelistenApiTests/RelistenApiTests.csproj --nologo`: **135 passed, 24 skipped, 0 failed**. The skipped tests belong to the separate opt-in tour lookup fixture.
-- All seven provider comparisons start from a cleared catalog while preserving the artist identity. They compare legacy and Temporal catalog output, including source, track, and show UUIDs.
-- Tests cover receipts after lost acknowledgement, rollback and overlap, cancellation before commit, retry refetches, expiry/cleanup, 18,386-item bounded discovery, targeted imports, Archive deletion verification, workflow rollover/replay, worker replacement, and ten-child batch concurrency.
-- Phantasy Tour tests verify existing local-date and tour-bound repairs without fetching known-show details, and suppress repair after incomplete discovery.
-- `dotnet publish RelistenIngestionWorker/RelistenIngestionWorker.csproj -c Release` passed. `dotnet csharpier check .` checked 317 files; `git diff --check` passed.
-
-The build still reports the existing NU1903 advisory for `OpenTelemetry.Resources.Host` 1.15.1-beta.1. Dependency remediation is outside this ingestion redesign.
-
-## Decisions made during implementation
-
-- A run has a seven-day deadline that survives ContinueAsNew. Discovery/catalog snapshots and receipts expire one day later; cleanup runs at worker startup and hourly. Expired work requires a fresh import. This bounds storage without adding a configurable retention/recovery framework.
-- Stable listing selections remain outside Temporal history. Related item metadata, HTML, review responses, and redirect hops stay in memory and may be fetched again on retry.
-- The existing aggregate rebuild SQL owns its transactions. Rebuild therefore runs as an idempotent activity without an outer receipt transaction. It always runs at the end of an artist import, including when no item changed, to repair aggregates after an interrupted import.
-- The undeployed migration was replaced directly. There is no compatibility path for the previous draft schema, workflow protocol, or resume command. Public catalog/API behavior remains unchanged.
-
-No production infrastructure, deployment, production mutation, AI normalization, embeddings, or search indexing is part of this implementation. Future work should preserve the standards above and update this goal when the intended outcome changes.
-
-## Provider identifier follow-up
-
-Use one `UpstreamProvider` string-serialized enum throughout workflow contracts, activities, importer dispatch, and source lookups. Preserve existing JSON strings, database names, queue names, and snapshot/receipt keys. The upstream-source database/API `name` field remains the wire representation; its `Provider` property supplies the typed value for application code. Preserve unknown source names in catalog responses while excluding them from importer dispatch. PanicStream remains a known historical source but has no active ingestion registration.
-
-Verified this follow-up with 149 passing tests and 24 unrelated opt-in skips, plus a Release worker publish and CSharpier check. Provider tests round-trip the unchanged strings through Newtonsoft API JSON, Temporal payload conversion, and Dapper source mapping.
-
-## Typed importer flow and behavior parity follow-up
-
-Carry concrete types through discovery, immutable snapshots, item loading, and provider import methods. Use generic importer bases for shared Temporal mechanics, with provider-specific discovery types when reconciliation needs extra evidence. Keep JSON encoding in the persistence boundary; HTTP parsers still decode upstream responses. Manual import is an explicit entrypoint rather than a missing/empty metadata string.
-
-Share Archive's selection, metadata validation, and deletion verification between engines. Preserve importer diagnostics through standard worker logging even without a Hangfire context, and attach execution context to Temporal activity logs. Explain intentional execution differences and remaining sink differences in [the provider behavior guide](provider-behavior.md).
-
-Keep importer SQL in injected data services: source lookups, tour bounds, orphan venues, batch membership, and aggregate rebuilds. Preserve existing transaction ownership and public catalog behavior. The SQL extraction passed 25 persistence tests before its separate commit.
-
-The completed follow-up passed the full isolated suite: **157 passed, 24 unrelated opt-in skips, 0 failed**. New paired Hangfire/Temporal tests cover Archive metadata skips, date repair diagnostics, selection reasons, and guarded deletions with a fake notification sink. Release worker publish passed. Standard worker logging includes execution scopes; external Sentry initialization remains unchanged.
-
-## Test transport isolation follow-up
-
-Keep fixture routing and other test setup in the test project. Production HTTP code uses standard dependency injection for its transport and contains no test-only endpoint settings or request rewriting. Preserve activity cancellation, timeouts, upstream retry delays, redirects, and importer behavior.
-
-Verified with six HTTP tests and 33 local ingestion integration tests, including all seven provider comparisons. The HTTP tests cover client cancellation/disposal, redirects, retry delays, and provider response parsing. CSharpier checked 326 files.
-
-## API proposal under review
-
-The [typed provider API proposal](api-proposal.md) addresses mixed-purpose requests, string item keys/cursors, silent unsupported operations, and hidden provider sequencing. It recommends concrete provider workflows, generic data and iteration helpers, separate maintenance commands, and item results that support later processing. Alec has accepted separate provider workflows with composable, reusable operations, including rebuilding shows and years. The detailed API is still under review and has not been implemented. Keep item child workflows, processing policies, and retention changes marked as proposals until resolved. Use the linked Explore, Planning, and Implementation templates; the current document is not yet the finished implementation plan.
+The earlier design proposal remained under review until the provider workflow plan resolved the main choices: concrete provider workflows, shared activity composition for routine items, explicit maintenance commands, explicit admission conflicts, Redis payload offloading, and receipt-free retries. Planning is complete; this goal now covers implementation and verification.

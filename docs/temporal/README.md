@@ -1,19 +1,17 @@
 # Temporal ingestion
 
-The next change is specified by the [provider workflow implementation plan](provider-workflow-plan.md) and its [contract reference](provider-workflow-contracts.md). They cover concrete provider workflows, shared item activities, typed commands/results, Redis payload offloading, and receipt-free catalog retries. The [earlier proposal](api-proposal.md) records design alternatives; the new plan supersedes it where they differ.
+Relisten imports recordings and setlists in a separate .NET worker. Temporal records which operations have finished and resumes unfinished work after a worker restart. Each provider has a concrete workflow with typed inputs and results. Related HTTP requests and catalog writes remain together in item activities, which Temporal can retry.
 
-The code and guides below still describe the current implementation. PostgreSQL snapshots and receipts described here are being replaced by the planned refactor; they have not yet been removed.
+Start with [the execution graph and code map](architecture.md). Read [provider behavior](provider-behavior.md) for each provider's operations and deletion rules. Use [operations](operations.md) for commands, recovery, and the Hangfire handoff, or [local setup](../../local-dev/temporal/README.md) to run isolated services and tests.
 
-Relisten ingestion runs in a separate .NET worker. Artist workflows compose provider preparation, paginated item imports, reconciliation, and a final catalog rebuild. A manual Archive reimport uses the same item activity without enumerating the artist or reconciling unrelated sources.
+The [implementation plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md) explain the intended outcome, decisions, and verification requirements. [GOAL.md](GOAL.md) records the work's scope and standards. [Verification evidence](evidence/provider-workflow-verification.md) records the checks, reproduction steps, and remaining rollout limits. These documents are written for engineers who know the Relisten app but may be new to its importers or Temporal.
 
-Start with [the execution graph and code map](architecture.md). [Provider behavior and logging](provider-behavior.md) traces the shared Hangfire/Temporal methods and their intentional differences. Use [the operator instructions](operations.md) to configure, run, and recover imports, and [the local setup](../../local-dev/temporal/README.md) for integration tests. [The goal](GOAL.md) records the intended outcome and development standards.
+The implementation preserves catalog identities, listener API bodies, the seven active providers, and independent Archive deletion verification. Artist operations reject overlapping starts. A batch runs up to ten artists at once; each provider worker permits ten concurrent activities by default. PanicStream remains excluded.
 
-Related HTTP GETs run inside an item activity. Ten concurrent activities per provider and ten active artist children per batch provide the normal backpressure. No custom limiter or one-request-per-activity rule is needed. PanicStream is excluded.
+Temporal owns execution progress. PostgreSQL owns catalog rows. A Redis payload codec stores oversized serialized Temporal values for 15 days; small values remain in history. There are no application ingestion snapshots, commit receipts, or database resume commands. Item retries converge through current catalog identity checks and serialized transactions. They do not promise exact first-attempt mutation counts.
 
-Temporal owns execution progress. PostgreSQL retains only expiring discovery/catalog snapshots and transactional catalog receipts. Fetched item metadata, HTML, ratings responses, and redirect hops stay in activity memory. The workflow and activity code can change freely while this branch remains undeployed; there are no compatibility layers for its previous protocol.
+This branch has never been deployed. Its earlier workflow protocols and draft migration have been replaced directly. Production infrastructure, deployment, AI processing, and search indexing remain outside this work.
 
-The migration preserves catalog identities, API response contracts, the seven active providers, and independent Archive deletion verification. AI normalization, embeddings, search indexing, production infrastructure, and deployment are outside this work.
+## Earlier research
 
-## Historical research
-
-The [capacity evidence](capacity-and-evidence.md) records the October 6 catalog measurements and assumptions. These are historical observations, not a production capacity guarantee. The original decision, migration, and implementation documents remain as research history; the architecture and operations documents describe the current code.
+[Capacity evidence](capacity-and-evidence.md) contains historical October 6 measurements. [The API proposal](api-proposal.md) records earlier alternatives; the plan and contracts supersede it where they differ. Older migration and implementation proposals are research history, not current setup instructions.

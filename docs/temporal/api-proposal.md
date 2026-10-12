@@ -273,7 +273,7 @@ This branch has never deployed, so the internal workflow/storage contracts need 
 
 ## Evidence and remaining planning work
 
-Observed behavior comes from [current contracts](../../RelistenApi/Services/Ingestion/IngestionContracts.cs), the [generic importer](../../RelistenApi/Services/Ingestion/IngestionImporter.cs), the [artist workflow](../../RelistenApi/Services/Ingestion/Workflows/ArtistRefreshWorkflow.cs), and the [catalog rebuild service](../../RelistenApi/Services/Data/CatalogRebuildService.cs). The provider behavior guide links the current domain methods. Proposed types and execution trees above describe the replacement; they are not observations about deployed code.
+This proposal examined the contracts, generic `IngestionImporter`, artist workflow, and catalog rebuild service at baseline `529deba`. The generic importer has since been removed. See the [implemented contract reference](provider-workflow-contracts.md) and [provider guide](provider-behavior.md) for current interfaces and domain methods. The alternatives above remain historical design evidence, not descriptions of deployed code.
 
 Fresh review against the prompt templates:
 

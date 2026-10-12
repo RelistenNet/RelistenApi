@@ -1,6 +1,6 @@
 # Implement typed provider workflows and receipt-free retries
 
-Status: ready for implementation after the review recorded below. Prepared October 12, 2026 against `codex/temporal-ingestion-plan`, commit `529deba`. This document plans the next refactor; it does not claim that the refactor is implemented.
+Status: implemented and verified locally. Prepared October 12, 2026 against baseline `529deba` on `codex/temporal-ingestion-plan`. The steps retain their original rationale; the progress record below describes implementation evidence and departures.
 
 ## Outcome and reading order
 
@@ -8,7 +8,7 @@ An engineer should be able to open a provider's workflow file and see what it fe
 
 Readers are Alec, Switz, and implementers or reviewers who know Relisten as an app but may not know its technical stack. Alec controls rollout. No infrastructure creation or production deployment is part of implementing this plan.
 
-Read this file for scope, rationale, steps, verification, and handoff. Read [the contract reference](provider-workflow-contracts.md) before implementing client methods, provider workflows, or persistence. It defines the behavior that the steps below must produce. The [prior proposal](api-proposal.md) explains the alternatives; this plan supersedes its snapshot, receipt, item-child, and Local-result recommendations. [Current provider behavior](provider-behavior.md) and [current architecture](architecture.md) describe the code at the baseline commit. Update those guides during the final implementation step.
+Read this file for scope, rationale, steps, verification, and handoff. Read [the contract reference](provider-workflow-contracts.md) before implementing client methods, provider workflows, or persistence. It defines the behavior that the steps below must produce. The [prior proposal](api-proposal.md) explains the alternatives; this plan supersedes its snapshot, receipt, item-child, and Local-result recommendations. [Current provider behavior](provider-behavior.md) and [current architecture](architecture.md) describe the implemented code and link its entrypoints.
 
 ## Enough system context to begin
 
@@ -72,7 +72,7 @@ The previous chat, [Explore Temporal ingestion architecture](codex://threads/01a
 | Installed Temporal .NET SDK is 1.20.0 and supports asynchronous `IPayloadCodec`, client converter configuration, and a separate replay converter. | A custom Redis codec fits the installed SDK. Configure every client and replay worker consistently. |
 | Current local Redis has no persistence volume. | Restart loss is a testable accepted failure mode. Do not promise that histories survive Redis loss. |
 
-Source map: [store](../../RelistenApi/Services/Ingestion/IngestionStore.cs), [database routing](../../RelistenApi/Services/DbService.cs), [data services](../../RelistenApi/Services/Data/), [provider adapters](../../RelistenApi/Services/Importers/), [batch workflow](../../RelistenApi/Services/Ingestion/Workflows/RefreshBatchWorkflow.cs), [worker registration](../../RelistenApi/Services/Ingestion/TemporalIngestionRegistration.cs), [local stack](../../local-dev/temporal/docker-compose.yml). The official [Temporal .NET data-handling guide](https://docs.temporal.io/develop/dotnet/best-practices/data-handling) explains the converter/codec boundary.
+Current source map: [transaction runner](../../RelistenApi/Services/Data/CatalogImportTransaction.cs), [database routing](../../RelistenApi/Services/DbService.cs), [data services](../../RelistenApi/Services/Data/), [provider adapters](../../RelistenApi/Services/Importers/), [batch workflow](../../RelistenApi/Services/Ingestion/Workflows/RefreshBatchWorkflow.cs), [worker registration](../../RelistenApi/Services/Ingestion/TemporalIngestionRegistration.cs), [local stack](../../local-dev/temporal/docker-compose.yml). The official [Temporal .NET data-handling guide](https://docs.temporal.io/develop/dotnet/best-practices/data-handling) explains the converter/codec boundary.
 
 ## Implementation steps
 
@@ -169,7 +169,7 @@ Use `dotnet csharpier format .` and review its diff if the check fails. Run the 
 | Rebuild and visibility | Query source/show/year/count data and the artist response through its public read service/controller before/after invalidation; fail years and cache steps separately; retries converge. Verify the Hangfire rebuild still invalidates cache. |
 | Operating model | Paused schedules stay paused; UTC cadence and skip overlap are preserved; API-only host starts no workers; worker starts no HTTP/Hangfire server; cancellation stops new work and leaves committed data recoverable. |
 
-Retain test totals, skipped-fixture reasons, relevant SDK/server versions, replay history fixtures or reproducible generation instructions, and a short synthetic failure/recovery transcript under `docs/temporal/evidence/` when implementation runs. Do not commit credentials, full real-provider payloads, or logs containing secret query parameters. Existing test counts in older documents are historical, not proof for this refactor.
+The [implementation verification record](evidence/provider-workflow-verification.md) retains test totals, skipped-fixture reasons, SDK/server versions, reproducible history generation, and the synthetic failure/recovery sequence. Do not commit credentials, full real-provider payloads, or logs containing secret query parameters. Existing test counts in older documents are historical, not proof for this refactor.
 
 ## Migration, rollout, and rollback
 
@@ -199,6 +199,20 @@ Archive's current reconciliation considers all artist sources, and catalog sourc
 - [x] Corrected Local result ownership and retained transaction responsibility without receipts.
 - [x] Specified the plan and linked contract reference.
 - [x] Fresh feasibility/decision/complexity/verification review completed and findings resolved.
-- [ ] Implementation steps 1–6 and runtime evidence. These are future work.
+- [x] Implementation steps 1–6, including replacement of undeployed storage/interfaces.
+- [x] Final integrated verification, evidence, and implementation review fixes: 245 passing tests, zero failures, 24 unrelated opt-in skips; build, both publishes, formatting, and documentation links passed.
 
 Review record, October 12: a fresh reviewer checked the documents against the code and installed SDK. Two findings were resolved. The transaction contract now retains the existing ambient scope and sequential Npgsql connection reuse instead of assuming data services share an explicitly held connection. The handle contract now distinguishes SDK result and cancellation identities and follows explicit continuation links for status. The reference also makes collection-indexing serialization and vendor JSON conversion explicit. No additional design blocker was established. Runtime transaction behavior, converter/codec tests, and target rollout assumptions remain implementation verification, not claims made by this planning task.
+
+
+### Implementation decisions, October 12
+
+The implementation retains the intended ownership and operation boundaries. Small file-layout changes keep shared contracts beside their callers under `Services/Ingestion/`, with provider-specific contracts in each provider directory. `ImportHandle<TResult>` makes each operation's result type explicit: artist operations return `ArtistImportResult`, batches return `ImportBatchResult`, and collection discovery returns its processed count.
+
+The transaction runner passes cancellation to lock acquisition and checks cancellation/deadline before committing. Existing catalog data services do not accept a cancellation token on every SQL call. Rather than expanding this refactor through every data service, the runner also sets a transaction-local statement timeout bounded by the remaining deadline and five-minute transaction limit. Cancellation may wait for a bounded SQL statement; it cannot commit after the cancellation check fails.
+
+The final reviewer identified two lifecycle defects, both corrected: batch cancellation now waits for all already-started children, and logical deadlines use Temporal's server admission time so queue delay consumes the seven-day budget. Tests exercise these boundaries. Archive collection discovery also rejects an exhausted or non-advancing cursor before its declared total; incomplete discovery can no longer be mistaken for a complete page sequence.
+
+Verification uses an actual 180-item provider continuation, a partially processed 122-item page, a 251-artist batch continuation, and a 3 MiB payload transported through Redis across worker restart and three runs. These prove the state and transport boundaries without claiming an 18,386-item throughput or resource measurement. Full-catalog performance remains a rollout measurement, not an implementation correctness claim.
+
+Final evidence: [provider workflow verification](evidence/provider-workflow-verification.md). Production rollout remains separate operator work. The existing OpenTelemetry package vulnerability warning remains unchanged.

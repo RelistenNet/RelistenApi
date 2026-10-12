@@ -1,83 +1,94 @@
 # Operate the ingestion worker
 
-`RelistenIngestionWorker` is a separate .NET executable. It runs workflows and provider activities, using the API project's catalog services and parsers. It starts no API server or Hangfire server. [Local setup](../../local-dev/temporal/README.md) runs the same worker registrations against isolated PostgreSQL, Redis and Temporal services.
+`RelistenIngestionWorker` runs workflows and activities using the API project's catalog services and parsers. It starts no API or Hangfire server. [Local setup](../../local-dev/temporal/README.md) provides isolated PostgreSQL, Redis, and Temporal services for development. This document describes the intended operating procedure; no production deployment is part of this change.
 
-## Configuration and entry points
+## Configuration
 
 | Setting | Use |
 |---|---|
-| `DATABASE_URL` | Application PostgreSQL URL; includes the catalog and migration 13's `ingestion_snapshots` and `ingestion_receipts` tables |
-| `REDIS_URL` | Existing catalog cache Redis |
-| `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing settings |
+| `DATABASE_URL` | Application catalog PostgreSQL URL |
+| `REDIS_URL` | Catalog cache and temporary oversized Temporal payload bytes |
+| `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing |
 | `Temporal__Address` | Temporal gRPC endpoint; default `localhost:7233` |
 | `Temporal__Namespace` | Namespace; default `default` |
-| `Ingestion__Engine=Temporal` | API admission and Hangfire handoff switch; unset/`Hangfire` keeps legacy admission |
-| `Ingestion__Concurrency__ingest-archive=10` | Example per-provider worker concurrency override; every provider defaults to 10 |
-| `Ingestion__Rate__ingest-archive` | Optional queue activities/second limit; no default rate cap |
+| `Ingestion__Engine=Temporal` | API admission and Hangfire handoff switch; unset or `Hangfire` retains legacy admission |
+| `Ingestion__Concurrency__ingest-archive=10` | Example provider activity concurrency override; each provider defaults to ten |
+| `Ingestion__Rate__ingest-archive` | Optional queue activities-per-second limit |
 
-The worker does not read `Ingestion__Engine` as a pause control. Stop its process or pause schedules/cancel workflows in Temporal. All pollers on a provider queue must use the same optional rate setting. An item activity may issue several sequential GETs. The optional rate is activities per second, not HTTP requests per second. There is no internal request fanout or custom limiter.
+`Ingestion__Engine` does not pause an already running worker. Pause schedules and stop admission in addition to canceling or draining work. Use one worker host initially. Provider concurrency is per worker; another host multiplies it. Queue rate settings must agree across pollers. They count activities, not individual HTTP requests.
 
-Publish with `dotnet publish RelistenIngestionWorker -c Release`, or build the worker image with `docker build -f RelistenIngestionWorker/Dockerfile .`. Run `dotnet RelistenIngestionWorker.dll` from the publish directory with the environment above. The API remains a separate process.
+Publish with `dotnet publish RelistenIngestionWorker -c Release`, or build with `docker build -f RelistenIngestionWorker/Dockerfile .`. Run `dotnet RelistenIngestionWorker.dll` from its publish directory. The API runs separately.
 
-The following commands use `dotnet run --project RelistenIngestionWorker --` locally. A deployed executable accepts the same arguments.
+## Operator commands
+
+Commands below run from the repository root. The published executable accepts the same flags.
 
 ```sh
-# Resolve an artist by UUID, numeric ID or slug, then start a full import.
+# Resolve an artist UUID, numeric ID, or slug and refresh all enabled providers.
 dotnet run --project RelistenIngestionWorker -- --import=grateful-dead
 
-# Archive-only exact item, or a legacy thin/year filter.
-dotnet run --project RelistenIngestionWorker -- --import=grateful-dead --provider=archive.org --item=UPSTREAM_IDENTIFIER
+# Refresh only Archive or import one of its recordings.
+dotnet run --project RelistenIngestionWorker -- --import=grateful-dead --provider=archive.org
+dotnet run --project RelistenIngestionWorker -- --import=grateful-dead --item=UPSTREAM_IDENTIFIER
+
+# Preserve the legacy provider-specific year filters.
 dotnet run --project RelistenIngestionWorker -- --import=grateful-dead --year=2026
 
-# Catalog-wide entry points: full, thin, rebuild, discover.
+# Recover derived catalog data or run the explicit Jerry maintenance operation.
+dotnet run --project RelistenIngestionWorker -- --rebuild-artist=grateful-dead
+dotnet run --project RelistenIngestionWorker -- --repair-jerry-venues=grateful-dead
+
+# Batch values: full, thin, rebuild, discover.
 dotnet run --project RelistenIngestionWorker -- --batch=full
 
-# Cancel a workflow. Start a fresh artist/item import when ready to retry.
+# Create missing schedules; preserve existing schedules, including paused ones.
+dotnet run --project RelistenIngestionWorker -- --register-schedules
+
+# Intentionally cancel the current execution using this artist workflow ID.
 dotnet run --project RelistenIngestionWorker -- --cancel=ingest/artist/ARTIST_UUID
 ```
 
-Temporal Archive item imports suppress artist-wide absence reconciliation; run a full import for verified cleanup of other items. The six non-Archive targeted importer methods retain their existing no-op behavior. `--year` also retains provider-specific legacy behavior; it is not a newly uniform year backfill API. Jerry venue backfill and Phish.in-only refresh remain available through the existing admin/import endpoints.
+`--item` implies Archive. Combining it with another provider or with `--year` is invalid. With an explicit provider, year applies only to Archive, Phish.in, or Phish.net. Archive and Phish.net use an exact year; Phish.in uses a lower bound. Without an explicit provider, `--year` preserves those filters and runs other enabled providers normally. Targeted and year-filtered Archive imports do not reconcile unrelated recordings.
 
-Full, targeted and rebuild artist workflows share `ingest/artist/{uuid}`. An overlapping start returns that running workflow. Read the actual `RequestId` from its Temporal input; a rejected overlapping start does not replace that request. Request IDs identify discovery/catalog snapshots and commit receipts across Temporal runs and Continue-As-New.
+Every artist operation shares `ingest/artist/{uuid}`. An overlapping start reports a conflict containing that ID and exits unsuccessfully; it does not return somebody else's operation as success. Invalid or unsupported commands also exit unsuccessfully. Admitted commands print their workflow ID. The programmatic `ImportHandle` is tied to its admitted execution chain; the CLI's ID-only cancel command intentionally targets the current execution.
 
-Workers automatically continue open workflows after a restart. Cancellation waits for the active activity to stop; heartbeats deliver cancellation during I/O, and item/catalog-preparation transactions check it before committing. Rebuild SQL owns its transactions and may finish before observing cancellation. Cancellation does not undo committed items. Start a fresh artist/item import after cancellation or a completed partial result. The next artist import rebuilds aggregates even if it finds no new changes.
-
-Temporal reset can retry earlier work within the original seven-day deadline. Use it only before a newer import for that artist; resetting an old selection after newer work could apply stale inputs. A fresh import is the normal recovery path. There is no application-side resume command or progress journal.
-
-## Switch from Hangfire
-
-1. Disable/delete the three ingestion recurring jobs in the Hangfire dashboard: Archive artist discovery, full artist refresh and thin refresh. Stop manual admission during the handoff. Let current imports finish, or stop the old ingestion process.
-2. Apply migration 13 through normal API startup or the worker's explicit `--migrate` command. Existing catalog installations use their recorded migration version; do not set the local baseline flag.
-3. Set `Ingestion__Engine=Temporal` on the API and restart it. This stops registration of ingestion recurring jobs and the `artist_import` Hangfire server. Existing queued ingestion methods also return without importing when called in this mode. The default Hangfire server and popularity/cache jobs remain.
-4. Start one ingestion worker. Run a manual import if useful, then run `--register-schedules`. It creates Archive discovery at 06:30 UTC, full refresh at 07:00 UTC and the existing nine daily thin slots. Existing schedules, including paused schedules, are left intact.
-
-Stopping registration does not delete recurring jobs already stored by Hangfire; step 1 prevents them from accumulating unconsumed work. No per-artist rollout machinery or distributed ownership service is required. Run only one ingestion engine against the catalog at a time.
-
-Rollback: pause Temporal schedules and manual admission, cancel/drain running workflows, and stop the worker before selecting Hangfire on the API. Verify the old `artist_import` queue before restarting it; discard obsolete queued imports if appropriate. Restarting the API in Hangfire mode restores its recurring registrations. Keep migration 13 and committed catalog changes. Temporal histories and unexpired receipts remain available for inspection. Do not reset old workflows while Hangfire owns ingestion.
-
-Synchronous debug and `deleteOldContent=true` routes return HTTP 409 while Temporal is selected. Use the same stop/switch procedure for these exceptional legacy operations. They retain their old behavior in Hangfire mode and are never automatically retried by Temporal. Normal authenticated import routes retain HTTP 201 and their existing response shape, with a Temporal workflow ID in place of a Hangfire ID. Playback/catalog API models are unchanged.
+HTTP routes retain authorization and successful response shapes. Artist admission conflicts return `409` with code `import_already_running`, `workflowId`, and a message. Invalid requests and unsupported operations return `400` with their error code and message. Synchronous debug and destructive `deleteOldContent=true` routes retain their `409` protection when Temporal is selected. Listener catalog and playback responses remain unchanged.
 
 ## Inspect and recover
 
-Temporal UI shows each artist, current activity, retry, cancellation, and batch result. `FailedItems > 0` means a partial result even when a workflow completed. Item identifiers appear in activity inputs and exhausted errors are logged. Discovery and prerequisite failures stop the workflow. Batch results count failed or overlapping artists.
+Workers resume open executions after a restart. A completed artist can have status `Partial`; inspect its failed-item count and provider failure details. Batch results distinguish completed, partial, failed, and conflicting artists. Prerequisite, discovery, expiration, cancellation, and rebuild failures are not successful partial results.
 
-Archive reconciliation returns its Present/Deleted/Unknown or no-MP3 eligibility decisions in the activity result and transactional receipt. Only Archive errcode 104 establishes upstream deletion; 404, an empty response, or a dark flag alone does not. Completeness checks and the existing five-candidate guard are separate from Temporal execution status.
+Each operation has a seven-day deadline shared across children and continuation runs. Do not reset or retry an old execution beyond that deadline. A fresh import is the normal recovery after item failures, cancellation, or expiry. A standalone artist rebuild repairs derived data without requiring upstream availability. Every completed artist import rebuilds, including when it selects no items.
 
-Use one worker host, ten activities per provider, and ten artist children per batch. Watch queue wait, activity failures, upstream 429/5xx responses, application/Temporal database sizes, and cleanup errors. Catalog size alone does not establish hardware capacity. HTTP requests time out after 60 seconds and have a 64 MiB response-buffer bound. An activity attempt has a five-minute execution timeout, five attempts, a ten-second heartbeat timeout, and six hours including queue/retry delays. Adjust timeouts based on observed operation duration.
+Cancellation reaches activities through heartbeats. HTTP accepts the cancellation token. Catalog transactions check it after acquiring the lock and before commit. Existing Dapper calls have bounded SQL timeouts; cancellation does not immediately interrupt every query. Rebuild SQL owns its transactions and may complete some work before observing cancellation. Wait for the worker's activities to stop before handing ingestion to another owner. Committed catalog changes remain committed.
 
-## Storage, backups and upgrades
+Archive verification results include fixed deletion evidence in Temporal history. Only errcode 104 proves upstream deletion. The completeness checks and five-candidate guard apply independently of workflow status. A guarded result must remain visible in logs even if an external alert fails.
 
-Migration 13 creates two application tables:
+Watch queue wait, activity failures, upstream 429/5xx responses, Temporal history growth, and Redis eviction/persistence. HTTP requests have a 60-second timeout and 64 MiB response limit. Activity attempts have a five-minute timeout, five attempts, a ten-second heartbeat timeout, and six hours including queue/retry delays. Positive `Retry-After` values influence retry timing. These bounds do not establish production capacity; use the [queue guide](upstream-throttling.md) for tuning.
 
-- `ingestion_snapshots`: stable discovery selections and reused prerequisite catalogs.
-- `ingestion_receipts`: catalog operation results committed atomically with their writes.
+## Switch from Hangfire
 
-Fetched item metadata, HTML, and redirect hops are not persisted. There are no application request/failure journals or finalization markers. See [the architecture](architecture.md) for each provider's retained data.
+1. Stop manual ingestion admission. Disable or remove the three Hangfire ingestion recurring jobs: Archive discovery, full refresh, and thin refresh. Let existing work finish, or stop its process and verify that writes have ended.
+2. Verify catalog migration history, Temporal namespace retention of at most seven days, and Redis persistence/eviction settings. This refactor adds no application ingestion tables. Existing catalog installations retain their normal migration history; do not use the disposable local baseline flag.
+3. Set `Ingestion__Engine=Temporal` on the API and restart it. This stops ingestion recurring registration and the `artist_import` Hangfire server. Already queued ingestion methods return without importing in this mode. Popularity/cache jobs and the default Hangfire server remain.
+4. Start one ingestion worker. Verify a manual import, then register schedules explicitly. Archive discovery runs at 06:30 UTC; full refresh at 07:00 UTC; thin refresh at 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 UTC. Overlap policy is Skip. Repeated registration preserves existing schedules, including paused ones.
 
-A run expires after seven days; this deadline survives history rollover. Activities reject expired work and require a fresh import. Snapshots and receipts expire one day later. The worker removes expired rows at startup and hourly, logging cleanup failures for the next attempt. Temporal namespace history retention is separate. Do not manually remove unexpired receipts or inputs from a run that can still execute.
+Stopping recurring registration does not remove jobs already stored in Hangfire. Drain both scheduled and manually admitted ingestion before switching. The artist lock serializes Temporal attempts; it does not make simultaneous Hangfire and Temporal ingestion safe.
 
-This branch has never been deployed. Migration 13 was replaced directly; there is no upgrade path from its earlier draft table. To reset a disposable local stack from that draft, use the reset instructions in [local setup](../../local-dev/temporal/README.md).
+Rollback: pause Temporal schedules and manual admission, cancel/drain work, and stop the worker. Verify no activity is still writing before selecting Hangfire on the API. Review the old `artist_import` queue and discard obsolete queued work where appropriate. Restarting the API in Hangfire mode restores its recurring registrations. Keep committed catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
-The local auto-setup image creates separate `temporal` and `temporal_visibility` databases. A hosted installation should use explicit schema setup/update jobs and separate database credentials. Protect the Temporal frontend/UI with the deployment's normal network/auth controls. Back up Temporal persistence and visibility plus application snapshots, receipts, and catalog data; an application-only restore cannot recover workflow histories. A restore must start with ingestion stopped, restore the matched data set, then verify namespace/workflow access and an open workflow before starting pollers.
+The branch is undeployed, so there is no compatibility procedure for its earlier draft workflows or migration 13. Reset an old disposable local stack as described in [local setup](../../local-dev/temporal/README.md). Future deployments must drain incompatible open workflow histories or adopt Temporal workflow versioning.
 
-Pin server and SDK versions. Follow Temporal's supported server upgrade order and run its PostgreSQL persistence/visibility schema updates for each upgrade. Drain open workflows before deploying incompatible workflow code, or use Temporal's workflow versioning APIs. Keep replay tests for histories that will remain open. This work supplies a worker image and local stack; it does not create production infrastructure, configure production backups or deploy anything.
+## Storage, backups, and recovery
+
+There are no application ingestion snapshot or receipt tables. Temporal stores workflow history in its own PostgreSQL persistence and visibility databases. The Redis codec stores complete serialized payloads larger than 256 KiB and no larger than 64 MiB. Content keys include the Temporal namespace and SHA-256 digest. Each successful encode or reuse refreshes a 15-day expiry. Decoding does not extend retention or delete bytes.
+
+Fifteen days covers the seven-day execution limit, at most seven days of closed-history retention, and one day of margin. If closed-history retention must exceed seven days, increase payload retention by the same amount before adopting that policy. Saved schedules contain small commands rather than expiring payload references. Replay fixtures that outlive the TTL need their referenced bytes retained in isolated test storage or regenerated histories.
+
+Redis loss or eviction can make referenced history unreadable. The codec reports missing, corrupt, oversized, or unsupported payloads; it never refetches upstream inputs to conceal the loss. There is no web codec endpoint, so Temporal UI shows references for offloaded values. Keep small command/result summaries and structured logs available for diagnosis.
+
+If required bytes cannot be recovered, stop new admission and pause affected schedules. Attempt cancellation and drain running activities. If decoding prevents cancellation from being processed, stop the worker and verify that activity writes have ended before terminating the unreadable execution. Start fresh only after the old execution and its activities can no longer write. A fresh artist import or standalone rebuild repairs derived data. Do not delete arbitrary Redis keys as a recovery step.
+
+A production backup design must account for application catalog data, Temporal persistence/visibility, and Redis bytes needed by retained histories. Existing Redis settings determine durability; this change adds no new guarantee. Restore with ingestion stopped, then verify matched histories and payload access before starting pollers. Application-only restoration cannot restore workflow history.
+
+The local auto-setup image creates separate Temporal databases. A hosted installation should use explicit schema setup/update jobs, separate credentials, and normal frontend/UI access controls. Pin Temporal server and SDK versions and follow the server's supported upgrade order. Production infrastructure, backups, and deployment remain separate work.
