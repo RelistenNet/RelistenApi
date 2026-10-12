@@ -1,5 +1,7 @@
 # Decision memo
 
+> Historical planning record. The implemented design is documented in [architecture.md](architecture.md) and [operations.md](operations.md); these supersede activity, persistence, and recovery proposals below.
+
 Status: provisional. Scope is existing ingestion on self-hosted Temporal and PostgreSQL. See [overview](README.md) and [evidence](capacity-and-evidence.md). The [implementation plan](implementation-plan.md) and [queue throttling](upstream-throttling.md) refine this initial memo: separate manual item entry point, one HTTP request per fetch activity, and an operator-controlled ingestion stop/start during cutover.
 
 ## Existing behavior to preserve

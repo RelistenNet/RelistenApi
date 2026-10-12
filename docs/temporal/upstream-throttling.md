@@ -11,24 +11,20 @@ Use Temporal's native controls. **Start with ten concurrent activities per provi
 | `ingest-phantasytour` | Band pages and show blobs | 10 |
 | `ingest-jerry` | Mirror index and HTML pages | 10 |
 | `ingest-local` | Root and directory metadata | 10 |
-| `ingest-db` | Staged item application, manifest reads and rebuilds | 10 |
+| `ingest-db` | Artist preparation, batch selection and rebuilds | 10 |
 | `ingest-workflows` | Orchestration | 10 active artist children per normal batch |
 
 **PanicStream is disabled and excluded.** Do not register its activities, create a queue or migrate/test its importer.
 
-Ten concurrent jobs is not ten requests per second. Remove the invented 1 request/s limits: leave `MaxTaskQueueActivitiesPerSecond` unset initially unless an existing provider-specific limit is configured. Keep it available as a simple setting to tune from normal operation. `MaxConcurrentActivities=10` is per worker registration, not a global ten across all queues. Ten artist children doing one item at a time bound the normal batch; manual/discovery work can add some concurrency, as separate Hangfire jobs do today. No exact global cap is required here.
+Ten concurrent jobs can issue more than ten requests per second. Leave `MaxTaskQueueActivitiesPerSecond` unset initially unless an existing provider-specific limit is configured. Keep it available as a simple setting to tune from normal operation. `MaxConcurrentActivities=10` is per worker registration, not a global ten across all queues. Ten artist children doing one item at a time bound the normal batch; manual/discovery work can add some concurrency, as separate Hangfire jobs do today. No exact global cap is required here.
 
 The queue's optional rate setting is server-controlled; pollers on the same queue must use the same value. Concurrency is worker-local. Use one host and operator-controlled stop/start deployments instead of designing around autoscaling or overlapping replicas. See [.NET worker options](https://dotnet.temporal.io/api/Temporalio.Worker.TemporalWorkerOptions.html).
 
 ## Activity boundaries
 
-An upstream fetch activity makes one request per attempt. Archive fetches metadata and applies its staged result in separate activities. A list-page activity stages its results and returns a reference. Multi-request operations use a shared workflow helper:
+Activities follow domain operations: prepare provider catalogs, discover items, import an item, and reconcile. An item activity can issue several sequential GETs and follow redirects before its catalog transaction. Phish.net ratings/reviews and Local directory groups use this composition. There is no one-request assertion or numbered fetch-part protocol.
 
-- Phish.in: fetch each prerequisite and show-list page, then apply staged shows.
-- Phish.net: fetch the ratings date URL, follow each staged redirect in another activity, optionally fetch reviews, then apply enrichment.
-- Local: fetch each directory's metadata, then apply the merged date group.
-
-This makes a configured queue rate useful without inventing a separate HTTP limiter. Remove nested HTTP/Polly retries from extracted paths; Temporal retries the activity. Use normal remote activities, disable eager execution for the HTTP registrations, and avoid automatic redirects that hide extra requests.
+The optional queue rate limits activities per second. It does not count HTTP requests. Native concurrency remains useful because item activities do not fan requests out internally. Disable eager activity execution so provider work uses the configured queue. Temporal retries the item operation; its safe GETs may repeat.
 
 Keep ordinary bounded retries and HTTP timeouts. Honor `Retry-After` through the activity retry delay; reduce the queue rate if a provider returns sustained 429s. No shared cooldown service or fairness scheduler. Backfills use the same queues; Alec can pause them when needed.
 

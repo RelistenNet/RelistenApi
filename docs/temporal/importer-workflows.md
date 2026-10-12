@@ -1,5 +1,7 @@
 # Workflow and importer contracts
 
+> Historical planning record. The implemented design is documented in [architecture.md](architecture.md) and [operations.md](operations.md); these supersede activity, persistence, and recovery proposals below.
+
 Proposed implementation, 6 October 2026. Read the [implementation plan](implementation-plan.md) first. Observations refer to API commit `8414bad39d854a5f06bac5c3975d1e144fa9efa2`; proposed names below do not exist yet.
 
 ## Compose activities through two entry points

@@ -1,5 +1,7 @@
 # Implement Temporal ingestion
 
+> Historical planning record. The implemented design is documented in [architecture.md](architecture.md) and [operations.md](operations.md); these supersede activity, persistence, and recovery proposals below.
+
 **Accepted implementation plan — 6 October 2026.** For Alec and Switz. Self-host Temporal on PostgreSQL, develop it alongside Hangfire, test locally, and switch ingestion over in an operator-controlled rollout. Keep this proportional to a small service whose deployments Alec controls.
 
 Use shared activities composed by `ArtistRefreshWorkflow` and `ReimportItemWorkflow`, with artist children for batches. Start with **ten concurrent activities per provider worker and ten artists per batch**. Do not invent low request-per-second caps. PanicStream is disabled and excluded from this migration. AI/search and HA are out of scope.

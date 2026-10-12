@@ -14,11 +14,11 @@ Ingestion__LocalSchemaBaseline=12 dotnet run --project RelistenIngestionWorker -
 RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test RelistenApiTests
 ```
 
-The explicit baseline applies only to the supplied empty schema fixture. Historical migrations include markers for manual schema work and cannot recreate the current catalog from scratch. `init/01-catalog.sql` is a schema-only export from the read-only replica; it contains no production rows or credentials. Existing installations must retain their migration history. Migration 13 adds `ingestion_records`.
+The explicit baseline applies only to the supplied empty schema fixture. Historical migrations include markers for manual schema work and cannot recreate the current catalog from scratch. `init/01-catalog.sql` is a schema-only export from the read-only replica; it contains no production rows or credentials. Existing installations must retain their migration history. Migration 13 adds expiring `ingestion_snapshots` and `ingestion_receipts`. This undeployed migration replaces the earlier draft schema; reset this disposable stack before setup if it still has `ingestion_records`.
 
 Temporal UI: <http://127.0.0.1:18233>. Application PostgreSQL: port 15433. Redis: 16380. Temporal gRPC: 17233. The local stack uses server/auto-setup 1.29.1, UI 2.34.0 and PostgreSQL 17.10. These are tested local pins, not a recommendation to copy auto-setup or local credentials into production.
 
-Tests create fixture artists in this dedicated database. Workflow unit tests start an additional ephemeral Temporal development server through the .NET SDK. The first run may download that binary. Without `RELISTEN_LOCAL_INGESTION_TESTS=1`, the PostgreSQL/Compose integration fixture is skipped.
+Tests create fixture artists in this dedicated database and use a fresh Temporal namespace for each integration suite, so old local schedules cannot poll the fixture workers. Workflow unit tests start an additional ephemeral Temporal development server through the .NET SDK. The first run may download that binary. Without `RELISTEN_LOCAL_INGESTION_TESTS=1`, the PostgreSQL/Compose integration fixture is skipped.
 
 For manual work with a deliberately configured upstream, start the host:
 

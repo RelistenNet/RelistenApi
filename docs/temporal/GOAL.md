@@ -23,7 +23,27 @@ Use the plan as guidance and adapt when implementation or verification reveals a
 
 Commit logical chunks, each with a title and body explaining what changed and why. Verify observable behavior through public interfaces and contract boundaries. Cover retries, cancellation, workflow rollover/replay, provider output, Archive deletion evidence, and Phantasy Tour date repair. Do not substitute string/configuration checks or tests that mirror the implementation.
 
-## Progress
+## Completion and verification
 
-- Formatting rebase is complete. The first implementation is the starting point, not the accepted end state.
-- Readability redesign is in progress. Current verification and remaining issues will be recorded as each chunk completes.
+The readability redesign is implemented on October 12, 2026. The branch is rebased on `codex/csharpier-format`; CSharpier and scoped explicit-brace rules cover the ingestion code. The separate worker, seven provider adapters, artist/item entrypoints, bounded batches, and cleanup service use the revised contracts. PanicStream remains excluded.
+
+The local `deslop` and `code-simplifier` passes removed the generic fetch protocol, fake catalog items, duplicated item-failure handling, and application resume journal. The [execution graph and code map](architecture.md) describe the final design. [Operations](operations.md) describes commands, recovery, handoff, and storage retention.
+
+Verification against the isolated local Temporal/PostgreSQL/Redis stack:
+
+- `RELISTEN_LOCAL_INGESTION_TESTS=1 dotnet test RelistenApiTests/RelistenApiTests.csproj --nologo`: **135 passed, 24 skipped, 0 failed**. The skipped tests belong to the separate opt-in tour lookup fixture.
+- All seven provider comparisons start from a cleared catalog while preserving the artist identity. They compare legacy and Temporal catalog output, including source, track, and show UUIDs.
+- Tests cover receipts after lost acknowledgement, rollback and overlap, cancellation before commit, retry refetches, expiry/cleanup, 18,386-item bounded discovery, targeted imports, Archive deletion verification, workflow rollover/replay, worker replacement, and ten-child batch concurrency.
+- Phantasy Tour tests verify existing local-date and tour-bound repairs without fetching known-show details, and suppress repair after incomplete discovery.
+- `dotnet publish RelistenIngestionWorker/RelistenIngestionWorker.csproj -c Release` passed. `dotnet csharpier check .` checked 317 files; `git diff --check` passed.
+
+The build still reports the existing NU1903 advisory for `OpenTelemetry.Resources.Host` 1.15.1-beta.1. Dependency remediation is outside this ingestion redesign.
+
+## Decisions made during implementation
+
+- A run has a seven-day deadline that survives ContinueAsNew. Discovery/catalog snapshots and receipts expire one day later; cleanup runs at worker startup and hourly. Expired work requires a fresh import. This bounds storage without adding a configurable retention/recovery framework.
+- Stable listing selections remain outside Temporal history. Related item metadata, HTML, review responses, and redirect hops stay in memory and may be fetched again on retry.
+- The existing aggregate rebuild SQL owns its transactions. Rebuild therefore runs as an idempotent activity without an outer receipt transaction. It always runs at the end of an artist import, including when no item changed, to repair aggregates after an interrupted import.
+- The undeployed migration was replaced directly. There is no compatibility path for the previous draft schema, workflow protocol, or resume command. Public catalog/API behavior remains unchanged.
+
+No production infrastructure, deployment, production mutation, AI normalization, embeddings, or search indexing is part of this implementation. Future work should preserve the standards above and update this goal when the intended outcome changes.
