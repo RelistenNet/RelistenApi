@@ -7,7 +7,8 @@ namespace RelistenUserService.Authentication.Development;
 
 public sealed class DevelopmentDatabaseInitializer(
     IServiceProvider serviceProvider,
-    AccountsRuntimeConfiguration runtime)
+    AccountsRuntimeConfiguration runtime
+)
 {
     public async Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -18,18 +19,21 @@ public sealed class DevelopmentDatabaseInitializer(
             "relisten-mobile-ios-dev",
             "Relisten iOS development",
             "net.relisten.mobile:/oauth2redirect/ios",
-            cancellationToken);
+            cancellationToken
+        );
         await SeedClientAsync(
             scope.ServiceProvider,
             "relisten-mobile-android-dev",
             "Relisten Android development",
             "net.relisten.mobile:/oauth2redirect/android",
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     private async Task SeedScopesAsync(
         IServiceProvider services,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var manager = services.GetRequiredService<IOpenIddictScopeManager>();
         foreach (var name in RelistenScopes.Native)
@@ -53,25 +57,25 @@ public sealed class DevelopmentDatabaseInitializer(
         string clientId,
         string displayName,
         string redirectUri,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var descriptor = new OpenIddictApplicationDescriptor
         {
             ClientId = clientId,
             ClientType = ClientTypes.Public,
             ConsentType = ConsentTypes.Implicit,
-            DisplayName = displayName
+            DisplayName = displayName,
         };
         descriptor.RedirectUris.Add(new Uri(redirectUri));
-        descriptor.Permissions.UnionWith(
-        [
+        descriptor.Permissions.UnionWith([
             Permissions.Endpoints.Authorization,
             Permissions.Endpoints.Token,
             Permissions.GrantTypes.AuthorizationCode,
             Permissions.GrantTypes.RefreshToken,
             Permissions.ResponseTypes.Code,
             Permissions.Prefixes.Scope + Scopes.Profile,
-            .. RelistenScopes.Native.Select(scope => Permissions.Prefixes.Scope + scope)
+            .. RelistenScopes.Native.Select(scope => Permissions.Prefixes.Scope + scope),
         ]);
         descriptor.Requirements.Add(Requirements.Features.ProofKeyForCodeExchange);
 

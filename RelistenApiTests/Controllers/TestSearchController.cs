@@ -37,7 +37,8 @@ public class TestSearchController
             songs: false,
             sources: false,
             tours: false,
-            venues: false);
+            venues: false
+        );
 
         var results = ExtractResults(result);
         AssertEmptyResultsAreComplete(results);
@@ -46,17 +47,22 @@ public class TestSearchController
     [Test]
     public void Search_UsesArtistUuidQueryParameter()
     {
-        var parameters = typeof(SearchController).GetMethod(nameof(SearchController.Search))!.GetParameters();
+        var parameters = typeof(SearchController)
+            .GetMethod(nameof(SearchController.Search))!
+            .GetParameters();
 
         parameters.Select(parameter => parameter.Name).Should().Contain("artist_uuid");
         parameters.Select(parameter => parameter.Name).Should().NotContain("artist_id");
-        parameters.Single(parameter => parameter.Name == "artist_uuid").ParameterType.Should().Be(typeof(Guid?));
+        parameters
+            .Single(parameter => parameter.Name == "artist_uuid")
+            .ParameterType.Should()
+            .Be(typeof(Guid?));
     }
 
     private static SearchResults ExtractResults(IActionResult result)
     {
         result.Should().BeOfType<JsonResult>();
-        return ((JsonResult) result).Value.Should().BeOfType<SearchResults>().Subject;
+        return ((JsonResult)result).Value.Should().BeOfType<SearchResults>().Subject;
     }
 
     private static void AssertEmptyResultsAreComplete(SearchResults results)

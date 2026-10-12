@@ -28,12 +28,19 @@ public static class DevelopmentPersonaEndpoints
         }
 
         var personas = DevelopmentPersonaCatalog.All.Where(persona => persona.Provider == provider);
-        var buttons = string.Join("", personas.Select(persona => $"""
-            <button type="submit" name="persona" value="{WebUtility.HtmlEncode(persona.Id)}">
-              <strong>{WebUtility.HtmlEncode(persona.Label)}</strong>
-              <span>{WebUtility.HtmlEncode(persona.Profile.Subject)}</span>
-            </button>
-            """));
+        var buttons = string.Join(
+            "",
+            personas.Select(persona =>
+                $"""
+                    <button type="submit" name="persona" value="{WebUtility.HtmlEncode(
+                        persona.Id
+                    )}">
+                      <strong>{WebUtility.HtmlEncode(persona.Label)}</strong>
+                      <span>{WebUtility.HtmlEncode(persona.Profile.Subject)}</span>
+                    </button>
+                    """
+            )
+        );
         var html = $$"""
             <!doctype html>
             <html lang="en">
@@ -73,16 +80,20 @@ public static class DevelopmentPersonaEndpoints
         AccountsRuntimeConfiguration runtime,
         ExternalIdentityCompletionService identities,
         AuthSsoSignInService authSso,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var origins = context.Request.Headers.Origin;
         // The exact auth origin blocks cross-site Development-persona selection.
         // __Host-relisten_csrf cannot protect two forms that race before its first write.
-        if (origins.Count != 1
+        if (
+            origins.Count != 1
             || !string.Equals(
                 origins[0],
                 runtime.Issuer.GetLeftPart(UriPartial.Authority),
-                StringComparison.Ordinal))
+                StringComparison.Ordinal
+            )
+        )
         {
             return Results.StatusCode(StatusCodes.Status403Forbidden);
         }
@@ -113,11 +124,13 @@ public static class DevelopmentPersonaEndpoints
     private static bool TryGetProvider(string value, out string provider)
     {
         provider = "";
-        if (!value.StartsWith("/", StringComparison.Ordinal)
+        if (
+            !value.StartsWith("/", StringComparison.Ordinal)
             || value.StartsWith("//", StringComparison.Ordinal)
             || value.StartsWith("/\\", StringComparison.Ordinal)
             || !Uri.TryCreate($"http://localhost{value}", UriKind.Absolute, out var uri)
-            || uri.AbsolutePath != "/connect/authorize")
+            || uri.AbsolutePath != "/connect/authorize"
+        )
         {
             return false;
         }

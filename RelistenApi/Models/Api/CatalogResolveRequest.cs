@@ -33,13 +33,14 @@ namespace Relisten.Api.Models.Api
             "source_track",
             "song",
             "tour",
-            "venue"
+            "venue",
         };
 
         public static bool TryValidate(
             CatalogResolveRequest? request,
             out IReadOnlyList<CatalogReference> references,
-            out CatalogResolveValidationError? error)
+            out CatalogResolveValidationError? error
+        )
         {
             references = Array.Empty<CatalogReference>();
 
@@ -47,7 +48,8 @@ namespace Relisten.Api.Models.Api
             {
                 error = new CatalogResolveValidationError(
                     "request_required",
-                    "A JSON request body is required.");
+                    "A JSON request body is required."
+                );
                 return false;
             }
 
@@ -55,7 +57,8 @@ namespace Relisten.Api.Models.Api
             {
                 error = new CatalogResolveValidationError(
                     "unsupported_contract_version",
-                    $"contract_version must be {ContractVersion}.");
+                    $"contract_version must be {ContractVersion}."
+                );
                 return false;
             }
 
@@ -63,7 +66,8 @@ namespace Relisten.Api.Models.Api
             {
                 error = new CatalogResolveValidationError(
                     "references_required",
-                    "references must be a JSON array.");
+                    "references must be a JSON array."
+                );
                 return false;
             }
 
@@ -71,7 +75,8 @@ namespace Relisten.Api.Models.Api
             {
                 error = new CatalogResolveValidationError(
                     "references_required",
-                    "references must contain at least one catalog reference.");
+                    "references must contain at least one catalog reference."
+                );
                 return false;
             }
 
@@ -79,7 +84,8 @@ namespace Relisten.Api.Models.Api
             {
                 error = new CatalogResolveValidationError(
                     "too_many_references",
-                    $"references may contain at most {MaxReferenceCount} items.");
+                    $"references may contain at most {MaxReferenceCount} items."
+                );
                 return false;
             }
 
@@ -95,19 +101,28 @@ namespace Relisten.Api.Models.Api
                     return false;
                 }
 
-                if (candidate.catalog_type == null || !SupportedCatalogTypes.Contains(candidate.catalog_type))
+                if (
+                    candidate.catalog_type == null
+                    || !SupportedCatalogTypes.Contains(candidate.catalog_type)
+                )
                 {
-                    error = InvalidReference(index,
-                        "catalog_type must be one of artist, show, source, source_track, song, tour, or venue");
+                    error = InvalidReference(
+                        index,
+                        "catalog_type must be one of artist, show, source, source_track, song, tour, or venue"
+                    );
                     return false;
                 }
 
-                if (candidate.catalog_uuid == null ||
-                    !Guid.TryParseExact(candidate.catalog_uuid, "D", out var catalogUuid) ||
-                    catalogUuid == Guid.Empty)
+                if (
+                    candidate.catalog_uuid == null
+                    || !Guid.TryParseExact(candidate.catalog_uuid, "D", out var catalogUuid)
+                    || catalogUuid == Guid.Empty
+                )
                 {
-                    error = InvalidReference(index,
-                        "catalog_uuid must be a non-empty UUID in canonical hyphenated form");
+                    error = InvalidReference(
+                        index,
+                        "catalog_uuid must be a non-empty UUID in canonical hyphenated form"
+                    );
                     return false;
                 }
 
@@ -129,7 +144,8 @@ namespace Relisten.Api.Models.Api
         {
             return new CatalogResolveValidationError(
                 "invalid_catalog_reference",
-                $"references[{index}] {reason}.");
+                $"references[{index}] {reason}."
+            );
         }
     }
 }

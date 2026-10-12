@@ -2,7 +2,9 @@ namespace Relisten.Data
 {
     internal static class CatalogReferenceSourceTracksSql
     {
-        public const string Query = CatalogReferenceSql.Requested + @"
+        public const string Query =
+            CatalogReferenceSql.Requested
+            + @"
 SELECT
     track.*,
     source.uuid AS source_uuid,

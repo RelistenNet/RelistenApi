@@ -9,18 +9,17 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 namespace Relisten.Api.Models.Api
 {
     [AttributeUsage(AttributeTargets.Property)]
-    public class V3JsonOnlyAttribute : Attribute
-    {
-    }
+    public class V3JsonOnlyAttribute : Attribute { }
 
     [AttributeUsage(AttributeTargets.Property)]
-    public class V2JsonOnlyAttribute : Attribute
-    {
-    }
+    public class V2JsonOnlyAttribute : Attribute { }
 
     public class ApiV3ContractResolver : DefaultContractResolver
     {
-        protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization serialization)
+        protected override JsonProperty CreateProperty(
+            MemberInfo member,
+            MemberSerialization serialization
+        )
         {
             var property = base.CreateProperty(member, serialization);
 
@@ -44,13 +43,15 @@ namespace Relisten.Api.Models.Api
                 return;
             }
 
-            var skipProperties = context.Type.GetProperties()
+            var skipProperties = context
+                .Type.GetProperties()
                 .Where(t => t.GetCustomAttribute<V2JsonOnlyAttribute>() != null);
 
             foreach (var skipProperty in skipProperties)
             {
                 var propertyToSkip = schema.Properties.Keys.SingleOrDefault(x =>
-                    string.Equals(x, skipProperty.Name, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(x, skipProperty.Name, StringComparison.OrdinalIgnoreCase)
+                );
 
                 if (propertyToSkip != null)
                 {

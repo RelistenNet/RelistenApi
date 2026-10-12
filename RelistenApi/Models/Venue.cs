@@ -7,16 +7,27 @@ namespace Relisten.Api.Models
 {
     public class Venue : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [V2JsonOnly] [Required] public int artist_id { get; set; }
-        [Required] public Guid artist_uuid { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int artist_id { get; set; }
+
+        [Required]
+        public Guid artist_uuid { get; set; }
 
         public double? latitude { get; set; }
         public double? longitude { get; set; }
 
-        [Required] public string name { get; set; } = null!;
-        [Required] public string location { get; set; } = null!;
-        [Required] public string upstream_identifier { get; set; } = null!;
-        [Required] public string slug { get; set; } = null!;
+        [Required]
+        public string name { get; set; } = null!;
+
+        [Required]
+        public string location { get; set; } = null!;
+
+        [Required]
+        public string upstream_identifier { get; set; } = null!;
+
+        [Required]
+        public string slug { get; set; } = null!;
         public string? past_names { get; set; }
 
         [Required]
@@ -33,16 +44,19 @@ namespace Relisten.Api.Models
             }
         }
 
-        [Required] public Guid uuid { get; set; }
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class VenueWithShowCount : Venue
     {
-        [Required] public int shows_at_venue { get; set; }
+        [Required]
+        public int shows_at_venue { get; set; }
     }
 
     public class VenueWithShows : VenueWithShowCount
     {
-        [Required] public List<Show> shows { get; set; } = null!;
+        [Required]
+        public List<Show> shows { get; set; } = null!;
     }
 }

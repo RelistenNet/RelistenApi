@@ -1,4 +1,8 @@
 root = true
 
 [*.cs]
+end_of_line = lf
 dotnet_diagnostic.CA1707.severity = none
+
+[*.{config,csproj,props,slnx,targets,xaml,xml}]
+end_of_line = lf

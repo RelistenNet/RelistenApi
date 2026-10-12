@@ -27,7 +27,8 @@ public sealed class TestAuthenticationConfiguration
     {
         _certificateDirectory = Path.Combine(
             Path.GetTempPath(),
-            $"relisten-auth-certs-{Guid.NewGuid():N}");
+            $"relisten-auth-certs-{Guid.NewGuid():N}"
+        );
         Directory.CreateDirectory(_certificateDirectory);
     }
 
@@ -47,9 +48,10 @@ public sealed class TestAuthenticationConfiguration
 
         var options = provider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
 
-        options.TokenEndpointUris.Select(uri => uri.OriginalString).Should().Equal(
-            "/connect/token",
-            "/connect/token/");
+        options
+            .TokenEndpointUris.Select(uri => uri.OriginalString)
+            .Should()
+            .Equal("/connect/token", "/connect/token/");
     }
 
     [Test]
@@ -58,31 +60,34 @@ public sealed class TestAuthenticationConfiguration
         using var provider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
 
         var options = provider.GetRequiredService<IOptions<OpenIddictClientOptions>>().Value;
-        var registrations = options.Registrations
-            .Where(registration => registration.ClientId == AuthenticationConstants.WebClientId)
+        var registrations = options
+            .Registrations.Where(registration =>
+                registration.ClientId == AuthenticationConstants.WebClientId
+            )
             .OrderBy(registration => registration.RegistrationId)
             .ToArray();
 
         registrations.Should().HaveCount(2);
-        registrations.Select(registration => new
-        {
-            registration.RegistrationId,
-            RedirectUri = registration.RedirectUri!.AbsoluteUri
-        }).Should().BeEquivalentTo(
-        [
-            new
+        registrations
+            .Select(registration => new
             {
-                RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
-                RedirectUri = AuthenticationConstants.CanonicalWebCallback
-            },
-            new
-            {
-                RegistrationId = AuthenticationConstants.LocalWebRegistration,
-                RedirectUri = AuthenticationConstants.LocalWebCallback
-            }
-        ]);
-        registrations.Should().OnlyContain(registration =>
-            HasExactWebProtocolShape(registration));
+                registration.RegistrationId,
+                RedirectUri = registration.RedirectUri!.AbsoluteUri,
+            })
+            .Should()
+            .BeEquivalentTo([
+                new
+                {
+                    RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
+                    RedirectUri = AuthenticationConstants.CanonicalWebCallback,
+                },
+                new
+                {
+                    RegistrationId = AuthenticationConstants.LocalWebRegistration,
+                    RedirectUri = AuthenticationConstants.LocalWebCallback,
+                },
+            ]);
+        registrations.Should().OnlyContain(registration => HasExactWebProtocolShape(registration));
     }
 
     [Test]
@@ -111,45 +116,44 @@ public sealed class TestAuthenticationConfiguration
             TrustedProxyNetworks = ["127.0.0.1/32"],
             EnableExternalProviders = true,
             WebClientSecret = "test-web-client-secret",
-            Google = new()
-            {
-                Enabled = true,
-                ClientId = "google-client"
-            },
+            Google = new() { Enabled = true, ClientId = "google-client" },
             Apple = new()
             {
                 Enabled = true,
                 ClientId = "apple-client",
                 TeamId = "apple-team",
                 KeyId = "apple-key",
-                PrivateKeyPath = "/run/secrets/apple.p8"
-            }
+                PrivateKeyPath = "/run/secrets/apple.p8",
+            },
         };
 
         var action = () => AccountsRuntimeConfiguration.Create(options, environment);
 
-        action.Should().Throw<InvalidOperationException>()
+        action
+            .Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*Accounts:Google:ClientSecret*");
     }
 
     [Test]
     public void Local_Google_registers_without_loading_Apple_credentials()
     {
-        using var provider = BuildProvider(
-            CreateLocalGoogleOptions(),
-            Environments.Development);
+        using var provider = BuildProvider(CreateLocalGoogleOptions(), Environments.Development);
 
         var registrations = provider
             .GetRequiredService<IOptions<OpenIddictClientOptions>>()
-            .Value
-            .Registrations;
+            .Value.Registrations;
 
-        registrations.Should().ContainSingle(
-            registration => registration.RegistrationId
-                == AuthenticationConstants.GoogleProvider);
-        registrations.Should().NotContain(
-            registration => registration.RegistrationId
-                == AuthenticationConstants.AppleProvider);
+        registrations
+            .Should()
+            .ContainSingle(registration =>
+                registration.RegistrationId == AuthenticationConstants.GoogleProvider
+            );
+        registrations
+            .Should()
+            .NotContain(registration =>
+                registration.RegistrationId == AuthenticationConstants.AppleProvider
+            );
     }
 
     [Test]
@@ -163,27 +167,36 @@ public sealed class TestAuthenticationConfiguration
             AuthHost = "auth.relisten.localhost:5443",
             AccountsHost = "accounts.relisten.localhost:5443",
             EnableDevelopmentPersonas = true,
-            DevelopmentCertificateAuthorityPath =
-                CreateCertificateAuthority("unsupported-origin-ca.pem"),
+            DevelopmentCertificateAuthorityPath = CreateCertificateAuthority(
+                "unsupported-origin-ca.pem"
+            ),
             WebClientSecret = "test-web-client-secret",
-            WebOrigins = ["https://preview.relisten.localhost:5173"]
+            WebOrigins = ["https://preview.relisten.localhost:5173"],
         };
 
         var action = () => AccountsRuntimeConfiguration.Create(options, environment);
 
-        action.Should().Throw<InvalidOperationException>()
+        action
+            .Should()
+            .Throw<InvalidOperationException>()
             .WithMessage("*unsupported exact HTTPS origin*");
     }
 
     [Test]
     public void ReusesDevelopmentCertificatesAcrossServiceProviders()
     {
-        using var firstProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+        using var firstProvider = BuildProvider(
+            CreateDevelopmentOptions(),
+            Environments.Development
+        );
         var first = firstProvider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
         var firstSigningThumbprint = first.SigningCredentials.Single().Key.KeyId;
         var firstEncryptionThumbprint = first.EncryptionCredentials.Single().Key.KeyId;
 
-        using var secondProvider = BuildProvider(CreateDevelopmentOptions(), Environments.Development);
+        using var secondProvider = BuildProvider(
+            CreateDevelopmentOptions(),
+            Environments.Development
+        );
         var second = secondProvider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
 
         second.SigningCredentials.Single().Key.KeyId.Should().Be(firstSigningThumbprint);
@@ -214,44 +227,52 @@ public sealed class TestAuthenticationConfiguration
             DataProtectionCertificatePath = current,
             DataProtectionCertificatePassword = CertificatePassword,
             PreviousDataProtectionCertificatePath = previous,
-            PreviousDataProtectionCertificatePassword = CertificatePassword
+            PreviousDataProtectionCertificatePassword = CertificatePassword,
         };
         using var provider = BuildProvider(options, Environments.Production);
 
         var server = provider.GetRequiredService<IOptions<OpenIddictServerOptions>>().Value;
         using var previousCertificate = X509CertificateLoader.LoadPkcs12FromFile(
             previous,
-            CertificatePassword);
+            CertificatePassword
+        );
         using var currentCertificate = X509CertificateLoader.LoadPkcs12FromFile(
             current,
-            CertificatePassword);
+            CertificatePassword
+        );
         var expectedKeyIds = new[]
         {
             previousCertificate.Thumbprint,
-            currentCertificate.Thumbprint
+            currentCertificate.Thumbprint,
         };
 
-        server.SigningCredentials.Select(credential => credential.Key.KeyId)
-            .Should().BeEquivalentTo(expectedKeyIds);
-        server.EncryptionCredentials.Select(credential => credential.Key.KeyId)
-            .Should().BeEquivalentTo(expectedKeyIds);
+        server
+            .SigningCredentials.Select(credential => credential.Key.KeyId)
+            .Should()
+            .BeEquivalentTo(expectedKeyIds);
+        server
+            .EncryptionCredentials.Select(credential => credential.Key.KeyId)
+            .Should()
+            .BeEquivalentTo(expectedKeyIds);
     }
 
     private ServiceProvider BuildProvider(AccountsOptions options, string environmentName)
     {
         var environment = new TestHostEnvironment(environmentName)
         {
-            ContentRootPath = _certificateDirectory
+            ContentRootPath = _certificateDirectory,
         };
         var runtime = AccountsRuntimeConfiguration.Create(options, environment);
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Accounts"] =
-                    "Host=localhost;Database=relisten;Username=relisten;Password=test",
-                ["ConnectionStrings:AccountsLock"] =
-                    "Host=localhost;Database=relisten;Username=relisten;Password=test"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Accounts"] =
+                        "Host=localhost;Database=relisten;Username=relisten;Password=test",
+                    ["ConnectionStrings:AccountsLock"] =
+                        "Host=localhost;Database=relisten;Username=relisten;Password=test",
+                }
+            )
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
@@ -263,15 +284,18 @@ public sealed class TestAuthenticationConfiguration
         registration.ClientType
             == OpenIddict.Abstractions.OpenIddictConstants.ClientTypes.Confidential
         && registration.CodeChallengeMethods.SetEquals(
-            new[] { OpenIddict.Abstractions.OpenIddictConstants.CodeChallengeMethods.Sha256 })
+            new[] { OpenIddict.Abstractions.OpenIddictConstants.CodeChallengeMethods.Sha256 }
+        )
         && registration.ResponseModes.SetEquals(
-            new[] { OpenIddict.Abstractions.OpenIddictConstants.ResponseModes.Query })
+            new[] { OpenIddict.Abstractions.OpenIddictConstants.ResponseModes.Query }
+        )
         && registration.Scopes.SetEquals(
             new[]
             {
                 OpenIddict.Abstractions.OpenIddictConstants.Scopes.OpenId,
-                OpenIddict.Abstractions.OpenIddictConstants.Scopes.Profile
-            });
+                OpenIddict.Abstractions.OpenIddictConstants.Scopes.Profile,
+            }
+        );
 
     private string CreateCertificate(string fileName, DateTimeOffset notAfter)
     {
@@ -280,17 +304,20 @@ public sealed class TestAuthenticationConfiguration
             "CN=Relisten test",
             rsa,
             HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1);
-        request.CertificateExtensions.Add(new X509KeyUsageExtension(
-            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
-            critical: true));
+            RSASignaturePadding.Pkcs1
+        );
+        request.CertificateExtensions.Add(
+            new X509KeyUsageExtension(
+                X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment,
+                critical: true
+            )
+        );
         using var certificate = request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddDays(-1),
-            notAfter);
+            notAfter
+        );
         var path = Path.Combine(_certificateDirectory, fileName);
-        File.WriteAllBytes(
-            path,
-            certificate.Export(X509ContentType.Pfx, CertificatePassword));
+        File.WriteAllBytes(path, certificate.Export(X509ContentType.Pfx, CertificatePassword));
         return path;
     }
 
@@ -301,58 +328,67 @@ public sealed class TestAuthenticationConfiguration
             "CN=Relisten test development CA",
             rsa,
             HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1);
-        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(
-            certificateAuthority: true,
-            hasPathLengthConstraint: false,
-            pathLengthConstraint: 0,
-            critical: true));
-        request.CertificateExtensions.Add(new X509KeyUsageExtension(
-            X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
-            critical: true));
+            RSASignaturePadding.Pkcs1
+        );
+        request.CertificateExtensions.Add(
+            new X509BasicConstraintsExtension(
+                certificateAuthority: true,
+                hasPathLengthConstraint: false,
+                pathLengthConstraint: 0,
+                critical: true
+            )
+        );
+        request.CertificateExtensions.Add(
+            new X509KeyUsageExtension(
+                X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign,
+                critical: true
+            )
+        );
         using var certificate = request.CreateSelfSigned(
             DateTimeOffset.UtcNow.AddDays(-1),
-            DateTimeOffset.UtcNow.AddYears(1));
+            DateTimeOffset.UtcNow.AddYears(1)
+        );
         var path = Path.Combine(_certificateDirectory, fileName);
         File.WriteAllText(path, certificate.ExportCertificatePem());
         return path;
     }
 
-    private AccountsOptions CreateDevelopmentOptions() => new()
-    {
-        Issuer = "https://auth.relisten.localhost:5443",
-        Audience = "https://accounts.relisten.test",
-        AuthHost = "auth.relisten.localhost:5443",
-        AccountsHost = "accounts.relisten.localhost:5443",
-        WebOrigins = ["https://web.relisten.localhost:5173"],
-        EnableDevelopmentPersonas = true,
-        DevelopmentCertificateAuthorityPath =
-            CreateCertificateAuthority($"development-ca-{Guid.NewGuid():N}.pem"),
-        WebClientSecret = "test-web-client-secret"
-    };
+    private AccountsOptions CreateDevelopmentOptions() =>
+        new()
+        {
+            Issuer = "https://auth.relisten.localhost:5443",
+            Audience = "https://accounts.relisten.test",
+            AuthHost = "auth.relisten.localhost:5443",
+            AccountsHost = "accounts.relisten.localhost:5443",
+            WebOrigins = ["https://web.relisten.localhost:5173"],
+            EnableDevelopmentPersonas = true,
+            DevelopmentCertificateAuthorityPath = CreateCertificateAuthority(
+                $"development-ca-{Guid.NewGuid():N}.pem"
+            ),
+            WebClientSecret = "test-web-client-secret",
+        };
 
-    private AccountsOptions CreateLocalGoogleOptions() => new()
-    {
-        Issuer = "https://localhost:5443",
-        Audience = "https://accounts.relisten.test",
-        AuthHost = "localhost:5443",
-        AccountsHost = "accounts.relisten.localhost:5443",
-        WebOrigins = ["https://web.relisten.localhost:5173"],
-        EnableExternalProviders = true,
-        DevelopmentCertificateAuthorityPath =
-            CreateCertificateAuthority($"google-development-ca-{Guid.NewGuid():N}.pem"),
-        WebClientSecret = "test-web-client-secret",
-        Google = new()
+    private AccountsOptions CreateLocalGoogleOptions() =>
+        new()
         {
-            Enabled = true,
-            ClientId = "local-google-client",
-            ClientSecret = "local-google-secret"
-        },
-        Apple = new()
-        {
-            Enabled = false
-        }
-    };
+            Issuer = "https://localhost:5443",
+            Audience = "https://accounts.relisten.test",
+            AuthHost = "localhost:5443",
+            AccountsHost = "accounts.relisten.localhost:5443",
+            WebOrigins = ["https://web.relisten.localhost:5173"],
+            EnableExternalProviders = true,
+            DevelopmentCertificateAuthorityPath = CreateCertificateAuthority(
+                $"google-development-ca-{Guid.NewGuid():N}.pem"
+            ),
+            WebClientSecret = "test-web-client-secret",
+            Google = new()
+            {
+                Enabled = true,
+                ClientId = "local-google-client",
+                ClientSecret = "local-google-secret",
+            },
+            Apple = new() { Enabled = false },
+        };
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment
     {

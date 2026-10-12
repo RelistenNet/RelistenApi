@@ -31,7 +31,8 @@ public sealed class TestReviewedAccountAccessAuthorization
         _runtime = new AccountsRuntimeConfiguration(
             new AccountsOptions { Audience = "https://accounts.relisten.test" },
             new Uri("https://auth.relisten.test"),
-            TrustedProxyNetworks: []);
+            TrustedProxyNetworks: []
+        );
     }
 
     [OneTimeTearDown]
@@ -51,7 +52,8 @@ public sealed class TestReviewedAccountAccessAuthorization
         var permittedAccount = new CurrentAccountContext();
         var permitted = AuthorizationContext(
             requirement,
-            NativePrincipal(user, session, [RelistenScopes.UserRead]));
+            NativePrincipal(user, session, [RelistenScopes.UserRead])
+        );
         await Handler(dbContext, permittedAccount).HandleAsync(permitted);
 
         permitted.HasSucceeded.Should().BeTrue();
@@ -59,9 +61,7 @@ public sealed class TestReviewedAccountAccessAuthorization
         permittedAccount.NativeSessionId.Should().Be(session.Id);
 
         var missingScopeAccount = new CurrentAccountContext();
-        var missingScope = AuthorizationContext(
-            requirement,
-            NativePrincipal(user, session, []));
+        var missingScope = AuthorizationContext(requirement, NativePrincipal(user, session, []));
         await Handler(dbContext, missingScopeAccount).HandleAsync(missingScope);
 
         missingScope.HasSucceeded.Should().BeFalse();
@@ -73,7 +73,8 @@ public sealed class TestReviewedAccountAccessAuthorization
         var revokedSessionAccount = new CurrentAccountContext();
         var revokedSession = AuthorizationContext(
             requirement,
-            NativePrincipal(user, session, [RelistenScopes.UserRead]));
+            NativePrincipal(user, session, [RelistenScopes.UserRead])
+        );
         await Handler(dbContext, revokedSessionAccount).HandleAsync(revokedSession);
 
         revokedSession.HasSucceeded.Should().BeFalse();
@@ -93,7 +94,8 @@ public sealed class TestReviewedAccountAccessAuthorization
             user,
             Guid.CreateVersion7(),
             AuthenticationConstants.LocalWebOrigin,
-            IdentitySessionCapabilities.AccountProfileRead);
+            IdentitySessionCapabilities.AccountProfileRead
+        );
         var permitted = AuthorizationContext(requirement, principal);
         await Handler(dbContext, permittedAccount).HandleAsync(permitted);
 
@@ -105,7 +107,8 @@ public sealed class TestReviewedAccountAccessAuthorization
             user,
             Guid.CreateVersion7(),
             AuthenticationConstants.LocalWebOrigin,
-            IdentitySessionCapabilities.LibraryRead);
+            IdentitySessionCapabilities.LibraryRead
+        );
         var missingCapability = AuthorizationContext(requirement, principal);
         await Handler(dbContext, missingCapabilityAccount).HandleAsync(missingCapability);
 
@@ -119,10 +122,7 @@ public sealed class TestReviewedAccountAccessAuthorization
         var (user, session) = await CreateNativeSessionAsync(dbContext);
         var requirement = LibraryRequirement();
 
-        var nativeReaderPrincipal = NativePrincipal(
-            user,
-            session,
-            [RelistenScopes.LibraryRead]);
+        var nativeReaderPrincipal = NativePrincipal(user, session, [RelistenScopes.LibraryRead]);
         var nativeRead = AuthorizationContext(requirement, nativeReaderPrincipal);
         await Handler(dbContext, new CurrentAccountContext()).HandleAsync(nativeRead);
         nativeRead.HasSucceeded.Should().BeTrue();
@@ -130,22 +130,24 @@ public sealed class TestReviewedAccountAccessAuthorization
         var nativeReadOnlyMutation = AuthorizationContext(
             requirement,
             nativeReaderPrincipal,
-            HttpMethods.Post);
-        await Handler(dbContext, new CurrentAccountContext())
-            .HandleAsync(nativeReadOnlyMutation);
+            HttpMethods.Post
+        );
+        await Handler(dbContext, new CurrentAccountContext()).HandleAsync(nativeReadOnlyMutation);
         nativeReadOnlyMutation.HasSucceeded.Should().BeFalse();
 
         var nativeWriter = AuthorizationContext(
             requirement,
             NativePrincipal(user, session, [RelistenScopes.LibraryWrite]),
-            HttpMethods.Post);
+            HttpMethods.Post
+        );
         await Handler(dbContext, new CurrentAccountContext()).HandleAsync(nativeWriter);
         nativeWriter.HasSucceeded.Should().BeTrue();
 
         var webReadOnlyAccount = WebAccount(user, IdentitySessionCapabilities.LibraryRead);
         var webRead = AuthorizationContext(
             requirement,
-            new ClaimsPrincipal(new ClaimsIdentity("web")));
+            new ClaimsPrincipal(new ClaimsIdentity("web"))
+        );
         await Handler(dbContext, webReadOnlyAccount).HandleAsync(webRead);
         webRead.HasSucceeded.Should().BeTrue();
 
@@ -153,31 +155,31 @@ public sealed class TestReviewedAccountAccessAuthorization
         var webReadOnly = AuthorizationContext(
             requirement,
             new ClaimsPrincipal(new ClaimsIdentity("web")),
-            HttpMethods.Post);
+            HttpMethods.Post
+        );
         await Handler(dbContext, webReadOnlyAccount).HandleAsync(webReadOnly);
         webReadOnly.HasSucceeded.Should().BeFalse();
 
-        var webWriterAccount = WebAccount(
-            user,
-            IdentitySessionCapabilities.FavoriteMutation);
+        var webWriterAccount = WebAccount(user, IdentitySessionCapabilities.FavoriteMutation);
         var webWriter = AuthorizationContext(
             requirement,
             new ClaimsPrincipal(new ClaimsIdentity("web")),
-            HttpMethods.Post);
+            HttpMethods.Post
+        );
         await Handler(dbContext, webWriterAccount).HandleAsync(webWriter);
         webWriter.HasSucceeded.Should().BeTrue();
     }
 
     private async Task<(User User, NativeSession Session)> CreateNativeSessionAsync(
-        AccountsDbContext dbContext)
+        AccountsDbContext dbContext
+    )
     {
         var now = DateTimeOffset.UtcNow;
         var user = await dbContext.Users.SingleAsync(item => item.Id == _userId);
         var authorizationId = Guid.CreateVersion7(now);
-        dbContext.Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>().Add(new()
-        {
-            Id = authorizationId
-        });
+        dbContext
+            .Set<OpenIddictEntityFrameworkCoreAuthorization<Guid>>()
+            .Add(new() { Id = authorizationId });
         var session = new NativeSession
         {
             Id = Guid.CreateVersion7(now),
@@ -189,7 +191,7 @@ public sealed class TestReviewedAccountAccessAuthorization
             LastUsedAt = now,
             AbsoluteExpiresAt = now + TimeSpan.FromDays(1),
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
         };
         dbContext.NativeSessions.Add(session);
         await dbContext.SaveChangesAsync();
@@ -198,15 +200,18 @@ public sealed class TestReviewedAccountAccessAuthorization
 
     private ReviewedAccountAccessAuthorizationHandler Handler(
         AccountsDbContext dbContext,
-        CurrentAccountContext currentAccount) =>
+        CurrentAccountContext currentAccount
+    ) =>
         new(
             new NativeSessionAuthenticator(dbContext, _runtime, TimeProvider.System),
-            currentAccount);
+            currentAccount
+        );
 
     private ClaimsPrincipal NativePrincipal(
         User user,
         NativeSession session,
-        IEnumerable<string> scopes)
+        IEnumerable<string> scopes
+    )
     {
         var principal = new NativePrincipalFactory(_runtime).Create(user, session, scopes);
         principal.SetAudiences(_runtime.Options.Audience);
@@ -214,36 +219,45 @@ public sealed class TestReviewedAccountAccessAuthorization
     }
 
     private static ReviewedAccountAccessRequirement Requirement() =>
-        new(new ReviewedAccountAccessRule(
-            RelistenScopes.UserRead,
-            IdentitySessionCapabilities.AccountProfileRead));
+        new(
+            new ReviewedAccountAccessRule(
+                RelistenScopes.UserRead,
+                IdentitySessionCapabilities.AccountProfileRead
+            )
+        );
 
     private static ReviewedAccountAccessRequirement LibraryRequirement() =>
         new(
             new ReviewedAccountAccessRule(
                 RelistenScopes.LibraryRead,
-                IdentitySessionCapabilities.LibraryRead),
+                IdentitySessionCapabilities.LibraryRead
+            ),
             new ReviewedAccountAccessRule(
                 RelistenScopes.LibraryWrite,
-                IdentitySessionCapabilities.FavoriteMutation));
+                IdentitySessionCapabilities.FavoriteMutation
+            )
+        );
 
     private static CurrentAccountContext WebAccount(
         User user,
-        IdentitySessionCapabilities capabilities)
+        IdentitySessionCapabilities capabilities
+    )
     {
         var account = new CurrentAccountContext();
         account.SetWeb(
             user,
             Guid.CreateVersion7(),
             AuthenticationConstants.LocalWebOrigin,
-            capabilities);
+            capabilities
+        );
         return account;
     }
 
     private static AuthorizationHandlerContext AuthorizationContext(
         ReviewedAccountAccessRequirement requirement,
         ClaimsPrincipal principal,
-        string method = "GET")
+        string method = "GET"
+    )
     {
         var context = new DefaultHttpContext();
         context.Request.Method = method;

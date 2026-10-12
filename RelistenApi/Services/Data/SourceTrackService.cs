@@ -9,43 +9,57 @@ namespace Relisten.Data
 {
     public class SourceTrackService : RelistenDataServiceBase
     {
-        public SourceTrackService(DbService db) : base(db) { }
+        public SourceTrackService(DbService db)
+            : base(db) { }
 
         public async Task<SourceTrack?> ForId(int id)
         {
-            return (await ForIds(new[] {id})).FirstOrDefault();
+            return (await ForIds(new[] { id })).FirstOrDefault();
         }
 
         public Task<IEnumerable<SourceTrack>> ForIds(IList<int> ids)
         {
-            return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
+            return db.WithConnection(con =>
+                con.QueryAsync<SourceTrack>(
+                    @"
                 SELECT
                     t.*
                 FROM
                     source_tracks t
                 WHERE
                     t.id = ANY(@trackIds)
-            ", new {trackIds = ids}));
+            ",
+                    new { trackIds = ids }
+                )
+            );
         }
 
         public async Task<SourceTrack?> ForUUID(Guid uuid)
         {
-            return (await ForUUIDs(new[] {uuid})).FirstOrDefault();
+            return (await ForUUIDs(new[] { uuid })).FirstOrDefault();
         }
 
         public Task<IEnumerable<SourceTrack>> ForUUIDs(IList<Guid> uuids)
         {
-            return db.WithConnection(con => con.QueryAsync<SourceTrack>(@"
+            return db.WithConnection(con =>
+                con.QueryAsync<SourceTrack>(
+                    @"
                 SELECT
                     t.*
                 FROM
                     source_tracks t
                 WHERE
                     t.uuid = ANY(@trackUUIDs)
-            ", new {trackUUIDs = uuids}));
+            ",
+                    new { trackUUIDs = uuids }
+                )
+            );
         }
 
-        public async Task<IEnumerable<SourceTrack>> InsertAll(Source source, IEnumerable<SourceTrack> tracks)
+        public async Task<IEnumerable<SourceTrack>> InsertAll(
+            Source source,
+            IEnumerable<SourceTrack> tracks
+        )
         {
             var trackList = tracks.ToList();
             if (trackList.Count == 0)
@@ -56,7 +70,9 @@ namespace Relisten.Data
             return await db.WithWriteConnection(async con =>
             {
                 // Batch insert using UNNEST for all tracks at once
-                var inserted = (await con.QueryAsync<SourceTrack>(@"
+                var inserted = (
+                    await con.QueryAsync<SourceTrack>(
+                        @"
                     INSERT INTO
                         source_tracks
                         (
@@ -119,24 +135,28 @@ namespace Relisten.Data
                             updated_at = EXCLUDED.updated_at,
                             artist_id = EXCLUDED.artist_id
                     RETURNING *
-                ", new
-                {
-                    source_ids = trackList.Select(t => t.source_id).ToArray(),
-                    source_set_ids = trackList.Select(t => t.source_set_id).ToArray(),
-                    track_positions = trackList.Select(t => t.track_position).ToArray(),
-                    durations = trackList.Select(t => t.duration).ToArray(),
-                    titles = trackList.Select(t => t.title).ToArray(),
-                    slugs = trackList.Select(t => t.slug).ToArray(),
-                    mp3_urls = trackList.Select(t => t.mp3_url).ToArray(),
-                    mp3_md5s = trackList.Select(t => t.mp3_md5).ToArray(),
-                    flac_urls = trackList.Select(t => t.flac_url).ToArray(),
-                    flac_md5s = trackList.Select(t => t.flac_md5).ToArray(),
-                    updated_ats = trackList.Select(t => t.updated_at).ToArray(),
-                    artist_ids = trackList.Select(t => t.artist_id).ToArray()
-                })).ToList();
+                ",
+                        new
+                        {
+                            source_ids = trackList.Select(t => t.source_id).ToArray(),
+                            source_set_ids = trackList.Select(t => t.source_set_id).ToArray(),
+                            track_positions = trackList.Select(t => t.track_position).ToArray(),
+                            durations = trackList.Select(t => t.duration).ToArray(),
+                            titles = trackList.Select(t => t.title).ToArray(),
+                            slugs = trackList.Select(t => t.slug).ToArray(),
+                            mp3_urls = trackList.Select(t => t.mp3_url).ToArray(),
+                            mp3_md5s = trackList.Select(t => t.mp3_md5).ToArray(),
+                            flac_urls = trackList.Select(t => t.flac_url).ToArray(),
+                            flac_md5s = trackList.Select(t => t.flac_md5).ToArray(),
+                            updated_ats = trackList.Select(t => t.updated_at).ToArray(),
+                            artist_ids = trackList.Select(t => t.artist_id).ToArray(),
+                        }
+                    )
+                ).ToList();
 
                 // mark these as orphaned
-                await con.ExecuteAsync(@"
+                await con.ExecuteAsync(
+                    @"
                     UPDATE
                         source_tracks
                     SET
@@ -144,7 +164,13 @@ namespace Relisten.Data
                     WHERE
                         source_id = @sourceId
                         AND NOT(mp3_url = ANY(@mp3Urls))
-                ", new {sourceId = source.id, mp3Urls = trackList.Select(t => t.mp3_url).ToList()});
+                ",
+                    new
+                    {
+                        sourceId = source.id,
+                        mp3Urls = trackList.Select(t => t.mp3_url).ToList(),
+                    }
+                );
 
                 return inserted;
             });

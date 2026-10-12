@@ -9,11 +9,13 @@ public sealed class ExternalIdentityCompletionService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
     UsernameReservationService usernames,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider
+)
 {
     public async Task<User> CompleteAsync(
         ExternalIdentityProfile profile,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Validate(profile);
 
@@ -24,12 +26,15 @@ public sealed class ExternalIdentityCompletionService(
             return existing.User;
         }
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
         // Issuer and subject are the account-linking authority. Email is mutable provider
         // metadata and must never merge Apple and Google identities implicitly.
         await advisoryLocks.LockAsync(
             $"external-identity:{profile.Issuer}\n{profile.Subject}",
-            cancellationToken);
+            cancellationToken
+        );
 
         existing = await FindAsync(profile, cancellationToken);
         if (existing is not null)
@@ -46,21 +51,23 @@ public sealed class ExternalIdentityCompletionService(
             Username = await usernames.AllocateAsync(profile.Email, now, cancellationToken),
             CreatedAt = now,
             UpdatedAt = now,
-            LastLoginAt = now
-        };
-        user.ExternalIdentities.Add(new ExternalIdentity
-        {
-            Id = Guid.CreateVersion7(),
-            Issuer = profile.Issuer,
-            ProviderSubject = profile.Subject,
-            EmailAtProvider = profile.Email,
-            EmailVerifiedAtProvider = profile.EmailVerified,
-            EmailIsPrivateRelay = profile.EmailIsPrivateRelay,
-            EmailObservedAt = profile.Email is null ? null : now,
             LastLoginAt = now,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
+        };
+        user.ExternalIdentities.Add(
+            new ExternalIdentity
+            {
+                Id = Guid.CreateVersion7(),
+                Issuer = profile.Issuer,
+                ProviderSubject = profile.Subject,
+                EmailAtProvider = profile.Email,
+                EmailVerifiedAtProvider = profile.EmailVerified,
+                EmailIsPrivateRelay = profile.EmailIsPrivateRelay,
+                EmailObservedAt = profile.Email is null ? null : now,
+                LastLoginAt = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+            }
+        );
 
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -70,18 +77,22 @@ public sealed class ExternalIdentityCompletionService(
 
     private Task<ExternalIdentity?> FindAsync(
         ExternalIdentityProfile profile,
-        CancellationToken cancellationToken) =>
-        dbContext.ExternalIdentities
-            .Include(identity => identity.User)
+        CancellationToken cancellationToken
+    ) =>
+        dbContext
+            .ExternalIdentities.Include(identity => identity.User)
             .SingleOrDefaultAsync(
-                identity => identity.Issuer == profile.Issuer
+                identity =>
+                    identity.Issuer == profile.Issuer
                     && identity.ProviderSubject == profile.Subject,
-                cancellationToken);
+                cancellationToken
+            );
 
     private async Task RecordLoginAsync(
         ExternalIdentity identity,
         ExternalIdentityProfile profile,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (identity.User.Status != UserStatuses.Active)
         {
@@ -107,13 +118,18 @@ public sealed class ExternalIdentityCompletionService(
 
     private static void Validate(ExternalIdentityProfile profile)
     {
-        if (!Uri.TryCreate(profile.Issuer, UriKind.Absolute, out _)
+        if (
+            !Uri.TryCreate(profile.Issuer, UriKind.Absolute, out _)
             || string.IsNullOrWhiteSpace(profile.Subject)
             || profile.Issuer.Length > 512
             || profile.Subject.Length > 512
-            || profile.Email?.Length > 320)
+            || profile.Email?.Length > 320
+        )
         {
-            throw new ArgumentException("The verified external identity is malformed.", nameof(profile));
+            throw new ArgumentException(
+                "The verified external identity is malformed.",
+                nameof(profile)
+            );
         }
     }
 }

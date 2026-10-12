@@ -15,7 +15,7 @@ namespace Relisten.Services.Popularity
     {
         Hours48,
         Days7,
-        Days30
+        Days30,
     }
 
     public class PopularityService
@@ -33,8 +33,12 @@ namespace Relisten.Services.Popularity
         private readonly IBackgroundJobClient backgroundJobs;
         private readonly ILogger<PopularityService> logger;
 
-        public PopularityService(DbService db, PopularityCacheService cache,
-            IBackgroundJobClient backgroundJobs, ILogger<PopularityService> logger)
+        public PopularityService(
+            DbService db,
+            PopularityCacheService cache,
+            IBackgroundJobClient backgroundJobs,
+            ILogger<PopularityService> logger
+        )
         {
             this.db = db;
             this.cache = cache;
@@ -42,115 +46,188 @@ namespace Relisten.Services.Popularity
             this.logger = logger;
         }
 
-        public async Task<Dictionary<Guid, PopularityMetrics>> GetArtistPopularityMap(bool allowStale = true)
+        public async Task<Dictionary<Guid, PopularityMetrics>> GetArtistPopularityMap(
+            bool allowStale = true
+        )
         {
             var key = "popularity:artists:map:30d-48h";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds, ComputeArtistPopularityMap,
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshArtistPopularityMap()),
-                allowStale);
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
+                ComputeArtistPopularityMap,
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshArtistPopularityMap()),
+                allowStale
+            );
         }
 
-        public async Task<Dictionary<Guid, PopularityMetrics>> GetShowPopularityMapForArtist(Guid artistUuid,
-            bool allowStale = true)
+        public async Task<Dictionary<Guid, PopularityMetrics>> GetShowPopularityMapForArtist(
+            Guid artistUuid,
+            bool allowStale = true
+        )
         {
             var cached = await GetShowPopularityCacheMapForArtist(artistUuid, allowStale);
-            return cached.ToDictionary(entry => entry.Key, entry => CachedShowPopularityMapper.ToPopularityMetrics(entry.Value));
+            return cached.ToDictionary(
+                entry => entry.Key,
+                entry => CachedShowPopularityMapper.ToPopularityMetrics(entry.Value)
+            );
         }
 
-        public async Task<Dictionary<Guid, PopularityMetrics>> GetYearPopularityMapForArtist(Guid artistUuid,
-            bool allowStale = true)
+        public async Task<Dictionary<Guid, PopularityMetrics>> GetYearPopularityMapForArtist(
+            Guid artistUuid,
+            bool allowStale = true
+        )
         {
             var key = $"popularity:artist:{artistUuid}:years:map:30d-48h";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputeYearPopularityMapForArtist(artistUuid),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshYearPopularityMapForArtist(artistUuid)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job =>
+                        job.RefreshYearPopularityMapForArtist(artistUuid)
+                    ),
+                allowStale
+            );
         }
 
-        public async Task<IReadOnlyList<PopularArtistListItem>> GetPopularArtists(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<PopularArtistListItem>> GetPopularArtists(
+            int limit,
+            bool allowStale = true
+        )
         {
             var key = $"popularity:artists:hot:30d:{limit}";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputePopularArtists(limit),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularArtists(limit)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularArtists(limit)),
+                allowStale
+            );
         }
 
-        public async Task<IReadOnlyList<PopularArtistListItem>> GetTrendingArtists(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<PopularArtistListItem>> GetTrendingArtists(
+            int limit,
+            bool allowStale = true
+        )
         {
             var key = $"popularity:artists:trending:48h:{limit}";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputeTrendingArtists(limit),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingArtists(limit)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job =>
+                        job.RefreshTrendingArtists(limit)
+                    ),
+                allowStale
+            );
         }
 
-        public async Task<IReadOnlyList<Show>> GetPopularShows(int limit, bool allowStale = true,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        public async Task<IReadOnlyList<Show>> GetPopularShows(
+            int limit,
+            bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var key = GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow);
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputePopularShows(limit, sortWindow),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularShows(limit, sortWindow)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job =>
+                        job.RefreshPopularShows(limit, sortWindow)
+                    ),
+                allowStale
+            );
         }
 
-        public async Task<IReadOnlyList<Show>> GetTrendingShows(int limit, bool allowStale = true,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        public async Task<IReadOnlyList<Show>> GetTrendingShows(
+            int limit,
+            bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var key = GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow);
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputeTrendingShows(limit, sortWindow),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingShows(limit, sortWindow)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job =>
+                        job.RefreshTrendingShows(limit, sortWindow)
+                    ),
+                allowStale
+            );
         }
 
-        public async Task<ArtistPopularTrendingShowsResponse> GetArtistPopularTrendingShows(Artist artist, int limit,
-            bool allowStale = true, PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        public async Task<ArtistPopularTrendingShowsResponse> GetArtistPopularTrendingShows(
+            Artist artist,
+            int limit,
+            bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var candidateShows = await BuildArtistShowCandidates(artist, allowStale);
-            return CreateArtistPopularTrendingShowsResponse(artist, candidateShows, limit, sortWindow);
+            return CreateArtistPopularTrendingShowsResponse(
+                artist,
+                candidateShows,
+                limit,
+                sortWindow
+            );
         }
 
         public async Task<MultiArtistPopularTrendingShowsResponse> GetArtistsPopularTrendingShows(
-            IReadOnlyList<Artist>? artists, int limit, bool allowStale = true,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+            IReadOnlyList<Artist>? artists,
+            int limit,
+            bool allowStale = true,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             if (artists == null || artists.Count == 0)
             {
                 return new MultiArtistPopularTrendingShowsResponse();
             }
 
-            var artistResults = await Task.WhenAll(artists
-                .Select(artist => GetArtistPopularTrendingShows(artist, limit, allowStale, sortWindow)));
+            var artistResults = await Task.WhenAll(
+                artists.Select(artist =>
+                    GetArtistPopularTrendingShows(artist, limit, allowStale, sortWindow)
+                )
+            );
 
-            return new MultiArtistPopularTrendingShowsResponse
-            {
-                artists = artistResults.ToList()
-            };
+            return new MultiArtistPopularTrendingShowsResponse { artists = artistResults.ToList() };
         }
 
-        public async Task<IReadOnlyList<Show>> GetArtistsMomentumShows(IReadOnlyList<Artist>? artists, int limit,
-            bool allowStale = true)
+        public async Task<IReadOnlyList<Show>> GetArtistsMomentumShows(
+            IReadOnlyList<Artist>? artists,
+            int limit,
+            bool allowStale = true
+        )
         {
             if (artists == null || artists.Count == 0)
             {
                 return [];
             }
 
-            var mapsByArtist = await Task.WhenAll(artists.Select(async artist => new
-            {
-                artist,
-                map = await GetShowPopularityCacheMapForArtist(artist.uuid, allowStale)
-            }));
+            var mapsByArtist = await Task.WhenAll(
+                artists.Select(async artist => new
+                {
+                    artist,
+                    map = await GetShowPopularityCacheMapForArtist(artist.uuid, allowStale),
+                })
+            );
 
             var candidates = mapsByArtist
-                .SelectMany(item => item.map.Select(entry => new
-                {
-                    item.artist,
-                    showUuid = entry.Key,
-                    cached = entry.Value
-                }))
+                .SelectMany(item =>
+                    item.map.Select(entry => new
+                    {
+                        item.artist,
+                        showUuid = entry.Key,
+                        cached = entry.Value,
+                    })
+                )
                 .ToList();
 
             if (candidates.Count == 0)
@@ -161,7 +238,9 @@ namespace Relisten.Services.Popularity
             var topCandidates = candidates
                 .Select(item =>
                 {
-                    var rankingMomentum = CachedShowPopularityMapper.GetRankingMomentumScore(item.cached);
+                    var rankingMomentum = CachedShowPopularityMapper.GetRankingMomentumScore(
+                        item.cached
+                    );
                     var rawMomentum = CachedShowPopularityMapper.GetRawMomentumScore(item.cached);
 
                     return new
@@ -170,7 +249,7 @@ namespace Relisten.Services.Popularity
                         item.showUuid,
                         item.cached,
                         rankingMomentum,
-                        rawMomentum
+                        rawMomentum,
                     };
                 })
                 .OrderByDescending(item => item.rankingMomentum)
@@ -184,9 +263,11 @@ namespace Relisten.Services.Popularity
                 .GroupBy(artist => artist.uuid)
                 .ToDictionary(group => group.Key, group => group.First().features);
 
-            var showDetailsByUuid = await LoadShowDetailsByUuid(topCandidates.Select(item => item.showUuid),
-                featuresByArtistUuid);
-            
+            var showDetailsByUuid = await LoadShowDetailsByUuid(
+                topCandidates.Select(item => item.showUuid),
+                featuresByArtistUuid
+            );
+
             if (showDetailsByUuid.Count == 0)
             {
                 return [];
@@ -209,22 +290,35 @@ namespace Relisten.Services.Popularity
             return ordered;
         }
 
-        public async Task<IReadOnlyList<PopularYearListItem>> GetPopularYears(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<PopularYearListItem>> GetPopularYears(
+            int limit,
+            bool allowStale = true
+        )
         {
             var key = $"popularity:years:hot:30d:{limit}";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputePopularYears(limit),
                 () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshPopularYears(limit)),
-                allowStale);
+                allowStale
+            );
         }
 
-        public async Task<IReadOnlyList<PopularYearListItem>> GetTrendingYears(int limit, bool allowStale = true)
+        public async Task<IReadOnlyList<PopularYearListItem>> GetTrendingYears(
+            int limit,
+            bool allowStale = true
+        )
         {
             var key = $"popularity:years:trending:48h:{limit}";
-            return await GetOrRefresh(key, DefaultStaleAfterSeconds,
+            return await GetOrRefresh(
+                key,
+                DefaultStaleAfterSeconds,
                 () => ComputeTrendingYears(limit),
-                () => backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingYears(limit)),
-                allowStale);
+                () =>
+                    backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshTrendingYears(limit)),
+                allowStale
+            );
         }
 
         public async Task RefreshArtistPopularityMap()
@@ -236,13 +330,19 @@ namespace Relisten.Services.Popularity
         public async Task RefreshShowPopularityMapForArtist(Guid artistUuid)
         {
             var map = await ComputeShowPopularityMapForArtist(artistUuid);
-            await cache.SetAsync($"popularity:artist:{artistUuid}:shows:map:30d-48h", NewCacheEntry(map));
+            await cache.SetAsync(
+                $"popularity:artist:{artistUuid}:shows:map:30d-48h",
+                NewCacheEntry(map)
+            );
         }
 
         public async Task RefreshYearPopularityMapForArtist(Guid artistUuid)
         {
             var map = await ComputeYearPopularityMapForArtist(artistUuid);
-            await cache.SetAsync($"popularity:artist:{artistUuid}:years:map:30d-48h", NewCacheEntry(map));
+            await cache.SetAsync(
+                $"popularity:artist:{artistUuid}:years:map:30d-48h",
+                NewCacheEntry(map)
+            );
         }
 
         public async Task RefreshPopularArtists(int limit)
@@ -257,20 +357,28 @@ namespace Relisten.Services.Popularity
             await cache.SetAsync($"popularity:artists:trending:48h:{limit}", NewCacheEntry(list));
         }
 
-        public async Task RefreshPopularShows(int limit,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        public async Task RefreshPopularShows(
+            int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var list = await ComputePopularShows(limit, sortWindow);
-            await cache.SetAsync(GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow),
-                NewCacheEntry(list));
+            await cache.SetAsync(
+                GetShowPopularityCacheKey("popularity:shows:hot:30d", limit, sortWindow),
+                NewCacheEntry(list)
+            );
         }
 
-        public async Task RefreshTrendingShows(int limit,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        public async Task RefreshTrendingShows(
+            int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var list = await ComputeTrendingShows(limit, sortWindow);
-            await cache.SetAsync(GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow),
-                NewCacheEntry(list));
+            await cache.SetAsync(
+                GetShowPopularityCacheKey("popularity:shows:trending:48h", limit, sortWindow),
+                NewCacheEntry(list)
+            );
         }
 
         public async Task RefreshPopularYears(int limit)
@@ -285,8 +393,10 @@ namespace Relisten.Services.Popularity
             await cache.SetAsync($"popularity:years:trending:48h:{limit}", NewCacheEntry(list));
         }
 
-        public void ApplyArtistPopularity(IEnumerable<ArtistWithCounts> artists,
-            Dictionary<Guid, PopularityMetrics> map)
+        public void ApplyArtistPopularity(
+            IEnumerable<ArtistWithCounts> artists,
+            Dictionary<Guid, PopularityMetrics> map
+        )
         {
             foreach (var artist in artists)
             {
@@ -297,7 +407,10 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        public void ApplyYearPopularity(IEnumerable<Year> years, Dictionary<Guid, PopularityMetrics> map)
+        public void ApplyYearPopularity(
+            IEnumerable<Year> years,
+            Dictionary<Guid, PopularityMetrics> map
+        )
         {
             foreach (var year in years)
             {
@@ -308,7 +421,10 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        public void ApplyShowPopularity(IEnumerable<Show> shows, Dictionary<Guid, PopularityMetrics> map)
+        public void ApplyShowPopularity(
+            IEnumerable<Show> shows,
+            Dictionary<Guid, PopularityMetrics> map
+        )
         {
             foreach (var show in shows)
             {
@@ -319,8 +435,9 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        private async Task<Dictionary<Guid, CachedShowPopularity>> GetShowPopularityCacheMapForArtist(Guid artistUuid,
-            bool allowStale = true)
+        private async Task<
+            Dictionary<Guid, CachedShowPopularity>
+        > GetShowPopularityCacheMapForArtist(Guid artistUuid, bool allowStale = true)
         {
             var key = $"popularity:artist:{artistUuid}:shows:map:30d-48h";
             var cached = await TryGetShowPopularityCacheMap(key);
@@ -333,7 +450,9 @@ namespace Relisten.Services.Popularity
 
                 if (allowStale)
                 {
-                    backgroundJobs.Enqueue<PopularityJobs>(job => job.RefreshShowPopularityMapForArtist(artistUuid));
+                    backgroundJobs.Enqueue<PopularityJobs>(job =>
+                        job.RefreshShowPopularityMapForArtist(artistUuid)
+                    );
                     return cached.Entry.data;
                 }
             }
@@ -343,15 +462,18 @@ namespace Relisten.Services.Popularity
             return fresh;
         }
 
-        private async Task<PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>> TryGetShowPopularityCacheMap(
-            string key)
+        private async Task<
+            PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>
+        > TryGetShowPopularityCacheMap(string key)
         {
             try
             {
                 var cached = await cache.GetAsync<Dictionary<Guid, CachedShowPopularity>>(key);
                 if (cached.HasValue && cached.Entry != null)
                 {
-                    cached.Entry.data = CachedShowPopularityMapper.NormalizeCachedShowPopularityMap(cached.Entry.data);
+                    cached.Entry.data = CachedShowPopularityMapper.NormalizeCachedShowPopularityMap(
+                        cached.Entry.data
+                    );
                 }
 
                 if (cached.HasValue)
@@ -361,8 +483,10 @@ namespace Relisten.Services.Popularity
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex,
-                    "Failed to deserialize cached show popularity map using cache DTO. Falling back to legacy DTO.");
+                logger.LogWarning(
+                    ex,
+                    "Failed to deserialize cached show popularity map using cache DTO. Falling back to legacy DTO."
+                );
             }
 
             try
@@ -370,7 +494,10 @@ namespace Relisten.Services.Popularity
                 var legacy = await cache.GetAsync<Dictionary<Guid, PopularityMetrics>>(key);
                 if (!legacy.HasValue || legacy.Entry == null)
                 {
-                    return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>> { HasValue = false };
+                    return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>
+                    {
+                        HasValue = false,
+                    };
                 }
 
                 return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>
@@ -382,19 +509,28 @@ namespace Relisten.Services.Popularity
                         generated_at = legacy.Entry.generated_at,
                         stale_after_seconds = legacy.Entry.stale_after_seconds,
                         data = CachedShowPopularityMapper.ConvertLegacyShowPopularityMap(
-                            legacy.Entry.data ?? new Dictionary<Guid, PopularityMetrics>())
-                    }
+                            legacy.Entry.data ?? new Dictionary<Guid, PopularityMetrics>()
+                        ),
+                    },
                 };
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to deserialize legacy cached show popularity map.");
-                return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>> { HasValue = false };
+                return new PopularityCacheResult<Dictionary<Guid, CachedShowPopularity>>
+                {
+                    HasValue = false,
+                };
             }
         }
 
-        private async Task<T> GetOrRefresh<T>(string key, int staleAfterSeconds, Func<Task<T>> factory,
-            Action refreshAction, bool allowStale)
+        private async Task<T> GetOrRefresh<T>(
+            string key,
+            int staleAfterSeconds,
+            Func<Task<T>> factory,
+            Action refreshAction,
+            bool allowStale
+        )
         {
             var cached = await cache.GetAsync<T>(key);
             if (cached.HasValue && cached.Entry != null)
@@ -416,19 +552,24 @@ namespace Relisten.Services.Popularity
             return fresh;
         }
 
-        private PopularityCacheEntry<T> NewCacheEntry<T>(T data, int staleAfterSeconds = DefaultStaleAfterSeconds)
+        private PopularityCacheEntry<T> NewCacheEntry<T>(
+            T data,
+            int staleAfterSeconds = DefaultStaleAfterSeconds
+        )
         {
             return new PopularityCacheEntry<T>
             {
                 data = data,
                 generated_at = DateTime.UtcNow,
-                stale_after_seconds = staleAfterSeconds
+                stale_after_seconds = staleAfterSeconds,
             };
         }
 
         private async Task<Dictionary<Guid, PopularityMetrics>> ComputeArtistPopularityMap()
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityRow>(
+                    @"
                 WITH plays_90d AS (
                     SELECT artist_uuid, SUM(plays) AS plays_90d
                     FROM source_track_plays_daily
@@ -477,14 +618,20 @@ namespace Relisten.Services.Popularity
                 FULL OUTER JOIN plays_7d p7 ON p7.artist_uuid = COALESCE(p30.artist_uuid, p48.artist_uuid)
                 FULL OUTER JOIN plays_90d p90 ON p90.artist_uuid = COALESCE(p30.artist_uuid, p48.artist_uuid, p7.artist_uuid)
                 FULL OUTER JOIN plays_6h p6 ON p6.artist_uuid = COALESCE(p30.artist_uuid, p48.artist_uuid, p7.artist_uuid, p90.artist_uuid)
-            "));
+            "
+                )
+            );
 
             return BuildMetricsMap(rows);
         }
 
-        private async Task<Dictionary<Guid, CachedShowPopularity>> ComputeShowPopularityMapForArtist(Guid artistUuid)
+        private async Task<
+            Dictionary<Guid, CachedShowPopularity>
+        > ComputeShowPopularityMapForArtist(Guid artistUuid)
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityShowCacheRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityShowCacheRow>(
+                    @"
                 WITH artist_ref AS (
                     SELECT id
                     FROM artists
@@ -605,19 +752,26 @@ namespace Relisten.Services.Popularity
                 FULL OUTER JOIN plays_90d p90 ON p90.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid)
                 FULL OUTER JOIN plays_6h p6 ON p6.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid)
                 LEFT JOIN otd_penalty_7d otd ON otd.uuid = COALESCE(p30.uuid, p48.uuid, p7.uuid, p90.uuid, p6.uuid)
-            ", new
-            {
-                artistUuid,
-                otdPenaltyWindowDays = ShowMomentumScoring.HistoricalPenaltyWindowDays,
-                otdPenaltyHalfLifeDays = ShowMomentumScoring.HistoricalPenaltyHalfLifeDays
-            }));
+            ",
+                    new
+                    {
+                        artistUuid,
+                        otdPenaltyWindowDays = ShowMomentumScoring.HistoricalPenaltyWindowDays,
+                        otdPenaltyHalfLifeDays = ShowMomentumScoring.HistoricalPenaltyHalfLifeDays,
+                    }
+                )
+            );
 
             return BuildShowPopularityCacheMap(rows);
         }
 
-        private async Task<Dictionary<Guid, PopularityMetrics>> ComputeYearPopularityMapForArtist(Guid artistUuid)
+        private async Task<Dictionary<Guid, PopularityMetrics>> ComputeYearPopularityMapForArtist(
+            Guid artistUuid
+        )
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityRow>(
+                    @"
                 WITH daily AS (
                     SELECT
                         y.uuid,
@@ -668,14 +822,19 @@ namespace Relisten.Services.Popularity
                     COALESCE(h.seconds_48h, 0) AS seconds_48h
                 FROM daily d
                 FULL OUTER JOIN hourly h ON h.uuid = d.uuid
-            ", new { artistUuid }));
+            ",
+                    new { artistUuid }
+                )
+            );
 
             return BuildMetricsMap(rows);
         }
 
         private async Task<IReadOnlyList<PopularArtistListItem>> ComputePopularArtists(int limit)
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityArtistRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityArtistRow>(
+                    @"
                 WITH plays_90d AS (
                     SELECT artist_uuid, SUM(plays) AS plays_90d
                     FROM source_track_plays_daily
@@ -727,18 +886,29 @@ namespace Relisten.Services.Popularity
                 LEFT JOIN plays_90d p90 ON p90.artist_uuid = a.uuid
                 LEFT JOIN plays_6h p6 ON p6.artist_uuid = a.uuid
                 WHERE p30.plays_30d IS NOT NULL
-            "));
+            "
+                )
+            );
 
             var items = rows.Select(row => new PopularArtistListItem
-            {
-                artist_uuid = row.artist_uuid,
-                name = row.name,
-                plays_30d = row.plays_30d,
-                plays_48h = row.plays_48h,
-                trend_ratio = ComputeTrendRatio(row.plays_48h, row.plays_90d),
-                popularity = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h, row.plays_90d,
-                    row.seconds_30d, row.seconds_7d, row.seconds_48h)
-            }).ToList();
+                {
+                    artist_uuid = row.artist_uuid,
+                    name = row.name,
+                    plays_30d = row.plays_30d,
+                    plays_48h = row.plays_48h,
+                    trend_ratio = ComputeTrendRatio(row.plays_48h, row.plays_90d),
+                    popularity = CreateMetrics(
+                        row.plays_30d,
+                        row.plays_7d,
+                        row.plays_6h,
+                        row.plays_48h,
+                        row.plays_90d,
+                        row.seconds_30d,
+                        row.seconds_7d,
+                        row.seconds_48h
+                    ),
+                })
+                .ToList();
 
             ApplyMomentumScores(items.Select(item => item.popularity).ToList());
 
@@ -756,8 +926,10 @@ namespace Relisten.Services.Popularity
         {
             var items = await ComputePopularArtists(int.MaxValue);
             var filtered = items
-                .Where(item => item.plays_48h >= ArtistTrendingPlays48hFloor &&
-                               item.plays_30d >= ArtistTrendingPlays30dFloor)
+                .Where(item =>
+                    item.plays_48h >= ArtistTrendingPlays48hFloor
+                    && item.plays_30d >= ArtistTrendingPlays30dFloor
+                )
                 .OrderByDescending(item => item.trend_ratio)
                 .ThenByDescending(item => item.popularity.windows.days_30d.hot_score)
                 .Take(limit)
@@ -767,9 +939,14 @@ namespace Relisten.Services.Popularity
             return filtered;
         }
 
-        private async Task<IReadOnlyList<Show>> ComputePopularShows(int limit, PopularitySortWindow sortWindow)
+        private async Task<IReadOnlyList<Show>> ComputePopularShows(
+            int limit,
+            PopularitySortWindow sortWindow
+        )
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityShowRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityShowRow>(
+                    @"
                 WITH plays_90d AS (
                     SELECT show_uuid, SUM(plays) AS plays_90d
                     FROM source_track_plays_daily
@@ -820,7 +997,9 @@ namespace Relisten.Services.Popularity
                 LEFT JOIN plays_90d p90 ON p90.show_uuid = s.uuid
                 LEFT JOIN plays_6h p6 ON p6.show_uuid = s.uuid
                 WHERE p30.plays_30d IS NOT NULL
-            "));
+            "
+                )
+            );
 
             var showDetails = await LoadShowDetailsByUuid(rows.Select(row => row.show_uuid), null);
             var items = new List<Show>();
@@ -832,16 +1011,26 @@ namespace Relisten.Services.Popularity
                     continue;
                 }
 
-                show.popularity = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h,
-                    row.plays_90d, row.seconds_30d, row.seconds_7d, row.seconds_48h);
+                show.popularity = CreateMetrics(
+                    row.plays_30d,
+                    row.plays_7d,
+                    row.plays_6h,
+                    row.plays_48h,
+                    row.plays_90d,
+                    row.seconds_30d,
+                    row.seconds_7d,
+                    row.seconds_48h
+                );
                 items.Add(show);
             }
 
-            ApplyMomentumScores(items
-                .Select(item => item.popularity)
-                .Where(metrics => metrics != null)
-                .Select(metrics => metrics!)
-                .ToList());
+            ApplyMomentumScores(
+                items
+                    .Select(item => item.popularity)
+                    .Where(metrics => metrics != null)
+                    .Select(metrics => metrics!)
+                    .ToList()
+            );
 
             var ordered = items
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
@@ -852,12 +1041,17 @@ namespace Relisten.Services.Popularity
             return ordered;
         }
 
-        private async Task<IReadOnlyList<Show>> ComputeTrendingShows(int limit, PopularitySortWindow sortWindow)
+        private async Task<IReadOnlyList<Show>> ComputeTrendingShows(
+            int limit,
+            PopularitySortWindow sortWindow
+        )
         {
             var items = await ComputePopularShows(int.MaxValue, sortWindow);
             var filtered = items
-                .Where(item => (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
-                               (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor)
+                .Where(item =>
+                    (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor
+                    && (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor
+                )
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
                 .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
                 .ThenByDescending(item => item.popularity?.trend_ratio ?? 0)
@@ -867,8 +1061,10 @@ namespace Relisten.Services.Popularity
             return filtered;
         }
 
-        private async Task<IReadOnlyList<Show>> BuildArtistShowCandidates(Artist artist,
-            bool allowStale)
+        private async Task<IReadOnlyList<Show>> BuildArtistShowCandidates(
+            Artist artist,
+            bool allowStale
+        )
         {
             var showPopularity = await GetShowPopularityMapForArtist(artist.uuid, allowStale);
             if (showPopularity.Count == 0)
@@ -876,14 +1072,15 @@ namespace Relisten.Services.Popularity
                 return [];
             }
 
-            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid = artist.features == null
-                ? null
-                : new Dictionary<Guid, Features>
-                {
-                    [artist.uuid] = artist.features
-                };
+            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid =
+                artist.features == null
+                    ? null
+                    : new Dictionary<Guid, Features> { [artist.uuid] = artist.features };
 
-            var showDetails = await LoadShowDetailsByUuid(showPopularity.Keys, featuresByArtistUuid);
+            var showDetails = await LoadShowDetailsByUuid(
+                showPopularity.Keys,
+                featuresByArtistUuid
+            );
             if (showDetails.Count == 0)
             {
                 return [];
@@ -904,22 +1101,27 @@ namespace Relisten.Services.Popularity
             return items;
         }
 
-        internal static ArtistPopularTrendingShowsResponse CreateArtistPopularTrendingShowsResponse(Artist artist,
-            IReadOnlyList<Show> candidateShows, int limit,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+        internal static ArtistPopularTrendingShowsResponse CreateArtistPopularTrendingShowsResponse(
+            Artist artist,
+            IReadOnlyList<Show> candidateShows,
+            int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             return new ArtistPopularTrendingShowsResponse
             {
                 artist_uuid = artist.uuid,
                 artist_name = artist.name,
                 popular_shows = RankPopularArtistShows(candidateShows, limit, sortWindow),
-                trending_shows = RankTrendingArtistShows(candidateShows, limit, sortWindow)
+                trending_shows = RankTrendingArtistShows(candidateShows, limit, sortWindow),
             };
         }
 
         internal static IReadOnlyList<Show> RankPopularArtistShows(
-            IReadOnlyList<Show> candidateShows, int limit,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+            IReadOnlyList<Show> candidateShows,
+            int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var ordered = candidateShows
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
@@ -931,12 +1133,16 @@ namespace Relisten.Services.Popularity
         }
 
         internal static IReadOnlyList<Show> RankTrendingArtistShows(
-            IReadOnlyList<Show> candidateShows, int limit,
-            PopularitySortWindow sortWindow = PopularitySortWindow.Days30)
+            IReadOnlyList<Show> candidateShows,
+            int limit,
+            PopularitySortWindow sortWindow = PopularitySortWindow.Days30
+        )
         {
             var filtered = candidateShows
-                .Where(item => (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor &&
-                               (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor)
+                .Where(item =>
+                    (item.popularity?.windows.hours_48h.plays ?? 0) >= ShowTrendingPlays48hFloor
+                    && (item.popularity?.windows.days_30d.plays ?? 0) >= ShowTrendingPlays30dFloor
+                )
                 .OrderByDescending(item => GetSortWindowHotScore(item, sortWindow))
                 .ThenByDescending(item => GetSortWindowPlays(item, sortWindow))
                 .ThenByDescending(item => item.popularity?.trend_ratio ?? 0)
@@ -958,7 +1164,7 @@ namespace Relisten.Services.Popularity
             {
                 PopularitySortWindow.Hours48 => windows.hours_48h.hot_score,
                 PopularitySortWindow.Days7 => windows.days_7d.hot_score,
-                _ => windows.days_30d.hot_score
+                _ => windows.days_30d.hot_score,
             };
         }
 
@@ -974,11 +1180,15 @@ namespace Relisten.Services.Popularity
             {
                 PopularitySortWindow.Hours48 => windows.hours_48h.plays,
                 PopularitySortWindow.Days7 => windows.days_7d.plays,
-                _ => windows.days_30d.plays
+                _ => windows.days_30d.plays,
             };
         }
 
-        private static string GetShowPopularityCacheKey(string baseKey, int limit, PopularitySortWindow sortWindow)
+        private static string GetShowPopularityCacheKey(
+            string baseKey,
+            int limit,
+            PopularitySortWindow sortWindow
+        )
         {
             if (sortWindow == PopularitySortWindow.Days30)
             {
@@ -994,12 +1204,14 @@ namespace Relisten.Services.Popularity
             {
                 PopularitySortWindow.Hours48 => "48h",
                 PopularitySortWindow.Days7 => "7d",
-                _ => "30d"
+                _ => "30d",
             };
         }
 
-        private async Task<Dictionary<Guid, Show>> LoadShowDetailsByUuid(IEnumerable<Guid> showUuids,
-            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid)
+        private async Task<Dictionary<Guid, Show>> LoadShowDetailsByUuid(
+            IEnumerable<Guid> showUuids,
+            IReadOnlyDictionary<Guid, Features>? featuresByArtistUuid
+        )
         {
             var uuids = showUuids.Distinct().ToArray();
             if (uuids.Length == 0)
@@ -1007,8 +1219,10 @@ namespace Relisten.Services.Popularity
                 return new Dictionary<Guid, Show>();
             }
 
-            var shows = (await db.WithConnection(con => con.QueryAsync<Show, VenueWithShowCount, Tour, Era, Year, Show>(
-                @"
+            var shows = (
+                await db.WithConnection(con =>
+                    con.QueryAsync<Show, VenueWithShowCount, Tour, Era, Year, Show>(
+                        @"
                 SELECT
                     s.*,
                     a.uuid as artist_uuid,
@@ -1040,45 +1254,57 @@ namespace Relisten.Services.Popularity
                     LEFT JOIN venue_show_counts venue_counts ON venue_counts.id = s.venue_id
                 WHERE
                     s.uuid = ANY(@uuids)
-            ", (show, venue, tour, era, year) =>
-                {
-                    show.venue = venue;
+            ",
+                        (show, venue, tour, era, year) =>
+                        {
+                            show.venue = venue;
 
-                    var includeTours = true;
-                    var includeEras = true;
-                    var includeYears = true;
-                    if (featuresByArtistUuid != null &&
-                        featuresByArtistUuid.TryGetValue(show.artist_uuid, out var features))
-                    {
-                        includeTours = features.tours;
-                        includeEras = features.eras;
-                        includeYears = features.years;
-                    }
+                            var includeTours = true;
+                            var includeEras = true;
+                            var includeYears = true;
+                            if (
+                                featuresByArtistUuid != null
+                                && featuresByArtistUuid.TryGetValue(
+                                    show.artist_uuid,
+                                    out var features
+                                )
+                            )
+                            {
+                                includeTours = features.tours;
+                                includeEras = features.eras;
+                                includeYears = features.years;
+                            }
 
-                    if (includeTours)
-                    {
-                        show.tour = tour;
-                    }
+                            if (includeTours)
+                            {
+                                show.tour = tour;
+                            }
 
-                    if (includeEras)
-                    {
-                        show.era = era;
-                    }
+                            if (includeEras)
+                            {
+                                show.era = era;
+                            }
 
-                    if (includeYears)
-                    {
-                        show.year = year;
-                    }
+                            if (includeYears)
+                            {
+                                show.year = year;
+                            }
 
-                    return show;
-                }, new { uuids }))).ToList();
+                            return show;
+                        },
+                        new { uuids }
+                    )
+                )
+            ).ToList();
 
             return shows.ToDictionary(show => show.uuid, show => show);
         }
 
         private async Task<IReadOnlyList<PopularYearListItem>> ComputePopularYears(int limit)
         {
-            var rows = await db.WithConnection(con => con.QueryAsync<PopularityYearRow>(@"
+            var rows = await db.WithConnection(con =>
+                con.QueryAsync<PopularityYearRow>(
+                    @"
                 WITH plays_90d AS (
                     SELECT s.year_id, SUM(p.plays) AS plays_90d
                     FROM source_track_plays_daily p
@@ -1138,20 +1364,31 @@ namespace Relisten.Services.Popularity
                 LEFT JOIN plays_90d p90 ON p90.year_id = y.id
                 LEFT JOIN plays_6h p6 ON p6.year_id = y.id
                 WHERE p30.plays_30d IS NOT NULL
-            "));
+            "
+                )
+            );
 
             var items = rows.Select(row => new PopularYearListItem
-            {
-                year_uuid = row.year_uuid,
-                year = row.year,
-                artist_uuid = row.artist_uuid,
-                artist_name = row.artist_name,
-                plays_30d = row.plays_30d,
-                plays_48h = row.plays_48h,
-                trend_ratio = ComputeTrendRatio(row.plays_48h, row.plays_90d),
-                popularity = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h, row.plays_90d,
-                    row.seconds_30d, row.seconds_7d, row.seconds_48h)
-            }).ToList();
+                {
+                    year_uuid = row.year_uuid,
+                    year = row.year,
+                    artist_uuid = row.artist_uuid,
+                    artist_name = row.artist_name,
+                    plays_30d = row.plays_30d,
+                    plays_48h = row.plays_48h,
+                    trend_ratio = ComputeTrendRatio(row.plays_48h, row.plays_90d),
+                    popularity = CreateMetrics(
+                        row.plays_30d,
+                        row.plays_7d,
+                        row.plays_6h,
+                        row.plays_48h,
+                        row.plays_90d,
+                        row.seconds_30d,
+                        row.seconds_7d,
+                        row.seconds_48h
+                    ),
+                })
+                .ToList();
 
             ApplyMomentumScores(items.Select(item => item.popularity).ToList());
 
@@ -1169,8 +1406,10 @@ namespace Relisten.Services.Popularity
         {
             var items = await ComputePopularYears(int.MaxValue);
             var filtered = items
-                .Where(item => item.plays_48h >= YearTrendingPlays48hFloor &&
-                               item.plays_30d >= YearTrendingPlays30dFloor)
+                .Where(item =>
+                    item.plays_48h >= YearTrendingPlays48hFloor
+                    && item.plays_30d >= YearTrendingPlays30dFloor
+                )
                 .OrderByDescending(item => item.trend_ratio)
                 .ThenByDescending(item => item.popularity.windows.days_30d.hot_score)
                 .Take(limit)
@@ -1183,11 +1422,20 @@ namespace Relisten.Services.Popularity
         private Dictionary<Guid, PopularityMetrics> BuildMetricsMap(IEnumerable<PopularityRow> rows)
         {
             var metrics = rows.Select(row => new
-            {
-                row.uuid,
-                metrics = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h, row.plays_90d,
-                    row.seconds_30d, row.seconds_7d, row.seconds_48h)
-            }).ToList();
+                {
+                    row.uuid,
+                    metrics = CreateMetrics(
+                        row.plays_30d,
+                        row.plays_7d,
+                        row.plays_6h,
+                        row.plays_48h,
+                        row.plays_90d,
+                        row.seconds_30d,
+                        row.seconds_7d,
+                        row.seconds_48h
+                    ),
+                })
+                .ToList();
 
             ApplyMomentumScores(metrics.Select(item => item.metrics).ToList());
 
@@ -1195,44 +1443,67 @@ namespace Relisten.Services.Popularity
         }
 
         private Dictionary<Guid, CachedShowPopularity> BuildShowPopularityCacheMap(
-            IEnumerable<PopularityShowCacheRow> rows)
+            IEnumerable<PopularityShowCacheRow> rows
+        )
         {
             var metrics = rows.Select(row => new
-            {
-                row.uuid,
-                weighted_penalized_plays_7d = row.weighted_penalized_plays_7d,
-                metrics = CreateMetrics(row.plays_30d, row.plays_7d, row.plays_6h, row.plays_48h, row.plays_90d,
-                    row.seconds_30d, row.seconds_7d, row.seconds_48h)
-            }).ToList();
+                {
+                    row.uuid,
+                    weighted_penalized_plays_7d = row.weighted_penalized_plays_7d,
+                    metrics = CreateMetrics(
+                        row.plays_30d,
+                        row.plays_7d,
+                        row.plays_6h,
+                        row.plays_48h,
+                        row.plays_90d,
+                        row.seconds_30d,
+                        row.seconds_7d,
+                        row.seconds_48h
+                    ),
+                })
+                .ToList();
 
             ApplyMomentumScores(metrics.Select(item => item.metrics).ToList());
 
-            return metrics.ToDictionary(item => item.uuid, item =>
-            {
-                var raw = item.metrics.momentum_score;
-                var ratio = ShowMomentumScoring.ComputeOtdPenaltyRatio(item.weighted_penalized_plays_7d,
-                    item.metrics.windows.days_7d.plays);
-                var organic = ShowMomentumScoring.ComputeOrganicMomentumScore(raw, ratio);
-
-                return new CachedShowPopularity
+            return metrics.ToDictionary(
+                item => item.uuid,
+                item =>
                 {
-                    windows = item.metrics.windows,
-                    trend_ratio = item.metrics.trend_ratio,
-                    momentum_score = raw,
-                    plays_6h = item.metrics.plays_6h,
-                    plays_90d = item.metrics.plays_90d,
-                    momentum = new CachedShowMomentum
+                    var raw = item.metrics.momentum_score;
+                    var ratio = ShowMomentumScoring.ComputeOtdPenaltyRatio(
+                        item.weighted_penalized_plays_7d,
+                        item.metrics.windows.days_7d.plays
+                    );
+                    var organic = ShowMomentumScoring.ComputeOrganicMomentumScore(raw, ratio);
+
+                    return new CachedShowPopularity
                     {
-                        raw = raw,
-                        organic = organic,
-                        otd_penalty_ratio_7d = ratio
-                    }
-                };
-            });
+                        windows = item.metrics.windows,
+                        trend_ratio = item.metrics.trend_ratio,
+                        momentum_score = raw,
+                        plays_6h = item.metrics.plays_6h,
+                        plays_90d = item.metrics.plays_90d,
+                        momentum = new CachedShowMomentum
+                        {
+                            raw = raw,
+                            organic = organic,
+                            otd_penalty_ratio_7d = ratio,
+                        },
+                    };
+                }
+            );
         }
 
-        internal static PopularityMetrics CreateMetrics(long plays30d, long plays7d, long plays6h, long plays48h,
-            long plays90d, long seconds30d, long seconds7d, long seconds48h)
+        internal static PopularityMetrics CreateMetrics(
+            long plays30d,
+            long plays7d,
+            long plays6h,
+            long plays48h,
+            long plays90d,
+            long seconds30d,
+            long seconds7d,
+            long seconds48h
+        )
         {
             return new PopularityMetrics
             {
@@ -1242,25 +1513,25 @@ namespace Relisten.Services.Popularity
                     {
                         plays = plays30d,
                         hours = seconds30d / 3600.0,
-                        hot_score = Math.Sqrt(Math.Max(plays30d, 0))
+                        hot_score = Math.Sqrt(Math.Max(plays30d, 0)),
                     },
                     days_7d = new PopularityWindowMetrics
                     {
                         plays = plays7d,
                         hours = seconds7d / 3600.0,
-                        hot_score = Math.Sqrt(Math.Max(plays7d, 0))
+                        hot_score = Math.Sqrt(Math.Max(plays7d, 0)),
                     },
                     hours_48h = new PopularityWindowMetrics
                     {
                         plays = plays48h,
                         hours = seconds48h / 3600.0,
-                        hot_score = Math.Sqrt(Math.Max(plays48h, 0))
-                    }
+                        hot_score = Math.Sqrt(Math.Max(plays48h, 0)),
+                    },
                 },
                 plays_6h = plays6h,
                 plays_90d = plays90d,
                 trend_ratio = ComputeTrendRatio(plays48h, plays90d),
-                momentum_score = 0
+                momentum_score = 0,
             };
         }
 
@@ -1298,22 +1569,28 @@ namespace Relisten.Services.Popularity
             }
 
             var trendRanks = PercentileRanks(metrics.Select(item => item.trend_ratio).ToList());
-            var hotRanks = PercentileRanks(metrics
-                .Select(item => item.windows.days_30d.hot_score)
-                .ToList());
-            var shortTrendRanks = PercentileRanks(metrics
-                .Select(item =>
-                {
-                    return ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays);
-                })
-                .ToList());
+            var hotRanks = PercentileRanks(
+                metrics.Select(item => item.windows.days_30d.hot_score).ToList()
+            );
+            var shortTrendRanks = PercentileRanks(
+                metrics
+                    .Select(item =>
+                    {
+                        return ComputeShortTrendRatio(item.plays_6h, item.windows.days_7d.plays);
+                    })
+                    .ToList()
+            );
 
             for (var i = 0; i < metrics.Count; i++)
             {
                 var trendNorm = trendRanks[i];
                 var hotNorm = hotRanks[i];
                 var shortNorm = shortTrendRanks[i];
-                metrics[i].momentum_score = Math.Clamp(0.6 * trendNorm + 0.2 * shortNorm + 0.2 * hotNorm, 0, 1);
+                metrics[i].momentum_score = Math.Clamp(
+                    0.6 * trendNorm + 0.2 * shortNorm + 0.2 * hotNorm,
+                    0,
+                    1
+                );
             }
         }
 
@@ -1344,7 +1621,8 @@ namespace Relisten.Services.Popularity
             return ranks;
         }
 
-        private void AssignRanks<T>(IReadOnlyList<T> items) where T : class
+        private void AssignRanks<T>(IReadOnlyList<T> items)
+            where T : class
         {
             for (var i = 0; i < items.Count; i++)
             {

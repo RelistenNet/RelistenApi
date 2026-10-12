@@ -19,7 +19,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
         RefreshTokenLockProvider refreshTokenLocks,
         TimeProvider timeProvider,
         IHostApplicationLifetime applicationLifetime,
-        ILogger<RefreshTokenReplayMiddleware> logger)
+        ILogger<RefreshTokenReplayMiddleware> logger
+    )
     {
         var refreshToken = await ReadRefreshTokenAsync(context);
         if (refreshToken is null)
@@ -33,19 +34,22 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
         using var lockDeadline = CreateSecurityDeadline(applicationLifetime);
         await using var refreshTokenLock = await refreshTokenLocks.AcquireAsync(
             refreshToken,
-            lockDeadline.Token);
+            lockDeadline.Token
+        );
         var replayDetected = await RevokeIfRedeemedAsync(
             tokenManager,
             authorizationManager,
             dbContext,
             timeProvider,
             refreshToken,
-            applicationLifetime);
+            applicationLifetime
+        );
 
         var requestAborted = context.RequestAborted;
         using var downstreamDeadline = CreateDownstreamDeadline(
             requestAborted,
-            applicationLifetime);
+            applicationLifetime
+        );
         ExceptionDispatchInfo? downstreamFailure = null;
         try
         {
@@ -64,10 +68,14 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
             context.RequestAborted = requestAborted;
         }
 
-        if (!replayDetected
-            && (downstreamFailure is not null
+        if (
+            !replayDetected
+            && (
+                downstreamFailure is not null
                 || context.Response.StatusCode >= StatusCodes.Status400BadRequest
-                || downstreamDeadline.IsCancellationRequested))
+                || downstreamDeadline.IsCancellationRequested
+            )
+        )
         {
             try
             {
@@ -80,7 +88,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
                     dbContext,
                     timeProvider,
                     refreshToken,
-                    applicationLifetime);
+                    applicationLifetime
+                );
             }
             catch (Exception exception) when (downstreamFailure is not null)
             {
@@ -88,7 +97,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
                 // recheck failure is still operationally urgent, but must not replace that cause.
                 logger.LogError(
                     exception,
-                    "Refresh-token safety recheck failed after the token pipeline threw.");
+                    "Refresh-token safety recheck failed after the token pipeline threw."
+                );
             }
         }
 
@@ -97,8 +107,7 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
 
     private static async Task<string?> ReadRefreshTokenAsync(HttpContext context)
     {
-        if (!IsTokenEndpoint(context.Request.Path)
-            || !context.Request.HasFormContentType)
+        if (!IsTokenEndpoint(context.Request.Path) || !context.Request.HasFormContentType)
         {
             return null;
         }
@@ -107,23 +116,22 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
         // before OpenIddict reads the same token request later in the pipeline.
         var form = await context.Request.ReadFormAsync(context.RequestAborted);
         var refreshToken = form[Parameters.RefreshToken].ToString();
-        return form[Parameters.GrantType] == GrantTypes.RefreshToken
+        return
+            form[Parameters.GrantType] == GrantTypes.RefreshToken
             && !string.IsNullOrWhiteSpace(refreshToken)
-                ? refreshToken
-                : null;
+            ? refreshToken
+            : null;
     }
 
     internal static bool IsTokenEndpoint(PathString path) =>
         string.Equals(path.Value, TokenEndpointPath, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(
-            path.Value,
-            $"{TokenEndpointPath}/",
-            StringComparison.OrdinalIgnoreCase);
+        || string.Equals(path.Value, $"{TokenEndpointPath}/", StringComparison.OrdinalIgnoreCase);
 
     private static async Task<bool> IsRedeemedAsync(
         IOpenIddictTokenManager tokenManager,
         string refreshToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var token = await tokenManager.FindByReferenceIdAsync(refreshToken, cancellationToken);
         return token is not null
@@ -136,7 +144,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
         AccountsDbContext dbContext,
         TimeProvider timeProvider,
         string refreshToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var token = await tokenManager.FindByReferenceIdAsync(refreshToken, cancellationToken);
         if (token is null)
@@ -150,10 +159,13 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
             return;
         }
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
         var session = await dbContext.NativeSessions.SingleOrDefaultAsync(
             item => item.AuthorizationId == authorizationUuid,
-            cancellationToken);
+            cancellationToken
+        );
         if (session is not null)
         {
             var now = timeProvider.GetUtcNow();
@@ -163,7 +175,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
 
         var authorization = await authorizationManager.FindByIdAsync(
             authorizationId,
-            cancellationToken);
+            cancellationToken
+        );
         if (authorization is not null)
         {
             await authorizationManager.TryRevokeAsync(authorization, cancellationToken);
@@ -179,7 +192,8 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
         AccountsDbContext dbContext,
         TimeProvider timeProvider,
         string refreshToken,
-        IHostApplicationLifetime applicationLifetime)
+        IHostApplicationLifetime applicationLifetime
+    )
     {
         // Parsing the request remains client-cancellable. Once a complete reference token is
         // available, replay detection and revocation become a bounded server-side operation.
@@ -197,26 +211,31 @@ public sealed class RefreshTokenReplayMiddleware(RequestDelegate next)
             dbContext,
             timeProvider,
             refreshToken,
-            deadline.Token);
+            deadline.Token
+        );
         return true;
     }
 
     private static CancellationTokenSource CreateSecurityDeadline(
-        IHostApplicationLifetime applicationLifetime)
+        IHostApplicationLifetime applicationLifetime
+    )
     {
         var deadline = CancellationTokenSource.CreateLinkedTokenSource(
-            applicationLifetime.ApplicationStopping);
+            applicationLifetime.ApplicationStopping
+        );
         deadline.CancelAfter(RevocationDeadline);
         return deadline;
     }
 
     private static CancellationTokenSource CreateDownstreamDeadline(
         CancellationToken requestAborted,
-        IHostApplicationLifetime applicationLifetime)
+        IHostApplicationLifetime applicationLifetime
+    )
     {
         var deadline = CancellationTokenSource.CreateLinkedTokenSource(
             requestAborted,
-            applicationLifetime.ApplicationStopping);
+            applicationLifetime.ApplicationStopping
+        );
         deadline.CancelAfter(RevocationDeadline);
         return deadline;
     }

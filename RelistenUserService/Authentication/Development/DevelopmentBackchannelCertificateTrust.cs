@@ -8,29 +8,31 @@ public sealed class DevelopmentBackchannelCertificateTrust
     private readonly string _issuerOrigin;
     private readonly X509Certificate2 _certificateAuthority;
 
-    public DevelopmentBackchannelCertificateTrust(
-        Uri issuer,
-        string certificateAuthorityPath)
+    public DevelopmentBackchannelCertificateTrust(Uri issuer, string certificateAuthorityPath)
     {
         _issuerOrigin = issuer.GetLeftPart(UriPartial.Authority);
         _certificateAuthority = X509CertificateLoader.LoadCertificateFromFile(
-            certificateAuthorityPath);
+            certificateAuthorityPath
+        );
     }
 
     public bool Validate(
         HttpRequestMessage request,
         X509Certificate2? certificate,
         X509Chain? ignoredChain,
-        SslPolicyErrors errors)
+        SslPolicyErrors errors
+    )
     {
-        if (request.RequestUri is null
+        if (
+            request.RequestUri is null
             || !string.Equals(
                 request.RequestUri.GetLeftPart(UriPartial.Authority),
                 _issuerOrigin,
-                StringComparison.Ordinal)
+                StringComparison.Ordinal
+            )
             || certificate is null
-            || (errors & ~SslPolicyErrors.RemoteCertificateChainErrors)
-                != SslPolicyErrors.None)
+            || (errors & ~SslPolicyErrors.RemoteCertificateChainErrors) != SslPolicyErrors.None
+        )
         {
             return false;
         }

@@ -23,8 +23,9 @@ namespace Relisten.Services.Popularity
             }
         }
 
-        public void OnStateUnapplied(ApplyStateContext context, IWriteOnlyTransaction transaction)
-        {
-        }
+        public void OnStateUnapplied(
+            ApplyStateContext context,
+            IWriteOnlyTransaction transaction
+        ) { }
     }
 }

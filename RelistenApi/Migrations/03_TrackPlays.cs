@@ -7,7 +7,8 @@ namespace Migrations
     {
         protected override void Up()
         {
-            Execute(@"
+            Execute(
+                @"
 CREATE TABLE source_track_plays (
     id SERIAL,
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -22,14 +23,17 @@ CREATE INDEX idx_source_track_plays_created_at
 
 ALTER TABLE ONLY source_track_plays
     ADD CONSTRAINT source_track_plays_source_track_uuid_fkey FOREIGN KEY (source_track_uuid) REFERENCES source_tracks(uuid) ON DELETE SET NULL;
-           ");
+           "
+            );
         }
 
         protected override void Down()
         {
-            Execute(@"
+            Execute(
+                @"
 DROP TABLE source_track_plays;
-            ");
+            "
+            );
         }
     }
 }

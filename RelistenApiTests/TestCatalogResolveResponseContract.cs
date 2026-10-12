@@ -46,15 +46,16 @@ public sealed class TestCatalogResolveResponseContract
                         slug = "artist",
                         sort_name = "Artist",
                         features = new Features { id = 84, artist_id = 42 },
-                        upstream_sources = []
-                    }
-                ]
-            }
+                        upstream_sources = [],
+                    },
+                ],
+            },
         };
 
         var json = JsonConvert.SerializeObject(
             response,
-            RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
+            RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+        );
         var parsed = JObject.Parse(json);
 
         parsed.SelectTokens("$..id").Should().BeEmpty();
@@ -75,33 +76,35 @@ public sealed class TestCatalogResolveResponseContract
         {
             new("artist", existingArtistUuid),
             new("show", existingShowUuid),
-            new("show", missingShowUuid)
+            new("show", missingShowUuid),
         };
         var entities = new CatalogResolveEntities
         {
             artists =
             [
-                new ArtistWithCounts {uuid = existingArtistUuid},
-                new ArtistWithCounts {uuid = missingShowUuid}
+                new ArtistWithCounts { uuid = existingArtistUuid },
+                new ArtistWithCounts { uuid = missingShowUuid },
             ],
-            shows = [new Show {uuid = existingShowUuid}]
+            shows = [new Show { uuid = existingShowUuid }],
         };
 
         var resolved = CatalogReferenceResolver.BuildResolvedReferences(references, entities);
 
-        resolved.Select(reference => (
-                reference.catalog_type,
-                reference.catalog_uuid,
-                reference.availability))
-            .Should().Equal(
+        resolved
+            .Select(reference =>
+                (reference.catalog_type, reference.catalog_uuid, reference.availability)
+            )
+            .Should()
+            .Equal(
                 ("artist", existingArtistUuid, "available"),
                 ("show", existingShowUuid, "available"),
-                ("show", missingShowUuid, "unavailable"));
+                ("show", missingShowUuid, "unavailable")
+            );
     }
 
     private static Type ElementType(string propertyName) =>
-        typeof(CatalogResolveEntities).GetProperty(propertyName)!
-            .PropertyType
-            .GetGenericArguments()
+        typeof(CatalogResolveEntities)
+            .GetProperty(propertyName)!
+            .PropertyType.GetGenericArguments()
             .Single();
 }

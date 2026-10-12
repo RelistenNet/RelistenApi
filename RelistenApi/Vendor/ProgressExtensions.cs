@@ -7,8 +7,11 @@ namespace Relisten
 {
     public static class ProgressExtensions
     {
-        public static async Task<IList<T>> AsyncForEachWithProgress<T>(this IList<T> list, IProgressBar bar,
-            Func<T, Task> action)
+        public static async Task<IList<T>> AsyncForEachWithProgress<T>(
+            this IList<T> list,
+            IProgressBar bar,
+            Func<T, Task> action
+        )
         {
             var count = 1;
             foreach (var item in list)
@@ -22,7 +25,11 @@ namespace Relisten
             return list;
         }
 
-        public static IList<T> ForEachWithProgress<T>(this IList<T> list, IProgressBar bar, Action<T> action)
+        public static IList<T> ForEachWithProgress<T>(
+            this IList<T> list,
+            IProgressBar bar,
+            Action<T> action
+        )
         {
             var count = 1;
             foreach (var item in list)
@@ -37,8 +44,12 @@ namespace Relisten
         }
 
         // http://stackoverflow.com/a/27325206/132509
-        public static async Task ForEachAsync<TSource>(this IList<TSource> source, Func<TSource, Task> selector,
-            IProgressBar bar, int maxDegreesOfParallelism)
+        public static async Task ForEachAsync<TSource>(
+            this IList<TSource> source,
+            Func<TSource, Task> selector,
+            IProgressBar bar,
+            int maxDegreesOfParallelism
+        )
         {
             var activeTasks = new HashSet<Task>();
             var count = 1;

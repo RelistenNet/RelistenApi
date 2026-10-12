@@ -8,9 +8,8 @@ namespace Relisten.Data
 {
     public class LinkService : RelistenDataServiceBase
     {
-        public LinkService(DbService db) : base(db)
-        {
-        }
+        public LinkService(DbService db)
+            : base(db) { }
 
         public async Task<IEnumerable<Link>> AddLinksForSource(Source src, IEnumerable<Link> links)
         {
@@ -23,7 +22,8 @@ namespace Relisten.Data
             return await db.WithWriteConnection(async con =>
             {
                 // Batch insert using UNNEST for all links at once
-                var inserted = await con.QueryAsync<Link>(@"
+                var inserted = await con.QueryAsync<Link>(
+                    @"
                     INSERT INTO
                         links
                         (
@@ -59,16 +59,18 @@ namespace Relisten.Data
                         url = EXCLUDED.url,
                         label = EXCLUDED.label
                     RETURNING *
-                ", new
-                {
-                    source_ids = linkList.Select(l => l.source_id).ToArray(),
-                    upstream_source_ids = linkList.Select(l => l.upstream_source_id).ToArray(),
-                    for_reviews = linkList.Select(l => l.for_reviews).ToArray(),
-                    for_ratings = linkList.Select(l => l.for_ratings).ToArray(),
-                    for_sources = linkList.Select(l => l.for_source).ToArray(),
-                    urls = linkList.Select(l => l.url).ToArray(),
-                    labels = linkList.Select(l => l.label).ToArray()
-                });
+                ",
+                    new
+                    {
+                        source_ids = linkList.Select(l => l.source_id).ToArray(),
+                        upstream_source_ids = linkList.Select(l => l.upstream_source_id).ToArray(),
+                        for_reviews = linkList.Select(l => l.for_reviews).ToArray(),
+                        for_ratings = linkList.Select(l => l.for_ratings).ToArray(),
+                        for_sources = linkList.Select(l => l.for_source).ToArray(),
+                        urls = linkList.Select(l => l.url).ToArray(),
+                        labels = linkList.Select(l => l.label).ToArray(),
+                    }
+                );
 
                 return inserted;
             });

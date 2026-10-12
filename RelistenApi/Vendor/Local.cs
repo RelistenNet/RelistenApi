@@ -18,9 +18,7 @@ namespace Relisten.Vendor.Local
         public List<string> txts { get; set; } = null!;
     }
 
-    public class LocalEraReiponse : LocalRootObject<IDictionary<string, IList<string>>>
-    {
-    }
+    public class LocalEraReiponse : LocalRootObject<IDictionary<string, IList<string>>> { }
 
     public class LocalSmallTour
     {
@@ -121,13 +119,15 @@ namespace Relisten.Vendor.Local
         public LocalTrackTags tags { get; set; } = null!;
     }
 
-    public class LocalTrackTags {
+    public class LocalTrackTags
+    {
         public long duration { get; set; }
         public string title { get; set; } = null!;
         public LocalTrackTagsTrack track { get; set; } = null!;
     }
 
-    public class LocalTrackTagsTrack {
+    public class LocalTrackTagsTrack
+    {
         public int no { get; set; }
         public int of { get; set; }
     }
@@ -160,7 +160,6 @@ namespace Relisten.Vendor.Local
         public List<LocalShowTrack> tracks { get; set; } = null!;
         public DateTime updated_at { get; set; }
     }
-
 
     public class ShowMetadata
     {

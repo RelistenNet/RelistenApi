@@ -38,7 +38,10 @@ public sealed class HealthController : ControllerBase
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Database readiness check failed");
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { status = "unavailable" });
+            return StatusCode(
+                StatusCodes.Status503ServiceUnavailable,
+                new { status = "unavailable" }
+            );
         }
     }
 }

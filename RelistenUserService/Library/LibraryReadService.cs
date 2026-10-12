@@ -4,9 +4,7 @@ using RelistenUserService.Persistence;
 
 namespace RelistenUserService.Library;
 
-public sealed record LibraryChangesExecution(
-    FavoriteLibraryChanges? Response,
-    bool CursorExpired)
+public sealed record LibraryChangesExecution(FavoriteLibraryChanges? Response, bool CursorExpired)
 {
     public static LibraryChangesExecution Succeeded(FavoriteLibraryChanges response) =>
         new(response, false);
@@ -18,23 +16,27 @@ public sealed class LibraryReadService(
     AccountsDbContext dbContext,
     LibraryStateStore stateStore,
     LibraryCursorProtector cursorProtector,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider
+)
 {
     public const int MaximumChangesPerPage = 500;
 
     public async Task<FavoriteLibrarySnapshot> GetSnapshotAsync(
         Guid userId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            cancellationToken);
+            cancellationToken
+        );
         var state = await stateStore.GetOrCreateAsync(
             userId,
             timeProvider.GetUtcNow(),
             LibraryStateLockMode.SharedRead,
-            cancellationToken);
-        var favorites = await dbContext.Favorites
-            .AsNoTracking()
+            cancellationToken
+        );
+        var favorites = await dbContext
+            .Favorites.AsNoTracking()
             .Where(favorite => favorite.UserId == userId)
             .OrderBy(favorite => favorite.CreatedAt)
             .ThenBy(favorite => favorite.Id)
@@ -43,7 +45,8 @@ public sealed class LibraryReadService(
                 favorite.CatalogType,
                 favorite.CatalogUuid,
                 favorite.CreatedAt,
-                favorite.UpdatedAt))
+                favorite.UpdatedAt
+            ))
             .ToArrayAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -51,13 +54,15 @@ public sealed class LibraryReadService(
             FavoriteMutationRequestValidator.ContractVersion,
             state.Revision,
             cursorProtector.Protect(userId, state.Revision),
-            favorites);
+            favorites
+        );
     }
 
     public async Task<LibraryChangesExecution> GetChangesAsync(
         Guid userId,
         string? cursor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!cursorProtector.TryUnprotect(cursor, userId, out var afterRevision))
         {
@@ -65,19 +70,21 @@ public sealed class LibraryReadService(
         }
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(
-            cancellationToken);
+            cancellationToken
+        );
         var state = await stateStore.GetOrCreateAsync(
             userId,
             timeProvider.GetUtcNow(),
             LibraryStateLockMode.SharedRead,
-            cancellationToken);
+            cancellationToken
+        );
         if (afterRevision > state.Revision)
         {
             return LibraryChangesExecution.Expired();
         }
 
-        var changes = await dbContext.LibraryChanges
-            .AsNoTracking()
+        var changes = await dbContext
+            .LibraryChanges.AsNoTracking()
             .Where(change => change.UserId == userId && change.Revision > afterRevision)
             .OrderBy(change => change.Revision)
             .Take(MaximumChangesPerPage + 1)
@@ -85,8 +92,10 @@ public sealed class LibraryReadService(
 
         // Revisions are contiguous per user. A gap means the cursor predates retained history,
         // even if the protected token itself is still cryptographically valid.
-        if (afterRevision < state.Revision
-            && (changes.Length == 0 || changes[0].Revision != afterRevision + 1))
+        if (
+            afterRevision < state.Revision
+            && (changes.Length == 0 || changes[0].Revision != afterRevision + 1)
+        )
         {
             return LibraryChangesExecution.Expired();
         }
@@ -104,10 +113,12 @@ public sealed class LibraryReadService(
                     change.FavoriteId,
                     change.CatalogType,
                     change.CatalogUuid,
-                    change.ChangedAt))
+                    change.ChangedAt
+                ))
                 .ToArray(),
             cursorProtector.Protect(userId, nextRevision),
-            hasMore);
+            hasMore
+        );
         await transaction.CommitAsync(cancellationToken);
         return LibraryChangesExecution.Succeeded(response);
     }

@@ -22,7 +22,9 @@ public class TestPopularityEndpointContracts
     [Test]
     public void ArtistPopularTrendingShows_ShouldDeclareSingleArtistContract()
     {
-        var method = typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistPopularTrendingShows));
+        var method = typeof(PopularityController).GetMethod(
+            nameof(PopularityController.ArtistPopularTrendingShows)
+        );
         method.Should().NotBeNull();
 
         var route = method!.GetCustomAttribute<HttpGetAttribute>();
@@ -32,16 +34,22 @@ public class TestPopularityEndpointContracts
         var produces = method.GetCustomAttributes<ProducesResponseTypeAttribute>().Single();
         produces.Type.Should().Be(typeof(ArtistPopularTrendingShowsResponse));
 
-        typeof(ArtistPopularTrendingShowsResponse).GetProperty(nameof(ArtistPopularTrendingShowsResponse.popular_shows))!
-            .PropertyType.Should().Be(typeof(IReadOnlyList<Show>));
-        typeof(ArtistPopularTrendingShowsResponse).GetProperty(nameof(ArtistPopularTrendingShowsResponse.trending_shows))!
-            .PropertyType.Should().Be(typeof(IReadOnlyList<Show>));
+        typeof(ArtistPopularTrendingShowsResponse)
+            .GetProperty(nameof(ArtistPopularTrendingShowsResponse.popular_shows))!
+            .PropertyType.Should()
+            .Be(typeof(IReadOnlyList<Show>));
+        typeof(ArtistPopularTrendingShowsResponse)
+            .GetProperty(nameof(ArtistPopularTrendingShowsResponse.trending_shows))!
+            .PropertyType.Should()
+            .Be(typeof(IReadOnlyList<Show>));
     }
 
     [Test]
     public void ArtistsPopularTrendingShows_ShouldDeclareListBasedMultiArtistContract()
     {
-        var method = typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsPopularTrendingShows));
+        var method = typeof(PopularityController).GetMethod(
+            nameof(PopularityController.ArtistsPopularTrendingShows)
+        );
         method.Should().NotBeNull();
 
         var route = method!.GetCustomAttribute<HttpGetAttribute>();
@@ -51,8 +59,10 @@ public class TestPopularityEndpointContracts
         var produces = method.GetCustomAttributes<ProducesResponseTypeAttribute>().Single();
         produces.Type.Should().Be(typeof(MultiArtistPopularTrendingShowsResponse));
 
-        typeof(MultiArtistPopularTrendingShowsResponse).GetProperty(nameof(MultiArtistPopularTrendingShowsResponse.artists))!
-            .PropertyType.Should().Be(typeof(IReadOnlyList<ArtistPopularTrendingShowsResponse>));
+        typeof(MultiArtistPopularTrendingShowsResponse)
+            .GetProperty(nameof(MultiArtistPopularTrendingShowsResponse.artists))!
+            .PropertyType.Should()
+            .Be(typeof(IReadOnlyList<ArtistPopularTrendingShowsResponse>));
     }
 
     [Test]
@@ -67,19 +77,22 @@ public class TestPopularityEndpointContracts
                     artist_uuid = Guid.Parse("10000000-0000-0000-0000-000000000001"),
                     artist_name = "Artist One",
                     popular_shows = new List<Show> { NewShow(1) },
-                    trending_shows = new List<Show> { NewShow(2) }
+                    trending_shows = new List<Show> { NewShow(2) },
                 },
                 new ArtistPopularTrendingShowsResponse
                 {
                     artist_uuid = Guid.Parse("20000000-0000-0000-0000-000000000002"),
                     artist_name = "Artist Two",
                     popular_shows = new List<Show>(),
-                    trending_shows = new List<Show>()
-                }
-            }
+                    trending_shows = new List<Show>(),
+                },
+            },
         };
 
-        var json = JsonConvert.SerializeObject(response, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
+        var json = JsonConvert.SerializeObject(
+            response,
+            RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+        );
         var parsed = JObject.Parse(json);
 
         parsed["artists"]!.Type.Should().Be(JTokenType.Array);
@@ -92,7 +105,9 @@ public class TestPopularityEndpointContracts
     [Test]
     public void ArtistsMomentumShows_ShouldDeclareMergedMomentumContract()
     {
-        var method = typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsMomentumShows));
+        var method = typeof(PopularityController).GetMethod(
+            nameof(PopularityController.ArtistsMomentumShows)
+        );
         method.Should().NotBeNull();
 
         var route = method!.GetCustomAttribute<HttpGetAttribute>();
@@ -109,15 +124,23 @@ public class TestPopularityEndpointContracts
         AssertShowQueryDefaults(nameof(PopularityController.PopularShows));
         AssertShowQueryDefaults(nameof(PopularityController.TrendingShows));
         AssertShowQueryDefaults(nameof(PopularityController.ArtistPopularTrendingShows));
-        AssertShowQueryDefaults(nameof(PopularityController.ArtistsPopularTrendingShows), expectedLimit: 10);
-        AssertLimitQueryDefault(nameof(PopularityController.ArtistsMomentumShows), expectedLimit: 25);
+        AssertShowQueryDefaults(
+            nameof(PopularityController.ArtistsPopularTrendingShows),
+            expectedLimit: 10
+        );
+        AssertLimitQueryDefault(
+            nameof(PopularityController.ArtistsMomentumShows),
+            expectedLimit: 25
+        );
     }
 
     [Test]
     public void NormalizeShowLimit_ShouldClampAtRequestedMax()
     {
-        var normalize = typeof(PopularityController).GetMethod("NormalizeShowLimit",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var normalize = typeof(PopularityController).GetMethod(
+            "NormalizeShowLimit",
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
         normalize.Should().NotBeNull();
         normalize!.Invoke(null, new object[] { 50, 25 }).Should().Be(25);
@@ -130,25 +153,25 @@ public class TestPopularityEndpointContracts
     [Test]
     public void ShowPopularityEndpoints_ShouldReturnShowContract()
     {
-        typeof(PopularityController).GetMethod(nameof(PopularityController.PopularShows))!
+        typeof(PopularityController)
+            .GetMethod(nameof(PopularityController.PopularShows))!
             .GetCustomAttributes<ProducesResponseTypeAttribute>()
             .Single()
-            .Type
-            .Should()
+            .Type.Should()
             .Be(typeof(Show[]));
 
-        typeof(PopularityController).GetMethod(nameof(PopularityController.TrendingShows))!
+        typeof(PopularityController)
+            .GetMethod(nameof(PopularityController.TrendingShows))!
             .GetCustomAttributes<ProducesResponseTypeAttribute>()
             .Single()
-            .Type
-            .Should()
+            .Type.Should()
             .Be(typeof(Show[]));
 
-        typeof(PopularityController).GetMethod(nameof(PopularityController.ArtistsMomentumShows))!
+        typeof(PopularityController)
+            .GetMethod(nameof(PopularityController.ArtistsMomentumShows))!
             .GetCustomAttributes<ProducesResponseTypeAttribute>()
             .Single()
-            .Type
-            .Should()
+            .Type.Should()
             .Be(typeof(Show[]));
     }
 
@@ -173,9 +196,9 @@ public class TestPopularityEndpointContracts
                 windows = new PopularityWindows
                 {
                     days_30d = new PopularityWindowMetrics { plays = 10, hot_score = 3.0 },
-                    hours_48h = new PopularityWindowMetrics { plays = 9 }
-                }
-            }
+                    hours_48h = new PopularityWindowMetrics { plays = 9 },
+                },
+            },
         };
     }
 
@@ -183,35 +206,34 @@ public class TestPopularityEndpointContracts
     {
         AssertLimitQueryDefault(methodName, expectedLimit);
 
-        var parameters = typeof(PopularityController).GetMethod(methodName)!
-            .GetParameters();
+        var parameters = typeof(PopularityController).GetMethod(methodName)!.GetParameters();
 
-        parameters.Single(parameter => parameter.Name == "window")
-            .DefaultValue
-            .Should()
+        parameters
+            .Single(parameter => parameter.Name == "window")
+            .DefaultValue.Should()
             .Be(PopularitySortWindow.Days30);
     }
 
     private static void AssertLimitQueryDefault(string methodName, int expectedLimit)
     {
-        var parameters = typeof(PopularityController).GetMethod(methodName)!
-            .GetParameters();
+        var parameters = typeof(PopularityController).GetMethod(methodName)!.GetParameters();
 
-        parameters.Single(parameter => parameter.Name == "limit")
-            .DefaultValue
-            .Should()
+        parameters
+            .Single(parameter => parameter.Name == "limit")
+            .DefaultValue.Should()
             .Be(expectedLimit);
     }
 
     private static void AssertShowWindowBinder(string methodName)
     {
-        var windowParameter = typeof(PopularityController).GetMethod(methodName)!
+        var windowParameter = typeof(PopularityController)
+            .GetMethod(methodName)!
             .GetParameters()
             .Single(parameter => parameter.Name == "window");
 
-        windowParameter.GetCustomAttribute<ModelBinderAttribute>()!
-            .BinderType
-            .Should()
+        windowParameter
+            .GetCustomAttribute<ModelBinderAttribute>()!
+            .BinderType.Should()
             .Be(typeof(PopularitySortWindowModelBinder));
     }
 }

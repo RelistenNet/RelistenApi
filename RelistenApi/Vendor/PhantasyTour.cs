@@ -15,7 +15,6 @@ namespace Relisten.Vendor.PhantasyTour
         public bool attended { get; set; }
     }
 
-
     public class PhantasyTourBand
     {
         public int id { get; set; }

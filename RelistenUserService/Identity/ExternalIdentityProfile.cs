@@ -5,4 +5,5 @@ public sealed record ExternalIdentityProfile(
     string Subject,
     string? Email,
     bool? EmailVerified,
-    bool? EmailIsPrivateRelay);
+    bool? EmailIsPrivateRelay
+);

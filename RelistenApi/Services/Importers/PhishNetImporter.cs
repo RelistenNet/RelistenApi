@@ -27,7 +27,8 @@ namespace Relisten.Import
             LinkService linkService,
             ILogger<PhishNetImporter> log,
             RedisService redisService
-        ) : base(db, redisService)
+        )
+            : base(db, redisService)
         {
             this.linkService = linkService;
             _sourceService = sourceService;
@@ -46,24 +47,35 @@ namespace Relisten.Import
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
             return ImportableData.SourceRatings
-                   | ImportableData.SourceReviews
-                   | ImportableData.Sources;
+                | ImportableData.SourceReviews
+                | ImportableData.Sources;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext? ctx)
+        public override async Task<ImportStats> ImportDataForArtist(
+            Artist artist,
+            ArtistUpstreamSource src,
+            PerformContext? ctx
+        )
         {
             var stats = new ImportStats();
 
-            var allShows = (await _sourceService.AllForArtist(artist)).OrderBy(s => s.display_date).ToList();
+            var allShows = (await _sourceService.AllForArtist(artist))
+                .OrderBy(s => s.display_date)
+                .ToList();
 
             var shows = CurrentImportOptions.IsThinScrape
-                ? allShows.Where(s => s.display_date.StartsWith(CurrentImportOptions.OnlyYear.ToString()!)).ToList()
+                ? allShows
+                    .Where(s =>
+                        s.display_date.StartsWith(CurrentImportOptions.OnlyYear.ToString()!)
+                    )
+                    .ToList()
                 : allShows;
 
             var prog = ctx?.WriteProgressBar();
 
-            ctx?.WriteLine($"Processing {shows.Count} shows{(CurrentImportOptions.IsThinScrape ? $" (filtered to year {CurrentImportOptions.OnlyYear}, {allShows.Count} total)" : "")}");
+            ctx?.WriteLine(
+                $"Processing {shows.Count} shows{(CurrentImportOptions.IsThinScrape ? $" (filtered to year {CurrentImportOptions.OnlyYear}, {allShows.Count} total)" : "")}"
+            );
 
             var phishNetApiShows = await phishNetApiClient.Shows(ctx);
 
@@ -76,10 +88,14 @@ namespace Relisten.Import
             }
             else
             {
-                await shows.ForEachAsync(async dbSource =>
-                {
-                    stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
-                }, prog, 10);
+                await shows.ForEachAsync(
+                    async dbSource =>
+                    {
+                        stats += await ProcessSource(artist, src, dbSource, phishNetApiShows, ctx);
+                    },
+                    prog,
+                    10
+                );
             }
 
             ctx?.WriteLine("Rebuilding...");
@@ -90,23 +106,36 @@ namespace Relisten.Import
             return stats;
         }
 
-        public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string? showIdentifier, PerformContext? ctx)
+        public override Task<ImportStats> ImportSpecificShowDataForArtist(
+            Artist artist,
+            ArtistUpstreamSource src,
+            string? showIdentifier,
+            PerformContext? ctx
+        )
         {
             return Task.FromResult(new ImportStats());
         }
 
-        private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(Source dbSource, PerformContext? ctx)
+        private async Task<PhishNetScrapeResults> ScrapePhishNetForSource(
+            Source dbSource,
+            PerformContext? ctx
+        )
         {
             var ratingScraper = new PhishNetRatingsScraper(http, dbSource.display_date);
-            ctx?.WriteLine($"Requesting {PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date)}");
+            ctx?.WriteLine(
+                $"Requesting {PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date)}"
+            );
 
             return await ratingScraper.ScrapeRatings();
         }
 
-        private async Task<ImportStats> ProcessSource(Artist artist, ArtistUpstreamSource src, Source dbSource,
+        private async Task<ImportStats> ProcessSource(
+            Artist artist,
+            ArtistUpstreamSource src,
+            Source dbSource,
             IList<PhishNetApiShow> phishNetApiShows,
-            PerformContext? ctx)
+            PerformContext? ctx
+        )
         {
             var stats = new ImportStats();
 
@@ -115,16 +144,22 @@ namespace Relisten.Import
 
             if (!ratings.RatingMatched)
             {
-                ctx?.WriteLine($"{dbSource.display_date} skipping — failed to scrape ratings from phish.net");
+                ctx?.WriteLine(
+                    $"{dbSource.display_date} skipping — failed to scrape ratings from phish.net"
+                );
             }
             else
             {
                 var newAvgRating = decimal.ToDouble(ratings.RatingAverage * 2.0m);
 
-                if (dbSource.num_ratings != ratings.RatingVotesCast
-                    || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001)
+                if (
+                    dbSource.num_ratings != ratings.RatingVotesCast
+                    || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001
+                )
                 {
-                    ctx?.WriteLine($"{dbSource.display_date} ratings changed: num_ratings {dbSource.num_ratings} → {ratings.RatingVotesCast}, avg_rating {dbSource.avg_rating} → {newAvgRating}");
+                    ctx?.WriteLine(
+                        $"{dbSource.display_date} ratings changed: num_ratings {dbSource.num_ratings} → {ratings.RatingVotesCast}, avg_rating {dbSource.avg_rating} → {newAvgRating}"
+                    );
                     dbSource.num_ratings = ratings.RatingVotesCast;
                     dbSource.avg_rating = newAvgRating;
 
@@ -133,17 +168,21 @@ namespace Relisten.Import
 
                 if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
                 {
-                    ctx?.WriteLine($"{dbSource.display_date} reviews changed: {dbSource.num_reviews} → {ratings.NumberOfReviewsWritten}");
+                    ctx?.WriteLine(
+                        $"{dbSource.display_date} reviews changed: {dbSource.num_reviews} → {ratings.NumberOfReviewsWritten}"
+                    );
                     var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
 
-                    var dbReviews = reviews.Select(rev => new SourceReview
-                    {
-                        rating = null,
-                        title = null,
-                        review = rev.review_text,
-                        author = rev.username,
-                        updated_at = rev.posted_at
-                    }).ToList();
+                    var dbReviews = reviews
+                        .Select(rev => new SourceReview
+                        {
+                            rating = null,
+                            title = null,
+                            review = rev.review_text,
+                            author = rev.username,
+                            updated_at = rev.posted_at,
+                        })
+                        .ToList();
 
                     dbSource.num_reviews = dbReviews.Count;
 
@@ -153,11 +192,15 @@ namespace Relisten.Import
                 }
             }
 
-            var phishNetApiShow = phishNetApiShows.FirstOrDefault(pnetShow => pnetShow.showdate == dbSource.display_date);
+            var phishNetApiShow = phishNetApiShows.FirstOrDefault(pnetShow =>
+                pnetShow.showdate == dbSource.display_date
+            );
 
             if (!dbSource.description.Contains(phishNetApiShow!.setlist_notes))
             {
-                ctx?.WriteLine($"{dbSource.display_date} setlist_notes changed: [{dbSource.description.Length} chars] → [{phishNetApiShow.setlist_notes.Length} chars]");
+                ctx?.WriteLine(
+                    $"{dbSource.display_date} setlist_notes changed: [{dbSource.description.Length} chars] → [{phishNetApiShow.setlist_notes.Length} chars]"
+                );
                 dbSource.description = phishNetApiShow.setlist_notes;
 
                 dirty = true;
@@ -170,26 +213,34 @@ namespace Relisten.Import
                 stats.Updated++;
             }
 
-            stats.Created += (await linkService.AddLinksForSource(dbSource,
-            [
-                new Link
-                    {
-                        source_id = dbSource.id,
-                        for_ratings = true,
-                        for_source = false,
-                        for_reviews = true,
-                        upstream_source_id = src.upstream_source_id,
-                        url = PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date),
-                        label = "View on phish.net"
-                    }
-            ])).Count();
-
+            stats.Created += (
+                await linkService.AddLinksForSource(
+                    dbSource,
+                    [
+                        new Link
+                        {
+                            source_id = dbSource.id,
+                            for_ratings = true,
+                            for_source = false,
+                            for_reviews = true,
+                            upstream_source_id = src.upstream_source_id,
+                            url = PhishNetRatingsScraper.PhishNetUrlForSource(
+                                dbSource.display_date
+                            ),
+                            label = "View on phish.net",
+                        },
+                    ]
+                )
+            ).Count();
 
             return stats;
         }
 
-        private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(ImportStats stats, Source source,
-            IList<SourceReview> reviews)
+        private async Task<IEnumerable<SourceReview>> ReplaceSourceReviews(
+            ImportStats stats,
+            Source source,
+            IList<SourceReview> reviews
+        )
         {
             foreach (var review in reviews)
             {

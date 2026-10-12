@@ -12,67 +12,100 @@ namespace Relisten.Api.Models
         NoFlac,
         Flac16Bit,
         Flac24Bit,
-        NoPlayableFlac
+        NoPlayableFlac,
     }
 
     public class SlimSource : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [V2JsonOnly] [Required] public int artist_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int artist_id { get; set; }
 
-        [Required] public Guid artist_uuid { get; set; }
+        [Required]
+        public Guid artist_uuid { get; set; }
 
-        [V2JsonOnly] [Required] public int? venue_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int? venue_id { get; set; }
 
-        [Required] public Guid? venue_uuid { get; set; }
+        [Required]
+        public Guid? venue_uuid { get; set; }
         public Venue venue { get; set; } = null!;
 
-        [Required] public string display_date { get; set; } = null!;
+        [Required]
+        public string display_date { get; set; } = null!;
 
-        [Required] public bool is_soundboard { get; set; }
+        [Required]
+        public bool is_soundboard { get; set; }
 
-        [Required] public bool is_remaster { get; set; }
+        [Required]
+        public bool is_remaster { get; set; }
 
-        [Required] public bool has_jamcharts { get; set; }
+        [Required]
+        public bool has_jamcharts { get; set; }
 
-        [Required] public double avg_rating { get; set; }
+        [Required]
+        public double avg_rating { get; set; }
 
-        [Required] public int num_reviews { get; set; }
+        [Required]
+        public int num_reviews { get; set; }
 
         public int? num_ratings { get; set; }
 
-        [Required] public double avg_rating_weighted { get; set; }
+        [Required]
+        public double avg_rating_weighted { get; set; }
 
         public double duration { get; set; }
 
-        [Required] public string upstream_identifier { get; set; } = null!;
+        [Required]
+        public string upstream_identifier { get; set; } = null!;
 
-        [Required] public Guid uuid { get; set; }
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class SlimSourceWithShowVenueAndArtist : SlimSource
     {
-        [V2JsonOnly] [Required] public int? show_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int? show_id { get; set; }
 
-        [Required] public Guid? show_uuid { get; set; }
+        [Required]
+        public Guid? show_uuid { get; set; }
 
         public Show show { get; set; } = null!;
 
-        [Required] public SlimArtistWithFeatures artist { get; set; } = null!;
+        [Required]
+        public SlimArtistWithFeatures artist { get; set; } = null!;
     }
 
     public class Source : SlimSource
     {
-        [V2JsonOnly] [Required] public int? show_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int? show_id { get; set; }
 
-        [Required] public Guid show_uuid { get; set; }
+        [Required]
+        public Guid show_uuid { get; set; }
         public Show show { get; set; } = null!;
 
-        [Required] public string description { get; set; } = null!;
-        [Required] public string taper_notes { get; set; } = null!;
-        [Required] public string source { get; set; } = null!;
-        [Required] public string taper { get; set; } = null!;
-        [Required] public string transferrer { get; set; } = null!;
-        [Required] public string lineage { get; set; } = null!;
+        [Required]
+        public string description { get; set; } = null!;
+
+        [Required]
+        public string taper_notes { get; set; } = null!;
+
+        [Required]
+        public string source { get; set; } = null!;
+
+        [Required]
+        public string taper { get; set; } = null!;
+
+        [Required]
+        public string transferrer { get; set; } = null!;
+
+        [Required]
+        public string lineage { get; set; } = null!;
 
         [Required]
         [JsonConverter(typeof(StringEnumConverter))]
@@ -81,23 +114,31 @@ namespace Relisten.Api.Models
 
     public class SourceReviewInformation
     {
-        [V2JsonOnly] [Required] public int source_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int source_id { get; set; }
 
-        [Required] public string upstream_identifier { get; set; } = null!;
+        [Required]
+        public string upstream_identifier { get; set; } = null!;
 
-        [Required] public int review_count { get; set; }
+        [Required]
+        public int review_count { get; set; }
 
-        [Required] public DateTime review_max_updated_at { get; set; }
+        [Required]
+        public DateTime review_max_updated_at { get; set; }
     }
 
     public class SourceFull : Source
     {
         // public IList<SourceReview> reviews { get; set; }
 
-        [Required] public int review_count { get; set; }
+        [Required]
+        public int review_count { get; set; }
 
-        [Required] public IList<SourceSet> sets { get; set; } = null!;
+        [Required]
+        public IList<SourceSet> sets { get; set; } = null!;
 
-        [Required] public IList<Link> links { get; set; } = null!;
+        [Required]
+        public IList<Link> links { get; set; } = null!;
     }
 }

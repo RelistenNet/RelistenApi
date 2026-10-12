@@ -37,13 +37,22 @@ public class TestArchiveOrgSearchClient
         var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync("GratefulDead", year);
 
         docs.Should().BeEmpty();
-        QueryHelpers.ParseQuery(handler.Requests.Single().Query)["q"].ToString()
-            .Should().Be(year.HasValue ? "collection:GratefulDead AND year:2026" : "collection:GratefulDead");
+        QueryHelpers
+            .ParseQuery(handler.Requests.Single().Query)["q"]
+            .ToString()
+            .Should()
+            .Be(
+                year.HasValue ? "collection:GratefulDead AND year:2026" : "collection:GratefulDead"
+            );
     }
 
     [TestCase("{\"error\":\"[DEEP_PAGING] limit exceeded\"}")]
-    [TestCase("{\"responseHeader\":{\"status\":0},\"response\":{\"numFound\":1,\"start\":0,\"docs\":[]}}")]
-    [TestCase("{\"responseHeader\":{\"status\":0},\"response\":{\"numFound\":2,\"start\":0,\"docs\":[{\"identifier\":\"same\"},{\"identifier\":\"same\"}]}}")]
+    [TestCase(
+        "{\"responseHeader\":{\"status\":0},\"response\":{\"numFound\":1,\"start\":0,\"docs\":[]}}"
+    )]
+    [TestCase(
+        "{\"responseHeader\":{\"status\":0},\"response\":{\"numFound\":2,\"start\":0,\"docs\":[{\"identifier\":\"same\"},{\"identifier\":\"same\"}]}}"
+    )]
     public async Task RejectsApiErrorsTruncatedResponsesAndDuplicateIdentifiers(string body)
     {
         using var handler = new SearchHandler(body);
@@ -58,7 +67,10 @@ public class TestArchiveOrgSearchClient
     [Test]
     public async Task RejectsHttpFailures()
     {
-        using var handler = new SearchHandler(Response(0, 0)) { StatusCode = HttpStatusCode.ServiceUnavailable };
+        using var handler = new SearchHandler(Response(0, 0))
+        {
+            StatusCode = HttpStatusCode.ServiceUnavailable,
+        };
         using var http = new HttpClient(handler);
 
         var act = () => new ArchiveOrgSearchClient(http).FetchAllAsync("GratefulDead", null);
@@ -78,26 +90,39 @@ public class TestArchiveOrgSearchClient
         await act.Should().ThrowAsync<JsonException>();
     }
 
-    private static string Response(int count, int total) => JsonConvert.SerializeObject(new
-    {
-        responseHeader = new { status = 0 },
-        response = new { numFound = total, start = 0,
-            docs = Enumerable.Range(0, count).Select(index => new { identifier = $"recording-{index:D5}" }) }
-    });
+    private static string Response(int count, int total) =>
+        JsonConvert.SerializeObject(
+            new
+            {
+                responseHeader = new { status = 0 },
+                response = new
+                {
+                    numFound = total,
+                    start = 0,
+                    docs = Enumerable
+                        .Range(0, count)
+                        .Select(index => new { identifier = $"recording-{index:D5}" }),
+                },
+            }
+        );
 
     private sealed class SearchHandler(params string[] responses) : HttpMessageHandler
     {
         public List<Uri> Requests { get; } = [];
         public HttpStatusCode StatusCode { get; init; } = HttpStatusCode.OK;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
-            CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             Requests.Add(request.RequestUri!);
-            return Task.FromResult(new HttpResponseMessage(StatusCode)
-            {
-                Content = new StringContent(responses[Requests.Count - 1])
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(StatusCode)
+                {
+                    Content = new StringContent(responses[Requests.Count - 1]),
+                }
+            );
         }
     }
 }

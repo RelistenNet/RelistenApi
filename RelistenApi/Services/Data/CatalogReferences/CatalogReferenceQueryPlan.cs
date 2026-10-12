@@ -16,15 +16,15 @@ namespace Relisten.Data
         Tours = 1 << 5,
         Venues = 1 << 6,
         Years = 1 << 7,
-        SourceSets = 1 << 8
+        SourceSets = 1 << 8,
     }
 
     internal sealed record CatalogReferenceQueryPlan(
         string Sql,
-        CatalogReferenceResultSets ResultSets)
+        CatalogReferenceResultSets ResultSets
+    )
     {
-        public bool Includes(CatalogReferenceResultSets resultSet) =>
-            ResultSets.HasFlag(resultSet);
+        public bool Includes(CatalogReferenceResultSets resultSet) => ResultSets.HasFlag(resultSet);
 
         public static CatalogReferenceQueryPlan Create(IReadOnlyList<CatalogReference> references)
         {
@@ -40,56 +40,86 @@ namespace Relisten.Data
                 resultSets |= catalogType switch
                 {
                     "artist" => 0,
-                    "show" => CatalogReferenceResultSets.Shows |
-                              CatalogReferenceResultSets.Tours |
-                              CatalogReferenceResultSets.Venues |
-                              CatalogReferenceResultSets.Years,
-                    "source" => CatalogReferenceResultSets.Shows |
-                                CatalogReferenceResultSets.Sources |
-                                CatalogReferenceResultSets.Tours |
-                                CatalogReferenceResultSets.Venues |
-                                CatalogReferenceResultSets.Years |
-                                CatalogReferenceResultSets.SourceSets,
-                    "source_track" => CatalogReferenceResultSets.Shows |
-                                      CatalogReferenceResultSets.Sources |
-                                      CatalogReferenceResultSets.SourceTracks |
-                                      CatalogReferenceResultSets.Tours |
-                                      CatalogReferenceResultSets.Venues |
-                                      CatalogReferenceResultSets.Years |
-                                      CatalogReferenceResultSets.SourceSets,
+                    "show" => CatalogReferenceResultSets.Shows
+                        | CatalogReferenceResultSets.Tours
+                        | CatalogReferenceResultSets.Venues
+                        | CatalogReferenceResultSets.Years,
+                    "source" => CatalogReferenceResultSets.Shows
+                        | CatalogReferenceResultSets.Sources
+                        | CatalogReferenceResultSets.Tours
+                        | CatalogReferenceResultSets.Venues
+                        | CatalogReferenceResultSets.Years
+                        | CatalogReferenceResultSets.SourceSets,
+                    "source_track" => CatalogReferenceResultSets.Shows
+                        | CatalogReferenceResultSets.Sources
+                        | CatalogReferenceResultSets.SourceTracks
+                        | CatalogReferenceResultSets.Tours
+                        | CatalogReferenceResultSets.Venues
+                        | CatalogReferenceResultSets.Years
+                        | CatalogReferenceResultSets.SourceSets,
                     "song" => CatalogReferenceResultSets.Songs,
                     "tour" => CatalogReferenceResultSets.Tours,
                     "venue" => CatalogReferenceResultSets.Venues,
                     _ => throw new ArgumentOutOfRangeException(
                         nameof(references),
                         catalogType,
-                        "Unsupported catalog reference type.")
+                        "Unsupported catalog reference type."
+                    ),
                 };
             }
 
             // CatalogReferenceResolver reads these result sets in this order. Keep the append order
             // beside the dependency map so adding one entity cannot silently shift Dapper's mapping.
-            var statements = new List<string>
-            {
-                CatalogReferenceArtistsSql.Query
-            };
+            var statements = new List<string> { CatalogReferenceArtistsSql.Query };
 
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Shows,
-                CatalogReferenceShowsSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Sources,
-                CatalogReferenceSourcesSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.SourceTracks,
-                CatalogReferenceSourceTracksSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Songs,
-                CatalogReferenceSongsSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Tours,
-                CatalogReferenceToursSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Venues,
-                CatalogReferenceVenuesSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.Years,
-                CatalogReferenceYearsSql.Query);
-            AddIfIncluded(statements, resultSets, CatalogReferenceResultSets.SourceSets,
-                CatalogReferenceSourceSetsSql.Query);
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Shows,
+                CatalogReferenceShowsSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Sources,
+                CatalogReferenceSourcesSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.SourceTracks,
+                CatalogReferenceSourceTracksSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Songs,
+                CatalogReferenceSongsSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Tours,
+                CatalogReferenceToursSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Venues,
+                CatalogReferenceVenuesSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.Years,
+                CatalogReferenceYearsSql.Query
+            );
+            AddIfIncluded(
+                statements,
+                resultSets,
+                CatalogReferenceResultSets.SourceSets,
+                CatalogReferenceSourceSetsSql.Query
+            );
 
             return new CatalogReferenceQueryPlan(string.Join("\n", statements), resultSets);
         }
@@ -98,7 +128,8 @@ namespace Relisten.Data
             ICollection<string> statements,
             CatalogReferenceResultSets included,
             CatalogReferenceResultSets candidate,
-            string sql)
+            string sql
+        )
         {
             if (included.HasFlag(candidate))
             {

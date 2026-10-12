@@ -1,10 +1,10 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
-using OpenIddict.Client.AspNetCore;
 using OpenIddict.Abstractions;
+using OpenIddict.Client.AspNetCore;
 using Relisten.Accounts.Contracts.Authentication;
 using RelistenUserService.Authentication.Authorization;
 using RelistenUserService.Authentication.Sessions;
@@ -21,17 +21,20 @@ public sealed class WebSessionController(
     IdentitySessionLifecycle sessions,
     SessionCookieManager cookies,
     IAntiforgery antiforgery,
-    CurrentAccountContext currentAccount)
-    : ControllerBase
+    CurrentAccountContext currentAccount
+) : ControllerBase
 {
     [HttpGet("start")]
     [AllowAnonymous]
     public IActionResult Start(
         [FromQuery(Name = "return_to")] string? returnTo,
-        [FromQuery(Name = "select_account")] bool selectAccount = false)
+        [FromQuery(Name = "select_account")] bool selectAccount = false
+    )
     {
-        if (!ApplicationReturnPath.TryValidate(returnTo, out var returnPath)
-            || HttpContext.Features.Get<IWebOriginFeature>() is not { } webOrigin)
+        if (
+            !ApplicationReturnPath.TryValidate(returnTo, out var returnPath)
+            || HttpContext.Features.Get<IWebOriginFeature>() is not { } webOrigin
+        )
         {
             return BadRequest();
         }
@@ -40,9 +43,8 @@ public sealed class WebSessionController(
         {
             AuthenticationConstants.CanonicalWebOrigin =>
                 AuthenticationConstants.CanonicalWebRegistration,
-            AuthenticationConstants.LocalWebOrigin =>
-                AuthenticationConstants.LocalWebRegistration,
-            _ => null
+            AuthenticationConstants.LocalWebOrigin => AuthenticationConstants.LocalWebRegistration,
+            _ => null,
         };
         if (registrationId is null)
         {
@@ -52,10 +54,11 @@ public sealed class WebSessionController(
         var properties = new AuthenticationProperties(
             new Dictionary<string, string?>
             {
-                [OpenIddictClientAspNetCoreConstants.Properties.RegistrationId] = registrationId
-            })
+                [OpenIddictClientAspNetCoreConstants.Properties.RegistrationId] = registrationId,
+            }
+        )
         {
-            RedirectUri = returnPath
+            RedirectUri = returnPath,
         };
         if (selectAccount)
         {
@@ -65,9 +68,7 @@ public sealed class WebSessionController(
             ? AuthenticationConstants.GoogleProvider
             : AuthenticationConstants.AppleProvider;
 
-        return Challenge(
-            properties,
-            OpenIddictClientAspNetCoreDefaults.AuthenticationScheme);
+        return Challenge(properties, OpenIddictClientAspNetCoreDefaults.AuthenticationScheme);
     }
 
     [HttpGet("callback")]
@@ -75,17 +76,22 @@ public sealed class WebSessionController(
     public async Task<IActionResult> Callback(CancellationToken cancellationToken)
     {
         var result = await HttpContext.AuthenticateAsync(
-            OpenIddictClientAspNetCoreDefaults.AuthenticationScheme);
-        if (!result.Succeeded
+            OpenIddictClientAspNetCoreDefaults.AuthenticationScheme
+        );
+        if (
+            !result.Succeeded
             || result.Principal is not { Identity.IsAuthenticated: true } principal
             || !Guid.TryParse(principal.GetClaim(Claims.Subject), out var userId)
             || !Guid.TryParse(
                 principal.GetClaim(RelistenClaims.SessionId),
-                out var authSsoSessionId)
+                out var authSsoSessionId
+            )
             || HttpContext.Features.Get<IWebOriginFeature>() is not { } webOrigin
             || !ApplicationReturnPath.TryValidate(
                 result.Properties?.RedirectUri,
-                out var returnPath))
+                out var returnPath
+            )
+        )
         {
             return Unauthorized();
         }
@@ -94,18 +100,21 @@ public sealed class WebSessionController(
         {
             AuthenticationConstants.CanonicalWebOrigin =>
                 AuthenticationConstants.CanonicalWebRegistration,
-            AuthenticationConstants.LocalWebOrigin =>
-                AuthenticationConstants.LocalWebRegistration,
-            _ => null
+            AuthenticationConstants.LocalWebOrigin => AuthenticationConstants.LocalWebRegistration,
+            _ => null,
         };
         string? registrationId = null;
-        var hasRegistration = result.Properties is not null
+        var hasRegistration =
+            result.Properties is not null
             && result.Properties.Items.TryGetValue(
                 OpenIddictClientAspNetCoreConstants.Properties.RegistrationId,
-                out registrationId);
-        if (expectedRegistration is null
+                out registrationId
+            );
+        if (
+            expectedRegistration is null
             || !hasRegistration
-            || registrationId != expectedRegistration)
+            || registrationId != expectedRegistration
+        )
         {
             return Unauthorized();
         }
@@ -117,7 +126,8 @@ public sealed class WebSessionController(
                 userId,
                 authSsoSessionId,
                 webOrigin.Origin,
-                cancellationToken);
+                cancellationToken
+            );
         }
         catch (InvalidOperationException)
         {
@@ -133,11 +143,10 @@ public sealed class WebSessionController(
 
     [HttpPost("logout")]
     public async Task<ActionResult<SessionNavigationResponse>> Logout(
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        await sessions.RevokeWebAndParentAsync(
-            currentAccount.WebSessionId,
-            cancellationToken);
+        await sessions.RevokeWebAndParentAsync(currentAccount.WebSessionId, cancellationToken);
         cookies.ClearWeb(Response);
         cookies.ClearCsrf(Response);
         return Ok(new SessionNavigationResponse(AuthCookieClearUrl("/")));
@@ -146,16 +155,15 @@ public sealed class WebSessionController(
     [HttpPost("switch-account")]
     public async Task<ActionResult<SessionNavigationResponse>> SwitchAccount(
         [FromQuery(Name = "return_to")] string? returnTo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!ApplicationReturnPath.TryValidate(returnTo, out var returnPath))
         {
             return BadRequest();
         }
 
-        await sessions.RevokeWebAndParentAsync(
-            currentAccount.WebSessionId,
-            cancellationToken);
+        await sessions.RevokeWebAndParentAsync(currentAccount.WebSessionId, cancellationToken);
         cookies.ClearWeb(Response);
         cookies.ClearCsrf(Response);
         var restartPath = QueryHelpers.AddQueryString(
@@ -163,22 +171,25 @@ public sealed class WebSessionController(
             new Dictionary<string, string?>
             {
                 ["return_to"] = returnPath,
-                ["select_account"] = "true"
-            });
+                ["select_account"] = "true",
+            }
+        );
         return Ok(new SessionNavigationResponse(AuthCookieClearUrl(restartPath)));
     }
 
     private string AuthCookieClearUrl(string returnPath)
     {
-        var webOrigin = currentAccount.WebOrigin
+        var webOrigin =
+            currentAccount.WebOrigin
             ?? throw new InvalidOperationException("The web session origin is unavailable.");
         return QueryHelpers.AddQueryString(
             new Uri(runtime.Issuer, "/auth/sso/clear").AbsoluteUri,
             new Dictionary<string, string?>
             {
                 ["web_origin"] = webOrigin,
-                ["return_to"] = returnPath
-            });
+                ["return_to"] = returnPath,
+            }
+        );
     }
 }
 
@@ -186,18 +197,21 @@ public sealed class WebSessionController(
 public sealed class AuthSsoCookieController(
     AccountsRuntimeConfiguration runtime,
     IdentitySessionLifecycle sessions,
-    SessionCookieManager cookies)
-    : ControllerBase
+    SessionCookieManager cookies
+) : ControllerBase
 {
     [HttpGet("/auth/sso/clear")]
     public async Task<IActionResult> Clear(
         [FromQuery(Name = "web_origin")] string? webOrigin,
         [FromQuery(Name = "return_to")] string? returnTo,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (webOrigin is null
+        if (
+            webOrigin is null
             || !runtime.WebOrigins.Contains(webOrigin, StringComparer.Ordinal)
-            || !ApplicationReturnPath.TryValidate(returnTo, out var returnPath))
+            || !ApplicationReturnPath.TryValidate(returnTo, out var returnPath)
+        )
         {
             return BadRequest();
         }
@@ -205,11 +219,10 @@ public sealed class AuthSsoCookieController(
         var authCookie = Request.Cookies[AuthenticationConstants.AuthSsoCookie];
         // The logout POST revokes the auth SSO session before this auth-host request.
         // An active __Host-relisten_auth cookie cannot authorize its own deletion.
-        if (authCookie is not null
-            && await sessions.CanClearRevokedAuthSsoAsync(
-                authCookie,
-                webOrigin,
-                cancellationToken))
+        if (
+            authCookie is not null
+            && await sessions.CanClearRevokedAuthSsoAsync(authCookie, webOrigin, cancellationToken)
+        )
         {
             cookies.ClearAuthSso(Response);
             cookies.ClearCsrf(Response);

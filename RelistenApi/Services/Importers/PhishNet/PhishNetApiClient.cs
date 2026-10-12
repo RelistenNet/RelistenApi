@@ -16,8 +16,7 @@ public class PhishNetApiClient(HttpClient httpClient)
     static string CleanPhishNetString(string str)
     {
         // I don't know what the heck this garbage is, but we don't want it.
-        return str
-            .Replace("â\u0080\u009dÂ", string.Empty)
+        return str.Replace("â\u0080\u009dÂ", string.Empty)
             .Replace("Â\u009d", string.Empty)
             .Replace("â\u0080\u009c", string.Empty);
     }
@@ -30,19 +29,23 @@ public class PhishNetApiClient(HttpClient httpClient)
         var resp = await httpClient.GetAsync(url);
         var page = await resp.Content.ReadAsStringAsync();
 
-        var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(CleanPhishNetString(page));
+        var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(
+            CleanPhishNetString(page)
+        );
 
         return shows?.data?.Where(show => show.artist_name == "Phish").ToList()
-               ?? new List<PhishNetApiShow>();
+            ?? new List<PhishNetApiShow>();
     }
 
     string PhishNetApiReviewsUrlForDate(string displayDate)
     {
-        return
-            $"https://api.phish.net/v5/reviews/showdate/{displayDate}.json?apikey=B6570BEDA805B616AB6C";
+        return $"https://api.phish.net/v5/reviews/showdate/{displayDate}.json?apikey=B6570BEDA805B616AB6C";
     }
 
-    public async Task<IEnumerable<PhishNetApiReview>> Reviews(string displayDate, PerformContext? ctx)
+    public async Task<IEnumerable<PhishNetApiReview>> Reviews(
+        string displayDate,
+        PerformContext? ctx
+    )
     {
         var url = PhishNetApiReviewsUrlForDate(displayDate);
         ctx?.WriteLine($"Requesting {url}");
@@ -55,13 +58,13 @@ public class PhishNetApiClient(HttpClient httpClient)
             return new List<PhishNetApiReview>();
         }
 
-        var reviews =
-            JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(CleanPhishNetString(page));
+        var reviews = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(
+            CleanPhishNetString(page)
+        );
 
         return reviews?.data ?? new List<PhishNetApiReview>();
     }
 }
-
 
 public class PhishNetApiReview
 {
@@ -69,6 +72,7 @@ public class PhishNetApiReview
     public int uid { get; set; }
     public string username { get; set; } = null!;
     public string review_text { get; set; } = null!;
+
     [JsonConverter(typeof(DateFormatConverter), "yyyy-MM-dd HH:mm:ss")]
     public DateTime posted_at { get; set; }
     public int score { get; set; }
@@ -107,7 +111,8 @@ public class PhishNetApiShow
     public string updated_at { get; set; } = null!;
 }
 
-public class PhishNetApiResponse<T> where T : class
+public class PhishNetApiResponse<T>
+    where T : class
 {
     public bool error { get; set; }
     public string error_message { get; set; } = null!;

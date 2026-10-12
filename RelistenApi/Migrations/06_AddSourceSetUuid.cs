@@ -7,7 +7,8 @@ namespace Migrations
     {
         protected override void Up()
         {
-            Execute(@"
+            Execute(
+                @"
                 ALTER TABLE source_sets ADD COLUMN uuid uuid NULL UNIQUE;
                 
                 UPDATE source_sets
@@ -16,7 +17,8 @@ namespace Migrations
                 WHERE sources.id = source_sets.source_id;
 
                 ALTER TABLE source_sets ALTER COLUMN uuid SET NOT NULL;
-            ");
+            "
+            );
         }
 
         protected override void Down()

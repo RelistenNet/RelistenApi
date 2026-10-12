@@ -43,14 +43,15 @@ internal static class DevelopmentOpenIddictRsaKeyStore
             if (bytesRead != encodedKey.Length)
             {
                 throw new CryptographicException(
-                    $"The local OpenIddict {purpose} key contains trailing data.");
+                    $"The local OpenIddict {purpose} key contains trailing data."
+                );
             }
 
             return new RsaSecurityKey(rsa)
             {
-                KeyId = Convert.ToHexString(
-                        SHA256.HashData(rsa.ExportSubjectPublicKeyInfo()))
-                    .ToLowerInvariant()
+                KeyId = Convert
+                    .ToHexString(SHA256.HashData(rsa.ExportSubjectPublicKeyInfo()))
+                    .ToLowerInvariant(),
             };
         }
         catch
@@ -79,7 +80,7 @@ internal static class DevelopmentOpenIddictRsaKeyStore
                     Access = FileAccess.Write,
                     Mode = FileMode.CreateNew,
                     Share = FileShare.None,
-                    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+                    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
                 };
                 using var stream = new FileStream(temporaryPath, options);
                 stream.Write(encodedKey);

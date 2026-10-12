@@ -15,8 +15,9 @@ public interface IDiscordWebhookNotifier
 
 public sealed class DiscordWebhookNotifier : IDiscordWebhookNotifier
 {
-    internal static readonly HttpRequestOptionsKey<bool> SuppressTracingKey =
-        new("Relisten.SuppressHttpClientTracing");
+    internal static readonly HttpRequestOptionsKey<bool> SuppressTracingKey = new(
+        "Relisten.SuppressHttpClientTracing"
+    );
 
     private readonly HttpClient httpClient;
     private readonly ILogger<DiscordWebhookNotifier> logger;
@@ -25,7 +26,8 @@ public sealed class DiscordWebhookNotifier : IDiscordWebhookNotifier
     public DiscordWebhookNotifier(
         HttpClient httpClient,
         IConfiguration configuration,
-        ILogger<DiscordWebhookNotifier> logger)
+        ILogger<DiscordWebhookNotifier> logger
+    )
     {
         this.httpClient = httpClient;
         this.logger = logger;
@@ -34,23 +36,27 @@ public sealed class DiscordWebhookNotifier : IDiscordWebhookNotifier
 
     public async Task SendAsync(string message, CancellationToken cancellationToken = default)
     {
-        if (!Uri.TryCreate(webhookUrl, UriKind.Absolute, out var webhookUri) ||
-            webhookUri.Scheme != Uri.UriSchemeHttps ||
-            (!webhookUri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase) &&
-             !webhookUri.Host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase)) ||
-            !webhookUri.AbsolutePath.StartsWith("/api/webhooks/", StringComparison.Ordinal))
+        if (
+            !Uri.TryCreate(webhookUrl, UriKind.Absolute, out var webhookUri)
+            || webhookUri.Scheme != Uri.UriSchemeHttps
+            || (
+                !webhookUri.Host.Equals("discord.com", StringComparison.OrdinalIgnoreCase)
+                && !webhookUri.Host.Equals("discordapp.com", StringComparison.OrdinalIgnoreCase)
+            )
+            || !webhookUri.AbsolutePath.StartsWith("/api/webhooks/", StringComparison.Ordinal)
+        )
         {
-            logger.LogWarning("Discord webhook notifications are not configured with a valid Discord HTTPS URL");
+            logger.LogWarning(
+                "Discord webhook notifications are not configured with a valid Discord HTTPS URL"
+            );
             return;
         }
 
         using var request = new HttpRequestMessage(HttpMethod.Post, webhookUri)
         {
-            Content = JsonContent.Create(new
-            {
-                content = message,
-                allowed_mentions = new { parse = Array.Empty<string>() }
-            })
+            Content = JsonContent.Create(
+                new { content = message, allowed_mentions = new { parse = Array.Empty<string>() } }
+            ),
         };
         request.Options.Set(SuppressTracingKey, true);
 
@@ -61,7 +67,8 @@ public sealed class DiscordWebhookNotifier : IDiscordWebhookNotifier
             {
                 logger.LogWarning(
                     "Discord webhook notification failed with HTTP status {StatusCode}",
-                    (int)response.StatusCode);
+                    (int)response.StatusCode
+                );
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

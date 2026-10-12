@@ -48,8 +48,8 @@ public sealed class LibraryCursorProtector
             revision = BinaryPrimitives.ReadInt64BigEndian(payload.AsSpan(17));
             return userId == expectedUserId && revision >= 0;
         }
-        catch (Exception exception) when (
-            exception is CryptographicException or FormatException or ArgumentException)
+        catch (Exception exception)
+            when (exception is CryptographicException or FormatException or ArgumentException)
         {
             return false;
         }

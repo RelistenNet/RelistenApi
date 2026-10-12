@@ -9,7 +9,8 @@ namespace Migrations
         {
             // generated with:
             // docker exec -i 1a9d276c0d02 sh -c "pg_dump -U relisten --no-owner -n public -s relisten_db" > schema.sql
-            Execute(@"
+            Execute(
+                @"
 CREATE TABLE artists (
     id integer NOT NULL,
     musicbrainz_id text,
@@ -676,12 +677,14 @@ ALTER TABLE ONLY venues
 
 ALTER TABLE ONLY years
     ADD CONSTRAINT years_artist_id_fkey FOREIGN KEY (artist_id) REFERENCES artists(id) ON UPDATE CASCADE ON DELETE CASCADE;            
-            ");
+            "
+            );
         }
 
         protected override void Down()
         {
-            Execute(@"
+            Execute(
+                @"
 DO $$ DECLARE
     r RECORD;
 BEGIN
@@ -689,7 +692,8 @@ BEGIN
         EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
     END LOOP;
 END $$;            
-            ");
+            "
+            );
         }
     }
 }

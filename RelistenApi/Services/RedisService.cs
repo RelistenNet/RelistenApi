@@ -24,7 +24,10 @@ namespace Relisten
             //because of https://github.com/dotnet/corefx/issues/8768
             var dnsTask = Dns.GetHostAddressesAsync(redisURL.Host);
             var addresses = dnsTask.Result;
-            var connect = string.Join(",", addresses.Select(x => x.MapToIPv4() + ":" + redisURL.Port));
+            var connect = string.Join(
+                ",",
+                addresses.Select(x => x.MapToIPv4() + ":" + redisURL.Port)
+            );
 
             var configurationOptions = ConfigurationOptions.Parse($"{connect},syncTimeout=10000");
 

@@ -21,7 +21,8 @@ public sealed class TestHostBoundaryMiddleware
                 reachedApplication = true;
                 return Task.CompletedTask;
             },
-            Runtime());
+            Runtime()
+        );
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString("accounts.relisten.net");
         context.Request.Path = path;
@@ -49,7 +50,8 @@ public sealed class TestHostBoundaryMiddleware
     public async Task Browser_and_native_routes_use_exact_host_and_port_boundaries(
         string path,
         string host,
-        bool expectedToReachApplication)
+        bool expectedToReachApplication
+    )
     {
         var reachedApplication = false;
         var middleware = new HostBoundaryMiddleware(
@@ -58,7 +60,8 @@ public sealed class TestHostBoundaryMiddleware
                 reachedApplication = true;
                 return Task.CompletedTask;
             },
-            Runtime());
+            Runtime()
+        );
         var context = new DefaultHttpContext();
         context.Request.Host = new HostString(host);
         context.Request.Path = path;
@@ -72,13 +75,15 @@ public sealed class TestHostBoundaryMiddleware
         }
     }
 
-    private static AccountsRuntimeConfiguration Runtime() => new(
-        new AccountsOptions
-        {
-            Issuer = "https://auth.relisten.net",
-            AuthHost = "auth.relisten.net",
-            AccountsHost = "accounts.relisten.net"
-        },
-        new Uri("https://auth.relisten.net"),
-        TrustedProxyNetworks: []);
+    private static AccountsRuntimeConfiguration Runtime() =>
+        new(
+            new AccountsOptions
+            {
+                Issuer = "https://auth.relisten.net",
+                AuthHost = "auth.relisten.net",
+                AccountsHost = "accounts.relisten.net",
+            },
+            new Uri("https://auth.relisten.net"),
+            TrustedProxyNetworks: []
+        );
 }

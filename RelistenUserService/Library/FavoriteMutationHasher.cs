@@ -16,7 +16,8 @@ public static class FavoriteMutationHasher
             mutation.CatalogType,
             mutation.CatalogUuid.ToString("D"),
             mutation.DesiredState,
-            mutation.FavoriteUuid?.ToString("D") ?? "-");
+            mutation.FavoriteUuid?.ToString("D") ?? "-"
+        );
         return SHA256.HashData(Encoding.UTF8.GetBytes(semanticValue));
     }
 }

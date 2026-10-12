@@ -1,12 +1,12 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
 using OpenIddict.Client.WebIntegration;
 using OpenIddict.Server.AspNetCore;
-using Microsoft.AspNetCore.WebUtilities;
 using RelistenUserService.Authentication.Sessions;
 using RelistenUserService.Configuration;
 using RelistenUserService.Identity.Entities;
@@ -23,16 +23,16 @@ public sealed class AuthorizationController(
     NativePrincipalFactory principalFactory,
     WebBootstrapPrincipalFactory webPrincipalFactory,
     SessionCookieManager cookies,
-    TimeProvider timeProvider)
-    : Controller
+    TimeProvider timeProvider
+) : Controller
 {
     [HttpGet("~/connect/authorize")]
     public async Task<IActionResult> Authorize(CancellationToken cancellationToken)
     {
-        var request = HttpContext.GetOpenIddictServerRequest()
+        var request =
+            HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenIddict request is unavailable.");
-        if (!runtime.Options.EnableDevelopmentPersonas
-            && !runtime.Options.EnableExternalProviders)
+        if (!runtime.Options.EnableDevelopmentPersonas && !runtime.Options.EnableExternalProviders)
         {
             // Keeping the service available with sign-in disabled is useful during a
             // controlled rollout, but the authorization endpoint must fail predictably.
@@ -41,35 +41,45 @@ public sealed class AuthorizationController(
                 new ProblemDetails
                 {
                     Status = StatusCodes.Status503ServiceUnavailable,
-                    Title = "Account sign-in is not configured."
-                });
+                    Title = "Account sign-in is not configured.",
+                }
+            );
         }
 
         var authentication = request.HasPromptValue(PromptValues.SelectAccount)
             ? AuthenticateResult.NoResult()
             : await HttpContext.AuthenticateAsync(AuthenticationConstants.AuthSsoScheme);
-        if (!authentication.Succeeded
-            || !Guid.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId))
+        if (
+            !authentication.Succeeded
+            || !Guid.TryParse(authentication.Principal?.GetClaim(Claims.Subject), out var userId)
+        )
         {
             if (runtime.Options.EnableExternalProviders)
             {
                 return ChallengeExternalProvider(request);
             }
 
-            return Redirect(QueryHelpers.AddQueryString(
-                "/development/sign-in",
-                "return_url",
-                AuthorizationReturnUrl(request)));
+            return Redirect(
+                QueryHelpers.AddQueryString(
+                    "/development/sign-in",
+                    "return_url",
+                    AuthorizationReturnUrl(request)
+                )
+            );
         }
 
         var user = await dbContext.Users.SingleOrDefaultAsync(
             item => item.Id == userId && item.Status == UserStatuses.Active,
-            cancellationToken);
-        if (user is null
+            cancellationToken
+        );
+        if (
+            user is null
             || string.IsNullOrWhiteSpace(request.ClientId)
             || !Guid.TryParse(
                 authentication.Principal?.GetClaim(RelistenClaims.SessionId),
-                out var authSsoSessionId))
+                out var authSsoSessionId
+            )
+        )
         {
             cookies.ClearAuthSso(Response);
             return Forbid();
@@ -80,10 +90,9 @@ public sealed class AuthorizationController(
             var webPrincipal = webPrincipalFactory.Create(
                 user,
                 authSsoSessionId,
-                request.GetScopes());
-            return SignIn(
-                webPrincipal,
-                OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+                request.GetScopes()
+            );
+            return SignIn(webPrincipal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
         var now = timeProvider.GetUtcNow();
@@ -97,16 +106,20 @@ public sealed class AuthorizationController(
             LastUsedAt = now,
             AbsoluteExpiresAt = now + AuthenticationConstants.NativeSessionAbsoluteLifetime,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
         };
         var principal = principalFactory.Create(user, session, request.GetScopes());
 
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var application = await applicationManager.FindByClientIdAsync(
-            request.ClientId,
-            cancellationToken)
-            ?? throw new InvalidOperationException("The validated OpenIddict client is unavailable.");
-        var applicationId = await applicationManager.GetIdAsync(application, cancellationToken)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            cancellationToken
+        );
+        var application =
+            await applicationManager.FindByClientIdAsync(request.ClientId, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "The validated OpenIddict client is unavailable."
+            );
+        var applicationId =
+            await applicationManager.GetIdAsync(application, cancellationToken)
             ?? throw new InvalidOperationException("The OpenIddict client has no ID.");
         var authorization = await authorizationManager.CreateAsync(
             principal,
@@ -114,11 +127,13 @@ public sealed class AuthorizationController(
             applicationId,
             AuthorizationTypes.Permanent,
             principal.GetScopes(),
-            cancellationToken);
-        var authorizationId = await authorizationManager.GetIdAsync(
-            authorization,
-            cancellationToken)
-            ?? throw new InvalidOperationException("OpenIddict created an authorization without an ID.");
+            cancellationToken
+        );
+        var authorizationId =
+            await authorizationManager.GetIdAsync(authorization, cancellationToken)
+            ?? throw new InvalidOperationException(
+                "OpenIddict created an authorization without an ID."
+            );
         session.AuthorizationId = Guid.Parse(authorizationId);
         principal.SetAuthorizationId(authorizationId);
         dbContext.NativeSessions.Add(session);
@@ -132,29 +147,31 @@ public sealed class AuthorizationController(
     {
         var scheme = request.GetParameter("provider").ToString() switch
         {
-            AuthenticationConstants.GoogleProvider
-                when runtime.Options.Google.Enabled =>
+            AuthenticationConstants.GoogleProvider when runtime.Options.Google.Enabled =>
                 OpenIddictClientWebIntegrationConstants.Providers.Google,
-            AuthenticationConstants.AppleProvider
-                when runtime.Options.Apple.Enabled =>
+            AuthenticationConstants.AppleProvider when runtime.Options.Apple.Enabled =>
                 OpenIddictClientWebIntegrationConstants.Providers.Apple,
-            _ => null
+            _ => null,
         };
         if (scheme is null)
         {
-            return BadRequest(new ProblemDetails
-            {
-                Status = StatusCodes.Status400BadRequest,
-                Title = "A supported identity provider is required."
-            });
+            return BadRequest(
+                new ProblemDetails
+                {
+                    Status = StatusCodes.Status400BadRequest,
+                    Title = "A supported identity provider is required.",
+                }
+            );
         }
 
         var properties = new AuthenticationProperties
         {
-            RedirectUri = AuthorizationReturnUrl(request)
+            RedirectUri = AuthorizationReturnUrl(request),
         };
-        if (scheme == OpenIddictClientWebIntegrationConstants.Providers.Google
-            && request.HasPromptValue(PromptValues.SelectAccount))
+        if (
+            scheme == OpenIddictClientWebIntegrationConstants.Providers.Google
+            && request.HasPromptValue(PromptValues.SelectAccount)
+        )
         {
             // Google supports a first-class account picker. Apple does not document
             // the OIDC prompt parameter, so forwarding it could invalidate the request.
@@ -176,7 +193,8 @@ public sealed class AuthorizationController(
         {
             if (string.Equals(parameter.Key, Parameters.Prompt, StringComparison.Ordinal))
             {
-                var remainingPrompts = request.GetPromptValues()
+                var remainingPrompts = request
+                    .GetPromptValues()
                     .Where(value => value != PromptValues.SelectAccount);
                 var prompt = string.Join(' ', remainingPrompts);
                 if (prompt.Length > 0)

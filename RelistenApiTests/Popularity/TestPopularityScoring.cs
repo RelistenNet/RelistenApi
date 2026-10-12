@@ -26,8 +26,16 @@ public class TestPopularityScoring
     [Test]
     public void CreateMetrics_ShouldUseSqrtForHotScore()
     {
-        var metrics = PopularityService.CreateMetrics(plays30d: 100, plays7d: 49, plays6h: 9, plays48h: 10,
-            plays90d: 900, seconds30d: 3600, seconds7d: 1800, seconds48h: 900);
+        var metrics = PopularityService.CreateMetrics(
+            plays30d: 100,
+            plays7d: 49,
+            plays6h: 9,
+            plays48h: 10,
+            plays90d: 900,
+            seconds30d: 3600,
+            seconds7d: 1800,
+            seconds48h: 900
+        );
         metrics.windows.days_30d.hot_score.Should().BeApproximately(10.0, 0.0001);
         metrics.windows.days_7d.hot_score.Should().BeApproximately(7.0, 0.0001);
         metrics.windows.days_30d.hours.Should().BeApproximately(1.0, 0.0001);
@@ -40,9 +48,30 @@ public class TestPopularityScoring
     {
         var metrics = new List<PopularityMetrics>
         {
-            new() { trend_ratio = 1, windows = new PopularityWindows { days_30d = new PopularityWindowMetrics { hot_score = 10 } } },
-            new() { trend_ratio = 2, windows = new PopularityWindows { days_30d = new PopularityWindowMetrics { hot_score = 20 } } },
-            new() { trend_ratio = 3, windows = new PopularityWindows { days_30d = new PopularityWindowMetrics { hot_score = 30 } } }
+            new()
+            {
+                trend_ratio = 1,
+                windows = new PopularityWindows
+                {
+                    days_30d = new PopularityWindowMetrics { hot_score = 10 },
+                },
+            },
+            new()
+            {
+                trend_ratio = 2,
+                windows = new PopularityWindows
+                {
+                    days_30d = new PopularityWindowMetrics { hot_score = 20 },
+                },
+            },
+            new()
+            {
+                trend_ratio = 3,
+                windows = new PopularityWindows
+                {
+                    days_30d = new PopularityWindowMetrics { hot_score = 30 },
+                },
+            },
         };
 
         PopularityService.ApplyMomentumScores(metrics);
@@ -57,7 +86,8 @@ public class TestPopularityScoring
     {
         var shouldPenalize = ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
             showDate: new DateTime(1977, 12, 30),
-            playDay: new DateTime(2026, 12, 29));
+            playDay: new DateTime(2026, 12, 29)
+        );
 
         shouldPenalize.Should().BeFalse();
     }
@@ -65,19 +95,25 @@ public class TestPopularityScoring
     [Test]
     public void ShouldApplyHistoricalAnniversaryPenalty_ShouldPenalizeWithinWindowAndStopAfterDay7()
     {
-        ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
+        ShowMomentumScoring
+            .ShouldApplyHistoricalAnniversaryPenalty(
                 showDate: new DateTime(1977, 2, 17),
-                playDay: new DateTime(2026, 2, 17))
+                playDay: new DateTime(2026, 2, 17)
+            )
             .Should()
             .BeTrue();
-        ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
+        ShowMomentumScoring
+            .ShouldApplyHistoricalAnniversaryPenalty(
                 showDate: new DateTime(1977, 2, 17),
-                playDay: new DateTime(2026, 2, 24))
+                playDay: new DateTime(2026, 2, 24)
+            )
             .Should()
             .BeTrue();
-        ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
+        ShowMomentumScoring
+            .ShouldApplyHistoricalAnniversaryPenalty(
                 showDate: new DateTime(1977, 2, 17),
-                playDay: new DateTime(2026, 2, 25))
+                playDay: new DateTime(2026, 2, 25)
+            )
             .Should()
             .BeFalse();
     }
@@ -87,7 +123,8 @@ public class TestPopularityScoring
     {
         var shouldPenalize = ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
             showDate: new DateTime(2026, 2, 1),
-            playDay: new DateTime(2026, 2, 2));
+            playDay: new DateTime(2026, 2, 2)
+        );
 
         shouldPenalize.Should().BeFalse();
     }
@@ -97,7 +134,8 @@ public class TestPopularityScoring
     {
         var shouldPenalize = ShowMomentumScoring.ShouldApplyHistoricalAnniversaryPenalty(
             showDate: new DateTime(2025, 12, 31),
-            playDay: new DateTime(2026, 1, 1));
+            playDay: new DateTime(2026, 1, 1)
+        );
 
         shouldPenalize.Should().BeFalse();
     }
@@ -107,10 +145,12 @@ public class TestPopularityScoring
     {
         var anniversary = ShowMomentumScoring.AnniversaryDateForPlayDay(
             showDate: new DateTime(2024, 2, 29),
-            playDay: new DateTime(2025, 2, 28));
+            playDay: new DateTime(2025, 2, 28)
+        );
 
         anniversary.Should().Be(new DateTime(2025, 2, 28));
-        ShowMomentumScoring.AnniversaryDayOffset(new DateTime(2024, 2, 29), new DateTime(2025, 2, 28))
+        ShowMomentumScoring
+            .AnniversaryDayOffset(new DateTime(2024, 2, 29), new DateTime(2025, 2, 28))
             .Should()
             .Be(0);
     }
@@ -126,7 +166,10 @@ public class TestPopularityScoring
     [Test]
     public void ComputeOrganicMomentumScore_ShouldApplyMaxReductionAtFullPenalty()
     {
-        var organic = ShowMomentumScoring.ComputeOrganicMomentumScore(rawMomentumScore: 0.8, otdPenaltyRatio7d: 1.0);
+        var organic = ShowMomentumScoring.ComputeOrganicMomentumScore(
+            rawMomentumScore: 0.8,
+            otdPenaltyRatio7d: 1.0
+        );
 
         organic.Should().BeApproximately(0.4, 0.0001);
     }
@@ -137,21 +180,26 @@ public class TestPopularityScoring
         var withOrganic = new CachedShowPopularity
         {
             momentum_score = 0.7,
-            momentum = new CachedShowMomentum
-            {
-                raw = 0.7,
-                organic = 0.2
-            }
+            momentum = new CachedShowMomentum { raw = 0.7, organic = 0.2 },
         };
-        var withoutOrganic = new CachedShowPopularity
-        {
-            momentum_score = 0.6
-        };
+        var withoutOrganic = new CachedShowPopularity { momentum_score = 0.6 };
 
-        CachedShowPopularityMapper.GetRankingMomentumScore(withOrganic).Should().BeApproximately(0.2, 0.0001);
-        CachedShowPopularityMapper.GetRawMomentumScore(withOrganic).Should().BeApproximately(0.7, 0.0001);
-        CachedShowPopularityMapper.GetRankingMomentumScore(withoutOrganic).Should().BeApproximately(0.6, 0.0001);
-        CachedShowPopularityMapper.GetRawMomentumScore(withoutOrganic).Should().BeApproximately(0.6, 0.0001);
+        CachedShowPopularityMapper
+            .GetRankingMomentumScore(withOrganic)
+            .Should()
+            .BeApproximately(0.2, 0.0001);
+        CachedShowPopularityMapper
+            .GetRawMomentumScore(withOrganic)
+            .Should()
+            .BeApproximately(0.7, 0.0001);
+        CachedShowPopularityMapper
+            .GetRankingMomentumScore(withoutOrganic)
+            .Should()
+            .BeApproximately(0.6, 0.0001);
+        CachedShowPopularityMapper
+            .GetRawMomentumScore(withoutOrganic)
+            .Should()
+            .BeApproximately(0.6, 0.0001);
     }
 
     [Test]
@@ -168,9 +216,9 @@ public class TestPopularityScoring
                 plays_90d = 34,
                 windows = new PopularityWindows
                 {
-                    days_7d = new PopularityWindowMetrics { plays = 56, hot_score = 7.8 }
-                }
-            }
+                    days_7d = new PopularityWindowMetrics { plays = 56, hot_score = 7.8 },
+                },
+            },
         };
 
         var converted = CachedShowPopularityMapper.ConvertLegacyShowPopularityMap(legacy);

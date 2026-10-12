@@ -7,20 +7,23 @@ namespace RelistenUserService.Authentication.Authorization;
 
 public sealed record ReviewedAccountAccessRule(
     string NativeScope,
-    IdentitySessionCapabilities WebCapability);
+    IdentitySessionCapabilities WebCapability
+);
 
 public sealed record ReviewedAccountAccessRequirement(
     ReviewedAccountAccessRule DefaultRule,
-    ReviewedAccountAccessRule? MutationRule = null) : IAuthorizationRequirement;
+    ReviewedAccountAccessRule? MutationRule = null
+) : IAuthorizationRequirement;
 
 public sealed class ReviewedAccountAccessAuthorizationHandler(
     NativeSessionAuthenticator nativeSessions,
-    CurrentAccountContext currentAccount)
-    : AuthorizationHandler<ReviewedAccountAccessRequirement>
+    CurrentAccountContext currentAccount
+) : AuthorizationHandler<ReviewedAccountAccessRequirement>
 {
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
-        ReviewedAccountAccessRequirement requirement)
+        ReviewedAccountAccessRequirement requirement
+    )
     {
         var rule = SelectRule(context.Resource, requirement);
         if (currentAccount.IsWeb)
@@ -47,16 +50,18 @@ public sealed class ReviewedAccountAccessAuthorizationHandler(
 
     private static ReviewedAccountAccessRule SelectRule(
         object? resource,
-        ReviewedAccountAccessRequirement requirement)
+        ReviewedAccountAccessRequirement requirement
+    )
     {
         if (requirement.MutationRule is null)
         {
             return requirement.DefaultRule;
         }
 
-        return resource is HttpContext httpContext
+        return
+            resource is HttpContext httpContext
             && !AccountRequestMethod.IsMutation(httpContext.Request.Method)
-                ? requirement.DefaultRule
-                : requirement.MutationRule;
+            ? requirement.DefaultRule
+            : requirement.MutationRule;
     }
 }

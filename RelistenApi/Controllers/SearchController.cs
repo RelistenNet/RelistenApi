@@ -19,7 +19,8 @@ namespace Relisten.Controllers
             DbService db,
             ArtistService artistService,
             SearchService searchService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _searchService = searchService;
         }
@@ -35,7 +36,8 @@ namespace Relisten.Controllers
             [FromQuery] bool songs = true,
             [FromQuery] bool sources = true,
             [FromQuery] bool tours = true,
-            [FromQuery] bool venues = true)
+            [FromQuery] bool venues = true
+        )
         {
             var searchTerm = q?.Trim();
             var options = new SearchOptions
@@ -45,10 +47,14 @@ namespace Relisten.Controllers
                 Songs = songs,
                 Sources = sources,
                 Tours = tours,
-                Venues = venues
+                Venues = venues,
             };
 
-            if (string.IsNullOrWhiteSpace(searchTerm) || searchTerm.Length < 3 || !options.AnyEnabled)
+            if (
+                string.IsNullOrWhiteSpace(searchTerm)
+                || searchTerm.Length < 3
+                || !options.AnyEnabled
+            )
             {
                 return JsonSuccess(SearchResults.Empty());
             }

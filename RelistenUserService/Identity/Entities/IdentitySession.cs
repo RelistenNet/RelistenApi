@@ -5,6 +5,7 @@ public sealed class IdentitySession
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string Purpose { get; set; } = "";
+
     // PostgreSQL stores only the validator hash. A database disclosure cannot use the
     // hash as the raw cookie validator for an authenticated browser request.
     public byte[] ValidatorHash { get; set; } = [];
@@ -38,5 +39,5 @@ public enum IdentitySessionCapabilities
     AccountProfileRead = 1,
     LibraryRead = 2,
     FavoriteMutation = 4,
-    AllWeb = AccountProfileRead | LibraryRead | FavoriteMutation
+    AllWeb = AccountProfileRead | LibraryRead | FavoriteMutation,
 }

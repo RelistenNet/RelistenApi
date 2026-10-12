@@ -8,13 +8,18 @@ namespace Relisten.Services.Popularity
     internal static class CachedShowPopularityMapper
     {
         internal static Dictionary<Guid, CachedShowPopularity> ConvertLegacyShowPopularityMap(
-            Dictionary<Guid, PopularityMetrics> map)
+            Dictionary<Guid, PopularityMetrics> map
+        )
         {
-            return map.ToDictionary(entry => entry.Key, entry => FromPopularityMetrics(entry.Value));
+            return map.ToDictionary(
+                entry => entry.Key,
+                entry => FromPopularityMetrics(entry.Value)
+            );
         }
 
         internal static Dictionary<Guid, CachedShowPopularity> NormalizeCachedShowPopularityMap(
-            Dictionary<Guid, CachedShowPopularity>? map)
+            Dictionary<Guid, CachedShowPopularity>? map
+        )
         {
             if (map == null)
             {
@@ -37,7 +42,7 @@ namespace Relisten.Services.Popularity
                 trend_ratio = cached.trend_ratio,
                 momentum_score = cached.momentum_score,
                 plays_6h = cached.plays_6h,
-                plays_90d = cached.plays_90d
+                plays_90d = cached.plays_90d,
             };
         }
 
@@ -49,7 +54,7 @@ namespace Relisten.Services.Popularity
                 trend_ratio = metrics.trend_ratio,
                 momentum_score = metrics.momentum_score,
                 plays_6h = metrics.plays_6h,
-                plays_90d = metrics.plays_90d
+                plays_90d = metrics.plays_90d,
             };
         }
 

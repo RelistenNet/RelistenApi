@@ -19,7 +19,8 @@ namespace Relisten.Controllers
             ArtistService artistService,
             SetlistSongService setlistSongService,
             SetlistShowService setlistShowService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
@@ -33,10 +34,13 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Songs(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, art =>
-            {
-                return _setlistSongService.AllForArtistWithPlayCount(art);
-            });
+            return await ApiRequest(
+                artistIdOrSlug,
+                art =>
+                {
+                    return _setlistSongService.AllForArtistWithPlayCount(art);
+                }
+            );
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/songs/{idAndSlug}")]
@@ -44,20 +48,29 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> SongsWithShows(string artistIdOrSlug, string idAndSlug)
         {
-            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (artist, id) =>
-            {
-                return _setlistSongService.ForIdWithShows(artist, id.Id!.Value);
-            });
+            return await ApiRequestWithIdentifier(
+                artistIdOrSlug,
+                idAndSlug,
+                (artist, id) =>
+                {
+                    return _setlistSongService.ForIdWithShows(artist, id.Id!.Value);
+                }
+            );
         }
 
         [HttpGet("v3/artists/{artistIdOrSlug}/songs/{songIdOrSlug}")]
         [ProducesResponseType(typeof(SetlistSongWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> SongsWithShowsV3(string artistIdOrSlug, string songIdOrSlug)
+        public async Task<IActionResult> SongsWithShowsV3(
+            string artistIdOrSlug,
+            string songIdOrSlug
+        )
         {
             var id = new Identifier(songIdOrSlug);
-            return await ApiRequest(artistIdOrSlug,
-                art => _setlistSongService.ForIdWithShows(art, id.Id, id.Guid, id.Slug));
+            return await ApiRequest(
+                artistIdOrSlug,
+                art => _setlistSongService.ForIdWithShows(art, id.Id, id.Guid, id.Slug)
+            );
         }
     }
 }

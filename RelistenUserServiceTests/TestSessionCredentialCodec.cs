@@ -22,9 +22,7 @@ public sealed class TestSessionCredentialCodec
         credential.Should().NotBeNull();
         credential!.SessionId.Should().Be(sessionId);
         credential.ValidatorHash.Should().HaveCount(32);
-        _codec.ValidatorMatches(
-            credential.ValidatorHash,
-            issued.ValidatorHash).Should().BeTrue();
+        _codec.ValidatorMatches(credential.ValidatorHash, issued.ValidatorHash).Should().BeTrue();
         issued.CookieValue.Split('.').Should().HaveCount(3);
         issued.CookieValue.Should().MatchRegex("^[A-Za-z0-9._-]+$");
         credential.Clear();
@@ -38,9 +36,10 @@ public sealed class TestSessionCredentialCodec
         var first = _codec.Issue(sessionId);
         var second = _codec.Issue(sessionId);
 
-        CryptographicOperations.FixedTimeEquals(
-            first.ValidatorHash,
-            second.ValidatorHash).Should().BeFalse();
+        CryptographicOperations
+            .FixedTimeEquals(first.ValidatorHash, second.ValidatorHash)
+            .Should()
+            .BeFalse();
     }
 
     [TestCase(null)]
@@ -64,5 +63,4 @@ public sealed class TestSessionCredentialCodec
 
         _codec.TryParse(string.Join('.', parts), out _).Should().BeFalse();
     }
-
 }

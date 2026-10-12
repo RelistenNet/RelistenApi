@@ -2,7 +2,9 @@ namespace Relisten.Data
 {
     internal static class CatalogReferenceSongsSql
     {
-        public const string Query = CatalogReferenceSql.Requested + @"
+        public const string Query =
+            CatalogReferenceSql.Requested
+            + @"
 SELECT
     song.*,
     artist.uuid AS artist_uuid,

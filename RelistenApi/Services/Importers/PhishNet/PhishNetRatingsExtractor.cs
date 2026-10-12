@@ -36,12 +36,13 @@ public partial class PhishNetRatingsExtractor(string pageContents)
 {
     string PageContents { get; } = pageContents;
 
-    private static readonly Regex PhishNetRatingScraper =
-        PhishNetRatingScraperRegex();
+    private static readonly Regex PhishNetRatingScraper = PhishNetRatingScraperRegex();
+
     [GeneratedRegex(@"Overall: (?<AverageRating>[\d.]+)\/5 \(>?<?(?<VotesCast>\d+) ratings\)")]
     private static partial Regex PhishNetRatingScraperRegex();
 
     private static readonly Regex PhishNetReviewCountScraper = PhishNetReviewCountScraperRegex();
+
     [GeneratedRegex(@"class='tpc-comment review'")]
     private static partial Regex PhishNetReviewCountScraperRegex();
 
@@ -52,9 +53,11 @@ public partial class PhishNetRatingsExtractor(string pageContents)
         return new PhishNetScrapeResults
         {
             RatingMatched = ratingMatches.Success,
-            RatingAverage = ImporterUtils.TryParseDecimal(ratingMatches.Groups["AverageRating"].Value),
+            RatingAverage = ImporterUtils.TryParseDecimal(
+                ratingMatches.Groups["AverageRating"].Value
+            ),
             RatingVotesCast = ImporterUtils.TryParseInt(ratingMatches.Groups["VotesCast"].Value),
-            NumberOfReviewsWritten = PhishNetReviewCountScraper.Matches(PageContents).Count
+            NumberOfReviewsWritten = PhishNetReviewCountScraper.Matches(PageContents).Count,
         };
     }
 }

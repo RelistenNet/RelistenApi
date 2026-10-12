@@ -9,10 +9,11 @@ public enum UsernameCommandStatus
     InvalidUsername,
     UsernameChangeTooSoon,
     UsernameUnavailable,
-    UsernameVersionStale
+    UsernameVersionStale,
 }
 
 public sealed record UsernameCommandResult(
     UsernameCommandStatus Status,
     User User,
-    DateTimeOffset? RetryAt = null);
+    DateTimeOffset? RetryAt = null
+);

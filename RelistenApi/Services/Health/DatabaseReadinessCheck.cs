@@ -32,9 +32,12 @@ public sealed class DatabaseReadinessCheck : IReadinessCheck
     {
         await using var connection = _db.CreateConnection(longTimeout: false, readOnly);
         await connection.OpenAsync(cancellationToken);
-        await connection.ExecuteScalarAsync<int>(new CommandDefinition(
-            "SELECT 1",
-            commandTimeout: 3,
-            cancellationToken: cancellationToken));
+        await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(
+                "SELECT 1",
+                commandTimeout: 3,
+                cancellationToken: cancellationToken
+            )
+        );
     }
 }

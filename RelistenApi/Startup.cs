@@ -29,9 +29,9 @@ using Relisten.Api.Models;
 using Relisten.Api.Models.Api;
 using Relisten.Data;
 using Relisten.Import;
-using Relisten.Services.Indexing;
 using Relisten.Services.Auth;
 using Relisten.Services.Health;
+using Relisten.Services.Indexing;
 using Relisten.Services.Notifications;
 using Relisten.Services.Popularity;
 using Relisten.Vendor.ArchiveOrg;
@@ -59,104 +59,130 @@ namespace Relisten
             services.AddCors();
             services.AddResponseCompression();
             services.AddHttpContextAccessor();
-            services.AddTransient<IConfigureOptions<MvcNewtonsoftJsonOptions>, RelistenApiJsonOptionsWrapper>();
+            services.AddTransient<
+                IConfigureOptions<MvcNewtonsoftJsonOptions>,
+                RelistenApiJsonOptionsWrapper
+            >();
 
             SetupAuthentication(services);
 
             // Add framework services.
-            services.AddMvc(mvcOptions =>
-            {
-                mvcOptions.EnableEndpointRouting = false;
-            }).AddNewtonsoftJson();
+            services
+                .AddMvc(mvcOptions =>
+                {
+                    mvcOptions.EnableEndpointRouting = false;
+                })
+                .AddNewtonsoftJson();
 
             var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT");
             if (otlpEndpoint != null)
             {
-                services.AddOpenTelemetry()
-                    .ConfigureResource(resource =>
-                        resource.AddService(serviceName: "relistenapi"))
-                    .WithTracing(tracing => tracing
-                        .AddAspNetCoreInstrumentation(options =>
-                        {
-                            options.EnrichWithHttpResponse = (activity, response) =>
+                services
+                    .AddOpenTelemetry()
+                    .ConfigureResource(resource => resource.AddService(serviceName: "relistenapi"))
+                    .WithTracing(tracing =>
+                        tracing
+                            .AddAspNetCoreInstrumentation(options =>
                             {
-                                var endpoint = response.HttpContext.GetEndpoint();
-                                if (endpoint is RouteEndpoint routeEndpoint)
+                                options.EnrichWithHttpResponse = (activity, response) =>
                                 {
-                                    var descriptor = routeEndpoint.Metadata.GetMetadata<ControllerActionDescriptor>();
-                                    if (descriptor is not null)
+                                    var endpoint = response.HttpContext.GetEndpoint();
+                                    if (endpoint is RouteEndpoint routeEndpoint)
                                     {
-                                        var controller = descriptor.ControllerName;
-                                        var action = descriptor.ActionName;
+                                        var descriptor =
+                                            routeEndpoint.Metadata.GetMetadata<ControllerActionDescriptor>();
+                                        if (descriptor is not null)
+                                        {
+                                            var controller = descriptor.ControllerName;
+                                            var action = descriptor.ActionName;
 
-                                        var pathParameters = descriptor.Parameters
-                                            .Where(p => p.BindingInfo is null ||
-                                                        p.BindingInfo.BindingSource?.Id == "Path")
-                                            .Select(p => $"{{{p.Name}}}");
+                                            var pathParameters = descriptor
+                                                .Parameters.Where(p =>
+                                                    p.BindingInfo is null
+                                                    || p.BindingInfo.BindingSource?.Id == "Path"
+                                                )
+                                                .Select(p => $"{{{p.Name}}}");
 
-                                        var route = string.Join("/", [controller, action, .. pathParameters]);
+                                            var route = string.Join(
+                                                "/",
+                                                [controller, action, .. pathParameters]
+                                            );
 
-                                        activity.DisplayName = $"{route}";
-                                        activity.SetTag("http.route", route);
+                                            activity.DisplayName = $"{route}";
+                                            activity.SetTag("http.route", route);
+                                        }
                                     }
-                                }
-                            };
-                        })
-                        .AddNpgsql()
-                        .AddHttpClientInstrumentation(options =>
-                        {
-                            options.FilterHttpRequestMessage = request =>
-                                !request.Options.TryGetValue(
-                                    DiscordWebhookNotifier.SuppressTracingKey,
-                                    out var suppressTracing) ||
-                                !suppressTracing;
-                        })
-                        .AddHangfireInstrumentation()
-                        .AddSource("Relisten.Import")
-                        .AddOtlpExporter(otlpOptions =>
-                        {
-                            otlpOptions.Endpoint = new Uri(otlpEndpoint);
+                                };
+                            })
+                            .AddNpgsql()
+                            .AddHttpClientInstrumentation(options =>
+                            {
+                                options.FilterHttpRequestMessage = request =>
+                                    !request.Options.TryGetValue(
+                                        DiscordWebhookNotifier.SuppressTracingKey,
+                                        out var suppressTracing
+                                    ) || !suppressTracing;
+                            })
+                            .AddHangfireInstrumentation()
+                            .AddSource("Relisten.Import")
+                            .AddOtlpExporter(otlpOptions =>
+                            {
+                                otlpOptions.Endpoint = new Uri(otlpEndpoint);
 
-                            otlpOptions.Protocol = OtlpExportProtocol.Grpc;
-                        }))
-                    .WithMetrics(metrics => metrics
-                        .AddAspNetCoreInstrumentation()
-                        .AddMeter("Npgsql")
-                        .AddOtlpExporter(otlpOptions =>
-                        {
-                            otlpOptions.Endpoint = new Uri(otlpEndpoint);
-                            otlpOptions.Protocol = OtlpExportProtocol.Grpc;
-                        }));
+                                otlpOptions.Protocol = OtlpExportProtocol.Grpc;
+                            })
+                    )
+                    .WithMetrics(metrics =>
+                        metrics
+                            .AddAspNetCoreInstrumentation()
+                            .AddMeter("Npgsql")
+                            .AddOtlpExporter(otlpOptions =>
+                            {
+                                otlpOptions.Endpoint = new Uri(otlpEndpoint);
+                                otlpOptions.Protocol = OtlpExportProtocol.Grpc;
+                            })
+                    );
             }
-
 
             services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v2",
+                c.SwaggerDoc(
+                    "v2",
                     new OpenApiInfo
                     {
                         Version = "v2",
                         Title = "Relisten API",
-                        Contact =
-                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
+                        Contact = new OpenApiContact
+                        {
+                            Name = "Alec Gorge",
+                            Url = new Uri("https://twitter.com/alecgorge"),
+                        },
                         License = new OpenApiLicense
                         {
-                            Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
-                        }
-                    });
+                            Name = "MIT",
+                            Url = new Uri("https://opensource.org/licenses/MIT"),
+                        },
+                    }
+                );
 
-                c.SwaggerDoc("v3",
+                c.SwaggerDoc(
+                    "v3",
                     new OpenApiInfo
                     {
                         Version = "v3",
                         Title = "Relisten API",
-                        Contact =
-                            new OpenApiContact { Name = "Alec Gorge", Url = new Uri("https://twitter.com/alecgorge") },
+                        Contact = new OpenApiContact
+                        {
+                            Name = "Alec Gorge",
+                            Url = new Uri("https://twitter.com/alecgorge"),
+                        },
                         License = new OpenApiLicense
                         {
-                            Name = "MIT", Url = new Uri("https://opensource.org/licenses/MIT")
-                        }
-                    });
+                            Name = "MIT",
+                            Url = new Uri("https://opensource.org/licenses/MIT"),
+                        },
+                    }
+                );
 
                 c.SchemaFilter<SwaggerSkipV2PropertyFilter>();
             });
@@ -166,32 +192,32 @@ namespace Relisten
             SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
             SqlMapper.AddTypeHandler(new DateTimeHandler());
 
-            JsonConvert.DefaultSettings = () => new JsonSerializerSettings
-            {
-                DateTimeZoneHandling = DateTimeZoneHandling.Utc
-            };
+            JsonConvert.DefaultSettings = () =>
+                new JsonSerializerSettings { DateTimeZoneHandling = DateTimeZoneHandling.Utc };
 
             services.AddSingleton<DbService>(serviceProvider =>
             {
-                var dbUrl = Configuration["DATABASE_URL"]
+                var dbUrl =
+                    Configuration["DATABASE_URL"]
                     ?? throw new InvalidOperationException("DATABASE_URL is required");
                 var writeHost = Configuration["PGBOUNCER_WRITE_HOST"];
                 var readOnlyHost = Configuration["PGBOUNCER_READ_ONLY_HOST"];
 
-                if (HostEnvironment.IsProduction() &&
-                    (string.IsNullOrWhiteSpace(writeHost) || string.IsNullOrWhiteSpace(readOnlyHost)))
+                if (
+                    HostEnvironment.IsProduction()
+                    && (
+                        string.IsNullOrWhiteSpace(writeHost)
+                        || string.IsNullOrWhiteSpace(readOnlyHost)
+                    )
+                )
                 {
                     throw new InvalidOperationException(
-                        "PGBOUNCER_WRITE_HOST and PGBOUNCER_READ_ONLY_HOST are required in production");
+                        "PGBOUNCER_WRITE_HOST and PGBOUNCER_READ_ONLY_HOST are required in production"
+                    );
                 }
 
                 var logger = serviceProvider.GetRequiredService<ILogger<DbService>>();
-                var db = new DbService(
-                    dbUrl,
-                    writeHost,
-                    readOnlyHost,
-                    HostEnvironment,
-                    logger);
+                var db = new DbService(dbUrl, writeHost, readOnlyHost, HostEnvironment, logger);
 
                 // Run migrations immediately after construction
                 using (var pg = db.CreateConnection(longTimeout: true, readOnly: false))
@@ -205,8 +231,10 @@ namespace Relisten
                     }
                     catch (MissingMigrationException ex) when (HostEnvironment.IsDevelopment())
                     {
-                        Log.Warning(ex,
-                            "Skipping migration validation because the local development database is ahead of this checkout.");
+                        Log.Warning(
+                            ex,
+                            "Skipping migration validation because the local development database is ahead of this checkout."
+                        );
                         return db;
                     }
 
@@ -219,7 +247,8 @@ namespace Relisten
 
                     if (migrator.LatestMigration.Version != migrator.CurrentMigration!.Version)
                     {
-                        var msg = $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.";
+                        var msg =
+                            $"The newest available migration ({migrator.LatestMigration.Version}) != The current database migration ({migrator.CurrentMigration!.Version}). You probably need to add a call to run the migration.";
                         if (HostEnvironment.IsDevelopment())
                         {
                             Log.Warning(msg);
@@ -243,25 +272,30 @@ namespace Relisten
                 // processed into a connection string
                 // hangfire.UsePostgreSqlStorage(DbService.ConnStr);
 
-                hangfire.UseRedisStorage(ConnectionMultiplexer.Connect(configurationOptions),
+                hangfire.UseRedisStorage(
+                    ConnectionMultiplexer.Connect(configurationOptions),
                     new RedisStorageOptions
                     {
                         InvisibilityTimeout = TimeSpan.FromHours(4),
-                        ExpiryCheckInterval = TimeSpan.FromMinutes(1)
-                    });
+                        ExpiryCheckInterval = TimeSpan.FromMinutes(1),
+                    }
+                );
                 hangfire.UseConsole();
                 hangfire.UseRecurringJob(typeof(ScheduledService));
             });
 
             if (!HostEnvironment.IsDevelopment())
             {
-                if (!string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"]) &&
-                    Configuration["ENABLE_HANGFIRE_SERVER"] != "false")
+                if (
+                    !string.IsNullOrEmpty(Configuration["ENABLE_HANGFIRE_SERVER"])
+                    && Configuration["ENABLE_HANGFIRE_SERVER"] != "false"
+                )
                 {
                     services.AddHangfireServer(options =>
                     {
                         options.Queues = ["artist_import"];
-                        options.ServerName = $"relistenapi:artist_import ({Environment.MachineName})";
+                        options.ServerName =
+                            $"relistenapi:artist_import ({Environment.MachineName})";
                         options.WorkerCount = 10;
                     });
 
@@ -277,7 +311,8 @@ namespace Relisten
             services.AddSingleton(redis);
             services.AddSingleton(Configuration);
 
-            services.AddDataProtection()
+            services
+                .AddDataProtection()
                 .PersistKeysToStackExchangeRedis(redis.connection, "DataProtection-Keys")
                 .SetApplicationName("RelistenApi");
 
@@ -303,7 +338,9 @@ namespace Relisten
             services.AddScoped<PanicStreamComImporter, PanicStreamComImporter>();
             services.AddScoped<ArtistService, ArtistService>();
             services.AddScoped<UpstreamSourceService, UpstreamSourceService>();
-            services.AddScoped<IUpstreamSourceLookup>(sp => sp.GetRequiredService<UpstreamSourceService>());
+            services.AddScoped<IUpstreamSourceLookup>(sp =>
+                sp.GetRequiredService<UpstreamSourceService>()
+            );
             services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();
             services.AddScoped<IArchiveOrgArtistIndexRepository, ArchiveOrgArtistIndexRepository>();
             services.AddScoped<ArchiveOrgArtistIndexer, ArchiveOrgArtistIndexer>();
@@ -315,8 +352,10 @@ namespace Relisten
             services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
             services.AddScoped<LinkService, LinkService>();
             services.AddScoped<SourceTrackPlaysService, SourceTrackPlaysService>();
-            services.AddHttpClient<IDiscordWebhookNotifier, DiscordWebhookNotifier>(client =>
-                    client.Timeout = TimeSpan.FromSeconds(10))
+            services
+                .AddHttpClient<IDiscordWebhookNotifier, DiscordWebhookNotifier>(client =>
+                    client.Timeout = TimeSpan.FromSeconds(10)
+                )
                 .RemoveAllLoggers();
         }
 
@@ -334,7 +373,10 @@ namespace Relisten
             {
                 options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
                 {
-                    diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
+                    diagnosticContext.Set(
+                        "UserAgent",
+                        httpContext.Request.Headers["User-Agent"].ToString()
+                    );
                     if (httpContext.Connection.RemoteIpAddress is { } remoteIpAddress)
                     {
                         diagnosticContext.Set("RemoteIP", remoteIpAddress);
@@ -342,10 +384,12 @@ namespace Relisten
                 };
             });
 
-            app.UseCors(builder => builder
-                .WithMethods("GET", "POST", "OPTIONS", "HEAD")
-                .WithOrigins("*")
-                .AllowAnyMethod());
+            app.UseCors(builder =>
+                builder
+                    .WithMethods("GET", "POST", "OPTIONS", "HEAD")
+                    .WithOrigins("*")
+                    .AllowAnyMethod()
+            );
 
             app.UseAuthentication();
             app.UseStaticFiles();
@@ -354,8 +398,10 @@ namespace Relisten
 
             if (!env.IsDevelopment())
             {
-                app.UseHangfireDashboard("/relisten-admin/hangfire",
-                    new DashboardOptions { Authorization = [new MyAuthorizationFilter()] });
+                app.UseHangfireDashboard(
+                    "/relisten-admin/hangfire",
+                    new DashboardOptions { Authorization = [new MyAuthorizationFilter()] }
+                );
             }
 
             app.UseSwagger(c =>
@@ -376,7 +422,11 @@ namespace Relisten
             });
 
             app.UseCors(builder =>
-                builder.WithMethods("GET", "POST", "OPTIONS", "HEAD").WithOrigins("*").AllowAnyMethod());
+                builder
+                    .WithMethods("GET", "POST", "OPTIONS", "HEAD")
+                    .WithOrigins("*")
+                    .AllowAnyMethod()
+            );
         }
 
         public void SetupAuthentication(IServiceCollection services)
@@ -387,18 +437,23 @@ namespace Relisten
             services.AddSingleton<IUserStore<ApplicationUser>>(userStore);
             services.AddSingleton<IUserPasswordStore<ApplicationUser>>(userStore);
             services.AddSingleton<IRoleStore<ApplicationRole>>(roleStore);
-            services.AddSingleton<IUserClaimsPrincipalFactory<ApplicationUser>, EnvUserPrincipalFactory>();
+            services.AddSingleton<
+                IUserClaimsPrincipalFactory<ApplicationUser>,
+                EnvUserPrincipalFactory
+            >();
 
             services.AddAuthentication();
             services.AddAuthorization();
-            services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
-            {
-                options.Password.RequiredLength = 1;
-                options.Password.RequireLowercase = false;
-                options.Password.RequireUppercase = false;
-                options.Password.RequireDigit = false;
-                options.Password.RequireNonAlphanumeric = false;
-            }).AddDefaultTokenProviders();
+            services
+                .AddIdentity<ApplicationUser, ApplicationRole>(options =>
+                {
+                    options.Password.RequiredLength = 1;
+                    options.Password.RequireLowercase = false;
+                    options.Password.RequireUppercase = false;
+                    options.Password.RequireDigit = false;
+                    options.Password.RequireNonAlphanumeric = false;
+                })
+                .AddDefaultTokenProviders();
 
             services.ConfigureApplicationCookie(options =>
             {
@@ -434,7 +489,9 @@ namespace Relisten
             ApplyDefaultSerializerSettings(jsonOptions.SerializerSettings);
         }
 
-        private static JsonSerializerSettings ApplyDefaultSerializerSettings(JsonSerializerSettings settings)
+        private static JsonSerializerSettings ApplyDefaultSerializerSettings(
+            JsonSerializerSettings settings
+        )
         {
             settings.DateFormatString = "yyyy'-'MM'-'dd'T'HH':'mm':'ssK";
             settings.DateTimeZoneHandling = DateTimeZoneHandling.Utc;

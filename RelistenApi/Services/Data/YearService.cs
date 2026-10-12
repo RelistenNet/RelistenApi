@@ -9,14 +9,17 @@ namespace Relisten.Data
     {
         private readonly ShowService _showService;
 
-        public YearService(DbService db, ShowService showService) : base(db)
+        public YearService(DbService db, ShowService showService)
+            : base(db)
         {
             _showService = showService;
         }
 
         public async Task<IEnumerable<Year>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<Year>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<Year>(
+                    @"
                 SELECT
                     y.*
                     , a.uuid as artist_uuid
@@ -27,7 +30,10 @@ namespace Relisten.Data
                     y.artist_id = @artistId
                 ORDER BY
                     y.year ASC
-            ", new {artistId = artist.id}));
+            ",
+                    new { artistId = artist.id }
+                )
+            );
         }
 
         public async Task<YearWithShows?> ForIdentifierWithShows(Artist artist, Identifier id)
@@ -37,7 +43,8 @@ namespace Relisten.Data
             if (id.Id.HasValue)
             {
                 where = "y.id = @year_id";
-            } else if (id.Guid.HasValue)
+            }
+            else if (id.Guid.HasValue)
             {
                 where = "y.uuid = @year_guid";
             }
@@ -46,7 +53,9 @@ namespace Relisten.Data
                 where = "y.year = @year";
             }
 
-            var year = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<YearWithShows>(@$"
+            var year = await db.WithConnection(con =>
+                con.QuerySingleOrDefaultAsync<YearWithShows>(
+                    @$"
                 SELECT
                     y.*
                     , a.uuid as artist_uuid
@@ -58,7 +67,16 @@ namespace Relisten.Data
                     AND {where}
                 ORDER BY
                     y.year ASC
-            ", new {artistId = artist.id, year_id = id.Id, year = id.Slug, year_guid = id.Guid}));
+            ",
+                    new
+                    {
+                        artistId = artist.id,
+                        year_id = id.Id,
+                        year = id.Slug,
+                        year_guid = id.Guid,
+                    }
+                )
+            );
 
             if (year == null)
             {
@@ -66,10 +84,13 @@ namespace Relisten.Data
             }
 
             year.shows = new List<Show>();
-            year.shows.AddRange(await _showService.ShowsForCriteria(artist,
-                "s.artist_id = @artist_id AND s.year_id = @year_id",
-                new {artist_id = artist.id, year_id = year.id}
-            ));
+            year.shows.AddRange(
+                await _showService.ShowsForCriteria(
+                    artist,
+                    "s.artist_id = @artist_id AND s.year_id = @year_id",
+                    new { artist_id = artist.id, year_id = year.id }
+                )
+            );
 
             return year;
         }

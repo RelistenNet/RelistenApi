@@ -14,32 +14,36 @@ public static class AccountApiBehavior
             var invalidCommandUuid = HasErrorFor(
                 context.ModelState.Keys,
                 "client_command_uuid",
-                "ClientCommandUuid");
+                "ClientCommandUuid"
+            );
             var invalidContractVersion = HasErrorFor(
                 context.ModelState.Keys,
                 "contract_version",
-                "ContractVersion");
+                "ContractVersion"
+            );
             var (status, code) = (invalidCommandUuid, invalidContractVersion) switch
             {
                 (true, _) => (
                     StatusCodes.Status422UnprocessableEntity,
-                    AccountErrorCodes.InvalidCommandUuid),
+                    AccountErrorCodes.InvalidCommandUuid
+                ),
                 (_, true) => (
                     StatusCodes.Status422UnprocessableEntity,
-                    AccountErrorCodes.InvalidContractVersion),
-                _ => (StatusCodes.Status400BadRequest, AccountErrorCodes.InvalidRequest)
+                    AccountErrorCodes.InvalidContractVersion
+                ),
+                _ => (StatusCodes.Status400BadRequest, AccountErrorCodes.InvalidRequest),
             };
             var problem = new ValidationProblemDetails(context.ModelState)
             {
                 Status = status,
-                Title = code
+                Title = code,
             };
             problem.Extensions["code"] = code;
 
             return new ObjectResult(problem)
             {
                 StatusCode = status,
-                ContentTypes = { "application/problem+json" }
+                ContentTypes = { "application/problem+json" },
             };
         };
     }
@@ -47,7 +51,10 @@ public static class AccountApiBehavior
     private static bool HasErrorFor(
         IEnumerable<string> keys,
         string jsonName,
-        string propertyName) => keys.Any(key =>
+        string propertyName
+    ) =>
+        keys.Any(key =>
             key.Contains(jsonName, StringComparison.OrdinalIgnoreCase)
-            || key.Contains(propertyName, StringComparison.OrdinalIgnoreCase));
+            || key.Contains(propertyName, StringComparison.OrdinalIgnoreCase)
+        );
 }

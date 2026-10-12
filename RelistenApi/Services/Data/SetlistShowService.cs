@@ -20,35 +20,47 @@ namespace Relisten.Data
 
     public class SetlistShowService : RelistenDataServiceBase
     {
-        public SetlistShowService(DbService db) : base(db) { }
+        public SetlistShowService(DbService db)
+            : base(db) { }
 
         // Correct dates by provider identity, never by the old date: neighboring shows may
         // all be shifted, or may legitimately share a date. Apply the whole listing together.
         public Task<int> UpdateDates(Artist artist, IReadOnlyDictionary<string, DateTime> dates)
         {
-            if (dates.Count == 0) return Task.FromResult(0);
+            if (dates.Count == 0)
+                return Task.FromResult(0);
 
             var rows = dates.ToArray();
-            return db.WithWriteConnection(con => con.ExecuteAsync(@"
+            return db.WithWriteConnection(con =>
+                con.ExecuteAsync(
+                    @"
                 UPDATE setlist_shows s
                 SET date = incoming.date, updated_at = statement_timestamp()
                 FROM UNNEST(@identifiers::text[], @dates::date[]) AS incoming(identifier, date)
                 WHERE s.artist_id = @artistId
                     AND s.upstream_identifier = incoming.identifier
                     AND s.date IS DISTINCT FROM incoming.date
-            ", new
-            {
-                artistId = artist.id,
-                identifiers = rows.Select(row => row.Key).ToArray(),
-                dates = rows.Select(row => DateOnly.FromDateTime(row.Value)).ToArray()
-            }));
+            ",
+                    new
+                    {
+                        artistId = artist.id,
+                        identifiers = rows.Select(row => row.Key).ToArray(),
+                        dates = rows.Select(row => DateOnly.FromDateTime(row.Value)).ToArray(),
+                    }
+                )
+            );
         }
 
-        public async Task<IEnumerable<SetlistShow>> AllForArtist(Artist artist, bool withVenuesToursAndEras = false)
+        public async Task<IEnumerable<SetlistShow>> AllForArtist(
+            Artist artist,
+            bool withVenuesToursAndEras = false
+        )
         {
             if (withVenuesToursAndEras)
             {
-                return await db.WithConnection(con => con.QueryAsync<SetlistShow, Tour, Venue, Era, SetlistShow>(@"
+                return await db.WithConnection(con =>
+                    con.QueryAsync<SetlistShow, Tour, Venue, Era, SetlistShow>(
+                        @"
                     SELECT
                         s.*, a.uuid as artist_uuid, t.uuid as tour_uuid, v.uuid as venue_uuid, t.*, v.*, e.*
                     FROM
@@ -59,44 +71,58 @@ namespace Relisten.Data
                         LEFT JOIN artists a ON s.artist_id = a.id
                     WHERE
                         s.artist_id = @id
-                    ", (setlistShow, tour, venue, era) =>
-                {
-                    setlistShow.venue = venue;
+                    ",
+                        (setlistShow, tour, venue, era) =>
+                        {
+                            setlistShow.venue = venue;
 
-                    if (artist.features.tours)
-                    {
-                        setlistShow.tour = tour;
-                    }
+                            if (artist.features.tours)
+                            {
+                                setlistShow.tour = tour;
+                            }
 
-                    if (artist.features.eras)
-                    {
-                        setlistShow.era = era;
-                    }
+                            if (artist.features.eras)
+                            {
+                                setlistShow.era = era;
+                            }
 
-                    return setlistShow;
-                }, new {artist.id}));
+                            return setlistShow;
+                        },
+                        new { artist.id }
+                    )
+                );
             }
 
-            return await db.WithConnection(con => con.QueryAsync<SetlistShow>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SetlistShow>(
+                    @"
                 SELECT
                     *
                 FROM
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<IEnumerable<SimpleSetlistShow>> AllSimpleForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<SimpleSetlistShow>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SimpleSetlistShow>(
+                    @"
                 SELECT
                     id, created_at, updated_at, date
                 FROM
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<SetlistShow> Save(SetlistShow show)
@@ -109,12 +135,14 @@ namespace Relisten.Data
                 show.date,
                 show.tour_id,
                 show.upstream_identifier,
-                show.updated_at
+                show.updated_at,
             };
 
             if (show.id != 0)
             {
-                return await db.WithWriteConnection(con => con.QuerySingleAsync<SetlistShow>(@"
+                return await db.WithWriteConnection(con =>
+                    con.QuerySingleAsync<SetlistShow>(
+                        @"
                     UPDATE
                         setlist_shows
                     SET
@@ -128,10 +156,15 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", p));
+                ",
+                        p
+                    )
+                );
             }
 
-            return await db.WithWriteConnection(con => con.QuerySingleAsync<SetlistShow>(@"
+            return await db.WithWriteConnection(con =>
+                con.QuerySingleAsync<SetlistShow>(
+                    @"
                     INSERT INTO
                         setlist_shows
 
@@ -155,15 +188,22 @@ namespace Relisten.Data
                             md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", p));
+                ",
+                    p
+                )
+            );
         }
 
-        public async Task<ImportStats> UpdateSongPlays(SetlistShow show, IEnumerable<SetlistSong> songs)
+        public async Task<ImportStats> UpdateSongPlays(
+            SetlistShow show,
+            IEnumerable<SetlistSong> songs
+        )
         {
             var stats = new ImportStats();
             await db.WithConnection(async con =>
             {
-                stats.Created += await con.ExecuteAsync(@"
+                stats.Created += await con.ExecuteAsync(
+                    @"
                     INSERT
                     INTO
                         setlist_songs_plays
@@ -180,16 +220,21 @@ namespace Relisten.Data
                     ON CONFLICT
                         ON CONSTRAINT setlist_songs_plays_song_id_show_id_key
                         DO NOTHING
-                ", songs.Select(song => new {showId = show.id, songId = song.id}));
+                ",
+                    songs.Select(song => new { showId = show.id, songId = song.id })
+                );
 
-                stats.Removed += await con.ExecuteAsync(@"
+                stats.Removed += await con.ExecuteAsync(
+                    @"
                     DELETE
                     FROM
                         setlist_songs_plays
                     WHERE
                         played_setlist_show_id = @showId
                         AND NOT(played_setlist_song_id = ANY(@songIds))
-                ", new {showId = show.id, songIds = songs.Select(s => s.id).ToList()});
+                ",
+                    new { showId = show.id, songIds = songs.Select(s => s.id).ToList() }
+                );
             });
 
             return stats;

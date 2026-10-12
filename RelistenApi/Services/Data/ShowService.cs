@@ -14,7 +14,8 @@ namespace Relisten.Data
             DbService db,
             SourceService sourceService,
             PopularityService popularityService
-        ) : base(db)
+        )
+            : base(db)
         {
             _sourceService = sourceService;
             this.popularityService = popularityService;
@@ -30,12 +31,16 @@ namespace Relisten.Data
             int? limit = null,
             string? orderBy = null,
             bool includeNestedObject = true
-        ) where T : Show
+        )
+            where T : Show
         {
             orderBy ??= "display_date ASC";
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            var shows = (await db.WithConnection(con => con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(@"
+            var shows = (
+                await db.WithConnection(con =>
+                    con.QueryAsync<T, VenueWithShowCount, Tour, Era, Year, T>(
+                        @"
                 SELECT
                     s.*,
                     a.uuid as artist_uuid,
@@ -67,36 +72,47 @@ namespace Relisten.Data
                     LEFT JOIN venue_show_counts venue_counts ON venue_counts.id = s.venue_id
 
                 WHERE
-                    " + where + @"
+                    "
+                            + where
+                            + @"
                 ORDER BY
-                    " + orderBy + @"
-				" + limitClause + @"
-            ", (show, venue, tour, era, year) =>
-            {
-                if (!includeNestedObject)
-                {
-                    return show;
-                }
+                    "
+                            + orderBy
+                            + @"
+				"
+                            + limitClause
+                            + @"
+            ",
+                        (show, venue, tour, era, year) =>
+                        {
+                            if (!includeNestedObject)
+                            {
+                                return show;
+                            }
 
-                show.venue = venue;
+                            show.venue = venue;
 
-                if (artist == null || artist.features.tours)
-                {
-                    show.tour = tour;
-                }
+                            if (artist == null || artist.features.tours)
+                            {
+                                show.tour = tour;
+                            }
 
-                if (artist == null || artist.features.eras)
-                {
-                    show.era = era;
-                }
+                            if (artist == null || artist.features.eras)
+                            {
+                                show.era = era;
+                            }
 
-                if (artist == null || artist.features.years)
-                {
-                    show.year = year;
-                }
+                            if (artist == null || artist.features.years)
+                            {
+                                show.year = year;
+                            }
 
-                return show;
-            }, parms))).ToList();
+                            return show;
+                        },
+                        parms
+                    )
+                )
+            ).ToList();
 
             await ApplyShowPopularity(shows, artist);
             return shows;
@@ -108,19 +124,42 @@ namespace Relisten.Data
             object? parms,
             int? limit = null,
             string? orderBy = null,
-            bool includeNestedObject = true)
+            bool includeNestedObject = true
+        )
         {
-            return await ShowsForCriteriaGeneric<Show>(artist, where, parms, limit, orderBy, includeNestedObject);
+            return await ShowsForCriteriaGeneric<Show>(
+                artist,
+                where,
+                parms,
+                limit,
+                orderBy,
+                includeNestedObject
+            );
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(string where, object? parms,
-            int? limit = null, string? orderBy = null)
+        public async Task<IEnumerable<ShowWithArtist>> ShowsForCriteriaWithArtists(
+            string where,
+            object? parms,
+            int? limit = null,
+            string? orderBy = null
+        )
         {
             orderBy = orderBy == null ? "display_date ASC" : orderBy;
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
-            var shows = (await db.WithConnection(con =>
-                con.QueryAsync<ShowWithArtist, VenueWithShowCount, Tour, Era, Artist, Features, Year, ShowWithArtist>(@"
+            var shows = (
+                await db.WithConnection(con =>
+                    con.QueryAsync<
+                        ShowWithArtist,
+                        VenueWithShowCount,
+                        Tour,
+                        Era,
+                        Artist,
+                        Features,
+                        Year,
+                        ShowWithArtist
+                    >(
+                        @"
                     SELECT
                         s.*,
                         a.uuid as artist_uuid,
@@ -158,36 +197,50 @@ namespace Relisten.Data
                         INNER JOIN show_source_information cnt ON cnt.show_id = s.id
                         LEFT JOIN venue_show_counts venue_counts ON venue_counts.id = s.venue_id
                     WHERE
-                        " + where + @"
+                        "
+                            + where
+                            + @"
                     ORDER BY
-                        " + orderBy + @"
-                    " + limitClause + @"
-                ", (show, venue, tour, era, art, features, year) =>
-                {
-                    art.features = features;
-                    show.artist = art;
-                    show.venue = venue;
-                    show.year = year;
+                        "
+                            + orderBy
+                            + @"
+                    "
+                            + limitClause
+                            + @"
+                ",
+                        (show, venue, tour, era, art, features, year) =>
+                        {
+                            art.features = features;
+                            show.artist = art;
+                            show.venue = venue;
+                            show.year = year;
 
-                    if (art.features.tours)
-                    {
-                        show.tour = tour;
-                    }
+                            if (art.features.tours)
+                            {
+                                show.tour = tour;
+                            }
 
-                    if (art.features.eras)
-                    {
-                        show.era = era;
-                    }
+                            if (art.features.eras)
+                            {
+                                show.era = era;
+                            }
 
-                    return show;
-                }, parms))).ToList();
+                            return show;
+                        },
+                        parms
+                    )
+                )
+            ).ToList();
 
             await ApplyShowPopularity(shows, null);
             return shows;
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(IReadOnlyList<Artist>? artists = null,
-            int? shows = null, int? days = null)
+        public async Task<IEnumerable<ShowWithArtist>> RecentlyPerformed(
+            IReadOnlyList<Artist>? artists = null,
+            int? shows = null,
+            int? days = null
+        )
         {
             if (shows == null && days == null)
             {
@@ -208,30 +261,53 @@ namespace Relisten.Data
             {
                 if (artists != null)
                 {
-                    return await ShowsForCriteriaWithArtists($@"
+                    return await ShowsForCriteriaWithArtists(
+                        $@"
                         s.artist_id = ANY(@artistIds)
                         AND s.date > (CURRENT_DATE - INTERVAL '{days}' day)
-                    ", new {artistIds = artists.Select(a => a.id).ToList()}, null, "s.display_date DESC");
+                    ",
+                        new { artistIds = artists.Select(a => a.id).ToList() },
+                        null,
+                        "s.display_date DESC"
+                    );
                 }
 
-                return await ShowsForCriteriaWithArtists($@"
+                return await ShowsForCriteriaWithArtists(
+                    $@"
                     s.date > (CURRENT_DATE - INTERVAL '{days}' day)
-                ", new { }, null, "s.display_date DESC");
+                ",
+                    new { },
+                    null,
+                    "s.display_date DESC"
+                );
             }
 
             if (artists != null)
             {
-                return await ShowsForCriteriaWithArtists(@"
+                return await ShowsForCriteriaWithArtists(
+                    @"
                     s.artist_id = ANY(@artistIds)
-                ", new {artistIds = artists.Select(a => a.id).ToList()}, shows, "s.display_date DESC");
+                ",
+                    new { artistIds = artists.Select(a => a.id).ToList() },
+                    shows,
+                    "s.display_date DESC"
+                );
             }
 
-            return await ShowsForCriteriaWithArtists(@"
-            ", new { }, shows, "s.display_date DESC");
+            return await ShowsForCriteriaWithArtists(
+                @"
+            ",
+                new { },
+                shows,
+                "s.display_date DESC"
+            );
         }
 
-        public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(IReadOnlyList<Artist>? artists = null,
-            int? shows = null, int? days = null)
+        public async Task<IEnumerable<ShowWithArtist>> RecentlyUpdated(
+            IReadOnlyList<Artist>? artists = null,
+            int? shows = null,
+            int? days = null
+        )
         {
             if (shows == null && days == null)
             {
@@ -252,34 +328,57 @@ namespace Relisten.Data
             {
                 if (artists != null)
                 {
-                    return await ShowsForCriteriaWithArtists($@"
+                    return await ShowsForCriteriaWithArtists(
+                        $@"
                         s.artist_id = ANY(@artistIds)
                         AND s.updated_at > (CURRENT_DATE - INTERVAL '{days}' day)
-                    ", new {artistIds = artists.Select(a => a.id).ToList()}, null, "s.updated_at DESC");
+                    ",
+                        new { artistIds = artists.Select(a => a.id).ToList() },
+                        null,
+                        "s.updated_at DESC"
+                    );
                 }
 
-                return await ShowsForCriteriaWithArtists($@"
+                return await ShowsForCriteriaWithArtists(
+                    $@"
                     s.updated_at > (CURRENT_DATE - INTERVAL '{days}' day)
-                ", new { }, null, "s.updated_at DESC");
+                ",
+                    new { },
+                    null,
+                    "s.updated_at DESC"
+                );
             }
 
             if (artists != null)
             {
-                return await ShowsForCriteriaWithArtists(@"
+                return await ShowsForCriteriaWithArtists(
+                    @"
                     s.artist_id = ANY(@artistIds)
-                ", new {artistIds = artists.Select(a => a.id).ToList()}, shows, "s.updated_at DESC");
+                ",
+                    new { artistIds = artists.Select(a => a.id).ToList() },
+                    shows,
+                    "s.updated_at DESC"
+                );
             }
 
-            return await ShowsForCriteriaWithArtists(@"
-            ", new { }, shows, "s.updated_at DESC");
+            return await ShowsForCriteriaWithArtists(
+                @"
+            ",
+                new { },
+                shows,
+                "s.updated_at DESC"
+            );
         }
 
-        public Task<ShowWithSources?> ShowWithSourcesForArtistOnDate(Artist artist, string displayDate)
+        public Task<ShowWithSources?> ShowWithSourcesForArtistOnDate(
+            Artist artist,
+            string displayDate
+        )
         {
             return ShowWithSourcesForGeneric(
                 artist,
                 "s.artist_id = @artistId AND s.display_date = @showDate",
-                new {artistId = artist.id, showDate = displayDate}
+                new { artistId = artist.id, showDate = displayDate }
             );
         }
 
@@ -288,11 +387,15 @@ namespace Relisten.Data
             return ShowWithSourcesForGeneric(
                 artist,
                 "s.artist_id = @artistId AND s.uuid = @uuid",
-                new {artistId = artist.id, uuid}
+                new { artistId = artist.id, uuid }
             );
         }
 
-        public async Task<ShowWithSources?> ShowWithSourcesForGeneric(Artist artist, string where, object param)
+        public async Task<ShowWithSources?> ShowWithSourcesForGeneric(
+            Artist artist,
+            string where,
+            object param
+        )
         {
             var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist, where, param);
             var show = shows.FirstOrDefault();
@@ -307,7 +410,8 @@ namespace Relisten.Data
             return show;
         }
 
-        private async Task ApplyShowPopularity<T>(IReadOnlyList<T> shows, Artist? artist) where T : Show
+        private async Task ApplyShowPopularity<T>(IReadOnlyList<T> shows, Artist? artist)
+            where T : Show
         {
             if (shows.Count == 0)
             {
@@ -316,37 +420,50 @@ namespace Relisten.Data
 
             if (artist != null)
             {
-                var showPopularity = await popularityService.GetShowPopularityMapForArtist(artist.uuid);
+                var showPopularity = await popularityService.GetShowPopularityMapForArtist(
+                    artist.uuid
+                );
                 popularityService.ApplyShowPopularity(shows, showPopularity);
                 return;
             }
 
             foreach (var group in shows.GroupBy(show => show.artist_uuid))
             {
-                var showPopularity = await popularityService.GetShowPopularityMapForArtist(group.Key);
+                var showPopularity = await popularityService.GetShowPopularityMapForArtist(
+                    group.Key
+                );
                 popularityService.ApplyShowPopularity(group.ToList(), showPopularity);
             }
         }
 
         public async Task<IEnumerable<int>> ActiveArtistIds(int days)
         {
-            return await db.WithConnection(con => con.QueryAsync<int>($@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<int>(
+                    $@"
                 SELECT DISTINCT artist_id
                 FROM shows
                 WHERE date > CURRENT_DATE - INTERVAL '{days}' day
-            "));
+            "
+                )
+            );
         }
 
         public async Task<IEnumerable<Show>> AllSimpleForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<Show>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<Show>(
+                    @"
                 SELECT
                     id, created_at, updated_at, date
                 FROM
                     setlist_shows
                 WHERE
                     artist_id = @id
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
     }
 }

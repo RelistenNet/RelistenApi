@@ -38,18 +38,21 @@ public sealed class TestUsernameCommandIntegration
             start.Task,
             firstContext,
             userId,
-            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, firstUsername));
+            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, firstUsername)
+        );
         var second = ExecuteAfterAsync(
             start.Task,
             secondContext,
             userId,
-            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, secondUsername));
+            new UpdateUsernameRequest(1, Guid.CreateVersion7(), 1, secondUsername)
+        );
 
         start.SetResult();
         var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10));
 
         results.Should().ContainSingle(result => result.Status == UsernameCommandStatus.Success);
-        var stale = results.Should()
+        var stale = results
+            .Should()
             .ContainSingle(result => result.Status == UsernameCommandStatus.UsernameVersionStale)
             .Which;
         stale.User.UsernameVersion.Should().Be(2);
@@ -57,18 +60,29 @@ public sealed class TestUsernameCommandIntegration
         await using var verificationContext = _database.CreateContext();
         var storedUser = await verificationContext.Users.SingleAsync(user => user.Id == userId);
         storedUser.Username.Should().BeOneOf(firstUsername, secondUsername);
-        storedUser.Username.Should().Be(
-            results.Single(result => result.Status == UsernameCommandStatus.Success).User.Username);
+        storedUser
+            .Username.Should()
+            .Be(
+                results
+                    .Single(result => result.Status == UsernameCommandStatus.Success)
+                    .User.Username
+            );
         storedUser.UsernameVersion.Should().Be(2);
-        (await verificationContext.UsernameCommandReceipts.CountAsync(
-            receipt => receipt.UserId == userId)).Should().Be(1);
+        (
+            await verificationContext.UsernameCommandReceipts.CountAsync(receipt =>
+                receipt.UserId == userId
+            )
+        )
+            .Should()
+            .Be(1);
     }
 
     private static async Task<UsernameCommandResult> ExecuteAfterAsync(
         Task start,
         AccountsDbContext dbContext,
         Guid userId,
-        UpdateUsernameRequest request)
+        UpdateUsernameRequest request
+    )
     {
         await start;
         var policy = new UsernamePolicy();
@@ -78,10 +92,10 @@ public sealed class TestUsernameCommandIntegration
             advisoryLocks,
             new UsernameReservationService(dbContext, advisoryLocks, policy),
             policy,
-            TimeProvider.System);
+            TimeProvider.System
+        );
         return await service.ExecuteAsync(userId, request, CancellationToken.None);
     }
 
-    private static string UniqueUsername(string prefix) =>
-        $"{prefix}_{Guid.NewGuid():N}"[..30];
+    private static string UniqueUsername(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..30];
 }

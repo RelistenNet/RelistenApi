@@ -22,10 +22,17 @@ public class TestPhishNetRatingsExtractor
         var scraper = new PhishNetRatingsExtractor(over500RatingsSetlistHtml);
         var results = scraper.ExtractRatings();
 
-        results.Should().BeEquivalentTo(new PhishNetScrapeResults
-        {
-            RatingMatched = true, RatingAverage = 4.636m, RatingVotesCast = 500, NumberOfReviewsWritten = 18
-        });
+        results
+            .Should()
+            .BeEquivalentTo(
+                new PhishNetScrapeResults
+                {
+                    RatingMatched = true,
+                    RatingAverage = 4.636m,
+                    RatingVotesCast = 500,
+                    NumberOfReviewsWritten = 18,
+                }
+            );
     }
 
     [Test]
@@ -34,9 +41,16 @@ public class TestPhishNetRatingsExtractor
         var scraper = new PhishNetRatingsExtractor(under50RatingsSetlistHtml);
         var results = scraper.ExtractRatings();
 
-        results.Should().BeEquivalentTo(new PhishNetScrapeResults
-        {
-            RatingMatched = true, RatingAverage = 4.268m, RatingVotesCast = 50, NumberOfReviewsWritten = 4
-        });
+        results
+            .Should()
+            .BeEquivalentTo(
+                new PhishNetScrapeResults
+                {
+                    RatingMatched = true,
+                    RatingAverage = 4.268m,
+                    RatingVotesCast = 50,
+                    NumberOfReviewsWritten = 4,
+                }
+            );
     }
 }

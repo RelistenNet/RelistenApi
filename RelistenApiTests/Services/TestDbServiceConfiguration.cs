@@ -17,16 +17,20 @@ public class TestDbServiceConfiguration
             "relisten-db-pgbouncer-rw.default",
             "relisten-db-pgbouncer-ro.default",
             new ProductionHostEnvironment(),
-            NullLogger<Relisten.DbService>.Instance);
+            NullLogger<Relisten.DbService>.Instance
+        );
 
         Relisten.DbService.ConnStr.Should().Contain("Host=relisten-db-pgbouncer-rw.default;");
-        Relisten.DbService.ReadOnlyConnStr.Should()
+        Relisten
+            .DbService.ReadOnlyConnStr.Should()
             .Contain("Host=relisten-db-pgbouncer-ro.default,relisten-db-pgbouncer-rw.default;")
             .And.Contain("Target Session Attributes=prefer-standby");
-        Relisten.DbService.ConnStr.Should()
+        Relisten
+            .DbService.ConnStr.Should()
             .Contain("Max Auto Prepare=100")
             .And.Contain("Auto Prepare Min Usages=5");
-        Relisten.DbService.ReadOnlyConnStr.Should()
+        Relisten
+            .DbService.ReadOnlyConnStr.Should()
             .Contain("Max Auto Prepare=100")
             .And.Contain("Auto Prepare Min Usages=5");
         Relisten.DbService.ConnStr.Should().Contain("No Reset On Close=true");
@@ -41,7 +45,8 @@ public class TestDbServiceConfiguration
             null,
             null,
             new ProductionHostEnvironment(),
-            NullLogger<Relisten.DbService>.Instance);
+            NullLogger<Relisten.DbService>.Instance
+        );
 
         Relisten.DbService.ConnStr.Should().Contain("Host=localhost;Port=15432;");
         Relisten.DbService.ReadOnlyConnStr.Should().Contain("Host=localhost,localhost;Port=15432;");

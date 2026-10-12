@@ -2,7 +2,9 @@ namespace Relisten.Data
 {
     internal static class CatalogReferenceSourceSetsSql
     {
-        public const string Query = CatalogReferenceSql.Requested + @",
+        public const string Query =
+            CatalogReferenceSql.Requested
+            + @",
 candidate_source_ids AS (
     SELECT entity.id
     FROM requested r

@@ -13,22 +13,24 @@ public sealed class AuthSsoAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IdentitySessionLifecycle sessions)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    IdentitySessionLifecycle sessions
+) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var session = await sessions.AuthenticateAsync(
             Request.Cookies[AuthenticationConstants.AuthSsoCookie],
             IdentitySessionPurposes.AuthSso,
-            Context.RequestAborted);
+            Context.RequestAborted
+        );
         if (session is null)
         {
             return AuthenticateResult.NoResult();
         }
 
         return AuthenticateResult.Success(
-            new AuthenticationTicket(CreatePrincipal(session), Scheme.Name));
+            new AuthenticationTicket(CreatePrincipal(session), Scheme.Name)
+        );
     }
 
     private static ClaimsPrincipal CreatePrincipal(AuthenticatedIdentitySession session)
@@ -36,7 +38,8 @@ public sealed class AuthSsoAuthenticationHandler(
         var identity = new ClaimsIdentity(
             AuthenticationConstants.AuthSsoScheme,
             Claims.Name,
-            Claims.Role);
+            Claims.Role
+        );
         identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString("D")));
         identity.AddClaim(new Claim(Claims.Name, session.User.Username));
         identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString("D")));
@@ -50,8 +53,8 @@ public sealed class WebSessionAuthenticationHandler(
     UrlEncoder encoder,
     IdentitySessionLifecycle sessions,
     SessionCookieManager cookies,
-    CurrentAccountContext currentAccount)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    CurrentAccountContext currentAccount
+) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -64,10 +67,13 @@ public sealed class WebSessionAuthenticationHandler(
         var session = await sessions.AuthenticateAsync(
             cookieValue,
             IdentitySessionPurposes.Web,
-            Context.RequestAborted);
-        if (session is null
+            Context.RequestAborted
+        );
+        if (
+            session is null
             || session.WebOrigin is null
-            || !string.Equals(session.WebOrigin, webOrigin.Origin, StringComparison.Ordinal))
+            || !string.Equals(session.WebOrigin, webOrigin.Origin, StringComparison.Ordinal)
+        )
         {
             return AuthenticateResult.NoResult();
         }
@@ -76,7 +82,8 @@ public sealed class WebSessionAuthenticationHandler(
             session.User,
             session.SessionId,
             session.WebOrigin,
-            session.Capabilities);
+            session.Capabilities
+        );
         if (session.WasTouched && cookieValue is not null)
         {
             cookies.RenewWeb(Response, cookieValue, session.ExpiresAt);
@@ -85,11 +92,13 @@ public sealed class WebSessionAuthenticationHandler(
         var identity = new ClaimsIdentity(
             AuthenticationConstants.WebSessionScheme,
             Claims.Name,
-            Claims.Role);
+            Claims.Role
+        );
         identity.AddClaim(new Claim(Claims.Subject, session.User.Id.ToString("D")));
         identity.AddClaim(new Claim(Claims.Name, session.User.Username));
         identity.AddClaim(new Claim(RelistenClaims.SessionId, session.SessionId.ToString("D")));
         return AuthenticateResult.Success(
-            new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name));
+            new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)
+        );
     }
 }

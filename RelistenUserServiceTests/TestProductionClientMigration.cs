@@ -28,23 +28,30 @@ public sealed class TestProductionClientMigration
 
         application.ClientType.Should().Be("public");
         application.ConsentType.Should().Be("implicit");
-        JsonSerializer.Deserialize<string[]>(application.RedirectUris!)
-            .Should().Equal("net.relisten.mobile:/oauth2redirect/ios");
-        JsonSerializer.Deserialize<string[]>(application.Requirements!)
-            .Should().ContainSingle().Which.Should().Be("ft:pkce");
+        JsonSerializer
+            .Deserialize<string[]>(application.RedirectUris!)
+            .Should()
+            .Equal("net.relisten.mobile:/oauth2redirect/ios");
+        JsonSerializer
+            .Deserialize<string[]>(application.Requirements!)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be("ft:pkce");
 
         var permissions = JsonSerializer.Deserialize<string[]>(application.Permissions!);
-        permissions.Should().Contain(
-        [
-            "ept:authorization",
-            "ept:token",
-            "gt:authorization_code",
-            "gt:refresh_token",
-            "rst:code",
-            "scp:user.read",
-            "scp:library.read",
-            "scp:library.write",
-            "scp:account.manage"
-        ]);
+        permissions
+            .Should()
+            .Contain([
+                "ept:authorization",
+                "ept:token",
+                "gt:authorization_code",
+                "gt:refresh_token",
+                "rst:code",
+                "scp:user.read",
+                "scp:library.read",
+                "scp:library.write",
+                "scp:account.manage",
+            ]);
     }
 }

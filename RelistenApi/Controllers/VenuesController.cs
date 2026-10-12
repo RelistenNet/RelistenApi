@@ -19,7 +19,8 @@ namespace Relisten.Controllers
             ArtistService artistService,
             VenueService venueService,
             ShowService showService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _venueService = venueService;
             _showService = showService;
@@ -33,10 +34,13 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Venues(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, art =>
-            {
-                return _venueService.AllForArtist(art);
-            });
+            return await ApiRequest(
+                artistIdOrSlug,
+                art =>
+                {
+                    return _venueService.AllForArtist(art);
+                }
+            );
         }
 
         [HttpGet("v2/artists/{artistIdOrSlug}/venues/{idAndSlug}")]
@@ -44,20 +48,29 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> VenuesWithShows(string artistIdOrSlug, string idAndSlug)
         {
-            return await ApiRequestWithIdentifier(artistIdOrSlug, idAndSlug, (art, id) =>
-            {
-                return _venueService.ForIdWithShows(art, id.Id!.Value);
-            });
+            return await ApiRequestWithIdentifier(
+                artistIdOrSlug,
+                idAndSlug,
+                (art, id) =>
+                {
+                    return _venueService.ForIdWithShows(art, id.Id!.Value);
+                }
+            );
         }
 
         [HttpGet("v3/artists/{artistIdOrSlug}/venues/{venueIdOrSlug}")]
         [ProducesResponseType(typeof(VenueWithShows), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> VenuesWithShowsV3(string artistIdOrSlug, string venueIdOrSlug)
+        public async Task<IActionResult> VenuesWithShowsV3(
+            string artistIdOrSlug,
+            string venueIdOrSlug
+        )
         {
             var id = new Identifier(venueIdOrSlug);
-            return await ApiRequest(artistIdOrSlug,
-                art => _venueService.ForIdWithShows(art, id.Id, id.Guid, id.Slug));
+            return await ApiRequest(
+                artistIdOrSlug,
+                art => _venueService.ForIdWithShows(art, id.Id, id.Guid, id.Slug)
+            );
         }
     }
 }

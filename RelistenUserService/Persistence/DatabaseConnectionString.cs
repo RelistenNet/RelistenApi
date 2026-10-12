@@ -16,7 +16,7 @@ public static class DatabaseConnectionString
             ["sslmode"] = "SSL Mode",
             ["sslpassword"] = "SSL Password",
             ["sslrootcert"] = "Root Certificate",
-            ["target_session_attrs"] = "Target Session Attributes"
+            ["target_session_attrs"] = "Target Session Attributes",
         };
 
     public static string Resolve(IConfiguration configuration)
@@ -24,14 +24,16 @@ public static class DatabaseConnectionString
         // Deployments provide ACCOUNTS_DATABASE_URL as a PostgreSQL URI. It must
         // outrank file-based defaults so a local setting can never shadow the
         // production Secret mounted by the deployment manifest.
-        var configured = configuration["ACCOUNTS_DATABASE_URL"]
+        var configured =
+            configuration["ACCOUNTS_DATABASE_URL"]
             ?? configuration.GetConnectionString("Accounts")
             ?? configuration["DATABASE_URL"];
 
         if (string.IsNullOrWhiteSpace(configured))
         {
             throw new InvalidOperationException(
-                "ConnectionStrings:Accounts or ACCOUNTS_DATABASE_URL is required.");
+                "ConnectionStrings:Accounts or ACCOUNTS_DATABASE_URL is required."
+            );
         }
 
         return Normalize(configured);
@@ -39,9 +41,11 @@ public static class DatabaseConnectionString
 
     public static string ResolveRefreshTokenLocks(
         IConfiguration configuration,
-        IHostEnvironment environment)
+        IHostEnvironment environment
+    )
     {
-        var configured = configuration["ACCOUNTS_LOCK_DATABASE_URL"]
+        var configured =
+            configuration["ACCOUNTS_LOCK_DATABASE_URL"]
             ?? configuration.GetConnectionString("AccountsLock");
         if (string.IsNullOrWhiteSpace(configured))
         {
@@ -51,7 +55,8 @@ public static class DatabaseConnectionString
             }
 
             throw new InvalidOperationException(
-                "ConnectionStrings:AccountsLock or ACCOUNTS_LOCK_DATABASE_URL must point directly to the PostgreSQL primary.");
+                "ConnectionStrings:AccountsLock or ACCOUNTS_LOCK_DATABASE_URL must point directly to the PostgreSQL primary."
+            );
         }
 
         return Normalize(configured);
@@ -59,7 +64,7 @@ public static class DatabaseConnectionString
 
     private static string Normalize(string configured) =>
         configured.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
-            || configured.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        || configured.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
             ? ConvertUri(configured)
             : configured;
 
@@ -69,13 +74,16 @@ public static class DatabaseConnectionString
         if (!string.IsNullOrEmpty(uri.Fragment))
         {
             throw new InvalidOperationException(
-                "PostgreSQL connection URI fragments are not supported.");
+                "PostgreSQL connection URI fragments are not supported."
+            );
         }
 
         var userInfo = uri.UserInfo.Split(':', 2);
         if (userInfo.Length != 2)
         {
-            throw new InvalidOperationException("The PostgreSQL URI must include a username and password.");
+            throw new InvalidOperationException(
+                "The PostgreSQL URI must include a username and password."
+            );
         }
 
         var builder = new NpgsqlConnectionStringBuilder
@@ -85,15 +93,13 @@ public static class DatabaseConnectionString
             Database = Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/')),
             Username = Uri.UnescapeDataString(userInfo[0]),
             Password = Uri.UnescapeDataString(userInfo[1]),
-            IncludeErrorDetail = false
+            IncludeErrorDetail = false,
         };
         ApplyQueryOptions(builder, uri.Query);
         return builder.ConnectionString;
     }
 
-    private static void ApplyQueryOptions(
-        NpgsqlConnectionStringBuilder builder,
-        string query)
+    private static void ApplyQueryOptions(NpgsqlConnectionStringBuilder builder, string query)
     {
         if (string.IsNullOrEmpty(query))
         {
@@ -105,24 +111,26 @@ public static class DatabaseConnectionString
         {
             var pair = segment.Split('=', 2);
             var option = Uri.UnescapeDataString(pair[0]);
-            if (pair.Length != 2
+            if (
+                pair.Length != 2
                 || string.IsNullOrWhiteSpace(option)
-                || !SupportedUriOptions.TryGetValue(option, out var connectionStringKey))
+                || !SupportedUriOptions.TryGetValue(option, out var connectionStringKey)
+            )
             {
                 throw new InvalidOperationException(
-                    $"PostgreSQL connection URI option '{option}' is not supported. " +
-                    "Use an Npgsql key/value connection string for additional options.");
+                    $"PostgreSQL connection URI option '{option}' is not supported. "
+                        + "Use an Npgsql key/value connection string for additional options."
+                );
             }
 
             if (!seen.Add(option))
             {
                 throw new InvalidOperationException(
-                    $"PostgreSQL connection URI option '{option}' is specified more than once.");
+                    $"PostgreSQL connection URI option '{option}' is specified more than once."
+                );
             }
 
-            var optionValue = NormalizeOptionValue(
-                option,
-                Uri.UnescapeDataString(pair[1]));
+            var optionValue = NormalizeOptionValue(option, Uri.UnescapeDataString(pair[1]));
             try
             {
                 builder[connectionStringKey] = optionValue;
@@ -131,7 +139,8 @@ public static class DatabaseConnectionString
             {
                 throw new InvalidOperationException(
                     $"PostgreSQL connection URI option '{option}' has an invalid value.",
-                    exception);
+                    exception
+                );
             }
         }
     }
@@ -139,7 +148,8 @@ public static class DatabaseConnectionString
     private static string NormalizeOptionValue(string option, string value) =>
         option.Equals("sslmode", StringComparison.OrdinalIgnoreCase)
         || option.Equals("channel_binding", StringComparison.OrdinalIgnoreCase)
-            ? value.Replace("-", "", StringComparison.Ordinal)
+            ? value
+                .Replace("-", "", StringComparison.Ordinal)
                 .Replace("_", "", StringComparison.Ordinal)
             : value;
 }

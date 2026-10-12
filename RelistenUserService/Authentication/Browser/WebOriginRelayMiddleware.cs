@@ -10,13 +10,15 @@ namespace RelistenUserService.Authentication.Browser;
 /// </summary>
 public sealed class WebOriginRelayMiddleware(
     RequestDelegate next,
-    AccountsRuntimeConfiguration runtime)
+    AccountsRuntimeConfiguration runtime
+)
 {
     public async Task InvokeAsync(HttpContext context)
     {
         var hasRelay = context.Request.Headers.TryGetValue(
             AuthenticationConstants.WebOriginHeader,
-            out var relayedOrigins);
+            out var relayedOrigins
+        );
         if (!BrowserRouteBoundary.CanRelay(context.Request.Path))
         {
             // A relay hint on another route could make caller-supplied host data affect
@@ -35,8 +37,10 @@ public sealed class WebOriginRelayMiddleware(
         string webOrigin;
         if (hasRelay)
         {
-            if (!IsExpectedBackend(backendOrigin)
-                || !TryGetRelayedOrigin(relayedOrigins, out webOrigin))
+            if (
+                !IsExpectedBackend(backendOrigin)
+                || !TryGetRelayedOrigin(relayedOrigins, out webOrigin)
+            )
             {
                 context.Response.StatusCode = StatusCodes.Status400BadRequest;
                 return;
@@ -46,8 +50,10 @@ public sealed class WebOriginRelayMiddleware(
         {
             webOrigin = backendOrigin;
         }
-        else if (BrowserRouteBoundary.IsSharedResourcePath(context.Request.Path)
-            && IsAccountsBackend(backendOrigin))
+        else if (
+            BrowserRouteBoundary.IsSharedResourcePath(context.Request.Path)
+            && IsAccountsBackend(backendOrigin)
+        )
         {
             await next(context);
             return;
@@ -68,9 +74,7 @@ public sealed class WebOriginRelayMiddleware(
         await next(context);
     }
 
-    private bool TryGetRelayedOrigin(
-        StringValues values,
-        out string webOrigin)
+    private bool TryGetRelayedOrigin(StringValues values, out string webOrigin)
     {
         webOrigin = "";
         if (values.Count != 1)
@@ -79,8 +83,7 @@ public sealed class WebOriginRelayMiddleware(
         }
 
         var value = values[0];
-        if (value is null
-            || !runtime.WebOrigins.Contains(value, StringComparer.Ordinal))
+        if (value is null || !runtime.WebOrigins.Contains(value, StringComparer.Ordinal))
         {
             return false;
         }
@@ -90,8 +93,7 @@ public sealed class WebOriginRelayMiddleware(
     }
 
     private bool IsExpectedBackend(string origin) =>
-        IsAccountsBackend(origin)
-        || runtime.WebOrigins.Contains(origin, StringComparer.Ordinal);
+        IsAccountsBackend(origin) || runtime.WebOrigins.Contains(origin, StringComparer.Ordinal);
 
     private bool IsAccountsBackend(string origin) =>
         Uri.TryCreate(origin, UriKind.Absolute, out var actual)

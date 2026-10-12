@@ -7,7 +7,8 @@ public class AddMaxCreatedAtToShowSourceInfo : Migration
 {
     protected override void Up()
     {
-        Execute(@"
+        Execute(
+            @"
             ALTER TABLE show_source_information ADD COLUMN max_created_at timestamp with time zone;
 
             UPDATE show_source_information ssi
@@ -20,13 +21,16 @@ public class AddMaxCreatedAtToShowSourceInfo : Migration
             WHERE max_created_at IS NULL;
 
             ALTER TABLE show_source_information ALTER COLUMN max_created_at SET NOT NULL;
-        ");
+        "
+        );
     }
 
     protected override void Down()
     {
-        Execute(@"
+        Execute(
+            @"
             ALTER TABLE show_source_information DROP COLUMN max_created_at;
-        ");
+        "
+        );
     }
 }

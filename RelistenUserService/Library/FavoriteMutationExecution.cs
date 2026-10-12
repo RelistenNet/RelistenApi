@@ -6,17 +6,19 @@ public enum FavoriteMutationFailureKind
 {
     IdempotencyConflict,
     FavoriteUuidConflict,
-    QuotaExceeded
+    QuotaExceeded,
 }
 
 public sealed record FavoriteMutationFailure(
     FavoriteMutationFailureKind Kind,
     string Detail,
-    IReadOnlyList<Guid>? ConflictingUuids = null);
+    IReadOnlyList<Guid>? ConflictingUuids = null
+);
 
 public sealed record FavoriteMutationExecution(
     FavoriteMutationBatchResponse? Response,
-    FavoriteMutationFailure? Failure)
+    FavoriteMutationFailure? Failure
+)
 {
     public static FavoriteMutationExecution Succeeded(FavoriteMutationBatchResponse response) =>
         new(response, null);

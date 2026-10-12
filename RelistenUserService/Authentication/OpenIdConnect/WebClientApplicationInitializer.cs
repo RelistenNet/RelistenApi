@@ -6,7 +6,8 @@ namespace RelistenUserService.Authentication.OpenIdConnect;
 
 public sealed class WebClientApplicationInitializer(
     IServiceProvider serviceProvider,
-    AccountsRuntimeConfiguration runtime)
+    AccountsRuntimeConfiguration runtime
+)
 {
     private static readonly HashSet<string> ExpectedPermissions =
     [
@@ -14,18 +15,18 @@ public sealed class WebClientApplicationInitializer(
         Permissions.Endpoints.Token,
         Permissions.GrantTypes.AuthorizationCode,
         Permissions.ResponseTypes.Code,
-        Permissions.Prefixes.Scope + Scopes.Profile
+        Permissions.Prefixes.Scope + Scopes.Profile,
     ];
 
     private static readonly HashSet<string> ExpectedRequirements =
     [
-        Requirements.Features.ProofKeyForCodeExchange
+        Requirements.Features.ProofKeyForCodeExchange,
     ];
 
     private static readonly HashSet<string> ExpectedRedirectUris =
     [
         AuthenticationConstants.CanonicalWebCallback,
-        AuthenticationConstants.LocalWebCallback
+        AuthenticationConstants.LocalWebCallback,
     ];
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -34,7 +35,8 @@ public sealed class WebClientApplicationInitializer(
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
         var existing = await manager.FindByClientIdAsync(
             AuthenticationConstants.WebClientId,
-            cancellationToken);
+            cancellationToken
+        );
         if (existing is null)
         {
             await manager.CreateAsync(Descriptor(), cancellationToken);
@@ -44,21 +46,23 @@ public sealed class WebClientApplicationInitializer(
         var validSecret = await manager.ValidateClientSecretAsync(
             existing,
             runtime.Options.WebClientSecret,
-            cancellationToken);
+            cancellationToken
+        );
         var clientType = await manager.GetClientTypeAsync(existing, cancellationToken);
         var permissions = await manager.GetPermissionsAsync(existing, cancellationToken);
         var requirements = await manager.GetRequirementsAsync(existing, cancellationToken);
         var redirectUris = await manager.GetRedirectUrisAsync(existing, cancellationToken);
-        if (!validSecret
+        if (
+            !validSecret
             || clientType != ClientTypes.Confidential
             || !permissions.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedPermissions)
             || !requirements.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedRequirements)
-            || !redirectUris
-                .ToHashSet(StringComparer.Ordinal)
-                .SetEquals(ExpectedRedirectUris))
+            || !redirectUris.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedRedirectUris)
+        )
         {
             throw new InvalidOperationException(
-                "The persisted relisten-web client does not match the configured browser boundary.");
+                "The persisted relisten-web client does not match the configured browser boundary."
+            );
         }
     }
 
@@ -70,7 +74,7 @@ public sealed class WebClientApplicationInitializer(
             ClientSecret = runtime.Options.WebClientSecret,
             ClientType = ClientTypes.Confidential,
             ConsentType = ConsentTypes.Implicit,
-            DisplayName = "Relisten web"
+            DisplayName = "Relisten web",
         };
         descriptor.Permissions.UnionWith(ExpectedPermissions);
         descriptor.Requirements.UnionWith(ExpectedRequirements);

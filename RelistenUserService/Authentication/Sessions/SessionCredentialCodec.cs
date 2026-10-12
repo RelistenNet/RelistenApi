@@ -22,10 +22,9 @@ public sealed class SessionCredentialCodec
                 '.',
                 Version,
                 sessionId.ToString("N"),
-                WebEncoders.Base64UrlEncode(validator));
-            return new IssuedSessionCredential(
-                cookieValue,
-                SHA256.HashData(validator));
+                WebEncoders.Base64UrlEncode(validator)
+            );
+            return new IssuedSessionCredential(cookieValue, SHA256.HashData(validator));
         }
         finally
         {
@@ -42,11 +41,13 @@ public sealed class SessionCredentialCodec
         }
 
         var parts = cookieValue.Split('.');
-        if (parts.Length != 3
+        if (
+            parts.Length != 3
             || !string.Equals(parts[0], Version, StringComparison.Ordinal)
             || !Guid.TryParseExact(parts[1], "N", out var sessionId)
             || sessionId.Version != 7
-            || !string.Equals(parts[1], sessionId.ToString("N"), StringComparison.Ordinal))
+            || !string.Equals(parts[1], sessionId.ToString("N"), StringComparison.Ordinal)
+        )
         {
             return false;
         }
@@ -63,18 +64,19 @@ public sealed class SessionCredentialCodec
 
         try
         {
-            if (validator.Length != ValidatorLength
+            if (
+                validator.Length != ValidatorLength
                 || !string.Equals(
                     parts[2],
                     WebEncoders.Base64UrlEncode(validator),
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal
+                )
+            )
             {
                 return false;
             }
 
-            credential = new ParsedSessionCredential(
-                sessionId,
-                SHA256.HashData(validator));
+            credential = new ParsedSessionCredential(sessionId, SHA256.HashData(validator));
             return true;
         }
         finally
@@ -85,23 +87,20 @@ public sealed class SessionCredentialCodec
 
     public bool ValidatorMatches(
         ReadOnlySpan<byte> candidateHash,
-        ReadOnlySpan<byte> persistedHash) =>
+        ReadOnlySpan<byte> persistedHash
+    ) =>
         candidateHash.Length == ValidatorLength
         && persistedHash.Length == ValidatorLength
         && CryptographicOperations.FixedTimeEquals(candidateHash, persistedHash);
 }
 
-public sealed class IssuedSessionCredential(
-    string cookieValue,
-    byte[] validatorHash)
+public sealed class IssuedSessionCredential(string cookieValue, byte[] validatorHash)
 {
     public string CookieValue { get; } = cookieValue;
     internal byte[] ValidatorHash { get; } = validatorHash;
 }
 
-public sealed class ParsedSessionCredential(
-    Guid sessionId,
-    byte[] validatorHash)
+public sealed class ParsedSessionCredential(Guid sessionId, byte[] validatorHash)
 {
     public Guid SessionId { get; } = sessionId;
     internal byte[] ValidatorHash { get; } = validatorHash;

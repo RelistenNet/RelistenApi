@@ -31,15 +31,20 @@ namespace Relisten.Import
 
         private readonly AsyncRetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Policy
             .Handle<JsonReaderException>()
-            .OrResult<Tuple<bool, ImportStats>>(r => false /* never error on the result */)
+            .OrResult<Tuple<bool, ImportStats>>(r =>
+                false /* never error on the result */
+            )
             //.HandleResult<HttpResponseMessage>(r => r.StatusCode == HttpStatusCode.ServiceUnavailable)
             .WaitAndRetryAsync(7, attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)));
 
-        private IDictionary<string, SetlistShow?> existingSetlistShows = new Dictionary<string, SetlistShow?>();
-        private IDictionary<string, SetlistSong?> existingSetlistSongs = new Dictionary<string, SetlistSong?>();
+        private IDictionary<string, SetlistShow?> existingSetlistShows =
+            new Dictionary<string, SetlistShow?>();
+        private IDictionary<string, SetlistSong?> existingSetlistSongs =
+            new Dictionary<string, SetlistSong?>();
         private IDictionary<string, Tour?> existingTours = new Dictionary<string, Tour?>();
 
-        private IDictionary<string, VenueWithShowCount?> existingVenues = new Dictionary<string, VenueWithShowCount?>();
+        private IDictionary<string, VenueWithShowCount?> existingVenues =
+            new Dictionary<string, VenueWithShowCount?>();
 
         private IDictionary<string, DateTime> tourToEndDate = new Dictionary<string, DateTime>();
 
@@ -54,7 +59,8 @@ namespace Relisten.Import
             ILogger<SetlistFmImporter> log,
             LinkService linkService,
             RedisService redisService
-        ) : base(db, redisService)
+        )
+            : base(db, redisService)
         {
             _linkService = linkService;
             _setlistShowService = setlistShowService;
@@ -64,7 +70,9 @@ namespace Relisten.Import
             _log = log;
 
             http.DefaultRequestHeaders.Accept.Clear();
-            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            http.DefaultRequestHeaders.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json")
+            );
             http.DefaultRequestHeaders.Add("x-api-key", "a8e279f5-3209-4657-97dc-ad26f10d0109");
         }
 
@@ -79,13 +87,16 @@ namespace Relisten.Import
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
             return ImportableData.Eras
-                   | ImportableData.SetlistShowsAndSongs
-                   | ImportableData.Tours
-                   | ImportableData.Venues;
+                | ImportableData.SetlistShowsAndSongs
+                | ImportableData.Tours
+                | ImportableData.Venues;
         }
 
-        public override async Task<ImportStats> ImportDataForArtist(Artist artist, ArtistUpstreamSource src,
-            PerformContext? ctx)
+        public override async Task<ImportStats> ImportDataForArtist(
+            Artist artist,
+            ArtistUpstreamSource src,
+            PerformContext? ctx
+        )
         {
             var page = 1;
             Tuple<bool, ImportStats>? result = null;
@@ -134,8 +145,12 @@ namespace Relisten.Import
             return stats;
         }
 
-        public override Task<ImportStats> ImportSpecificShowDataForArtist(Artist artist, ArtistUpstreamSource src,
-            string? showIdentifier, PerformContext? ctx)
+        public override Task<ImportStats> ImportSpecificShowDataForArtist(
+            Artist artist,
+            ArtistUpstreamSource src,
+            string? showIdentifier,
+            PerformContext? ctx
+        )
         {
             return Task.FromResult(new ImportStats());
         }
@@ -152,7 +167,8 @@ namespace Relisten.Import
                 .ToDictionary(grp => grp.Key, grp => (VenueWithShowCount?)grp.First());
 
             existingTours = (await _tourService.AllForArtist(artist))
-                .GroupBy(tour => tour.upstream_identifier).ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
+                .GroupBy(tour => tour.upstream_identifier)
+                .ToDictionary(grp => grp.Key, grp => (Tour?)grp.First());
 
             existingSetlistShows = (await _setlistShowService.AllForArtist(artist))
                 .GroupBy(show => show.upstream_identifier)
@@ -181,7 +197,7 @@ namespace Relisten.Import
                     longitude = setlist.venue.city.coords?.@long,
                     location = $"{setlist.venue.city.name}, {setlist.venue.city.state}",
                     upstream_identifier = setlist.venue._iguanaUpstreamId,
-                    slug = Slugify(setlist.venue.name)
+                    slug = Slugify(setlist.venue.name),
                 };
 
                 dbVenue = await _venueService.Save(sc);
@@ -201,16 +217,18 @@ namespace Relisten.Import
                 dbTour = existingTours.GetValue(tour_upstream);
                 if (dbTour == null)
                 {
-                    dbTour = await _tourService.Save(new Tour
-                    {
-                        updated_at = now,
-                        artist_id = artist.id,
-                        start_date = null,
-                        end_date = null,
-                        name = tour_upstream,
-                        slug = Slugify(tour_upstream),
-                        upstream_identifier = tour_upstream
-                    });
+                    dbTour = await _tourService.Save(
+                        new Tour
+                        {
+                            updated_at = now,
+                            artist_id = artist.id,
+                            start_date = null,
+                            end_date = null,
+                            name = tour_upstream,
+                            slug = Slugify(tour_upstream),
+                            upstream_identifier = tour_upstream,
+                        }
+                    );
 
                     existingTours[dbTour.upstream_identifier] = dbTour!;
 
@@ -227,15 +245,17 @@ namespace Relisten.Import
 
             if (dbShow == null)
             {
-                dbShow = await _setlistShowService.Save(new SetlistShow
-                {
-                    artist_id = artist.id,
-                    updated_at = setlistLastUpdated,
-                    date = date,
-                    upstream_identifier = setlist.id,
-                    venue_id = dbVenue!.id,
-                    tour_id = artist.features.tours ? dbTour?.id : null
-                });
+                dbShow = await _setlistShowService.Save(
+                    new SetlistShow
+                    {
+                        artist_id = artist.id,
+                        updated_at = setlistLastUpdated,
+                        date = date,
+                        upstream_identifier = setlist.id,
+                        venue_id = dbVenue!.id,
+                        tour_id = artist.features.tours ? dbTour?.id : null,
+                    }
+                );
 
                 existingSetlistShows[dbShow.upstream_identifier] = dbShow!;
 
@@ -262,20 +282,28 @@ namespace Relisten.Import
 
             // setlist.fm doesn't provide much info about tours so we need to find the start
             // and end date ourselves.
-            if (artist.features.tours &&
-                (dbTour!.start_date == null
-                 || dbTour.end_date == null
-                 || dbShow.date < dbTour.start_date
-                 || dbShow.date > dbTour.end_date))
+            if (
+                artist.features.tours
+                && (
+                    dbTour!.start_date == null
+                    || dbTour.end_date == null
+                    || dbShow.date < dbTour.start_date
+                    || dbShow.date > dbTour.end_date
+                )
+            )
             {
-                if (!tourToStartDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow.date < tourToStartDate[dbTour.upstream_identifier])
+                if (
+                    !tourToStartDate.ContainsKey(dbTour.upstream_identifier)
+                    || dbShow.date < tourToStartDate[dbTour.upstream_identifier]
+                )
                 {
                     tourToStartDate[dbTour.upstream_identifier] = dbShow.date;
                 }
 
-                if (!tourToEndDate.ContainsKey(dbTour.upstream_identifier)
-                    || dbShow.date > tourToEndDate[dbTour.upstream_identifier])
+                if (
+                    !tourToEndDate.ContainsKey(dbTour.upstream_identifier)
+                    || dbShow.date > tourToEndDate[dbTour.upstream_identifier]
+                )
                 {
                     tourToEndDate[dbTour.upstream_identifier] = dbShow.date;
                 }
@@ -283,11 +311,15 @@ namespace Relisten.Import
 
             if (shouldAddSongs)
             {
-                var songs = setlist.sets.set.SelectMany(set => set.song)
-                    .Select(song => new {Name = song.name, Slug = Slugify(song.name)}).GroupBy(song => song.Slug)
-                    .Select(grp => grp.First()).ToList();
+                var songs = setlist
+                    .sets.set.SelectMany(set => set.song)
+                    .Select(song => new { Name = song.name, Slug = Slugify(song.name) })
+                    .GroupBy(song => song.Slug)
+                    .Select(grp => grp.First())
+                    .ToList();
 
-                var dbSongs = existingSetlistSongs.Where(kvp => songs.Select(song => song.Slug).Contains(kvp.Key))
+                var dbSongs = existingSetlistSongs
+                    .Where(kvp => songs.Select(song => song.Slug).Contains(kvp.Key))
                     .Select(kvp => kvp.Value)
                     .Where(song => song != null)
                     .Select(song => song!)
@@ -295,15 +327,17 @@ namespace Relisten.Import
 
                 if (songs.Count != dbSongs.Count)
                 {
-                    var newSongs = songs.Where(song => dbSongs.Find(dbSong => dbSong.slug == song.Slug) == null)
+                    var newSongs = songs
+                        .Where(song => dbSongs.Find(dbSong => dbSong.slug == song.Slug) == null)
                         .Select(song => new SetlistSong
                         {
                             artist_id = artist.id,
                             name = song.Name,
                             slug = song.Slug,
                             updated_at = now,
-                            upstream_identifier = song.Slug
-                        }).ToList();
+                            upstream_identifier = song.Slug,
+                        })
+                        .ToList();
 
                     var justAdded = await _setlistSongService.InsertAll(artist, newSongs);
                     dbSongs.AddRange(justAdded);
@@ -321,8 +355,12 @@ namespace Relisten.Import
             return stats;
         }
 
-        private async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(Artist artist, HttpResponseMessage res,
-            PerformContext? ctx, IProgressBar? prog)
+        private async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(
+            Artist artist,
+            HttpResponseMessage res,
+            PerformContext? ctx,
+            IProgressBar? prog
+        )
         {
             var body = await res.Content.ReadAsStringAsync();
             SetlistsRootObject? root = null;
@@ -367,13 +405,20 @@ namespace Relisten.Import
                     catch (Exception e)
                     {
                         s.Stop();
-                        ctx?.WriteLine("{0}/{1}...failed in {2}! Stats: {3}", artist.name, setlist.eventDate, s.Elapsed,
-                            e.Message);
+                        ctx?.WriteLine(
+                            "{0}/{1}...failed in {2}! Stats: {3}",
+                            artist.name,
+                            setlist.eventDate,
+                            s.Elapsed,
+                            e.Message
+                        );
 
                         throw;
                     }
 
-                    prog?.SetValue(((100.0 * (root.page - 1) * root.itemsPerPage) + (count * 1.0)) / root.total);
+                    prog?.SetValue(
+                        ((100.0 * (root.page - 1) * root.itemsPerPage) + (count * 1.0)) / root.total
+                    );
 
                     count++;
                 }
@@ -386,7 +431,9 @@ namespace Relisten.Import
 
         private async Task UpdateTourStartEndDates(Artist artist)
         {
-            await db.WithWriteConnection(con => con.ExecuteAsync(@"
+            await db.WithWriteConnection(con =>
+                con.ExecuteAsync(
+                    @"
                 UPDATE
                     tours
                 SET
@@ -395,16 +442,19 @@ namespace Relisten.Import
                 WHERE
                     artist_id = @artistId
                     AND upstream_identifier = @upstream_identifier
-            ", tourToStartDate.Keys.Select(tourUpstreamId =>
-            {
-                return new
-                {
-                    startDate = tourToStartDate[tourUpstreamId],
-                    endDate = tourToEndDate[tourUpstreamId],
-                    artistId = artist.id,
-                    upstream_identifier = tourUpstreamId
-                };
-            })));
+            ",
+                    tourToStartDate.Keys.Select(tourUpstreamId =>
+                    {
+                        return new
+                        {
+                            startDate = tourToStartDate[tourUpstreamId],
+                            endDate = tourToEndDate[tourUpstreamId],
+                            artistId = artist.id,
+                            upstream_identifier = tourUpstreamId,
+                        };
+                    })
+                )
+            );
 
             tourToStartDate = new Dictionary<string, DateTime>();
             tourToEndDate = new Dictionary<string, DateTime>();

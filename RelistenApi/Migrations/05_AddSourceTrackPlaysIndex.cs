@@ -7,10 +7,12 @@ namespace Migrations
     {
         protected override void Up()
         {
-            Execute(@"
+            Execute(
+                @"
                 CREATE INDEX IF NOT EXISTS idx_source_track_plays_id_btree ON source_track_plays(id);
                 CREATE INDEX IF NOT EXISTS idx_setlist_shows_artist_id ON setlist_shows (artist_id);
-            ");
+            "
+            );
         }
 
         protected override void Down()

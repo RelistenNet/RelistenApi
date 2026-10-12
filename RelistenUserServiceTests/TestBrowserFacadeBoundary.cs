@@ -28,8 +28,11 @@ public sealed class TestBrowserFacadeBoundary
         var json = SerializeMe(currentAccount);
 
         using var document = JsonDocument.Parse(json);
-        document.RootElement.GetProperty("native_session_uuid").GetGuid()
-            .Should().Be(nativeSessionId);
+        document
+            .RootElement.GetProperty("native_session_uuid")
+            .GetGuid()
+            .Should()
+            .Be(nativeSessionId);
     }
 
     [Test]
@@ -40,13 +43,13 @@ public sealed class TestBrowserFacadeBoundary
             User(),
             Guid.CreateVersion7(),
             AuthenticationConstants.LocalWebOrigin,
-            IdentitySessionCapabilities.AllWeb);
+            IdentitySessionCapabilities.AllWeb
+        );
 
         var json = SerializeMe(currentAccount);
 
         using var document = JsonDocument.Parse(json);
-        document.RootElement.TryGetProperty("native_session_uuid", out _)
-            .Should().BeFalse();
+        document.RootElement.TryGetProperty("native_session_uuid", out _).Should().BeFalse();
     }
 
     [Test]
@@ -56,23 +59,25 @@ public sealed class TestBrowserFacadeBoundary
         {
             Id = Guid.CreateVersion7(),
             Username = "browser_user",
-            SecurityVersion = 7
+            SecurityVersion = 7,
         };
         var authSsoSessionId = Guid.CreateVersion7();
 
         var principal = new WebBootstrapPrincipalFactory().Create(
             user,
             authSsoSessionId,
-            [Scopes.OpenId, Scopes.Profile]);
+            [Scopes.OpenId, Scopes.Profile]
+        );
 
         principal.GetResources().Should().BeEmpty();
-        principal.GetClaim(RelistenClaims.SessionId).Should()
-            .Be(authSsoSessionId.ToString("D"));
+        principal.GetClaim(RelistenClaims.SessionId).Should().Be(authSsoSessionId.ToString("D"));
         principal.GetClaim(RelistenClaims.SecurityVersion).Should().BeNull();
         principal.GetClaim(Claims.ClientId).Should().BeNull();
-        principal.Claims.Single(claim => claim.Type == RelistenClaims.SessionId)
+        principal
+            .Claims.Single(claim => claim.Type == RelistenClaims.SessionId)
             .GetDestinations()
-            .Should().Equal(Destinations.IdentityToken);
+            .Should()
+            .Equal(Destinations.IdentityToken);
     }
 
     private static string SerializeMe(CurrentAccountContext currentAccount)
@@ -80,19 +85,20 @@ public sealed class TestBrowserFacadeBoundary
         var context = new DefaultHttpContext();
         var controller = new MeController(currentAccount, null!)
         {
-            ControllerContext = new ControllerContext { HttpContext = context }
+            ControllerContext = new ControllerContext { HttpContext = context },
         };
         var result = controller.Get().Result.Should().BeOfType<OkObjectResult>().Subject;
-        return JsonSerializer.Serialize(result.Value, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-        });
+        return JsonSerializer.Serialize(
+            result.Value,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }
+        );
     }
 
-    private static User User() => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Username = "browser_user",
-        SecurityVersion = 7
-    };
+    private static User User() =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Username = "browser_user",
+            SecurityVersion = 7,
+        };
 }

@@ -44,7 +44,8 @@ public sealed class ConfigureProductionIosClient : Migration
                 permissions = EXCLUDED.permissions,
                 redirect_uris = EXCLUDED.redirect_uris,
                 requirements = EXCLUDED.requirements;
-            """);
+            """
+        );
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
@@ -53,6 +54,7 @@ public sealed class ConfigureProductionIosClient : Migration
             """
             DELETE FROM identity.openiddict_applications
             WHERE client_id = 'relisten-mobile-ios';
-            """);
+            """
+        );
     }
 }

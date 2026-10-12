@@ -69,9 +69,12 @@ namespace Relisten.Controllers.Admin
             {
                 // This doesn't count login failures towards account lockout
                 // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-                var result =
-                    await _signInManager.PasswordSignInAsync(model.Username, model.Password, model.RememberMe,
-                        true);
+                var result = await _signInManager.PasswordSignInAsync(
+                    model.Username,
+                    model.Password,
+                    model.RememberMe,
+                    true
+                );
                 if (result.Succeeded)
                 {
                     _logger.LogInformation(1, "User logged in.");
@@ -96,11 +99,13 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public async Task<IActionResult> Index()
         {
-            return View(new AdminViewModel
-            {
-                Artists = await _artistService.All(),
-                UpstreamSources = await _upstreamSourceService.AllUpstreamSources()
-            });
+            return View(
+                new AdminViewModel
+                {
+                    Artists = await _artistService.All(),
+                    UpstreamSources = await _upstreamSourceService.AllUpstreamSources(),
+                }
+            );
         }
 
         [HttpGet("/relisten-admin/popularity")]
@@ -108,26 +113,51 @@ namespace Relisten.Controllers.Admin
         public IActionResult Popularity()
         {
             ViewBag.Message = TempData["message"];
-            return View(new PopularityAdminViewModel
-            {
-                CacheEntries = new[]
+            return View(
+                new PopularityAdminViewModel
                 {
-                    new PopularityCacheEntryViewModel("popularity:artists:map:30d-48h", GetCacheStatus("popularity:artists:map:30d-48h")),
-                    new PopularityCacheEntryViewModel("popularity:artists:hot:30d:50", GetCacheStatus("popularity:artists:hot:30d:50")),
-                    new PopularityCacheEntryViewModel("popularity:artists:trending:48h:50", GetCacheStatus("popularity:artists:trending:48h:50")),
-                    new PopularityCacheEntryViewModel("popularity:shows:hot:30d:50", GetCacheStatus("popularity:shows:hot:30d:50")),
-                    new PopularityCacheEntryViewModel("popularity:shows:trending:48h:50", GetCacheStatus("popularity:shows:trending:48h:50")),
-                    new PopularityCacheEntryViewModel("popularity:years:hot:30d:50", GetCacheStatus("popularity:years:hot:30d:50")),
-                    new PopularityCacheEntryViewModel("popularity:years:trending:48h:50", GetCacheStatus("popularity:years:trending:48h:50"))
+                    CacheEntries = new[]
+                    {
+                        new PopularityCacheEntryViewModel(
+                            "popularity:artists:map:30d-48h",
+                            GetCacheStatus("popularity:artists:map:30d-48h")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:artists:hot:30d:50",
+                            GetCacheStatus("popularity:artists:hot:30d:50")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:artists:trending:48h:50",
+                            GetCacheStatus("popularity:artists:trending:48h:50")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:shows:hot:30d:50",
+                            GetCacheStatus("popularity:shows:hot:30d:50")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:shows:trending:48h:50",
+                            GetCacheStatus("popularity:shows:trending:48h:50")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:years:hot:30d:50",
+                            GetCacheStatus("popularity:years:hot:30d:50")
+                        ),
+                        new PopularityCacheEntryViewModel(
+                            "popularity:years:trending:48h:50",
+                            GetCacheStatus("popularity:years:trending:48h:50")
+                        ),
+                    },
                 }
-            });
+            );
         }
 
         [HttpPost("/relisten-admin/popularity/refresh-artists-map")]
         [Authorize]
         public IActionResult RefreshArtistPopularityMap()
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshArtistPopularityMap());
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshArtistPopularityMap()
+            );
             TempData["message"] = $"Queued artist popularity refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -142,7 +172,9 @@ namespace Relisten.Controllers.Admin
                 return RedirectToAction(nameof(Popularity));
             }
 
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshShowPopularityMapForArtist(uuid));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshShowPopularityMapForArtist(uuid)
+            );
             TempData["message"] = $"Queued show popularity refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -157,7 +189,9 @@ namespace Relisten.Controllers.Admin
                 return RedirectToAction(nameof(Popularity));
             }
 
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshYearPopularityMapForArtist(uuid));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshYearPopularityMapForArtist(uuid)
+            );
             TempData["message"] = $"Queued year popularity refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -166,7 +200,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshPopularArtists([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularArtists(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshPopularArtists(limit)
+            );
             TempData["message"] = $"Queued popular artists refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -175,7 +211,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshTrendingArtists([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingArtists(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshTrendingArtists(limit)
+            );
             TempData["message"] = $"Queued trending artists refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -184,7 +222,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshPopularShows([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularShows(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshPopularShows(limit)
+            );
             TempData["message"] = $"Queued popular shows refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -193,7 +233,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshTrendingShows([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingShows(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshTrendingShows(limit)
+            );
             TempData["message"] = $"Queued trending shows refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -202,7 +244,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshPopularYears([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshPopularYears(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshPopularYears(limit)
+            );
             TempData["message"] = $"Queued popular years refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -211,7 +255,9 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult RefreshTrendingYears([FromQuery] int limit = 50)
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _popularityJobs.RefreshTrendingYears(limit));
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _popularityJobs.RefreshTrendingYears(limit)
+            );
             TempData["message"] = $"Queued trending years refresh as job {jobId}.";
             return RedirectToAction(nameof(Popularity));
         }
@@ -241,25 +287,32 @@ namespace Relisten.Controllers.Admin
         [Authorize]
         public IActionResult IndexArchiveOrgArtists()
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true));
-            return Json(new {message = $"Queued as job {jobId}!"});
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true)
+            );
+            return Json(new { message = $"Queued as job {jobId}!" });
         }
 
         [HttpPost("/relisten-admin/refresh-all-artists")]
         [Authorize]
         public IActionResult RefreshAllArtists()
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() => _scheduledService.RefreshAllArtists(null, allowedInDev: true));
-            return Json(new {message = $"Queued as job {jobId}!"});
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _scheduledService.RefreshAllArtists(null, allowedInDev: true)
+            );
+            return Json(new { message = $"Queued as job {jobId}!" });
         }
 
         [HttpPost("/relisten-admin/backfill-jerrygarcia-venues")]
         [Authorize]
-        public IActionResult BackfillJerryGarciaVenues([FromQuery] string artistSlug = "grateful-dead")
+        public IActionResult BackfillJerryGarciaVenues(
+            [FromQuery] string artistSlug = "grateful-dead"
+        )
         {
-            var jobId =
-                Hangfire.BackgroundJob.Enqueue(() => _scheduledService.BackfillJerryGarciaVenues(artistSlug, null));
-            return Json(new {message = $"Queued as job {jobId}!"});
+            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                _scheduledService.BackfillJerryGarciaVenues(artistSlug, null)
+            );
+            return Json(new { message = $"Queued as job {jobId}!" });
         }
 
         private IActionResult RedirectToLocal(string? returnUrl)
@@ -275,13 +328,15 @@ namespace Relisten.Controllers.Admin
 
     public class LoginViewModel
     {
-        [Required] public string Username { get; set; } = null!;
+        [Required]
+        public string Username { get; set; } = null!;
 
         [Required]
         [DataType(DataType.Password)]
         public string Password { get; set; } = null!;
 
-        [Display(Name = "Remember me?")] public bool RememberMe { get; set; }
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
     }
 
     public class AdminViewModel

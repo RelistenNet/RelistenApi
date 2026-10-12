@@ -13,13 +13,14 @@ public sealed class TestDatabaseConnectionString
     public void PreservesSecurityAndPrimaryRoutingOptionsFromUri()
     {
         var configuration = BuildConfiguration(
-            "postgresql://accounts:p%40ss@db.internal:5433/relisten" +
-            "?sslmode=verify-full" +
-            "&sslrootcert=%2Fcerts%2Froot.pem" +
-            "&channel_binding=require" +
-            "&target_session_attrs=read-write" +
-            "&application_name=relisten-users" +
-            "&connect_timeout=7");
+            "postgresql://accounts:p%40ss@db.internal:5433/relisten"
+                + "?sslmode=verify-full"
+                + "&sslrootcert=%2Fcerts%2Froot.pem"
+                + "&channel_binding=require"
+                + "&target_session_attrs=read-write"
+                + "&application_name=relisten-users"
+                + "&connect_timeout=7"
+        );
 
         var resolved = DatabaseConnectionString.Resolve(configuration);
         var builder = new NpgsqlConnectionStringBuilder(resolved);
@@ -42,7 +43,8 @@ public sealed class TestDatabaseConnectionString
     public void RejectsQueryOptionsThatCannotBeAppliedUnambiguously(string query)
     {
         var configuration = BuildConfiguration(
-            $"postgresql://accounts:secret@db.internal/relisten?{query}");
+            $"postgresql://accounts:secret@db.internal/relisten?{query}"
+        );
 
         var resolve = () => DatabaseConnectionString.Resolve(configuration);
 
@@ -53,13 +55,15 @@ public sealed class TestDatabaseConnectionString
     public void AccountsDatabaseUrlOverridesFileConnectionString()
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Accounts"] =
-                    "Host=localhost;Database=local_accounts;Username=local;Password=local",
-                ["ACCOUNTS_DATABASE_URL"] =
-                    "postgresql://production:secret@accounts-db.internal/production_accounts"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Accounts"] =
+                        "Host=localhost;Database=local_accounts;Username=local;Password=local",
+                    ["ACCOUNTS_DATABASE_URL"] =
+                        "postgresql://production:secret@accounts-db.internal/production_accounts",
+                }
+            )
             .Build();
 
         var resolved = DatabaseConnectionString.Resolve(configuration);
@@ -73,18 +77,18 @@ public sealed class TestDatabaseConnectionString
     public void AccountsLockDatabaseUrlOverridesFileConnectionString()
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:AccountsLock"] =
-                    "Host=stale.example;Database=stale_accounts;Username=stale;Password=stale",
-                ["ACCOUNTS_LOCK_DATABASE_URL"] =
-                    "Host=127.0.0.1;Database=local_accounts;Username=local;Password=local"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:AccountsLock"] =
+                        "Host=stale.example;Database=stale_accounts;Username=stale;Password=stale",
+                    ["ACCOUNTS_LOCK_DATABASE_URL"] =
+                        "Host=127.0.0.1;Database=local_accounts;Username=local;Password=local",
+                }
+            )
             .Build();
 
-        var resolved = DatabaseConnectionString.ResolveRefreshTokenLocks(
-            configuration,
-            null!);
+        var resolved = DatabaseConnectionString.ResolveRefreshTokenLocks(configuration, null!);
         var builder = new NpgsqlConnectionStringBuilder(resolved);
 
         builder.Host.Should().Be("127.0.0.1");
@@ -93,9 +97,11 @@ public sealed class TestDatabaseConnectionString
 
     private static IConfiguration BuildConfiguration(string connectionString) =>
         new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:Accounts"] = connectionString
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:Accounts"] = connectionString,
+                }
+            )
             .Build();
 }

@@ -5,16 +5,19 @@ namespace Relisten.Api.Models.Api
     public enum ApiErrorCode
     {
         NoError = 0,
-        NotFound = 404
+        NotFound = 404,
     }
 
     public class ResponseEnvelope<T>
     {
-        [Required] public bool success { get; set; }
+        [Required]
+        public bool success { get; set; }
 
-        [Required] public ApiErrorCode error_code { get; set; }
+        [Required]
+        public ApiErrorCode error_code { get; set; }
 
-        [Required] public T? data { get; set; }
+        [Required]
+        public T? data { get; set; }
 
         public static ResponseEnvelope<T> Success(T? data = default)
         {

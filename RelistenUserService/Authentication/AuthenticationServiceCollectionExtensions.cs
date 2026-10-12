@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.DataProtection;
@@ -32,7 +32,8 @@ public static class AuthenticationServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment,
-        AccountsRuntimeConfiguration runtime)
+        AccountsRuntimeConfiguration runtime
+    )
     {
         services.AddSingleton(runtime);
         services.AddSingleton(runtime.Options);
@@ -42,8 +43,8 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddSingleton<RefreshTokenLockProvider>();
         services.Configure<ForwardedHeadersOptions>(options =>
         {
-            options.ForwardedHeaders = ForwardedHeaders.XForwardedHost
-                | ForwardedHeaders.XForwardedProto;
+            options.ForwardedHeaders =
+                ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
             options.ForwardLimit = 1;
             options.AllowedHosts.Add(new HostString(runtime.Options.AuthHost).Host);
             options.AllowedHosts.Add(new HostString(runtime.Options.AccountsHost).Host);
@@ -58,14 +59,16 @@ public static class AuthenticationServiceCollectionExtensions
         });
 
         services.AddDbContext<AccountsDbContext>(options =>
-            options.UseNpgsql(
+            options
+                .UseNpgsql(
                     DatabaseConnectionString.Resolve(configuration),
-                    postgres => postgres.MigrationsHistoryTable(
-                        "__EFMigrationsHistory",
-                        "identity"))
-                .UseOpenIddict<Guid>());
+                    postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "identity")
+                )
+                .UseOpenIddict<Guid>()
+        );
 
-        var dataProtection = services.AddDataProtection()
+        var dataProtection = services
+            .AddDataProtection()
             .SetApplicationName("Relisten.UserService")
             .PersistKeysToDbContext<AccountsDbContext>();
         if (!environment.IsDevelopment())
@@ -75,16 +78,21 @@ public static class AuthenticationServiceCollectionExtensions
                 runtime.Options.DataProtectionCertificatePassword,
                 runtime.Options.PreviousDataProtectionCertificatePath,
                 runtime.Options.PreviousDataProtectionCertificatePassword,
-                "Data Protection wrapping");
+                "Data Protection wrapping"
+            );
             dataProtection
                 .ProtectKeysWithCertificate(certificates[0])
                 .UnprotectKeysWithAnyCertificate(certificates);
         }
 
         var openIddict = services.AddOpenIddict();
-        openIddict.AddCore(options => options.UseEntityFrameworkCore()
-                .UseDbContext<AccountsDbContext>()
-                .ReplaceDefaultEntities<Guid>())
+        openIddict
+            .AddCore(options =>
+                options
+                    .UseEntityFrameworkCore()
+                    .UseDbContext<AccountsDbContext>()
+                    .ReplaceDefaultEntities<Guid>()
+            )
             .AddServer(options => ConfigureServer(options, environment, runtime))
             .AddValidation(options =>
             {
@@ -92,31 +100,33 @@ public static class AuthenticationServiceCollectionExtensions
                 options.UseAspNetCore();
             });
 
-        openIddict.AddClient(options =>
-            ConfigureClients(options, environment, runtime));
+        openIddict.AddClient(options => ConfigureClients(options, environment, runtime));
 
-        services.AddAuthentication(options =>
-        {
-            options.DefaultAuthenticateScheme =
-                OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme =
-                OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
-        })
+        services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme =
+                    OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme =
+                    OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            })
             .AddScheme<AuthenticationSchemeOptions, AuthSsoAuthenticationHandler>(
                 AuthenticationConstants.AuthSsoScheme,
-                _ => { })
+                _ => { }
+            )
             .AddScheme<AuthenticationSchemeOptions, WebSessionAuthenticationHandler>(
                 AuthenticationConstants.WebSessionScheme,
-                _ => { })
-            .AddScheme<AuthenticationSchemeOptions,
-                RejectedAccountCredentialAuthenticationHandler>(
+                _ => { }
+            )
+            .AddScheme<AuthenticationSchemeOptions, RejectedAccountCredentialAuthenticationHandler>(
                 AuthenticationConstants.RejectedAccountCredentialScheme,
-                _ => { })
+                _ => { }
+            )
             .AddPolicyScheme(
                 AuthenticationConstants.AccountCredentialScheme,
                 displayName: null,
-                options => options.ForwardDefaultSelector =
-                    AccountCredentialSelector.SelectScheme);
+                options => options.ForwardDefaultSelector = AccountCredentialSelector.SelectScheme
+            );
 
         if (runtime.Options.EnableDevelopmentPersonas)
         {
@@ -139,24 +149,30 @@ public static class AuthenticationServiceCollectionExtensions
                 options,
                 AuthenticationConstants.UserReadPolicy,
                 RelistenScopes.UserRead,
-                IdentitySessionCapabilities.AccountProfileRead);
+                IdentitySessionCapabilities.AccountProfileRead
+            );
             AddReviewedAccountPolicy(
                 options,
                 AuthenticationConstants.LibraryAccessPolicy,
                 new ReviewedAccountAccessRule(
                     RelistenScopes.LibraryRead,
-                    IdentitySessionCapabilities.LibraryRead),
+                    IdentitySessionCapabilities.LibraryRead
+                ),
                 new ReviewedAccountAccessRule(
                     RelistenScopes.LibraryWrite,
-                    IdentitySessionCapabilities.FavoriteMutation));
+                    IdentitySessionCapabilities.FavoriteMutation
+                )
+            );
             AddPolicy(
                 options,
                 AuthenticationConstants.AccountManagePolicy,
-                RelistenScopes.AccountManage);
+                RelistenScopes.AccountManage
+            );
             AddWebPolicy(
                 options,
                 AuthenticationConstants.BrowserProfileReadPolicy,
-                IdentitySessionCapabilities.AccountProfileRead);
+                IdentitySessionCapabilities.AccountProfileRead
+            );
         });
 
         services.AddScoped<CurrentAccountContext>();
@@ -164,15 +180,19 @@ public static class AuthenticationServiceCollectionExtensions
         services.AddScoped<IdentitySessionLifecycle>();
         services.AddSingleton<SessionCookieManager>();
         services.AddScoped<AuthSsoSignInService>();
-        services.AddSingleton<IAntiforgeryAdditionalDataProvider,
-            WebSessionAntiforgeryAdditionalDataProvider>();
+        services.AddSingleton<
+            IAntiforgeryAdditionalDataProvider,
+            WebSessionAntiforgeryAdditionalDataProvider
+        >();
         services.AddScoped<NativeSessionAuthenticator>();
         services.AddScoped<IAuthorizationHandler, NativeSessionAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, ReviewedAccountAccessAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, WebCapabilityAuthorizationHandler>();
         services.AddSingleton<IAuthorizationHandler, ScopeAuthorizationHandler>();
-        services.AddSingleton<IAuthorizationMiddlewareResultHandler,
-            NativeSessionAuthorizationResultHandler>();
+        services.AddSingleton<
+            IAuthorizationMiddlewareResultHandler,
+            NativeSessionAuthorizationResultHandler
+        >();
         services.AddScoped<AdvisoryLockService>();
         services.AddScoped<UsernamePolicy>();
         services.AddScoped<UsernameReservationService>();
@@ -192,84 +212,104 @@ public static class AuthenticationServiceCollectionExtensions
     private static void ConfigureClients(
         OpenIddictClientBuilder options,
         IHostEnvironment environment,
-        AccountsRuntimeConfiguration runtime)
+        AccountsRuntimeConfiguration runtime
+    )
     {
-        options.AllowAuthorizationCodeFlow()
-            .SetStateTokenLifetime(TimeSpan.FromMinutes(15));
+        options.AllowAuthorizationCodeFlow().SetStateTokenLifetime(TimeSpan.FromMinutes(15));
         if (environment.IsDevelopment() && OperatingSystem.IsMacOS())
         {
             // Preview/tunnel authentication must remain safe to run on macOS. Reuse the
             // checkout-local raw keys instead of importing PKCS#12 into the login Keychain.
-            options.AddSigningKey(DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
-                .AddEncryptionKey(
-                    DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment));
+            options
+                .AddSigningKey(DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
+                .AddEncryptionKey(DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment));
         }
         else if (environment.IsDevelopment())
         {
-            options.AddSigningCertificate(
-                    DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
+            options
+                .AddSigningCertificate(
+                    DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment)
+                )
                 .AddEncryptionCertificate(
-                    DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
+                    DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment)
+                );
         }
         else
         {
-            options.AddSigningCertificates(LoadCertificateSet(
-                runtime.Options.SigningCertificatePath,
-                runtime.Options.SigningCertificatePassword,
-                runtime.Options.PreviousSigningCertificatePath,
-                runtime.Options.PreviousSigningCertificatePassword,
-                "signing"))
-            .AddEncryptionCertificates(LoadCertificateSet(
-                runtime.Options.EncryptionCertificatePath,
-                runtime.Options.EncryptionCertificatePassword,
-                runtime.Options.PreviousEncryptionCertificatePath,
-                runtime.Options.PreviousEncryptionCertificatePassword,
-                "encryption"));
+            options
+                .AddSigningCertificates(
+                    LoadCertificateSet(
+                        runtime.Options.SigningCertificatePath,
+                        runtime.Options.SigningCertificatePassword,
+                        runtime.Options.PreviousSigningCertificatePath,
+                        runtime.Options.PreviousSigningCertificatePassword,
+                        "signing"
+                    )
+                )
+                .AddEncryptionCertificates(
+                    LoadCertificateSet(
+                        runtime.Options.EncryptionCertificatePath,
+                        runtime.Options.EncryptionCertificatePassword,
+                        runtime.Options.PreviousEncryptionCertificatePath,
+                        runtime.Options.PreviousEncryptionCertificatePassword,
+                        "encryption"
+                    )
+                );
         }
 
-        options.AddRegistration(new OpenIddictClientRegistration
-        {
-            RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
-            Issuer = runtime.Issuer,
-            ClientId = AuthenticationConstants.WebClientId,
-            ClientSecret = runtime.Options.WebClientSecret,
-            ClientType = ClientTypes.Confidential,
-            RedirectUri = new Uri(AuthenticationConstants.CanonicalWebCallback),
-            Scopes = { Scopes.OpenId, Scopes.Profile },
-            CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
-            ResponseModes = { ResponseModes.Query }
-        });
-        options.AddRegistration(new OpenIddictClientRegistration
-        {
-            RegistrationId = AuthenticationConstants.LocalWebRegistration,
-            Issuer = runtime.Issuer,
-            ClientId = AuthenticationConstants.WebClientId,
-            ClientSecret = runtime.Options.WebClientSecret,
-            ClientType = ClientTypes.Confidential,
-            RedirectUri = new Uri(AuthenticationConstants.LocalWebCallback),
-            Scopes = { Scopes.OpenId, Scopes.Profile },
-            CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
-            ResponseModes = { ResponseModes.Query }
-        });
+        options.AddRegistration(
+            new OpenIddictClientRegistration
+            {
+                RegistrationId = AuthenticationConstants.CanonicalWebRegistration,
+                Issuer = runtime.Issuer,
+                ClientId = AuthenticationConstants.WebClientId,
+                ClientSecret = runtime.Options.WebClientSecret,
+                ClientType = ClientTypes.Confidential,
+                RedirectUri = new Uri(AuthenticationConstants.CanonicalWebCallback),
+                Scopes = { Scopes.OpenId, Scopes.Profile },
+                CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
+                ResponseModes = { ResponseModes.Query },
+            }
+        );
+        options.AddRegistration(
+            new OpenIddictClientRegistration
+            {
+                RegistrationId = AuthenticationConstants.LocalWebRegistration,
+                Issuer = runtime.Issuer,
+                ClientId = AuthenticationConstants.WebClientId,
+                ClientSecret = runtime.Options.WebClientSecret,
+                ClientType = ClientTypes.Confidential,
+                RedirectUri = new Uri(AuthenticationConstants.LocalWebCallback),
+                Scopes = { Scopes.OpenId, Scopes.Profile },
+                CodeChallengeMethods = { CodeChallengeMethods.Sha256 },
+                ResponseModes = { ResponseModes.Query },
+            }
+        );
 
-        options.UseAspNetCore()
-            .EnableRedirectionEndpointPassthrough();
+        options.UseAspNetCore().EnableRedirectionEndpointPassthrough();
         var systemNetHttp = options.UseSystemNetHttp();
-        if (environment.IsDevelopment()
-            && !string.IsNullOrWhiteSpace(
-                runtime.Options.DevelopmentCertificateAuthorityPath))
+        if (
+            environment.IsDevelopment()
+            && !string.IsNullOrWhiteSpace(runtime.Options.DevelopmentCertificateAuthorityPath)
+        )
         {
             var trust = new DevelopmentBackchannelCertificateTrust(
                 runtime.Issuer,
-                runtime.Options.DevelopmentCertificateAuthorityPath);
-            systemNetHttp.ConfigureHttpClientHandler((registration, handler) =>
-            {
-                if (registration.RegistrationId is AuthenticationConstants.CanonicalWebRegistration
-                    or AuthenticationConstants.LocalWebRegistration)
+                runtime.Options.DevelopmentCertificateAuthorityPath
+            );
+            systemNetHttp.ConfigureHttpClientHandler(
+                (registration, handler) =>
                 {
-                    handler.ServerCertificateCustomValidationCallback = trust.Validate;
+                    if (
+                        registration.RegistrationId
+                        is AuthenticationConstants.CanonicalWebRegistration
+                            or AuthenticationConstants.LocalWebRegistration
+                    )
+                    {
+                        handler.ServerCertificateCustomValidationCallback = trust.Validate;
+                    }
                 }
-            });
+            );
         }
 
         if (runtime.Options.EnableExternalProviders)
@@ -278,22 +318,26 @@ public static class AuthenticationServiceCollectionExtensions
             if (runtime.Options.Google.Enabled)
             {
                 providers.AddGoogle(google =>
-                    google.SetClientId(runtime.Options.Google.ClientId)
+                    google
+                        .SetClientId(runtime.Options.Google.ClientId)
                         .SetClientSecret(runtime.Options.Google.ClientSecret)
                         .SetRegistrationId(AuthenticationConstants.GoogleProvider)
                         .SetRedirectUri(AuthenticationConstants.GoogleCallbackPath)
-                        .AddScopes(Scopes.Email, Scopes.Profile));
+                        .AddScopes(Scopes.Email, Scopes.Profile)
+                );
             }
 
             if (runtime.Options.Apple.Enabled)
             {
                 providers.AddApple(apple =>
-                    apple.SetClientId(runtime.Options.Apple.ClientId)
+                    apple
+                        .SetClientId(runtime.Options.Apple.ClientId)
                         .SetTeamId(runtime.Options.Apple.TeamId)
                         .SetSigningKey(LoadAppleSigningKey(runtime.Options.Apple))
                         .SetRegistrationId(AuthenticationConstants.AppleProvider)
                         .SetRedirectUri(AuthenticationConstants.AppleCallbackPath)
-                        .AddScopes(Scopes.Email));
+                        .AddScopes(Scopes.Email)
+                );
             }
         }
     }
@@ -303,7 +347,8 @@ public static class AuthenticationServiceCollectionExtensions
         if (!File.Exists(options.PrivateKeyPath))
         {
             throw new InvalidOperationException(
-                $"The Apple private key file '{options.PrivateKeyPath}' does not exist.");
+                $"The Apple private key file '{options.PrivateKeyPath}' does not exist."
+            );
         }
 
         var algorithm = ECDsa.Create();
@@ -324,9 +369,11 @@ public static class AuthenticationServiceCollectionExtensions
     private static void ConfigureServer(
         OpenIddictServerBuilder options,
         IHostEnvironment environment,
-        AccountsRuntimeConfiguration runtime)
+        AccountsRuntimeConfiguration runtime
+    )
     {
-        options.SetIssuer(runtime.Issuer)
+        options
+            .SetIssuer(runtime.Issuer)
             .SetAuthorizationEndpointUris("/connect/authorize")
             // OpenIddict accepts every registered URI, while discovery advertises the first.
             // Register the common trailing-slash spelling so replay protection can treat both
@@ -345,7 +392,8 @@ public static class AuthenticationServiceCollectionExtensions
                 RelistenScopes.UserRead,
                 RelistenScopes.LibraryRead,
                 RelistenScopes.LibraryWrite,
-                RelistenScopes.AccountManage);
+                RelistenScopes.AccountManage
+            );
         options.Configure(server =>
         {
             server.CodeChallengeMethods.Clear();
@@ -358,49 +406,57 @@ public static class AuthenticationServiceCollectionExtensions
             {
                 // .NET does not support EphemeralKeySet for PKCS#12 on macOS.
                 // Raw checkout-local RSA keys avoid certificate and Keychain APIs entirely.
-                options.AddSigningKey(
-                        DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
+                options
+                    .AddSigningKey(DevelopmentOpenIddictRsaKeyStore.LoadSigningKey(environment))
                     .AddEncryptionKey(
-                        DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment));
+                        DevelopmentOpenIddictRsaKeyStore.LoadEncryptionKey(environment)
+                    );
             }
             else
             {
-                options.AddSigningCertificate(
-                        DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment))
+                options
+                    .AddSigningCertificate(
+                        DevelopmentOpenIddictCertificateStore.LoadSigningCertificate(environment)
+                    )
                     .AddEncryptionCertificate(
-                        DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment));
+                        DevelopmentOpenIddictCertificateStore.LoadEncryptionCertificate(environment)
+                    );
             }
         }
         else
         {
-            options.AddSigningCertificates(LoadCertificateSet(
-                    runtime.Options.SigningCertificatePath,
-                    runtime.Options.SigningCertificatePassword,
-                    runtime.Options.PreviousSigningCertificatePath,
-                    runtime.Options.PreviousSigningCertificatePassword,
-                    "signing"))
-                .AddEncryptionCertificates(LoadCertificateSet(
-                    runtime.Options.EncryptionCertificatePath,
-                    runtime.Options.EncryptionCertificatePassword,
-                    runtime.Options.PreviousEncryptionCertificatePath,
-                    runtime.Options.PreviousEncryptionCertificatePassword,
-                    "encryption"));
+            options
+                .AddSigningCertificates(
+                    LoadCertificateSet(
+                        runtime.Options.SigningCertificatePath,
+                        runtime.Options.SigningCertificatePassword,
+                        runtime.Options.PreviousSigningCertificatePath,
+                        runtime.Options.PreviousSigningCertificatePassword,
+                        "signing"
+                    )
+                )
+                .AddEncryptionCertificates(
+                    LoadCertificateSet(
+                        runtime.Options.EncryptionCertificatePath,
+                        runtime.Options.EncryptionCertificatePassword,
+                        runtime.Options.PreviousEncryptionCertificatePath,
+                        runtime.Options.PreviousEncryptionCertificatePassword,
+                        "encryption"
+                    )
+                );
         }
 
-        options.UseAspNetCore()
+        options
+            .UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
             .EnableTokenEndpointPassthrough();
     }
 
-    private static X509Certificate2 LoadCertificate(
-        string? path,
-        string? password,
-        string purpose)
+    private static X509Certificate2 LoadCertificate(string? path, string? password, string purpose)
     {
         if (string.IsNullOrWhiteSpace(path))
         {
-            throw new InvalidOperationException(
-                $"A production {purpose} certificate is required.");
+            throw new InvalidOperationException($"A production {purpose} certificate is required.");
         }
 
         return X509CertificateLoader.LoadPkcs12FromFile(path, password);
@@ -411,7 +467,8 @@ public static class AuthenticationServiceCollectionExtensions
         string? currentPassword,
         string? previousPath,
         string? previousPassword,
-        string purpose)
+        string purpose
+    )
     {
         var current = LoadCertificate(currentPath, currentPassword, purpose);
         if (string.IsNullOrWhiteSpace(previousPath))
@@ -419,7 +476,8 @@ public static class AuthenticationServiceCollectionExtensions
             if (!string.IsNullOrEmpty(previousPassword))
             {
                 throw new InvalidOperationException(
-                    $"The previous {purpose} certificate password requires a certificate path.");
+                    $"The previous {purpose} certificate password requires a certificate path."
+                );
             }
 
             return [current];
@@ -429,69 +487,76 @@ public static class AuthenticationServiceCollectionExtensions
         // OpenIddict, the current certificate must also expire after the previous certificate:
         // OpenIddict selects the valid X.509 credential with the furthest expiration date.
         // Both private keys stay loaded during overlap so old keys and tokens remain usable.
-        return
-        [
-            current,
-            LoadCertificate(previousPath, previousPassword, $"previous {purpose}")
-        ];
+        return [current, LoadCertificate(previousPath, previousPassword, $"previous {purpose}")];
     }
 
-    private static void AddPolicy(
-        AuthorizationOptions options,
-        string name,
-        string? scope = null)
+    private static void AddPolicy(AuthorizationOptions options, string name, string? scope = null)
     {
-        options.AddPolicy(name, policy =>
-        {
-            policy.AuthenticationSchemes.Add(
-                OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
-            policy.RequireAuthenticatedUser();
-            policy.AddRequirements(new NativeSessionRequirement());
-            if (scope is not null)
+        options.AddPolicy(
+            name,
+            policy =>
             {
-                policy.AddRequirements(new ScopeRequirement(scope));
+                policy.AuthenticationSchemes.Add(
+                    OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme
+                );
+                policy.RequireAuthenticatedUser();
+                policy.AddRequirements(new NativeSessionRequirement());
+                if (scope is not null)
+                {
+                    policy.AddRequirements(new ScopeRequirement(scope));
+                }
             }
-        });
+        );
     }
 
     private static void AddWebPolicy(
         AuthorizationOptions options,
         string name,
-        IdentitySessionCapabilities capability)
+        IdentitySessionCapabilities capability
+    )
     {
-        options.AddPolicy(name, policy =>
-        {
-            policy.AuthenticationSchemes.Add(AuthenticationConstants.WebSessionScheme);
-            policy.RequireAuthenticatedUser();
-            policy.AddRequirements(new WebCapabilityRequirement(capability));
-        });
+        options.AddPolicy(
+            name,
+            policy =>
+            {
+                policy.AuthenticationSchemes.Add(AuthenticationConstants.WebSessionScheme);
+                policy.RequireAuthenticatedUser();
+                policy.AddRequirements(new WebCapabilityRequirement(capability));
+            }
+        );
     }
 
     private static void AddReviewedAccountPolicy(
         AuthorizationOptions options,
         string name,
         string nativeScope,
-        IdentitySessionCapabilities webCapability)
+        IdentitySessionCapabilities webCapability
+    )
     {
         AddReviewedAccountPolicy(
             options,
             name,
-            new ReviewedAccountAccessRule(nativeScope, webCapability));
+            new ReviewedAccountAccessRule(nativeScope, webCapability)
+        );
     }
 
     private static void AddReviewedAccountPolicy(
         AuthorizationOptions options,
         string name,
         ReviewedAccountAccessRule defaultRule,
-        ReviewedAccountAccessRule? mutationRule = null)
+        ReviewedAccountAccessRule? mutationRule = null
+    )
     {
-        options.AddPolicy(name, policy =>
-        {
-            policy.AuthenticationSchemes.Add(AuthenticationConstants.AccountCredentialScheme);
-            policy.RequireAuthenticatedUser();
-            policy.AddRequirements(new ReviewedAccountAccessRequirement(
-                defaultRule,
-                mutationRule));
-        });
+        options.AddPolicy(
+            name,
+            policy =>
+            {
+                policy.AuthenticationSchemes.Add(AuthenticationConstants.AccountCredentialScheme);
+                policy.RequireAuthenticatedUser();
+                policy.AddRequirements(
+                    new ReviewedAccountAccessRequirement(defaultRule, mutationRule)
+                );
+            }
+        );
     }
 }

@@ -3,19 +3,18 @@ using RelistenUserService.Identity.Entities;
 
 namespace RelistenUserService.Authentication.Authorization;
 
-public sealed record WebCapabilityRequirement(
-    IdentitySessionCapabilities Capability) : IAuthorizationRequirement;
+public sealed record WebCapabilityRequirement(IdentitySessionCapabilities Capability)
+    : IAuthorizationRequirement;
 
-public sealed class WebCapabilityAuthorizationHandler(
-    CurrentAccountContext currentAccount)
+public sealed class WebCapabilityAuthorizationHandler(CurrentAccountContext currentAccount)
     : AuthorizationHandler<WebCapabilityRequirement>
 {
     protected override Task HandleRequirementAsync(
         AuthorizationHandlerContext context,
-        WebCapabilityRequirement requirement)
+        WebCapabilityRequirement requirement
+    )
     {
-        if (currentAccount.IsWeb
-            && currentAccount.WebCapabilities.HasFlag(requirement.Capability))
+        if (currentAccount.IsWeb && currentAccount.WebCapabilities.HasFlag(requirement.Capability))
         {
             context.Succeed(requirement);
         }

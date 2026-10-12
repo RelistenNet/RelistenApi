@@ -20,7 +20,8 @@ namespace Relisten.Controllers
             ImporterService importer,
             ScheduledService scheduledService,
             IConfiguration configuration
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _configuration = configuration;
             _scheduledService = scheduledService;
@@ -33,13 +34,17 @@ namespace Relisten.Controllers
 
         [HttpPost("{idOrSlug}")]
         [Authorize]
-        public async Task<IActionResult> Post(string idOrSlug, [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> Post(
+            string idOrSlug,
+            [FromQuery] bool deleteOldContent = false
+        )
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
                 var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null));
+                    _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
+                );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -49,7 +54,10 @@ namespace Relisten.Controllers
 
         [HttpPost("{idOrSlug}/debug")]
         [Authorize]
-        public async Task<IActionResult> PostDebug(string idOrSlug, [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> PostDebug(
+            string idOrSlug,
+            [FromQuery] bool deleteOldContent = false
+        )
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
@@ -65,33 +73,49 @@ namespace Relisten.Controllers
         [HttpPost("phishin")]
         public IActionResult JustRefreshPhishin()
         {
-            if (!Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key) ||
-                key != _configuration["PANIC_KEY"])
+            if (
+                !Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key)
+                || key != _configuration["PANIC_KEY"]
+            )
             {
                 return Unauthorized();
             }
 
-            return StatusCode(201,
-                BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null)));
+            return StatusCode(
+                201,
+                BackgroundJob.Enqueue(() => _scheduledService.RefreshPhishFromPhishinOnly(null))
+            );
         }
 
         [HttpPost("all-years-and-shows")]
         [Authorize]
         public IActionResult AllYearsAndShows()
         {
-            return StatusCode(201, BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null)));
+            return StatusCode(
+                201,
+                BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
+            );
         }
 
         [HttpPost("{idOrSlug}/{showIdentifier}")]
         [Authorize]
-        public async Task<IActionResult> PostShow(string idOrSlug, string showIdentifier,
-            [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> PostShow(
+            string idOrSlug,
+            string showIdentifier,
+            [FromQuery] bool deleteOldContent = false
+        )
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
                 var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null));
+                    _scheduledService.RefreshArtist(
+                        idOrSlug,
+                        showIdentifier,
+                        deleteOldContent,
+                        null
+                    )
+                );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -101,13 +125,22 @@ namespace Relisten.Controllers
 
         [HttpPost("{idOrSlug}/{showIdentifier}/debug")]
         [Authorize]
-        public async Task<IActionResult> PostShowDebug(string idOrSlug, string showIdentifier,
-            [FromQuery] bool deleteOldContent = false)
+        public async Task<IActionResult> PostShowDebug(
+            string idOrSlug,
+            string showIdentifier,
+            [FromQuery] bool deleteOldContent = false
+        )
         {
             var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                await _scheduledService.RefreshArtist(idOrSlug, showIdentifier, deleteOldContent, null, null);
+                await _scheduledService.RefreshArtist(
+                    idOrSlug,
+                    showIdentifier,
+                    deleteOldContent,
+                    null,
+                    null
+                );
 
                 return StatusCode(201, "done!");
             }

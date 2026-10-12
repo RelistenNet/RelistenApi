@@ -9,8 +9,11 @@ namespace Relisten.Services.Auth
             return password;
         }
 
-        public PasswordVerificationResult VerifyHashedPassword(ApplicationUser user, string hashedPassword,
-            string providedPassword)
+        public PasswordVerificationResult VerifyHashedPassword(
+            ApplicationUser user,
+            string hashedPassword,
+            string providedPassword
+        )
         {
             return hashedPassword == providedPassword
                 ? PasswordVerificationResult.Success

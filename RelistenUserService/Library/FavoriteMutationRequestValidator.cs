@@ -10,7 +10,8 @@ public sealed record FavoriteMutationCommand(
     string CatalogType,
     Guid CatalogUuid,
     string DesiredState,
-    Guid? FavoriteUuid);
+    Guid? FavoriteUuid
+);
 
 public static class FavoriteMutationRequestValidator
 {
@@ -20,7 +21,8 @@ public static class FavoriteMutationRequestValidator
     public static bool TryValidate(
         FavoriteMutationBatchRequest? request,
         out IReadOnlyList<FavoriteMutationCommand> mutations,
-        out FavoriteMutationValidationFailure? failure)
+        out FavoriteMutationValidationFailure? failure
+    )
     {
         mutations = [];
         if (request is null)
@@ -33,7 +35,8 @@ public static class FavoriteMutationRequestValidator
         {
             failure = new(
                 AccountErrorCodes.InvalidContractVersion,
-                $"contract_version must be {ContractVersion}.");
+                $"contract_version must be {ContractVersion}."
+            );
             return false;
         }
 
@@ -47,7 +50,8 @@ public static class FavoriteMutationRequestValidator
         {
             failure = new(
                 LibraryErrorCodes.LimitExceeded,
-                $"mutations may contain at most {MaximumBatchSize} items.");
+                $"mutations may contain at most {MaximumBatchSize} items."
+            );
             return false;
         }
 
@@ -78,7 +82,8 @@ public static class FavoriteMutationRequestValidator
             {
                 failure = InvalidAt(
                     index,
-                    "catalog_type must be one of artist, show, source, source_track, song, tour, or venue");
+                    "catalog_type must be one of artist, show, source, source_track, song, tour, or venue"
+                );
                 return false;
             }
 
@@ -90,9 +95,7 @@ public static class FavoriteMutationRequestValidator
 
             if (!FavoriteDesiredStates.IsSupported(candidate.DesiredState))
             {
-                failure = InvalidAt(
-                    index,
-                    "desired_state must be favorite or not_favorite");
+                failure = InvalidAt(index, "desired_state must be favorite or not_favorite");
                 return false;
             }
 
@@ -102,7 +105,8 @@ public static class FavoriteMutationRequestValidator
                 {
                     failure = InvalidAt(
                         index,
-                        "favorite_uuid must be a UUIDv7 value when desired_state is favorite");
+                        "favorite_uuid must be a UUIDv7 value when desired_state is favorite"
+                    );
                     return false;
                 }
             }
@@ -110,16 +114,20 @@ public static class FavoriteMutationRequestValidator
             {
                 failure = InvalidAt(
                     index,
-                    "favorite_uuid must be omitted when desired_state is not_favorite");
+                    "favorite_uuid must be omitted when desired_state is not_favorite"
+                );
                 return false;
             }
 
-            validated.Add(new(
-                candidate.MutationUuid,
-                candidate.CatalogType!,
-                candidate.CatalogUuid,
-                candidate.DesiredState!,
-                candidate.FavoriteUuid));
+            validated.Add(
+                new(
+                    candidate.MutationUuid,
+                    candidate.CatalogType!,
+                    candidate.CatalogUuid,
+                    candidate.DesiredState!,
+                    candidate.FavoriteUuid
+                )
+            );
         }
 
         mutations = validated;

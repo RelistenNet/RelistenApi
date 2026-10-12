@@ -39,7 +39,8 @@ namespace Relisten.Controllers
             SourceService sourceService,
             RedisService redisService,
             PopularityService popularityService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             this.yearService = yearService;
             this.venueService = venueService;
@@ -54,10 +55,15 @@ namespace Relisten.Controllers
         [HttpGet("v2/artists")]
         [HttpGet("v3/artists")]
         [ProducesResponseType(typeof(IEnumerable<ArtistWithCounts>), 200)]
-        public async Task<IActionResult> Get([FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false)
+        public async Task<IActionResult> Get(
+            [FromQuery(Name = "include_autocreated")] bool includeAutoCreated = false
+        )
         {
-            var artists = (await _artistService.AllWithCounts<ArtistWithCounts>(
-                includeAutoCreated: includeAutoCreated)).ToList();
+            var artists = (
+                await _artistService.AllWithCounts<ArtistWithCounts>(
+                    includeAutoCreated: includeAutoCreated
+                )
+            ).ToList();
 
             if (IsV3Request)
             {
@@ -74,14 +80,20 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> Get(string artistIdOrSlug)
         {
-            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string> {artistIdOrSlug}))
-                .FirstOrDefault();
+            var art = (
+                await _artistService.AllWithCounts<ArtistWithCounts>(
+                    new List<string> { artistIdOrSlug }
+                )
+            ).FirstOrDefault();
             if (art != null)
             {
                 if (IsV3Request)
                 {
                     var popularity = await popularityService.GetArtistPopularityMap();
-                    popularityService.ApplyArtistPopularity(new List<ArtistWithCounts> {art}, popularity);
+                    popularityService.ApplyArtistPopularity(
+                        new List<ArtistWithCounts> { art },
+                        popularity
+                    );
                 }
 
                 return JsonSuccess(art);
@@ -100,8 +112,11 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> GetFullArtist(string artistUuid)
         {
-            var art = (await _artistService.AllWithCounts<ArtistWithCounts>(new List<string> {artistUuid}))
-                .FirstOrDefault();
+            var art = (
+                await _artistService.AllWithCounts<ArtistWithCounts>(
+                    new List<string> { artistUuid }
+                )
+            ).FirstOrDefault();
 
             if (art == null)
             {
@@ -120,8 +135,12 @@ namespace Relisten.Controllers
             var venuesTask = venueService.AllForArtist(art);
             var songsTask = setlistSongService.AllForArtistWithPlayCount(art);
             var toursTask = tourService.AllForArtistWithShowCount(art);
-            var showsTask = showService.ShowsForCriteria(art, "s.artist_id = @artistId", new {artistId = art.id},
-                includeNestedObject: false);
+            var showsTask = showService.ShowsForCriteria(
+                art,
+                "s.artist_id = @artistId",
+                new { artistId = art.id },
+                includeNestedObject: false
+            );
 
             await Task.WhenAll(yearsTask, venuesTask, songsTask, toursTask, showsTask);
 
@@ -136,13 +155,18 @@ namespace Relisten.Controllers
             };
 
             var artistPopularity = await popularityService.GetArtistPopularityMap();
-            popularityService.ApplyArtistPopularity(new List<ArtistWithCounts> {resp.artist}, artistPopularity);
+            popularityService.ApplyArtistPopularity(
+                new List<ArtistWithCounts> { resp.artist },
+                artistPopularity
+            );
 
             var yearPopularity = await popularityService.GetYearPopularityMapForArtist(art.uuid);
             popularityService.ApplyYearPopularity(resp.years, yearPopularity);
 
             var json = JsonConvert.SerializeObject(
-                resp, RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings);
+                resp,
+                RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+            );
 
             await redis.db.StringSetAsync(cacheKey, json, TimeSpan.FromHours(24));
 
@@ -157,7 +181,10 @@ namespace Relisten.Controllers
             artist.SlimArtist.id = 0;
 
             var art = await _artistService.Save(artist.SlimArtist);
-            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
+            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(
+                art,
+                artist.SlimUpstreamSources
+            );
 
             return JsonSuccess(await _artistService.FindArtistById(art.id));
         }
@@ -168,7 +195,10 @@ namespace Relisten.Controllers
         public async Task<IActionResult> UpdateArtist([FromBody] CreateUpdateArtistDto artist)
         {
             var art = await _artistService.Save(artist.SlimArtist);
-            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(art, artist.SlimUpstreamSources);
+            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(
+                art,
+                artist.SlimUpstreamSources
+            );
 
             return JsonSuccess(await _artistService.FindArtistById(art.id));
         }

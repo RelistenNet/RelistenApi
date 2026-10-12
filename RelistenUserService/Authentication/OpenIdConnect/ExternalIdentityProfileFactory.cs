@@ -7,41 +7,32 @@ namespace RelistenUserService.Authentication.OpenIdConnect;
 
 internal static class ExternalIdentityProfileFactory
 {
-    public static ExternalIdentityProfile Create(
-        string provider,
-        ClaimsPrincipal principal)
+    public static ExternalIdentityProfile Create(string provider, ClaimsPrincipal principal)
     {
         var registrationId = GetUnambiguousClaim(
             principal,
             Claims.Private.RegistrationId,
-            StringComparer.Ordinal);
-        if (!string.Equals(
-                registrationId,
-                provider,
-                StringComparison.Ordinal))
+            StringComparer.Ordinal
+        );
+        if (!string.Equals(registrationId, provider, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                "The external identity registration does not match its callback route.");
+                "The external identity registration does not match its callback route."
+            );
         }
 
-        var subject = GetUnambiguousClaim(
-            principal,
-            Claims.Subject,
-            StringComparer.Ordinal);
+        var subject = GetUnambiguousClaim(principal, Claims.Subject, StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(subject))
         {
             throw new InvalidOperationException(
-                "The external provider returned no stable subject identifier.");
+                "The external provider returned no stable subject identifier."
+            );
         }
 
-        var email = GetUnambiguousClaim(
-            principal,
-            Claims.Email,
-            StringComparer.OrdinalIgnoreCase);
-        var emailVerified = ParseBoolean(GetUnambiguousClaim(
-            principal,
-            Claims.EmailVerified,
-            StringComparer.OrdinalIgnoreCase));
+        var email = GetUnambiguousClaim(principal, Claims.Email, StringComparer.OrdinalIgnoreCase);
+        var emailVerified = ParseBoolean(
+            GetUnambiguousClaim(principal, Claims.EmailVerified, StringComparer.OrdinalIgnoreCase)
+        );
         return provider switch
         {
             AuthenticationConstants.GoogleProvider => new(
@@ -49,7 +40,8 @@ internal static class ExternalIdentityProfileFactory
                 subject,
                 email,
                 emailVerified,
-                false),
+                false
+            ),
             AuthenticationConstants.AppleProvider => new(
                 AuthenticationConstants.AppleIssuer,
                 subject,
@@ -59,21 +51,26 @@ internal static class ExternalIdentityProfileFactory
                     ? null
                     : email.EndsWith(
                         "@privaterelay.appleid.com",
-                        StringComparison.OrdinalIgnoreCase)),
+                        StringComparison.OrdinalIgnoreCase
+                    )
+            ),
             _ => throw new InvalidOperationException(
-                $"External provider '{provider}' is not allowlisted.")
+                $"External provider '{provider}' is not allowlisted."
+            ),
         };
     }
 
     private static string? GetUnambiguousClaim(
         ClaimsPrincipal principal,
         string type,
-        StringComparer comparer)
+        StringComparer comparer
+    )
     {
         // OIDC providers may emit the same claim in both the ID token and the
         // user-info response. Equivalent duplicates are harmless; conflicting
         // identity values must fail closed instead of depending on claim order.
-        var values = principal.FindAll(type)
+        var values = principal
+            .FindAll(type)
             .Select(claim => claim.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(comparer)
@@ -83,7 +80,8 @@ internal static class ExternalIdentityProfileFactory
             0 => null,
             1 => values[0],
             _ => throw new InvalidOperationException(
-                $"The external provider returned conflicting '{type}' claims.")
+                $"The external provider returned conflicting '{type}' claims."
+            ),
         };
     }
 

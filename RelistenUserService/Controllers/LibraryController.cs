@@ -14,29 +14,32 @@ namespace RelistenUserService.Controllers;
 public sealed class LibraryController(
     CurrentAccountContext currentAccount,
     FavoriteMutationService mutationService,
-    LibraryReadService readService)
-    : ControllerBase
+    LibraryReadService readService
+) : ControllerBase
 {
     [HttpGet("snapshot")]
     public async Task<ActionResult<FavoriteLibrarySnapshot>> Snapshot(
-        CancellationToken cancellationToken) =>
-        Ok(await readService.GetSnapshotAsync(currentAccount.User.Id, cancellationToken));
+        CancellationToken cancellationToken
+    ) => Ok(await readService.GetSnapshotAsync(currentAccount.User.Id, cancellationToken));
 
     [HttpGet("changes")]
     public async Task<ActionResult<FavoriteLibraryChanges>> Changes(
         [FromQuery] string? after,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var execution = await readService.GetChangesAsync(
             currentAccount.User.Id,
             after,
-            cancellationToken);
+            cancellationToken
+        );
         return execution.CursorExpired
             ? LibraryProblem(
                 StatusCodes.Status410Gone,
                 LibraryErrorCodes.SyncCursorExpired,
                 "The library cursor is invalid or no longer retained. Fetch a new snapshot.",
-                new() { ["snapshot_url"] = "/v1/library/snapshot" })
+                new() { ["snapshot_url"] = "/v1/library/snapshot" }
+            )
             : Ok(execution.Response!);
     }
 
@@ -44,23 +47,29 @@ public sealed class LibraryController(
     [RequestSizeLimit(256 * 1024)]
     public async Task<ActionResult<FavoriteMutationBatchResponse>> MutateFavorites(
         [FromBody] FavoriteMutationBatchRequest? request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (!FavoriteMutationRequestValidator.TryValidate(
+        if (
+            !FavoriteMutationRequestValidator.TryValidate(
                 request,
                 out var mutations,
-                out var validationFailure))
+                out var validationFailure
+            )
+        )
         {
             return LibraryProblem(
                 StatusCodes.Status422UnprocessableEntity,
                 validationFailure!.Code,
-                validationFailure.Detail);
+                validationFailure.Detail
+            );
         }
 
         var execution = await mutationService.ExecuteAsync(
             currentAccount.User.Id,
             mutations,
-            cancellationToken);
+            cancellationToken
+        );
         if (execution.Response is not null)
         {
             return Ok(execution.Response);
@@ -73,17 +82,20 @@ public sealed class LibraryController(
                 StatusCodes.Status409Conflict,
                 AccountErrorCodes.IdempotencyConflict,
                 failure.Detail,
-                new() { ["conflicting_mutation_uuids"] = failure.ConflictingUuids }),
+                new() { ["conflicting_mutation_uuids"] = failure.ConflictingUuids }
+            ),
             FavoriteMutationFailureKind.FavoriteUuidConflict => LibraryProblem(
                 StatusCodes.Status409Conflict,
                 LibraryErrorCodes.FavoriteUuidConflict,
                 failure.Detail,
-                new() { ["conflicting_favorite_uuids"] = failure.ConflictingUuids }),
+                new() { ["conflicting_favorite_uuids"] = failure.ConflictingUuids }
+            ),
             FavoriteMutationFailureKind.QuotaExceeded => LibraryProblem(
                 StatusCodes.Status422UnprocessableEntity,
                 LibraryErrorCodes.QuotaExceeded,
-                failure.Detail),
-            _ => throw new InvalidOperationException("Unknown favorite mutation failure.")
+                failure.Detail
+            ),
+            _ => throw new InvalidOperationException("Unknown favorite mutation failure."),
         };
     }
 
@@ -91,14 +103,11 @@ public sealed class LibraryController(
         int status,
         string code,
         string detail,
-        Dictionary<string, object?>? extensions = null)
+        Dictionary<string, object?>? extensions = null
+    )
     {
         extensions ??= [];
         extensions["code"] = code;
-        return Problem(
-            statusCode: status,
-            title: code,
-            detail: detail,
-            extensions: extensions);
+        return Problem(statusCode: status, title: code, detail: detail, extensions: extensions);
     }
 }

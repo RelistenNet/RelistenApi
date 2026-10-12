@@ -106,7 +106,10 @@ namespace Relisten
             context?.WriteLine($"--> Rebuilding all {artists.Count} artists");
             var bar = context?.WriteProgressBar();
 
-            Func<Artist, Task> rebuildArtist = async artist => { await _importerService.Rebuild(artist, context); };
+            Func<Artist, Task> rebuildArtist = async artist =>
+            {
+                await _importerService.Rebuild(artist, context);
+            };
 
             if (bar == null)
             {
@@ -175,8 +178,16 @@ namespace Relisten
         [AutomaticRetry(Attempts = 0)]
         public async Task RefreshPhishFromPhishinOnly(PerformContext? ctx)
         {
-            await RefreshArtist("phish", null,
-                false, u => u.upstream_source_id == 3 /* phish.in */, ctx);
+            await RefreshArtist(
+                "phish",
+                null,
+                false,
+                u =>
+                    u.upstream_source_id
+                    == 3 /* phish.in */
+                ,
+                ctx
+            );
         }
 
         [Queue("artist_import")]
@@ -234,8 +245,12 @@ namespace Relisten
 
                 if (specificShowId != null)
                 {
-                    artistStats =
-                        await _importerService.Import(artist, filterUpstreamSources, specificShowId, ctx);
+                    artistStats = await _importerService.Import(
+                        artist,
+                        filterUpstreamSources,
+                        specificShowId,
+                        ctx
+                    );
                 }
                 else
                 {
@@ -275,11 +290,14 @@ namespace Relisten
             }
 
             var src = artist.upstream_sources.FirstOrDefault(s =>
-                s.upstream_source.name == JerryGarciaComImporter.DataSourceName);
+                s.upstream_source.name == JerryGarciaComImporter.DataSourceName
+            );
 
             if (src == null)
             {
-                ctx?.WriteLine($"No {JerryGarciaComImporter.DataSourceName} upstream source for {artist.name}");
+                ctx?.WriteLine(
+                    $"No {JerryGarciaComImporter.DataSourceName} upstream source for {artist.name}"
+                );
                 return;
             }
 
@@ -312,7 +330,9 @@ namespace Relisten
             var allArtists = await _artistService.All();
             var activeArtists = allArtists.Where(a => activeArtistIds.Contains(a.id)).ToList();
 
-            context?.WriteLine($"--> Found {activeArtists.Count} active artists with shows in the past 7 days");
+            context?.WriteLine(
+                $"--> Found {activeArtists.Count} active artists with shows in the past 7 days"
+            );
 
             foreach (var artist in activeArtists)
             {

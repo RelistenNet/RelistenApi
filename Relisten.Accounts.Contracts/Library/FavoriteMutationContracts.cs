@@ -2,19 +2,22 @@ namespace Relisten.Accounts.Contracts.Library;
 
 public sealed record FavoriteMutationBatchRequest(
     int ContractVersion,
-    IReadOnlyList<FavoriteMutationRequestItem>? Mutations);
+    IReadOnlyList<FavoriteMutationRequestItem>? Mutations
+);
 
 public sealed record FavoriteMutationRequestItem(
     Guid MutationUuid,
     string? CatalogType,
     Guid CatalogUuid,
     string? DesiredState,
-    Guid? FavoriteUuid);
+    Guid? FavoriteUuid
+);
 
 public sealed record FavoriteMutationBatchResponse(
     int ContractVersion,
     long LibraryRevision,
-    IReadOnlyList<FavoriteMutationResult> Results);
+    IReadOnlyList<FavoriteMutationResult> Results
+);
 
 public sealed record FavoriteMutationResult(
     Guid MutationUuid,
@@ -24,4 +27,5 @@ public sealed record FavoriteMutationResult(
     bool Changed,
     Guid? SubmittedFavoriteUuid,
     Guid? CanonicalFavoriteUuid,
-    long LibraryRevision);
+    long LibraryRevision
+);

@@ -19,7 +19,8 @@ namespace Relisten.Controllers
             DbService db,
             ArtistService artistService,
             EraService eraService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _eraService = eraService;
         }
@@ -29,10 +30,13 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
         public async Task<IActionResult> eras(string artistIdOrSlug)
         {
-            return await ApiRequest(artistIdOrSlug, art =>
-            {
-                return _eraService.AllForArtist(art);
-            });
+            return await ApiRequest(
+                artistIdOrSlug,
+                art =>
+                {
+                    return _eraService.AllForArtist(art);
+                }
+            );
         }
     }
 }

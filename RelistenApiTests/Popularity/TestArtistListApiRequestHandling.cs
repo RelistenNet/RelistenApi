@@ -18,11 +18,15 @@ public class TestArtistListApiRequestHandling
         var controller = new TestRelistenBaseController();
         IReadOnlyList<Artist>? callbackArtists = null;
 
-        var result = await controller.CallArtistListApiRequest(Array.Empty<string>(), false, artists =>
-        {
-            callbackArtists = artists;
-            return Task.FromResult("ok");
-        });
+        var result = await controller.CallArtistListApiRequest(
+            Array.Empty<string>(),
+            false,
+            artists =>
+            {
+                callbackArtists = artists;
+                return Task.FromResult("ok");
+            }
+        );
 
         callbackArtists.Should().NotBeNull();
         callbackArtists!.Should().BeEmpty();
@@ -32,14 +36,14 @@ public class TestArtistListApiRequestHandling
 
     private class TestRelistenBaseController : RelistenBaseController
     {
-        public TestRelistenBaseController() : base(null!, null!, null!)
-        {
-        }
+        public TestRelistenBaseController()
+            : base(null!, null!, null!) { }
 
         public Task<IActionResult> CallArtistListApiRequest<T>(
             IReadOnlyList<string> artistIdsOrSlugs,
             bool queryAllWhenEmpty,
-            Func<IReadOnlyList<Artist>, Task<T>> cb)
+            Func<IReadOnlyList<Artist>, Task<T>> cb
+        )
         {
             return ApiRequest(artistIdsOrSlugs, cb, queryAllWhenEmpty);
         }

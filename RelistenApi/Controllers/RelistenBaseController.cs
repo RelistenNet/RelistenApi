@@ -26,7 +26,8 @@ namespace Relisten.Api
         protected RedisService redis { get; set; }
         protected DbService db { get; set; }
         protected ArtistService _artistService { get; set; }
-        protected bool IsV3Request => HttpContext?.Request?.Path.StartsWithSegments("/api/v3") ?? false;
+        protected bool IsV3Request =>
+            HttpContext?.Request?.Path.StartsWithSegments("/api/v3") ?? false;
 
         protected IActionResult JsonSuccess<T>(T anything)
         {
@@ -53,7 +54,7 @@ namespace Relisten.Api
 
                 if (isSlugOnly)
                 {
-                    id = new Identifier {Slug = idAndSlug};
+                    id = new Identifier { Slug = idAndSlug };
                 }
 
                 if (!id.Id.HasValue && !allowIdWithoutValue)
@@ -83,10 +84,7 @@ namespace Relisten.Api
             return await ApiRequest(art, cb);
         }
 
-        protected async Task<IActionResult> ApiRequest<T>(
-            Artist? art,
-            Func<Artist, Task<T>> cb
-        )
+        protected async Task<IActionResult> ApiRequest<T>(Artist? art, Func<Artist, Task<T>> cb)
         {
             if (art != null)
             {
@@ -156,7 +154,8 @@ namespace Relisten.Api
 
     public class ApiCacheControlAttribute : ActionFilterAttribute
     {
-        private const string DefaultCacheControl = "public, max-age=1800, immutable, stale-while-revalidate=60";
+        private const string DefaultCacheControl =
+            "public, max-age=1800, immutable, stale-while-revalidate=60";
         private const string RandomCacheControl = "no-cache";
 
         public override void OnResultExecuting(ResultExecutingContext ctx)

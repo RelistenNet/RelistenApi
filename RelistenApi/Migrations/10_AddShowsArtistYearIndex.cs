@@ -12,12 +12,16 @@ public class AddShowsArtistYearIndex : Migration
 
     protected override void Up()
     {
-        Execute(@"
+        Execute(
+            @"
             CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_shows_artist_id_year_id ON shows (artist_id, year_id);
-        ");
-        Execute(@"
+        "
+        );
+        Execute(
+            @"
             CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_show_source_information_artist_id ON show_source_information (artist_id) INCLUDE (source_count);
-        ");
+        "
+        );
     }
 
     protected override void Down()

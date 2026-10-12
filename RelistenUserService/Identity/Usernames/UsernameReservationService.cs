@@ -8,7 +8,8 @@ namespace RelistenUserService.Identity.Usernames;
 public sealed class UsernameReservationService(
     AccountsDbContext dbContext,
     AdvisoryLockService advisoryLocks,
-    UsernamePolicy policy)
+    UsernamePolicy policy
+)
 {
     private const string RandomAlphabet = "abcdefghijklmnopqrstuvwxyz234567";
     private const int MaximumAttempts = 12;
@@ -16,14 +17,16 @@ public sealed class UsernameReservationService(
     public async Task<string> AllocateAsync(
         string? providerEmail,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var emailCandidate = policy.CandidateFromEmail(providerEmail);
         for (var attempt = 0; attempt < MaximumAttempts; attempt++)
         {
-            var candidate = attempt == 0 && emailCandidate is not null
-                ? emailCandidate
-                : BuildRandomCandidate(emailCandidate);
+            var candidate =
+                attempt == 0 && emailCandidate is not null
+                    ? emailCandidate
+                    : BuildRandomCandidate(emailCandidate);
 
             await advisoryLocks.LockUsernamesAsync([candidate], cancellationToken);
             if (await IsAvailableAsync(candidate, now, cancellationToken))
@@ -38,12 +41,13 @@ public sealed class UsernameReservationService(
     public async Task<bool> IsAvailableAsync(
         string username,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var expiredHold = await dbContext.UsernameHolds
-            .SingleOrDefaultAsync(
-                hold => hold.Username == username && hold.ReleaseAt <= now,
-                cancellationToken);
+        var expiredHold = await dbContext.UsernameHolds.SingleOrDefaultAsync(
+            hold => hold.Username == username && hold.ReleaseAt <= now,
+            cancellationToken
+        );
         if (expiredHold is not null)
         {
             dbContext.UsernameHolds.Remove(expiredHold);
@@ -52,7 +56,8 @@ public sealed class UsernameReservationService(
         return !await dbContext.Users.AnyAsync(user => user.Username == username, cancellationToken)
             && !await dbContext.UsernameHolds.AnyAsync(
                 hold => hold.Username == username && hold.ReleaseAt > now,
-                cancellationToken);
+                cancellationToken
+            );
     }
 
     private static string BuildRandomCandidate(string? emailCandidate)

@@ -9,12 +9,17 @@ namespace Relisten.Data
 {
     public class SetlistSongService : RelistenDataServiceBase
     {
-        public SetlistSongService(DbService db) : base(db) { }
+        public SetlistSongService(DbService db)
+            : base(db) { }
 
-        public async Task<IEnumerable<SetlistSong>> ForUpstreamIdentifiers(Artist artist,
-            IEnumerable<string> upstreamIds)
+        public async Task<IEnumerable<SetlistSong>> ForUpstreamIdentifiers(
+            Artist artist,
+            IEnumerable<string> upstreamIds
+        )
         {
-            return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SetlistSong>(
+                    @"
                 SELECT
                     s.*
                     , a.uuid as artist_uuid
@@ -24,12 +29,17 @@ namespace Relisten.Data
                 WHERE
                     s.artist_id = @artistId
                     AND s.upstream_identifier = ANY(@upstreamIds)
-            ", new {artistId = artist.id, upstreamIds = upstreamIds.ToList()}));
+            ",
+                    new { artistId = artist.id, upstreamIds = upstreamIds.ToList() }
+                )
+            );
         }
 
         public async Task<IEnumerable<SetlistSong>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<SetlistSong>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SetlistSong>(
+                    @"
                 SELECT
                     s.*
                     , a.uuid as artist_uuid
@@ -38,14 +48,31 @@ namespace Relisten.Data
                     JOIN artists a on s.artist_id = a.id
                 WHERE
                     s.artist_id = @artistId
-            ", new {artistId = artist.id}));
+            ",
+                    new { artistId = artist.id }
+                )
+            );
         }
 
-        public async Task<SetlistSongWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null, string? slug = null)
+        public async Task<SetlistSongWithShows?> ForIdWithShows(
+            Artist artist,
+            int? id,
+            Guid? uuid = null,
+            string? slug = null
+        )
         {
             SetlistSongWithShows? bigSong = null;
             await db.WithConnection(con =>
-                con.QueryAsync<SetlistSongWithShows, Show, VenueWithShowCount, Tour, Era, Year, SetlistSongWithShows>(@"
+                con.QueryAsync<
+                    SetlistSongWithShows,
+                    Show,
+                    VenueWithShowCount,
+                    Tour,
+                    Era,
+                    Year,
+                    SetlistSongWithShows
+                >(
+                    @"
                 SELECT
                     s.*
                     , a.uuid as artist_uuid
@@ -110,14 +137,26 @@ namespace Relisten.Data
 
                         return song;
                     },
-                    new {artistId = artist.id, songId = id, songUuid = uuid, songSlug = slug}));
+                    new
+                    {
+                        artistId = artist.id,
+                        songId = id,
+                        songUuid = uuid,
+                        songSlug = slug,
+                    }
+                )
+            );
 
             return bigSong;
         }
 
-        public async Task<IEnumerable<SetlistSongWithPlayCount>> AllForArtistWithPlayCount(Artist artist)
+        public async Task<IEnumerable<SetlistSongWithPlayCount>> AllForArtistWithPlayCount(
+            Artist artist
+        )
         {
-            return await db.WithConnection(con => con.QueryAsync<SetlistSongWithPlayCount>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SetlistSongWithPlayCount>(
+                    @"
                 SELECT
                     s.*, a.uuid as artist_uuid, shows.shows_played_at
                 FROM
@@ -140,10 +179,16 @@ namespace Relisten.Data
                 WHERE
                     s.artist_id = @id
                 ORDER BY s.name
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
-        public async Task<IEnumerable<SetlistSong>> InsertAll(Artist artist, IEnumerable<SetlistSong> songs)
+        public async Task<IEnumerable<SetlistSong>> InsertAll(
+            Artist artist,
+            IEnumerable<SetlistSong> songs
+        )
         {
             var songList = songs.ToList();
             if (songList.Count == 0)
@@ -154,7 +199,8 @@ namespace Relisten.Data
             return await db.WithWriteConnection(async con =>
             {
                 // Batch insert using UNNEST for all songs at once
-                var inserted = await con.QueryAsync<SetlistSong>(@"
+                var inserted = await con.QueryAsync<SetlistSong>(
+                    @"
                     INSERT INTO
                         setlist_songs
                         (
@@ -184,14 +230,18 @@ namespace Relisten.Data
                             upstream_identifier = EXCLUDED.upstream_identifier,
                             updated_at = EXCLUDED.updated_at
                     RETURNING *
-                ", new
-                {
-                    artist_ids = songList.Select(s => s.artist_id).ToArray(),
-                    names = songList.Select(s => s.name).ToArray(),
-                    slugs = songList.Select(s => s.slug).ToArray(),
-                    upstream_identifiers = songList.Select(s => s.upstream_identifier).ToArray(),
-                    updated_ats = songList.Select(s => s.updated_at).ToArray()
-                });
+                ",
+                    new
+                    {
+                        artist_ids = songList.Select(s => s.artist_id).ToArray(),
+                        names = songList.Select(s => s.name).ToArray(),
+                        slugs = songList.Select(s => s.slug).ToArray(),
+                        upstream_identifiers = songList
+                            .Select(s => s.upstream_identifier)
+                            .ToArray(),
+                        updated_ats = songList.Select(s => s.updated_at).ToArray(),
+                    }
+                );
 
                 return inserted;
             });

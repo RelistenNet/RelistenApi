@@ -14,8 +14,7 @@ public sealed class TestRefreshTokenEndpointBoundary
     [TestCase("/CONNECT/TOKEN")]
     public void CoversEveryRegisteredTokenEndpointSpelling(string path)
     {
-        RefreshTokenReplayMiddleware.IsTokenEndpoint(new PathString(path))
-            .Should().BeTrue();
+        RefreshTokenReplayMiddleware.IsTokenEndpoint(new PathString(path)).Should().BeTrue();
     }
 
     [TestCase("/connect/token/extra")]
@@ -23,7 +22,6 @@ public sealed class TestRefreshTokenEndpointBoundary
     [TestCase("/connect/authorize")]
     public void DoesNotMatchOtherEndpoints(string path)
     {
-        RefreshTokenReplayMiddleware.IsTokenEndpoint(new PathString(path))
-            .Should().BeFalse();
+        RefreshTokenReplayMiddleware.IsTokenEndpoint(new PathString(path)).Should().BeFalse();
     }
 }

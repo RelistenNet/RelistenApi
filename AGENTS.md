@@ -16,8 +16,10 @@
 
 ## Coding Style & Naming Conventions
 - C# uses standard conventions: PascalCase for types/methods, camelCase for locals/parameters, and private fields commonly prefixed with `_`.
-- Follow the existing formatting in files (4-space indents, aligned SQL in verbatim strings); there is no enforced formatter in the repo.
+- Use CSharpier's formatting defaults and the repository's `.editorconfig` settings.
 - Keep namespaces consistent with the folder structure (e.g., `RelistenApi/Services/Data` -> `Relisten.Data`).
+- Use the repository-local CSharpier tool for formatting: run `dotnet tool restore`, then `dotnet csharpier format .` from the repo root.
+- Before every commit and push, run `dotnet csharpier check .`. If it fails, run `dotnet csharpier format .`, review the resulting diff, and rerun the check before proceeding.
 
 ## Testing Guidelines
 - Tests use NUnit with FluentAssertions; new tests should live in `RelistenApiTests/` alongside related fixtures.

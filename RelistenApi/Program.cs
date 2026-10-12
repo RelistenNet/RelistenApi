@@ -14,7 +14,8 @@ namespace Relisten
         public static int Main(string[] args)
         {
             // Two-stage initialization: bootstrap logger before anything else
-            var isDevelopment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+            var isDevelopment =
+                Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
             var bootstrapConfig = new LoggerConfiguration()
                 .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
                 .Enrich.FromLogContext();
@@ -22,13 +23,18 @@ namespace Relisten
             if (isDevelopment)
                 bootstrapConfig.WriteTo.Console();
             else
-                bootstrapConfig.WriteTo.Console(new Serilog.Formatting.Compact.CompactJsonFormatter());
+                bootstrapConfig.WriteTo.Console(
+                    new Serilog.Formatting.Compact.CompactJsonFormatter()
+                );
 
             Log.Logger = bootstrapConfig.CreateBootstrapLogger();
 
             try
             {
-                Log.Information("Starting RelistenApi from {WorkingDirectory}", Directory.GetCurrentDirectory());
+                Log.Information(
+                    "Starting RelistenApi from {WorkingDirectory}",
+                    Directory.GetCurrentDirectory()
+                );
 
                 var port = 3823;
 
@@ -38,7 +44,14 @@ namespace Relisten
                     if (string.Equals(key, "PORT", StringComparison.OrdinalIgnoreCase))
                     {
                         var value = envVar.Value?.ToString();
-                        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedPort))
+                        if (
+                            int.TryParse(
+                                value,
+                                NumberStyles.Integer,
+                                CultureInfo.InvariantCulture,
+                                out var parsedPort
+                            )
+                        )
                         {
                             port = parsedPort;
                             Log.Information("Using PORT environment variable: {Port}", port);
@@ -65,17 +78,22 @@ namespace Relisten
         public static IHostBuilder CreateHostBuilder(string[] args, int port)
         {
             return Host.CreateDefaultBuilder(args)
-                .UseSerilog((context, services, configuration) => configuration
-                    .ReadFrom.Configuration(context.Configuration)
-                    .ReadFrom.Services(services)
-                    .Enrich.FromLogContext())
+                .UseSerilog(
+                    (context, services, configuration) =>
+                        configuration
+                            .ReadFrom.Configuration(context.Configuration)
+                            .ReadFrom.Services(services)
+                            .Enrich.FromLogContext()
+                )
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     var sentryDsn = Environment.GetEnvironmentVariable("SENTRY_DSN");
                     if (!string.IsNullOrEmpty(sentryDsn))
                     {
-                        Log.Information("Configuring Sentry integration with DSN: {SentryDsn}",
-                            MaskSentryDsn(sentryDsn));
+                        Log.Information(
+                            "Configuring Sentry integration with DSN: {SentryDsn}",
+                            MaskSentryDsn(sentryDsn)
+                        );
                         webBuilder.UseSentry(o =>
                         {
                             o.Dsn = sentryDsn;

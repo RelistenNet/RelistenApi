@@ -4,4 +4,5 @@ public sealed record UpdateUsernameRequest(
     int ContractVersion,
     Guid ClientCommandUuid,
     long ExpectedUsernameVersion,
-    string Username);
+    string Username
+);

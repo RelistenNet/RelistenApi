@@ -40,3 +40,21 @@ Stop the containers without deleting their data:
 3. Debug > Start Debugging (F5) or Debug > Start without Debugging (shift+F5)
 
 Open the API Server at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs)
+
+## Formatting
+
+Restore the repository-local CSharpier tool, then format the codebase:
+
+```sh
+dotnet tool restore
+dotnet csharpier format .
+```
+
+Before every commit and push, check formatting without changing files:
+
+```sh
+dotnet csharpier check .
+```
+
+If the check fails, run `dotnet csharpier format .`, review the diff, and rerun
+the check before committing or pushing.

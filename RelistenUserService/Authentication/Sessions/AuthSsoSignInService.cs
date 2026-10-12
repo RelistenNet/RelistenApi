@@ -4,12 +4,14 @@ namespace RelistenUserService.Authentication.Sessions;
 
 public sealed class AuthSsoSignInService(
     IdentitySessionLifecycle sessions,
-    SessionCookieManager cookies)
+    SessionCookieManager cookies
+)
 {
     public async Task SignInAsync(
         HttpResponse response,
         User user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var session = await sessions.CreateAuthSsoAsync(user.Id, cancellationToken);
         cookies.SetAuthSso(response, session);

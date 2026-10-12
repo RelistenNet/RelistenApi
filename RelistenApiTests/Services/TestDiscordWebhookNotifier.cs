@@ -19,8 +19,9 @@ public class TestDiscordWebhookNotifier
     [Test]
     public async Task SendAsyncShouldPostMessageWithoutMentionsOrTracing()
     {
-        var handler = new RecordingHandler((_, _) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var handler = new RecordingHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
+        );
         using var httpClient = new HttpClient(handler);
         var notifier = CreateNotifier(httpClient, "https://discord.com/api/webhooks/id/token");
 
@@ -33,14 +34,20 @@ public class TestDiscordWebhookNotifier
 
         using var payload = JsonDocument.Parse(handler.Body!);
         payload.RootElement.GetProperty("content").GetString().Should().Be("blocked @everyone");
-        payload.RootElement.GetProperty("allowed_mentions").GetProperty("parse").GetArrayLength().Should().Be(0);
+        payload
+            .RootElement.GetProperty("allowed_mentions")
+            .GetProperty("parse")
+            .GetArrayLength()
+            .Should()
+            .Be(0);
     }
 
     [Test]
     public async Task SendAsyncShouldSkipRequestsWithoutAConfiguredWebhook()
     {
-        var handler = new RecordingHandler((_, _) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var handler = new RecordingHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
+        );
         using var httpClient = new HttpClient(handler);
         var notifier = CreateNotifier(httpClient, null);
 
@@ -53,8 +60,9 @@ public class TestDiscordWebhookNotifier
     [TestCase("https://example.com/api/webhooks/id/token")]
     public async Task SendAsyncShouldSkipInvalidWebhookUrls(string webhookUrl)
     {
-        var handler = new RecordingHandler((_, _) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var handler = new RecordingHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.NoContent))
+        );
         using var httpClient = new HttpClient(handler);
         var notifier = CreateNotifier(httpClient, webhookUrl);
 
@@ -66,19 +74,30 @@ public class TestDiscordWebhookNotifier
     [Test]
     public async Task SendAsyncShouldNotThrowForDeliveryFailures()
     {
-        var nonSuccessHandler = new RecordingHandler((_, _) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway)));
+        var nonSuccessHandler = new RecordingHandler(
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadGateway))
+        );
         using var nonSuccessClient = new HttpClient(nonSuccessHandler);
-        var nonSuccessNotifier = CreateNotifier(nonSuccessClient, "https://discord.com/api/webhooks/id/token");
+        var nonSuccessNotifier = CreateNotifier(
+            nonSuccessClient,
+            "https://discord.com/api/webhooks/id/token"
+        );
 
         var nonSuccessAct = () => nonSuccessNotifier.SendAsync("blocked");
 
         await nonSuccessAct.Should().NotThrowAsync();
 
-        var exceptionHandler = new RecordingHandler((_, _) =>
-            Task.FromException<HttpResponseMessage>(new HttpRequestException("network unavailable")));
+        var exceptionHandler = new RecordingHandler(
+            (_, _) =>
+                Task.FromException<HttpResponseMessage>(
+                    new HttpRequestException("network unavailable")
+                )
+        );
         using var exceptionClient = new HttpClient(exceptionHandler);
-        var exceptionNotifier = CreateNotifier(exceptionClient, "https://discord.com/api/webhooks/id/token");
+        var exceptionNotifier = CreateNotifier(
+            exceptionClient,
+            "https://discord.com/api/webhooks/id/token"
+        );
 
         var exceptionAct = () => exceptionNotifier.SendAsync("blocked");
 
@@ -88,8 +107,9 @@ public class TestDiscordWebhookNotifier
     [Test]
     public async Task SendAsyncShouldPropagateCallerCancellation()
     {
-        var handler = new RecordingHandler((_, cancellationToken) =>
-            Task.FromCanceled<HttpResponseMessage>(cancellationToken));
+        var handler = new RecordingHandler(
+            (_, cancellationToken) => Task.FromCanceled<HttpResponseMessage>(cancellationToken)
+        );
         using var httpClient = new HttpClient(handler);
         var notifier = CreateNotifier(httpClient, "https://discord.com/api/webhooks/id/token");
         using var cancellationSource = new CancellationTokenSource();
@@ -108,20 +128,25 @@ public class TestDiscordWebhookNotifier
             values["DISCORD_WEBHOOK_URL"] = webhookUrl;
         }
 
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(values)
-            .Build();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(values).Build();
         return new DiscordWebhookNotifier(
             httpClient,
             configuration,
-            NullLogger<DiscordWebhookNotifier>.Instance);
+            NullLogger<DiscordWebhookNotifier>.Instance
+        );
     }
 
     private sealed class RecordingHandler : HttpMessageHandler
     {
-        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder;
+        private readonly Func<
+            HttpRequestMessage,
+            CancellationToken,
+            Task<HttpResponseMessage>
+        > responder;
 
-        public RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder)
+        public RecordingHandler(
+            Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder
+        )
         {
             this.responder = responder;
         }
@@ -134,15 +159,21 @@ public class TestDiscordWebhookNotifier
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             RequestCount++;
             Method = request.Method;
             RequestUri = request.RequestUri;
-            Body = request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-            SuppressTracing = request.Options.TryGetValue(
-                DiscordWebhookNotifier.SuppressTracingKey,
-                out var suppressTracing) && suppressTracing;
+            Body =
+                request.Content == null
+                    ? null
+                    : await request.Content.ReadAsStringAsync(cancellationToken);
+            SuppressTracing =
+                request.Options.TryGetValue(
+                    DiscordWebhookNotifier.SuppressTracingKey,
+                    out var suppressTracing
+                ) && suppressTracing;
             return await responder(request, cancellationToken);
         }
     }

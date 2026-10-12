@@ -9,27 +9,42 @@ namespace Relisten.Api.Models
     {
         // The inherited updated_at is the last time API-visible catalog data for this show changed.
         // Upstream source recency is exposed separately as most_recent_source_updated_at.
-        [V2JsonOnly] [Required] public int artist_id { get; set; }
-        [Required] public Guid artist_uuid { get; set; }
-        [V2JsonOnly] public int? venue_id { get; set; }
+        [V2JsonOnly]
+        [Required]
+        public int artist_id { get; set; }
+
+        [Required]
+        public Guid artist_uuid { get; set; }
+
+        [V2JsonOnly]
+        public int? venue_id { get; set; }
         public VenueWithShowCount venue { get; set; } = null!;
         public Guid? venue_uuid { get; set; }
-        [V2JsonOnly] public int? tour_id { get; set; }
+
+        [V2JsonOnly]
+        public int? tour_id { get; set; }
         public Guid? tour_uuid { get; set; }
         public Tour tour { get; set; } = null!;
-        [V2JsonOnly] public int year_id { get; set; }
+
+        [V2JsonOnly]
+        public int year_id { get; set; }
         public Guid year_uuid { get; set; }
         public Year year { get; set; } = null!;
-        [V2JsonOnly] public int? era_id { get; set; }
+
+        [V2JsonOnly]
+        public int? era_id { get; set; }
         public Era era { get; set; } = null!;
 
         /// <summary>ONLY DATE</summary>
         [Required]
         public DateTime date { get; set; }
 
-        [Required] public float avg_rating { get; set; }
+        [Required]
+        public float avg_rating { get; set; }
         public float? avg_duration { get; set; }
-        [Required] public string display_date { get; set; } = null!;
+
+        [Required]
+        public string display_date { get; set; } = null!;
 
         /// <summary>
         ///     This can be used to determine the age of the source most recently added. `updated_at`
@@ -45,19 +60,26 @@ namespace Relisten.Api.Models
         [Required]
         public bool has_soundboard_source { get; set; }
 
-        [Required] public bool has_streamable_flac_source { get; set; }
-        [Required] public int source_count { get; set; }
-        [Required] public Guid uuid { get; set; }
+        [Required]
+        public bool has_streamable_flac_source { get; set; }
+
+        [Required]
+        public int source_count { get; set; }
+
+        [Required]
+        public Guid uuid { get; set; }
         public PopularityMetrics? popularity { get; set; }
     }
 
     public class ShowWithArtist : Show
     {
-        [Required] public Artist artist { get; set; } = null!;
+        [Required]
+        public Artist artist { get; set; } = null!;
     }
 
     public class ShowWithSources : Show
     {
-        [Required] public IEnumerable<SourceFull> sources { get; set; } = null!;
+        [Required]
+        public IEnumerable<SourceFull> sources { get; set; } = null!;
     }
 }

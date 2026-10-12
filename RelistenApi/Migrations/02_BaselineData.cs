@@ -9,7 +9,8 @@ namespace Migrations
         {
             // generated with:
             // docker exec -i 1a9d276c0d02 sh -c "pg_dump -U relisten --no-owner -t artists -t artists_upstream_sources -t features -t upstream_sources  -a relisten_db" > data.sql
-            Execute(@"
+            Execute(
+                @"
 --
 -- Data for Name: artists; Type: TABLE DATA; Schema: public; Owner: -
 --
@@ -559,14 +560,17 @@ SELECT pg_catalog.setval('featuresets_id_seq', 236, true);
 --
 
 SELECT pg_catalog.setval('upstream_sources_id_seq', 7, true);
-           ");
+           "
+            );
         }
 
         protected override void Down()
         {
-            Execute(@"
+            Execute(
+                @"
 TRUNCATE features, artists_upstream_sources, artists, upstream_sources RESTART IDENTITY;          
-            ");
+            "
+            );
         }
     }
 }

@@ -14,7 +14,8 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
     public RefreshTokenLockProvider(
         IConfiguration configuration,
         IHostEnvironment environment,
-        ILogger<RefreshTokenLockProvider> logger)
+        ILogger<RefreshTokenLockProvider> logger
+    )
     {
         _logger = logger;
         // This tiny pool is separate from ordinary traffic. Lock transactions stay open while
@@ -22,7 +23,8 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
         // while waiting for another connection to perform token I/O.
         var connectionString = DatabaseConnectionString.ResolveRefreshTokenLocks(
             configuration,
-            environment);
+            environment
+        );
         var options = new NpgsqlConnectionStringBuilder(connectionString)
         {
             ApplicationName = "Relisten.UserService.RefreshLocks",
@@ -30,14 +32,15 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
             Enlist = false,
             MaxPoolSize = MaximumPoolSize,
             MinPoolSize = 0,
-            Pooling = true
+            Pooling = true,
         };
         _dataSource = NpgsqlDataSource.Create(options.ConnectionString);
     }
 
     public async Task<IAsyncDisposable> AcquireAsync(
         string refreshToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         NpgsqlTransaction? transaction = null;
@@ -63,7 +66,8 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
                 {
                     _logger.LogError(
                         exception,
-                        "Failed to dispose a refresh-token lock transaction after acquisition failed.");
+                        "Failed to dispose a refresh-token lock transaction after acquisition failed."
+                    );
                 }
             }
 
@@ -77,7 +81,8 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
             {
                 _logger.LogError(
                     exception,
-                    "Failed to dispose a refresh-token lock connection after acquisition failed.");
+                    "Failed to dispose a refresh-token lock connection after acquisition failed."
+                );
             }
 
             throw;
@@ -95,8 +100,8 @@ public sealed class RefreshTokenLockProvider : IAsyncDisposable
     private sealed class Lease(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        ILogger logger)
-        : IAsyncDisposable
+        ILogger logger
+    ) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {

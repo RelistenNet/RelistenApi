@@ -27,7 +27,7 @@ namespace Relisten.Data
                 return;
             }
 
-            var parts = idAndOrSlug.Split(new[] {'-'}, 2);
+            var parts = idAndOrSlug.Split(new[] { '-' }, 2);
 
             if (parts.Length == 1)
             {
@@ -69,7 +69,8 @@ namespace Relisten.Data
 
     public class VenueService : RelistenDataServiceBase
     {
-        public VenueService(DbService db, ShowService showService) : base(db)
+        public VenueService(DbService db, ShowService showService)
+            : base(db)
         {
             _showService = showService;
         }
@@ -81,9 +82,13 @@ namespace Relisten.Data
             return await ForUpstreamIdentifier(null, upstreamId);
         }
 
-        public async Task<IEnumerable<VenueWithShowCount>> AllIncludingUnusedForArtist(Artist artist)
+        public async Task<IEnumerable<VenueWithShowCount>> AllIncludingUnusedForArtist(
+            Artist artist
+        )
         {
-            return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<VenueWithShowCount>(
+                    @"
                 SELECT
                     v.*,
 	                COALESCE(counts.shows_at_venue, 0) AS shows_at_venue
@@ -94,12 +99,17 @@ namespace Relisten.Data
                     v.artist_id = @id
                 ORDER BY
                     v.name ASC
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<IEnumerable<VenueWithShowCount>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<VenueWithShowCount>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<VenueWithShowCount>(
+                    @"
                 SELECT
                     v.*,
                     a.uuid as artist_uuid,
@@ -112,14 +122,19 @@ namespace Relisten.Data
                     v.artist_id = @id
                 ORDER BY
                 	v.name ASC
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<Venue?> ForUpstreamIdentifier(Artist? artist, string upstreamId)
         {
             if (artist != null)
             {
-                return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
+                return await db.WithConnection(con =>
+                    con.QueryFirstOrDefaultAsync<Venue>(
+                        @"
                     SELECT
                         *
                     FROM
@@ -127,22 +142,38 @@ namespace Relisten.Data
                     WHERE
                         artist_id = @artistId
                         AND upstream_identifier = @upstreamId
-                ", new {artistId = artist.id, upstreamId}));
+                ",
+                        new { artistId = artist.id, upstreamId }
+                    )
+                );
             }
 
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Venue>(@"
+            return await db.WithConnection(con =>
+                con.QueryFirstOrDefaultAsync<Venue>(
+                    @"
                     SELECT
                         *
                     FROM
                         venues
                     WHERE
                         upstream_identifier = @upstreamId
-                ", new {upstreamId}));
+                ",
+                    new { upstreamId }
+                )
+            );
         }
 
-        public async Task<T?> ForId<T>(int? id = null, Guid? uuid = null, string? slug = null, int? artist_id = null) where T : Venue
+        public async Task<T?> ForId<T>(
+            int? id = null,
+            Guid? uuid = null,
+            string? slug = null,
+            int? artist_id = null
+        )
+            where T : Venue
         {
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<T>(@"
+            return await db.WithConnection(con =>
+                con.QueryFirstOrDefaultAsync<T>(
+                    @"
                 SELECT
                     v.*
                     , a.uuid as artist_uuid
@@ -154,7 +185,16 @@ namespace Relisten.Data
                 WHERE
                     (v.id = @id OR v.uuid = @uuid OR v.slug = @slug)
                     AND (@artist_id IS NULL OR v.artist_id = @artist_id)
-            ", new {id, uuid, slug, artist_id}));
+            ",
+                    new
+                    {
+                        id,
+                        uuid,
+                        slug,
+                        artist_id,
+                    }
+                )
+            );
         }
 
         public async Task<VenueWithShowCount?> ForId(int id)
@@ -162,7 +202,12 @@ namespace Relisten.Data
             return await ForId<VenueWithShowCount>(id);
         }
 
-        public async Task<VenueWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null, string? slug = null)
+        public async Task<VenueWithShows?> ForIdWithShows(
+            Artist artist,
+            int? id,
+            Guid? uuid = null,
+            string? slug = null
+        )
         {
             var venue = await ForId<VenueWithShows>(id, uuid, slug, artist.id);
 
@@ -172,10 +217,13 @@ namespace Relisten.Data
             }
 
             venue.shows = new List<Show>();
-            venue.shows.AddRange(await _showService.ShowsForCriteria(artist,
-                "s.artist_id = @artist_id AND s.venue_id = @venue_id",
-                new {artist_id = artist.id, venue_id = venue.id}
-            ));
+            venue.shows.AddRange(
+                await _showService.ShowsForCriteria(
+                    artist,
+                    "s.artist_id = @artist_id AND s.venue_id = @venue_id",
+                    new { artist_id = artist.id, venue_id = venue.id }
+                )
+            );
 
             return venue;
         }
@@ -193,12 +241,14 @@ namespace Relisten.Data
                 venue.upstream_identifier,
                 venue.updated_at,
                 venue.past_names,
-                venue.slug
+                venue.slug,
             };
 
             if (venue.id != 0)
             {
-                return await db.WithWriteConnection(con => con.QuerySingleAsync<Venue>(@"
+                return await db.WithWriteConnection(con =>
+                    con.QuerySingleAsync<Venue>(
+                        @"
                     UPDATE
                         venues
                     SET
@@ -215,10 +265,15 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", p));
+                ",
+                        p
+                    )
+                );
             }
 
-            return await db.WithWriteConnection(con => con.QuerySingleAsync<Venue>(@"
+            return await db.WithWriteConnection(con =>
+                con.QuerySingleAsync<Venue>(
+                    @"
                     INSERT INTO
                         venues
 
@@ -248,7 +303,10 @@ namespace Relisten.Data
                             md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", p));
+                ",
+                    p
+                )
+            );
         }
     }
 }

@@ -18,8 +18,10 @@ namespace Relisten.Services.Auth
         public Task<ClaimsPrincipal> CreateAsync(ApplicationUser user)
         {
             var identity = new ClaimsIdentity(
-                CookieAuthenticationDefaults.AuthenticationScheme, _options.ClaimsIdentity.UserNameClaimType,
-                _options.ClaimsIdentity.RoleClaimType);
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                _options.ClaimsIdentity.UserNameClaimType,
+                _options.ClaimsIdentity.RoleClaimType
+            );
 
             identity.AddClaim(new Claim(_options.ClaimsIdentity.UserIdClaimType, user.Username));
 

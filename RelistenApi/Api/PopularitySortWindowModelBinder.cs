@@ -34,7 +34,7 @@ namespace Relisten.Api
                 "hours48" => PopularitySortWindow.Hours48,
                 "days7" => PopularitySortWindow.Days7,
                 "days30" => PopularitySortWindow.Days30,
-                _ => PopularitySortWindow.Days30
+                _ => PopularitySortWindow.Days30,
             };
         }
     }

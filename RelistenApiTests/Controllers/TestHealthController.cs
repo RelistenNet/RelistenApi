@@ -14,7 +14,10 @@ public class TestHealthController
     public void Live_ReturnsOkWithoutCheckingDependencies()
     {
         var readinessCheck = new StubReadinessCheck();
-        var controller = new HealthController(readinessCheck, NullLogger<HealthController>.Instance);
+        var controller = new HealthController(
+            readinessCheck,
+            NullLogger<HealthController>.Instance
+        );
 
         var result = controller.Live();
 
@@ -26,7 +29,10 @@ public class TestHealthController
     public async Task Ready_WhenDatabasePathsAreHealthy_ReturnsOk()
     {
         var readinessCheck = new StubReadinessCheck();
-        var controller = new HealthController(readinessCheck, NullLogger<HealthController>.Instance);
+        var controller = new HealthController(
+            readinessCheck,
+            NullLogger<HealthController>.Instance
+        );
 
         var result = await controller.Ready(CancellationToken.None);
 
@@ -37,8 +43,13 @@ public class TestHealthController
     [Test]
     public async Task Ready_WhenADatabasePathFails_ReturnsServiceUnavailable()
     {
-        var readinessCheck = new StubReadinessCheck(new InvalidOperationException("database unavailable"));
-        var controller = new HealthController(readinessCheck, NullLogger<HealthController>.Instance);
+        var readinessCheck = new StubReadinessCheck(
+            new InvalidOperationException("database unavailable")
+        );
+        var controller = new HealthController(
+            readinessCheck,
+            NullLogger<HealthController>.Instance
+        );
 
         var result = await controller.Ready(CancellationToken.None);
 

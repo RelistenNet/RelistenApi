@@ -20,6 +20,7 @@ public static class AccountProfileFactory
             user.UsernameReviewedAt is null,
             user.UsernameReviewedAt,
             changeAvailableAt,
-            nativeSessionId);
+            nativeSessionId
+        );
     }
 }

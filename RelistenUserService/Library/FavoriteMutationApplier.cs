@@ -15,7 +15,8 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         LibraryState state,
         IDictionary<CatalogReference, Favorite> activeByTarget,
         IDictionary<Guid, Favorite> knownById,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
         var target = new CatalogReference(mutation.CatalogType, mutation.CatalogUuid);
         var changed = false;
@@ -33,7 +34,8 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
                     userId,
                     target,
                     knownById,
-                    now);
+                    now
+                );
                 activeByTarget[target] = favorite;
                 canonicalFavoriteId = favorite.Id;
                 changed = true;
@@ -60,7 +62,8 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
             changed,
             mutation.FavoriteUuid,
             canonicalFavoriteId,
-            state.Revision);
+            state.Revision
+        );
     }
 
     private Favorite RestoreOrCreateFavorite(
@@ -68,7 +71,8 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         Guid userId,
         CatalogReference target,
         IDictionary<Guid, Favorite> knownById,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
         if (!knownById.TryGetValue(favoriteId, out var favorite))
         {
@@ -77,7 +81,7 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
                 Id = favoriteId,
                 UserId = userId,
                 CatalogType = target.CatalogType,
-                CatalogUuid = target.CatalogUuid
+                CatalogUuid = target.CatalogUuid,
             };
             knownById.Add(favoriteId, favorite);
         }
@@ -85,9 +89,7 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         favorite.CreatedAt = now;
         favorite.UpdatedAt = now;
         var entry = dbContext.Entry(favorite);
-        entry.State = entry.State == EntityState.Deleted
-            ? EntityState.Modified
-            : EntityState.Added;
+        entry.State = entry.State == EntityState.Deleted ? EntityState.Modified : EntityState.Added;
         return favorite;
     }
 
@@ -95,18 +97,21 @@ internal sealed class FavoriteMutationApplier(AccountsDbContext dbContext)
         LibraryState state,
         Favorite favorite,
         string changeType,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
         state.Revision++;
-        dbContext.LibraryChanges.Add(new()
-        {
-            UserId = favorite.UserId,
-            Revision = state.Revision,
-            ChangeType = changeType,
-            FavoriteId = favorite.Id,
-            CatalogType = favorite.CatalogType,
-            CatalogUuid = favorite.CatalogUuid,
-            ChangedAt = now
-        });
+        dbContext.LibraryChanges.Add(
+            new()
+            {
+                UserId = favorite.UserId,
+                Revision = state.Revision,
+                ChangeType = changeType,
+                FavoriteId = favorite.Id,
+                CatalogType = favorite.CatalogType,
+                CatalogUuid = favorite.CatalogUuid,
+                ChangedAt = now,
+            }
+        );
     }
 }

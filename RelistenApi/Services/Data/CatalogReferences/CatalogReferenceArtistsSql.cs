@@ -4,7 +4,9 @@ namespace Relisten.Data
     {
         // Artists and features are separate result sets because Features is nested on the mobile DTO.
         // CatalogReferenceResolver attaches them after both sets have been read asynchronously.
-        private const string CandidateArtistIds = CatalogReferenceSql.Requested + @",
+        private const string CandidateArtistIds =
+            CatalogReferenceSql.Requested
+            + @",
 candidate_artist_ids AS (
     SELECT entity.id
     FROM requested r
@@ -37,7 +39,9 @@ candidate_artist_ids AS (
     WHERE entity.artist_id IS NOT NULL
 )";
 
-        public const string Query = CandidateArtistIds + @", show_counts AS (
+        public const string Query =
+            CandidateArtistIds
+            + @", show_counts AS (
     SELECT show_entity.artist_id, COUNT(*)::integer AS show_count
     FROM shows show_entity
     JOIN candidate_artist_ids candidate ON candidate.id = show_entity.artist_id
@@ -59,7 +63,9 @@ LEFT JOIN show_counts ON show_counts.artist_id = artist.id
 LEFT JOIN source_counts ON source_counts.artist_id = artist.id
 ORDER BY artist.uuid;
 
-" + CandidateArtistIds + @"
+"
+            + CandidateArtistIds
+            + @"
 SELECT feature.*
 FROM features feature
 JOIN candidate_artist_ids candidate ON candidate.id = feature.artist_id

@@ -15,8 +15,12 @@ namespace Relisten.Vendor.ArchiveOrg
             return "";
         }
 
-        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-            JsonSerializer serializer)
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer
+        )
         {
             // Load JObject from stream
             if (reader.TokenType == JsonToken.StartArray)
@@ -48,8 +52,12 @@ namespace Relisten.Vendor.ArchiveOrg
             return objectType == typeof(List<T>);
         }
 
-        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-            JsonSerializer serializer)
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer
+        )
         {
             var token = JToken.Load(reader);
             if (token.Type == JTokenType.Array)
@@ -57,7 +65,7 @@ namespace Relisten.Vendor.ArchiveOrg
                 return token.ToObject<List<T>>();
             }
 
-            return new List<T> {token.ToObject<T>()!};
+            return new List<T> { token.ToObject<T>()! };
         }
 
         public override void WriteJson(JsonWriter writer, object? value, JsonSerializer serializer)
@@ -104,13 +112,20 @@ namespace Relisten.Vendor.ArchiveOrg
             if (s.Contains("T::Z"))
             {
                 s = s.Replace("T::Z", "T00:00:00Z");
-                Log.Warning("[WEIRD_DATE] {Identifier}: Empty time component 'T::Z' in date '{Original}'", identifier, original);
+                Log.Warning(
+                    "[WEIRD_DATE] {Identifier}: Empty time component 'T::Z' in date '{Original}'",
+                    identifier,
+                    original
+                );
             }
 
             // really. what the hell are you doing archive.org?!
             if (s == "0000-01-01T00:00:00Z")
             {
-                Log.Warning("[WEIRD_DATE] {Identifier}: Null/epoch date '0000-01-01T00:00:00Z'", identifier);
+                Log.Warning(
+                    "[WEIRD_DATE] {Identifier}: Null/epoch date '0000-01-01T00:00:00Z'",
+                    identifier
+                );
                 return null;
             }
 
@@ -131,8 +146,14 @@ namespace Relisten.Vendor.ArchiveOrg
 
                 if (year != expectedYear || month != expectedMonth || day != expectedDay)
                 {
-                    Log.Error("[INVALID_DATE] {Identifier}: Could clamp invalid date components but moved on (report to archive) '{Original}' → {Year}-{Month:D2}-{Day:D2}",
-                        identifier, original, year, month, day);
+                    Log.Error(
+                        "[INVALID_DATE] {Identifier}: Could clamp invalid date components but moved on (report to archive) '{Original}' → {Year}-{Month:D2}-{Day:D2}",
+                        identifier,
+                        original,
+                        year,
+                        month,
+                        day
+                    );
                     // don't send clamped dates – we should surface them for errors and report to archive.org team for fixing
                     return null;
                 }
@@ -140,24 +161,37 @@ namespace Relisten.Vendor.ArchiveOrg
                 return new DateTime(year, month, day, hour, minute, second, DateTimeKind.Utc);
             }
 
-            if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.None, out var result))
+            if (
+                DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.None, out var result)
+            )
             {
                 return result;
             }
 
-            Log.Warning("[WEIRD_DATE] {Identifier}: Failed to parse date '{Original}'", identifier, original);
+            Log.Warning(
+                "[WEIRD_DATE] {Identifier}: Failed to parse date '{Original}'",
+                identifier,
+                original
+            );
             return null;
         }
 
-        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-            JsonSerializer serializer)
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer
+        )
         {
             // Handle array of dates - return first valid date or sentinel
             if (reader.TokenType == JsonToken.StartArray)
             {
                 var array = JArray.Load(reader);
                 var arrayStr = string.Join(", ", array.Select(i => i.ToString()));
-                Log.Warning("[WEIRD_DATE] Date field is an array instead of string: [{ArrayValues}]", arrayStr);
+                Log.Warning(
+                    "[WEIRD_DATE] Date field is an array instead of string: [{ArrayValues}]",
+                    arrayStr
+                );
 
                 foreach (var item in array)
                 {
@@ -166,7 +200,10 @@ namespace Relisten.Vendor.ArchiveOrg
                         var parsed = TryParseDate(item.ToString());
                         if (parsed.HasValue)
                         {
-                            Log.Information("[WEIRD_DATE] Using first valid date from array: {Date}", parsed.Value);
+                            Log.Information(
+                                "[WEIRD_DATE] Using first valid date from array: {Date}",
+                                parsed.Value
+                            );
                             return parsed.Value;
                         }
                     }
@@ -194,8 +231,11 @@ namespace Relisten.Vendor.ArchiveOrg
 
             if (reader.TokenType != JsonToken.Null)
             {
-                Log.Warning("[WEIRD_DATE] Unexpected token type for date field: {TokenType}, value: {Value}",
-                    reader.TokenType, reader.Value);
+                Log.Warning(
+                    "[WEIRD_DATE] Unexpected token type for date field: {TokenType}, value: {Value}",
+                    reader.TokenType,
+                    reader.Value
+                );
             }
 
             return reader.Value;
@@ -219,7 +259,8 @@ namespace Relisten.Vendor.ArchiveOrg
         public int status { get; set; }
         public int QTime { get; set; }
 
-        [JsonProperty("@params")] public SearchParams parameters { get; set; } = null!;
+        [JsonProperty("@params")]
+        public SearchParams parameters { get; set; } = null!;
     }
 
     public class SearchDoc
@@ -230,7 +271,8 @@ namespace Relisten.Vendor.ArchiveOrg
         public string raw_display_date { get; set; } = null!;
 
         [JsonIgnore]
-        public DateTime date => DateTime.TryParse(raw_display_date, out var d) ? d : DateTime.MinValue;
+        public DateTime date =>
+            DateTime.TryParse(raw_display_date, out var d) ? d : DateTime.MinValue;
         public string identifier { get; set; } = null!;
         public DateTime? addeddate { get; set; }
         public DateTime? publicdate { get; set; }
@@ -247,8 +289,15 @@ namespace Relisten.Vendor.ArchiveOrg
             {
                 if (_max == null)
                 {
-                    _max = new[] {addeddate, publicdate, reviewdate /*, indexdate*/}
-                        .Where(d => d.HasValue).Max()!.Value;
+                    _max = new[]
+                    {
+                        addeddate,
+                        publicdate,
+                        reviewdate, /*, indexdate*/
+                    }
+                        .Where(d => d.HasValue)
+                        .Max()!
+                        .Value;
                 }
 
                 return _max.Value;
@@ -261,13 +310,18 @@ namespace Relisten.Vendor.ArchiveOrg
             {
                 var dates = new[]
                 {
-                    updatedate != null ? updatedate.Max() : (DateTime?)DateTime.MinValue, addeddate, publicdate
-                }.Where(d => d.HasValue).ToList();
+                    updatedate != null ? updatedate.Max() : (DateTime?)DateTime.MinValue,
+                    addeddate,
+                    publicdate,
+                }
+                    .Where(d => d.HasValue)
+                    .ToList();
 
                 if (dates.Count == 0)
                 {
                     throw new Exception(
-                        $"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible...");
+                        $"SearchDoc '{identifier}' has no addeddate, publicdate or updatedate...this shouldn't be possible..."
+                    );
                 }
 
                 return dates.Max()!.Value;
@@ -279,6 +333,7 @@ namespace Relisten.Vendor.ArchiveOrg
     {
         [JsonProperty(Required = Required.Always)]
         public int numFound { get; set; }
+
         [JsonProperty(Required = Required.Always)]
         public int start { get; set; }
         public IList<SearchDoc> docs { get; set; } = null!;

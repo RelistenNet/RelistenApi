@@ -19,11 +19,7 @@ public class TestArchiveOrgArtistIndexer
     [Test]
     public async Task IndexArtists_ShouldCreateAndLinkArtists()
     {
-        var upstreamSource = new UpstreamSource
-        {
-            id = 1,
-            name = "archive.org"
-        };
+        var upstreamSource = new UpstreamSource { id = 1, name = "archive.org" };
 
         var items = new List<ArchiveOrgCollectionIndexItem>
         {
@@ -31,37 +27,39 @@ public class TestArchiveOrgArtistIndexer
             {
                 identifier = "Guster",
                 title = "Guster",
-                item_count = 12
+                item_count = 12,
             },
             new()
             {
                 identifier = "NewBand",
                 title = "New Band",
-                item_count = 8
+                item_count = 8,
             },
             new()
             {
                 identifier = "TinyBand",
                 title = "Tiny Band",
-                item_count = 2
-            }
+                item_count = 2,
+            },
         };
 
         var repository = new FakeArchiveOrgArtistIndexRepository();
-        repository.SeedArtist(new Artist
-        {
-            id = 10,
-            name = "Guster",
-            slug = "guster",
-            sort_name = "Guster",
-            featured = (int)ArtistFeaturedFlags.None,
-            musicbrainz_id = string.Empty,
-            uuid = Guid.NewGuid(),
-            created_at = DateTime.UtcNow,
-            updated_at = DateTime.UtcNow,
-            features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
-            upstream_sources = Array.Empty<ArtistUpstreamSource>()
-        });
+        repository.SeedArtist(
+            new Artist
+            {
+                id = 10,
+                name = "Guster",
+                slug = "guster",
+                sort_name = "Guster",
+                featured = (int)ArtistFeaturedFlags.None,
+                musicbrainz_id = string.Empty,
+                uuid = Guid.NewGuid(),
+                created_at = DateTime.UtcNow,
+                updated_at = DateTime.UtcNow,
+                features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
+                upstream_sources = Array.Empty<ArtistUpstreamSource>(),
+            }
+        );
         repository.UpstreamMappings[(1, "Guster")] = 10;
 
         var indexer = new ArchiveOrgArtistIndexer(
@@ -84,11 +82,7 @@ public class TestArchiveOrgArtistIndexer
     [Test]
     public async Task IndexArtists_ShouldDisambiguateSlugCollisions()
     {
-        var upstreamSource = new UpstreamSource
-        {
-            id = 1,
-            name = "archive.org"
-        };
+        var upstreamSource = new UpstreamSource { id = 1, name = "archive.org" };
 
         var items = new List<ArchiveOrgCollectionIndexItem>
         {
@@ -96,25 +90,27 @@ public class TestArchiveOrgArtistIndexer
             {
                 identifier = "NewBand",
                 title = "New Band",
-                item_count = 8
-            }
+                item_count = 8,
+            },
         };
 
         var repository = new FakeArchiveOrgArtistIndexRepository();
-        repository.SeedArtist(new Artist
-        {
-            id = 10,
-            name = "New Band",
-            slug = "new-band",
-            sort_name = "New Band",
-            featured = (int)ArtistFeaturedFlags.None,
-            musicbrainz_id = string.Empty,
-            uuid = Guid.NewGuid(),
-            created_at = DateTime.UtcNow,
-            updated_at = DateTime.UtcNow,
-            features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
-            upstream_sources = Array.Empty<ArtistUpstreamSource>()
-        });
+        repository.SeedArtist(
+            new Artist
+            {
+                id = 10,
+                name = "New Band",
+                slug = "new-band",
+                sort_name = "New Band",
+                featured = (int)ArtistFeaturedFlags.None,
+                musicbrainz_id = string.Empty,
+                uuid = Guid.NewGuid(),
+                created_at = DateTime.UtcNow,
+                updated_at = DateTime.UtcNow,
+                features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
+                upstream_sources = Array.Empty<ArtistUpstreamSource>(),
+            }
+        );
 
         var indexer = new ArchiveOrgArtistIndexer(
             new FakeArchiveOrgCollectionIndexClient(items),
@@ -132,13 +128,17 @@ public class TestArchiveOrgArtistIndexer
     {
         private readonly IReadOnlyList<ArchiveOrgCollectionIndexItem> items;
 
-        public FakeArchiveOrgCollectionIndexClient(IReadOnlyList<ArchiveOrgCollectionIndexItem> items)
+        public FakeArchiveOrgCollectionIndexClient(
+            IReadOnlyList<ArchiveOrgCollectionIndexItem> items
+        )
         {
             this.items = items;
         }
 
-        public Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count,
-            CancellationToken cancellationToken)
+        public Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(
+            int count,
+            CancellationToken cancellationToken
+        )
         {
             return Task.FromResult(items);
         }
@@ -162,13 +162,23 @@ public class TestArchiveOrgArtistIndexer
     private sealed class FakeArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
     {
         private int nextId = 1000;
-        public Dictionary<string, Artist> ArtistsBySlug { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<(int upstreamSourceId, string upstreamIdentifier), int> UpstreamMappings { get; } = new();
+        public Dictionary<string, Artist> ArtistsBySlug { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<
+            (int upstreamSourceId, string upstreamIdentifier),
+            int
+        > UpstreamMappings { get; } = new();
 
-        public Task<Artist?> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier)
+        public Task<Artist?> FindArtistByUpstreamIdentifier(
+            int upstreamSourceId,
+            string upstreamIdentifier
+        )
         {
             return Task.FromResult(
-                UpstreamMappings.TryGetValue((upstreamSourceId, upstreamIdentifier), out var artistId)
+                UpstreamMappings.TryGetValue(
+                    (upstreamSourceId, upstreamIdentifier),
+                    out var artistId
+                )
                     ? ArtistsBySlug.Values.FirstOrDefault(artist => artist.id == artistId)
                     : null
             );
@@ -188,7 +198,7 @@ public class TestArchiveOrgArtistIndexer
                 created_at = DateTime.UtcNow,
                 updated_at = DateTime.UtcNow,
                 features = artist.features,
-                upstream_sources = Array.Empty<ArtistUpstreamSource>()
+                upstream_sources = Array.Empty<ArtistUpstreamSource>(),
             };
 
             ArtistsBySlug[created.slug] = created;
@@ -200,7 +210,11 @@ public class TestArchiveOrgArtistIndexer
             return Task.FromResult<IReadOnlyList<Artist>>(ArtistsBySlug.Values.ToList());
         }
 
-        public Task EnsureUpstreamSourceForArtist(int artistId, int upstreamSourceId, string upstreamIdentifier)
+        public Task EnsureUpstreamSourceForArtist(
+            int artistId,
+            int upstreamSourceId,
+            string upstreamIdentifier
+        )
         {
             if (!UpstreamMappings.ContainsKey((upstreamSourceId, upstreamIdentifier)))
             {

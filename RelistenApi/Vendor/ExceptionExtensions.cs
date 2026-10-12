@@ -23,8 +23,13 @@ namespace Relisten.Import
                 var val = "";
                 try
                 {
-                    val = JsonConvert.SerializeObject(kvp.Value,
-                        new JsonSerializerSettings {PreserveReferencesHandling = PreserveReferencesHandling.Objects});
+                    val = JsonConvert.SerializeObject(
+                        kvp.Value,
+                        new JsonSerializerSettings
+                        {
+                            PreserveReferencesHandling = PreserveReferencesHandling.Objects,
+                        }
+                    );
                 }
                 catch (JsonSerializationException)
                 {

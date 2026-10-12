@@ -7,7 +7,7 @@ namespace Migrations
     {
         protected override void Up()
         {
-            Execute(/*@"
+            Execute( /*@"
 ALTER TABLE ONLY source_reviews
     ADD COLUMN uuid uuid NULL;
 
@@ -51,12 +51,15 @@ ALTER TABLE ONLY source_sets
 
 ALTER TABLE ONLY setlist_songs_plays
     ADD CONSTRAINT setlist_songs_plays_song_id_show_id_key UNIQUE (played_setlist_song_id, played_setlist_show_id);    
-           "*/ @"SELECT 1");
+           "*/
+                @"SELECT 1"
+            );
         }
 
         protected override void Down()
         {
-            Execute(@"
+            Execute(
+                @"
 ALTER TABLE ONLY source_tracks
     DROP COLUMN is_orphaned,
     ALTER COLUMN source_set_id ADD NOT NULL,
@@ -71,7 +74,8 @@ ALTER TABLE ONLY source_sets
 ALTER TABLE ONLY source_reviews
     DROP COLUMN uuid,
     DROP CONSTRAINT source_reviews_uuid;
-            ");
+            "
+            );
         }
     }
 }

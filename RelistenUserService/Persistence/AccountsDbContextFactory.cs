@@ -19,7 +19,8 @@ public sealed class AccountsDbContextFactory : IDesignTimeDbContextFactory<Accou
         var builder = new DbContextOptionsBuilder<AccountsDbContext>();
         builder.UseNpgsql(
             DatabaseConnectionString.Resolve(configuration),
-            postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "identity"));
+            postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "identity")
+        );
         builder.UseOpenIddict<Guid>();
 
         return new AccountsDbContext(builder.Options);

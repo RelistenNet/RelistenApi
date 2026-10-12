@@ -18,7 +18,8 @@ namespace Relisten.Controllers
             ArtistService artistService,
             SourceService sourceService,
             ShowService showService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _sourceService = sourceService;
             _showService = showService;
@@ -35,50 +36,78 @@ namespace Relisten.Controllers
         [HttpGet("artists/{artistIdOrSlug}/shows/recently-added")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> ArtistRecentlyAddedShows([FromRoute] string artistIdOrSlug,
-            [FromQuery] int limit = 20, [FromQuery] int? previousDays = null,
-            [FromQuery] string sort_by = "created_at")
+        public async Task<IActionResult> ArtistRecentlyAddedShows(
+            [FromRoute] string artistIdOrSlug,
+            [FromQuery] int limit = 20,
+            [FromQuery] int? previousDays = null,
+            [FromQuery] string sort_by = "created_at"
+        )
         {
             limit = limit > 200 ? 200 : limit;
-            if (sort_by != "created_at" && sort_by != "updated_at") sort_by = "created_at";
+            if (sort_by != "created_at" && sort_by != "updated_at")
+                sort_by = "created_at";
             var col = SortColumn(sort_by);
 
-            return await ApiRequest(artistIdOrSlug, art => _showService.ShowsForCriteria(art, $@"
+            return await ApiRequest(
+                artistIdOrSlug,
+                art =>
+                    _showService.ShowsForCriteria(
+                        art,
+                        $@"
                 s.artist_id = @artistId
 				{(previousDays != null ? $"AND {col} >= current_date - '1 day'::interval * @previousDays" : "")}
-            ", new {artistId = art.id, previousDays}, limit, $"{col} DESC"));
+            ",
+                        new { artistId = art.id, previousDays },
+                        limit,
+                        $"{col} DESC"
+                    )
+            );
         }
 
         [HttpGet("artists/shows/recently-added")]
         [Obsolete]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> RecentlyAddedShows([FromQuery] int limit = 25,
-            [FromQuery] string sort_by = "created_at")
+        public async Task<IActionResult> RecentlyAddedShows(
+            [FromQuery] int limit = 25,
+            [FromQuery] string sort_by = "created_at"
+        )
         {
             limit = limit > 200 ? 200 : limit;
-            if (sort_by != "created_at" && sort_by != "updated_at") sort_by = "created_at";
+            if (sort_by != "created_at" && sort_by != "updated_at")
+                sort_by = "created_at";
             var col = SortColumn(sort_by);
 
             return JsonSuccess(
-                await _showService.ShowsForCriteriaWithArtists(@"1 = 1", null, limit, $"{col} DESC"));
+                await _showService.ShowsForCriteriaWithArtists(@"1 = 1", null, limit, $"{col} DESC")
+            );
         }
 
         [HttpGet("shows/recently-added")]
         [ProducesResponseType(typeof(IEnumerable<ShowWithArtist>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
-        public async Task<IActionResult> RecentlyAddedShows([FromQuery] int limit = 20,
+        public async Task<IActionResult> RecentlyAddedShows(
+            [FromQuery] int limit = 20,
             [FromQuery] int? previousDays = null,
-            [FromQuery] string sort_by = "created_at")
+            [FromQuery] string sort_by = "created_at"
+        )
         {
             limit = limit > 200 ? 200 : limit;
-            if (sort_by != "created_at" && sort_by != "updated_at") sort_by = "created_at";
+            if (sort_by != "created_at" && sort_by != "updated_at")
+                sort_by = "created_at";
             var col = SortColumn(sort_by);
 
-            return JsonSuccess(await _showService.ShowsForCriteriaWithArtists($@"
+            return JsonSuccess(
+                await _showService.ShowsForCriteriaWithArtists(
+                    $@"
 				1 = 1
 				{(previousDays != null ? $"AND {col} >= current_date - '1 day'::interval * @previousDays" : "")}
-			", new {previousDays}, limit, $"{col} DESC"));
+			",
+                    new { previousDays },
+                    limit,
+                    $"{col} DESC"
+                )
+            );
         }
     }
 }

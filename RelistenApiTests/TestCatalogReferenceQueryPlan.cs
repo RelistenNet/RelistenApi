@@ -10,24 +10,28 @@ public sealed class TestCatalogReferenceQueryPlan
     [TestCase("artist", (int)CatalogReferenceResultSets.Artists)]
     [TestCase(
         "show",
-        (int)(CatalogReferenceResultSets.Artists |
-              CatalogReferenceResultSets.Shows |
-              CatalogReferenceResultSets.Tours |
-              CatalogReferenceResultSets.Venues |
-              CatalogReferenceResultSets.Years))]
+        (int)(
+            CatalogReferenceResultSets.Artists
+            | CatalogReferenceResultSets.Shows
+            | CatalogReferenceResultSets.Tours
+            | CatalogReferenceResultSets.Venues
+            | CatalogReferenceResultSets.Years
+        )
+    )]
     [TestCase(
         "source_track",
-        (int)(CatalogReferenceResultSets.Artists |
-              CatalogReferenceResultSets.Shows |
-              CatalogReferenceResultSets.Sources |
-              CatalogReferenceResultSets.SourceTracks |
-              CatalogReferenceResultSets.Tours |
-              CatalogReferenceResultSets.Venues |
-              CatalogReferenceResultSets.Years |
-              CatalogReferenceResultSets.SourceSets))]
-    public void IncludesOnlyTheResultSetsNeededToHydrateAReference(
-        string catalogType,
-        int expected)
+        (int)(
+            CatalogReferenceResultSets.Artists
+            | CatalogReferenceResultSets.Shows
+            | CatalogReferenceResultSets.Sources
+            | CatalogReferenceResultSets.SourceTracks
+            | CatalogReferenceResultSets.Tours
+            | CatalogReferenceResultSets.Venues
+            | CatalogReferenceResultSets.Years
+            | CatalogReferenceResultSets.SourceSets
+        )
+    )]
+    public void IncludesOnlyTheResultSetsNeededToHydrateAReference(string catalogType, int expected)
     {
         var plan = CatalogReferenceQueryPlan.Create([Reference(catalogType)]);
 
@@ -37,15 +41,14 @@ public sealed class TestCatalogReferenceQueryPlan
     [Test]
     public void CombinesDependenciesForMixedReferenceTypes()
     {
-        var plan = CatalogReferenceQueryPlan.Create([
-            Reference("song"),
-            Reference("venue")
-        ]);
+        var plan = CatalogReferenceQueryPlan.Create([Reference("song"), Reference("venue")]);
 
-        plan.ResultSets.Should().Be(
-            CatalogReferenceResultSets.Artists |
-            CatalogReferenceResultSets.Songs |
-            CatalogReferenceResultSets.Venues);
+        plan.ResultSets.Should()
+            .Be(
+                CatalogReferenceResultSets.Artists
+                    | CatalogReferenceResultSets.Songs
+                    | CatalogReferenceResultSets.Venues
+            );
     }
 
     [Test]

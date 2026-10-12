@@ -10,8 +10,8 @@ namespace RelistenUserService.Authentication.OpenIdConnect;
 
 public sealed class ExternalIdentityCallbackController(
     ExternalIdentityCompletionService identities,
-    AuthSsoSignInService authSso)
-    : Controller
+    AuthSsoSignInService authSso
+) : Controller
 {
     [AcceptVerbs("GET", "POST", Route = "~/signin-google")]
     [IgnoreAntiforgeryToken]
@@ -25,23 +25,29 @@ public sealed class ExternalIdentityCallbackController(
 
     private async Task<IActionResult> CompleteAsync(
         string provider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var result = await HttpContext.AuthenticateAsync(
-            OpenIddictClientAspNetCoreDefaults.AuthenticationScheme);
-        if (!result.Succeeded
-            || result.Principal is not { Identity.IsAuthenticated: true } principal)
+            OpenIddictClientAspNetCoreDefaults.AuthenticationScheme
+        );
+        if (
+            !result.Succeeded
+            || result.Principal is not { Identity.IsAuthenticated: true } principal
+        )
         {
             return Problem(
                 statusCode: StatusCodes.Status401Unauthorized,
-                title: "The external identity response could not be authenticated.");
+                title: "The external identity response could not be authenticated."
+            );
         }
 
         var returnUrl = result.Properties?.RedirectUri;
         if (!IsAuthorizationReturnUrl(returnUrl))
         {
             throw new InvalidOperationException(
-                "The protected external identity return URL is invalid.");
+                "The protected external identity return URL is invalid."
+            );
         }
 
         User user;
@@ -49,7 +55,8 @@ public sealed class ExternalIdentityCallbackController(
         {
             user = await identities.CompleteAsync(
                 ExternalIdentityProfileFactory.Create(provider, principal),
-                cancellationToken);
+                cancellationToken
+            );
         }
         catch (AccountUnavailableException)
         {

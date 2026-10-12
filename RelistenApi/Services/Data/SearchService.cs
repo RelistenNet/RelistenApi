@@ -7,21 +7,26 @@ namespace Relisten.Data
 {
     public class SearchService : RelistenDataServiceBase
     {
-        public SearchService(DbService db) : base(db)
-        {
-        }
+        public SearchService(DbService db)
+            : base(db) { }
 
-        public async Task<SearchResults> Search(string searchTerm, Guid? artistUuid = null, SearchOptions? options = null)
+        public async Task<SearchResults> Search(
+            string searchTerm,
+            Guid? artistUuid = null,
+            SearchOptions? options = null
+        )
         {
             options ??= new SearchOptions();
 
             return await db.WithConnection(async con =>
             {
-                var parms = new {searchTerm, artistUuid};
+                var parms = new { searchTerm, artistUuid };
 
                 return new SearchResults
                 {
-                    Artists = options.Artists ? await con.QueryAsync<SlimArtist>($@"
+                    Artists = options.Artists
+                        ? await con.QueryAsync<SlimArtist>(
+                            $@"
 						SELECT
 							artists.*
 						FROM
@@ -35,8 +40,13 @@ namespace Relisten.Data
 						ORDER BY
 							COALESCE(show_counts.show_count, 0) DESC, name
 						LIMIT 20;
-					", parms) : Array.Empty<SlimArtist>(),
-                    Shows = options.Shows ? await con.QueryAsync<ShowWithSlimArtist, SlimArtist, ShowWithSlimArtist>($@"
+					",
+                            parms
+                        )
+                        : Array.Empty<SlimArtist>(),
+                    Shows = options.Shows
+                        ? await con.QueryAsync<ShowWithSlimArtist, SlimArtist, ShowWithSlimArtist>(
+                            $@"
 						SELECT
 								s.*,
 								a.uuid as artist_uuid,
@@ -61,12 +71,22 @@ namespace Relisten.Data
 						ORDER BY
 							COALESCE(cnt.source_count, 0) DESC, s.display_date DESC
 						LIMIT 20;
-					", (s, a) =>
-                    {
-                        s.slim_artist = a;
-                        return s;
-                    }, parms) : Array.Empty<ShowWithSlimArtist>(),
-                    Songs = options.Songs ? await con.QueryAsync<SetlistSongWithSlimArtist, SlimArtist, SetlistSongWithSlimArtist>($@"
+					",
+                            (s, a) =>
+                            {
+                                s.slim_artist = a;
+                                return s;
+                            },
+                            parms
+                        )
+                        : Array.Empty<ShowWithSlimArtist>(),
+                    Songs = options.Songs
+                        ? await con.QueryAsync<
+                            SetlistSongWithSlimArtist,
+                            SlimArtist,
+                            SetlistSongWithSlimArtist
+                        >(
+                            $@"
 		                SELECT
 			                    s.*,
 			                    a.uuid as artist_uuid,
@@ -85,12 +105,22 @@ namespace Relisten.Data
 		                    a.id, s.id
 		                ORDER BY shows_played_at DESC, s.name
 						LIMIT 20;
-					", (s, a) =>
-                    {
-                        s.slim_artist = a;
-                        return s;
-                    }, parms) : Array.Empty<SetlistSongWithSlimArtist>(),
-                    Sources = options.Sources ? await con.QueryAsync<SourceWithSlimArtist, SlimArtist, SourceWithSlimArtist>($@"
+					",
+                            (s, a) =>
+                            {
+                                s.slim_artist = a;
+                                return s;
+                            },
+                            parms
+                        )
+                        : Array.Empty<SetlistSongWithSlimArtist>(),
+                    Sources = options.Sources
+                        ? await con.QueryAsync<
+                            SourceWithSlimArtist,
+                            SlimArtist,
+                            SourceWithSlimArtist
+                        >(
+                            $@"
 						SELECT
 								s.*,
 								a.uuid as artist_uuid,
@@ -114,12 +144,18 @@ namespace Relisten.Data
 						ORDER BY
 							s.avg_rating_weighted DESC, s.duration DESC, s.display_date DESC
 						LIMIT 20;
-					", (s, a) =>
-                    {
-                        s.slim_artist = a;
-                        return s;
-                    }, parms) : Array.Empty<SourceWithSlimArtist>(),
-                    Tours = options.Tours ? await con.QueryAsync<TourWithSlimArtist, SlimArtist, TourWithSlimArtist>($@"
+					",
+                            (s, a) =>
+                            {
+                                s.slim_artist = a;
+                                return s;
+                            },
+                            parms
+                        )
+                        : Array.Empty<SourceWithSlimArtist>(),
+                    Tours = options.Tours
+                        ? await con.QueryAsync<TourWithSlimArtist, SlimArtist, TourWithSlimArtist>(
+                            $@"
 						SELECT
 								t.*,
 								a.uuid as artist_uuid,
@@ -136,12 +172,22 @@ namespace Relisten.Data
 						ORDER BY
 							COUNT(sh.id) DESC, t.start_date DESC, t.name
 					    LIMIT 20;
-					", (t, a) =>
-                    {
-                        t.slim_artist = a;
-                        return t;
-                    }, parms) : Array.Empty<TourWithSlimArtist>(),
-                    Venues = options.Venues ? await con.QueryAsync<VenueWithSlimArtist, SlimArtist, VenueWithSlimArtist>($@"
+					",
+                            (t, a) =>
+                            {
+                                t.slim_artist = a;
+                                return t;
+                            },
+                            parms
+                        )
+                        : Array.Empty<TourWithSlimArtist>(),
+                    Venues = options.Venues
+                        ? await con.QueryAsync<
+                            VenueWithSlimArtist,
+                            SlimArtist,
+                            VenueWithSlimArtist
+                        >(
+                            $@"
 						SELECT
 								v.*,
 								a.uuid as artist_uuid,
@@ -160,11 +206,15 @@ namespace Relisten.Data
 						ORDER BY
 							COUNT(sh.id) DESC, v.name
 						LIMIT 20;
-					", (v, a) =>
-                    {
-                        v.slim_artist = a;
-                        return v;
-                    }, parms) : Array.Empty<VenueWithSlimArtist>()
+					",
+                            (v, a) =>
+                            {
+                                v.slim_artist = a;
+                                return v;
+                            },
+                            parms
+                        )
+                        : Array.Empty<VenueWithSlimArtist>(),
                 };
             });
         }

@@ -10,8 +10,7 @@ public sealed partial class UsernamePolicy
     public bool TryNormalize(string? value, out string username)
     {
         username = value?.ToLowerInvariant() ?? "";
-        return UsernamePattern().IsMatch(username)
-            && !UsernameDenylist.Contains(username);
+        return UsernamePattern().IsMatch(username) && !UsernameDenylist.Contains(username);
     }
 
     public string? CandidateFromEmail(string? email)

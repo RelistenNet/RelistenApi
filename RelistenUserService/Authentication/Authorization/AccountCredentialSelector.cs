@@ -32,10 +32,13 @@ public static class AccountCredentialSelector
 public sealed class RejectedAccountCredentialAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
-    UrlEncoder encoder)
-    : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    UrlEncoder encoder
+) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     protected override Task<AuthenticateResult> HandleAuthenticateAsync() =>
-        Task.FromResult(AuthenticateResult.Fail(
-            "A request cannot use bearer and web-session credentials together."));
+        Task.FromResult(
+            AuthenticateResult.Fail(
+                "A request cannot use bearer and web-session credentials together."
+            )
+        );
 }

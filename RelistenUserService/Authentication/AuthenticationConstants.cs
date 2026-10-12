@@ -5,8 +5,7 @@ public static class AuthenticationConstants
     public const string AuthSsoScheme = "Relisten.AuthSso";
     public const string WebSessionScheme = "Relisten.WebSession";
     public const string AccountCredentialScheme = "Relisten.AccountCredential";
-    public const string RejectedAccountCredentialScheme =
-        "Relisten.RejectedAccountCredential";
+    public const string RejectedAccountCredentialScheme = "Relisten.RejectedAccountCredential";
     public const string AuthSsoCookie = "__Host-relisten_auth";
     public const string WebSessionCookie = "__Host-relisten_session";
     public const string CsrfCookie = "__Host-relisten_csrf";
@@ -15,8 +14,7 @@ public static class AuthenticationConstants
     public const string WebClientId = "relisten-web";
     public const string CanonicalWebOrigin = "https://relisten.net";
     public const string LocalWebOrigin = "https://web.relisten.localhost:5173";
-    public const string CanonicalWebCallback =
-        "https://relisten.net/auth/session/callback";
+    public const string CanonicalWebCallback = "https://relisten.net/auth/session/callback";
     public const string LocalWebCallback =
         "https://web.relisten.localhost:5173/auth/session/callback";
     public const string CanonicalWebRegistration = "relisten-web-canonical";
@@ -48,11 +46,5 @@ public static class RelistenScopes
     public const string LibraryWrite = "library.write";
     public const string AccountManage = "account.manage";
 
-    public static readonly string[] Native =
-    [
-        UserRead,
-        LibraryRead,
-        LibraryWrite,
-        AccountManage
-    ];
+    public static readonly string[] Native = [UserRead, LibraryRead, LibraryWrite, AccountManage];
 }

@@ -11,7 +11,8 @@ namespace Relisten
     public class DbService
     {
         private const int MaxSerializationRetries = 3;
-        private const string PreparedStatementOptions = ";Max Auto Prepare=100;Auto Prepare Min Usages=5";
+        private const string PreparedStatementOptions =
+            ";Max Auto Prepare=100;Auto Prepare Min Usages=5";
         private readonly ILogger<DbService> _logger;
 
         public DbService(
@@ -19,17 +20,20 @@ namespace Relisten
             string? writeHost,
             string? readOnlyHost,
             IHostEnvironment hostEnvironment,
-            ILogger<DbService> logger)
+            ILogger<DbService> logger
+        )
         {
             _logger = logger;
             var uri = new Uri(url);
             var parts = uri.UserInfo.Split(':');
             var port = uri.Port.ToString(CultureInfo.InvariantCulture);
             var database = uri.AbsolutePath.Substring(1);
-            var usesPooler = !string.IsNullOrWhiteSpace(writeHost) || !string.IsNullOrWhiteSpace(readOnlyHost);
+            var usesPooler =
+                !string.IsNullOrWhiteSpace(writeHost) || !string.IsNullOrWhiteSpace(readOnlyHost);
             writeHost = string.IsNullOrWhiteSpace(writeHost) ? uri.Host : writeHost;
             readOnlyHost = string.IsNullOrWhiteSpace(readOnlyHost) ? writeHost : readOnlyHost;
-            var connectionOptions = PreparedStatementOptions + (usesPooler ? ";No Reset On Close=true" : "");
+            var connectionOptions =
+                PreparedStatementOptions + (usesPooler ? ";No Reset On Close=true" : "");
 
             ConnStr =
                 $"Host={writeHost};Port={port};Username={parts[0]};Password={parts[1]};Database={database};Include Error Detail=true{connectionOptions}";
@@ -45,13 +49,20 @@ namespace Relisten
 
             _logger.LogInformation("Database connection initialized from {DatabaseUrl}", maskedUrl);
             _logger.LogInformation("Primary connection string: {ConnectionString}", maskedConnStr);
-            _logger.LogInformation("Read-only connection string (with fallback): {ReadOnlyConnectionString}", maskedReadOnlyConnStr);
+            _logger.LogInformation(
+                "Read-only connection string (with fallback): {ReadOnlyConnectionString}",
+                maskedReadOnlyConnStr
+            );
 
             if (hostEnvironment.IsDevelopment())
             {
-                var loggerFactory =
-                    LoggerFactory.Create(builder => builder.SetMinimumLevel(LogLevel.Debug).AddConsole());
-                NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory, parameterLoggingEnabled: true);
+                var loggerFactory = LoggerFactory.Create(builder =>
+                    builder.SetMinimumLevel(LogLevel.Debug).AddConsole()
+                );
+                NpgsqlLoggingConfiguration.InitializeLogging(
+                    loggerFactory,
+                    parameterLoggingEnabled: true
+                );
                 _logger.LogDebug("Npgsql parameter logging enabled for development environment");
             }
         }
@@ -71,7 +82,10 @@ namespace Relisten
             return new NpgsqlConnection(ConnStr + connectionSuffix);
         }
 
-        public Task<T> WithWriteConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false)
+        public Task<T> WithWriteConnection<T>(
+            Func<IDbConnection, Task<T>> getData,
+            bool longTimeout = false
+        )
         {
             return WithConnection(getData, longTimeout, readOnly: false);
         }
@@ -81,7 +95,11 @@ namespace Relisten
             return WithConnection(getData, longTimeout, readOnly: false);
         }
 
-        public async Task<T> WithConnection<T>(Func<IDbConnection, Task<T>> getData, bool longTimeout = false, bool readOnly = true)
+        public async Task<T> WithConnection<T>(
+            Func<IDbConnection, Task<T>> getData,
+            bool longTimeout = false,
+            bool readOnly = true
+        )
         {
             if (System.Transactions.Transaction.Current != null)
             {
@@ -106,9 +124,15 @@ namespace Relisten
                 catch (TimeoutException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL timeout",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
-                catch (NpgsqlException ex) when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                catch (NpgsqlException ex)
+                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
                 {
                     // Retry serialization/deadlock conflicts with a small backoff.
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
@@ -116,14 +140,22 @@ namespace Relisten
                 catch (NpgsqlException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                            GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
             }
         }
 
         // use for buffered queries that do not return a type
-        public async Task WithConnection(Func<IDbConnection, Task> getData, bool longTimeout = false, bool readOnly = false)
+        public async Task WithConnection(
+            Func<IDbConnection, Task> getData,
+            bool longTimeout = false,
+            bool readOnly = false
+        )
         {
             var attempts = 0;
 
@@ -143,24 +175,38 @@ namespace Relisten
                 catch (TimeoutException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL timeout",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
-                catch (NpgsqlException ex) when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                catch (NpgsqlException ex)
+                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
                 }
                 catch (NpgsqlException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                            GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
             }
         }
 
         // use for non-buffered queries that return a type
-        public async Task<TResult> WithConnection<TRead, TResult>(Func<IDbConnection, Task<TRead>> getData,
-            Func<TRead, Task<TResult>> process, bool longTimeout = false, bool readOnly = false)
+        public async Task<TResult> WithConnection<TRead, TResult>(
+            Func<IDbConnection, Task<TRead>> getData,
+            Func<TRead, Task<TResult>> process,
+            bool longTimeout = false,
+            bool readOnly = false
+        )
         {
             var attempts = 0;
 
@@ -180,17 +226,27 @@ namespace Relisten
                 catch (TimeoutException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL timeout", GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL timeout",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
-                catch (NpgsqlException ex) when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
+                catch (NpgsqlException ex)
+                    when (IsSerializationConflict(ex) && attempts < MaxSerializationRetries)
                 {
                     await Task.Delay(TimeSpan.FromMilliseconds(100 * attempts * attempts));
                 }
                 catch (NpgsqlException ex)
                 {
                     throw new Exception(
-                        string.Format("{0}.WithConnection() experienced a SQL exception (not a timeout)",
-                            GetType().FullName), ex);
+                        string.Format(
+                            "{0}.WithConnection() experienced a SQL exception (not a timeout)",
+                            GetType().FullName
+                        ),
+                        ex
+                    );
                 }
             }
         }
@@ -199,8 +255,8 @@ namespace Relisten
         {
             if (ex is PostgresException pg)
             {
-                return pg.SqlState == PostgresErrorCodes.SerializationFailure ||
-                       pg.SqlState == PostgresErrorCodes.DeadlockDetected;
+                return pg.SqlState == PostgresErrorCodes.SerializationFailure
+                    || pg.SqlState == PostgresErrorCodes.DeadlockDetected;
             }
 
             return false;

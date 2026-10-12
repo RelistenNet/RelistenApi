@@ -20,7 +20,10 @@ namespace Relisten.Services.Popularity
             return (playDay.Date - anniversary.Date).Days;
         }
 
-        internal static bool ShouldApplyHistoricalAnniversaryPenalty(DateTime showDate, DateTime playDay)
+        internal static bool ShouldApplyHistoricalAnniversaryPenalty(
+            DateTime showDate,
+            DateTime playDay
+        )
         {
             if (playDay.Year <= showDate.Year)
             {
@@ -51,9 +54,16 @@ namespace Relisten.Services.Popularity
             return Math.Clamp(weightedPenalizedPlays7d / plays7d, 0, 1);
         }
 
-        internal static double ComputeOrganicMomentumScore(double rawMomentumScore, double otdPenaltyRatio7d)
+        internal static double ComputeOrganicMomentumScore(
+            double rawMomentumScore,
+            double otdPenaltyRatio7d
+        )
         {
-            return Math.Clamp(rawMomentumScore * (1 - HistoricalPenaltyMaxReduction * otdPenaltyRatio7d), 0, 1);
+            return Math.Clamp(
+                rawMomentumScore * (1 - HistoricalPenaltyMaxReduction * otdPenaltyRatio7d),
+                0,
+                1
+            );
         }
     }
 }

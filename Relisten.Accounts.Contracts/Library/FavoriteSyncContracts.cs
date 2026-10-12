@@ -4,21 +4,24 @@ public sealed record FavoriteLibrarySnapshot(
     int ContractVersion,
     long LibraryRevision,
     string NextCursor,
-    IReadOnlyList<FavoriteSnapshotItem> Favorites);
+    IReadOnlyList<FavoriteSnapshotItem> Favorites
+);
 
 public sealed record FavoriteSnapshotItem(
     Guid FavoriteUuid,
     string CatalogType,
     Guid CatalogUuid,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt
+);
 
 public sealed record FavoriteLibraryChanges(
     int ContractVersion,
     long LibraryRevision,
     IReadOnlyList<FavoriteLibraryChange> Changes,
     string NextCursor,
-    bool HasMore);
+    bool HasMore
+);
 
 public sealed record FavoriteLibraryChange(
     Guid ChangeUuid,
@@ -27,4 +30,5 @@ public sealed record FavoriteLibraryChange(
     Guid FavoriteUuid,
     string CatalogType,
     Guid CatalogUuid,
-    DateTimeOffset ChangedAt);
+    DateTimeOffset ChangedAt
+);

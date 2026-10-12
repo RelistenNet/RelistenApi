@@ -17,8 +17,11 @@ public sealed class ArchiveOrgSearchClient
         this.httpClient = httpClient;
     }
 
-    public async Task<IList<SearchDoc>> FetchAllAsync(string? collection, int? year,
-        Action<string>? log = null)
+    public async Task<IList<SearchDoc>> FetchAllAsync(
+        string? collection,
+        int? year,
+        Action<string>? log = null
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(collection);
         var query = $"collection:{collection}";
@@ -32,7 +35,8 @@ public sealed class ArchiveOrgSearchClient
         if (result.docs.Count != result.numFound)
         {
             throw new InvalidDataException(
-                $"Archive.org search was incomplete: fetched {result.docs.Count} of {result.numFound} results.");
+                $"Archive.org search was incomplete: fetched {result.docs.Count} of {result.numFound} results."
+            );
         }
 
         return result.docs;
@@ -42,10 +46,11 @@ public sealed class ArchiveOrgSearchClient
     {
         // Let Archive choose the retrieval path from the hit count; a large numeric rows
         // value forces scrolling even for small collections. Omit page/sort to avoid deep paging.
-        var url = $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString(query)}" +
-                  "&fl[]=date&fl[]=identifier&fl[]=year&fl[]=addeddate&fl[]=reviewdate" +
-                  "&fl[]=indexdate&fl[]=publicdate&fl[]=updatedate" +
-                  "&rows=*&output=json";
+        var url =
+            $"https://archive.org/advancedsearch.php?q={Uri.EscapeDataString(query)}"
+            + "&fl[]=date&fl[]=identifier&fl[]=year&fl[]=addeddate&fl[]=reviewdate"
+            + "&fl[]=indexdate&fl[]=publicdate&fl[]=updatedate"
+            + "&rows=*&output=json";
         log?.Invoke($"All shows URL: {url}");
 
         using var response = await httpClient.GetAsync(url);
@@ -53,7 +58,8 @@ public sealed class ArchiveOrgSearchClient
         var json = await response.Content.ReadAsStringAsync();
         var root = JsonConvert.DeserializeObject<SearchRootObject>(
             json.Replace("\"0000-01-01T00:00:00Z\"", "null"),
-            new TolerantArchiveDateTimeConverter());
+            new TolerantArchiveDateTimeConverter()
+        );
 
         if (!string.IsNullOrEmpty(root?.error))
         {
@@ -66,11 +72,18 @@ public sealed class ArchiveOrgSearchClient
         }
 
         var result = root.response;
-        if (result.start != 0 || result.numFound < 0 || result.docs.Count > result.numFound ||
-            result.docs.Any(doc => string.IsNullOrWhiteSpace(doc?.identifier)) ||
-            result.docs.Select(doc => doc.identifier).Distinct(StringComparer.Ordinal).Count() != result.docs.Count)
+        if (
+            result.start != 0
+            || result.numFound < 0
+            || result.docs.Count > result.numFound
+            || result.docs.Any(doc => string.IsNullOrWhiteSpace(doc?.identifier))
+            || result.docs.Select(doc => doc.identifier).Distinct(StringComparer.Ordinal).Count()
+                != result.docs.Count
+        )
         {
-            throw new InvalidDataException("Archive.org search returned invalid counts or identifiers.");
+            throw new InvalidDataException(
+                "Archive.org search returned invalid counts or identifiers."
+            );
         }
 
         log?.Invoke($"Fetched {result.docs.Count} of {result.numFound} archive.org results");

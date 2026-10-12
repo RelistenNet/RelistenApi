@@ -8,7 +8,8 @@ namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
-        public TourService(DbService db, ShowService showService) : base(db)
+        public TourService(DbService db, ShowService showService)
+            : base(db)
         {
             _showService = showService;
         }
@@ -17,7 +18,9 @@ namespace Relisten.Data
 
         public async Task<Tour?> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Tour>(@"
+            return await db.WithConnection(con =>
+                con.QueryFirstOrDefaultAsync<Tour>(
+                    @"
                 SELECT
                     *
                 FROM
@@ -25,24 +28,39 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND upstream_identifier = @upstreamId
-            ", new {artistId = artist.id, upstreamId}));
+            ",
+                    new { artistId = artist.id, upstreamId }
+                )
+            );
         }
 
         public async Task<IEnumerable<Tour>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<Tour>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<Tour>(
+                    @"
                 SELECT
                     *
                 FROM
                     tours
                 WHERE
                     artist_id = @id
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
-        public async Task<TourWithShows?> ForIdWithShows(Artist artist, int? id, Guid? uuid = null, string? slug = null)
+        public async Task<TourWithShows?> ForIdWithShows(
+            Artist artist,
+            int? id,
+            Guid? uuid = null,
+            string? slug = null
+        )
         {
-            var tour = await db.WithConnection(con => con.QuerySingleOrDefaultAsync<TourWithShows>(@"
+            var tour = await db.WithConnection(con =>
+                con.QuerySingleOrDefaultAsync<TourWithShows>(
+                    @"
                 SELECT
                     *
                 FROM
@@ -50,16 +68,31 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND (id = @id OR uuid = @uuid OR slug = @slug)
-            ", new {id, uuid, slug, artistId = artist.id}));
+            ",
+                    new
+                    {
+                        id,
+                        uuid,
+                        slug,
+                        artistId = artist.id,
+                    }
+                )
+            );
 
             if (tour == null)
             {
                 return null;
             }
 
-            tour.shows = await _showService.ShowsForCriteria(artist,
+            tour.shows = await _showService.ShowsForCriteria(
+                artist,
                 "s.artist_id = @artistId AND (s.tour_id = @tourId OR t.uuid = @tourUuid)",
-                new {artistId = artist.id, tourId = tour.id, tourUuid = tour.uuid}
+                new
+                {
+                    artistId = artist.id,
+                    tourId = tour.id,
+                    tourUuid = tour.uuid,
+                }
             );
 
             return tour;
@@ -67,7 +100,9 @@ namespace Relisten.Data
 
         public async Task<IEnumerable<TourWithShowCount>> AllForArtistWithShowCount(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<TourWithShowCount>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<TourWithShowCount>(
+                    @"
                     SELECT
                         t.*
                         , a.uuid as artist_uuid
@@ -81,7 +116,10 @@ namespace Relisten.Data
                     WHERE
                         t.artist_id = @id
                     ORDER BY t.start_date
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<Tour> Save(Tour tour)
@@ -95,12 +133,14 @@ namespace Relisten.Data
                 tour.name,
                 tour.slug,
                 tour.upstream_identifier,
-                tour.updated_at
+                tour.updated_at,
             };
 
             if (tour.id != 0)
             {
-                return await db.WithWriteConnection(con => con.QuerySingleAsync<Tour>(@"
+                return await db.WithWriteConnection(con =>
+                    con.QuerySingleAsync<Tour>(
+                        @"
                     UPDATE
                         tours
                     SET
@@ -115,10 +155,15 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", p));
+                ",
+                        p
+                    )
+                );
             }
 
-            return await db.WithWriteConnection(con => con.QuerySingleAsync<Tour>(@"
+            return await db.WithWriteConnection(con =>
+                con.QuerySingleAsync<Tour>(
+                    @"
                     INSERT INTO
                         tours
 
@@ -144,7 +189,10 @@ namespace Relisten.Data
                             md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                         )
                     RETURNING *
-                ", p));
+                ",
+                    p
+                )
+            );
         }
     }
 }

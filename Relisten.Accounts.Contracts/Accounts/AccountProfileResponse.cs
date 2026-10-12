@@ -10,5 +10,5 @@ public sealed record AccountProfileResponse(
     bool UsernameReviewNeeded,
     DateTimeOffset? UsernameReviewedAt,
     DateTimeOffset? UsernameChangeAvailableAt,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    Guid? NativeSessionUuid);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? NativeSessionUuid
+);

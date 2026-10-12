@@ -12,9 +12,7 @@ namespace Relisten.Vendor.Phishin
         public T data { get; set; } = default!;
     }
 
-    public class PhishinEraResponse : PhishinRootObject<IDictionary<string, IList<string>>>
-    {
-    }
+    public class PhishinEraResponse : PhishinRootObject<IDictionary<string, IList<string>>> { }
 
     public class PhishinSmallTour
     {

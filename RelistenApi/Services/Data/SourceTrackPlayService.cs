@@ -8,13 +8,14 @@ namespace Relisten.Data
 {
     public class SourceTrackPlaysService : RelistenDataServiceBase
     {
-        public SourceTrackPlaysService(DbService db) : base(db)
-        {
-        }
+        public SourceTrackPlaysService(DbService db)
+            : base(db) { }
 
         public async Task<SourceTrackPlay> RecordPlayedTrack(SourceTrackPlay track)
         {
-            return await db.WithWriteConnection(con => con.QuerySingleAsync<SourceTrackPlay>(@"
+            return await db.WithWriteConnection(con =>
+                con.QuerySingleAsync<SourceTrackPlay>(
+                    @"
 				INSERT INTO
 					source_track_plays
 
@@ -31,12 +32,20 @@ namespace Relisten.Data
 					)
 
 				RETURNING *
-			", track));
+			",
+                    track
+                )
+            );
         }
 
-        public async Task<IEnumerable<SourceTrackPlay>> PlayedTracksSince(int? lastSeenId = null, int limit = 2000)
+        public async Task<IEnumerable<SourceTrackPlay>> PlayedTracksSince(
+            int? lastSeenId = null,
+            int limit = 2000
+        )
         {
-            var tracks = await db.WithConnection(con => con.QueryAsync<SourceTrackPlay>($@"
+            var tracks = await db.WithConnection(con =>
+                con.QueryAsync<SourceTrackPlay>(
+                    $@"
 				SELECT
 					t.*
 				FROM
@@ -48,7 +57,10 @@ namespace Relisten.Data
 					t.created_at {(lastSeenId != null ? "" : "DESC")}, t.id {(lastSeenId != null ? "" : "DESC")}
 				LIMIT
 					@limit
-			", new {lastSeenId, limit}));
+			",
+                    new { lastSeenId, limit }
+                )
+            );
 
             return tracks.OrderBy(t => t.id);
         }

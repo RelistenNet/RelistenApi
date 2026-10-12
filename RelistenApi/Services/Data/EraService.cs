@@ -7,7 +7,8 @@ namespace Relisten.Data
 {
     public class EraService : RelistenDataServiceBase
     {
-        public EraService(DbService db, ShowService showService) : base(db)
+        public EraService(DbService db, ShowService showService)
+            : base(db)
         {
             _showService = showService;
         }
@@ -16,7 +17,9 @@ namespace Relisten.Data
 
         public async Task<Era?> ForName(Artist artist, string name)
         {
-            return await db.WithConnection(con => con.QueryFirstOrDefaultAsync<Era>(@"
+            return await db.WithConnection(con =>
+                con.QueryFirstOrDefaultAsync<Era>(
+                    @"
                 SELECT
                     *
                 FROM
@@ -24,12 +27,17 @@ namespace Relisten.Data
                 WHERE
                     artist_id = @artistId
                     AND name = @name
-            ", new {artistId = artist.id, name}));
+            ",
+                    new { artistId = artist.id, name }
+                )
+            );
         }
 
         public async Task<IEnumerable<Era>> AllForArtist(Artist artist)
         {
-            return await db.WithConnection(con => con.QueryAsync<Era>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<Era>(
+                    @"
                 SELECT
                     *
                 FROM
@@ -38,7 +46,10 @@ namespace Relisten.Data
                     artist_id = @id
                 ORDER BY
                     ""order"" ASC
-            ", new {artist.id}));
+            ",
+                    new { artist.id }
+                )
+            );
         }
 
         public async Task<Era> Save(Era era)
@@ -49,12 +60,14 @@ namespace Relisten.Data
                 era.artist_id,
                 era.name,
                 era.order,
-                era.updated_at
+                era.updated_at,
             };
 
             if (era.id != 0)
             {
-                return await db.WithWriteConnection(con => con.QuerySingleAsync<Era>(@"
+                return await db.WithWriteConnection(con =>
+                    con.QuerySingleAsync<Era>(
+                        @"
                     UPDATE
                         eras
                     SET
@@ -65,10 +78,15 @@ namespace Relisten.Data
                     WHERE
                         id = @id
                     RETURNING *
-                ", p));
+                ",
+                        p
+                    )
+                );
             }
 
-            return await db.WithWriteConnection(con => con.QuerySingleAsync<Era>(@"
+            return await db.WithWriteConnection(con =>
+                con.QuerySingleAsync<Era>(
+                    @"
                     INSERT INTO
                         eras
 
@@ -86,7 +104,10 @@ namespace Relisten.Data
                             @updated_at
                         )
                     RETURNING *
-                ", p));
+                ",
+                    p
+                )
+            );
         }
     }
 }

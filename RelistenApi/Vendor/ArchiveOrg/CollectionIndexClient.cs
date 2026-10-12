@@ -9,7 +9,10 @@ namespace Relisten.Vendor.ArchiveOrg;
 
 public interface IArchiveOrgCollectionIndexClient
 {
-    Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(
+        int count,
+        CancellationToken cancellationToken
+    );
 }
 
 public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient, IDisposable
@@ -19,13 +22,17 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
     public ArchiveOrgCollectionIndexClient()
     {
         httpClient = new HttpClient();
-        httpClient.DefaultRequestHeaders.Add("User-Agent",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1");
+        httpClient.DefaultRequestHeaders.Add(
+            "User-Agent",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 11_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/11.0 Mobile/15E148 Safari/604.1"
+        );
         httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
     }
 
-    public async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(int count,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ArchiveOrgCollectionIndexItem>> FetchCollectionsAsync(
+        int count,
+        CancellationToken cancellationToken
+    )
     {
         var safeCount = Math.Max(100, count);
         var items = new List<ArchiveOrgCollectionIndexItem>();
@@ -76,7 +83,8 @@ public class ArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient,
                 if (parsed.total > items.Count)
                 {
                     throw new InvalidOperationException(
-                        $"archive.org scraping cursor did not advance for query; fetched {items.Count} of {parsed.total} items.");
+                        $"archive.org scraping cursor did not advance for query; fetched {items.Count} of {parsed.total} items."
+                    );
                 }
 
                 break;

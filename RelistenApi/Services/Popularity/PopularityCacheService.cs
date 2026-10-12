@@ -54,14 +54,15 @@ namespace Relisten.Services.Popularity
                 return new PopularityCacheResult<T> { HasValue = false };
             }
 
-            var isStale = DateTime.UtcNow - entry.generated_at >
-                          TimeSpan.FromSeconds(entry.stale_after_seconds);
+            var isStale =
+                DateTime.UtcNow - entry.generated_at
+                > TimeSpan.FromSeconds(entry.stale_after_seconds);
 
             return new PopularityCacheResult<T>
             {
                 HasValue = true,
                 IsStale = isStale,
-                Entry = entry
+                Entry = entry,
             };
         }
 
@@ -85,14 +86,15 @@ namespace Relisten.Services.Popularity
                 return new PopularityCacheHeaderResult { HasValue = false };
             }
 
-            var isStale = DateTime.UtcNow - header.generated_at >
-                          TimeSpan.FromSeconds(header.stale_after_seconds);
+            var isStale =
+                DateTime.UtcNow - header.generated_at
+                > TimeSpan.FromSeconds(header.stale_after_seconds);
 
             return new PopularityCacheHeaderResult
             {
                 HasValue = true,
                 IsStale = isStale,
-                Header = header
+                Header = header,
             };
         }
     }

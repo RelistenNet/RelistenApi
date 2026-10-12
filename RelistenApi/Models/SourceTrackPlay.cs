@@ -11,7 +11,7 @@ namespace Relisten.Api.Models
         iOS,
         Web,
         Sonos,
-        Android
+        Android,
     }
 
     public static class SourceTrackPlayAppTypeHelper

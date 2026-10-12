@@ -8,7 +8,8 @@ public sealed class PrivateNoStoreMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext context)
     {
         var path = context.Request.Path;
-        var requiresPrivateNoStore = path.StartsWithSegments("/v1")
+        var requiresPrivateNoStore =
+            path.StartsWithSegments("/v1")
             || BrowserRouteBoundary.IsSessionLifecyclePath(path)
             || BrowserRouteBoundary.IsCsrfPath(path)
             || path.StartsWithSegments("/auth/sso");

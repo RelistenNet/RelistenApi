@@ -10,11 +10,12 @@ namespace Relisten.Data
 {
     public sealed class CatalogReferenceResolver : RelistenDataServiceBase
     {
-        public CatalogReferenceResolver(DbService db) : base(db)
-        {
-        }
+        public CatalogReferenceResolver(DbService db)
+            : base(db) { }
 
-        public async Task<CatalogResolveResponse> Resolve(IReadOnlyList<CatalogReference> references)
+        public async Task<CatalogResolveResponse> Resolve(
+            IReadOnlyList<CatalogReference> references
+        )
         {
             if (references.Count == 0)
             {
@@ -29,11 +30,13 @@ namespace Relisten.Data
             {
                 using var results = await connection.QueryMultipleAsync(
                     queryPlan.Sql,
-                    new {catalog_types = catalogTypes, catalog_uuids = catalogUuids});
+                    new { catalog_types = catalogTypes, catalog_uuids = catalogUuids }
+                );
 
                 var artists = (await results.ReadAsync<ArtistWithCounts>()).ToArray();
-                var features = (await results.ReadAsync<Features>())
-                    .ToDictionary(feature => feature.artist_id);
+                var features = (await results.ReadAsync<Features>()).ToDictionary(feature =>
+                    feature.artist_id
+                );
                 foreach (var artist in artists)
                 {
                     artist.features = features[artist.id];
@@ -41,9 +44,15 @@ namespace Relisten.Data
                 }
 
                 var shows = await ReadIfIncluded<Show>(
-                    results, queryPlan, CatalogReferenceResultSets.Shows);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Shows
+                );
                 var sources = await ReadIfIncluded<SourceFull>(
-                    results, queryPlan, CatalogReferenceResultSets.Sources);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Sources
+                );
                 foreach (var source in sources)
                 {
                     source.sets = [];
@@ -51,17 +60,35 @@ namespace Relisten.Data
                 }
 
                 var sourceTracks = await ReadIfIncluded<SourceTrack>(
-                    results, queryPlan, CatalogReferenceResultSets.SourceTracks);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.SourceTracks
+                );
                 var songs = await ReadIfIncluded<SetlistSongWithPlayCount>(
-                    results, queryPlan, CatalogReferenceResultSets.Songs);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Songs
+                );
                 var tours = await ReadIfIncluded<TourWithShowCount>(
-                    results, queryPlan, CatalogReferenceResultSets.Tours);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Tours
+                );
                 var venues = await ReadIfIncluded<VenueWithShowCount>(
-                    results, queryPlan, CatalogReferenceResultSets.Venues);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Venues
+                );
                 var years = await ReadIfIncluded<Year>(
-                    results, queryPlan, CatalogReferenceResultSets.Years);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.Years
+                );
                 var sourceSets = await ReadIfIncluded<SourceSet>(
-                    results, queryPlan, CatalogReferenceResultSets.SourceSets);
+                    results,
+                    queryPlan,
+                    CatalogReferenceResultSets.SourceSets
+                );
                 foreach (var sourceSet in sourceSets)
                 {
                     sourceSet.tracks = [];
@@ -77,7 +104,7 @@ namespace Relisten.Data
                     tours = tours,
                     venues = venues,
                     years = years,
-                    source_sets = sourceSets
+                    source_sets = sourceSets,
                 };
 
                 return new CatalogResolveResponse
@@ -85,14 +112,15 @@ namespace Relisten.Data
                     contract_version = CatalogResolveRequestValidator.ContractVersion,
                     checked_at = DateTime.UtcNow,
                     references = BuildResolvedReferences(references, entities),
-                    entities = entities
+                    entities = entities,
                 };
             });
         }
 
         internal static IReadOnlyList<ResolvedCatalogReference> BuildResolvedReferences(
             IReadOnlyList<CatalogReference> references,
-            CatalogResolveEntities entities)
+            CatalogResolveEntities entities
+        )
         {
             var resolvedUuids = new Dictionary<string, HashSet<Guid>>(StringComparer.Ordinal)
             {
@@ -102,17 +130,20 @@ namespace Relisten.Data
                 ["source_track"] = EntityUuids(entities.source_tracks),
                 ["song"] = EntityUuids(entities.songs),
                 ["tour"] = EntityUuids(entities.tours),
-                ["venue"] = EntityUuids(entities.venues)
+                ["venue"] = EntityUuids(entities.venues),
             };
 
-            return references.Select(reference => new ResolvedCatalogReference
-            {
-                catalog_type = reference.CatalogType,
-                catalog_uuid = reference.CatalogUuid,
-                availability = resolvedUuids[reference.CatalogType].Contains(reference.CatalogUuid)
-                    ? "available"
-                    : "unavailable"
-            }).ToArray();
+            return references
+                .Select(reference => new ResolvedCatalogReference
+                {
+                    catalog_type = reference.CatalogType,
+                    catalog_uuid = reference.CatalogUuid,
+                    availability = resolvedUuids[reference.CatalogType]
+                        .Contains(reference.CatalogUuid)
+                        ? "available"
+                        : "unavailable",
+                })
+                .ToArray();
         }
 
         private static HashSet<Guid> EntityUuids<T>(IEnumerable<T> entities)
@@ -122,7 +153,8 @@ namespace Relisten.Data
         private static async Task<T[]> ReadIfIncluded<T>(
             SqlMapper.GridReader results,
             CatalogReferenceQueryPlan queryPlan,
-            CatalogReferenceResultSets resultSet)
+            CatalogReferenceResultSets resultSet
+        )
         {
             if (!queryPlan.Includes(resultSet))
             {
@@ -137,7 +169,7 @@ namespace Relisten.Data
             return new CatalogResolveResponse
             {
                 contract_version = CatalogResolveRequestValidator.ContractVersion,
-                checked_at = DateTime.UtcNow
+                checked_at = DateTime.UtcNow,
             };
         }
     }

@@ -22,7 +22,8 @@ namespace Relisten.Controllers
             SourceService sourceService,
             SourceTrackService sourceTrackService,
             SourceTrackPlaysService sourceTrackPlaysService
-        ) : base(redis, db, artistService)
+        )
+            : base(redis, db, artistService)
         {
             _sourceService = sourceService;
             _redisService = redis;
@@ -37,7 +38,6 @@ namespace Relisten.Controllers
         protected RedisService _redisService { get; }
         protected SourceService _sourceService { get; }
 
-
         [HttpPost("live/play")]
         [ProducesResponseType(typeof(ResponseEnvelope<SourceTrackPlay>), 200)]
         [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
@@ -49,7 +49,12 @@ namespace Relisten.Controllers
             [FromQuery] string? user_uuid = null
         )
         {
-            if (app_type != "ios" && app_type != "web" && app_type != "sonos" && app_type != "android")
+            if (
+                app_type != "ios"
+                && app_type != "web"
+                && app_type != "sonos"
+                && app_type != "android"
+            )
             {
                 return BadRequest();
             }
@@ -85,7 +90,7 @@ namespace Relisten.Controllers
             {
                 source_track_uuid = track.uuid,
                 app_type = SourceTrackPlayAppTypeHelper.FromString(app_type),
-                user_uuid = user_uuid != null ? Guid.Parse(user_uuid) : null
+                user_uuid = user_uuid != null ? Guid.Parse(user_uuid) : null,
             };
 
             return JsonSuccess(await _sourceTrackPlaysService.RecordPlayedTrack(stp));
@@ -98,32 +103,39 @@ namespace Relisten.Controllers
             limit = Math.Min(limit, 2000);
             var tracksPlays = await _sourceTrackPlaysService.PlayedTracksSince(lastSeenId, limit);
 
-            var tracks = await _sourceTrackService.ForUUIDs(tracksPlays.Select(t => t.source_track_uuid).ToList());
+            var tracks = await _sourceTrackService.ForUUIDs(
+                tracksPlays.Select(t => t.source_track_uuid).ToList()
+            );
 
-            var sourceIds = tracks
-                .Select(t => t.source_id)
-                .GroupBy(t => t)
-                .Select(g => g.First());
+            var sourceIds = tracks.Select(t => t.source_id).GroupBy(t => t).Select(g => g.First());
 
-            var trackLookup = tracks
-                    .ToDictionary(t => t.uuid, t => t)
-                ;
+            var trackLookup = tracks.ToDictionary(t => t.uuid, t => t);
 
-            var sources = (await _sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList()))
+            var sources = (
+                await _sourceService.SlimSourceWithShowAndArtistForIds(sourceIds.ToList())
+            )
                 .GroupBy(s => s.id)
                 .ToDictionary(g => g.Key, g => g.First());
 
-            return JsonSuccess(tracksPlays
-                .Where(t => trackLookup.ContainsKey(t.source_track_uuid) &&
-                            sources.ContainsKey(trackLookup[t.source_track_uuid].source_id))
-                .Select(trackPlay =>
-                {
-                    var track = trackLookup[trackPlay.source_track_uuid];
+            return JsonSuccess(
+                tracksPlays
+                    .Where(t =>
+                        trackLookup.ContainsKey(t.source_track_uuid)
+                        && sources.ContainsKey(trackLookup[t.source_track_uuid].source_id)
+                    )
+                    .Select(trackPlay =>
+                    {
+                        var track = trackLookup[trackPlay.source_track_uuid];
 
-                    trackPlay.track = new PlayedSourceTrack {source = sources[track.source_id], track = track};
+                        trackPlay.track = new PlayedSourceTrack
+                        {
+                            source = sources[track.source_id],
+                            track = track,
+                        };
 
-                    return trackPlay;
-                }));
+                        return trackPlay;
+                    })
+            );
         }
     }
 }

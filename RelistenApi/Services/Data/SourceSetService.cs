@@ -10,26 +10,36 @@ namespace Relisten.Data
     public enum SourceSetUuidVersion
     {
         V1,
-        V2
+        V2,
     }
 
     public class SourceSetService : RelistenDataServiceBase
     {
-        public SourceSetService(DbService db) : base(db) { }
+        public SourceSetService(DbService db)
+            : base(db) { }
 
         public async Task<IEnumerable<SourceSet>> AllForSources(IEnumerable<int> source_ids)
         {
-            return await db.WithConnection(con => con.QueryAsync<SourceSet>(@"
+            return await db.WithConnection(con =>
+                con.QueryAsync<SourceSet>(
+                    @"
                 SELECT
                     r.*
                 FROM
                     source_sets r
                 WHERE
                     source_id = ANY(@source_ids)
-            ", new {source_ids}));
+            ",
+                    new { source_ids }
+                )
+            );
         }
 
-        public async Task<SourceSet?> Update(Source source, SourceSet set, SourceSetUuidVersion uuidVersion)
+        public async Task<SourceSet?> Update(
+            Source source,
+            SourceSet set,
+            SourceSetUuidVersion uuidVersion
+        )
         {
             var l = new List<SourceSet>();
             l.Add(set);
@@ -37,8 +47,11 @@ namespace Relisten.Data
             return (await UpdateAll(source, l, uuidVersion)).FirstOrDefault();
         }
 
-        public async Task<IEnumerable<SourceSet>> UpdateAll(Source source, IEnumerable<SourceSet> sets,
-            SourceSetUuidVersion uuidVersion)
+        public async Task<IEnumerable<SourceSet>> UpdateAll(
+            Source source,
+            IEnumerable<SourceSet> sets,
+            SourceSetUuidVersion uuidVersion
+        )
         {
             return await db.WithWriteConnection(async con =>
             {
@@ -56,10 +69,12 @@ namespace Relisten.Data
                         set.name,
                         set.updated_at,
                         sourceUuid = source.uuid,
-                        sourceSetUuidNamespace
+                        sourceSetUuidNamespace,
                     };
 
-                    inserted.Add(await con.QuerySingleAsync<SourceSet>(@"
+                    inserted.Add(
+                        await con.QuerySingleAsync<SourceSet>(
+                            @"
                         INSERT INTO
                             source_sets
 
@@ -88,16 +103,22 @@ namespace Relisten.Data
                                 updated_at = EXCLUDED.updated_at
 
                         RETURNING *
-                    ", p));
+                    ",
+                            p
+                        )
+                    );
                 }
 
-                await con.ExecuteAsync(@"
+                await con.ExecuteAsync(
+                    @"
                     DELETE FROM
                         source_sets
                     WHERE
                         source_id = @sourceId
                         AND NOT(index = ANY(@indicies))
-                ", new {sourceId = source.id, indicies = sets.Select(s => s.index).ToList()});
+                ",
+                    new { sourceId = source.id, indicies = sets.Select(s => s.index).ToList() }
+                );
 
                 return inserted;
             });
@@ -109,7 +130,7 @@ namespace Relisten.Data
             {
                 SourceSetUuidVersion.V1 => "::source_set::",
                 SourceSetUuidVersion.V2 => "::source_set:v2::",
-                _ => throw new ArgumentOutOfRangeException(nameof(uuidVersion), uuidVersion, null)
+                _ => throw new ArgumentOutOfRangeException(nameof(uuidVersion), uuidVersion, null),
             };
         }
     }

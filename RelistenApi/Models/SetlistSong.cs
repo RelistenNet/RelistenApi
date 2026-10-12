@@ -7,11 +7,21 @@ namespace Relisten.Api.Models
 {
     public class SetlistSong : BaseRelistenModel, IHasPersistentIdentifier
     {
-        [V2JsonOnly] [Required] public int artist_id { get; set; }
-        [Required] public Guid artist_uuid { get; set; }
-        [Required] public string name { get; set; } = null!;
-        [Required] public string slug { get; set; } = null!;
-        [Required] public string upstream_identifier { get; set; } = null!;
+        [V2JsonOnly]
+        [Required]
+        public int artist_id { get; set; }
+
+        [Required]
+        public Guid artist_uuid { get; set; }
+
+        [Required]
+        public string name { get; set; } = null!;
+
+        [Required]
+        public string slug { get; set; } = null!;
+
+        [Required]
+        public string upstream_identifier { get; set; } = null!;
 
         [Required]
         public string sortName
@@ -27,23 +37,28 @@ namespace Relisten.Api.Models
             }
         }
 
-        [Required] public Guid uuid { get; set; }
+        [Required]
+        public Guid uuid { get; set; }
     }
 
     public class SetlistSongWithPlayCount : SetlistSong
     {
-        [Required] public int shows_played_at { get; set; }
+        [Required]
+        public int shows_played_at { get; set; }
     }
 
     public class SetlistSongWithShows : SetlistSong
     {
-        [Required] public IList<Show> shows { get; set; } = null!;
+        [Required]
+        public IList<Show> shows { get; set; } = null!;
     }
 
     public class SetlistShowSongJoin
     {
-        [Required] public int played_setlist_song_id { get; set; }
+        [Required]
+        public int played_setlist_song_id { get; set; }
 
-        [Required] public int played_setlist_show_id { get; set; }
+        [Required]
+        public int played_setlist_show_id { get; set; }
     }
 }

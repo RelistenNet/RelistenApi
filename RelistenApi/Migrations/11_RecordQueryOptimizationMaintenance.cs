@@ -16,6 +16,7 @@ public sealed class RecordQueryOptimizationMaintenance : Migration
     protected override void Down()
     {
         throw new NotSupportedException(
-            "Query optimization maintenance must be rolled back with the reviewed manual SQL procedure.");
+            "Query optimization maintenance must be rolled back with the reviewed manual SQL procedure."
+        );
     }
 }

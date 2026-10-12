@@ -13,7 +13,8 @@ public static class ArchiveOrgImporterUtils
     // thanks to this trouble child: https://archive.org/metadata/lotus2011-16-07.lotus2011-16-07_Neumann
     public static string? FixDisplayDate(Metadata? meta)
     {
-        if (meta == null) return null;
+        if (meta == null)
+            return null;
         return FixDisplayDate(meta.date, meta.identifier);
     }
 
@@ -27,7 +28,14 @@ public static class ArchiveOrgImporterUtils
         // Try parsing as a valid DateTime first (handles ISO 8601 like "2011-03-30T00:00:00Z")
         // If successful, it's a valid date - just format it as yyyy-MM-dd
         // Use RoundtripKind to preserve the original date without timezone conversion
-        if (DateTime.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed))
+        if (
+            DateTime.TryParse(
+                date,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.RoundtripKind,
+                out var parsed
+            )
+        )
         {
             return parsed.ToString("yyyy-MM-dd");
         }
@@ -61,14 +69,23 @@ public static class ArchiveOrgImporterUtils
             }
 
             // Try flipping if month looks like a day (> 12 but ≤ 31)
-            if (int.TryParse(month, out var monthNum) && monthNum > 12 && monthNum <= 31 &&
-                int.TryParse(day, out var dayNum) && dayNum <= 12)
+            if (
+                int.TryParse(month, out var monthNum)
+                && monthNum > 12
+                && monthNum <= 31
+                && int.TryParse(day, out var dayNum)
+                && dayNum <= 12
+            )
             {
                 var flipped = $"{year}-{day}-{month}";
                 if (TestDate(flipped))
                 {
-                    Log.Warning("[FLIP_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
-                        identifier, date, flipped);
+                    Log.Warning(
+                        "[FLIP_DATE] {Identifier}: Flipped '{Original}' → '{Result}'",
+                        identifier,
+                        date,
+                        flipped
+                    );
                     return flipped;
                 }
             }
@@ -76,16 +93,24 @@ public static class ArchiveOrgImporterUtils
             // If month still invalid (> 12), convert to XX
             if (int.TryParse(month, out var monthVal) && monthVal > 12)
             {
-                Log.Warning("[INVALID_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
-                    identifier, month, date);
+                Log.Warning(
+                    "[INVALID_DATE] {Identifier}: Invalid month '{Month}' in '{Date}', converting to XX",
+                    identifier,
+                    month,
+                    date
+                );
                 month = "XX";
             }
 
             // If day invalid (> 31), convert to XX
             if (int.TryParse(day, out var dayVal) && dayVal > 31)
             {
-                Log.Warning("[INVALID_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
-                    identifier, day, date);
+                Log.Warning(
+                    "[INVALID_DATE] {Identifier}: Invalid day '{Day}' in '{Date}', converting to XX",
+                    identifier,
+                    day,
+                    date
+                );
                 day = "XX";
             }
 
@@ -93,8 +118,12 @@ public static class ArchiveOrgImporterUtils
             var result = $"{year}-{month}-{day}";
             if (result != date)
             {
-                Log.Warning("[REMAP_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
-                    identifier, date, result);
+                Log.Warning(
+                    "[REMAP_DATE] {Identifier}: Remapped '{Original}' → '{Result}'",
+                    identifier,
+                    date,
+                    result
+                );
                 return result;
             }
         }
@@ -115,8 +144,12 @@ public static class ArchiveOrgImporterUtils
 
         if (d != null)
         {
-            Log.Warning("[WEIRD_DATE] {Identifier}: Flipped month/day '{Original}' → '{Result}'",
-                identifier, date, d);
+            Log.Warning(
+                "[WEIRD_DATE] {Identifier}: Flipped month/day '{Original}' → '{Result}'",
+                identifier,
+                date,
+                d
+            );
             return d;
         }
 
@@ -131,8 +164,12 @@ public static class ArchiveOrgImporterUtils
 
                 if (TestDate(tdate))
                 {
-                    Log.Warning("[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
-                        identifier, date, tdate);
+                    Log.Warning(
+                        "[WEIRD_DATE] {Identifier}: Extracted date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                        identifier,
+                        date,
+                        tdate
+                    );
                     return tdate;
                 }
 
@@ -140,22 +177,34 @@ public static class ArchiveOrgImporterUtils
 
                 if (flipped != null)
                 {
-                    Log.Warning("[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
-                        identifier, date, flipped);
+                    Log.Warning(
+                        "[WEIRD_DATE] {Identifier}: Extracted and flipped date from identifier, metadata date '{MetadataDate}' was invalid, using '{Result}'",
+                        identifier,
+                        date,
+                        flipped
+                    );
                     return flipped;
                 }
             }
         }
 
-        Log.Error("[WEIRD_DATE] {Identifier}: Unrecoverable date '{Date}' - all parsing strategies failed",
-            identifier, date);
+        Log.Error(
+            "[WEIRD_DATE] {Identifier}: Unrecoverable date '{Date}' - all parsing strategies failed",
+            identifier,
+            date
+        );
         return null;
     }
 
     private static bool TestDate(string date)
     {
-        return DateTime.TryParseExact(date, "yyyy-MM-dd",
-            DateTimeFormatInfo.InvariantInfo, DateTimeStyles.AssumeUniversal, out _);
+        return DateTime.TryParseExact(
+            date,
+            "yyyy-MM-dd",
+            DateTimeFormatInfo.InvariantInfo,
+            DateTimeStyles.AssumeUniversal,
+            out _
+        );
     }
 
     private static string? TryFlippingMonthAndDate(string date)

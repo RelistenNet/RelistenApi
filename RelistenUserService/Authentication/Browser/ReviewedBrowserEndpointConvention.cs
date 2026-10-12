@@ -12,22 +12,22 @@ namespace RelistenUserService.Authentication.Browser;
 public static class ReviewedBrowserEndpointConvention
 {
     public static IEndpointConventionBuilder RequireReviewedBrowserAuthorization(
-        this IEndpointConventionBuilder endpoints)
+        this IEndpointConventionBuilder endpoints
+    )
     {
         endpoints.Add(endpoint =>
         {
-            var action = endpoint.Metadata
-                .OfType<ControllerActionDescriptor>()
-                .SingleOrDefault();
+            var action = endpoint.Metadata.OfType<ControllerActionDescriptor>().SingleOrDefault();
             if (action?.AttributeRouteInfo?.Template is not { } template)
             {
                 return;
             }
 
             var policy = PolicyForRoute(RoutePath(template));
-            if (policy is null
-                || endpoint.Metadata.OfType<IAuthorizeData>()
-                    .Any(data => data.Policy == policy))
+            if (
+                policy is null
+                || endpoint.Metadata.OfType<IAuthorizeData>().Any(data => data.Policy == policy)
+            )
             {
                 return;
             }
@@ -44,8 +44,10 @@ public static class ReviewedBrowserEndpointConvention
             return AuthenticationConstants.LibraryAccessPolicy;
         }
 
-        if (BrowserRouteBoundary.IsSessionLifecyclePath(path)
-            || BrowserRouteBoundary.IsCsrfPath(path))
+        if (
+            BrowserRouteBoundary.IsSessionLifecyclePath(path)
+            || BrowserRouteBoundary.IsCsrfPath(path)
+        )
         {
             return AuthenticationConstants.BrowserProfileReadPolicy;
         }

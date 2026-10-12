@@ -17,13 +17,17 @@ public sealed class CurrentAccountContext
     public bool IsNative => IsLoaded && CredentialKind == AccountCredentialKind.Native;
     public bool IsWeb => IsLoaded && CredentialKind == AccountCredentialKind.Web;
 
-    public Guid NativeSessionId => IsNative
-        ? SessionId
-        : throw new InvalidOperationException("The current credential is not a native session.");
+    public Guid NativeSessionId =>
+        IsNative
+            ? SessionId
+            : throw new InvalidOperationException(
+                "The current credential is not a native session."
+            );
 
-    public Guid WebSessionId => IsWeb
-        ? SessionId
-        : throw new InvalidOperationException("The current credential is not a web session.");
+    public Guid WebSessionId =>
+        IsWeb
+            ? SessionId
+            : throw new InvalidOperationException("The current credential is not a web session.");
 
     public void SetNative(User user, Guid nativeSessionId)
     {
@@ -38,7 +42,8 @@ public sealed class CurrentAccountContext
         User user,
         Guid webSessionId,
         string webOrigin,
-        IdentitySessionCapabilities capabilities)
+        IdentitySessionCapabilities capabilities
+    )
     {
         User = user;
         CredentialKind = AccountCredentialKind.Web;
@@ -52,5 +57,5 @@ public enum AccountCredentialKind
 {
     None,
     Native,
-    Web
+    Web,
 }

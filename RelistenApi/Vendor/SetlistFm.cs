@@ -51,9 +51,9 @@ namespace Relisten.Vendor.SetlistFm
     public class Song
     {
         public string name { get; set; } = null!;
-//        public string info { get; set; }
-//        public Cover cover { get; set; }
-//        public With with { get; set; }
+        //        public string info { get; set; }
+        //        public Cover cover { get; set; }
+        //        public With with { get; set; }
     }
 
     public class Set
@@ -63,17 +63,22 @@ namespace Relisten.Vendor.SetlistFm
         public int? encore { get; set; }
     }
 
-    internal class TolerantListConverter<T> : CustomCreationConverter<IList<T>> where T : new()
+    internal class TolerantListConverter<T> : CustomCreationConverter<IList<T>>
+        where T : new()
     {
         public override IList<T> Create(Type objectType)
         {
             return new List<T>();
         }
 
-        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-            JsonSerializer serializer)
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer
+        )
         {
-            // Load JObject from stream 
+            // Load JObject from stream
             if (reader.TokenType == JsonToken.StartArray)
             {
                 var l = new List<T>();
@@ -100,10 +105,10 @@ namespace Relisten.Vendor.SetlistFm
 
             var jObject = JObject.Load(reader);
 
-            // Create target object based on JObject 
+            // Create target object based on JObject
             var target = (T)Activator.CreateInstance(typeof(T))!;
 
-            // Populate the object properties 
+            // Populate the object properties
             serializer.Populate(jObject.CreateReader(), target);
 
             var list = new List<T>();
@@ -116,15 +121,19 @@ namespace Relisten.Vendor.SetlistFm
     {
         public override Sets Create(Type objectType)
         {
-            return new Sets {set = new List<Set>()};
+            return new Sets { set = new List<Set>() };
         }
 
-        public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-            JsonSerializer serializer)
+        public override object? ReadJson(
+            JsonReader reader,
+            Type objectType,
+            object? existingValue,
+            JsonSerializer serializer
+        )
         {
             var s = Create(objectType);
 
-            // Load JObject from stream 
+            // Load JObject from stream
             if (reader.TokenType == JsonToken.String)
             {
                 return s;

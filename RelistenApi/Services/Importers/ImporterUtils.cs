@@ -5,9 +5,7 @@ namespace Relisten.Import;
 
 public class ImporterUtils
 {
-    public ImporterUtils()
-    {
-    }
+    public ImporterUtils() { }
 
     public static int TryParseInt(string str)
     {

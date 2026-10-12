@@ -37,26 +37,35 @@ public class TestToursController
         var url = Environment.GetEnvironmentVariable("RELISTEN_TOUR_TEST_DATABASE_URL");
         if (string.IsNullOrEmpty(url))
         {
-            Assert.Ignore("Set RELISTEN_TOUR_TEST_DATABASE_URL to run PostgreSQL tour regression tests.");
+            Assert.Ignore(
+                "Set RELISTEN_TOUR_TEST_DATABASE_URL to run PostgreSQL tour regression tests."
+            );
         }
 
         var uri = new Uri(url!);
         if (!uri.IsLoopback)
         {
-            throw new InvalidOperationException("Tour regression tests require a local disposable database.");
+            throw new InvalidOperationException(
+                "Tour regression tests require a local disposable database."
+            );
         }
 
         previousWrite = DbService.ConnStr;
         previousRead = DbService.ReadOnlyConnStr;
-        db = new DbService(url!, null, null,
+        db = new DbService(
+            url!,
+            null,
+            null,
             new HostingEnvironment { EnvironmentName = Environments.Production },
-            NullLogger<DbService>.Instance);
+            NullLogger<DbService>.Instance
+        );
         connection = new NpgsqlConnection(DbService.ConnStr);
         await connection.OpenAsync();
         await connection.ExecuteAsync($"CREATE SCHEMA {schema}; SET search_path TO {schema};");
         DbService.ConnStr += $";Search Path={schema};Pooling=false";
         DbService.ReadOnlyConnStr = DbService.ConnStr;
-        await connection.ExecuteAsync("""
+        await connection.ExecuteAsync(
+            """
             CREATE TABLE artists (id int PRIMARY KEY, uuid uuid, slug text);
             CREATE TABLE features (id int, artist_id int, tours bool);
             CREATE TABLE artists_upstream_sources (id int, artist_id int, upstream_source_id int);
@@ -76,31 +85,36 @@ public class TestToursController
                 (1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'fugazi'),
                 (2, 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'other');
             INSERT INTO features VALUES (1, 1, true), (2, 2, true);
-            """);
+            """
+        );
         var tours = new TourService(db, new ShowService(db, null!, null!));
         controller = new ToursController(null!, db, new ArtistService(db, null!), tours)
         {
-            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
     }
 
     [SetUp]
     public async Task SeedTours()
     {
-        await connection!.ExecuteAsync("""
+        await connection!.ExecuteAsync(
+            """
             TRUNCATE tours;
             INSERT INTO tours (id, artist_id, uuid, slug, name) VALUES
                 (42, 1, @uuid, '1989-fall-regional-dates', '1989 Fall Regional Dates'),
                 (1989, 1, '22222222-2222-2222-2222-222222222222', 'unrelated-tour', 'Unrelated'),
                 (43, 2, '33333333-3333-3333-3333-333333333333', 'other-tour', 'Other Artist');
-            """, new { uuid = Guid.Parse(TourUuid) });
+            """,
+            new { uuid = Guid.Parse(TourUuid) }
+        );
     }
 
     [OneTimeTearDown]
     public async Task DropSchema()
     {
         controller?.Dispose();
-        if (connection == null) return;
+        if (connection == null)
+            return;
         try
         {
             await connection.ExecuteAsync($"DROP SCHEMA IF EXISTS {schema} CASCADE;");
@@ -154,7 +168,10 @@ public class TestToursController
     [TestCase("fugazi", "33333333-3333-3333-3333-333333333333")]
     [TestCase("fugazi", "other-tour")]
     [TestCase("missing-artist", "42")]
-    public async Task V3MissingOrWrongArtistTourReturnsExistingNotFoundEnvelope(string artist, string identifier)
+    public async Task V3MissingOrWrongArtistTourReturnsExistingNotFoundEnvelope(
+        string artist,
+        string identifier
+    )
     {
         AssertNotFound(await controller.ToursWithShowsV3(artist, identifier));
     }
@@ -178,12 +195,15 @@ public class TestToursController
     [Test]
     public async Task DuplicateSlugsRemainAnErrorInsteadOfReturningAnArbitraryTour()
     {
-        await connection!.ExecuteAsync("""
+        await connection!.ExecuteAsync(
+            """
             INSERT INTO tours (id, artist_id, uuid, slug, name)
             VALUES (44, 1, '44444444-4444-4444-4444-444444444444',
                 '1989-fall-regional-dates', 'Duplicate');
-            """);
-        Func<Task> request = () => controller.ToursWithShowsV3("fugazi", "1989-fall-regional-dates");
+            """
+        );
+        Func<Task> request = () =>
+            controller.ToursWithShowsV3("fugazi", "1989-fall-regional-dates");
         await request.Should().ThrowAsync<InvalidOperationException>();
     }
 
@@ -231,8 +251,15 @@ public class TestToursController
         controller.HttpContext.Request.Method = "GET";
         controller.HttpContext.Request.Path = "/api/v3/artists/fugazi/tours/missing-tour";
         var context = new ResultExecutingContext(
-            new ActionContext(controller.HttpContext, new RouteData(), new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor()),
-            new List<IFilterMetadata>(), result, controller);
+            new ActionContext(
+                controller.HttpContext,
+                new RouteData(),
+                new Microsoft.AspNetCore.Mvc.Abstractions.ActionDescriptor()
+            ),
+            new List<IFilterMetadata>(),
+            result,
+            controller
+        );
         new ApiCacheControlAttribute().OnResultExecuting(context);
         controller.HttpContext.Response.Headers.CacheControl.ToString().Should().Be("no-store");
     }

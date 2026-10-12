@@ -27,14 +27,20 @@ namespace Relisten.Controllers
         [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
         public async Task<IActionResult> Resolve([FromBody] CatalogResolveRequest request)
         {
-            if (!CatalogResolveRequestValidator.TryValidate(request, out var references, out var error))
+            if (
+                !CatalogResolveRequestValidator.TryValidate(
+                    request,
+                    out var references,
+                    out var error
+                )
+            )
             {
                 return InvalidRequest(error!);
             }
 
             return new JsonResult(await _resolver.Resolve(references))
             {
-                SerializerSettings = RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings
+                SerializerSettings = RelistenApiJsonOptionsWrapper.ApiV3SerializerSettings,
             };
         }
 
@@ -46,7 +52,7 @@ namespace Relisten.Controllers
                 Title = "Invalid catalog resolver request",
                 Detail = error.Detail,
                 Status = StatusCodes.Status422UnprocessableEntity,
-                Instance = HttpContext.Request.Path
+                Instance = HttpContext.Request.Path,
             };
             problem.Extensions["code"] = error.Code;
 

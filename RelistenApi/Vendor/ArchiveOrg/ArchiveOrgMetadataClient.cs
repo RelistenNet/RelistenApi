@@ -12,7 +12,7 @@ public enum ArchiveOrgItemStatus
 {
     Unknown,
     Present,
-    Deleted
+    Deleted,
 }
 
 public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
@@ -22,7 +22,8 @@ public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         try
         {
-            var url = $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}?extended_err=1";
+            var url =
+                $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}?extended_err=1";
             using var response = await httpClient.GetAsync(url, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
@@ -36,15 +37,21 @@ public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
             }
 
             var metadata = root["metadata"];
-            if (metadata is JObject item && item["identifier"]?.Type == JTokenType.String &&
-                (string?)item["identifier"] == identifier)
+            if (
+                metadata is JObject item
+                && item["identifier"]?.Type == JTokenType.String
+                && (string?)item["identifier"] == identifier
+            )
             {
                 // Positive existence evidence wins even if an error is also present.
                 return (ArchiveOrgItemStatus.Present, "matching item metadata");
             }
 
-            if (metadata != null && metadata.Type != JTokenType.Null &&
-                (metadata is not JObject || metadata.HasValues))
+            if (
+                metadata != null
+                && metadata.Type != JTokenType.Null
+                && (metadata is not JObject || metadata.HasValues)
+            )
             {
                 return (ArchiveOrgItemStatus.Unknown, "invalid or mismatched item metadata");
             }
@@ -58,10 +65,18 @@ public sealed class ArchiveOrgMetadataClient(HttpClient httpClient)
 
             return (ArchiveOrgItemStatus.Unknown, "no definitive item state");
         }
-        catch (Exception error) when (error is HttpRequestException or OperationCanceledException or
-                                      JsonException or IOException)
+        catch (Exception error)
+            when (error
+                    is HttpRequestException
+                        or OperationCanceledException
+                        or JsonException
+                        or IOException
+            )
         {
-            return (ArchiveOrgItemStatus.Unknown, $"metadata request failed ({error.GetType().Name})");
+            return (
+                ArchiveOrgItemStatus.Unknown,
+                $"metadata request failed ({error.GetType().Name})"
+            );
         }
     }
 }

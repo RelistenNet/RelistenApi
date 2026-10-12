@@ -10,7 +10,8 @@ namespace RelistenUserService.Authentication.Browser;
 /// </summary>
 public sealed class HostBoundaryMiddleware(
     RequestDelegate next,
-    AccountsRuntimeConfiguration runtime)
+    AccountsRuntimeConfiguration runtime
+)
 {
     public async Task InvokeAsync(HttpContext context)
     {
@@ -37,12 +38,14 @@ public sealed class HostBoundaryMiddleware(
             return Matches(actual, new HostString(runtime.Options.AccountsHost));
         }
 
-        if (path.StartsWithSegments("/connect")
+        if (
+            path.StartsWithSegments("/connect")
             || path.StartsWithSegments("/.well-known")
             || path.StartsWithSegments("/development")
             || path.StartsWithSegments("/auth/sso")
             || path == AuthenticationConstants.GoogleCallbackPath
-            || path == AuthenticationConstants.AppleCallbackPath)
+            || path == AuthenticationConstants.AppleCallbackPath
+        )
         {
             return Matches(actual, new HostString(runtime.Options.AuthHost));
         }
@@ -53,8 +56,8 @@ public sealed class HostBoundaryMiddleware(
 
     private bool MatchesAccountsOrWeb(HostString actual) =>
         Matches(actual, new HostString(runtime.Options.AccountsHost))
-        || runtime.WebOrigins
-            .Select(origin => new Uri(origin))
+        || runtime
+            .WebOrigins.Select(origin => new Uri(origin))
             .Any(origin => Matches(actual, HostString.FromUriComponent(origin)));
 
     private static bool Matches(HostString actual, HostString expected) =>

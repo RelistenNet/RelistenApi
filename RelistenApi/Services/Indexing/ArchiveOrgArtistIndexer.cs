@@ -28,7 +28,11 @@ public interface IArchiveOrgArtistIndexRepository
     Task<Artist?> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier);
     Task<IReadOnlyList<Artist>> LoadExistingArtists();
     Task<SlimArtistWithFeatures> SaveArtist(SlimArtistWithFeatures artist);
-    Task EnsureUpstreamSourceForArtist(int artistId, int upstreamSourceId, string upstreamIdentifier);
+    Task EnsureUpstreamSourceForArtist(
+        int artistId,
+        int upstreamSourceId,
+        string upstreamIdentifier
+    );
 }
 
 public class ArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
@@ -36,13 +40,19 @@ public class ArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
     private readonly ArtistService artistService;
     private readonly UpstreamSourceService upstreamSourceService;
 
-    public ArchiveOrgArtistIndexRepository(ArtistService artistService, UpstreamSourceService upstreamSourceService)
+    public ArchiveOrgArtistIndexRepository(
+        ArtistService artistService,
+        UpstreamSourceService upstreamSourceService
+    )
     {
         this.artistService = artistService;
         this.upstreamSourceService = upstreamSourceService;
     }
 
-    public Task<Artist?> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier)
+    public Task<Artist?> FindArtistByUpstreamIdentifier(
+        int upstreamSourceId,
+        string upstreamIdentifier
+    )
     {
         return artistService.FindArtistByUpstreamIdentifier(upstreamSourceId, upstreamIdentifier);
     }
@@ -58,9 +68,17 @@ public class ArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
         return artistService.Save(artist);
     }
 
-    public Task EnsureUpstreamSourceForArtist(int artistId, int upstreamSourceId, string upstreamIdentifier)
+    public Task EnsureUpstreamSourceForArtist(
+        int artistId,
+        int upstreamSourceId,
+        string upstreamIdentifier
+    )
     {
-        return upstreamSourceService.EnsureUpstreamSourceForArtist(artistId, upstreamSourceId, upstreamIdentifier);
+        return upstreamSourceService.EnsureUpstreamSourceForArtist(
+            artistId,
+            upstreamSourceId,
+            upstreamIdentifier
+        );
     }
 }
 
@@ -92,7 +110,7 @@ public static class ArchiveOrgArtistDefaults
             venue_past_names = false,
             reviews_have_ratings = true,
             track_durations = true,
-            can_have_flac = true
+            can_have_flac = true,
         };
     }
 }
@@ -116,21 +134,29 @@ public class ArchiveOrgArtistIndexer
         this.upstreamSourceLookup = upstreamSourceLookup;
     }
 
-    public async Task<ArchiveOrgArtistIndexResult> IndexArtists(PerformContext? context = null,
-        int minItemCount = DefaultItemCountThreshold, CancellationToken cancellationToken = default)
+    public async Task<ArchiveOrgArtistIndexResult> IndexArtists(
+        PerformContext? context = null,
+        int minItemCount = DefaultItemCountThreshold,
+        CancellationToken cancellationToken = default
+    )
     {
-        var upstreamSource = await upstreamSourceLookup.FindUpstreamSourceByName(ArchiveOrgImporter.DataSourceName);
+        var upstreamSource = await upstreamSourceLookup.FindUpstreamSourceByName(
+            ArchiveOrgImporter.DataSourceName
+        );
         if (upstreamSource == null)
         {
             throw new InvalidOperationException("archive.org upstream source was not found.");
         }
 
-        var items = (await indexClient.FetchCollectionsAsync(DefaultScrapeCount, cancellationToken)).ToList();
+        var items = (
+            await indexClient.FetchCollectionsAsync(DefaultScrapeCount, cancellationToken)
+        ).ToList();
         context?.WriteLine($"archive.org collections fetched: {items.Count}");
         var existingArtists = await repository.LoadExistingArtists();
         var existingSlugs = new HashSet<string>(
             existingArtists.Select(artist => artist.slug),
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.OrdinalIgnoreCase
+        );
 
         var result = new ArchiveOrgArtistIndexResult();
 
@@ -150,8 +176,10 @@ public class ArchiveOrgArtistIndexer
                 continue;
             }
 
-            var existingMapping =
-                await repository.FindArtistByUpstreamIdentifier(upstreamSource.id, item.identifier);
+            var existingMapping = await repository.FindArtistByUpstreamIdentifier(
+                upstreamSource.id,
+                item.identifier
+            );
             if (existingMapping != null)
             {
                 result.Skipped++;
@@ -167,33 +195,46 @@ public class ArchiveOrgArtistIndexer
                 continue;
             }
 
-            var created = await repository.SaveArtist(new SlimArtistWithFeatures
-            {
-                id = 0,
-                name = item.title,
-                slug = slug,
-                sort_name = item.title.Replace("The ", ""),
-                musicbrainz_id = string.Empty,
-                featured = (int)ArtistFeaturedFlags.AutoCreated,
-                features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures()
-            });
+            var created = await repository.SaveArtist(
+                new SlimArtistWithFeatures
+                {
+                    id = 0,
+                    name = item.title,
+                    slug = slug,
+                    sort_name = item.title.Replace("The ", ""),
+                    musicbrainz_id = string.Empty,
+                    featured = (int)ArtistFeaturedFlags.AutoCreated,
+                    features = ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
+                }
+            );
 
-            await repository.EnsureUpstreamSourceForArtist(created.id, upstreamSource.id, item.identifier);
+            await repository.EnsureUpstreamSourceForArtist(
+                created.id,
+                upstreamSource.id,
+                item.identifier
+            );
             existingSlugs.Add(created.slug);
-            context?.WriteLine($"archive.org artist created: {created.name} ({item.identifier}) slug={created.slug}");
+            context?.WriteLine(
+                $"archive.org artist created: {created.name} ({item.identifier}) slug={created.slug}"
+            );
             result.Created++;
         }
 
         context?.WriteLine(
-            $"archive.org artist index: created={result.Created}, linked={result.Linked}, skipped={result.Skipped}");
+            $"archive.org artist index: created={result.Created}, linked={result.Linked}, skipped={result.Skipped}"
+        );
         context?.WriteLine(
-            $"archive.org artist index skip reasons: below_threshold={result.SkippedBelowThreshold}, existing={result.SkippedExisting}, missing_identifier={result.SkippedMissingIdentifier}, invalid_slug={result.SkippedInvalidSlug}");
+            $"archive.org artist index skip reasons: below_threshold={result.SkippedBelowThreshold}, existing={result.SkippedExisting}, missing_identifier={result.SkippedMissingIdentifier}, invalid_slug={result.SkippedInvalidSlug}"
+        );
 
         return result;
     }
 
-    private static string? BuildUniqueSlug(ArchiveOrgCollectionIndexItem item, HashSet<string> existingSlugs,
-        PerformContext? context)
+    private static string? BuildUniqueSlug(
+        ArchiveOrgCollectionIndexItem item,
+        HashSet<string> existingSlugs,
+        PerformContext? context
+    )
     {
         var baseSlug = SlugUtils.Slugify(item.title);
         if (string.IsNullOrWhiteSpace(baseSlug))
@@ -213,7 +254,8 @@ public class ArchiveOrgArtistIndexer
             if (!existingSlugs.Contains(candidate))
             {
                 context?.WriteLine(
-                    $"archive.org artist slug conflict: base={baseSlug} identifier={item.identifier} resolved={candidate}");
+                    $"archive.org artist slug conflict: base={baseSlug} identifier={item.identifier} resolved={candidate}"
+                );
                 return candidate;
             }
         }

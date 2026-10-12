@@ -45,7 +45,9 @@ namespace Relisten.Services.Auth
                         return Challenge(context);
                     }
 
-                    var parameter = Encoding.UTF8.GetString(Convert.FromBase64String(authValues.Parameter));
+                    var parameter = Encoding.UTF8.GetString(
+                        Convert.FromBase64String(authValues.Parameter)
+                    );
                     var parts = parameter.Split(':');
 
                     if (parts.Length > 1)
@@ -53,7 +55,10 @@ namespace Relisten.Services.Auth
                         var login = parts[0];
                         var password = parts[1];
 
-                        if (string.IsNullOrWhiteSpace(login) == false && string.IsNullOrWhiteSpace(password) == false)
+                        if (
+                            string.IsNullOrWhiteSpace(login) == false
+                            && string.IsNullOrWhiteSpace(password) == false
+                        )
                         {
                             return Username == login && Password == password;
                         }
@@ -67,7 +72,10 @@ namespace Relisten.Services.Auth
         private bool Challenge(HttpContext context)
         {
             context.Response.StatusCode = 401;
-            context.Response.Headers.Append("WWW-Authenticate", "Basic realm=\"Hangfire Dashboard\"");
+            context.Response.Headers.Append(
+                "WWW-Authenticate",
+                "Basic realm=\"Hangfire Dashboard\""
+            );
 
             //var buf = Encoding.UTF8.GetBytes("Authentication is required.");
             //context.Response.Body.Write(buf, 0, buf.Length);

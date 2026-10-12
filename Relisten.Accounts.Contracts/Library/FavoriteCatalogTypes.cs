@@ -10,8 +10,8 @@ public static class FavoriteCatalogTypes
     public const string Tour = "tour";
     public const string Venue = "venue";
 
-    public static bool IsSupported(string? value) => value is
-        Artist or Show or Source or SourceTrack or Song or Tour or Venue;
+    public static bool IsSupported(string? value) =>
+        value is Artist or Show or Source or SourceTrack or Song or Tour or Venue;
 }
 
 public static class FavoriteDesiredStates
