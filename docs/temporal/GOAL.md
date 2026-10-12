@@ -63,3 +63,9 @@ Share Archive's selection, metadata validation, and deletion verification betwee
 Keep importer SQL in injected data services: source lookups, tour bounds, orphan venues, batch membership, and aggregate rebuilds. Preserve existing transaction ownership and public catalog behavior. The SQL extraction passed 25 persistence tests before its separate commit.
 
 The completed follow-up passed the full isolated suite: **157 passed, 24 unrelated opt-in skips, 0 failed**. New paired Hangfire/Temporal tests cover Archive metadata skips, date repair diagnostics, selection reasons, and guarded deletions with a fake notification sink. Release worker publish passed. Standard worker logging includes execution scopes; external Sentry initialization remains unchanged.
+
+## Test transport isolation follow-up
+
+Keep fixture routing and other test setup in the test project. Production HTTP code uses standard dependency injection for its transport and contains no test-only endpoint settings or request rewriting. Preserve activity cancellation, timeouts, upstream retry delays, redirects, and importer behavior.
+
+Verified with six HTTP tests and 33 local ingestion integration tests, including all seven provider comparisons. The HTTP tests cover client cancellation/disposal, redirects, retry delays, and provider response parsing. CSharpier checked 326 files.

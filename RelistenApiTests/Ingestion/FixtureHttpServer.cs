@@ -4,7 +4,7 @@ using System.Text;
 
 namespace RelistenApiTests.Ingestion;
 
-// A loopback server exercises the production HTTP handler, including its endpoint override.
+// A loopback server exercises HTTP responses, redirects, and retry headers without real upstreams.
 internal sealed class FixtureHttpServer : IDisposable
 {
     private readonly HttpListener listener = new();

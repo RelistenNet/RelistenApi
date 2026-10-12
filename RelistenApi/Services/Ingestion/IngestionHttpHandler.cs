@@ -11,9 +11,8 @@ namespace Relisten.Ingestion;
 // GETs may repeat on activity retry. Queue limits control concurrent item operations.
 internal sealed class IngestionHttpHandler(
     CancellationToken activityCancellation,
-    Uri? endpoint,
     ILogger<IngestionHttpHandler>? log = null
-) : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = true })
+) : DelegatingHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
@@ -23,10 +22,6 @@ internal sealed class IngestionHttpHandler(
         // Exclude query parameters: some provider URLs carry API credentials.
         var url = request.RequestUri!.GetLeftPart(UriPartial.Path);
         log?.LogInformation("Requesting {UpstreamUrl}", url);
-        if (endpoint != null)
-        {
-            request.RequestUri = new Uri(endpoint, request.RequestUri!.PathAndQuery);
-        }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,

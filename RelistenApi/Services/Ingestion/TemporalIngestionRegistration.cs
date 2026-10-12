@@ -33,6 +33,8 @@ public static class TemporalIngestionRegistration
         services.AddTemporalIngestionClient(configuration);
         services.AddScoped<IngestionStore>();
         services.AddSingleton<IngestionHttpClientFactory>();
+        // IngestionHttpHandler logs paths without query parameters that may contain credentials.
+        services.AddHttpClient(nameof(IngestionHttpClientFactory)).RemoveAllLoggers();
         services.AddHostedService<IngestionCleanupService>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Workflows)

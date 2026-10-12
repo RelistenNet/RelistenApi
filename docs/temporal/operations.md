@@ -14,7 +14,6 @@
 | `Ingestion__Engine=Temporal` | API admission and Hangfire handoff switch; unset/`Hangfire` keeps legacy admission |
 | `Ingestion__Concurrency__ingest-archive=10` | Example per-provider worker concurrency override; every provider defaults to 10 |
 | `Ingestion__Rate__ingest-archive` | Optional queue activities/second limit; no default rate cap |
-| `Ingestion__UpstreamBaseUrl` | Local fixture override; leave unset in ordinary operation |
 
 The worker does not read `Ingestion__Engine` as a pause control. Stop its process or pause schedules/cancel workflows in Temporal. All pollers on a provider queue must use the same optional rate setting. An item activity may issue several sequential GETs. The optional rate is activities per second, not HTTP requests per second. There is no internal request fanout or custom limiter.
 

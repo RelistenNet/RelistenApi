@@ -63,7 +63,6 @@ public class TestIngestionPersistence
                 ["Temporal:Address"] = "127.0.0.1:17233",
                 ["Temporal:Namespace"] = testNamespace,
                 ["Ingestion:Engine"] = "Temporal",
-                ["Ingestion:UpstreamBaseUrl"] = upstream.Address.ToString(),
             }
         );
         builder.Services.AddSingleton(sp => new DbService(
@@ -79,6 +78,9 @@ public class TestIngestionPersistence
         builder
             .Services.AddRelistenCatalogServices()
             .AddTemporalIngestionWorkers(builder.Configuration);
+        builder
+            .Services.AddHttpClient(nameof(IngestionHttpClientFactory))
+            .ConfigurePrimaryHttpMessageHandler(() => new FixtureRedirectHandler(upstream.Address));
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
         SqlMapper.AddTypeHandler(new DateTimeHandler());
         builder.Services.AddSingleton<IDiscordWebhookNotifier>(notifications);
@@ -735,19 +737,6 @@ public class TestIngestionPersistence
                 (await c.QueryAsync<string>(sql, new { artistId })).ToArray()
             );
         return result;
-    }
-
-    private sealed class FixtureRedirectHandler(Uri endpoint)
-        : DelegatingHandler(new HttpClientHandler())
-    {
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request,
-            CancellationToken cancellationToken
-        )
-        {
-            request.RequestUri = new Uri(endpoint, request.RequestUri!.PathAndQuery);
-            return base.SendAsync(request, cancellationToken);
-        }
     }
 
     [Test]

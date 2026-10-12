@@ -20,13 +20,13 @@ Temporal UI: <http://127.0.0.1:18233>. Application PostgreSQL: port 15433. Redis
 
 Tests create fixture artists in this dedicated database and use a fresh Temporal namespace for each integration suite, so old local schedules cannot poll the fixture workers. Workflow unit tests start an additional ephemeral Temporal development server through the .NET SDK. The first run may download that binary. Without `RELISTEN_LOCAL_INGESTION_TESTS=1`, the PostgreSQL/Compose integration fixture is skipped.
 
-For manual work with a deliberately configured upstream, start the host:
+For manual imports from real upstreams, start the host:
 
 ```sh
 dotnet run --project RelistenIngestionWorker
 ```
 
-`Ingestion__UpstreamBaseUrl` redirects upstream requests to a fixture server. Leave it unset for ordinary operation. The test server is part of the test process; the Compose stack does not run it permanently. Starting a worker without this override allows queued imports to contact real upstreams.
+Tests register their own HTTP transport to route requests to a fixture server inside the test process. The standalone worker contacts real upstreams; it has no fixture-routing setting.
 
 Schedule creation is explicit and should follow the [handoff procedure](../../docs/temporal/operations.md):
 
