@@ -1,6 +1,8 @@
 # Temporal ingestion
 
-The [typed provider API proposal](api-proposal.md) describes the next suggested redesign. It is under review; the code and guides below still describe the current implementation.
+The next change is specified by the [provider workflow implementation plan](provider-workflow-plan.md) and its [contract reference](provider-workflow-contracts.md). They cover concrete provider workflows, shared item activities, typed commands/results, Redis payload offloading, and receipt-free catalog retries. The [earlier proposal](api-proposal.md) records design alternatives; the new plan supersedes it where they differ.
+
+The code and guides below still describe the current implementation. PostgreSQL snapshots and receipts described here are being replaced by the planned refactor; they have not yet been removed.
 
 Relisten ingestion runs in a separate .NET worker. Artist workflows compose provider preparation, paginated item imports, reconciliation, and a final catalog rebuild. A manual Archive reimport uses the same item activity without enumerating the artist or reconciling unrelated sources.
 

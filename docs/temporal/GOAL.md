@@ -1,5 +1,19 @@
 # Goal: make Temporal ingestion understandable and maintainable
 
+## Current goal: implement the typed provider plan
+
+The [provider workflow plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md) define the next intended outcome. These supersede the older snapshot, receipt, and universal-importer requirements below; the remaining sections record previous work rather than the new implementation contract.
+
+Make each provider's execution sequence clear in its own workflow. Use explicit typed operations, provider keys/cursors/results, shared item activity composition, and reusable catalog rebuild activities. Preserve seven active providers, catalog identity and listener API contracts, native queue controls, the separate worker, and independent Archive deletion verification. Keep PanicStream disabled. Reject overlapping manual artist operations with an explicit conflict containing the active workflow ID.
+
+Use the existing StackExchange.Redis client for transparent oversized Temporal payloads. Keep small payloads inline; Temporal's event history remains in PostgreSQL. Redis loss can require a fresh import. Remove application snapshots and commit receipts after receipt-free transactions, overlap serialization, and lost-acknowledgement retry tests prove catalog convergence. Do not promise exact mutation counts. Related GETs stay together where that makes the provider easier to follow.
+
+Write for Alec, Switz, and engineers who know the Relisten app but may not know the technical stack. Explain the concepts, contracts, ownership, failures, and reasons needed to implement without this conversation. Use plain language, selective ASD-STE100, deslop, and progressive disclosure. Keep SQL in data services and fixture transport in tests. Reuse the established formatting and implementation standards below; use grill-me if new evidence creates a consequential product decision.
+
+The current planning task must validate assumptions, specify executable steps and verification, and finish a fresh feasibility/decision/complexity review. The plan lives in this existing `docs/temporal/` directory, per Alec's October 12 clarification. No production mutations, deployment, AI processing, or indexing rollout are included. Future implementation must update the plan's progress and record evidence; the plan's existence is not implementation completion.
+
+## Previous implementation record
+
 Implement the agreed readability redesign on `codex/temporal-ingestion-plan`. This branch has never been deployed. Replace its internal interfaces, workflows, migrations, and recovery commands freely; do not retain compatibility layers for the first implementation.
 
 The separate worker must support the seven active providers, scheduled and manual artist imports, targeted Archive reimports, rebuilds, and existing maintenance operations. Exclude PanicStream. Preserve catalog identities, public API contracts, upstream behavior, and independent Archive completeness/deletion verification. Use native provider queues with ten concurrent activities and ten active artist children per batch. Do not deploy or mutate production.

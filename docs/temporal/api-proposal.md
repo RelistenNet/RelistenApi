@@ -1,6 +1,8 @@
 # Proposal: typed provider workflows and explicit import operations
 
-Status: updated October 12, 2026. Alec has accepted the direction of separate provider workflows with composable, reusable operations. The detailed API and item-child-workflow recommendation remain under review. No implementation changes have started. [Current implementation](architecture.md) · [Current provider behavior](provider-behavior.md)
+Status: historical design proposal, superseded on October 12, 2026 by the [implementation plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md). No implementation of this new refactor has started. [Current implementation](architecture.md) · [Current provider behavior](provider-behavior.md)
+
+The confirmed choices are separate provider workflows, shared activity composition for routine items, and explicit conflicts for overlapping artist requests. Large typed Temporal payloads use a Redis codec through StackExchange.Redis; idempotent catalog transactions replace snapshots and receipts. The Local importer returns one source per date group, correcting the multiple-source example below. Retain this proposal for its rationale and alternatives; follow the linked plan for implementation contracts.
 
 Readers: Alec, Switz, and engineers implementing or reviewing Relisten ingestion. This proposal uses the [Explore, Planning, and Implementation templates](https://chatgpt.com/space/page_c2d80e22b8288191b4e8dbbe10ba26af). It is a design proposal with an implementation outline, not a finished execution plan.
 
