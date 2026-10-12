@@ -329,6 +329,7 @@ namespace Relisten.Import
         public async Task<ImportStats> RebuildYears(Artist artist)
         {
             await catalog.RebuildYears(artist);
+            await catalog.InvalidateArtistCache(artist);
             return ImportStats.None;
         }
 
