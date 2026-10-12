@@ -53,3 +53,13 @@ No production infrastructure, deployment, production mutation, AI normalization,
 Use one `UpstreamProvider` string-serialized enum throughout workflow contracts, activities, importer dispatch, and source lookups. Preserve existing JSON strings, database names, queue names, and snapshot/receipt keys. The upstream-source database/API `name` field remains the wire representation; its `Provider` property supplies the typed value for application code. Preserve unknown source names in catalog responses while excluding them from importer dispatch. PanicStream remains a known historical source but has no active ingestion registration.
 
 Verified this follow-up with 149 passing tests and 24 unrelated opt-in skips, plus a Release worker publish and CSharpier check. Provider tests round-trip the unchanged strings through Newtonsoft API JSON, Temporal payload conversion, and Dapper source mapping.
+
+## Typed importer flow and behavior parity follow-up
+
+Carry concrete types through discovery, immutable snapshots, item loading, and provider import methods. Use generic importer bases for shared Temporal mechanics, with provider-specific discovery types when reconciliation needs extra evidence. Keep JSON encoding in the persistence boundary; HTTP parsers still decode upstream responses. Manual import is an explicit entrypoint rather than a missing/empty metadata string.
+
+Share Archive's selection, metadata validation, and deletion verification between engines. Preserve importer diagnostics through standard worker logging even without a Hangfire context, and attach execution context to Temporal activity logs. Explain intentional execution differences and remaining sink differences in [the provider behavior guide](provider-behavior.md).
+
+Keep importer SQL in injected data services: source lookups, tour bounds, orphan venues, batch membership, and aggregate rebuilds. Preserve existing transaction ownership and public catalog behavior. The SQL extraction passed 25 persistence tests before its separate commit.
+
+The completed follow-up passed the full isolated suite: **157 passed, 24 unrelated opt-in skips, 0 failed**. New paired Hangfire/Temporal tests cover Archive metadata skips, date repair diagnostics, selection reasons, and guarded deletions with a fake notification sink. Release worker publish passed. Standard worker logging includes execution scopes; external Sentry initialization remains unchanged.

@@ -1,6 +1,6 @@
 # How an import executes
 
-Read `ArtistRefreshWorkflow.RunAsync` for the artist sequence. `ImportProvider`, `ImportPages`, and `ImportPage` each own one level of iteration. `ReimportItemWorkflow` calls the same item activity directly. No generic workflow engine or numbered fetch protocol sits between these entrypoints and the provider operations.
+Read `ArtistRefreshWorkflow.RunAsync` for the artist sequence. `ImportProvider`, `ImportPages`, and `ImportPage` each own one level of iteration. `ReimportItemWorkflow` calls the same item activity directly.
 
 ```mermaid
 flowchart TD
@@ -29,8 +29,17 @@ The diagram groups item iteration; the code imports all items in the current pag
 | Shared exhausted-item failure policy | [ImportItemOperation](../../RelistenApi/Services/Ingestion/Workflows/ImportItemOperation.cs) |
 | Provider dispatch and activity boundaries | [IngestionActivities](../../RelistenApi/Services/Ingestion/Activities/IngestionActivities.cs) |
 | Artist batches and collection discovery | [IngestionBatchActivities](../../RelistenApi/Services/Ingestion/Activities/IngestionBatchActivities.cs) |
+| Typed discovery, snapshot paging and item loading | [IngestionImporter](../../RelistenApi/Services/Ingestion/IngestionImporter.cs) |
 | Provider contract and transactional context | [IProviderIngestion](../../RelistenApi/Services/Ingestion/ProviderIngestion.cs) |
 | Expiring snapshots and atomic receipts | [IngestionStore](../../RelistenApi/Services/Ingestion/IngestionStore.cs) |
+
+## Types through the provider flow
+
+`IngestionImporter<TItem>` binds discovery, `DiscoverySnapshot<TItem>`, persistence, and `ImportItemAsync` to one concrete item type. `IngestionImporter<TItem, TDiscovery>` also binds provider-specific reconciliation evidence. Archive uses `ArchiveImportItem` and `ArchiveDiscovery`; Phantasy Tour uses `PhantasyTourShowListing` and `PhantasyTourDiscovery`.
+
+The generic base stores the typed discovery object and returns bounded `ImportItem` references. When an item activity runs, the same base loads `DiscoveredItem<TItem>` and calls the provider's typed method. `IngestionStore` owns JSON serialization at the database boundary. Provider code parses external HTTP responses but does not encode metadata strings inside snapshots.
+
+The fixed `IProviderIngestion` interface exists only where the activity dispatches one of several providers. Providers implement typed abstract methods, so the interface does not force them to cast objects, inspect JSON tokens, or deserialize arbitrary metadata strings. Manual imports use an explicit `ReimportItemAsync` entrypoint; Archive fetches a search document and then calls its same typed item method.
 
 ## Provider operations
 
@@ -67,3 +76,9 @@ The execution deadline is deliberately finite because retained inputs have finit
 ## Verification boundaries
 
 Tests compare all seven providers' catalog output with the legacy path, including stable source/track/show identity. Other tests cover lost acknowledgements, transaction rollback and overlap, expiry/cleanup, bounded discovery, retry and cancellation, worker replacement, workflow replay/rollover, and batch concurrency. Phantasy Tour tests cover correcting existing dates without detail requests and withholding repair after incomplete discovery. Archive tests retain Present/Deleted/Unknown and thin/targeted reconciliation coverage.
+
+## Shared domain behavior and data services
+
+[Provider behavior and logging](provider-behavior.md) traces the shared methods used by Hangfire and Temporal, including Archive's former `processDoc` wrapper. It separates preserved domain behavior from intentional orchestration differences.
+
+Importers do not issue SQL. `SourceService` owns source reads from the primary; `TourService` owns date bounds; `VenueService` owns orphan cleanup. `CatalogRebuildService` owns the existing show/year aggregate SQL and cache invalidation because that operation spans several catalog tables. `ArtistService` owns batch membership selection. These services participate in the caller's item transaction, except aggregate rebuilds, which retain their existing transaction ownership.

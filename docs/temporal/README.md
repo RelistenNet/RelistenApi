@@ -2,7 +2,7 @@
 
 Relisten ingestion runs in a separate .NET worker. Artist workflows compose provider preparation, paginated item imports, reconciliation, and a final catalog rebuild. A manual Archive reimport uses the same item activity without enumerating the artist or reconciling unrelated sources.
 
-Start with [the execution graph and code map](architecture.md). Use [the operator instructions](operations.md) to configure, run, and recover imports, and [the local setup](../../local-dev/temporal/README.md) for integration tests. [The goal](GOAL.md) records the intended outcome and development standards.
+Start with [the execution graph and code map](architecture.md). [Provider behavior and logging](provider-behavior.md) traces the shared Hangfire/Temporal methods and their intentional differences. Use [the operator instructions](operations.md) to configure, run, and recover imports, and [the local setup](../../local-dev/temporal/README.md) for integration tests. [The goal](GOAL.md) records the intended outcome and development standards.
 
 Related HTTP GETs run inside an item activity. Ten concurrent activities per provider and ten active artist children per batch provide the normal backpressure. No custom limiter or one-request-per-activity rule is needed. PanicStream is excluded.
 
