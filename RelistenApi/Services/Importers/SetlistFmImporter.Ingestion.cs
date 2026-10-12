@@ -9,6 +9,8 @@ using Relisten.Vendor.SetlistFm;
 
 namespace Relisten.Import;
 
+// Keeps tolerant upstream parsing separate from catalog writes. Each item reloads
+// current rows under the artist lock, including tour bounds from earlier items.
 public partial class SetlistFmImporter
 {
     /// <summary>Reads one upstream page while preserving the tolerant setlist parser.</summary>
@@ -22,6 +24,7 @@ public partial class SetlistFmImporter
             context.CancellationToken
         );
         response.EnsureSuccessStatusCode();
+
         var root =
             JsonConvert.DeserializeObject<SetlistsRootObject>(
                 await response.Content.ReadAsStringAsync(context.CancellationToken),
@@ -30,14 +33,19 @@ public partial class SetlistFmImporter
                 new TolerantListConverter<Setlist>(),
                 new TolerantSetsConverter()
             ) ?? throw new System.IO.InvalidDataException("Setlist.fm returned an empty page.");
+
         if (root.setlist == null || root.itemsPerPage <= 0 || root.page != page || root.total < 0)
+        {
             throw new System.IO.InvalidDataException(
                 "Setlist.fm returned invalid pagination metadata."
             );
+        }
+
         var next =
             root.page < Math.Ceiling((double)root.total / root.itemsPerPage)
                 ? new SetlistFmPage(page + 1)
                 : null;
+
         return new Page<DiscoveredItem<SetlistFmId, Setlist>, SetlistFmPage>(
             root.setlist.Where(s => s.sets.set.Count > 0)
                 .Select(s => new DiscoveredItem<SetlistFmId, Setlist>(new(s.id), s))
@@ -55,24 +63,13 @@ public partial class SetlistFmImporter
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
-            // Item activities no longer share dictionaries. Carry forward committed tour
-            // bounds so applying the next item cannot shrink a previously imported tour.
-            foreach (var tour in existingTours.Values.Where(t => t != null))
-            {
-                if (tour!.start_date.HasValue)
-                {
-                    tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
-                }
+            RestoreCommittedTourBounds();
 
-                if (tour.end_date.HasValue)
-                {
-                    tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
-                }
-            }
             var unchanged =
                 existingSetlistShows.TryGetValue(item.Id.Value, out var previous)
                 && previous != null
                 && previous.updated_at >= item.Input.lastUpdated;
+
             await ProcessSetlist(context.Artist, item.Input);
             if (context.Artist.features.tours && tourToStartDate.Count > 0)
             {
@@ -85,5 +82,23 @@ public partial class SetlistFmImporter
                 unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied
             );
         });
+    }
+
+    private void RestoreCommittedTourBounds()
+    {
+        // Item activities do not share dictionaries. Preserve committed bounds so
+        // applying the next item cannot shrink a previously imported tour.
+        foreach (var tour in existingTours.Values.Where(tour => tour != null))
+        {
+            if (tour!.start_date.HasValue)
+            {
+                tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
+            }
+
+            if (tour.end_date.HasValue)
+            {
+                tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
+            }
+        }
     }
 }

@@ -28,6 +28,7 @@ public sealed class TemporalIngestionClient
         this.client = client;
         this.configuration = configuration;
         this.catalog = catalog;
+
         Archive = new ArchiveImportClient(this);
         Jerry = new JerryImportClient(this);
         PhishIn = new ProviderRefreshClient<RefreshPhishInArtist>(RefreshAsync);
@@ -43,6 +44,7 @@ public sealed class TemporalIngestionClient
             "Temporal",
             StringComparison.OrdinalIgnoreCase
         );
+
     public ArchiveImportClient Archive { get; }
     public JerryImportClient Jerry { get; }
     public ProviderRefreshClient<RefreshPhishInArtist> PhishIn { get; }
@@ -70,6 +72,7 @@ public sealed class TemporalIngestionClient
             RefreshArtist => null,
             _ => throw new InvalidImportRequest("Unknown artist refresh operation."),
         };
+
         return StartArtist(
             request.Artist,
             provider,
@@ -102,6 +105,7 @@ public sealed class TemporalIngestionClient
             (ArchiveArtistDiscoveryWorkflow workflow) => workflow.RunAsync(request, null),
             Options("ingest/discover/" + Guid.NewGuid())
         );
+
         return new ImportHandle<int>(handle);
     }
 
@@ -114,10 +118,12 @@ public sealed class TemporalIngestionClient
             RebuildCatalog => "rebuild",
             _ => throw new InvalidImportRequest("Unknown catalog operation."),
         };
+
         var handle = await client.StartWorkflowAsync(
             (RefreshBatchWorkflow workflow) => workflow.RunAsync(request, null, null),
             Options("ingest/" + name + "/" + Guid.NewGuid())
         );
+
         return new ImportHandle<ImportBatchResult>(handle);
     }
 
@@ -128,13 +134,20 @@ public sealed class TemporalIngestionClient
     )
     {
         if (artist.Value == Guid.Empty)
+        {
             throw new InvalidImportRequest("Artist UUID must not be empty.");
+        }
+
         var providers =
             await catalog.ProvidersForArtistAsync(artist) ?? throw new ArtistNotFound(artist);
         if (provider.HasValue && !providers.Contains(provider.Value))
+        {
             throw new UnsupportedImportOperation(
                 $"Artist has no enabled {provider.Value.ToValue()} mapping."
             );
+        }
+
+        // Temporal's atomic start, rather than a status read, owns the overlap race.
         var workflowId = "ingest/artist/" + artist;
         try
         {
@@ -159,7 +172,10 @@ public sealed class TemporalIngestionClient
     private static UpstreamProvider? ValidateYear(int? year, UpstreamProvider? provider)
     {
         if (year is < 1 or > 9999)
+        {
             throw new InvalidImportRequest("Year must be between 1 and 9999.");
+        }
+
         return provider;
     }
 
@@ -175,38 +191,44 @@ public sealed class TemporalIngestionClient
             }
         )
         {
-            var options = Options("ingest/scheduled/" + name);
-            var action =
-                name == "discover"
-                    ? ScheduleActionStartWorkflow.Create(
-                        (ArchiveArtistDiscoveryWorkflow workflow) =>
-                            workflow.RunAsync(new DiscoverArchiveArtists(), null),
-                        options
-                    )
-                    : ScheduleActionStartWorkflow.Create(
-                        (RefreshBatchWorkflow workflow) =>
-                            workflow.RunAsync(
-                                name == "full"
-                                    ? (CatalogBatchCommand)new RefreshCatalog()
-                                    : new RefreshRecentlyActiveArtists(),
-                                null,
-                                null
-                            ),
-                        options
-                    );
             var schedule = new Schedule(
-                action,
+                ScheduledAction(name),
                 new ScheduleSpec { CronExpressions = new[] { cron }, TimeZoneName = "UTC" }
             )
             {
                 Policy = new SchedulePolicy { Overlap = ScheduleOverlapPolicy.Skip },
             };
+
             try
             {
                 await client.CreateScheduleAsync("relisten-ingest-" + name, schedule);
             }
-            catch (ScheduleAlreadyRunningException) { }
+            catch (ScheduleAlreadyRunningException)
+            {
+                // Operators own existing schedules, including their paused state.
+            }
         }
+    }
+
+    private static ScheduleActionStartWorkflow ScheduledAction(string name)
+    {
+        var options = Options("ingest/scheduled/" + name);
+        if (name == "discover")
+        {
+            return ScheduleActionStartWorkflow.Create(
+                (ArchiveArtistDiscoveryWorkflow workflow) =>
+                    workflow.RunAsync(new DiscoverArchiveArtists(), null),
+                options
+            );
+        }
+
+        CatalogBatchCommand request =
+            name == "full" ? new RefreshCatalog() : new RefreshRecentlyActiveArtists();
+
+        return ScheduleActionStartWorkflow.Create(
+            (RefreshBatchWorkflow workflow) => workflow.RunAsync(request, null, null),
+            options
+        );
     }
 
     /// <summary>Only Archive exposes a targeted import; unsupported providers have no successful no-op method.</summary>
@@ -218,7 +240,10 @@ public sealed class TemporalIngestionClient
         public Task<ImportHandle<ArtistImportResult>> ImportItemAsync(ImportArchiveItem request)
         {
             if (string.IsNullOrWhiteSpace(request.Item.Value))
+            {
                 throw new InvalidImportRequest("Archive item identifier must not be empty.");
+            }
+
             return owner.StartArtist(
                 request.Artist,
                 UpstreamProvider.ArchiveOrg,

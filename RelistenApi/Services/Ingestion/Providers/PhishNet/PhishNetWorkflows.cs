@@ -5,16 +5,28 @@ using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.PhishNet;
 
+/// <summary>Resumes enrichment at the next unfinished source in the fixed selection.</summary>
 public sealed record PhishNetProgress(
     ProviderStage Stage = ProviderStage.NotStarted,
     int ItemIndex = 0,
     ProviderSummary? Summary = null
 );
 
-/// <summary>Enriches a fixed source selection after Phish.in has completed for this artist.</summary>
+/// <summary>
+/// Enriches existing catalog sources with Phish.net setlists and reviews.
+/// The artist coordinator completes Phish.in first so its sources are available for selection.
+/// </summary>
 [Workflow]
 public sealed class PhishNetWorkflow
 {
+    private ProviderRequest<RefreshPhishNetArtist> _input = null!;
+    private ProviderWorkflowContext _context = null!;
+    private ActivityOptions _options = null!;
+    private DiscoveredItem<CatalogSourceId, PhishNetSourceInput>[] _selection = null!;
+    private PhishNetProgress _progress = null!;
+    private ProviderSummary _summary = null!;
+    private int _completedCalls;
+
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
         ProviderRequest<RefreshPhishNetArtist> input,
@@ -22,49 +34,95 @@ public sealed class PhishNetWorkflow
         PhishNetProgress? progress = null
     )
     {
-        progress ??= new();
-        var summary = progress.Summary ?? new();
-        var context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
-        var options = ImportWorkflowOptions.Activity(
+        RestoreCheckpoint(input, selection, progress);
+        ImportWorkflowOptions.RequireActive(input.Execution);
+
+        await SelectSourcesIfNeededAsync();
+        await EnrichSelectedSourcesAsync();
+
+        return _summary;
+    }
+
+    private void RestoreCheckpoint(
+        ProviderRequest<RefreshPhishNetArtist> input,
+        DiscoveredItem<CatalogSourceId, PhishNetSourceInput>[]? selection,
+        PhishNetProgress? progress
+    )
+    {
+        // Replay reconstructs these fields. ContinueAsNew starts a fresh instance,
+        // so the fixed selection and durable progress also travel in run arguments.
+        _input = input;
+        _context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
+        _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.PhishNet]
         );
-        var calls = 0;
-        ImportWorkflowOptions.RequireActive(input.Execution);
-        if (progress.Stage == ProviderStage.NotStarted)
+        _selection = selection!;
+        _progress = progress ?? new();
+        _summary = _progress.Summary ?? new();
+        _completedCalls = 0;
+    }
+
+    private async Task SelectSourcesIfNeededAsync()
+    {
+        if (_progress.Stage != ProviderStage.NotStarted)
         {
-            selection = await Workflow.ExecuteActivityAsync(
-                (PhishNetActivities a) => a.SelectSourcesAsync(input),
-                options
-            );
-            calls++;
-            progress = progress with { Stage = ProviderStage.Importing };
+            return;
         }
-        while (progress.Stage == ProviderStage.Importing && progress.ItemIndex < selection!.Length)
+
+        // Select once so rollover cannot change membership or move the item index
+        // when other catalog work adds or updates sources.
+        _selection = await Workflow.ExecuteActivityAsync(
+            (PhishNetActivities a) => a.SelectSourcesAsync(_input),
+            _options
+        );
+        _completedCalls++;
+
+        _progress = _progress with { Stage = ProviderStage.Importing };
+    }
+
+    private async Task EnrichSelectedSourcesAsync()
+    {
+        while (
+            _progress.Stage == ProviderStage.Importing && _progress.ItemIndex < _selection.Length
+        )
         {
-            ImportWorkflowOptions.RequireActive(input.Execution);
-            if (ImportWorkflowOptions.ShouldContinue(calls))
-            {
-                var continuation = progress with { Summary = summary };
-                throw Workflow.CreateContinueAsNewException(
-                    (PhishNetWorkflow w) => w.RunAsync(input, selection, continuation)
-                );
-            }
-            var item = selection[progress.ItemIndex];
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (PhishNetActivities a) => a.EnrichSourceAsync(context, item),
-                        options
-                    )
-            );
-            calls++;
-            summary =
-                outcome.Failure == null
-                    ? summary.Add(outcome.Result!.Disposition)
-                    : summary.AddFailure(outcome.Failure);
-            progress = progress with { ItemIndex = progress.ItemIndex + 1 };
+            ImportWorkflowOptions.RequireActive(_input.Execution);
+            ContinueWithCheckpointIfNeeded();
+
+            await EnrichNextSourceAsync();
         }
-        return summary;
+    }
+
+    private async Task EnrichNextSourceAsync()
+    {
+        var item = _selection[_progress.ItemIndex];
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (PhishNetActivities a) => a.EnrichSourceAsync(_context, item),
+                    _options
+                )
+        );
+        _completedCalls++;
+
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
+        _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
+    }
+
+    private void ContinueWithCheckpointIfNeeded()
+    {
+        if (!ImportWorkflowOptions.ShouldContinue(_completedCalls))
+        {
+            return;
+        }
+
+        var checkpoint = _progress with { Summary = _summary };
+        throw Workflow.CreateContinueAsNewException(
+            (PhishNetWorkflow w) => w.RunAsync(_input, _selection, checkpoint)
+        );
     }
 }

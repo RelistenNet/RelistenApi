@@ -17,6 +17,7 @@ public class ArchiveItemImportWorkflow
     {
         execution = ImportWorkflowOptions.AssignExecution(execution);
         ImportWorkflowOptions.RequireActive(execution);
+
         var context = new ProviderWorkflowContext(request.Artist, execution);
         var (item, failure) = await ImportItemOperation.RunAsync(
             request.Item,
@@ -29,11 +30,14 @@ public class ArchiveItemImportWorkflow
                     )
                 )
         );
+
         var summary =
             failure != null
                 ? new ProviderSummary().AddFailure(failure)
                 : new ProviderSummary().Add(item!.Disposition);
+
         await CatalogSteps.RebuildArtist(request.Artist, execution);
+
         return new ArtistImportResult(
             request.Artist,
             summary.CompletedItems,

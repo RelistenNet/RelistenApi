@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
@@ -6,10 +7,22 @@ using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.Archive;
 
-/// <summary>Retains a complete listing and applies only deletion evidence verified from that listing.</summary>
+/// <summary>
+/// Imports a complete Archive selection, then reconciles deletions for an unfiltered refresh.
+/// The artist coordinator rebuilds shows, years, and cache after this workflow completes.
+/// </summary>
 [Workflow]
 public sealed class ArchiveWorkflow
 {
+    private ProviderRequest<RefreshArchiveArtist> _input = null!;
+    private ProviderWorkflowContext _context = null!;
+    private ActivityOptions _options = null!;
+    private ArchiveSelection _selection = null!;
+    private ArchiveProgress _progress = null!;
+    private ProviderSummary _summary = null!;
+    private List<ArchiveItemId> _noMp3 = null!;
+    private int _completedCalls;
+
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
         ProviderRequest<RefreshArchiveArtist> input,
@@ -17,88 +30,153 @@ public sealed class ArchiveWorkflow
         ArchiveProgress? progress = null
     )
     {
-        progress ??= new();
-        var context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
-        var options = ImportWorkflowOptions.Activity(
+        RestoreCheckpoint(input, selection, progress);
+        ImportWorkflowOptions.RequireActive(input.Execution);
+
+        await DiscoverRecordingsIfNeededAsync();
+        await ImportSelectedRecordingsAsync();
+        await ReconcileDeletionsForFullRefreshAsync();
+
+        return _summary;
+    }
+
+    private void RestoreCheckpoint(
+        ProviderRequest<RefreshArchiveArtist> input,
+        ArchiveSelection? selection,
+        ArchiveProgress? progress
+    )
+    {
+        // Replay reconstructs these fields. ContinueAsNew starts a fresh instance,
+        // so selection and durable progress must also travel in the run arguments.
+        _input = input;
+        _context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
+        _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
         );
-        var calls = 0;
-        ImportWorkflowOptions.RequireActive(input.Execution);
-        if (progress.Stage == ProviderStage.NotStarted)
+        _selection = selection!;
+        _progress = progress ?? new();
+        _summary = _progress.Summary ?? new();
+        _noMp3 = (_progress.NoMp3 ?? []).ToList();
+        _completedCalls = 0;
+    }
+
+    private async Task DiscoverRecordingsIfNeededAsync()
+    {
+        if (_progress.Stage != ProviderStage.NotStarted)
         {
-            selection = await Workflow.ExecuteActivityAsync(
-                (ArchiveActivities a) => a.DiscoverRecordings(context, input.Request.Year),
-                options
-            );
-            calls++;
-            progress = progress with { Stage = ProviderStage.Importing };
+            return;
         }
-        var summary = progress.Summary ?? new ProviderSummary();
-        var noMp3 = (progress.NoMp3 ?? []).ToList();
+
+        _selection = await Workflow.ExecuteActivityAsync(
+            (ArchiveActivities a) => a.DiscoverRecordings(_context, _input.Request.Year),
+            _options
+        );
+        _completedCalls++;
+
+        // Retain the original listing: later deletion checks must use the same
+        // observed identifiers even if Archive changes during this refresh.
+        _progress = _progress with
+        {
+            Stage = ProviderStage.Importing,
+        };
+    }
+
+    private async Task ImportSelectedRecordingsAsync()
+    {
         while (
-            progress.Stage == ProviderStage.Importing && progress.NextItem < selection!.Items.Length
+            _progress.Stage == ProviderStage.Importing
+            && _progress.NextItem < _selection.Items.Length
         )
         {
-            ImportWorkflowOptions.RequireActive(input.Execution);
-            if (ImportWorkflowOptions.ShouldContinue(calls))
-            {
-                var continuation = progress with { Summary = summary, NoMp3 = noMp3.ToArray() };
-                throw Workflow.CreateContinueAsNewException(
-                    (ArchiveWorkflow w) => w.RunAsync(input, selection, continuation)
-                );
-            }
-            var item = selection.Items[progress.NextItem];
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (ArchiveActivities a) =>
-                            a.ImportItem(context, new DiscoveredArchiveItem(item)),
-                        options
-                    )
-            );
-            calls++;
-            if (outcome.Failure != null)
-                summary = summary.AddFailure(outcome.Failure);
-            else
-            {
-                summary = summary.Add(outcome.Result!.Disposition);
-                if (outcome.Result.SkipReason == ArchiveSkipReason.NoVbrMp3 && noMp3.Count < 6)
-                    noMp3.Add(item.Id);
-            }
-            progress = progress with { NextItem = progress.NextItem + 1 };
+            ImportWorkflowOptions.RequireActive(_input.Execution);
+            ContinueWithCheckpointIfNeeded();
+
+            await ImportNextRecordingAsync();
         }
-        progress = progress with
-        {
-            Stage = ProviderStage.Finalizing,
-            Summary = summary,
-            NoMp3 = noMp3.ToArray(),
-        };
-        if (input.Request.Year == null)
-        {
-            ImportWorkflowOptions.RequireActive(input.Execution);
-            if (ImportWorkflowOptions.ShouldContinue(calls))
-                throw Workflow.CreateContinueAsNewException(
-                    (ArchiveWorkflow w) => w.RunAsync(input, selection, progress)
-                );
-            var plan =
-                progress.Deletions
-                ?? await Workflow.ExecuteActivityAsync(
+
+        _progress = _progress with { Stage = ProviderStage.Finalizing };
+    }
+
+    private async Task ImportNextRecordingAsync()
+    {
+        var item = _selection.Items[_progress.NextItem];
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
                     (ArchiveActivities a) =>
-                        a.VerifyDeletionCandidates(context, selection!, noMp3.ToArray()),
-                    options
-                );
-            calls++;
-            progress = progress with { Deletions = plan };
-            if (ImportWorkflowOptions.ShouldContinue(calls))
-                throw Workflow.CreateContinueAsNewException(
-                    (ArchiveWorkflow w) => w.RunAsync(input, selection, progress)
-                );
-            await Workflow.ExecuteActivityAsync(
-                (ArchiveActivities a) => a.ApplyVerifiedDeletions(context, plan),
-                options
-            );
+                        a.ImportItem(_context, new DiscoveredArchiveItem(item)),
+                    _options
+                )
+        );
+        _completedCalls++;
+
+        if (outcome.Failure != null)
+        {
+            _summary = _summary.AddFailure(outcome.Failure);
         }
-        return summary;
+        else
+        {
+            _summary = _summary.Add(outcome.Result!.Disposition);
+
+            // Six candidates are enough to trigger the existing five-deletion
+            // guard. Retaining more would only enlarge the continuation payload.
+            if (outcome.Result.SkipReason == ArchiveSkipReason.NoVbrMp3 && _noMp3.Count < 6)
+            {
+                _noMp3.Add(item.Id);
+            }
+        }
+
+        // Failed items count as finished attempts; a fresh refresh can retry them.
+        _progress = _progress with
+        {
+            NextItem = _progress.NextItem + 1,
+        };
+    }
+
+    private async Task ReconcileDeletionsForFullRefreshAsync()
+    {
+        if (_input.Request.Year != null)
+        {
+            return;
+        }
+
+        ImportWorkflowOptions.RequireActive(_input.Execution);
+        ContinueWithCheckpointIfNeeded();
+
+        var plan =
+            _progress.Deletions
+            ?? await Workflow.ExecuteActivityAsync(
+                (ArchiveActivities a) =>
+                    a.VerifyDeletionCandidates(_context, _selection, _noMp3.ToArray()),
+                _options
+            );
+        _completedCalls++;
+
+        // Keep the verified list across rollover. Applying it must never discover
+        // new candidates, including when an activity retries after committing.
+        _progress = _progress with
+        {
+            Deletions = plan,
+        };
+        ContinueWithCheckpointIfNeeded();
+
+        await Workflow.ExecuteActivityAsync(
+            (ArchiveActivities a) => a.ApplyVerifiedDeletions(_context, plan),
+            _options
+        );
+    }
+
+    private void ContinueWithCheckpointIfNeeded()
+    {
+        if (!ImportWorkflowOptions.ShouldContinue(_completedCalls))
+        {
+            return;
+        }
+
+        var checkpoint = _progress with { Summary = _summary, NoMp3 = _noMp3.ToArray() };
+        throw Workflow.CreateContinueAsNewException(
+            (ArchiveWorkflow w) => w.RunAsync(_input, _selection, checkpoint)
+        );
     }
 }

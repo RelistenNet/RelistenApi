@@ -80,8 +80,15 @@ public sealed record ProviderSummary(
     {
         var failures = new List<ItemFailure>(Failures ?? []);
         if (failures.Count < 20)
+        {
             failures.Add(failure);
-        return this with { FailedItems = FailedItems + 1, Failures = failures.ToArray() };
+        }
+
+        return this with
+        {
+            FailedItems = FailedItems + 1,
+            Failures = failures.ToArray(),
+        };
     }
 }
 

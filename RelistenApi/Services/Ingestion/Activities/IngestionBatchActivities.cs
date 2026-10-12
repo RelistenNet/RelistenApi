@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Data;
 using Relisten.Services.Indexing;
@@ -27,8 +26,10 @@ public sealed class IngestionBatchActivities(
     {
         using var heartbeat = new ActivityHeartbeat();
         RequireActive(execution);
+
         var selected = await artists.UuidsForImport(request is RefreshRecentlyActiveArtists);
         RequireActive(execution);
+
         return selected.Select(value => new ArtistId(Guid.Parse(value))).ToArray();
     }
 
@@ -42,14 +43,23 @@ public sealed class IngestionBatchActivities(
         var url =
             "https://archive.org/services/search/v1/scrape?q=collection:etree%20AND%20mediatype:collection&fields=identifier,title,item_count,month&count=10000";
         if (progress.Cursor != null)
+        {
             url += "&cursor=" + Uri.EscapeDataString(progress.Cursor.Token);
+        }
+
         using var response = await http.GetAsync(url, token);
         response.EnsureSuccessStatusCode();
+
         var page = ArchiveOrgCollectionIndexParser.Parse(
             await response.Content.ReadAsStringAsync(token)
         );
         if (page?.items == null)
+        {
             throw new InvalidDataException("Archive returned an invalid collection page.");
+        }
+
+        // A missing or repeated cursor cannot establish completeness while the
+        // provider still claims more results. Fail instead of accepting a partial index.
         var complete =
             page.total > 0
                 ? progress.Processed + page.items.Count >= page.total
@@ -62,9 +72,12 @@ public sealed class IngestionBatchActivities(
                 || page.cursor == progress.Cursor?.Token
             )
         )
+        {
             throw new InvalidDataException(
                 "Archive collection listing ended before its declared total or its cursor did not advance."
             );
+        }
+
         RequireActive(progress.Execution);
         return new ArchiveCollectionPage(
             page.items.ToArray(),
@@ -81,6 +94,7 @@ public sealed class IngestionBatchActivities(
         using var heartbeat = new ActivityHeartbeat();
         RequireActive(execution);
         var token = ActivityExecutionContext.Current.CancellationToken;
+
         try
         {
             return await transactions.RunCollectionPageAsync(
@@ -107,10 +121,12 @@ public sealed class IngestionBatchActivities(
     {
         ActivityExecutionContext.Current.CancellationToken.ThrowIfCancellationRequested();
         if (DateTimeOffset.UtcNow >= execution.Deadline)
+        {
             throw new ApplicationFailureException(
                 "This import has expired. Start a fresh import.",
                 errorType: "ImportExpired",
                 nonRetryable: true
             );
+        }
     }
 }

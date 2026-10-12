@@ -24,14 +24,35 @@ public class ArtistRefreshWorkflow
     {
         execution = ImportWorkflowOptions.AssignExecution(execution);
         ImportWorkflowOptions.RequireActive(execution);
+
         var plan = await Workflow.ExecuteActivityAsync(
             (CatalogActivities activities) => activities.PrepareArtist(request, execution),
             ImportWorkflowOptions.Activity(IngestionQueues.Database)
         );
+
+        var result = await RefreshProvidersAsync(request, execution, plan.Providers);
+
+        // Partial and empty imports also repair derived data left by earlier failed work.
+        // Cancellation and failed prerequisites propagate before reaching this step.
+        await CatalogSteps.RebuildArtist(request.Artist, execution);
+
+        return result;
+    }
+
+    private static async Task<ArtistImportResult> RefreshProvidersAsync(
+        ArtistRefreshCommand request,
+        IngestionExecution execution,
+        UpstreamProvider[] providers
+    )
+    {
         var result = new ArtistImportResult(request.Artist, 0, 0, 0);
-        foreach (var provider in plan.Providers)
+
+        // Provider order comes from the catalog. Keep it sequential so later
+        // providers can use the artist data written by earlier providers.
+        foreach (var provider in providers)
         {
             var summary = await RunProvider(request, execution, provider);
+
             result = result with
             {
                 CompletedItems = result.CompletedItems + summary.CompletedItems,
@@ -39,9 +60,7 @@ public class ArtistRefreshWorkflow
                 FailedItems = result.FailedItems + summary.FailedItems,
             };
         }
-        // Partial and empty imports also repair derived data left by earlier failed work.
-        // Cancellation and failed prerequisites propagate before reaching this step.
-        await CatalogSteps.RebuildArtist(request.Artist, execution);
+
         return result;
     }
 
@@ -57,100 +76,110 @@ public class ArtistRefreshWorkflow
             $"{Workflow.Info.WorkflowId}/provider/{provider.ToValue()}",
             execution
         );
-        return provider switch
+
+        // Build the typed request before starting its child. Only the three
+        // providers below accept year filters; the others refresh the whole artist.
+        switch (provider)
         {
-            UpstreamProvider.ArchiveOrg => Workflow.ExecuteChildWorkflowAsync(
-                (ArchiveWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshArchiveArtist>(
-                            request as RefreshArchiveArtist
-                                ?? new RefreshArchiveArtist(artist, filteredYear),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.Phishin => Workflow.ExecuteChildWorkflowAsync(
-                (PhishInWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshPhishInArtist>(
-                            request as RefreshPhishInArtist
-                                ?? new RefreshPhishInArtist(artist, filteredYear),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.PhishNet => Workflow.ExecuteChildWorkflowAsync(
-                (PhishNetWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshPhishNetArtist>(
-                            request as RefreshPhishNetArtist
-                                ?? new RefreshPhishNetArtist(artist, filteredYear),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.SetlistFm => Workflow.ExecuteChildWorkflowAsync(
-                (SetlistFmWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshSetlistFmArtist>(
-                            new RefreshSetlistFmArtist(artist),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.PhantasyTour => Workflow.ExecuteChildWorkflowAsync(
-                (PhantasyTourWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshPhantasyTourArtist>(
-                            new RefreshPhantasyTourArtist(artist),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.JerryGarcia => Workflow.ExecuteChildWorkflowAsync(
-                (JerryWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshJerryArtist>(
-                            new RefreshJerryArtist(artist),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            UpstreamProvider.Local => Workflow.ExecuteChildWorkflowAsync(
-                (LocalWorkflow w) =>
-                    w.RunAsync(
-                        new ProviderRequest<RefreshLocalArtist>(
-                            new RefreshLocalArtist(artist),
-                            execution
-                        ),
-                        null,
-                        null
-                    ),
-                options
-            ),
-            _ => throw new ApplicationFailureException(
-                "Unsupported ingestion provider.",
-                "UnsupportedImportOperation",
-                nonRetryable: true
-            ),
-        };
+            case UpstreamProvider.ArchiveOrg:
+            {
+                var command =
+                    request as RefreshArchiveArtist
+                    ?? new RefreshArchiveArtist(artist, filteredYear);
+                var providerRequest = new ProviderRequest<RefreshArchiveArtist>(command, execution);
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (ArchiveWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.Phishin:
+            {
+                var command =
+                    request as RefreshPhishInArtist
+                    ?? new RefreshPhishInArtist(artist, filteredYear);
+                var providerRequest = new ProviderRequest<RefreshPhishInArtist>(command, execution);
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (PhishInWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.PhishNet:
+            {
+                var command =
+                    request as RefreshPhishNetArtist
+                    ?? new RefreshPhishNetArtist(artist, filteredYear);
+                var providerRequest = new ProviderRequest<RefreshPhishNetArtist>(
+                    command,
+                    execution
+                );
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (PhishNetWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.SetlistFm:
+            {
+                var command = new RefreshSetlistFmArtist(artist);
+                var providerRequest = new ProviderRequest<RefreshSetlistFmArtist>(
+                    command,
+                    execution
+                );
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (SetlistFmWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.PhantasyTour:
+            {
+                var command = new RefreshPhantasyTourArtist(artist);
+                var providerRequest = new ProviderRequest<RefreshPhantasyTourArtist>(
+                    command,
+                    execution
+                );
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (PhantasyTourWorkflow workflow) =>
+                        workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.JerryGarcia:
+            {
+                var command = new RefreshJerryArtist(artist);
+                var providerRequest = new ProviderRequest<RefreshJerryArtist>(command, execution);
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (JerryWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            case UpstreamProvider.Local:
+            {
+                var command = new RefreshLocalArtist(artist);
+                var providerRequest = new ProviderRequest<RefreshLocalArtist>(command, execution);
+
+                return Workflow.ExecuteChildWorkflowAsync(
+                    (LocalWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    options
+                );
+            }
+
+            default:
+                throw new ApplicationFailureException(
+                    "Unsupported ingestion provider.",
+                    "UnsupportedImportOperation",
+                    nonRetryable: true
+                );
+        }
     }
 }

@@ -10,6 +10,17 @@ namespace Relisten.Ingestion.Workflows;
 [Workflow]
 public class RefreshBatchWorkflow
 {
+    private const int ConcurrentArtists = 10;
+    private const int ArtistsPerRun = 250;
+
+    // Temporal recreates these fields by replaying RunAsync. Only the selection and
+    // completed progress cross a continuation; no active child is carried forward.
+    private CatalogBatchCommand _request = null!;
+    private ArtistId[] _selectedArtists = null!;
+    private BatchProgress _progress = null!;
+    private ImportBatchResult _result = null!;
+    private readonly List<Task<ArtistOutcome>> _active = new();
+
     [WorkflowRun]
     public async Task<ImportBatchResult> RunAsync(
         CatalogBatchCommand request,
@@ -17,110 +28,145 @@ public class RefreshBatchWorkflow
         BatchProgress? progress = null
     )
     {
-        progress ??= new BatchProgress(
-            ImportWorkflowOptions.AssignExecution(null),
-            Workflow.UtcNow.Year
-        );
-        ImportWorkflowOptions.RequireActive(progress.Execution);
-        selectedArtists ??= await Workflow.ExecuteActivityAsync(
-            (IngestionBatchActivities a) => a.SelectArtists(request, progress.Execution),
+        _request = request;
+        _progress =
+            progress
+            ?? new BatchProgress(ImportWorkflowOptions.AssignExecution(null), Workflow.UtcNow.Year);
+        _result = _progress.Result ?? new ImportBatchResult();
+
+        ImportWorkflowOptions.RequireActive(_progress.Execution);
+        _selectedArtists = selectedArtists ?? await SelectArtistsAsync();
+
+        await ImportCurrentSegmentAsync();
+
+        if (_progress.NextArtist < _selectedArtists.Length)
+        {
+            ContinueWithRemainingArtists();
+        }
+
+        return _result;
+    }
+
+    private Task<ArtistId[]> SelectArtistsAsync() =>
+        Workflow.ExecuteActivityAsync(
+            (IngestionBatchActivities activities) =>
+                activities.SelectArtists(_request, _progress.Execution),
             ImportWorkflowOptions.Activity(IngestionQueues.Database)
         );
-        var result = progress.Result ?? new ImportBatchResult();
-        var active = new List<Task<ArtistOutcome>>();
-        var first = progress.NextArtist;
-        var end = Math.Min(first + 250, selectedArtists.Length);
+
+    private async Task ImportCurrentSegmentAsync()
+    {
+        var end = Math.Min(_progress.NextArtist + ArtistsPerRun, _selectedArtists.Length);
+
         try
         {
-            while (progress.NextArtist < end)
+            while (_progress.NextArtist < end)
             {
                 Workflow.CancellationToken.ThrowIfCancellationRequested();
-                ImportWorkflowOptions.RequireActive(progress.Execution);
-                active.Add(ImportArtist(request, selectedArtists[progress.NextArtist], progress));
-                progress = progress with { NextArtist = progress.NextArtist + 1 };
-                if (active.Count == 10)
-                    result = await FinishOne(active, result);
+                ImportWorkflowOptions.RequireActive(_progress.Execution);
+
+                _active.Add(ImportArtistAsync(_selectedArtists[_progress.NextArtist]));
+                _progress = _progress with { NextArtist = _progress.NextArtist + 1 };
+
+                if (_active.Count == ConcurrentArtists)
+                {
+                    await FinishOneArtistAsync();
+                }
+
                 if (Workflow.ContinueAsNewSuggested)
+                {
                     break;
+                }
             }
-            // Continuation carries no live children.
-            while (active.Count > 0)
-                result = await FinishOne(active, result);
+
+            // Every started artist must settle before its result enters the next run.
+            while (_active.Count > 0)
+            {
+                await FinishOneArtistAsync();
+            }
         }
         catch (Exception error) when (TemporalException.IsCanceledException(error))
         {
-            // One child's cancellation can complete before the other nine. Keep the
-            // parent open until every started child has acknowledged cancellation.
-            try
-            {
-                await Workflow.WhenAllAsync(active);
-            }
-            catch (Exception)
-            {
-                // WhenAll waits for every task even when one fails. Preserve the
-                // original cancellation after the remaining children have settled.
-            }
+            await WaitForCanceledArtistsAsync();
             throw;
         }
-        if (progress.NextArtist < selectedArtists.Length)
-        {
-            progress = progress with { Result = result };
-            throw Workflow.CreateContinueAsNewException(
-                (RefreshBatchWorkflow w) => w.RunAsync(request, selectedArtists, progress)
-            );
-        }
-        return result;
     }
 
-    private static async Task<ImportBatchResult> FinishOne(
-        List<Task<ArtistOutcome>> active,
-        ImportBatchResult result
-    )
+    private async Task WaitForCanceledArtistsAsync()
     {
-        var finished = await Workflow.WhenAnyAsync(active);
-        active.Remove(finished);
-        return await finished switch
+        // One child's cancellation can complete before the other nine. Keep the
+        // parent open until every started child has acknowledged cancellation.
+        try
         {
-            ArtistOutcome.Completed => result with
+            await Workflow.WhenAllAsync(_active);
+        }
+        catch (Exception)
+        {
+            // WhenAll waits for every task even when one fails. The caller then
+            // rethrows the original cancellation, rather than a sibling's failure.
+        }
+    }
+
+    private async Task FinishOneArtistAsync()
+    {
+        var finished = await Workflow.WhenAnyAsync(_active);
+        _active.Remove(finished);
+
+        _result = await finished switch
+        {
+            ArtistOutcome.Completed => _result with
             {
-                CompletedArtists = result.CompletedArtists + 1,
+                CompletedArtists = _result.CompletedArtists + 1,
             },
-            ArtistOutcome.Partial => result with { PartialArtists = result.PartialArtists + 1 },
-            ArtistOutcome.Conflict => result with
+            ArtistOutcome.Partial => _result with { PartialArtists = _result.PartialArtists + 1 },
+            ArtistOutcome.Conflict => _result with
             {
-                ConflictingArtists = result.ConflictingArtists + 1,
+                ConflictingArtists = _result.ConflictingArtists + 1,
             },
-            _ => result with { FailedArtists = result.FailedArtists + 1 },
+            _ => _result with { FailedArtists = _result.FailedArtists + 1 },
         };
     }
 
-    private static async Task<ArtistOutcome> ImportArtist(
-        CatalogBatchCommand request,
-        ArtistId artist,
-        BatchProgress progress
-    )
+    private void ContinueWithRemainingArtists()
     {
-        var options = CoordinatorOptions.Child($"ingest/artist/{artist}", progress.Execution);
+        _progress = _progress with { Result = _result };
+
+        throw Workflow.CreateContinueAsNewException(
+            (RefreshBatchWorkflow workflow) =>
+                workflow.RunAsync(_request, _selectedArtists, _progress)
+        );
+    }
+
+    private async Task<ArtistOutcome> ImportArtistAsync(ArtistId artist)
+    {
+        var options = CoordinatorOptions.Child($"ingest/artist/{artist}", _progress.Execution);
+
         try
         {
             ArtistImportResult result;
-            if (request is RebuildCatalog)
-                result = await Workflow.ExecuteChildWorkflowAsync(
-                    (RebuildArtistCatalogWorkflow w) =>
-                        w.RunAsync(new RebuildArtistCatalog(artist), progress.Execution),
-                    options
-                );
-            else
+
+            if (_request is RebuildCatalog)
             {
-                ArtistRefreshCommand command =
-                    request is RefreshRecentlyActiveArtists
-                        ? new RefreshFilteredArtist(artist, progress.FilterYear)
-                        : new RefreshArtist(artist);
                 result = await Workflow.ExecuteChildWorkflowAsync(
-                    (ArtistRefreshWorkflow w) => w.RunAsync(command, progress.Execution),
+                    (RebuildArtistCatalogWorkflow workflow) =>
+                        workflow.RunAsync(new RebuildArtistCatalog(artist), _progress.Execution),
                     options
                 );
             }
+            else
+            {
+                ArtistRefreshCommand command =
+                    _request is RefreshRecentlyActiveArtists
+                        ? new RefreshFilteredArtist(artist, _progress.FilterYear)
+                        : new RefreshArtist(artist);
+
+                result = await Workflow.ExecuteChildWorkflowAsync(
+                    (ArtistRefreshWorkflow workflow) =>
+                        workflow.RunAsync(command, _progress.Execution),
+                    options
+                );
+            }
+
             return result.Status == ImportStatus.Completed
                 ? ArtistOutcome.Completed
                 : ArtistOutcome.Partial;

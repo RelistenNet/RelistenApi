@@ -15,6 +15,10 @@ public sealed record ProviderContext(
     CancellationToken CancellationToken
 )
 {
+    /// <summary>
+    /// Serializes one catalog change with other attempts for this artist and rolls back on failure.
+    /// Reload mutable catalog rows inside apply; do not perform HTTP requests while holding the lock.
+    /// </summary>
     public Task<T> CommitAsync<T>(Func<Task<T>> apply) =>
         Transactions.RunAsync(Artist.id, Run.Deadline, CancellationToken, apply);
 }

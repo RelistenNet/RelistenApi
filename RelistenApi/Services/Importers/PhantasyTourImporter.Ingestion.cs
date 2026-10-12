@@ -31,6 +31,7 @@ public partial class PhantasyTourImporter
             JsonConvert.DeserializeObject<PhantasyTourShowListing[]>(
                 await response.Content.ReadAsStringAsync(context.CancellationToken)
             ) ?? throw new InvalidDataException("Phantasy Tour returned an invalid listing.");
+
         var dates = new Dictionary<PhantasyTourShowId, DateTime>();
         var selected = new List<DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing>>();
         await PreloadData(context.Artist);
@@ -82,8 +83,11 @@ public partial class PhantasyTourImporter
             await PreloadData(context.Artist);
             return existingSetlistShows.GetValue(identifier);
         });
+
         if (existing != null)
+        {
             return new(item.Id, new(existing.id), ItemDisposition.Unchanged);
+        }
 
         using var response = await http.GetAsync(
             UrlForShow(item.Id.Value),
@@ -91,16 +95,23 @@ public partial class PhantasyTourImporter
         );
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
+
         return await context.CommitAsync(async () =>
         {
+            // A previous attempt may have committed while this attempt fetched
+            // the detail page. Reuse that row instead of inserting another one.
             await PreloadData(context.Artist);
             if (existingSetlistShows.GetValue(identifier) is { } current)
+            {
                 return new PhantasyTourItemResult(
                     item.Id,
                     new(current.id),
                     ItemDisposition.Unchanged
                 );
+            }
+
             await ApplyShowBody(context.Artist, new ImportStats(), null, item.Id.Value, body);
+
             return new PhantasyTourItemResult(
                 item.Id,
                 new(existingSetlistShows[identifier]!.id),
@@ -117,7 +128,10 @@ public partial class PhantasyTourImporter
     {
         var dates = new Dictionary<PhantasyTourShowId, DateTime>();
         foreach (var entry in listedDates)
+        {
             AddListedDate(dates, entry.Id, entry.Date);
+        }
+
         return context.CommitAsync(async () =>
         {
             var corrected = await _setlistShowService.UpdateDates(
@@ -139,9 +153,12 @@ public partial class PhantasyTourImporter
     )
     {
         if (dates.TryGetValue(identifier, out var previous) && previous != date)
+        {
             throw new InvalidDataException(
                 $"Phantasy Tour returned conflicting dates for {identifier.Value}."
             );
+        }
+
         dates[identifier] = date;
     }
 }

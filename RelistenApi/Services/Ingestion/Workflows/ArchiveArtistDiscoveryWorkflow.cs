@@ -8,34 +8,56 @@ namespace Relisten.Ingestion.Workflows;
 [Workflow]
 public class ArchiveArtistDiscoveryWorkflow
 {
+    private ArchiveDiscoveryProgress _progress = null!;
+
     [WorkflowRun]
     public async Task<int> RunAsync(
         DiscoverArchiveArtists request,
         ArchiveDiscoveryProgress? progress = null
     )
     {
-        progress ??= new ArchiveDiscoveryProgress(ImportWorkflowOptions.AssignExecution(null));
-        for (var calls = 0; ; )
+        _progress =
+            progress ?? new ArchiveDiscoveryProgress(ImportWorkflowOptions.AssignExecution(null));
+
+        await DiscoverUntilCheckpointAsync();
+
+        if (_progress.Cursor != null)
         {
-            ImportWorkflowOptions.RequireActive(progress.Execution);
-            var page = await Workflow.ExecuteActivityAsync(
-                (IngestionBatchActivities a) => a.FetchCollectionPage(progress),
-                ImportWorkflowOptions.Activity(
-                    IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
-                )
+            throw Workflow.CreateContinueAsNewException(
+                (ArchiveArtistDiscoveryWorkflow workflow) => workflow.RunAsync(request, _progress)
             );
-            var count = await Workflow.ExecuteActivityAsync(
-                (IngestionBatchActivities a) => a.ApplyCollectionPage(progress.Execution, page),
-                ImportWorkflowOptions.Activity(IngestionQueues.Database)
-            );
-            calls += 2;
-            progress = progress with { Cursor = page.Next, Processed = progress.Processed + count };
-            if (page.Next == null)
-                return progress.Processed;
-            if (ImportWorkflowOptions.ShouldContinue(calls))
-                throw Workflow.CreateContinueAsNewException(
-                    (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(request, progress)
-                );
         }
+
+        return _progress.Processed;
+    }
+
+    private async Task DiscoverUntilCheckpointAsync()
+    {
+        var activityCalls = 0;
+
+        do
+        {
+            ImportWorkflowOptions.RequireActive(_progress.Execution);
+            await FetchAndApplyPageAsync();
+            activityCalls += 2;
+        } while (_progress.Cursor != null && !ImportWorkflowOptions.ShouldContinue(activityCalls));
+    }
+
+    private async Task FetchAndApplyPageAsync()
+    {
+        // Persist the fetched page in workflow history before writing the catalog.
+        // A database retry must apply that same page even if Archive changes meanwhile.
+        var page = await Workflow.ExecuteActivityAsync(
+            (IngestionBatchActivities activities) => activities.FetchCollectionPage(_progress),
+            ImportWorkflowOptions.Activity(IngestionQueues.Providers[UpstreamProvider.ArchiveOrg])
+        );
+
+        var count = await Workflow.ExecuteActivityAsync(
+            (IngestionBatchActivities activities) =>
+                activities.ApplyCollectionPage(_progress.Execution, page),
+            ImportWorkflowOptions.Activity(IngestionQueues.Database)
+        );
+
+        _progress = _progress with { Cursor = page.Next, Processed = _progress.Processed + count };
     }
 }

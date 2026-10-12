@@ -26,18 +26,24 @@ internal static class ImportItemOperation
         {
             var cause = error.InnerException;
             if (cause is ApplicationFailureException { ErrorType: "ImportExpired" })
+            {
+                // Expiration ends the execution; it is not an item we may skip.
                 throw;
+            }
+
             var message = cause?.Message ?? error.Message;
             var category =
                 (cause as ApplicationFailureException)?.ErrorType
                 ?? cause?.GetType().Name
                 ?? "ActivityFailure";
+
             Workflow.Logger.LogWarning(
                 error,
                 "Item {ItemIdentifier} failed after activity retries with {ErrorCategory}",
                 CanonicalKey(key),
                 category
             );
+
             return (
                 null,
                 new ItemFailure<TKey>(

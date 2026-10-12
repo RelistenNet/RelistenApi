@@ -27,7 +27,9 @@ public partial class JerryGarciaComImporter
             ?? throw new System.IO.InvalidDataException(
                 "Jerry mirror returned an invalid page index."
             );
+
         await PreloadData(context.Artist);
+
         return new JerrySelection(
             BuildFileMetaObjects(files)
                 .Where(f => existingSetlistShows.ContainsKey(f.Identifier) == existing)
@@ -48,6 +50,14 @@ public partial class JerryGarciaComImporter
         DiscoveredItem<JerryShowId, FileMetaObject> item
     ) => ApplySelectedPageAsync(context, item, repairVenue: true);
 
+    /// <summary>Refreshes tour bounds after repairs; orphan removal requires every selected repair to succeed.</summary>
+    public Task<int> FinishVenueRepairAsync(ProviderContext context, bool removeOrphans) =>
+        context.CommitAsync(async () =>
+        {
+            await _tourService.RefreshDatesFromSetlists(context.Artist);
+            return removeOrphans ? await _venueService.RemoveOrphansForArtist(context.Artist) : 0;
+        });
+
     private async Task<JerryItemResult> ApplySelectedPageAsync(
         ProviderContext context,
         DiscoveredItem<JerryShowId, FileMetaObject> item,
@@ -61,65 +71,93 @@ public partial class JerryGarciaComImporter
         response.EnsureSuccessStatusCode();
         var html = await response.Content.ReadAsStringAsync(context.CancellationToken);
         var modifiedAt = response.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow;
+
         // The legacy parser deliberately ignores pages without show details. Make
         // that outcome visible instead of reporting an import with no identity.
         if (ParseShowPage(html) == null)
+        {
             return new(item.Id, null, ItemDisposition.Skipped, JerrySkipReason.MissingShowDetails);
+        }
+
         return await context.CommitAsync(async () =>
         {
+            // Fresh importer dictionaries belong to this activity attempt. Reload
+            // after acquiring the artist lock before testing catalog membership.
             await PreloadData(context.Artist);
-            var previous = existingSetlistShows.GetValue(item.Id.Value);
-            if (repairVenue)
-            {
-                if (previous == null)
-                    return new JerryItemResult(
-                        item.Id,
-                        null,
-                        ItemDisposition.Skipped,
-                        JerrySkipReason.MissingCatalogSetlist
-                    );
-                var stats = new ImportStats();
-                await ApplyVenueBackfill(stats, context.Artist, item.Input, html, modifiedAt);
-                return new JerryItemResult(
-                    item.Id,
-                    new(previous.id),
-                    stats.Created + stats.Updated == 0
-                        ? ItemDisposition.Unchanged
-                        : ItemDisposition.Applied
-                );
-            }
-            if (previous != null)
-                return new JerryItemResult(item.Id, new(previous.id), ItemDisposition.Unchanged);
-            foreach (var tour in existingTours.Values.Where(t => t != null))
-            {
-                if (tour!.start_date.HasValue)
-                    tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
-                if (tour.end_date.HasValue)
-                    tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
-            }
-            await ProcessPage(
-                new ImportStats(),
-                context.Artist,
-                item.Input,
-                html,
-                modifiedAt,
-                null
-            );
-            if (context.Artist.features.tours && tourToStartDate.Count > 0)
-                await UpdateTourStartEndDates(context.Artist);
-            return new JerryItemResult(
-                item.Id,
-                new(existingSetlistShows[item.Id.Value]!.id),
-                ItemDisposition.Applied
-            );
+
+            return repairVenue
+                ? await ApplyVenueRepairAsync(context, item, html, modifiedAt)
+                : await ApplyMissingPageAsync(context, item, html, modifiedAt);
         });
     }
 
-    /// <summary>Refreshes tour bounds after repairs; orphan removal requires every selected repair to succeed.</summary>
-    public Task<int> FinishVenueRepairAsync(ProviderContext context, bool removeOrphans) =>
-        context.CommitAsync(async () =>
+    private async Task<JerryItemResult> ApplyVenueRepairAsync(
+        ProviderContext context,
+        DiscoveredItem<JerryShowId, FileMetaObject> item,
+        string html,
+        DateTime modifiedAt
+    )
+    {
+        var previous = existingSetlistShows.GetValue(item.Id.Value);
+        if (previous == null)
         {
-            await _tourService.RefreshDatesFromSetlists(context.Artist);
-            return removeOrphans ? await _venueService.RemoveOrphansForArtist(context.Artist) : 0;
-        });
+            return new(
+                item.Id,
+                null,
+                ItemDisposition.Skipped,
+                JerrySkipReason.MissingCatalogSetlist
+            );
+        }
+
+        var stats = new ImportStats();
+        await ApplyVenueBackfill(stats, context.Artist, item.Input, html, modifiedAt);
+
+        return new(
+            item.Id,
+            new(previous.id),
+            stats.Created + stats.Updated == 0 ? ItemDisposition.Unchanged : ItemDisposition.Applied
+        );
+    }
+
+    private async Task<JerryItemResult> ApplyMissingPageAsync(
+        ProviderContext context,
+        DiscoveredItem<JerryShowId, FileMetaObject> item,
+        string html,
+        DateTime modifiedAt
+    )
+    {
+        var previous = existingSetlistShows.GetValue(item.Id.Value);
+        if (previous != null)
+        {
+            return new(item.Id, new(previous.id), ItemDisposition.Unchanged);
+        }
+
+        RestoreCommittedTourBounds();
+        await ProcessPage(new ImportStats(), context.Artist, item.Input, html, modifiedAt, null);
+
+        if (context.Artist.features.tours && tourToStartDate.Count > 0)
+        {
+            await UpdateTourStartEndDates(context.Artist);
+        }
+
+        return new(item.Id, new(existingSetlistShows[item.Id.Value]!.id), ItemDisposition.Applied);
+    }
+
+    private void RestoreCommittedTourBounds()
+    {
+        // Activities do not share these dictionaries. Preserve dates committed by
+        // earlier pages so importing the next page can only extend tour bounds.
+        foreach (var tour in existingTours.Values.Where(tour => tour != null))
+        {
+            if (tour!.start_date.HasValue)
+            {
+                tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
+            }
+
+            if (tour.end_date.HasValue)
+            {
+                tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
+            }
+        }
+    }
 }

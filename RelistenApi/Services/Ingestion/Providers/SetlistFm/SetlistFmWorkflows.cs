@@ -17,6 +17,16 @@ public sealed record SetlistFmProgress(
 [Workflow]
 public sealed class SetlistFmWorkflow
 {
+    // Replay restores fields within this run; continuation arguments carry the
+    // current page and its next unprocessed item into a fresh run.
+    private ProviderRequest<RefreshSetlistFmArtist> _input = null!;
+    private ProviderWorkflowContext _context = null!;
+    private ActivityOptions _options = null!;
+    private Page<DiscoveredItem<SetlistFmId, Setlist>, SetlistFmPage>? _page;
+    private SetlistFmProgress _progress = null!;
+    private ProviderSummary _summary = null!;
+    private int _activityCalls;
+
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
         ProviderRequest<RefreshSetlistFmArtist> input,
@@ -24,64 +34,102 @@ public sealed class SetlistFmWorkflow
         SetlistFmProgress? progress = null
     )
     {
-        progress ??= new();
-        var summary = progress.Summary ?? new();
-        var context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
-        var options = ImportWorkflowOptions.Activity(
+        _input = input;
+        _context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
+        _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.SetlistFm]
         );
-        var calls = 0;
-        while (progress.Stage != ProviderStage.Complete)
+        _page = page;
+        _progress = progress ?? new();
+        _summary = _progress.Summary ?? new();
+        _activityCalls = 0;
+
+        await ImportSetlistPagesAsync();
+
+        return _summary;
+    }
+
+    private async Task ImportSetlistPagesAsync()
+    {
+        while (_progress.Stage != ProviderStage.Complete)
         {
-            ImportWorkflowOptions.RequireActive(input.Execution);
-            if (ImportWorkflowOptions.ShouldContinue(calls))
+            ContinueBeforeNextStepIfNeeded();
+
+            if (_page == null)
             {
-                progress = progress with { Summary = summary };
-                throw Workflow.CreateContinueAsNewException(
-                    (SetlistFmWorkflow w) => w.RunAsync(input, page, progress)
-                );
-            }
-            if (page == null)
-            {
-                page = await Workflow.ExecuteActivityAsync(
-                    (SetlistFmActivities a) => a.ReadSetlistPageAsync(context, progress.Next),
-                    options
-                );
-                calls++;
-                progress = progress with
-                {
-                    Stage = ProviderStage.Importing,
-                    ItemIndex = 0,
-                    Next = page.Next,
-                };
+                await ReadNextPageAsync();
                 continue;
             }
-            if (progress.ItemIndex < page.Items.Length)
+
+            if (_progress.ItemIndex < _page.Items.Length)
             {
-                var item = page.Items[progress.ItemIndex];
-                var outcome = await ImportItemOperation.RunAsync(
-                    item.Id,
-                    () =>
-                        Workflow.ExecuteActivityAsync(
-                            (SetlistFmActivities a) => a.ImportSetlistAsync(context, item),
-                            options
-                        )
-                );
-                calls++;
-                summary =
-                    outcome.Failure == null
-                        ? summary.Add(outcome.Result!.Disposition)
-                        : summary.AddFailure(outcome.Failure);
-                progress = progress with { ItemIndex = progress.ItemIndex + 1 };
+                await ImportNextSetlistAsync();
                 continue;
             }
-            page = null;
-            progress = progress with
+
+            // An empty page is not necessarily the last page. Follow the provider's
+            // next-page cursor only after every item on this page has an outcome.
+            _page = null;
+            _progress = _progress with
             {
-                Stage = progress.Next == null ? ProviderStage.Complete : ProviderStage.Importing,
+                Stage = _progress.Next == null ? ProviderStage.Complete : ProviderStage.Importing,
                 ItemIndex = 0,
             };
         }
-        return summary;
+    }
+
+    private async Task ReadNextPageAsync()
+    {
+        _page = await Workflow.ExecuteActivityAsync(
+            (SetlistFmActivities a) => a.ReadSetlistPageAsync(_context, _progress.Next),
+            _options
+        );
+
+        _activityCalls++;
+        _progress = _progress with
+        {
+            Stage = ProviderStage.Importing,
+            ItemIndex = 0,
+            Next = _page.Next,
+        };
+    }
+
+    private async Task ImportNextSetlistAsync()
+    {
+        var item = _page!.Items[_progress.ItemIndex];
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (SetlistFmActivities a) => a.ImportSetlistAsync(_context, item),
+                    _options
+                )
+        );
+
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
+        _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
+    }
+
+    private void ContinueBeforeNextStepIfNeeded()
+    {
+        ImportWorkflowOptions.RequireActive(_input.Execution);
+        if (!ImportWorkflowOptions.ShouldContinue(_activityCalls))
+        {
+            return;
+        }
+
+        // Keep the partially consumed page. Refetching it after continuation could
+        // move items between pages and either repeat or miss setlists.
+        _progress = _progress with
+        {
+            Summary = _summary,
+        };
+        throw Workflow.CreateContinueAsNewException(
+            (SetlistFmWorkflow w) => w.RunAsync(_input, _page, _progress)
+        );
     }
 }

@@ -64,46 +64,9 @@ public sealed class RedisPayloadCodec : IPayloadCodec
         var encoded = new List<Payload>(payloads.Count);
         foreach (var payload in payloads)
         {
-            var length = payload.CalculateSize();
-            if (length > MaximumPayloadSize)
-                throw new RedisPayloadException(
-                    "PayloadTooLarge",
-                    "Serialized payload exceeds 64 MiB."
-                );
-            if (length <= InlineThreshold)
-            {
-                encoded.Add(payload);
-                continue;
-            }
-
-            var bytes = payload.ToByteArray();
-            var digest = Convert.ToHexStringLower(SHA256.HashData(bytes));
-            var key = keyPrefix + digest;
-            var stored = await database.ScriptEvaluateAsync(
-                StoreScript,
-                new RedisKey[] { key },
-                new RedisValue[] { bytes, (long)Retention.TotalMilliseconds }
-            );
-            if ((int)stored != 1)
-                throw Error("PayloadContentConflict", key);
-            encoded.Add(
-                new Payload
-                {
-                    Metadata = { ["encoding"] = ByteString.CopyFromUtf8(Encoding) },
-                    Data = ByteString.CopyFrom(
-                        JsonSerializer.SerializeToUtf8Bytes(
-                            new
-                            {
-                                version = 1,
-                                key,
-                                length,
-                                sha256 = digest,
-                            }
-                        )
-                    ),
-                }
-            );
+            encoded.Add(await EncodePayloadAsync(payload));
         }
+
         return encoded;
     }
 
@@ -115,66 +78,139 @@ public sealed class RedisPayloadCodec : IPayloadCodec
         var decoded = new List<Payload>(payloads.Count);
         foreach (var payload in payloads)
         {
-            if (!IsReference(payload))
-            {
-                decoded.Add(payload);
-                continue;
-            }
-
-            var reference = ParseReference(payload);
-            var result = (RedisResult[])
-                (
-                    await database.ScriptEvaluateAsync(
-                        ReadScript,
-                        new RedisKey[] { reference.Key },
-                        new RedisValue[] { reference.Length }
-                    )
-                )!;
-            if ((int)result[0] == 0)
-                throw Error("PayloadNotFound", reference.Key);
-            if ((int)result[0] != 2)
-                throw Error("PayloadCorrupt", reference.Key);
-            var bytes = (byte[])result[1]!;
-            if (
-                bytes.Length != reference.Length
-                || Convert.ToHexStringLower(SHA256.HashData(bytes)) != reference.Digest
-            )
-                throw Error("PayloadCorrupt", reference.Key);
-            Payload original;
-            try
-            {
-                original = Payload.Parser.ParseFrom(bytes);
-            }
-            catch (InvalidProtocolBufferException)
-            {
-                throw Error("PayloadCorrupt", reference.Key);
-            }
-            if (IsReference(original))
-                throw Error("NestedPayloadReference", reference.Key);
-            decoded.Add(original);
+            decoded.Add(IsReference(payload) ? await DecodeReferenceAsync(payload) : payload);
         }
+
         return decoded;
+    }
+
+    private async Task<Payload> EncodePayloadAsync(Payload payload)
+    {
+        var length = payload.CalculateSize();
+        if (length > MaximumPayloadSize)
+        {
+            throw new RedisPayloadException(
+                "PayloadTooLarge",
+                "Serialized payload exceeds 64 MiB."
+            );
+        }
+
+        if (length <= InlineThreshold)
+        {
+            return payload;
+        }
+
+        // Store the complete protobuf value: replay needs the original metadata too.
+        var bytes = payload.ToByteArray();
+        var digest = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var key = keyPrefix + digest;
+        var stored = await database.ScriptEvaluateAsync(
+            StoreScript,
+            new RedisKey[] { key },
+            new RedisValue[] { bytes, (long)Retention.TotalMilliseconds }
+        );
+
+        if ((int)stored != 1)
+        {
+            throw Error("PayloadContentConflict", key);
+        }
+
+        // Return a reference only after Redis has stored or refreshed its immutable bytes.
+        return new Payload
+        {
+            Metadata = { ["encoding"] = ByteString.CopyFromUtf8(Encoding) },
+            Data = ByteString.CopyFrom(
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new
+                    {
+                        version = 1,
+                        key,
+                        length,
+                        sha256 = digest,
+                    }
+                )
+            ),
+        };
+    }
+
+    private async Task<Payload> DecodeReferenceAsync(Payload payload)
+    {
+        var reference = ParseReference(payload);
+        var result = (RedisResult[])
+            (
+                await database.ScriptEvaluateAsync(
+                    ReadScript,
+                    new RedisKey[] { reference.Key },
+                    new RedisValue[] { reference.Length }
+                )
+            )!;
+
+        if ((int)result[0] == 0)
+        {
+            throw Error("PayloadNotFound", reference.Key);
+        }
+
+        if ((int)result[0] != 2)
+        {
+            throw Error("PayloadCorrupt", reference.Key);
+        }
+
+        // Neither valid JSON nor a matching Redis key proves that the bytes are intact.
+        var bytes = (byte[])result[1]!;
+        if (
+            bytes.Length != reference.Length
+            || Convert.ToHexStringLower(SHA256.HashData(bytes)) != reference.Digest
+        )
+        {
+            throw Error("PayloadCorrupt", reference.Key);
+        }
+
+        Payload original;
+        try
+        {
+            original = Payload.Parser.ParseFrom(bytes);
+        }
+        catch (InvalidProtocolBufferException)
+        {
+            throw Error("PayloadCorrupt", reference.Key);
+        }
+
+        if (IsReference(original))
+        {
+            throw Error("NestedPayloadReference", reference.Key);
+        }
+
+        return original;
     }
 
     private (string Key, int Length, string Digest) ParseReference(Payload payload)
     {
         // Reference documents are small. Bound JSON parsing before inspecting supplied keys.
         if (payload.Data.Length > 4096)
+        {
             throw new RedisPayloadException(
                 "InvalidPayloadReference",
                 "Reference document exceeds 4096 bytes."
             );
+        }
+
         try
         {
             using var document = JsonDocument.Parse(payload.Data.Memory);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 4)
+            {
                 throw new JsonException();
+            }
+
             if (root.GetProperty("version").GetInt32() != 1)
+            {
                 throw new RedisPayloadException(
                     "UnsupportedPayloadReference",
                     "Unsupported Redis payload reference version."
                 );
+            }
+
             var key = root.GetProperty("key").GetString();
             var digest = root.GetProperty("sha256").GetString();
             var length = root.GetProperty("length").GetInt32();
@@ -186,7 +222,10 @@ public sealed class RedisPayloadCodec : IPayloadCodec
                 || length <= InlineThreshold
                 || length > MaximumPayloadSize
             )
+            {
                 throw new JsonException();
+            }
+
             return (key, length, digest);
         }
         catch (Exception error)

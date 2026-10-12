@@ -37,11 +37,13 @@ internal static class ImportWorkflowOptions
     internal static void RequireActive(IngestionExecution execution)
     {
         if (Workflow.UtcNow >= execution.Deadline)
+        {
             throw new ApplicationFailureException(
                 "The import execution deadline has passed.",
                 "ImportExpired",
                 nonRetryable: true
             );
+        }
     }
 
     internal static bool ShouldContinue(int completedCalls) =>

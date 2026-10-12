@@ -14,7 +14,9 @@ public class RebuildArtistCatalogWorkflow
     )
     {
         execution = ImportWorkflowOptions.AssignExecution(execution);
+
         await CatalogSteps.RebuildArtist(request.Artist, execution);
+
         return new ArtistImportResult(request.Artist, 0, 0, 0);
     }
 }

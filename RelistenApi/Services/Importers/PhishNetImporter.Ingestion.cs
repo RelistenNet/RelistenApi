@@ -26,6 +26,7 @@ public partial class PhishNetImporter
     {
         var shows = await phishNetApiClient.Shows(null);
         var sources = await _sourceService.AllForArtistFromPrimary(context.Artist);
+
         return sources
             .Where(source =>
                 !year.HasValue
@@ -57,11 +58,16 @@ public partial class PhishNetImporter
         var ratings = await new PhishNetRatingsScraper(http, before.display_date).ScrapeRatings();
         PhishNetApiReview[]? reviews = null;
         if (ratings.RatingMatched && before.num_reviews != ratings.NumberOfReviewsWritten)
+        {
             reviews = (await phishNetApiClient.Reviews(before.display_date, null)).ToArray();
+        }
 
         return await context.CommitAsync(async () =>
         {
             var current = await _sourceService.ForArtistFromPrimary(context.Artist, item.Id.Value);
+
+            // HTTP inputs were fetched before locking. If they no longer describe
+            // the current recording, retry the whole activity to fetch fresh data.
             if (
                 current.display_date != before.display_date
                 || (
@@ -70,31 +76,32 @@ public partial class PhishNetImporter
                     && reviews == null
                 )
             )
+            {
                 throw new EnrichmentInputsChangedException();
+            }
 
-            var show = item.Input.Show;
-            var shows =
-                show == null
-                    ? Array.Empty<PhishNetApiShow>()
-                    : new[]
-                    {
-                        new PhishNetApiShow
-                        {
-                            showdate = show.Date,
-                            setlist_notes = show.SetlistNotes!,
-                        },
-                    };
             await ProcessSource(
                 context.Artist,
                 context.Source,
                 current,
-                shows,
+                SelectedShows(item.Input.Show),
                 null,
                 ratings,
                 reviews ?? Array.Empty<PhishNetApiReview>()
             );
+
             return new PhishNetItemResult(item.Id, ItemDisposition.Applied);
         });
+    }
+
+    private static PhishNetApiShow[] SelectedShows(PhishNetShowInput? show)
+    {
+        if (show == null)
+        {
+            return [];
+        }
+
+        return [new PhishNetApiShow { showdate = show.Date, setlist_notes = show.SetlistNotes! }];
     }
 }
 

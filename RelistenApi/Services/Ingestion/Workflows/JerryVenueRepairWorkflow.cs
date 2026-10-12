@@ -15,19 +15,19 @@ public class JerryVenueRepairWorkflow
     )
     {
         execution = ImportWorkflowOptions.AssignExecution(execution);
+
+        var providerRequest = new ProviderRequest<RepairJerryVenues>(request, execution);
         var summary = await Workflow.ExecuteChildWorkflowAsync(
             (JerryVenueRepairProviderWorkflow workflow) =>
-                workflow.RunAsync(
-                    new ProviderRequest<RepairJerryVenues>(request, execution),
-                    null,
-                    null
-                ),
+                workflow.RunAsync(providerRequest, null, null),
             CoordinatorOptions.Child(
                 $"{Workflow.Info.WorkflowId}/provider/jerry-venue-repair",
                 execution
             )
         );
+
         await CatalogSteps.RebuildArtist(request.Artist, execution);
+
         return new ArtistImportResult(
             request.Artist,
             summary.CompletedItems,
