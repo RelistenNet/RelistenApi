@@ -1,6 +1,8 @@
 # Proposal: typed provider workflows and explicit import operations
 
-Status: proposed on October 12, 2026. This describes a replacement for the undeployed ingestion API. It is not implemented or agreed. [Current implementation](architecture.md) · [Current provider behavior](provider-behavior.md)
+Status: updated October 12, 2026. Alec has accepted the direction of separate provider workflows with composable, reusable operations. The detailed API and item-child-workflow recommendation remain under review. No implementation changes have started. [Current implementation](architecture.md) · [Current provider behavior](provider-behavior.md)
+
+Readers: Alec, Switz, and engineers implementing or reviewing Relisten ingestion. This proposal uses the [Explore, Planning, and Implementation templates](https://chatgpt.com/space/page_c2d80e22b8288191b4e8dbbe10ba26af). It is a design proposal with an implementation outline, not a finished execution plan.
 
 The API should answer three questions without reading a base class: what can this provider import, what happens to one item, and what happens after all items finish?
 
@@ -138,6 +140,41 @@ The internal item-workflow input distinguishes `FromDiscovery` from `RequestedBy
 
 Both entry paths run the same item workflow. A targeted-import coordinator resolves prerequisites, runs that workflow, and rebuilds the artist's derived data. The artist refresh performs the final rebuild once after all provider work. The item workflow does not choose whether to rebuild based on how it was invoked.
 
+## Shared operations are composable
+
+Separate provider workflows share catalog operations and ordinary C# helpers. They do not copy rebuild SQL or reimplement retry rules. Use these three levels:
+
+| Level | Responsibility | Examples |
+|---|---|---|
+| Data service or ordinary function | Perform a catalog operation or transform data. No Temporal dependency. | `CatalogRebuildService.RebuildShows`, date parsing, source upserts |
+| Shared activity | Run an operation with Temporal retries, cancellation and execution logging. | `CatalogActivities.RebuildShows`, `RebuildYears`, `InvalidateArtistCache` |
+| Workflow helper | Compose activity calls in a named sequence. No direct database or HTTP access. | `CatalogSteps.RebuildArtist` |
+
+The proposed shared activity methods take a typed `ArtistId`. Each resolves the artist and invokes the appropriate data-service operation. Their names describe effects; they do not accept a provider enum or an import-mode flag.
+
+A workflow can use individual operations when their prerequisites are met. The normal finalization helper composes them in this order:
+
+```csharp
+internal static async Task RebuildArtist(ArtistId artist)
+{
+    await RebuildShows(artist);
+    await RebuildYears(artist);
+    await InvalidateArtistCache(artist);
+}
+```
+
+This is a workflow-helper sketch. Each awaited method schedules the corresponding `CatalogActivities` method on the database task queue. It does not directly call a data service.
+
+`RebuildShows` refreshes source durations/ratings, creates or updates derived shows, and associates sources with shows. `RebuildYears` then uses those show associations to rebuild years and related aggregates. The cache is invalidated after both operations succeed. Reordering these steps can leave derived data inconsistent.
+
+The full artist refresh, targeted-item coordinator, and standalone `RebuildArtistCatalogWorkflow` use this same helper. Normal artist refreshes call it after all providers, not once per item. A new maintenance workflow can reuse the appropriate individual activity without implementing a provider importer.
+
+The current [catalog rebuild service](../../RelistenApi/Services/Data/CatalogRebuildService.cs) already contains the SQL. Its `RebuildYears` method also invalidates the artist cache. The proposed change makes cache invalidation a separate service operation and activity. Keep the SQL's existing transaction ownership: rebuild operations must not be wrapped in an item receipt transaction.
+
+If rebuilding years fails, Temporal retries that activity. The completed show rebuild remains completed in workflow history. If the process loses a database-commit acknowledgement, the rebuild may run again and must converge to the same catalog state. A standalone rebuild remains available after an import is canceled. Cache invalidation can retry independently.
+
+Not every helper needs an activity or child workflow. Parsing, selecting items, converting typed IDs and calculating values remain ordinary functions. Named shared workflow helpers schedule durable operations; provider workflows state when those operations are required. Avoid a configurable step registry or another inheritance hierarchy for this composition.
+
 ## Each provider keeps its own item definition
 
 | Provider | Item key | Input and operation | Work after enumeration |
@@ -231,3 +268,16 @@ If accepted:
 5. Rewrite provider guides against the resulting code. Run seven-provider behavior comparisons, receipt/cancellation tests, workflow replay/rollover checks, and formatting. Remove the superseded universal base and contracts.
 
 This branch has never deployed, so the internal workflow/storage contracts need no compatibility layer. Keep logical commits and existing behavior tests while replacing them. No deployment, production schema change, AI feature, or indexing rollout is included in this proposal.
+
+## Evidence and remaining planning work
+
+Observed behavior comes from [current contracts](../../RelistenApi/Services/Ingestion/IngestionContracts.cs), the [generic importer](../../RelistenApi/Services/Ingestion/IngestionImporter.cs), the [artist workflow](../../RelistenApi/Services/Ingestion/Workflows/ArtistRefreshWorkflow.cs), and the [catalog rebuild service](../../RelistenApi/Services/Data/CatalogRebuildService.cs). The provider behavior guide links the current domain methods. Proposed types and execution trees above describe the replacement; they are not observations about deployed code.
+
+Fresh review against the prompt templates:
+
+- Accepted: separate provider workflows and reusable operations. These fit the existing data services and the separate worker. Keep SQL in data services and fixture transport in tests.
+- Still proposed: item child workflows now versus activity composition until another durable step exists. Extra histories are the principal cost. Activity composition would become preferable if independent item orchestration no longer provides value.
+- Planning must specify concrete serialized request/result variants, provider checkpoints, admission/conflict behavior and the initial targeted-import capability set. The implementer should not infer these from examples. Changing completed-run retention remains a separate proposal.
+- Add shared-operation verification: rebuild after partial import, correct show/year associations and counts, retry after a lost commit acknowledgement, year-rebuild failure followed by retry, and eventual cache invalidation. Verify through resulting catalog data and workflow behavior, not assertions about helper names or configuration.
+- Before implementation, map these contracts to coherent commits and confirm dependencies. The branch is undeployed, so there is no running-workflow compatibility migration. Preserve external catalog/API contracts and the existing [Hangfire handoff and rollback procedure](operations.md). A local refactor can be rolled back by reverting its commits; deploying it remains outside this task.
+- The final plan needs one more review after the remaining decisions are resolved. Check that each provider's sequence is readable, shared utilities remove actual duplication, and every observable behavior change has a contract test.
