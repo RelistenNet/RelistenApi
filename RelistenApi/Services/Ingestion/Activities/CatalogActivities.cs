@@ -19,6 +19,7 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
     {
         using var heartbeat = new ActivityHeartbeat();
         var artist = await Resolve(new ProviderWorkflowContext(request.Artist, execution));
+
         var requested = request switch
         {
             RefreshArchiveArtist => UpstreamProvider.ArchiveOrg,
@@ -30,6 +31,7 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
             RefreshLocalArtist => UpstreamProvider.Local,
             _ => (UpstreamProvider?)null,
         };
+
         var providers = artist
             .upstream_sources.Select(source => source.upstream_source.Provider)
             .Where(provider =>
@@ -38,12 +40,16 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
             .Select(provider => provider!.Value)
             .Where(provider => requested == null || provider == requested)
             .ToArray();
+
         if (requested.HasValue && providers.Length == 0)
+        {
             throw new ApplicationFailureException(
                 "Artist has no mapping for the requested provider.",
                 "UnsupportedImportOperation",
                 nonRetryable: true
             );
+        }
+
         return new ArtistImportPlan(request.Artist, providers);
     }
 
@@ -75,12 +81,13 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
     {
         RequireActive(context.Execution);
         var artist =
-            await artists.FindArtistWithIdOrSlug(context.Artist.ToString())
+            await artists.FindArtistForImport(context.Artist.ToString())
             ?? throw new ApplicationFailureException(
                 "Artist no longer exists.",
                 "ArtistNotFound",
                 nonRetryable: true
             );
+
         RequireActive(context.Execution);
         return artist;
     }
@@ -89,10 +96,12 @@ public sealed class CatalogActivities(ArtistService artists, CatalogRebuildServi
     {
         ActivityExecutionContext.Current.CancellationToken.ThrowIfCancellationRequested();
         if (DateTimeOffset.UtcNow >= execution.Deadline)
+        {
             throw new ApplicationFailureException(
                 "This import has expired. Start a fresh import.",
                 "ImportExpired",
                 nonRetryable: true
             );
+        }
     }
 }

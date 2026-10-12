@@ -142,6 +142,139 @@ public class TestIngestionPersistence
         DbService.ReadOnlyConnStr = originalRead;
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ArchiveMissingReviewTimestampsDoNotBlockOtherRecordings(bool temporal)
+    {
+        await Import();
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                """
+                INSERT INTO source_review_counts(source_id, source_review_max_updated_at, source_review_count)
+                SELECT id, now(), 1 FROM sources WHERE artist_id = @artistId
+                ON CONFLICT(source_id) DO UPDATE SET source_review_count = 1,
+                    source_review_max_updated_at = now()
+                """,
+                new { artistId }
+            )
+        );
+
+        var listing = JObject.Parse(Listing);
+        var documents = (JArray)listing["response"]!["docs"]!;
+        var nextRecording = (JObject)documents[0].DeepClone();
+        nextRecording["identifier"] = "fixture-2000-01-02";
+        nextRecording["date"] = "2000-01-02T00:00:00Z";
+        documents.Add(nextRecording);
+        listing["response"]!["numFound"] = 2;
+
+        // This source is already in the catalog, but Archive supplies no usable
+        // review freshness evidence. The second recording remains a new import.
+        documents[0]["addeddate"] = null;
+        documents[0]["publicdate"] = null;
+        documents[0]["reviewdate"] = null;
+        logs.Entries.Clear();
+        upstream.Respond = uri =>
+            uri.AbsolutePath.StartsWith("/metadata/")
+                ? uri.Segments.Last() == "fixture-2000-01-02"
+                    ? Metadata("New recording").Replace("2000-01-01", "2000-01-02")
+                    : Metadata("Refreshed recording")
+                : listing.ToString();
+
+        var result = await RunArchive(temporal);
+
+        (await Catalog())
+            .Select(row => row.title)
+            .Should()
+            .BeEquivalentTo("Refreshed recording", "New recording");
+        if (temporal)
+        {
+            result!.CompletedItems.Should().Be(2);
+            result.FailedItems.Should().Be(0);
+        }
+
+        logs.Entries.Should()
+            .Contain(entry =>
+                entry.Event == ImportEvents.ArchiveItemSelected
+                && Equals(entry.Fields["ItemIdentifier"], "fixture-2000-01-01")
+                && Equals(entry.Fields["Reason"], "review_timestamp_missing")
+            );
+    }
+
+    [TestCase("uuid")]
+    [TestCase("slug")]
+    [TestCase("numeric")]
+    public async Task ImportUsesPrimaryArtistAndMappingsWhenReplicaHasNotCaughtUp(
+        string identifierKind
+    )
+    {
+        // A shadow read schema simulates replication lag without changing the
+        // primary artist or its mapping. Every connection remains local to this fixture.
+        var replicaSchema = "ingestion_replica_" + Guid.NewGuid().ToString("N");
+        var readConnection = DbService.ReadOnlyConnStr;
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                $"""
+                CREATE SCHEMA {replicaSchema};
+                CREATE VIEW {replicaSchema}.artists AS SELECT * FROM public.artists WHERE id <> {artistId};
+                CREATE VIEW {replicaSchema}.artists_upstream_sources AS
+                    SELECT * FROM public.artists_upstream_sources WHERE artist_id <> {artistId};
+                """
+            )
+        );
+
+        try
+        {
+            DbService.ReadOnlyConnStr = new Npgsql.NpgsqlConnectionStringBuilder(readConnection)
+            {
+                SearchPath = replicaSchema + ",public",
+            }.ConnectionString;
+            var identifier = identifierKind switch
+            {
+                "slug" => "fixture-" + artistUuid,
+                "numeric" => artistId.ToString(),
+                _ => artistUuid.ToString(),
+            };
+            using var scope = host.Services.CreateScope();
+            var artists = scope.ServiceProvider.GetRequiredService<ArtistService>();
+
+            (await artists.FindArtistWithIdOrSlug(identifier)).Should().BeNull();
+            var importArtist = await artists.FindArtistForImport(identifier);
+            importArtist.Should().NotBeNull();
+            importArtist!.uuid.Should().Be(artistUuid);
+            importArtist
+                .upstream_sources.Should()
+                .ContainSingle()
+                .Which.upstream_source.Provider.Should()
+                .Be(UpstreamProvider.ArchiveOrg);
+
+            // Exercise the HTTP resolver, admission, artist preparation, and
+            // provider activity context while the listener lookup still sees no artist.
+            var controller =
+                ActivatorUtilities.CreateInstance<Relisten.Controllers.ImportController>(
+                    scope.ServiceProvider
+                );
+            var response = (Microsoft.AspNetCore.Mvc.ObjectResult)await controller.Post(identifier);
+            response.StatusCode.Should().Be(201);
+            var result = await host
+                .Services.GetRequiredService<ITemporalClient>()
+                .GetWorkflowHandle<ArtistRefreshWorkflow, ArtistImportResult>(
+                    "ingest/artist/" + artistUuid
+                )
+                .GetResultAsync();
+
+            result.CompletedItems.Should().Be(1);
+            result.FailedItems.Should().Be(0);
+            (await Catalog()).Should().ContainSingle();
+        }
+        finally
+        {
+            DbService.ReadOnlyConnStr = readConnection;
+            await db.WithWriteConnection(connection =>
+                connection.ExecuteAsync($"DROP SCHEMA {replicaSchema} CASCADE")
+            );
+        }
+    }
+
     [TestCase(false, "missing_date")]
     [TestCase(true, "missing_date")]
     [TestCase(false, "dark")]

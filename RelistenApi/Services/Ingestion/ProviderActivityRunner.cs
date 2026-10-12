@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,10 @@ public sealed class ProviderActivityRunner(
     ILogger<ProviderActivityRunner> log
 )
 {
+    /// <summary>
+    /// Runs one provider operation with fresh importer state and the activity's cancellation token.
+    /// The operation fetches HTTP inputs before using ProviderContext.CommitAsync for catalog writes.
+    /// </summary>
     public async Task<TResult> RunAsync<TImporter, TResult>(
         ProviderWorkflowContext input,
         UpstreamProvider provider,
@@ -47,40 +52,22 @@ public sealed class ProviderActivityRunner(
                 ["Attempt"] = activity.Info.Attempt,
             }
         );
-        activity.CancellationToken.ThrowIfCancellationRequested();
-        if (DateTimeOffset.UtcNow >= input.Execution.Deadline)
-            throw new ApplicationFailureException(
-                "The import execution deadline has passed.",
-                "ImportExpired",
-                nonRetryable: true
-            );
+
+        RequireActive(input.Execution, activity.CancellationToken);
+
+        // Importer dictionaries are mutable caches. Never share them between
+        // activity attempts, even when Temporal retries the same selected item.
         using var scope = scopes.CreateScope();
         var services = scope.ServiceProvider;
-        var artist =
-            await services
-                .GetRequiredService<ArtistService>()
-                .FindArtistWithIdOrSlug(input.Artist.ToString())
-            ?? throw new ApplicationFailureException(
-                "Artist no longer exists.",
-                "ArtistNotFound",
-                nonRetryable: true
-            );
-        var mapping =
-            artist.upstream_sources.SingleOrDefault(s => s.upstream_source.Provider == provider)
-            ?? throw new ApplicationFailureException(
-                "Artist no longer has the requested provider mapping.",
-                "UnsupportedImportOperation",
-                nonRetryable: true
-            );
-        var importer = services.GetRequiredService<TImporter>();
-        importer.UseIngestionHttpClient(httpClients.Create(activity.CancellationToken));
-        var context = new ProviderContext(
-            artist,
-            mapping,
-            input.Execution,
-            services.GetRequiredService<CatalogImportTransaction>(),
+        var context = await ResolveContextAsync(
+            services,
+            input,
+            provider,
             activity.CancellationToken
         );
+        var importer = services.GetRequiredService<TImporter>();
+        importer.UseIngestionHttpClient(httpClients.Create(activity.CancellationToken));
+
         try
         {
             var result = await action(importer, context);
@@ -95,6 +82,57 @@ public sealed class ProviderActivityRunner(
         {
             throw new ApplicationFailureException(
                 error.Message,
+                "ImportExpired",
+                nonRetryable: true
+            );
+        }
+    }
+
+    private static async Task<ProviderContext> ResolveContextAsync(
+        IServiceProvider services,
+        ProviderWorkflowContext input,
+        UpstreamProvider provider,
+        CancellationToken cancellationToken
+    )
+    {
+        var artist =
+            await services
+                .GetRequiredService<ArtistService>()
+                .FindArtistForImport(input.Artist.ToString())
+            ?? throw new ApplicationFailureException(
+                "Artist no longer exists.",
+                "ArtistNotFound",
+                nonRetryable: true
+            );
+        var mapping =
+            artist.upstream_sources.SingleOrDefault(source =>
+                source.upstream_source.Provider == provider
+            )
+            ?? throw new ApplicationFailureException(
+                "Artist no longer has the requested provider mapping.",
+                "UnsupportedImportOperation",
+                nonRetryable: true
+            );
+
+        return new ProviderContext(
+            artist,
+            mapping,
+            input.Execution,
+            services.GetRequiredService<CatalogImportTransaction>(),
+            cancellationToken
+        );
+    }
+
+    private static void RequireActive(
+        IngestionExecution execution,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (DateTimeOffset.UtcNow >= execution.Deadline)
+        {
+            throw new ApplicationFailureException(
+                "The import execution deadline has passed.",
                 "ImportExpired",
                 nonRetryable: true
             );
@@ -136,7 +174,9 @@ public sealed class ProviderActivityRunner(
             LocalItemResult value => (value.Item.Value, value.Disposition, null),
             _ => null,
         };
+
         if (item is { } outcome)
+        {
             log.LogInformation(
                 ImportEvents.ItemCompleted,
                 "Item {ItemIdentifier} completed with {Disposition}; skip reason: {SkipReason}",
@@ -144,5 +184,6 @@ public sealed class ProviderActivityRunner(
                 outcome.Disposition,
                 outcome.SkipReason
             );
+        }
     }
 }

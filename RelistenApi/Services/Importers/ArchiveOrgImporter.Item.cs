@@ -39,9 +39,20 @@ public partial class ArchiveOrgImporter
             return "new_source";
         }
 
-        if (review != null && doc.max_review_date > review.review_max_updated_at)
+        if (review != null)
         {
-            return "reviews_updated";
+            // Archive sometimes omits every review freshness timestamp. Fetch the
+            // item conservatively; one incomplete listing entry must not abort
+            // discovery of the other recordings in the collection.
+            if (doc.addeddate == null && doc.publicdate == null && doc.reviewdate == null)
+            {
+                return "review_timestamp_missing";
+            }
+
+            if (doc.max_review_date > review.review_max_updated_at)
+            {
+                return "reviews_updated";
+            }
         }
 
         var date = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date, doc.identifier);

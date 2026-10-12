@@ -21,7 +21,7 @@ public sealed class ImportAdmissionCatalog(IServiceScopeFactory scopes) : IImpor
         using var scope = scopes.CreateScope();
         var found = await scope
             .ServiceProvider.GetRequiredService<ArtistService>()
-            .FindArtistWithIdOrSlug(artist.ToString());
+            .FindArtistForImport(artist.ToString());
         return found
             ?.upstream_sources.Select(mapping => mapping.upstream_source.Provider)
             .Where(provider =>

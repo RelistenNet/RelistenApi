@@ -280,7 +280,10 @@ namespace Relisten.Data
             return filled?.FirstOrDefault();
         }
 
-        async Task<IEnumerable<T>> FillInUpstreamSources<T>(IEnumerable<T>? art)
+        async Task<IEnumerable<T>> FillInUpstreamSources<T>(
+            IEnumerable<T>? art,
+            bool readOnly = true
+        )
             where T : Artist
         {
             if (art == null)
@@ -288,9 +291,10 @@ namespace Relisten.Data
                 return Array.Empty<T>();
             }
 
-            var srcs = await db.WithConnection(con =>
-                con.QueryAsync(
-                    @"
+            var srcs = await db.WithConnection(
+                con =>
+                    con.QueryAsync(
+                        @"
 				SELECT
 					aus.*, a.uuid as artist_uuid, s.*
 				FROM
@@ -302,13 +306,14 @@ namespace Relisten.Data
 				ORDER BY
 					aus.upstream_source_id ASC
 ",
-                    (ArtistUpstreamSource aus, UpstreamSource src) =>
-                    {
-                        aus.upstream_source = src;
-                        return aus;
-                    },
-                    new { artistIds = art.Select(a => a.id).ToList() }
-                )
+                        (ArtistUpstreamSource aus, UpstreamSource src) =>
+                        {
+                            aus.upstream_source = src;
+                            return aus;
+                        },
+                        new { artistIds = art.Select(a => a.id).ToList() }
+                    ),
+                readOnly: readOnly
             );
 
             var gsrcs = srcs.Select(s =>
@@ -339,8 +344,25 @@ namespace Relisten.Data
             return (await FindArtistsWithIdsOrSlugs(new[] { idOrSlug })).FirstOrDefault();
         }
 
-        public async Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(
+        /// <summary>
+        /// Resolves an import target by numeric ID, UUID, or slug from the primary database.
+        /// The artist and its provider mappings must both be current: replica lag must not
+        /// reject newly discovered artists or make durable work omit a provider.
+        /// </summary>
+        public async Task<Artist?> FindArtistForImport(string idOrSlug)
+        {
+            return (
+                await FindArtistsWithIdsOrSlugs(new[] { idOrSlug }, readOnly: false)
+            ).FirstOrDefault();
+        }
+
+        public Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(
             IReadOnlyList<string> idsOrSlugs
+        ) => FindArtistsWithIdsOrSlugs(idsOrSlugs, readOnly: true);
+
+        private async Task<IEnumerable<Artist>> FindArtistsWithIdsOrSlugs(
+            IReadOnlyList<string> idsOrSlugs,
+            bool readOnly
         )
         {
             var baseSql =
@@ -363,31 +385,34 @@ namespace Relisten.Data
                 FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
             }
 
-            return await db.WithConnection(async con =>
-            {
-                string where;
-                if (idsOrSlugs.Count == 0)
+            return await db.WithConnection(
+                async con =>
                 {
-                    where = "1=1";
-                }
-                else
-                {
-                    where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
-                }
-
-                var artists = await con.QueryAsync(
-                    baseSql + where,
-                    joiner,
-                    new
+                    string where;
+                    if (idsOrSlugs.Count == 0)
                     {
-                        ids,
-                        slugs,
-                        uuids,
+                        where = "1=1";
                     }
-                );
+                    else
+                    {
+                        where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+                    }
 
-                return await FillInUpstreamSources(artists);
-            });
+                    var artists = await con.QueryAsync(
+                        baseSql + where,
+                        joiner,
+                        new
+                        {
+                            ids,
+                            slugs,
+                            uuids,
+                        }
+                    );
+
+                    return await FillInUpstreamSources(artists, readOnly);
+                },
+                readOnly: readOnly
+            );
         }
 
         private static void FlexiblyParseArtistIdentifier(

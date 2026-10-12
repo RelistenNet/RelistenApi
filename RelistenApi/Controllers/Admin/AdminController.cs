@@ -323,9 +323,12 @@ namespace Relisten.Controllers.Admin
             string jobId;
             if (_temporal.Enabled)
             {
-                var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
+                var artist = await _artistService.FindArtistForImport(artistSlug);
                 if (artist == null)
+                {
                     return NotFound();
+                }
+
                 jobId = (
                     await _temporal.Jerry.RepairVenuesAsync(
                         new RepairJerryVenues(new ArtistId(artist.uuid))
@@ -333,9 +336,12 @@ namespace Relisten.Controllers.Admin
                 ).WorkflowId;
             }
             else
+            {
                 jobId = Hangfire.BackgroundJob.Enqueue(() =>
                     _scheduledService.BackfillJerryGarciaVenues(artistSlug, null)
                 );
+            }
+
             return Json(new { message = $"Queued as job {jobId}!" });
         }
 
