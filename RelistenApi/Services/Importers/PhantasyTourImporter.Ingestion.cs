@@ -11,10 +11,13 @@ namespace Relisten.Import;
 
 // Known shows need no detail fetch. Their dates are reconciled from the complete
 // listing at provider finalization, preserving the upstream's local calendar date.
-public partial class PhantasyTourImporter : IProviderIngestion
+public partial class PhantasyTourImporter
 {
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<PhantasyTourDiscovery> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         var page = cursor == null ? 1u : uint.Parse(cursor);
         using var response = await http.GetAsync(
@@ -27,7 +30,7 @@ public partial class PhantasyTourImporter : IProviderIngestion
                 await response.Content.ReadAsStringAsync(context.CancellationToken)
             ) ?? throw new InvalidDataException("Phantasy Tour returned an invalid listing.");
         var dates = new Dictionary<string, DateTime>();
-        var selected = new List<DiscoveredItem>();
+        var selected = new List<DiscoveredItem<PhantasyTourShowListing>>();
         await PreloadData(context.Artist);
 
         foreach (var show in shows)
@@ -48,26 +51,21 @@ public partial class PhantasyTourImporter : IProviderIngestion
             AddListedDate(dates, identifier, show.dateTime.Date);
             if (!existingSetlistShows.ContainsKey(identifier))
             {
-                selected.Add(new DiscoveredItem(show.id.ToString(), ""));
+                selected.Add(new DiscoveredItem<PhantasyTourShowListing>(show.id.ToString(), show));
             }
         }
 
         var next = shows.Length == ITEMS_PER_PAGE ? (page + 1).ToString() : null;
-        return new DiscoverySnapshot(selected.ToArray(), next, SetlistDates: dates);
+        return new PhantasyTourDiscovery(selected.ToArray(), next, SetlistDates: dates);
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        DiscoveredItem<PhantasyTourShowListing> item
     )
     {
-        if (context.Request.Item != null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
-        var showId = int.Parse(item.Identifier);
+        var showId = item.Metadata.id;
         using var response = await http.GetAsync(UrlForShow(showId), context.CancellationToken);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
@@ -82,7 +80,7 @@ public partial class PhantasyTourImporter : IProviderIngestion
     }
 
     /// <inheritdoc />
-    public async Task<ProviderResult> ReconcileAsync(
+    public override async Task<ProviderResult> ReconcileAsync(
         ProviderContext context,
         string[] ineligibleItems,
         bool hasFailures
@@ -93,14 +91,14 @@ public partial class PhantasyTourImporter : IProviderIngestion
         do
         {
             var snapshot =
-                await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
+                await context.Store.ReadSnapshotAsync<PhantasyTourDiscovery>(
                     context.Run,
-                    IngestionActivities.DiscoveryName(Provider, cursor)
+                    DiscoveryName(cursor)
                 )
                 ?? throw new InvalidOperationException(
                     "Phantasy Tour discovery has not completed."
                 );
-            foreach (var (identifier, date) in snapshot.SetlistDates!)
+            foreach (var (identifier, date) in snapshot.SetlistDates)
             {
                 AddListedDate(dates, identifier, date);
             }
@@ -132,3 +130,10 @@ public partial class PhantasyTourImporter : IProviderIngestion
         dates[identifier] = date;
     }
 }
+
+/// <summary>Local calendar dates from a complete Phantasy Tour listing page.</summary>
+public record PhantasyTourDiscovery(
+    DiscoveredItem<PhantasyTourShowListing>[] Items,
+    string? NextCursor,
+    IReadOnlyDictionary<string, DateTime> SetlistDates
+) : DiscoverySnapshot<PhantasyTourShowListing>(Items, NextCursor);

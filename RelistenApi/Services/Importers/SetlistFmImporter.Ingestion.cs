@@ -8,10 +8,13 @@ using Relisten.Vendor.SetlistFm;
 
 namespace Relisten.Import;
 
-public partial class SetlistFmImporter : IProviderIngestion
+public partial class SetlistFmImporter
 {
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<DiscoverySnapshot<Setlist>> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         var page = cursor == null ? 1 : int.Parse(cursor);
         using var response = await http.GetAsync(
@@ -31,25 +34,20 @@ public partial class SetlistFmImporter : IProviderIngestion
             root.page < Math.Ceiling((double)root.total / root.itemsPerPage)
                 ? (page + 1).ToString()
                 : null;
-        return new DiscoverySnapshot(
+        return new DiscoverySnapshot<Setlist>(
             root.setlist.Where(s => s.sets.set.Count > 0)
-                .Select(s => new DiscoveredItem(s.id, JsonConvert.SerializeObject(s)))
+                .Select(s => new DiscoveredItem<Setlist>(s.id, s))
                 .ToArray(),
             next
         );
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        DiscoveredItem<Setlist> item
     )
     {
-        if (context.Request.Item != null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
@@ -67,10 +65,7 @@ public partial class SetlistFmImporter : IProviderIngestion
                     tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
                 }
             }
-            var stats = await ProcessSetlist(
-                context.Artist,
-                JsonConvert.DeserializeObject<Setlist>(item.Metadata)!
-            );
+            var stats = await ProcessSetlist(context.Artist, item.Metadata);
             if (context.Artist.features.tours && tourToStartDate.Count > 0)
             {
                 await UpdateTourStartEndDates(context.Artist);

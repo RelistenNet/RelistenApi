@@ -19,6 +19,25 @@ namespace Relisten.Data
 
         private readonly ImporterService _importService;
 
+        /// <summary>Selects full or recently active artist UUIDs for a stable import batch.</summary>
+        public async Task<string[]> UuidsForImport(bool thin)
+        {
+            var artists = await db.WithWriteConnection(connection =>
+                connection.QueryAsync<string>(
+                    """
+                    SELECT a.uuid::text FROM artists a
+                    WHERE @thin = false OR EXISTS (
+                        SELECT 1 FROM shows s
+                        WHERE s.artist_id = a.id AND s.date > CURRENT_DATE - INTERVAL '7 days'
+                    )
+                    ORDER BY a.id
+                    """,
+                    new { thin }
+                )
+            );
+            return artists.ToArray();
+        }
+
         public ArtistService(DbService db, ImporterService importService)
             : base(db)
         {

@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Server;
+using Microsoft.Extensions.Logging;
 using Relisten.Api.Models;
 using Relisten.Data;
 
@@ -57,9 +58,11 @@ namespace Relisten.Import
             PhishNetImporter _phishnet,
             JerryGarciaComImporter _jerry,
             PhantasyTourImporter _phantasy,
-            LocalImporter _local
+            LocalImporter _local,
+            ILogger<ImporterService> log
         )
         {
+            this.log = log;
             var imps = new ImporterBase[]
             {
                 _setlistFm,
@@ -78,6 +81,8 @@ namespace Relisten.Import
                 importers[i.Provider] = i;
             }
         }
+
+        private readonly ILogger log;
 
         private IDictionary<UpstreamProvider, ImporterBase> importers { get; }
 
@@ -123,13 +128,13 @@ namespace Relisten.Import
             if (importer == null)
                 return new ImportStats();
 
-            ctx?.WriteLine("Rebuilding Shows");
+            ImportProgress.WriteLine(log, ctx, "Rebuilding Shows");
             var stats = await importer.RebuildShows(artist);
 
-            ctx?.WriteLine("Rebuilding Years");
+            ImportProgress.WriteLine(log, ctx, "Rebuilding Years");
             stats += await importer.RebuildYears(artist);
 
-            ctx?.WriteLine("Done!");
+            ImportProgress.WriteLine(log, ctx, "Done!");
 
             return stats;
         }
@@ -159,7 +164,9 @@ namespace Relisten.Import
                 .upstream_sources.Where(s => s.upstream_source.importer != null)
                 .ToList();
 
-            ctx?.WriteLine(
+            ImportProgress.WriteLine(
+                log,
+                ctx,
                 $"Found {srcs.Count} valid importers.{(importOptions.IsThinScrape ? $" (thin scrape, year={importOptions.OnlyYear})" : "")}"
             );
             var prog = ctx?.WriteProgressBar();
@@ -168,13 +175,17 @@ namespace Relisten.Import
             {
                 if (filterUpstreamSources != null && !filterUpstreamSources(item))
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"Skipping (rejected by filter): {item.upstream_source_id}, {item.upstream_identifier}"
                     );
                     return;
                 }
 
-                ctx?.WriteLine(
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
                     $"Importing with {item.upstream_source_id}, {item.upstream_identifier}"
                 );
 
@@ -221,9 +232,10 @@ namespace Relisten.Import
 
         public ImportOptions CurrentImportOptions { get; set; } = ImportOptions.Default;
 
-        public ImporterBase(CatalogRebuildService catalog)
+        public ImporterBase(CatalogRebuildService catalog, ILogger log)
         {
             this.catalog = catalog;
+            this.log = log;
             http = new HttpClient();
 
             // iPhone on iOS 11.4
@@ -233,6 +245,8 @@ namespace Relisten.Import
             );
             http.DefaultRequestHeaders.Add("Accept", "*/*");
         }
+
+        protected readonly ILogger log;
 
         protected HttpClient http { get; set; }
 

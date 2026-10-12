@@ -11,13 +11,14 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.Local;
 using Sentry;
 
 namespace Relisten.Import
 {
-    public partial class LocalImporter : ImporterBase
+    public partial class LocalImporter : IngestionImporter<LocalShow[]>
     {
         private readonly LinkService linkService;
 
@@ -49,7 +50,7 @@ namespace Relisten.Import
             ILogger<LocalImporter> log,
             IConfiguration configuration
         )
-            : base(catalog)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;
@@ -99,13 +100,13 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
-            ctx?.WriteLine("Processing Venues");
+            ImportProgress.WriteLine(log, ctx, "Processing Venues");
             stats += await ProcessVenues(artist, src, ctx);
 
-            ctx?.WriteLine("Processing Shows");
+            ImportProgress.WriteLine(log, ctx, "Processing Shows");
             stats += await ProcessShows(artist, src, ctx);
 
-            ctx?.WriteLine("Rebuilding");
+            ImportProgress.WriteLine(log, ctx, "Rebuilding");
             await RebuildShows(artist);
             await RebuildYears(artist);
 
@@ -162,7 +163,7 @@ namespace Relisten.Import
         )
         {
             var url = LocalApiUrl(apiRoute);
-            ctx?.WriteLine($"Requesting {url}");
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
             using var resp = await http.GetAsync(url);
             resp.EnsureSuccessStatusCode();
             return JsonConvert.DeserializeObject<LocalRootObject<T>>(
@@ -173,7 +174,7 @@ namespace Relisten.Import
         private async Task<LocalShowObject> LocalShowRequest(string apiRoute, PerformContext? ctx)
         {
             var url = LocalApiUrl(apiRoute);
-            ctx?.WriteLine($"Requesting {url}");
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
             using var resp = await http.GetAsync(url);
             resp.EnsureSuccessStatusCode();
             return JsonConvert.DeserializeObject<LocalShowObject>(
@@ -476,13 +477,17 @@ namespace Relisten.Import
                 }
                 catch (Exception e)
                 {
-                    ctx?.WriteLine($"Error processing show (but continuing): {date}");
-                    ctx?.LogException(e);
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
+                        $"Error processing show (but continuing): {date}"
+                    );
+                    ImportProgress.LogException(log, ctx, e);
 
                     SentrySdk.CaptureException(e);
                 }
                 prog?.SetValue(100.0 * (++idx / totalShows));
-                ctx?.WriteLine($"Processing Show {idx} of {totalShows}");
+                ImportProgress.WriteLine(log, ctx, $"Processing Show {idx} of {totalShows}");
             }
 
             return stats;

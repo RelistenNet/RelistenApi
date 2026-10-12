@@ -19,6 +19,7 @@ var migrate = args.Contains("--migrate");
 var builder = Host.CreateApplicationBuilder(
     args.Where(a => a != "--register-schedules" && a != "--migrate").ToArray()
 );
+builder.Logging.AddSimpleConsole(options => options.IncludeScopes = true);
 SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
 SqlMapper.AddTypeHandler(new DateTimeHandler());
 JsonConvert.DefaultSettings = () =>

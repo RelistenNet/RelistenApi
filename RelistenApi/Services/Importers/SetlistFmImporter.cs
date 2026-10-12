@@ -14,6 +14,7 @@ using Polly;
 using Polly.Retry;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.SetlistFm;
 using Artist = Relisten.Api.Models.Artist;
@@ -22,7 +23,7 @@ using Venue = Relisten.Api.Models.Venue;
 
 namespace Relisten.Import
 {
-    public partial class SetlistFmImporter : ImporterBase
+    public partial class SetlistFmImporter : IngestionImporter<Setlist>
     {
         private readonly LinkService _linkService;
 
@@ -56,7 +57,7 @@ namespace Relisten.Import
             ILogger<SetlistFmImporter> log,
             LinkService linkService
         )
-            : base(catalog)
+            : base(catalog, log)
         {
             _linkService = linkService;
             _setlistShowService = setlistShowService;
@@ -124,18 +125,22 @@ namespace Relisten.Import
                 await UpdateTourStartEndDates(artist);
             }
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows and years...");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows and years...");
                 await RebuildShows(artist);
                 await RebuildYears(artist);
-                ctx?.WriteLine("--> rebuilt!");
+                ImportProgress.WriteLine(log, ctx, "--> rebuilt!");
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
             return stats;
@@ -373,7 +378,7 @@ namespace Relisten.Import
             catch (JsonReaderException)
             {
                 var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
-                ctx?.WriteLine("Failed to parse {0}:\n{1}", requestUri, body);
+                ImportProgress.WriteLine(log, ctx, "Failed to parse {0}:\n{1}", requestUri, body);
                 throw;
             }
 
@@ -387,21 +392,23 @@ namespace Relisten.Import
                     var s = new Stopwatch();
                     s.Start();
 
-                    // ctx?.WriteLine("Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
+                    // ImportProgress.WriteLine(log, ctx, "Indexing setlist: {0}/{1}...", artist.name, setlist.eventDate);
 
                     try
                     {
                         var thisStats = await ProcessSetlist(artist, setlist);
 
                         s.Stop();
-                        // ctx?.WriteLine("...success in {0}! Stats: {1}", s.Elapsed, thisStats);
+                        // ImportProgress.WriteLine(log, ctx, "...success in {0}! Stats: {1}", s.Elapsed, thisStats);
 
                         stats += thisStats;
                     }
                     catch (Exception e)
                     {
                         s.Stop();
-                        ctx?.WriteLine(
+                        ImportProgress.WriteLine(
+                            log,
+                            ctx,
                             "{0}/{1}...failed in {2}! Stats: {3}",
                             artist.name,
                             setlist.eventDate,

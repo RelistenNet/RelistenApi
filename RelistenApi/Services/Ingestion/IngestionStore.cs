@@ -77,7 +77,8 @@ public sealed class IngestionStore(DbService db)
     }
 
     /// <summary>Returns only one item's listing metadata, rather than loading the full artist snapshot.</summary>
-    public async Task<DiscoveredItem> ReadItemAsync(IngestionRun run, ImportItem item)
+    public async Task<DiscoveredItem<TItem>> ReadItemAsync<TItem>(IngestionRun run, ImportItem item)
+        where TItem : class
     {
         RequireActive(run);
         var json = await db.WithWriteConnection(c =>
@@ -94,7 +95,8 @@ public sealed class IngestionStore(DbService db)
                 }
             )
         );
-        var found = json == null ? null : JsonConvert.DeserializeObject<DiscoveredItem>(json);
+        var found =
+            json == null ? null : JsonConvert.DeserializeObject<DiscoveredItem<TItem>>(json);
         if (found?.Identifier != item.Identifier)
         {
             throw new InvalidOperationException("The item is missing from its discovery snapshot.");

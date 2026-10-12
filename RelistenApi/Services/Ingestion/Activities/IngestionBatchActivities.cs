@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
+using Relisten.Data;
 using Relisten.Services.Indexing;
 using Relisten.Vendor.ArchiveOrg;
 using Temporalio.Activities;
@@ -12,7 +12,7 @@ namespace Relisten.Ingestion;
 
 /// <summary>Snapshots batch membership and indexes Archive artist collections one page at a time.</summary>
 public sealed class IngestionBatchActivities(
-    DbService db,
+    ArtistService artistService,
     IngestionStore store,
     ArchiveOrgArtistIndexer indexer,
     IngestionHttpClientFactory httpClients
@@ -26,7 +26,7 @@ public sealed class IngestionBatchActivities(
         var artists = await store.SnapshotAsync(
             request.Run!,
             "artists",
-            () => SelectArtists(request.Mode == "thin")
+            () => artistService.UuidsForImport(request.Mode == "thin")
         );
         var page = artists.Skip(request.Offset).Take(250).ToArray();
         var nextOffset = request.Offset + page.Length;
@@ -60,24 +60,6 @@ public sealed class IngestionBatchActivities(
                 return new DiscoveryPage(nextCursor, page.items.Count);
             }
         );
-    }
-
-    private async Task<string[]> SelectArtists(bool thin)
-    {
-        var artists = await db.WithWriteConnection(connection =>
-            connection.QueryAsync<string>(
-                """
-                SELECT a.uuid::text FROM artists a
-                WHERE @thin = false OR EXISTS (
-                    SELECT 1 FROM shows s
-                    WHERE s.artist_id = a.id AND s.date > CURRENT_DATE - INTERVAL '7 days'
-                )
-                ORDER BY a.id
-                """,
-                new { thin }
-            )
-        );
-        return artists.ToArray();
     }
 
     private async Task<ArchiveOrgCollectionIndexResponse> FetchCollections(

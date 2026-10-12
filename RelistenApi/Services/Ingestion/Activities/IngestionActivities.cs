@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
@@ -14,13 +16,15 @@ public sealed class IngestionActivities(
     ArtistService artists,
     ImporterService importers,
     IngestionStore store,
-    IngestionHttpClientFactory httpClients
+    IngestionHttpClientFactory httpClients,
+    ILogger<IngestionActivities> log
 ) : IIngestionActivities
 {
     [Activity("Ingestion.PrepareArtist")]
     public async Task<ArtistImportPlan> PrepareArtist(ArtistImportRequest request)
     {
         using var heartbeat = new ActivityHeartbeat();
+        using var logging = BeginLogScope(request);
         IngestionStore.RequireActive(request.Run!);
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
@@ -41,6 +45,10 @@ public sealed class IngestionActivities(
             );
         }
 
+        log.LogInformation(
+            "Prepared artist with {ProviderCount} enabled providers",
+            providers.Length
+        );
         return new ArtistImportPlan(artist.uuid.ToString(), providers);
     }
 
@@ -51,17 +59,22 @@ public sealed class IngestionActivities(
     )
     {
         using var heartbeat = new ActivityHeartbeat();
+        using var logging = BeginLogScope(request, provider);
         var saved = await store.ReadReceiptAsync<ImportStats>(
             request.Run!,
             provider.ToValue() + "/prepare"
         );
         if (saved != null)
         {
+            log.LogInformation("Returning previously committed result");
             return saved;
         }
 
         var (context, importer) = await Provider(request, provider, "prepare");
-        return await importer.PrepareAsync(context);
+        log.LogInformation("Preparing provider catalogs");
+        var result = await importer.PrepareAsync(context);
+        log.LogInformation("Provider preparation completed: {Stats}", result);
+        return result;
     }
 
     [Activity("Ingestion.DiscoverItems")]
@@ -72,43 +85,15 @@ public sealed class IngestionActivities(
     )
     {
         using var heartbeat = new ActivityHeartbeat();
-        var position = cursor ?? new DiscoveryCursor();
-        var name = DiscoveryName(provider, position.Upstream);
-        var snapshot = await store.SnapshotAsync(
-            request.Run!,
-            name,
-            async () =>
-            {
-                var (context, importer) = await Provider(request, provider, "discover");
-                return await importer.DiscoverAsync(context, position.Upstream);
-            }
+        using var logging = BeginLogScope(request, provider);
+        var (context, importer) = await Provider(request, provider, "discover");
+        var page = await importer.DiscoverPageAsync(context, cursor);
+        log.LogInformation(
+            "Discovered {ItemCount} items; more pages: {HasNextPage}",
+            page.Items.Length,
+            page.NextCursor != null
         );
-        var items = snapshot
-            .Items.Skip(position.Offset)
-            .Take(100)
-            .Select((item, index) => new ImportItem(item.Identifier, name, position.Offset + index))
-            .ToArray();
-        var nextOffset = position.Offset + items.Length;
-        DiscoveryCursor? next = null;
-
-        if (nextOffset < snapshot.Items.Length)
-        {
-            next = position with { Offset = nextOffset };
-        }
-        else if (snapshot.NextCursor != null)
-        {
-            if (snapshot.NextCursor == position.Upstream)
-            {
-                throw new ApplicationFailureException(
-                    "Provider discovery cursor did not advance.",
-                    nonRetryable: true
-                );
-            }
-
-            next = new DiscoveryCursor(snapshot.NextCursor);
-        }
-
-        return new ImportPage(items, next);
+        return page;
     }
 
     [Activity("Ingestion.ImportItem")]
@@ -119,6 +104,7 @@ public sealed class IngestionActivities(
     )
     {
         using var heartbeat = new ActivityHeartbeat();
+        using var logging = BeginLogScope(request, provider, item?.Identifier ?? request.Item);
         var identifier =
             item?.Identifier
             ?? request.Item
@@ -130,15 +116,22 @@ public sealed class IngestionActivities(
         );
         if (saved != null)
         {
+            log.LogInformation("Returning previously committed result");
             return saved;
         }
 
-        var input =
-            item == null
-                ? new DiscoveredItem(identifier, "")
-                : await store.ReadItemAsync(request.Run!, item);
         var (context, importer) = await Provider(request, provider, operation);
-        return await importer.ImportItemAsync(context, input);
+        log.LogInformation("Importing item");
+        var result = await importer.ImportAsync(context, item);
+        log.LogInformation(
+            ImportEvents.ItemCompleted,
+            "Item completed: {Created} created, {Updated} updated, {Removed} removed; ineligible: {Ineligible}",
+            result.Stats.Created,
+            result.Stats.Updated,
+            result.Stats.Removed,
+            result.Ineligible
+        );
+        return result;
     }
 
     [Activity("Ingestion.ReconcileProvider")]
@@ -150,23 +143,28 @@ public sealed class IngestionActivities(
     )
     {
         using var heartbeat = new ActivityHeartbeat();
+        using var logging = BeginLogScope(request, provider);
         var saved = await store.ReadReceiptAsync<ProviderResult>(
             request.Run!,
             provider.ToValue() + "/reconcile"
         );
         if (saved != null)
         {
+            log.LogInformation("Returning previously committed result");
             return saved;
         }
 
         var (context, importer) = await Provider(request, provider, "reconcile");
-        return await importer.ReconcileAsync(context, ineligibleItems, hasFailures);
+        var result = await importer.ReconcileAsync(context, ineligibleItems, hasFailures);
+        log.LogInformation("Provider reconciliation completed: {Stats}", result.Stats);
+        return result;
     }
 
     [Activity("Ingestion.FinishArtist")]
     public async Task<ImportResult> FinishArtist(ArtistImportRequest request, ImportResult result)
     {
         using var heartbeat = new ActivityHeartbeat();
+        using var logging = BeginLogScope(request);
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
@@ -177,13 +175,37 @@ public sealed class IngestionActivities(
         // Always rebuild: a cancelled earlier import may have committed items only.
         var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
         cancellationToken.ThrowIfCancellationRequested();
+        log.LogInformation("Rebuilding artist aggregates");
         await importers.Rebuild(artist, null);
         cancellationToken.ThrowIfCancellationRequested();
+        log.LogInformation(
+            "Artist import finished: {Stats}; {FailedItems} failed items",
+            result.Stats,
+            result.FailedItems
+        );
         return result;
     }
 
-    internal static string DiscoveryName(UpstreamProvider provider, string? cursor) =>
-        provider.ToValue() + "/discovery/" + (cursor ?? "first");
+    private IDisposable? BeginLogScope(
+        ArtistImportRequest request,
+        UpstreamProvider? provider = null,
+        string? item = null
+    )
+    {
+        var activity = ActivityExecutionContext.Current.Info;
+        return log.BeginScope(
+            new Dictionary<string, object?>
+            {
+                ["RequestId"] = request.RequestId,
+                ["Artist"] = request.Artist,
+                ["Provider"] = provider?.ToValue(),
+                ["ItemIdentifier"] = item,
+                ["WorkflowId"] = activity.WorkflowId,
+                ["ActivityId"] = activity.ActivityId,
+                ["Attempt"] = activity.Attempt,
+            }
+        );
+    }
 
     private async Task<(ProviderContext Context, IProviderIngestion Importer)> Provider(
         ArtistImportRequest request,

@@ -124,6 +124,7 @@ WHERE
 ;
 ";
 
+    /// <summary>Refreshes year aggregates and invalidates the artist cache after catalog writes.</summary>
     public async Task RebuildYears(Artist artist)
     {
         await db.WithWriteConnection(con =>
@@ -229,6 +230,7 @@ COMMIT;
         await redisService.db.KeyDeleteAsync(ArtistsController.FullArtistCacheKey(artist));
     }
 
+    /// <summary>Refreshes shows, recording aggregates, and derived counts for one artist.</summary>
     public async Task RebuildShows(Artist artist)
     {
         var sql =

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Ingestion;
 using Relisten.Vendor.Local;
 
@@ -10,7 +9,7 @@ namespace Relisten.Import;
 
 // The root catalog is reused for venue preparation and stable date selection.
 // Directory metadata is fetched and applied within each date's item activity.
-public partial class LocalImporter : IProviderIngestion
+public partial class LocalImporter
 {
     private Task<LocalRootObject<LocalShow>> RootCatalog(ProviderContext context) =>
         context.Store.SnapshotAsync(
@@ -32,7 +31,7 @@ public partial class LocalImporter : IProviderIngestion
         );
 
     /// <inheritdoc />
-    public async Task<ImportStats> PrepareAsync(ProviderContext context)
+    public override async Task<ImportStats> PrepareAsync(ProviderContext context)
     {
         if (context.Request.Item != null)
         {
@@ -48,11 +47,14 @@ public partial class LocalImporter : IProviderIngestion
     }
 
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<DiscoverySnapshot<LocalShow[]>> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         var root = await RootCatalog(context);
         await PreloadData(context.Artist);
-        return new DiscoverySnapshot(
+        return new DiscoverySnapshot<LocalShow[]>(
             root.data.Where(day =>
                     day.Value.Count > 0
                     && (
@@ -61,23 +63,18 @@ public partial class LocalImporter : IProviderIngestion
                         || day.Value[0].updated_at > source.updated_at
                     )
                 )
-                .Select(day => new DiscoveredItem(day.Key, JsonConvert.SerializeObject(day.Value)))
+                .Select(day => new DiscoveredItem<LocalShow[]>(day.Key, day.Value.ToArray()))
                 .ToArray()
         );
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        DiscoveredItem<LocalShow[]> item
     )
     {
-        if (context.Request.Item != null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
-        var shows = JsonConvert.DeserializeObject<LocalShow[]>(item.Metadata)!;
+        var shows = item.Metadata;
         var metadata = new Dictionary<string, LocalShowObject>();
         foreach (var directory in shows.Select(show => show.dir).Distinct())
         {

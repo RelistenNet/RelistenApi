@@ -12,13 +12,14 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.Phishin;
 using Sentry;
 
 namespace Relisten.Import
 {
-    public partial class PhishinImporter : ImporterBase
+    public partial class PhishinImporter : IngestionImporter<PhishinShow>
     {
         private readonly LinkService linkService;
 
@@ -50,7 +51,7 @@ namespace Relisten.Import
             ILogger<PhishinImporter> log,
             IConfiguration configuration
         )
-            : base(catalog)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;
@@ -105,33 +106,37 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
-            ctx?.WriteLine("Processing Eras");
+            ImportProgress.WriteLine(log, ctx, "Processing Eras");
             stats += await ProcessEras(artist, ctx);
 
-            ctx?.WriteLine("Processing Tours");
+            ImportProgress.WriteLine(log, ctx, "Processing Tours");
             stats += await ProcessTours(artist, ctx);
 
-            ctx?.WriteLine("Processing Songs");
+            ImportProgress.WriteLine(log, ctx, "Processing Songs");
             stats += await ProcessSongs(artist, ctx);
 
-            ctx?.WriteLine("Processing Venues");
+            ImportProgress.WriteLine(log, ctx, "Processing Venues");
             stats += await ProcessVenues(artist, ctx);
 
-            ctx?.WriteLine("Processing Shows");
+            ImportProgress.WriteLine(log, ctx, "Processing Shows");
             stats += await ProcessShows(artist, src, ctx);
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows and years...");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows and years...");
                 await RebuildShows(artist);
                 await RebuildYears(artist);
-                ctx?.WriteLine("--> rebuilt!");
+                ImportProgress.WriteLine(log, ctx, "--> rebuilt!");
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
             return stats;
@@ -194,7 +199,7 @@ namespace Relisten.Import
         )
         {
             var url = PhishinApiUrl(apiRoute, sort_attr, per_page, page);
-            ctx?.WriteLine($"Requesting {url}");
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
             using var resp = await http.GetAsync(url);
             resp.EnsureSuccessStatusCode();
             return JsonConvert.DeserializeObject<PhishinRootObject<T>>(
@@ -676,10 +681,12 @@ namespace Relisten.Import
                     }
                     catch (Exception e)
                     {
-                        ctx?.WriteLine(
+                        ImportProgress.WriteLine(
+                            log,
+                            ctx,
                             $"Error processing show (but continuing): {show.date} (id: {show.id})"
                         );
-                        ctx?.LogException(e);
+                        ImportProgress.LogException(log, ctx, e);
 
                         e.Data["phishin_show_date"] = show.date;
                         e.Data["phishin_show_id"] = show.id;
@@ -696,7 +703,9 @@ namespace Relisten.Import
                 // all remaining pages (earlier dates) won't either
                 if (isThinScrape && !processedAnyOnPage)
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"Thin scrape: no shows on page {currentPage} matched year {CurrentImportOptions.OnlyYear}, stopping"
                     );
                     allShowsBeforeCutoff = true;

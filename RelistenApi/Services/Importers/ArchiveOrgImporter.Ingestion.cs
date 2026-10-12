@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
 using Relisten.Vendor;
@@ -14,91 +13,88 @@ namespace Relisten.Import;
 
 // Full discovery is a verified rows=* snapshot. Item metadata lives only for one
 // activity attempt; absence alone never authorizes a deletion.
-public partial class ArchiveOrgImporter : IProviderIngestion
+public partial class ArchiveOrgImporter
 {
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<ArchiveDiscovery> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync(
             context.Source.upstream_identifier,
             context.Request.Year
         );
         await PreloadData(context.Artist);
-        var cutoff = DateTime.UtcNow.AddDays(
-            -CurrentImportOptions.RescrapeRecentDays.GetValueOrDefault(7)
-        );
-        var selected = docs.Where(doc =>
+        var selected = new List<DiscoveredItem<ArchiveImportItem>>();
+        foreach (var doc in docs)
         {
-            var source = existingSources.GetValue(doc.identifier);
-            var review = existingSourceReviewInformation.GetValue(doc.identifier);
-            var date = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date, doc.identifier);
-            return source == null
-                || (review != null && doc.max_review_date > review.review_max_updated_at)
-                || (date != null && source.display_date != date)
-                || (CurrentImportOptions.RescrapeRecentDays.HasValue && doc.addeddate > cutoff);
-        });
+            var reason = ImportReason(
+                doc,
+                existingSources.GetValue(doc.identifier),
+                existingSourceReviewInformation.GetValue(doc.identifier),
+                null
+            );
+            if (reason != null)
+            {
+                selected.Add(
+                    new DiscoveredItem<ArchiveImportItem>(
+                        doc.identifier,
+                        new ArchiveImportItem(doc, reason)
+                    )
+                );
+            }
+        }
 
-        return new DiscoverySnapshot(
-            selected
-                .Select(doc => new DiscoveredItem(doc.identifier, JsonConvert.SerializeObject(doc)))
-                .ToArray(),
-            ObservedIdentifiers: docs.Select(doc => doc.identifier).ToArray()
+        return new ArchiveDiscovery(
+            selected.ToArray(),
+            docs.Select(doc => doc.identifier).ToArray()
         );
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ReimportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        string identifier
     )
     {
-        var doc = string.IsNullOrEmpty(item.Metadata)
-            ? await new ArchiveOrgSearchClient(http).FetchItemAsync(
+        var doc =
+            await new ArchiveOrgSearchClient(http).FetchItemAsync(
                 context.Source.upstream_identifier,
-                item.Identifier
+                identifier
             )
-            : JsonConvert.DeserializeObject<SearchDoc>(item.Metadata)!;
-        if (doc == null)
-        {
-            throw new InvalidDataException(
+            ?? throw new InvalidDataException(
                 "The requested Archive item was not found in its collection."
             );
-        }
+        return await ImportItemAsync(
+            context,
+            new DiscoveredItem<ArchiveImportItem>(
+                identifier,
+                new ArchiveImportItem(doc, "targeted_show")
+            )
+        );
+    }
 
-        using var response = await http.GetAsync(
-            DetailsUrlForIdentifier(item.Identifier),
+    /// <inheritdoc />
+    public override async Task<ItemImportResult> ImportItemAsync(
+        ProviderContext context,
+        DiscoveredItem<ArchiveImportItem> item
+    )
+    {
+        var doc = item.Metadata.Document;
+        var metadata = await FetchItemMetadata(
+            context.Artist,
+            doc,
+            item.Metadata.Reason,
+            null,
             context.CancellationToken
         );
-        response.EnsureSuccessStatusCode();
-        var details =
-            JsonConvert.DeserializeObject<RootObject>(
-                await response.Content.ReadAsStringAsync(context.CancellationToken),
-                new TolerantStringConverter()
-            ) ?? throw new InvalidDataException("Archive returned empty metadata.");
-
-        if (details.is_dark == true)
+        if (metadata == null)
         {
             return new ItemImportResult(new ImportStats());
         }
 
-        if (
-            !string.IsNullOrEmpty(details.error)
-            || details.errcode.HasValue
-            || details.metadata?.identifier != item.Identifier
-        )
-        {
-            throw new InvalidDataException("Archive returned erroneous or mismatched metadata.");
-        }
-
-        var date =
-            details.metadata.date == null
-                ? null
-                : ArchiveOrgImporterUtils.FixDisplayDate(details.metadata);
-        if (date == null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
+        var details = metadata.Details;
         return await context.CommitAsync(async () =>
         {
             var source = await _sourceService.ForUpstreamIdentifierFromPrimary(
@@ -116,7 +112,7 @@ public partial class ArchiveOrgImporter : IProviderIngestion
                 doc,
                 details,
                 context.Source,
-                date,
+                metadata.DisplayDate,
                 null
             );
             return new ItemImportResult(stats);
@@ -124,7 +120,7 @@ public partial class ArchiveOrgImporter : IProviderIngestion
     }
 
     /// <inheritdoc />
-    public async Task<ProviderResult> ReconcileAsync(
+    public override async Task<ProviderResult> ReconcileAsync(
         ProviderContext context,
         string[] ineligibleItems,
         bool hasFailures
@@ -136,9 +132,9 @@ public partial class ArchiveOrgImporter : IProviderIngestion
         }
 
         var snapshot =
-            await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
+            await context.Store.ReadSnapshotAsync<ArchiveDiscovery>(
                 context.Run,
-                IngestionActivities.DiscoveryName(Provider, null)
+                DiscoveryName(null)
             ) ?? throw new InvalidOperationException("Archive discovery has not completed.");
         var observed =
             snapshot.ObservedIdentifiers
@@ -153,6 +149,7 @@ public partial class ArchiveOrgImporter : IProviderIngestion
 
         if (ExceedsDeletionLimit(candidates.Length) || ExceedsDeletionLimit(ineligibleItems.Length))
         {
+            await ReportDeletionGuard(context.Artist, candidates, null);
             return new ProviderResult(
                 new ImportStats(),
                 [
@@ -166,47 +163,36 @@ public partial class ArchiveOrgImporter : IProviderIngestion
             );
         }
 
-        var decisions = new List<DeletionDecision>();
-        foreach (var identifier in candidates)
-        {
-            if (ineligibleItems.Contains(identifier))
-            {
-                decisions.Add(
-                    new DeletionDecision(
-                        identifier,
-                        "Ineligible",
-                        "Metadata contains no VBR MP3 files",
-                        true
-                    )
-                );
-                continue;
-            }
-
-            var metadata = await new ArchiveOrgMetadataClient(http).CheckAsync(identifier);
-            decisions.Add(
-                new DeletionDecision(
-                    identifier,
-                    metadata.Status.ToString(),
-                    metadata.Reason,
-                    metadata.Status == ArchiveOrgItemStatus.Deleted
-                )
-            );
-        }
+        var verification = await VerifyDeletionCandidatesAsync(
+            candidates,
+            ineligibleItems.ToHashSet(),
+            http,
+            message => ImportProgress.WriteLine(log, null, message)
+        );
 
         return await context.CommitAsync(async () =>
         {
-            var deleted = decisions
-                .Where(decision => decision.Delete)
-                .Select(decision => decision.Identifier)
-                .ToArray();
+            var deleted = verification.Identifiers;
             var removed =
-                deleted.Length == 0
+                deleted.Count == 0
                     ? 0
                     : await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
                         context.Artist.id,
                         deleted
                     );
-            return new ProviderResult(new ImportStats { Removed = removed }, decisions.ToArray());
+            return new ProviderResult(
+                new ImportStats { Removed = removed },
+                verification.Decisions
+            );
         });
     }
 }
+
+/// <summary>Archive listing evidence used to verify absence independently of selected imports.</summary>
+public record ArchiveDiscovery(
+    DiscoveredItem<ArchiveImportItem>[] Items,
+    string[] ObservedIdentifiers
+) : DiscoverySnapshot<ArchiveImportItem>(Items);
+
+/// <summary>Archive search metadata and the reason it was selected for import.</summary>
+public record ArchiveImportItem(SearchDoc Document, string Reason);

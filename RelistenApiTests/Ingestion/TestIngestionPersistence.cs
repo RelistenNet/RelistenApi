@@ -5,11 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Relisten;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
+using Relisten.Services.Notifications;
 using Temporalio.Client;
 
 namespace RelistenApiTests.Ingestion;
@@ -18,6 +21,8 @@ namespace RelistenApiTests.Ingestion;
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestIngestionPersistence
 {
+    private readonly IngestionLogCapture logs = new();
+    private readonly RecordingNotifier notifications = new();
     private IHost host = null!;
     private FixtureHttpServer upstream = null!;
     private DbService db = null!;
@@ -51,6 +56,7 @@ public class TestIngestionPersistence
         );
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
+        builder.Logging.AddProvider(logs);
         builder.Configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
@@ -75,6 +81,7 @@ public class TestIngestionPersistence
             .AddTemporalIngestionWorkers(builder.Configuration);
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
         SqlMapper.AddTypeHandler(new DateTimeHandler());
+        builder.Services.AddSingleton<IDiscordWebhookNotifier>(notifications);
         host = builder.Build();
         db = host.Services.GetRequiredService<DbService>();
         store = new IngestionStore(db);
@@ -92,6 +99,8 @@ public class TestIngestionPersistence
     public async Task SeedArtist()
     {
         upstream.Redirects.Clear();
+        logs.Entries.Clear();
+        notifications.Messages.Clear();
         requestId = Guid.NewGuid().ToString();
         artistUuid = Guid.NewGuid();
         artistId = await db.WithWriteConnection(c =>
@@ -126,6 +135,135 @@ public class TestIngestionPersistence
         upstream.Dispose();
         DbService.ConnStr = originalWrite;
         DbService.ReadOnlyConnStr = originalRead;
+    }
+
+    [TestCase(false, "missing_date")]
+    [TestCase(true, "missing_date")]
+    [TestCase(false, "dark")]
+    [TestCase(true, "dark")]
+    public async Task ArchiveMetadataSkipsHaveTheSameBehaviorAndDiagnostics(
+        bool temporal,
+        string reason
+    )
+    {
+        var metadata = JObject.Parse(Metadata("Skipped"));
+        if (reason == "dark")
+            metadata["is_dark"] = true;
+        else
+            metadata["metadata"]!["date"] = null;
+        upstream.Respond = uri =>
+            uri.AbsolutePath.StartsWith("/metadata/") ? metadata.ToString() : Listing;
+
+        await RunArchive(temporal);
+
+        (await Catalog()).Should().BeEmpty();
+        var skipped = logs.Entries.Single(entry => entry.Event == ImportEvents.ArchiveItemSkipped);
+        skipped.Fields["Reason"].Should().Be(reason);
+        skipped.Fields["ItemIdentifier"].Should().Be("fixture-2000-01-01");
+        if (temporal)
+        {
+            skipped.Fields["RequestId"].Should().Be(requestId);
+            skipped.Fields["Provider"].Should().Be("archive.org");
+            skipped.Fields["WorkflowId"].Should().Be("ingest/artist/" + artistUuid);
+        }
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ArchiveDateRepairAndSelectionReasonRemainVisible(bool temporal)
+    {
+        upstream.Respond = uri =>
+            uri.AbsolutePath.StartsWith("/metadata/")
+                ? Metadata("Remapped")
+                    .Replace("2000-01-01", "2000-13-01")
+                    .Replace("fixture-2000-13-01", "fixture-2000-01-01")
+                : Listing;
+        await RunArchive(temporal);
+
+        var selected = logs.Entries.Single(entry =>
+            entry.Event == ImportEvents.ArchiveItemSelected
+        );
+        selected.Fields["Reason"].Should().Be("new_source");
+        var remapped = logs.Entries.Single(entry =>
+            entry.Event == ImportEvents.ArchiveDateRemapped
+        );
+        remapped.Fields["DisplayDate"].Should().Be("2000-01-13");
+        var source = await host
+            .Services.GetRequiredService<SourceService>()
+            .ForArtistFromPrimary(
+                (await host.Services.GetRequiredService<ArtistService>().FindArtistById(artistId))!,
+                await db.WithWriteConnection(c =>
+                    c.QuerySingleAsync<long>(
+                        "SELECT id FROM sources WHERE artist_id=@artistId",
+                        new { artistId }
+                    )
+                )
+            );
+        source.display_date.Should().Be("2000-01-13");
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ArchiveGuardPreservesSourcesAndAlertsOperators(bool temporal)
+    {
+        var listing = JObject.Parse(Listing);
+        var template = listing["response"]!["docs"]![0]!;
+        listing["response"]!["docs"] = new JArray(
+            Enumerable
+                .Range(0, 6)
+                .Select(index =>
+                {
+                    var item = template.DeepClone();
+                    item["identifier"] = "fixture-" + index;
+                    return item;
+                })
+        );
+        listing["response"]!["numFound"] = 6;
+        upstream.Respond = uri =>
+            uri.AbsolutePath.StartsWith("/metadata/")
+                ? Metadata("Guarded").Replace("fixture-2000-01-01", uri.Segments.Last())
+                : listing.ToString();
+        await RunArchive(temporal);
+        logs.Entries.Clear();
+        upstream.Respond = _ => EmptyListing;
+
+        await RunArchive(temporal);
+
+        (await Catalog()).Should().HaveCount(6);
+        var guard = logs.Entries.Single(entry => entry.Event == ImportEvents.ArchiveDeletionGuard);
+        guard.Fields["SourceDeletionCount"].Should().Be(6);
+        notifications.Messages.Should().ContainSingle();
+    }
+
+    private async Task RunArchive(bool temporal)
+    {
+        if (temporal)
+        {
+            (await Import()).FailedItems.Should().Be(0);
+            return;
+        }
+
+        using var scope = host.Services.CreateScope();
+        var artist = (
+            await scope.ServiceProvider.GetRequiredService<ArtistService>().FindArtistById(artistId)
+        )!;
+        var source = artist.upstream_sources.Single();
+        var importer = source.upstream_source.importer!;
+        importer.UseIngestionHttpClient(
+            new HttpClient(new FixtureRedirectHandler(upstream.Address))
+        );
+        await importer.ImportDataForArtist(artist, source, null);
+    }
+
+    private sealed class RecordingNotifier : IDiscordWebhookNotifier
+    {
+        internal List<string> Messages { get; } = new();
+
+        public Task SendAsync(string message, CancellationToken cancellationToken = default)
+        {
+            Messages.Add(message);
+            return Task.CompletedTask;
+        }
     }
 
     [Test]
@@ -255,20 +393,17 @@ public class TestIngestionPersistence
     [Test]
     public async Task SnapshotRetryKeepsTheFirstDiscoverySelection()
     {
-        var first = new DiscoverySnapshot([new("a", "first")], ObservedIdentifiers: ["a"]);
+        var first = new DiscoverySnapshot<Receipt>([new("a", new Receipt(1))]);
         await store.SnapshotAsync(Run, "page", () => Task.FromResult(first));
         var retry = await store.SnapshotAsync(
             Run,
             "page",
-            () =>
-                Task.FromResult(
-                    new DiscoverySnapshot([new("b", "later")], ObservedIdentifiers: ["b"])
-                )
+            () => Task.FromResult(new DiscoverySnapshot<Receipt>([new("b", new Receipt(2))]))
         );
         retry.Should().BeEquivalentTo(first);
-        (await store.ReadItemAsync(Run, new ImportItem("a", "page", 0)))
-            .Metadata.Should()
-            .Be("first");
+        (await store.ReadItemAsync<Receipt>(Run, new ImportItem("a", "page", 0)))
+            .Metadata.Value.Should()
+            .Be(1);
     }
 
     [Test]
@@ -660,12 +795,22 @@ public class TestIngestionPersistence
     {
         var items = Enumerable
             .Range(0, 18386)
-            .Select(index => new DiscoveredItem("item-" + index, "{}"))
+            .Select(index => new DiscoveredItem<Relisten.Import.ArchiveImportItem>(
+                "item-" + index,
+                new Relisten.Import.ArchiveImportItem(
+                    new Relisten.Vendor.ArchiveOrg.SearchDoc
+                    {
+                        identifier = "item-" + index,
+                        addeddate = new DateTime(2026, 1, 1),
+                    },
+                    "new_source"
+                )
+            ))
             .ToArray();
         await store.SnapshotAsync(
             Run,
             "archive.org/discovery/first",
-            () => Task.FromResult(new DiscoverySnapshot(items))
+            () => Task.FromResult(new Relisten.Import.ArchiveDiscovery(items, []))
         );
         using var scope = host.Services.CreateScope();
         var activities = ActivatorUtilities.CreateInstance<IngestionActivities>(

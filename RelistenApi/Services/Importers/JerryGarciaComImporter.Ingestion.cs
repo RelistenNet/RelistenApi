@@ -7,10 +7,13 @@ using Relisten.Vendor;
 
 namespace Relisten.Import;
 
-public partial class JerryGarciaComImporter : IProviderIngestion
+public partial class JerryGarciaComImporter
 {
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<DiscoverySnapshot<FileMetaObject>> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         using var response = await http.GetAsync(
             ShowPagesListingUrl(context.Source),
@@ -25,30 +28,25 @@ public partial class JerryGarciaComImporter : IProviderIngestion
                 "Jerry mirror returned an invalid page index."
             );
         await PreloadData(context.Artist);
-        return new DiscoverySnapshot(
+        return new DiscoverySnapshot<FileMetaObject>(
             BuildFileMetaObjects(files)
                 .Where(f =>
                     context.Request.BackfillJerryVenues
                         ? existingSetlistShows.ContainsKey(f.Identifier)
                         : !existingSetlistShows.ContainsKey(f.Identifier)
                 )
-                .Select(f => new DiscoveredItem(f.Identifier, JsonConvert.SerializeObject(f)))
+                .Select(f => new DiscoveredItem<FileMetaObject>(f.Identifier, f))
                 .ToArray()
         );
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        DiscoveredItem<FileMetaObject> item
     )
     {
-        if (context.Request.Item != null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
-        var file = JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!;
+        var file = item.Metadata;
         using var response = await http.GetAsync(
             ShowPageUrl(context.Source, file.FilePath),
             context.CancellationToken
@@ -75,23 +73,10 @@ public partial class JerryGarciaComImporter : IProviderIngestion
             var stats = new ImportStats();
             if (context.Request.BackfillJerryVenues)
             {
-                await ApplyVenueBackfill(
-                    stats,
-                    context.Artist,
-                    JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!,
-                    html,
-                    modifiedAt
-                );
+                await ApplyVenueBackfill(stats, context.Artist, item.Metadata, html, modifiedAt);
                 return new ItemImportResult(stats);
             }
-            await ProcessPage(
-                stats,
-                context.Artist,
-                JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!,
-                html,
-                modifiedAt,
-                null
-            );
+            await ProcessPage(stats, context.Artist, item.Metadata, html, modifiedAt, null);
             if (context.Artist.features.tours && tourToStartDate.Count > 0)
             {
                 await UpdateTourStartEndDates(context.Artist);
@@ -102,7 +87,7 @@ public partial class JerryGarciaComImporter : IProviderIngestion
     }
 
     /// <inheritdoc />
-    public async Task<ProviderResult> ReconcileAsync(
+    public override async Task<ProviderResult> ReconcileAsync(
         ProviderContext context,
         string[] ineligibleItems,
         bool hasFailures

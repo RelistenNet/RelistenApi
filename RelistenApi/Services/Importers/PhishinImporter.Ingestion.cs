@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Ingestion;
 using Relisten.Vendor.Phishin;
 
@@ -10,7 +9,7 @@ namespace Relisten.Import;
 
 // The prerequisite catalogs are reused across show activities. The snapshot keeps
 // era and song-ID mappings stable without refetching four catalogs for every show.
-public partial class PhishinImporter : IProviderIngestion
+public partial class PhishinImporter
 {
     private record Catalogs(
         IDictionary<string, IList<string>> Eras,
@@ -20,7 +19,7 @@ public partial class PhishinImporter : IProviderIngestion
     );
 
     /// <inheritdoc />
-    public async Task<ImportStats> PrepareAsync(ProviderContext context)
+    public override async Task<ImportStats> PrepareAsync(ProviderContext context)
     {
         if (context.Request.Item != null)
         {
@@ -53,7 +52,10 @@ public partial class PhishinImporter : IProviderIngestion
     }
 
     /// <inheritdoc />
-    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
+    public override async Task<DiscoverySnapshot<PhishinShow>> DiscoverAsync(
+        ProviderContext context,
+        string? cursor
+    )
     {
         var page = cursor == null ? 1 : int.Parse(cursor);
         var listing = await PhishinApiRequest<IEnumerable<PhishinShow>>(
@@ -65,8 +67,8 @@ public partial class PhishinImporter : IProviderIngestion
         );
         if (cursor == null && context.Request.Year.HasValue && listing.total_pages > 1)
         {
-            return new DiscoverySnapshot(
-                Array.Empty<DiscoveredItem>(),
+            return new DiscoverySnapshot<PhishinShow>(
+                Array.Empty<DiscoveredItem<PhishinShow>>(),
                 listing.total_pages.ToString()
             );
         }
@@ -94,32 +96,24 @@ public partial class PhishinImporter : IProviderIngestion
             next = (page + 1).ToString();
         }
 
-        return new DiscoverySnapshot(
+        return new DiscoverySnapshot<PhishinShow>(
             shows
-                .Select(show => new DiscoveredItem(
-                    show.id.ToString(),
-                    JsonConvert.SerializeObject(show)
-                ))
+                .Select(show => new DiscoveredItem<PhishinShow>(show.id.ToString(), show))
                 .ToArray(),
             next
         );
     }
 
     /// <inheritdoc />
-    public async Task<ItemImportResult> ImportItemAsync(
+    public override async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        DiscoveredItem item
+        DiscoveredItem<PhishinShow> item
     )
     {
-        if (context.Request.Item != null)
-        {
-            return new ItemImportResult(new ImportStats());
-        }
-
         var catalogs =
             await context.Store.ReadSnapshotAsync<Catalogs>(context.Run, "phish.in/catalogs")
             ?? throw new InvalidOperationException("Phish.in catalogs have not been prepared.");
-        var show = JsonConvert.DeserializeObject<PhishinShow>(item.Metadata)!;
+        var show = item.Metadata;
 
         return await context.CommitAsync(async () =>
         {

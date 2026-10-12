@@ -3,19 +3,26 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
 // GETs may repeat on activity retry. Queue limits control concurrent item operations.
-internal sealed class IngestionHttpHandler(CancellationToken activityCancellation, Uri? endpoint)
-    : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = true })
+internal sealed class IngestionHttpHandler(
+    CancellationToken activityCancellation,
+    Uri? endpoint,
+    ILogger<IngestionHttpHandler>? log = null
+) : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = true })
 {
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
     )
     {
+        // Exclude query parameters: some provider URLs carry API credentials.
+        var url = request.RequestUri!.GetLeftPart(UriPartial.Path);
+        log?.LogInformation("Requesting {UpstreamUrl}", url);
         if (endpoint != null)
         {
             request.RequestUri = new Uri(endpoint, request.RequestUri!.PathAndQuery);
@@ -26,6 +33,11 @@ internal sealed class IngestionHttpHandler(CancellationToken activityCancellatio
             activityCancellation
         );
         var response = await base.SendAsync(request, linked.Token);
+        log?.LogInformation(
+            "Upstream returned HTTP {StatusCode} for {UpstreamUrl}",
+            (int)response.StatusCode,
+            url
+        );
         if (
             response.StatusCode == HttpStatusCode.TooManyRequests
             || (int)response.StatusCode >= 500

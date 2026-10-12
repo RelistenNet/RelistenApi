@@ -58,7 +58,7 @@ namespace Relisten.Import
             ILogger<PanicStreamComImporter> log,
             IConfiguration configuration
         )
-            : base(catalog)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _sourceService = sourceService;
