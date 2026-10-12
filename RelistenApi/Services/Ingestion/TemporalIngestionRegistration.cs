@@ -2,7 +2,17 @@ using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
+using Relisten.Data;
+using Relisten.Ingestion.Providers.Archive;
+using Relisten.Ingestion.Providers.Jerry;
+using Relisten.Ingestion.Providers.Local;
+using Relisten.Ingestion.Providers.PhantasyTour;
+using Relisten.Ingestion.Providers.PhishIn;
+using Relisten.Ingestion.Providers.PhishNet;
+using Relisten.Ingestion.Providers.SetlistFm;
+using Relisten.Ingestion.Transport;
 using Relisten.Ingestion.Workflows;
+using Temporalio.Converters;
 using Temporalio.Extensions.Hosting;
 
 namespace Relisten.Ingestion;
@@ -16,10 +26,20 @@ public static class TemporalIngestionRegistration
         IConfiguration configuration
     )
     {
-        services.AddTemporalClient(
-            configuration["Temporal:Address"] ?? "localhost:7233",
-            configuration["Temporal:Namespace"] ?? "default"
-        );
+        var temporalNamespace = configuration["Temporal:Namespace"] ?? "default";
+        services
+            .AddTemporalClient(
+                configuration["Temporal:Address"] ?? "localhost:7233",
+                temporalNamespace
+            )
+            .Configure<RedisService>(
+                (options, redis) =>
+                    options.DataConverter = DataConverter.Default with
+                    {
+                        PayloadCodec = new RedisPayloadCodec(redis.db, temporalNamespace),
+                    }
+            );
+        services.AddSingleton<IImportAdmissionCatalog, ImportAdmissionCatalog>();
         services.AddSingleton<TemporalIngestionClient>();
         return services;
     }
@@ -31,20 +51,30 @@ public static class TemporalIngestionRegistration
     )
     {
         services.AddTemporalIngestionClient(configuration);
-        services.AddScoped<IngestionStore>();
+        services.AddScoped<CatalogImportTransaction>();
+        services.AddSingleton<ProviderActivityRunner>();
         services.AddSingleton<IngestionHttpClientFactory>();
         // IngestionHttpHandler logs paths without query parameters that may contain credentials.
         services.AddHttpClient(nameof(IngestionHttpClientFactory)).RemoveAllLoggers();
-        services.AddHostedService<IngestionCleanupService>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Workflows)
             .AddWorkflow<ArtistRefreshWorkflow>()
-            .AddWorkflow<ReimportItemWorkflow>()
+            .AddWorkflow<ArchiveItemImportWorkflow>()
+            .AddWorkflow<RebuildArtistCatalogWorkflow>()
+            .AddWorkflow<JerryVenueRepairWorkflow>()
+            .AddWorkflow<ArchiveWorkflow>()
+            .AddWorkflow<PhishInWorkflow>()
+            .AddWorkflow<PhishNetWorkflow>()
+            .AddWorkflow<SetlistFmWorkflow>()
+            .AddWorkflow<PhantasyTourWorkflow>()
+            .AddWorkflow<JerryWorkflow>()
+            .AddWorkflow<JerryVenueRepairProviderWorkflow>()
+            .AddWorkflow<LocalWorkflow>()
             .AddWorkflow<RefreshBatchWorkflow>()
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
-            .AddScopedActivities<IngestionActivities>()
+            .AddScopedActivities<CatalogActivities>()
             .AddScopedActivities<IngestionBatchActivities>()
             .ConfigureOptions(o =>
             {
@@ -53,9 +83,31 @@ public static class TemporalIngestionRegistration
             });
         foreach (var (provider, queue) in IngestionQueues.Providers)
         {
-            var builder = services
-                .AddHostedTemporalWorker(queue)
-                .AddScopedActivities<IngestionActivities>();
+            var builder = services.AddHostedTemporalWorker(queue);
+            switch (provider)
+            {
+                case UpstreamProvider.ArchiveOrg:
+                    builder.AddScopedActivities<ArchiveActivities>();
+                    break;
+                case UpstreamProvider.Phishin:
+                    builder.AddScopedActivities<PhishInActivities>();
+                    break;
+                case UpstreamProvider.PhishNet:
+                    builder.AddScopedActivities<PhishNetActivities>();
+                    break;
+                case UpstreamProvider.SetlistFm:
+                    builder.AddScopedActivities<SetlistFmActivities>();
+                    break;
+                case UpstreamProvider.PhantasyTour:
+                    builder.AddScopedActivities<PhantasyTourActivities>();
+                    break;
+                case UpstreamProvider.JerryGarcia:
+                    builder.AddScopedActivities<JerryActivities>();
+                    break;
+                case UpstreamProvider.Local:
+                    builder.AddScopedActivities<LocalActivities>();
+                    break;
+            }
             if (provider == UpstreamProvider.ArchiveOrg)
             {
                 builder.AddScopedActivities<IngestionBatchActivities>();

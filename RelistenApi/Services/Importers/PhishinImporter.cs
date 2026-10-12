@@ -19,7 +19,7 @@ using Sentry;
 
 namespace Relisten.Import
 {
-    public partial class PhishinImporter : IngestionImporter<PhishinShow>
+    public partial class PhishinImporter : ImporterBase
     {
         private readonly LinkService linkService;
 
@@ -202,9 +202,12 @@ namespace Relisten.Import
             ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
             using var resp = await http.GetAsync(url);
             resp.EnsureSuccessStatusCode();
-            return JsonConvert.DeserializeObject<PhishinRootObject<T>>(
+            var result = JsonConvert.DeserializeObject<PhishinRootObject<T>>(
                 await resp.Content.ReadAsStringAsync()
-            )!;
+            );
+            if (result == null || !result.success || result.data == null)
+                throw new System.IO.InvalidDataException("Phish.in returned an invalid response.");
+            return result;
         }
 
         public async Task<ImportStats> ProcessTours(
@@ -494,6 +497,8 @@ namespace Relisten.Import
                 addSongs = true;
             }
 
+            existingSetlistShows[show.date] = dbShow;
+
             if (addSongs)
             {
                 var dbSongs = show
@@ -725,7 +730,11 @@ namespace Relisten.Import
         {
             using var scope = new TransactionScope(
                 TransactionScopeOption.Required,
-                new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                new TransactionOptions()
+                {
+                    IsolationLevel =
+                        Transaction.Current?.IsolationLevel ?? IsolationLevel.RepeatableRead,
+                },
                 TransactionScopeAsyncFlowOption.Enabled
             );
 
@@ -792,6 +801,19 @@ namespace Relisten.Import
                 existingSources[dbSource.upstream_identifier] = dbSource!;
 
                 stats.Updated++;
+            }
+            else if (!existingSetlistShows.ContainsKey(show.date))
+            {
+                // A recording can outlive its setlist row. Restore that identity without
+                // overwriting newer recording metadata with this listing's older fields.
+                await ProcessSetlistShow(
+                    stats,
+                    show,
+                    artist,
+                    src,
+                    dbSource,
+                    new Dictionary<string, SourceSet?>()
+                );
             }
 
             scope.Complete();

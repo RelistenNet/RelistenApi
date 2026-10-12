@@ -16,8 +16,7 @@ using Relisten.Vendor.PhantasyTour;
 
 namespace Relisten.Import
 {
-    public partial class PhantasyTourImporter
-        : IngestionImporter<PhantasyTourShowListing, PhantasyTourDiscovery>
+    public partial class PhantasyTourImporter : ImporterBase
     {
         private const uint ITEMS_PER_PAGE = 100;
         private IDictionary<string, SetlistShow?> existingSetlistShows =

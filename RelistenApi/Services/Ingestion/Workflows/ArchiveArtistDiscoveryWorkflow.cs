@@ -4,42 +4,38 @@ using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
 
-/// <summary>Indexes Archive artist collections one upstream page at a time.</summary>
+/// <summary>Records each fetched page before applying it, so a write retry cannot refetch a different collection list.</summary>
 [Workflow]
 public class ArchiveArtistDiscoveryWorkflow
 {
     [WorkflowRun]
     public async Task<int> RunAsync(
-        IngestionRun? run = null,
-        string? cursor = null,
-        int fetched = 0
+        DiscoverArchiveArtists request,
+        ArchiveDiscoveryProgress? progress = null
     )
     {
-        run ??= new IngestionRun(
-            Workflow.NewGuid().ToString(),
-            Workflow.UtcNow + IngestionRun.MaximumDuration
-        );
-        for (var pages = 0; ; pages++)
+        progress ??= new ArchiveDiscoveryProgress(ImportWorkflowOptions.AssignExecution(null));
+        for (var calls = 0; ; )
         {
+            ImportWorkflowOptions.RequireActive(progress.Execution);
             var page = await Workflow.ExecuteActivityAsync(
-                (IngestionBatchActivities a) => a.DiscoverArtists(run, cursor, fetched),
+                (IngestionBatchActivities a) => a.FetchCollectionPage(progress),
                 ImportWorkflowOptions.Activity(
                     IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
                 )
             );
-            fetched += page.Count;
-            cursor = page.NextCursor;
-            if (cursor == null)
-            {
-                return fetched;
-            }
-
-            if (pages >= 100 || Workflow.ContinueAsNewSuggested)
-            {
+            var count = await Workflow.ExecuteActivityAsync(
+                (IngestionBatchActivities a) => a.ApplyCollectionPage(progress.Execution, page),
+                ImportWorkflowOptions.Activity(IngestionQueues.Database)
+            );
+            calls += 2;
+            progress = progress with { Cursor = page.Next, Processed = progress.Processed + count };
+            if (page.Next == null)
+                return progress.Processed;
+            if (ImportWorkflowOptions.ShouldContinue(calls))
                 throw Workflow.CreateContinueAsNewException(
-                    (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(run, cursor, fetched)
+                    (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(request, progress)
                 );
-            }
         }
     }
 }

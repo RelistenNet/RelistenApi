@@ -10,6 +10,7 @@ internal sealed class FixtureHttpServer : IDisposable
     private readonly HttpListener listener = new();
     public Uri Address { get; }
     public Func<Uri, string> Respond { get; set; } = _ => "{}";
+    public Func<Uri, Task>? BeforeResponse { get; set; }
     public Dictionary<string, string> Redirects { get; } = new();
     public HttpStatusCode Status { get; set; } = HttpStatusCode.OK;
     public TimeSpan? RetryAfter { get; set; }
@@ -35,6 +36,8 @@ internal sealed class FixtureHttpServer : IDisposable
             {
                 var context = await listener.GetContextAsync();
                 Requests++;
+                if (BeforeResponse != null)
+                    await BeforeResponse(context.Request.Url!);
                 var redirect = Redirects.GetValueOrDefault(context.Request.Url!.AbsolutePath);
                 var bytes = Encoding.UTF8.GetBytes(
                     redirect == null ? Respond(context.Request.Url) : ""

@@ -3,58 +3,39 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.Local;
 using Relisten.Vendor.Local;
 
 namespace Relisten.Import;
 
-// The root catalog is reused for venue preparation and stable date selection.
-// Directory metadata is fetched and applied within each date's item activity.
+// One root response supplies venues and date selection. Each date merges its directories into one source.
 public partial class LocalImporter
 {
-    private Task<LocalRootObject<LocalShow>> RootCatalog(ProviderContext context) =>
-        context.Store.SnapshotAsync(
-            context.Run,
-            "local/root",
-            async () =>
-            {
-                var root = await LocalApiRequest<LocalShow>(
-                    $"{context.Source.upstream_identifier}/metadata",
-                    null
-                );
-                if (root?.data == null)
-                {
-                    throw new System.IO.InvalidDataException("Local metadata catalog is missing.");
-                }
-
-                return root;
-            }
-        );
-
-    /// <inheritdoc />
-    public override async Task<ImportStats> PrepareAsync(ProviderContext context)
+    public async Task<LocalRootObject<LocalShow>> FetchRootAndPrepareVenuesAsync(
+        ProviderContext context
+    )
     {
-        if (context.Request.Item != null)
-        {
-            return new ImportStats();
-        }
-
-        var root = await RootCatalog(context);
-        return await context.CommitAsync(async () =>
+        var root = await LocalApiRequest<LocalShow>(
+            $"{context.Source.upstream_identifier}/metadata",
+            null
+        );
+        if (root?.data == null)
+            throw new System.IO.InvalidDataException("Local metadata catalog is missing.");
+        await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
             return await ProcessVenues(context.Artist, context.Source, null, root);
         });
+        return root;
     }
 
-    /// <inheritdoc />
-    public override async Task<DiscoverySnapshot<LocalShow[]>> DiscoverAsync(
+    public async Task<LocalSelection> SelectChangedDatesAsync(
         ProviderContext context,
-        string? cursor
+        LocalRootObject<LocalShow> root
     )
     {
-        var root = await RootCatalog(context);
         await PreloadData(context.Artist);
-        return new DiscoverySnapshot<LocalShow[]>(
+        return new(
             root.data.Where(day =>
                     day.Value.Count > 0
                     && (
@@ -63,43 +44,53 @@ public partial class LocalImporter
                         || day.Value[0].updated_at > source.updated_at
                     )
                 )
-                .Select(day => new DiscoveredItem<LocalShow[]>(day.Key, day.Value.ToArray()))
+                .Select(day => new DiscoveredItem<LocalShowDate, LocalShow[]>(
+                    new(day.Key),
+                    day.Value.ToArray()
+                ))
                 .ToArray()
         );
     }
 
-    /// <inheritdoc />
-    public override async Task<ItemImportResult> ImportItemAsync(
+    public async Task<LocalItemResult> ImportDateAsync(
         ProviderContext context,
-        DiscoveredItem<LocalShow[]> item
+        DiscoveredItem<LocalShowDate, LocalShow[]> item
     )
     {
-        var shows = item.Metadata;
         var metadata = new Dictionary<string, LocalShowObject>();
-        foreach (var directory in shows.Select(show => show.dir).Distinct())
-        {
+        foreach (var directory in item.Input.Select(show => show.dir).Distinct())
             metadata[directory] =
                 await LocalShowRequest(
                     $"{context.Source.upstream_identifier}/{directory}/metadata",
                     null
                 )
                 ?? throw new System.IO.InvalidDataException("Local directory metadata is missing.");
-        }
-
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
-            var stats = new ImportStats();
+            var unchanged =
+                existingSources.TryGetValue(item.Id.Value, out var old)
+                && old != null
+                && item.Input[0].updated_at <= old.updated_at;
             await ProcessOneDay(
-                stats,
+                new ImportStats(),
                 context.Artist,
                 context.Source,
-                item.Identifier,
-                shows,
+                item.Id.Value,
+                item.Input,
                 null,
                 metadata
             );
-            return new ItemImportResult(stats);
+            var source =
+                await _sourceService.ForUpstreamIdentifierFromPrimary(context.Artist, item.Id.Value)
+                ?? throw new InvalidOperationException(
+                    "Local date import did not produce a source."
+                );
+            return new LocalItemResult(
+                item.Id,
+                unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied,
+                new(source.id)
+            );
         });
     }
 }

@@ -1,150 +1,142 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.PhishIn;
+using Relisten.Vendor;
 using Relisten.Vendor.Phishin;
 
 namespace Relisten.Import;
 
-// The prerequisite catalogs are reused across show activities. The snapshot keeps
-// era and song-ID mappings stable without refetching four catalogs for every show.
+// Fetch provider catalogs before the write lock. Item attempts reload current catalog rows
+// and restore only the stable upstream era/song mappings from preparation.
 public partial class PhishinImporter
 {
-    private record Catalogs(
-        IDictionary<string, IList<string>> Eras,
-        PhishinSmallTour[] Tours,
-        PhishinSmallSong[] Songs,
-        PhishinSmallVenue[] Venues
-    );
-
-    /// <inheritdoc />
-    public override async Task<ImportStats> PrepareAsync(ProviderContext context)
+    /// <summary>Fetches and commits prerequisite catalogs, then returns the mappings used by shows.</summary>
+    public async Task<PhishInCatalogs> PrepareCatalogsAsync(ProviderContext context)
     {
-        if (context.Request.Item != null)
-        {
-            return new ImportStats();
-        }
-
-        var catalogs = await context.Store.SnapshotAsync(
-            context.Run,
-            "phish.in/catalogs",
-            async () =>
-                new Catalogs(
-                    (
-                        await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", null)
-                    ).data,
-                    (await PhishinApiRequest<PhishinSmallTour[]>("tours", null)).data,
-                    (await PhishinApiRequest<PhishinSmallSong[]>("songs", null)).data,
-                    (await PhishinApiRequest<PhishinSmallVenue[]>("venues", null)).data
-                )
-        );
+        var eras = (await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", null)).data;
+        var tours = (await PhishinApiRequest<PhishinSmallTour[]>("tours", null)).data;
+        var songs = (await PhishinApiRequest<PhishinSmallSong[]>("songs", null)).data;
+        var venues = (await PhishinApiRequest<PhishinSmallVenue[]>("venues", null)).data;
 
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
-            var stats = await ProcessEras(context.Artist, null, catalogs.Eras);
-            stats += await ProcessTours(context.Artist, null, catalogs.Tours);
-            stats += await ProcessSongs(context.Artist, null, catalogs.Songs);
-            stats += await ProcessVenues(context.Artist, null, catalogs.Venues);
-            return stats;
+            await ProcessEras(context.Artist, null, eras);
+            await ProcessTours(context.Artist, null, tours);
+            await ProcessSongs(context.Artist, null, songs);
+            await ProcessVenues(context.Artist, null, venues);
+            return new PhishInCatalogs(
+                eras,
+                songs
+                    .Where(song => !song.alias_for.HasValue)
+                    .Select(song => new PhishInSongMapping(song.id, song.slug))
+                    .ToArray()
+            );
         });
     }
 
-    /// <inheritdoc />
-    public override async Task<DiscoverySnapshot<PhishinShow>> DiscoverAsync(
-        ProviderContext context,
-        string? cursor
-    )
+    /// <summary>Preserves forward full refresh and backward lower-year-bound refresh pagination.</summary>
+    public async Task<
+        Page<DiscoveredItem<PhishInShowId, PhishInShowInput>, PhishInPage>
+    > ReadShowPageAsync(ProviderContext context, int? fromYear, PhishInPage? cursor)
     {
-        var page = cursor == null ? 1 : int.Parse(cursor);
-        var listing = await PhishinApiRequest<IEnumerable<PhishinShow>>(
-            "shows",
-            null,
-            "date",
-            20,
-            page
-        );
-        if (cursor == null && context.Request.Year.HasValue && listing.total_pages > 1)
-        {
-            return new DiscoverySnapshot<PhishinShow>(
-                Array.Empty<DiscoveredItem<PhishinShow>>(),
-                listing.total_pages.ToString()
-            );
-        }
+        var page = cursor?.Number ?? 1;
+        var listing = await PhishinApiRequest<PhishinShow[]>("shows", null, "date", 20, page);
+        if (listing.total_pages < 0)
+            throw new InvalidDataException("Phish.in returned an invalid show page.");
+        if (cursor == null && fromYear.HasValue && listing.total_pages > 1)
+            return new([], new PhishInPage(listing.total_pages));
 
         var shows = listing
             .data.Where(show =>
-                context.Request.Year == null
-                || string.Compare(
-                    show.date,
-                    context.Request.Year + "-01-01",
-                    StringComparison.Ordinal
-                ) >= 0
+                !fromYear.HasValue
+                || string.Compare(show.date, $"{fromYear.Value:D4}-01-01", StringComparison.Ordinal)
+                    >= 0
             )
             .ToArray();
-        string? next = null;
-        if (context.Request.Year.HasValue)
-        {
-            if (page > 1 && shows.Length > 0)
-            {
-                next = (page - 1).ToString();
-            }
-        }
-        else if (page < listing.total_pages)
-        {
-            next = (page + 1).ToString();
-        }
-
-        return new DiscoverySnapshot<PhishinShow>(
+        var next = fromYear.HasValue
+            ? page > 1 && shows.Length > 0
+                ? new PhishInPage(page - 1)
+                : null
+            : page < listing.total_pages
+                ? new PhishInPage(page + 1)
+                : null;
+        return new(
             shows
-                .Select(show => new DiscoveredItem<PhishinShow>(show.id.ToString(), show))
+                .Select(show => new DiscoveredItem<PhishInShowId, PhishInShowInput>(
+                    new(show.id),
+                    new(
+                        show.date,
+                        show.sbd,
+                        show.remastered,
+                        show.tour_id,
+                        show.venue.id,
+                        show.taper_notes,
+                        show.updated_at,
+                        show.tags.Select(tag => tag.name).ToArray(),
+                        show.tracks.ToArray()
+                    )
+                ))
                 .ToArray(),
             next
         );
     }
 
-    /// <inheritdoc />
-    public override async Task<ItemImportResult> ImportItemAsync(
+    /// <summary>Imports a selected show and returns current catalog identities after any retry.</summary>
+    public Task<PhishInItemResult> ImportShowAsync(
         ProviderContext context,
-        DiscoveredItem<PhishinShow> item
-    )
-    {
-        var catalogs =
-            await context.Store.ReadSnapshotAsync<Catalogs>(context.Run, "phish.in/catalogs")
-            ?? throw new InvalidOperationException("Phish.in catalogs have not been prepared.");
-        var show = item.Metadata;
-
-        return await context.CommitAsync(async () =>
+        PhishInCatalogs catalogs,
+        DiscoveredItem<PhishInShowId, PhishInShowInput> item
+    ) =>
+        context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
             RestoreCatalogMappings(catalogs);
-            var stats = new ImportStats();
-            await ProcessOneShow(stats, context.Artist, context.Source, show, null);
-            return new ItemImportResult(stats);
-        });
-    }
-
-    private void RestoreCatalogMappings(Catalogs catalogs)
-    {
-        foreach (var era in catalogs.Eras)
-        {
-            foreach (var year in era.Value)
+            var input = item.Input;
+            var existing = existingSources.GetValue(item.Id.Value.ToString());
+            var unchanged =
+                existing != null
+                && existing.updated_at >= input.UpdatedAt
+                && existingSetlistShows.ContainsKey(input.Date);
+            var show = new PhishinShow
             {
-                yearToEraMapping[year] = existingEras[era.Key];
-            }
-        }
+                id = item.Id.Value,
+                date = input.Date,
+                sbd = input.Soundboard,
+                remastered = input.Remastered,
+                tour_id = input.TourId,
+                venue = new PhishinSmallVenue { id = input.VenueId },
+                taper_notes = input.TaperNotes!,
+                updated_at = input.UpdatedAt,
+                tags = input.Tags.Select(name => new PhishinTag { name = name }).ToList(),
+                tracks = input.Tracks.ToList(),
+            };
+            await ProcessOneShow(new ImportStats(), context.Artist, context.Source, show, null);
+            return new PhishInItemResult(
+                item.Id,
+                unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied,
+                new(existingSources[item.Id.Value.ToString()]!.id),
+                new(existingSetlistShows[input.Date]!.id)
+            );
+        });
+
+    private void RestoreCatalogMappings(PhishInCatalogs catalogs)
+    {
+        yearToEraMapping.Clear();
+        foreach (var era in catalogs.Eras)
+        foreach (var year in era.Value)
+            yearToEraMapping[year] = existingEras[era.Key];
 
         var songsBySlug = existingSetlistSongs
             .Values.Where(song => song != null)
             .GroupBy(song => song!.slug)
             .ToDictionary(group => group.Key, group => group.First());
         foreach (var song in catalogs.Songs)
-        {
-            if (!song.alias_for.HasValue && songsBySlug.TryGetValue(song.slug, out var known))
-            {
-                existingSetlistSongs[song.id.ToString()] = known;
-            }
-        }
+            if (songsBySlug.TryGetValue(song.Slug, out var known))
+                existingSetlistSongs[song.Id.ToString()] = known;
     }
 }

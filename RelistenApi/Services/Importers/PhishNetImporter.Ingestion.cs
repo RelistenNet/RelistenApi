@@ -2,80 +2,102 @@ using System;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Relisten.Api.Models;
 using Relisten.Import.PhishNet;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.PhishNet;
 
 namespace Relisten.Import;
 
-// Ratings, redirects, and reviews form one retryable item operation. Their bodies
-// remain in memory; only the discovery selection and committed result are retained.
+// Network reads happen before the lock. The transaction reloads its source so an
+// overlapping attempt cannot overwrite recording fields from an earlier snapshot.
 public partial class PhishNetImporter
 {
-    /// <summary>A recording selected for ratings/review enrichment and its matching API show.</summary>
-    public record SourceInput(long SourceId, PhishNetApiShow? Show);
-
     public override void UseIngestionHttpClient(HttpClient client)
     {
         base.UseIngestionHttpClient(client);
         phishNetApiClient = new PhishNetApiClient(client);
     }
 
-    /// <inheritdoc />
-    public override async Task<DiscoverySnapshot<SourceInput>> DiscoverAsync(
+    /// <summary>Selects current recordings and their matching Phish.net show metadata.</summary>
+    public async Task<DiscoveredItem<CatalogSourceId, PhishNetSourceInput>[]> SelectSourcesAsync(
         ProviderContext context,
-        string? cursor
+        int? year
     )
     {
         var shows = await phishNetApiClient.Shows(null);
         var sources = await _sourceService.AllForArtistFromPrimary(context.Artist);
-        return new DiscoverySnapshot<SourceInput>(
-            sources
-                .Where(source =>
-                    context.Request.Year == null
-                    || source.display_date.StartsWith(context.Request.Year.ToString()!)
-                )
-                .OrderBy(source => source.display_date)
-                .Select(source => new DiscoveredItem<SourceInput>(
-                    source.id.ToString(),
-                    new SourceInput(
-                        source.id,
-                        shows.FirstOrDefault(show => show.showdate == source.display_date)
+        return sources
+            .Where(source =>
+                !year.HasValue
+                || source.display_date.StartsWith($"{year.Value:D4}-", StringComparison.Ordinal)
+            )
+            .OrderBy(source => source.display_date)
+            .Select(source =>
+            {
+                var show = shows.FirstOrDefault(show => show.showdate == source.display_date);
+                return new DiscoveredItem<CatalogSourceId, PhishNetSourceInput>(
+                    new(source.id),
+                    new(
+                        show == null
+                            ? null
+                            : new PhishNetShowInput(show.showdate, show.setlist_notes)
                     )
-                ))
-                .ToArray()
-        );
+                );
+            })
+            .ToArray();
     }
 
-    /// <inheritdoc />
-    public override async Task<ItemImportResult> ImportItemAsync(
+    /// <summary>Enriches current source data; refetches outside the transaction if review requirements changed.</summary>
+    public async Task<PhishNetItemResult> EnrichSourceAsync(
         ProviderContext context,
-        DiscoveredItem<SourceInput> item
+        DiscoveredItem<CatalogSourceId, PhishNetSourceInput> item
     )
     {
-        var input = item.Metadata;
-        var source = await _sourceService.ForArtistFromPrimary(context.Artist, input.SourceId);
-        var ratings = await new PhishNetRatingsScraper(http, source.display_date).ScrapeRatings();
-        var reviews = Array.Empty<PhishNetApiReview>();
+        var before = await _sourceService.ForArtistFromPrimary(context.Artist, item.Id.Value);
+        var ratings = await new PhishNetRatingsScraper(http, before.display_date).ScrapeRatings();
+        PhishNetApiReview[]? reviews = null;
+        if (ratings.RatingMatched && before.num_reviews != ratings.NumberOfReviewsWritten)
+            reviews = (await phishNetApiClient.Reviews(before.display_date, null)).ToArray();
 
-        if (ratings.RatingMatched && source.num_reviews != ratings.NumberOfReviewsWritten)
-        {
-            reviews = (await phishNetApiClient.Reviews(source.display_date, null)).ToArray();
-        }
-
-        var shows = input.Show == null ? Array.Empty<PhishNetApiShow>() : new[] { input.Show };
         return await context.CommitAsync(async () =>
-            new ItemImportResult(
-                await ProcessSource(
-                    context.Artist,
-                    context.Source,
-                    source,
-                    shows,
-                    null,
-                    ratings,
-                    reviews
+        {
+            var current = await _sourceService.ForArtistFromPrimary(context.Artist, item.Id.Value);
+            if (
+                current.display_date != before.display_date
+                || (
+                    ratings.RatingMatched
+                    && current.num_reviews != ratings.NumberOfReviewsWritten
+                    && reviews == null
                 )
             )
-        );
+                throw new EnrichmentInputsChangedException();
+
+            var show = item.Input.Show;
+            var shows =
+                show == null
+                    ? Array.Empty<PhishNetApiShow>()
+                    : new[]
+                    {
+                        new PhishNetApiShow
+                        {
+                            showdate = show.Date,
+                            setlist_notes = show.SetlistNotes!,
+                        },
+                    };
+            await ProcessSource(
+                context.Artist,
+                context.Source,
+                current,
+                shows,
+                null,
+                ratings,
+                reviews ?? Array.Empty<PhishNetApiReview>()
+            );
+            return new PhishNetItemResult(item.Id, ItemDisposition.Applied);
+        });
     }
 }
+
+/// <summary>A concurrent write changed enrichment prerequisites; retry must fetch fresh inputs before locking.</summary>
+public sealed class EnrichmentInputsChangedException()
+    : Exception("The recording changed while fetching enrichment inputs.");

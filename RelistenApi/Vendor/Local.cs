@@ -150,6 +150,10 @@ namespace Relisten.Vendor.Local
         public bool missing { get; set; }
         public bool sbd { get; set; }
         public bool remastered { get; set; }
+
+        // Ingestion does not use tags. Their arbitrary notes can contain Newtonsoft
+        // tokens, which must not enter Temporal's System.Text.Json payloads.
+        [System.Text.Json.Serialization.JsonIgnore]
         public List<LocalTag> tags { get; set; } = null!;
         public int tour_id { get; set; }
         public string venue { get; set; } = null!;

@@ -7,104 +7,110 @@ using Relisten.Data;
 using Relisten.Services.Indexing;
 using Relisten.Vendor.ArchiveOrg;
 using Temporalio.Activities;
+using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
-/// <summary>Snapshots batch membership and indexes Archive artist collections one page at a time.</summary>
+/// <summary>Records batch membership and separates Archive collection fetches from atomic page writes.</summary>
 public sealed class IngestionBatchActivities(
-    ArtistService artistService,
-    IngestionStore store,
+    ArtistService artists,
     ArchiveOrgArtistIndexer indexer,
+    CatalogImportTransaction transactions,
     IngestionHttpClientFactory httpClients
 )
 {
-    /// <summary>Returns a bounded slice of the artist selection made when this batch began.</summary>
-    [Activity("Ingestion.ListArtists")]
-    public async Task<ArtistBatchPage> ListArtists(ImportBatchRequest request)
-    {
-        using var heartbeat = new ActivityHeartbeat();
-        var artists = await store.SnapshotAsync(
-            request.Run!,
-            "artists",
-            () => artistService.UuidsForImport(request.Mode == "thin")
-        );
-        var page = artists.Skip(request.Offset).Take(250).ToArray();
-        var nextOffset = request.Offset + page.Length;
-        return new ArtistBatchPage(page, nextOffset < artists.Length ? nextOffset : null);
-    }
-
-    /// <summary>Fetches, validates, and applies a collection page; retries return the committed result.</summary>
-    [Activity("Ingestion.DiscoverArtists")]
-    public async Task<DiscoveryPage> DiscoverArtists(IngestionRun run, string? cursor, int fetched)
-    {
-        using var heartbeat = new ActivityHeartbeat();
-        var operation = "collections/" + (cursor ?? "first");
-        var previous = await store.ReadReceiptAsync<DiscoveryPage>(run, operation);
-        if (previous != null)
-        {
-            return previous;
-        }
-
-        var token = ActivityExecutionContext.Current.CancellationToken;
-        var page = await FetchCollections(cursor, token);
-        var nextCursor = NextCursor(page, cursor, fetched);
-        token.ThrowIfCancellationRequested();
-
-        return await store.CommitAsync(
-            run,
-            operation,
-            async () =>
-            {
-                await indexer.ApplyCollectionsAsync(page.items, cancellationToken: token);
-                token.ThrowIfCancellationRequested();
-                return new DiscoveryPage(nextCursor, page.items.Count);
-            }
-        );
-    }
-
-    private async Task<ArchiveOrgCollectionIndexResponse> FetchCollections(
-        string? cursor,
-        CancellationToken token
+    [Activity("Ingestion.SelectArtists")]
+    public async Task<ArtistId[]> SelectArtists(
+        CatalogBatchCommand request,
+        IngestionExecution execution
     )
     {
+        using var heartbeat = new ActivityHeartbeat();
+        RequireActive(execution);
+        var selected = await artists.UuidsForImport(request is RefreshRecentlyActiveArtists);
+        RequireActive(execution);
+        return selected.Select(value => new ArtistId(Guid.Parse(value))).ToArray();
+    }
+
+    [Activity("Archive.FetchCollectionPage")]
+    public async Task<ArchiveCollectionPage> FetchCollectionPage(ArchiveDiscoveryProgress progress)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        RequireActive(progress.Execution);
+        var token = ActivityExecutionContext.Current.CancellationToken;
         using var http = httpClients.Create(token);
         var url =
             "https://archive.org/services/search/v1/scrape?q=collection:etree%20AND%20mediatype:collection&fields=identifier,title,item_count,month&count=10000";
-        if (cursor != null)
-        {
-            url += "&cursor=" + Uri.EscapeDataString(cursor);
-        }
-
+        if (progress.Cursor != null)
+            url += "&cursor=" + Uri.EscapeDataString(progress.Cursor.Token);
         using var response = await http.GetAsync(url, token);
         response.EnsureSuccessStatusCode();
-        return ArchiveOrgCollectionIndexParser.Parse(
+        var page = ArchiveOrgCollectionIndexParser.Parse(
             await response.Content.ReadAsStringAsync(token)
+        );
+        if (page?.items == null)
+            throw new InvalidDataException("Archive returned an invalid collection page.");
+        var complete =
+            page.total > 0
+                ? progress.Processed + page.items.Count >= page.total
+                : page.items.Count == 0 || string.IsNullOrWhiteSpace(page.cursor);
+        if (
+            !complete
+            && (
+                page.items.Count == 0
+                || string.IsNullOrWhiteSpace(page.cursor)
+                || page.cursor == progress.Cursor?.Token
+            )
+        )
+            throw new InvalidDataException(
+                "Archive collection listing ended before its declared total or its cursor did not advance."
+            );
+        RequireActive(progress.Execution);
+        return new ArchiveCollectionPage(
+            page.items.ToArray(),
+            complete ? null : new ArchiveCollectionCursor(page.cursor)
         );
     }
 
-    private static string? NextCursor(
-        ArchiveOrgCollectionIndexResponse page,
-        string? current,
-        int fetched
+    [Activity("Archive.ApplyCollectionPage")]
+    public async Task<int> ApplyCollectionPage(
+        IngestionExecution execution,
+        ArchiveCollectionPage page
     )
     {
-        if (page?.items == null)
+        using var heartbeat = new ActivityHeartbeat();
+        RequireActive(execution);
+        var token = ActivityExecutionContext.Current.CancellationToken;
+        try
         {
-            throw new InvalidDataException("Archive returned an invalid collection page.");
+            return await transactions.RunCollectionPageAsync(
+                execution.Deadline,
+                token,
+                async () =>
+                {
+                    await indexer.ApplyCollectionsAsync(page.Items, cancellationToken: token);
+                    return page.Items.Length;
+                }
+            );
         }
-
-        var complete =
-            page.items.Count == 0 || (page.total > 0 && fetched + page.items.Count >= page.total);
-        if (complete || string.IsNullOrWhiteSpace(page.cursor))
+        catch (CatalogImportExpiredException)
         {
-            return null;
+            throw new ApplicationFailureException(
+                "This import has expired. Start a fresh import.",
+                errorType: "ImportExpired",
+                nonRetryable: true
+            );
         }
+    }
 
-        if (page.cursor == current)
-        {
-            throw new InvalidDataException("Archive collection cursor did not advance.");
-        }
-
-        return page.cursor;
+    private static void RequireActive(IngestionExecution execution)
+    {
+        ActivityExecutionContext.Current.CancellationToken.ThrowIfCancellationRequested();
+        if (DateTimeOffset.UtcNow >= execution.Deadline)
+            throw new ApplicationFailureException(
+                "This import has expired. Start a fresh import.",
+                errorType: "ImportExpired",
+                nonRetryable: true
+            );
     }
 }

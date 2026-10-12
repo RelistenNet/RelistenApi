@@ -1,167 +1,156 @@
-using System;
-using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
-using Relisten.Import;
+using Relisten.Ingestion.Providers.Archive;
+using Relisten.Ingestion.Providers.Jerry;
+using Relisten.Ingestion.Providers.Local;
+using Relisten.Ingestion.Providers.PhantasyTour;
+using Relisten.Ingestion.Providers.PhishIn;
+using Relisten.Ingestion.Providers.PhishNet;
+using Relisten.Ingestion.Providers.SetlistFm;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
 
-/// <summary>
-/// Prepares an artist, imports each provider, then rebuilds the catalog. Helpers
-/// separate provider sequencing, page iteration, and checkpoint advancement.
-/// </summary>
+/// <summary>Runs the artist's concrete providers in catalog order, then rebuilds derived shows, years, and cache once.</summary>
 [Workflow]
 public class ArtistRefreshWorkflow
 {
-    private ArtistImportRequest request = null!;
-    private ImportCheckpoint progress = null!;
-    private int activityCount;
-
     [WorkflowRun]
-    public async Task<ImportResult> RunAsync(
-        ArtistImportRequest input,
-        ImportCheckpoint? checkpoint = null
+    public async Task<ArtistImportResult> RunAsync(
+        ArtistRefreshCommand request,
+        IngestionExecution? execution = null
     )
     {
-        request = ImportWorkflowOptions.AssignRun(input);
-        progress = checkpoint ?? new ImportCheckpoint(Stats: new ImportStats());
-        if (progress.Providers == null)
-        {
-            var plan = await Workflow.ExecuteActivityAsync(
-                (IIngestionActivities activities) => activities.PrepareArtist(request),
-                ImportWorkflowOptions.Activity(IngestionQueues.Database)
-            );
-            progress = progress with { Providers = plan.Providers };
-        }
-
-        if (!request.RebuildOnly)
-        {
-            while (progress.ProviderIndex < progress.Providers.Length)
-            {
-                await ImportProvider(progress.Providers[progress.ProviderIndex]);
-                AdvanceProvider();
-                ContinueIfNeeded();
-            }
-        }
-
-        var result = new ImportResult(request.RequestId, progress.Stats!, progress.FailedItems);
-        return await Workflow.ExecuteActivityAsync(
-            (IIngestionActivities activities) => activities.FinishArtist(request, result),
+        execution = ImportWorkflowOptions.AssignExecution(execution);
+        ImportWorkflowOptions.RequireActive(execution);
+        var plan = await Workflow.ExecuteActivityAsync(
+            (CatalogActivities activities) => activities.PrepareArtist(request, execution),
             ImportWorkflowOptions.Activity(IngestionQueues.Database)
         );
-    }
-
-    private async Task ImportProvider(UpstreamProvider provider)
-    {
-        var options = ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider]);
-        if (!progress.ProviderPrepared)
+        var result = new ArtistImportResult(request.Artist, 0, 0, 0);
+        foreach (var provider in plan.Providers)
         {
-            var stats = await Workflow.ExecuteActivityAsync(
-                (IIngestionActivities activities) => activities.PrepareProvider(request, provider),
-                options
-            );
-            progress = progress with { Stats = progress.Stats! + stats, ProviderPrepared = true };
-            activityCount++;
-        }
-
-        await ImportPages(provider);
-
-        var result = await Workflow.ExecuteActivityAsync(
-            (IIngestionActivities activities) =>
-                activities.ReconcileProvider(
-                    request,
-                    provider,
-                    progress.IneligibleItems ?? Array.Empty<string>(),
-                    progress.ProviderFailures > 0
-                ),
-            options
-        );
-        progress = progress with { Stats = progress.Stats! + result.Stats };
-        activityCount++;
-    }
-
-    private async Task ImportPages(UpstreamProvider provider)
-    {
-        do
-        {
-            var page = await Workflow.ExecuteActivityAsync(
-                (IIngestionActivities activities) =>
-                    activities.DiscoverItems(request, provider, progress.Cursor),
-                ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider])
-            );
-            activityCount++;
-
-            await ImportPage(provider, page);
-            progress = progress with { Cursor = page.NextCursor, ItemIndex = 0 };
-
-            // After the final page, proceed directly to reconciliation. Rollover
-            // here would make a null cursor look like discovery had not started.
-            if (progress.Cursor != null)
+            var summary = await RunProvider(request, execution, provider);
+            result = result with
             {
-                ContinueIfNeeded();
-            }
-        } while (progress.Cursor != null);
-    }
-
-    private async Task ImportPage(UpstreamProvider provider, ImportPage page)
-    {
-        while (progress.ItemIndex < page.Items.Length)
-        {
-            ContinueIfNeeded();
-            var item = page.Items[progress.ItemIndex];
-            var result = await ImportItemOperation.RunAsync(request, provider, item);
-            RecordItemResult(item.Identifier, result);
-            activityCount++;
-        }
-    }
-
-    private void RecordItemResult(string identifier, ItemImportResult? result)
-    {
-        if (result == null)
-        {
-            progress = progress with
-            {
-                ItemIndex = progress.ItemIndex + 1,
-                FailedItems = progress.FailedItems + 1,
-                ProviderFailures = progress.ProviderFailures + 1,
+                CompletedItems = result.CompletedItems + summary.CompletedItems,
+                SkippedItems = result.SkippedItems + summary.SkippedItems,
+                FailedItems = result.FailedItems + summary.FailedItems,
             };
-            return;
         }
-
-        var ineligible = progress.IneligibleItems ?? Array.Empty<string>();
-        if (result.Ineligible && ineligible.Length < 6)
-        {
-            // Six identifiers are enough to trip Archive's five-deletion guard.
-            ineligible = ineligible.Append(identifier).ToArray();
-        }
-
-        progress = progress with
-        {
-            ItemIndex = progress.ItemIndex + 1,
-            Stats = progress.Stats! + result.Stats,
-            IneligibleItems = ineligible,
-        };
+        // Partial and empty imports also repair derived data left by earlier failed work.
+        // Cancellation and failed prerequisites propagate before reaching this step.
+        await CatalogSteps.RebuildArtist(request.Artist, execution);
+        return result;
     }
 
-    private void AdvanceProvider() =>
-        progress = progress with
-        {
-            ProviderIndex = progress.ProviderIndex + 1,
-            Cursor = null,
-            ItemIndex = 0,
-            ProviderPrepared = false,
-            ProviderFailures = 0,
-            IneligibleItems = null,
-        };
-
-    private void ContinueIfNeeded()
+    private static Task<ProviderSummary> RunProvider(
+        ArtistRefreshCommand request,
+        IngestionExecution execution,
+        UpstreamProvider provider
+    )
     {
-        if (activityCount >= 100 || Workflow.ContinueAsNewSuggested)
+        var artist = request.Artist;
+        var filteredYear = (request as RefreshFilteredArtist)?.Year;
+        var options = CoordinatorOptions.Child(
+            $"{Workflow.Info.WorkflowId}/provider/{provider.ToValue()}",
+            execution
+        );
+        return provider switch
         {
-            throw Workflow.CreateContinueAsNewException(
-                (ArtistRefreshWorkflow workflow) => workflow.RunAsync(request, progress)
-            );
-        }
+            UpstreamProvider.ArchiveOrg => Workflow.ExecuteChildWorkflowAsync(
+                (ArchiveWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshArchiveArtist>(
+                            request as RefreshArchiveArtist
+                                ?? new RefreshArchiveArtist(artist, filteredYear),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.Phishin => Workflow.ExecuteChildWorkflowAsync(
+                (PhishInWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshPhishInArtist>(
+                            request as RefreshPhishInArtist
+                                ?? new RefreshPhishInArtist(artist, filteredYear),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.PhishNet => Workflow.ExecuteChildWorkflowAsync(
+                (PhishNetWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshPhishNetArtist>(
+                            request as RefreshPhishNetArtist
+                                ?? new RefreshPhishNetArtist(artist, filteredYear),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.SetlistFm => Workflow.ExecuteChildWorkflowAsync(
+                (SetlistFmWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshSetlistFmArtist>(
+                            new RefreshSetlistFmArtist(artist),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.PhantasyTour => Workflow.ExecuteChildWorkflowAsync(
+                (PhantasyTourWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshPhantasyTourArtist>(
+                            new RefreshPhantasyTourArtist(artist),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.JerryGarcia => Workflow.ExecuteChildWorkflowAsync(
+                (JerryWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshJerryArtist>(
+                            new RefreshJerryArtist(artist),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            UpstreamProvider.Local => Workflow.ExecuteChildWorkflowAsync(
+                (LocalWorkflow w) =>
+                    w.RunAsync(
+                        new ProviderRequest<RefreshLocalArtist>(
+                            new RefreshLocalArtist(artist),
+                            execution
+                        ),
+                        null,
+                        null
+                    ),
+                options
+            ),
+            _ => throw new ApplicationFailureException(
+                "Unsupported ingestion provider.",
+                "UnsupportedImportOperation",
+                nonRetryable: true
+            ),
+        };
     }
 }

@@ -18,7 +18,7 @@ using Sentry;
 
 namespace Relisten.Import
 {
-    public partial class LocalImporter : IngestionImporter<LocalShow[]>
+    public partial class LocalImporter : ImporterBase
     {
         private readonly LinkService linkService;
 
@@ -505,7 +505,11 @@ namespace Relisten.Import
         {
             using var scope = new TransactionScope(
                 TransactionScopeOption.Required,
-                new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
+                new TransactionOptions()
+                {
+                    IsolationLevel =
+                        Transaction.Current?.IsolationLevel ?? IsolationLevel.RepeatableRead,
+                },
                 TransactionScopeAsyncFlowOption.Enabled
             );
 

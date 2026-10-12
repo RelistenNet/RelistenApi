@@ -7,6 +7,7 @@ using Hangfire.Server;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
+using Relisten.Ingestion.Providers.Archive;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
@@ -16,7 +17,7 @@ using InvalidDataException = System.IO.InvalidDataException;
 namespace Relisten.Import;
 
 // Both ingestion engines use these selection, metadata-validation, and diagnostic
-// rules. Hangfire owns its loop; Temporal owns activity retries and commit receipts.
+// rules. Hangfire owns its loop; Temporal owns activity retries and typed item results.
 public partial class ArchiveOrgImporter
 {
     private record ItemMetadata(RootObject Details, string DisplayDate);
@@ -65,7 +66,8 @@ public partial class ArchiveOrgImporter
         SearchDoc doc,
         string reason,
         PerformContext? ctx,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Action<ArchiveSkipReason, string>? skipped = null
     )
     {
         using var sourceActivity = ActivitySource.StartActivity($"import-source:{doc.identifier}");
@@ -109,6 +111,7 @@ public partial class ArchiveOrgImporter
                 "dark"
             );
             ImportProgress.WriteLine(log, ctx, "\tis_dark == true, skipping...");
+            skipped?.Invoke(ArchiveSkipReason.DarkItem, "dark");
             return null;
         }
 
@@ -151,6 +154,7 @@ public partial class ArchiveOrgImporter
             };
 
             SentrySdk.CaptureException(e);
+            skipped?.Invoke(ArchiveSkipReason.MissingOrInvalidMetadata, "missing_date");
 
             return null;
         }
@@ -204,6 +208,7 @@ public partial class ArchiveOrgImporter
             };
 
             SentrySdk.CaptureException(e);
+            skipped?.Invoke(ArchiveSkipReason.UnrepairedDate, "invalid_date");
 
             return null;
         }
@@ -250,6 +255,13 @@ public partial class ArchiveOrgImporter
             artist.slug,
             MaxSourcesDeletedPerSync
         );
-        await discordWebhookNotifier.SendAsync(message);
+        try
+        {
+            await discordWebhookNotifier.SendAsync(message);
+        }
+        catch (Exception error)
+        {
+            log.LogWarning(error, "Could not send Archive deletion guard notification.");
+        }
     }
 }

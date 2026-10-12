@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.PhantasyTour;
+using Relisten.Vendor;
 using Relisten.Vendor.PhantasyTour;
 
 namespace Relisten.Import;
@@ -13,13 +15,13 @@ namespace Relisten.Import;
 // listing at provider finalization, preserving the upstream's local calendar date.
 public partial class PhantasyTourImporter
 {
-    /// <inheritdoc />
-    public override async Task<PhantasyTourDiscovery> DiscoverAsync(
+    /// <summary>Selects missing shows and retains dates for every listed past show.</summary>
+    public async Task<PhantasyTourDiscovery> ReadShowPageAsync(
         ProviderContext context,
-        string? cursor
+        PhantasyTourPage? cursor
     )
     {
-        var page = cursor == null ? 1u : uint.Parse(cursor);
+        var page = cursor?.Number ?? 1u;
         using var response = await http.GetAsync(
             UrlForArtist(context.Source, page),
             context.CancellationToken
@@ -29,8 +31,8 @@ public partial class PhantasyTourImporter
             JsonConvert.DeserializeObject<PhantasyTourShowListing[]>(
                 await response.Content.ReadAsStringAsync(context.CancellationToken)
             ) ?? throw new InvalidDataException("Phantasy Tour returned an invalid listing.");
-        var dates = new Dictionary<string, DateTime>();
-        var selected = new List<DiscoveredItem<PhantasyTourShowListing>>();
+        var dates = new Dictionary<PhantasyTourShowId, DateTime>();
+        var selected = new List<DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing>>();
         await PreloadData(context.Artist);
 
         foreach (var show in shows)
@@ -48,92 +50,98 @@ public partial class PhantasyTourImporter
             }
 
             var identifier = UpstreamIdentifierForPhantasyTourId(show.id);
-            AddListedDate(dates, identifier, show.dateTime.Date);
+            AddListedDate(dates, new(show.id), show.dateTime.Date);
             if (!existingSetlistShows.ContainsKey(identifier))
             {
-                selected.Add(new DiscoveredItem<PhantasyTourShowListing>(show.id.ToString(), show));
+                selected.Add(
+                    new DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing>(
+                        new(show.id),
+                        show
+                    )
+                );
             }
         }
 
-        var next = shows.Length == ITEMS_PER_PAGE ? (page + 1).ToString() : null;
-        return new PhantasyTourDiscovery(selected.ToArray(), next, SetlistDates: dates);
+        var next = shows.Length == ITEMS_PER_PAGE ? new PhantasyTourPage(page + 1) : null;
+        return new PhantasyTourDiscovery(
+            selected.ToArray(),
+            next,
+            dates.Select(pair => new PhantasyTourListedDate(pair.Key, pair.Value)).ToArray()
+        );
     }
 
-    /// <inheritdoc />
-    public override async Task<ItemImportResult> ImportItemAsync(
+    /// <summary>Fetches details only for a missing setlist; retries recover an existing catalog identity.</summary>
+    public async Task<PhantasyTourItemResult> ImportShowAsync(
         ProviderContext context,
-        DiscoveredItem<PhantasyTourShowListing> item
+        DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing> item
     )
     {
-        var showId = item.Metadata.id;
-        using var response = await http.GetAsync(UrlForShow(showId), context.CancellationToken);
+        var identifier = UpstreamIdentifierForPhantasyTourId(item.Id.Value);
+        var existing = await context.CommitAsync(async () =>
+        {
+            await PreloadData(context.Artist);
+            return existingSetlistShows.GetValue(identifier);
+        });
+        if (existing != null)
+            return new(item.Id, new(existing.id), ItemDisposition.Unchanged);
+
+        using var response = await http.GetAsync(
+            UrlForShow(item.Id.Value),
+            context.CancellationToken
+        );
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
-
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
-            var stats = new ImportStats();
-            await ApplyShowBody(context.Artist, stats, null, showId, body);
-            return new ItemImportResult(stats);
+            if (existingSetlistShows.GetValue(identifier) is { } current)
+                return new PhantasyTourItemResult(
+                    item.Id,
+                    new(current.id),
+                    ItemDisposition.Unchanged
+                );
+            await ApplyShowBody(context.Artist, new ImportStats(), null, item.Id.Value, body);
+            return new PhantasyTourItemResult(
+                item.Id,
+                new(existingSetlistShows[identifier]!.id),
+                ItemDisposition.Applied
+            );
         });
     }
 
-    /// <inheritdoc />
-    public override async Task<ProviderResult> ReconcileAsync(
+    /// <summary>Repairs dates only from a complete, validated listing retained by the workflow.</summary>
+    public Task<int> RepairListedDatesAsync(
         ProviderContext context,
-        string[] ineligibleItems,
-        bool hasFailures
+        PhantasyTourListedDate[] listedDates
     )
     {
-        var dates = new Dictionary<string, DateTime>();
-        string? cursor = null;
-        do
+        var dates = new Dictionary<PhantasyTourShowId, DateTime>();
+        foreach (var entry in listedDates)
+            AddListedDate(dates, entry.Id, entry.Date);
+        return context.CommitAsync(async () =>
         {
-            var snapshot =
-                await context.Store.ReadSnapshotAsync<PhantasyTourDiscovery>(
-                    context.Run,
-                    DiscoveryName(cursor)
+            var corrected = await _setlistShowService.UpdateDates(
+                context.Artist,
+                dates.ToDictionary(
+                    pair => UpstreamIdentifierForPhantasyTourId(pair.Key.Value),
+                    pair => pair.Value
                 )
-                ?? throw new InvalidOperationException(
-                    "Phantasy Tour discovery has not completed."
-                );
-            foreach (var (identifier, date) in snapshot.SetlistDates)
-            {
-                AddListedDate(dates, identifier, date);
-            }
-
-            cursor = snapshot.NextCursor;
-        } while (cursor != null);
-
-        return await context.CommitAsync(async () =>
-        {
-            var corrected = await _setlistShowService.UpdateDates(context.Artist, dates);
+            );
             await _tourService.RefreshDatesFromSetlists(context.Artist);
-            return new ProviderResult(new ImportStats { Updated = corrected });
+            return corrected;
         });
     }
 
     private static void AddListedDate(
-        Dictionary<string, DateTime> dates,
-        string identifier,
+        Dictionary<PhantasyTourShowId, DateTime> dates,
+        PhantasyTourShowId identifier,
         DateTime date
     )
     {
         if (dates.TryGetValue(identifier, out var previous) && previous != date)
-        {
             throw new InvalidDataException(
-                $"Phantasy Tour returned conflicting dates for {identifier}."
+                $"Phantasy Tour returned conflicting dates for {identifier.Value}."
             );
-        }
-
         dates[identifier] = date;
     }
 }
-
-/// <summary>Local calendar dates from a complete Phantasy Tour listing page.</summary>
-public record PhantasyTourDiscovery(
-    DiscoveredItem<PhantasyTourShowListing>[] Items,
-    string? NextCursor,
-    IReadOnlyDictionary<string, DateTime> SetlistDates
-) : DiscoverySnapshot<PhantasyTourShowListing>(Items, NextCursor);

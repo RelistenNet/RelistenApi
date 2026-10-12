@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
+using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
+using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
@@ -9,88 +12,158 @@ using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
-/// <summary>Starts Temporal ingestion without coupling API callers to worker implementation details.</summary>
-public sealed class TemporalIngestionClient(ITemporalClient client, IConfiguration configuration)
+/// <summary>Admits explicit import operations; completing a start means queued, not imported.</summary>
+public sealed class TemporalIngestionClient
 {
-    /// <summary>Whether API requests should use Temporal instead of Hangfire ingestion.</summary>
+    private readonly ITemporalClient client;
+    private readonly IConfiguration configuration;
+    private readonly IImportAdmissionCatalog catalog;
+
+    public TemporalIngestionClient(
+        ITemporalClient client,
+        IConfiguration configuration,
+        IImportAdmissionCatalog catalog
+    )
+    {
+        this.client = client;
+        this.configuration = configuration;
+        this.catalog = catalog;
+        Archive = new ArchiveImportClient(this);
+        Jerry = new JerryImportClient(this);
+        PhishIn = new ProviderRefreshClient<RefreshPhishInArtist>(RefreshAsync);
+        PhishNet = new ProviderRefreshClient<RefreshPhishNetArtist>(RefreshAsync);
+        SetlistFm = new ProviderRefreshClient<RefreshSetlistFmArtist>(RefreshAsync);
+        PhantasyTour = new ProviderRefreshClient<RefreshPhantasyTourArtist>(RefreshAsync);
+        Local = new ProviderRefreshClient<RefreshLocalArtist>(RefreshAsync);
+    }
+
     public bool Enabled =>
         string.Equals(
             configuration["Ingestion:Engine"],
             "Temporal",
             StringComparison.OrdinalIgnoreCase
         );
+    public ArchiveImportClient Archive { get; }
+    public JerryImportClient Jerry { get; }
+    public ProviderRefreshClient<RefreshPhishInArtist> PhishIn { get; }
+    public ProviderRefreshClient<RefreshPhishNetArtist> PhishNet { get; }
+    public ProviderRefreshClient<RefreshSetlistFmArtist> SetlistFm { get; }
+    public ProviderRefreshClient<RefreshPhantasyTourArtist> PhantasyTour { get; }
+    public ProviderRefreshClient<RefreshLocalArtist> Local { get; }
 
-    /// <summary>Starts an artist operation, or returns the existing active workflow ID on overlap.</summary>
-    public async Task<string> StartArtistAsync(ArtistImportRequest request)
+    public Task<ImportHandle<ArtistImportResult>> RefreshArtistAsync(RefreshArtist request) =>
+        RefreshAsync(request);
+
+    /// <summary>Starts an explicit refresh scope, preserving each provider's filter meaning.</summary>
+    public Task<ImportHandle<ArtistImportResult>> RefreshAsync(ArtistRefreshCommand request)
     {
-        if (!Guid.TryParse(request.Artist, out var artistUuid))
+        var provider = request switch
         {
-            throw new ArgumentException("Artist imports require a catalog UUID.", nameof(request));
-        }
-
-        request = request with { Artist = artistUuid.ToString() };
-        var id = "ingest/artist/" + request.Artist;
-        var options = new WorkflowOptions(id, IngestionQueues.Workflows)
-        {
-            ExecutionTimeout = IngestionRun.MaximumDuration,
+            RefreshArchiveArtist r => ValidateYear(r.Year, UpstreamProvider.ArchiveOrg),
+            RefreshPhishInArtist r => ValidateYear(r.FromYear, UpstreamProvider.Phishin),
+            RefreshPhishNetArtist r => ValidateYear(r.Year, UpstreamProvider.PhishNet),
+            RefreshSetlistFmArtist => UpstreamProvider.SetlistFm,
+            RefreshPhantasyTourArtist => UpstreamProvider.PhantasyTour,
+            RefreshJerryArtist => UpstreamProvider.JerryGarcia,
+            RefreshLocalArtist => UpstreamProvider.Local,
+            RefreshFilteredArtist r => ValidateYear(r.Year, null),
+            RefreshArtist => null,
+            _ => throw new InvalidImportRequest("Unknown artist refresh operation."),
         };
+        return StartArtist(
+            request.Artist,
+            provider,
+            (ArtistRefreshWorkflow workflow) => workflow.RunAsync(request, null)
+        );
+    }
+
+    public Task<ImportHandle<ArtistImportResult>> RebuildArtistCatalogAsync(
+        RebuildArtistCatalog request
+    ) =>
+        StartArtist(
+            request.Artist,
+            null,
+            (RebuildArtistCatalogWorkflow workflow) => workflow.RunAsync(request, null)
+        );
+
+    public Task<ImportHandle<ImportBatchResult>> RefreshCatalogAsync(RefreshCatalog request) =>
+        StartBatch(request);
+
+    public Task<ImportHandle<ImportBatchResult>> RefreshRecentlyActiveArtistsAsync(
+        RefreshRecentlyActiveArtists request
+    ) => StartBatch(request);
+
+    public Task<ImportHandle<ImportBatchResult>> RebuildCatalogAsync(RebuildCatalog request) =>
+        StartBatch(request);
+
+    public async Task<ImportHandle<int>> DiscoverArchiveArtistsAsync(DiscoverArchiveArtists request)
+    {
+        var handle = await client.StartWorkflowAsync(
+            (ArchiveArtistDiscoveryWorkflow workflow) => workflow.RunAsync(request, null),
+            Options("ingest/discover/" + Guid.NewGuid())
+        );
+        return new ImportHandle<int>(handle);
+    }
+
+    private async Task<ImportHandle<ImportBatchResult>> StartBatch(CatalogBatchCommand request)
+    {
+        var name = request switch
+        {
+            RefreshCatalog => "full",
+            RefreshRecentlyActiveArtists => "thin",
+            RebuildCatalog => "rebuild",
+            _ => throw new InvalidImportRequest("Unknown catalog operation."),
+        };
+        var handle = await client.StartWorkflowAsync(
+            (RefreshBatchWorkflow workflow) => workflow.RunAsync(request, null, null),
+            Options("ingest/" + name + "/" + Guid.NewGuid())
+        );
+        return new ImportHandle<ImportBatchResult>(handle);
+    }
+
+    private async Task<ImportHandle<ArtistImportResult>> StartArtist<TWorkflow>(
+        ArtistId artist,
+        UpstreamProvider? provider,
+        Expression<Func<TWorkflow, Task<ArtistImportResult>>> run
+    )
+    {
+        if (artist.Value == Guid.Empty)
+            throw new InvalidImportRequest("Artist UUID must not be empty.");
+        var providers =
+            await catalog.ProvidersForArtistAsync(artist) ?? throw new ArtistNotFound(artist);
+        if (provider.HasValue && !providers.Contains(provider.Value))
+            throw new UnsupportedImportOperation(
+                $"Artist has no enabled {provider.Value.ToValue()} mapping."
+            );
+        var workflowId = "ingest/artist/" + artist;
         try
         {
-            if (request.Item == null)
-            {
-                await client.StartWorkflowAsync(
-                    (ArtistRefreshWorkflow w) => w.RunAsync(request, null),
-                    options
-                );
-            }
-            else
-            {
-                await client.StartWorkflowAsync(
-                    (ReimportItemWorkflow w) => w.RunAsync(request),
-                    options
-                );
-            }
+            return new ImportHandle<ArtistImportResult>(
+                await client.StartWorkflowAsync(run, Options(workflowId))
+            );
         }
         catch (WorkflowAlreadyStartedException)
         {
-            // Preserve the current skip-overlap behavior.
+            throw new ImportAlreadyRunning(workflowId);
         }
-
-        return id;
     }
 
-    /// <summary>Starts full/thin/rebuild catalog work, or Archive artist discovery.</summary>
-    public async Task<string> StartBatchAsync(string mode)
-    {
-        if (mode is not ("discover" or "full" or "thin" or "rebuild"))
+    private static WorkflowOptions Options(string id) =>
+        new(id, IngestionQueues.Workflows)
         {
-            throw new ArgumentException("Expected discover, full, thin or rebuild.", nameof(mode));
-        }
-
-        var id = "ingest/" + mode + "/" + Guid.NewGuid();
-        var options = new WorkflowOptions(id, IngestionQueues.Workflows)
-        {
-            ExecutionTimeout = IngestionRun.MaximumDuration,
+            ExecutionTimeout = TimeSpan.FromDays(7),
+            IdConflictPolicy = WorkflowIdConflictPolicy.Fail,
+            IdReusePolicy = WorkflowIdReusePolicy.AllowDuplicate,
         };
-        if (mode == "discover")
-        {
-            await client.StartWorkflowAsync(
-                (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(null, null, 0),
-                options
-            );
-        }
-        else
-        {
-            await client.StartWorkflowAsync(
-                (RefreshBatchWorkflow w) => w.RunAsync(new ImportBatchRequest(mode, id)),
-                options
-            );
-        }
 
-        return id;
+    private static UpstreamProvider? ValidateYear(int? year, UpstreamProvider? provider)
+    {
+        if (year is < 1 or > 9999)
+            throw new InvalidImportRequest("Year must be between 1 and 9999.");
+        return provider;
     }
 
-    /// <summary>Creates the existing UTC ingestion cadences. Existing schedules, including paused ones, are left intact.</summary>
+    /// <summary>Creates existing UTC cadences; registration never unpauses or replaces a saved schedule.</summary>
     public async Task RegisterSchedulesAsync()
     {
         foreach (
@@ -102,19 +175,23 @@ public sealed class TemporalIngestionClient(ITemporalClient client, IConfigurati
             }
         )
         {
-            var id = "relisten-ingest-" + name;
-            var options = new WorkflowOptions("ingest/scheduled/" + name, IngestionQueues.Workflows)
-            {
-                ExecutionTimeout = IngestionRun.MaximumDuration,
-            };
+            var options = Options("ingest/scheduled/" + name);
             var action =
                 name == "discover"
                     ? ScheduleActionStartWorkflow.Create(
-                        (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(null, null, 0),
+                        (ArchiveArtistDiscoveryWorkflow workflow) =>
+                            workflow.RunAsync(new DiscoverArchiveArtists(), null),
                         options
                     )
                     : ScheduleActionStartWorkflow.Create(
-                        (RefreshBatchWorkflow w) => w.RunAsync(new ImportBatchRequest(name)),
+                        (RefreshBatchWorkflow workflow) =>
+                            workflow.RunAsync(
+                                name == "full"
+                                    ? (CatalogBatchCommand)new RefreshCatalog()
+                                    : new RefreshRecentlyActiveArtists(),
+                                null,
+                                null
+                            ),
                         options
                     );
             var schedule = new Schedule(
@@ -126,9 +203,52 @@ public sealed class TemporalIngestionClient(ITemporalClient client, IConfigurati
             };
             try
             {
-                await client.CreateScheduleAsync(id, schedule);
+                await client.CreateScheduleAsync("relisten-ingest-" + name, schedule);
             }
             catch (ScheduleAlreadyRunningException) { }
         }
+    }
+
+    /// <summary>Only Archive exposes a targeted import; unsupported providers have no successful no-op method.</summary>
+    public sealed class ArchiveImportClient(TemporalIngestionClient owner)
+    {
+        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(RefreshArchiveArtist request) =>
+            owner.RefreshAsync(request);
+
+        public Task<ImportHandle<ArtistImportResult>> ImportItemAsync(ImportArchiveItem request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Item.Value))
+                throw new InvalidImportRequest("Archive item identifier must not be empty.");
+            return owner.StartArtist(
+                request.Artist,
+                UpstreamProvider.ArchiveOrg,
+                (ArchiveItemImportWorkflow workflow) => workflow.RunAsync(request, null)
+            );
+        }
+    }
+
+    public sealed class JerryImportClient(TemporalIngestionClient owner)
+    {
+        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(RefreshJerryArtist request) =>
+            owner.RefreshAsync(request);
+
+        public Task<ImportHandle<ArtistImportResult>> RepairVenuesAsync(
+            RepairJerryVenues request
+        ) =>
+            owner.StartArtist(
+                request.Artist,
+                UpstreamProvider.JerryGarcia,
+                (JerryVenueRepairWorkflow workflow) => workflow.RunAsync(request, null)
+            );
+    }
+
+    /// <summary>Offers a provider's typed refresh request without inventing optional lifecycle methods.</summary>
+    public sealed class ProviderRefreshClient<TRequest>(
+        Func<TRequest, Task<ImportHandle<ArtistImportResult>>> start
+    )
+        where TRequest : ArtistRefreshCommand
+    {
+        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(TRequest request) =>
+            start(request);
     }
 }

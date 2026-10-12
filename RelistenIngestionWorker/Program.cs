@@ -42,6 +42,28 @@ builder.Services.AddRelistenCatalogServices();
 builder.Services.AddTemporalIngestionWorkers(builder.Configuration);
 using var host = builder.Build();
 
+var operations = new[] { "import", "batch", "cancel", "rebuild-artist", "repair-jerry-venues" }
+    .Where(key => builder.Configuration[key] != null)
+    .ToArray();
+var operationCount = operations.Length + (migrate ? 1 : 0) + (registerSchedules ? 1 : 0);
+if (operationCount > 1)
+{
+    Console.Error.WriteLine(
+        "Choose one import, batch, cancel, rebuild, repair, migration, or schedule operation."
+    );
+    Environment.ExitCode = 1;
+    return;
+}
+if (
+    builder.Configuration["import"] == null
+    && new[] { "provider", "item", "year" }.Any(key => builder.Configuration[key] != null)
+)
+{
+    Console.Error.WriteLine("Provider, item, and year options require --import.");
+    Environment.ExitCode = 1;
+    return;
+}
+
 if (migrate)
 {
     using var connection = host
@@ -67,7 +89,7 @@ if (migrate)
         migrator.Baseline(12);
     }
 
-    migrator.MigrateTo(13);
+    migrator.MigrateTo(migrator.LatestMigration.Version);
     return;
 }
 
@@ -77,46 +99,143 @@ if (registerSchedules)
     return;
 }
 
-// Operator commands share the API client and accept the host's normal --key=value configuration.
-if (builder.Configuration["cancel"] is { } workflowId)
+// Operator commands use the same admission rules as the HTTP adapters.
+try
 {
-    await host
-        .Services.GetRequiredService<ITemporalClient>()
-        .GetWorkflowHandle(workflowId)
-        .CancelAsync();
-    Console.WriteLine($"Cancellation requested for {workflowId}");
-    return;
-}
+    if (operations.Length == 0)
+    {
+        await host.RunAsync();
+        return;
+    }
 
-if (builder.Configuration["import"] is { } artistIdentifier)
-{
+    var imports = host.Services.GetRequiredService<TemporalIngestionClient>();
+    if (builder.Configuration["cancel"] is { } workflowId)
+    {
+        await host
+            .Services.GetRequiredService<ITemporalClient>()
+            .GetWorkflowHandle(workflowId)
+            .CancelAsync();
+        Console.WriteLine(
+            $"Cancellation requested for the currently active execution of {workflowId}"
+        );
+        return;
+    }
+    if (builder.Configuration["batch"] is { } mode)
+    {
+        var id = mode switch
+        {
+            "full" => (await imports.RefreshCatalogAsync(new RefreshCatalog())).WorkflowId,
+            "thin" => (
+                await imports.RefreshRecentlyActiveArtistsAsync(new RefreshRecentlyActiveArtists())
+            ).WorkflowId,
+            "rebuild" => (await imports.RebuildCatalogAsync(new RebuildCatalog())).WorkflowId,
+            "discover" => (
+                await imports.DiscoverArchiveArtistsAsync(new DiscoverArchiveArtists())
+            ).WorkflowId,
+            _ => throw new InvalidImportRequest("Expected batch full, thin, rebuild, or discover."),
+        };
+        Console.WriteLine(id);
+        return;
+    }
+
     using var scope = host.Services.CreateScope();
+    var identifier = builder.Configuration[operations[0]]!;
     var artist =
         await scope
             .ServiceProvider.GetRequiredService<ArtistService>()
-            .FindArtistWithIdOrSlug(artistIdentifier)
-        ?? throw new InvalidOperationException("Artist not found.");
-    var request = new ArtistImportRequest(
-        artist.uuid.ToString(),
-        Guid.NewGuid().ToString(),
-        builder.Configuration["provider"] is { } provider
-            ? UpstreamProviders.Parse(provider)
-            : null,
-        builder.Configuration["item"],
-        builder.Configuration.GetValue<int?>("year")
-    );
-    Console.WriteLine(
-        await host.Services.GetRequiredService<TemporalIngestionClient>().StartArtistAsync(request)
-    );
-    return;
-}
+            .FindArtistWithIdOrSlug(identifier)
+        ?? throw new InvalidImportRequest("Artist was not found.");
+    var artistId = new ArtistId(artist.uuid);
+    if (operations[0] == "rebuild-artist")
+    {
+        Console.WriteLine(
+            (await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))).WorkflowId
+        );
+        return;
+    }
+    if (operations[0] == "repair-jerry-venues")
+    {
+        Console.WriteLine(
+            (await imports.Jerry.RepairVenuesAsync(new RepairJerryVenues(artistId))).WorkflowId
+        );
+        return;
+    }
 
-if (builder.Configuration["batch"] is { } mode)
+    UpstreamProvider? provider = null;
+    if (builder.Configuration["provider"] is { } providerName)
+    {
+        try
+        {
+            provider = UpstreamProviders.Parse(providerName);
+        }
+        catch (ArgumentException error)
+        {
+            throw new InvalidImportRequest(error.Message);
+        }
+    }
+    int? year = null;
+    if (builder.Configuration["year"] is { } yearText)
+    {
+        if (!int.TryParse(yearText, out var value) || value is < 1 or > 9999)
+            throw new InvalidImportRequest("Year must be between 1 and 9999.");
+        year = value;
+    }
+    if (builder.Configuration["item"] is { } item)
+    {
+        if (year != null)
+            throw new InvalidImportRequest("A targeted item cannot also specify a year.");
+        if (provider is not (null or UpstreamProvider.ArchiveOrg))
+            throw new UnsupportedImportOperation("Only Archive supports targeted item imports.");
+        Console.WriteLine(
+            (
+                await imports.Archive.ImportItemAsync(
+                    new ImportArchiveItem(artistId, new ArchiveItemId(item))
+                )
+            ).WorkflowId
+        );
+        return;
+    }
+    if (
+        year != null
+        && provider
+            is not (
+                null
+                or UpstreamProvider.ArchiveOrg
+                or UpstreamProvider.Phishin
+                or UpstreamProvider.PhishNet
+            )
+    )
+        throw new InvalidImportRequest("This provider does not support a year filter.");
+    ArtistRefreshCommand request = provider switch
+    {
+        null => year.HasValue
+            ? new RefreshFilteredArtist(artistId, year.Value)
+            : new RefreshArtist(artistId),
+        UpstreamProvider.ArchiveOrg => new RefreshArchiveArtist(artistId, year),
+        UpstreamProvider.Phishin => new RefreshPhishInArtist(artistId, year),
+        UpstreamProvider.PhishNet => new RefreshPhishNetArtist(artistId, year),
+        UpstreamProvider.SetlistFm => new RefreshSetlistFmArtist(artistId),
+        UpstreamProvider.PhantasyTour => new RefreshPhantasyTourArtist(artistId),
+        UpstreamProvider.JerryGarcia => new RefreshJerryArtist(artistId),
+        UpstreamProvider.Local => new RefreshLocalArtist(artistId),
+        _ => throw new UnsupportedImportOperation(
+            "This provider has no active ingestion implementation."
+        ),
+    };
+    Console.WriteLine((await imports.RefreshAsync(request)).WorkflowId);
+}
+catch (Exception error)
+    when (error
+            is ImportAlreadyRunning
+                or InvalidImportRequest
+                or UnsupportedImportOperation
+                or ArtistNotFound
+    )
 {
-    Console.WriteLine(
-        await host.Services.GetRequiredService<TemporalIngestionClient>().StartBatchAsync(mode)
+    Console.Error.WriteLine(
+        error is ImportAlreadyRunning conflict
+            ? $"{conflict.Message} Active workflow: {conflict.WorkflowId}"
+            : error.Message
     );
-    return;
+    Environment.ExitCode = 1;
 }
-
-await host.RunAsync();

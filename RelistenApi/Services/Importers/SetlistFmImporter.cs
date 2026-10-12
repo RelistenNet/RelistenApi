@@ -23,7 +23,7 @@ using Venue = Relisten.Api.Models.Venue;
 
 namespace Relisten.Import
 {
-    public partial class SetlistFmImporter : IngestionImporter<Setlist>
+    public partial class SetlistFmImporter : ImporterBase
     {
         private readonly LinkService _linkService;
 

@@ -16,6 +16,7 @@ using Relisten.Services.Popularity;
 namespace Relisten.Controllers.Admin
 {
     [ApiExplorerSettings(IgnoreApi = true)]
+    [ImportAdmissionErrors]
     public class AdminController : Controller
     {
         private readonly TemporalIngestionClient _temporal;
@@ -292,7 +293,9 @@ namespace Relisten.Controllers.Admin
         public async Task<IActionResult> IndexArchiveOrgArtists()
         {
             var jobId = _temporal.Enabled
-                ? await _temporal.StartBatchAsync("discover")
+                ? (
+                    await _temporal.DiscoverArchiveArtistsAsync(new DiscoverArchiveArtists())
+                ).WorkflowId
                 : Hangfire.BackgroundJob.Enqueue(() =>
                     _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true)
                 );
@@ -304,7 +307,7 @@ namespace Relisten.Controllers.Admin
         public async Task<IActionResult> RefreshAllArtists()
         {
             var jobId = _temporal.Enabled
-                ? await _temporal.StartBatchAsync("full")
+                ? (await _temporal.RefreshCatalogAsync(new RefreshCatalog())).WorkflowId
                 : Hangfire.BackgroundJob.Enqueue(() =>
                     _scheduledService.RefreshAllArtists(null, allowedInDev: true)
                 );
@@ -323,14 +326,11 @@ namespace Relisten.Controllers.Admin
                 var artist = await _artistService.FindArtistWithIdOrSlug(artistSlug);
                 if (artist == null)
                     return NotFound();
-                jobId = await _temporal.StartArtistAsync(
-                    new ArtistImportRequest(
-                        artist.uuid.ToString(),
-                        Guid.NewGuid().ToString(),
-                        Provider: UpstreamProvider.JerryGarcia,
-                        BackfillJerryVenues: true
+                jobId = (
+                    await _temporal.Jerry.RepairVenuesAsync(
+                        new RepairJerryVenues(new ArtistId(artist.uuid))
                     )
-                );
+                ).WorkflowId;
             }
             else
                 jobId = Hangfire.BackgroundJob.Enqueue(() =>

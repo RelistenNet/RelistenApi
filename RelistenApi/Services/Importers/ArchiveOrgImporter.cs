@@ -22,7 +22,7 @@ using InvalidDataException = System.IO.InvalidDataException;
 
 namespace Relisten.Import
 {
-    public partial class ArchiveOrgImporter : IngestionImporter<ArchiveImportItem, ArchiveDiscovery>
+    public partial class ArchiveOrgImporter : ImporterBase
     {
         private const int MaxSourcesDeletedPerSync = 5;
 

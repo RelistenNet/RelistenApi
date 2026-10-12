@@ -14,7 +14,7 @@ using Relisten.Ingestion;
 
 namespace Relisten.Import
 {
-    public partial class PhishNetImporter : IngestionImporter<PhishNetImporter.SourceInput>
+    public partial class PhishNetImporter : ImporterBase
     {
         readonly LinkService linkService;
         PhishNetApiClient phishNetApiClient;

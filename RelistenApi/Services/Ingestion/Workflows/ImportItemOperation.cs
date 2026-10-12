@@ -1,43 +1,64 @@
+using System;
+using System.Globalization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
-using Relisten.Api.Models;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
 
-/// <summary>Shared item failure policy for full imports and manual reimports.</summary>
+/// <summary>Only exhausted item failures become partial results. Discovery, expiry and cancellation propagate.</summary>
 internal static class ImportItemOperation
 {
-    // Null means an item exhausted retries. Prerequisites and discovery are never
-    // caught here: failure there prevents provider finalization altogether.
-    internal static async Task<ItemImportResult?> RunAsync(
-        ArtistImportRequest request,
-        UpstreamProvider provider,
-        ImportItem? item
+    internal static async Task<(TResult? Result, ItemFailure? Failure)> RunAsync<TKey, TResult>(
+        TKey key,
+        Func<Task<TResult>> run
     )
+        where TResult : class
     {
         try
         {
-            return await Workflow.ExecuteActivityAsync(
-                (IIngestionActivities activities) => activities.ImportItem(request, provider, item),
-                ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider])
-            );
+            var result = await run();
+            Workflow.Logger.LogInformation("Item {ItemIdentifier} completed", CanonicalKey(key));
+            return (result, null);
         }
         catch (ActivityFailureException error) when (!TemporalException.IsCanceledException(error))
         {
-            if (error.InnerException is ApplicationFailureException { ErrorType: "ImportExpired" })
-            {
+            var cause = error.InnerException;
+            if (cause is ApplicationFailureException { ErrorType: "ImportExpired" })
                 throw;
-            }
-
+            var message = cause?.Message ?? error.Message;
+            var category =
+                (cause as ApplicationFailureException)?.ErrorType
+                ?? cause?.GetType().Name
+                ?? "ActivityFailure";
             Workflow.Logger.LogWarning(
                 error,
-                "Import failed for {Provider} item {Item}",
-                provider.ToValue(),
-                item?.Identifier ?? request.Item
+                "Item {ItemIdentifier} failed after activity retries with {ErrorCategory}",
+                CanonicalKey(key),
+                category
             );
-            return null;
+            return (
+                null,
+                new ItemFailure<TKey>(
+                    key,
+                    category,
+                    message.Length <= 500 ? message : message[..500]
+                )
+            );
         }
     }
+
+    private static string CanonicalKey<TKey>(TKey key) =>
+        key switch
+        {
+            ArchiveItemId value => value.Value,
+            PhishInShowId value => value.Value.ToString(CultureInfo.InvariantCulture),
+            SetlistFmId value => value.Value,
+            PhantasyTourShowId value => value.Value.ToString(CultureInfo.InvariantCulture),
+            JerryShowId value => value.Value,
+            LocalShowDate value => value.Value,
+            CatalogSourceId value => value.Value.ToString(CultureInfo.InvariantCulture),
+            _ => throw new ArgumentException("Unknown provider item key.", nameof(key)),
+        };
 }

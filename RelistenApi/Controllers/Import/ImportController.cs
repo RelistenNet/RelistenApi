@@ -14,6 +14,7 @@ namespace Relisten.Controllers
 {
     [Route("api/v2/import/")]
     [ApiExplorerSettings(IgnoreApi = true)]
+    [ImportAdmissionErrors]
     public class ImportController : RelistenBaseController
     {
         public ImportController(
@@ -53,9 +54,11 @@ namespace Relisten.Controllers
                         "Stop Temporal ingestion and select Hangfire before a destructive reimport."
                     );
                 var jobId = _temporal.Enabled
-                    ? await _temporal.StartArtistAsync(
-                        new ArtistImportRequest(art.uuid.ToString(), Guid.NewGuid().ToString())
-                    )
+                    ? (
+                        await _temporal.RefreshArtistAsync(
+                            new RefreshArtist(new ArtistId(art.uuid))
+                        )
+                    ).WorkflowId
                     : BackgroundJob.Enqueue(() =>
                         _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
                     );
@@ -106,13 +109,11 @@ namespace Relisten.Controllers
                     return JsonNotFound(false);
                 return StatusCode(
                     201,
-                    await _temporal.StartArtistAsync(
-                        new ArtistImportRequest(
-                            artist.uuid.ToString(),
-                            Guid.NewGuid().ToString(),
-                            Provider: UpstreamProvider.Phishin
+                    (
+                        await _temporal.PhishIn.RefreshAsync(
+                            new RefreshPhishInArtist(new ArtistId(artist.uuid))
                         )
-                    )
+                    ).WorkflowId
                 );
             }
             return StatusCode(
@@ -128,7 +129,7 @@ namespace Relisten.Controllers
             return StatusCode(
                 201,
                 _temporal.Enabled
-                    ? await _temporal.StartBatchAsync("rebuild")
+                    ? (await _temporal.RebuildCatalogAsync(new RebuildCatalog())).WorkflowId
                     : BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
             );
         }
@@ -149,13 +150,14 @@ namespace Relisten.Controllers
                         "Stop Temporal ingestion and select Hangfire before a destructive reimport."
                     );
                 var jobId = _temporal.Enabled
-                    ? await _temporal.StartArtistAsync(
-                        new ArtistImportRequest(
-                            art.uuid.ToString(),
-                            Guid.NewGuid().ToString(),
-                            Item: showIdentifier
+                    ? (
+                        await _temporal.Archive.ImportItemAsync(
+                            new ImportArchiveItem(
+                                new ArtistId(art.uuid),
+                                new ArchiveItemId(showIdentifier)
+                            )
                         )
-                    )
+                    ).WorkflowId
                     : BackgroundJob.Enqueue(() =>
                         _scheduledService.RefreshArtist(
                             idOrSlug,

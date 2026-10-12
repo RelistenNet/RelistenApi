@@ -16,8 +16,7 @@ using Relisten.Vendor;
 
 namespace Relisten.Import
 {
-    public partial class JerryGarciaComImporter
-        : IngestionImporter<JerryGarciaComImporter.FileMetaObject>
+    public partial class JerryGarciaComImporter : ImporterBase
     {
         private IDictionary<string, SetlistShow?> existingSetlistShows =
             new Dictionary<string, SetlistShow?>();
