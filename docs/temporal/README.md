@@ -1,5 +1,7 @@
 # Temporal ingestion
 
+The [typed provider API proposal](api-proposal.md) describes the next suggested redesign. It is under review; the code and guides below still describe the current implementation.
+
 Relisten ingestion runs in a separate .NET worker. Artist workflows compose provider preparation, paginated item imports, reconciliation, and a final catalog rebuild. A manual Archive reimport uses the same item activity without enumerating the artist or reconciling unrelated sources.
 
 Start with [the execution graph and code map](architecture.md). [Provider behavior and logging](provider-behavior.md) traces the shared Hangfire/Temporal methods and their intentional differences. Use [the operator instructions](operations.md) to configure, run, and recover imports, and [the local setup](../../local-dev/temporal/README.md) for integration tests. [The goal](GOAL.md) records the intended outcome and development standards.

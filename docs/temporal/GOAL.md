@@ -69,3 +69,7 @@ The completed follow-up passed the full isolated suite: **157 passed, 24 unrelat
 Keep fixture routing and other test setup in the test project. Production HTTP code uses standard dependency injection for its transport and contains no test-only endpoint settings or request rewriting. Preserve activity cancellation, timeouts, upstream retry delays, redirects, and importer behavior.
 
 Verified with six HTTP tests and 33 local ingestion integration tests, including all seven provider comparisons. The HTTP tests cover client cancellation/disposal, redirects, retry delays, and provider response parsing. CSharpier checked 326 files.
+
+## API proposal under review
+
+The [typed provider API proposal](api-proposal.md) addresses mixed-purpose requests, string item keys/cursors, silent unsupported operations, and hidden provider sequencing. It recommends concrete provider workflows, generic data and iteration helpers, separate maintenance commands, and item results that support later processing. The proposal has not been accepted or implemented. Keep its review status explicit; do not treat proposed child-workflow or processing choices as agreed requirements.
