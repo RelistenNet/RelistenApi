@@ -1,9 +1,6 @@
 using System;
 using System.Linq;
-using System.Net.Http;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
 using Relisten.Data;
 using Relisten.Import;
 using Temporalio.Activities;
@@ -11,253 +8,199 @@ using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
-/// <summary>Runs provider operations with scoped services and stores large inputs outside workflow history.</summary>
+/// <summary>Bridges Temporal activities to provider operations; only database commits use retry receipts.</summary>
 public sealed class IngestionActivities(
     ArtistService artists,
     ImporterService importers,
-    ImportRunRepository store,
-    IConfiguration configuration
+    IngestionStore store,
+    IngestionHttpClientFactory httpClients
 ) : IIngestionActivities
 {
-    [Activity("Ingestion.Prepare")]
-    public async Task<ArtistImportPlan> Prepare(ArtistImportRequest request)
+    [Activity("Ingestion.PrepareArtist")]
+    public async Task<ArtistImportPlan> PrepareArtist(ArtistImportRequest request)
     {
-        await store.SaveAsync(request.RequestId, "request", request);
-        var recorded = await store.ReadAsync<ArtistImportRequest>(request.RequestId, "request");
-        if (recorded != request)
-            throw new ApplicationFailureException(
-                "Request ID already belongs to a different import.",
-                nonRetryable: true
-            );
-        var previous = await store.ReadAsync<ArtistImportPlan>(request.RequestId, "plan");
-        if (previous != null)
-            return previous;
+        using var heartbeat = new ActivityHeartbeat();
+        IngestionStore.RequireActive(request.Run!);
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
         var providers = artist
-            .upstream_sources.Select(s => s.upstream_source.name)
+            .upstream_sources.Select(source => source.upstream_source.name)
             .Where(IngestionQueues.Providers.ContainsKey)
-            .Where(p => request.Provider == null || p == request.Provider)
+            .Where(provider => request.Provider == null || provider == request.Provider)
             .ToArray();
+
         if (request.Provider != null && providers.Length == 0)
+        {
             throw new ApplicationFailureException(
                 "Artist has no enabled mapping for the requested provider.",
                 nonRetryable: true
             );
-        var plan = new ArtistImportPlan(artist.uuid.ToString(), providers);
-        await store.SaveAsync(request.RequestId, "plan", plan);
-        return (await store.ReadAsync<ArtistImportPlan>(request.RequestId, "plan"))!;
+        }
+
+        return new ArtistImportPlan(artist.uuid.ToString(), providers);
     }
 
-    [Activity("Ingestion.Discover")]
-    public async Task<ImportPage> Discover(
+    [Activity("Ingestion.PrepareProvider")]
+    public async Task<ImportStats> PrepareProvider(ArtistImportRequest request, string provider)
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        var saved = await store.ReadReceiptAsync<ImportStats>(request.Run!, provider + "/prepare");
+        if (saved != null)
+        {
+            return saved;
+        }
+
+        var (context, importer) = await Provider(request, provider, "prepare");
+        return await importer.PrepareAsync(context);
+    }
+
+    [Activity("Ingestion.DiscoverItems")]
+    public async Task<ImportPage> DiscoverItems(
         ArtistImportRequest request,
         string provider,
-        string? cursor
+        DiscoveryCursor? cursor
     )
     {
-        var key = provider + "/page/" + (cursor ?? "first");
-        var previous = await store.ReadAsync<ImportPage>(request.RequestId, key);
-        if (previous != null)
-            return previous;
-        var (context, importer) = await Context(request, provider);
-        var page = await ((IProviderIngestion)importer).DiscoverAsync(context, cursor);
-        return await store.SavePageAsync(request.RequestId, provider, key, page);
-    }
-
-    [Activity("Ingestion.Fetch")]
-    public async Task<bool> Fetch(ImportItemRef item, int part)
-    {
-        var key = ItemKey(item) + "/fetch/" + part;
-        var previous = await store.ReadAsync<ProviderFetch>(item.Request.RequestId, key);
-        if (previous != null)
-            return previous.Done;
-        var (context, importer) = await Context(item.Request, item.Provider);
-        var input = await Input(item);
-        if (part > 0)
-            context = context with
-            {
-                PreviousFetch = await store.ReadAsync<ProviderFetch>(
-                    item.Request.RequestId,
-                    ItemKey(item) + "/fetch/" + (part - 1)
-                ),
-            };
-        var fetched = await ((IProviderIngestion)importer).FetchAsync(context, input, part);
-        await store.SaveAsync(item.Request.RequestId, key, fetched);
-        // A timed-out attempt may have committed first. Return the stored version.
-        return (await store.ReadAsync<ProviderFetch>(item.Request.RequestId, key))!.Done;
-    }
-
-    [Activity("Ingestion.Apply")]
-    public async Task<ImportStats> Apply(ImportItemRef item)
-    {
-        var (context, importer) = await Context(item.Request, item.Provider);
-        var input = await Input(item);
-        var fetched = new System.Collections.Generic.List<ProviderFetch>();
-        for (var part = 0; ; part++)
-        {
-            var result =
-                await store.ReadAsync<ProviderFetch>(
-                    item.Request.RequestId,
-                    ItemKey(item) + "/fetch/" + part
-                ) ?? throw new InvalidOperationException("Item dependency was not staged.");
-            fetched.Add(result);
-            if (result.Done)
-                break;
-        }
-        try
-        {
-            return await store.ApplyOnceAsync(
-                item.Request.RequestId,
-                ItemKey(item) + "/receipt",
-                async () =>
-                {
-                    var stats = await ((IProviderIngestion)importer).ApplyAsync(
-                        context,
-                        input,
-                        fetched.ToArray()
-                    );
-                    await MarkForFinalization(item.Request, stats);
-                    return stats;
-                }
-            );
-        }
-        catch (Exception error) when (input.Key.StartsWith("catalog/", StringComparison.Ordinal))
-        {
-            // Shows depend on these lookups. Stop after retries instead of importing
-            // against a partially updated venue/song/era catalog.
-            throw new ApplicationFailureException(
-                "Provider catalog prerequisite failed.",
-                errorType: "IngestionPrerequisiteFailure",
-                inner: error
-            );
-        }
-    }
-
-    [Activity("Ingestion.RecordFailure")]
-    public Task RecordFailure(ImportItemRef item, string reason) =>
-        store.SaveAsync(item.Request.RequestId, ItemKey(item) + "/failure", new { reason });
-
-    [Activity("Ingestion.Candidates")]
-    public async Task<string[]> Candidates(ArtistImportRequest request, string provider)
-    {
-        if (
-            provider != ArchiveOrgImporter.DataSourceName
-            || request.Year != null
-            || request.Item != null
-        )
-            return Array.Empty<string>();
-        var (context, importer) = await Context(request, provider);
-        return await ((ArchiveOrgImporter)importer).IngestionDeletionCandidates(context);
-    }
-
-    [Activity("Ingestion.Verify")]
-    public async Task Verify(ArtistImportRequest request, string provider, string key)
-    {
-        var (context, importer) = await Context(request, provider);
-        await ((ArchiveOrgImporter)importer).VerifyIngestionCandidate(context, key);
-    }
-
-    [Activity("Ingestion.FinishProvider")]
-    public async Task<ImportStats> FinishProvider(ArtistImportRequest request, string provider)
-    {
-        var (context, importer) = await Context(request, provider);
-        return await store.ApplyOnceAsync(
-            request.RequestId,
-            provider + "/finished",
+        using var heartbeat = new ActivityHeartbeat();
+        var position = cursor ?? new DiscoveryCursor();
+        var name = DiscoveryName(provider, position.Upstream);
+        var snapshot = await store.SnapshotAsync(
+            request.Run!,
+            name,
             async () =>
             {
-                var stats = importer is ArchiveOrgImporter archive
-                    ? await archive.FinishIngestion(context)
-                    : new ImportStats();
-                await MarkForFinalization(request, stats);
-                return stats;
+                var (context, importer) = await Provider(request, provider, "discover");
+                return await importer.DiscoverAsync(context, position.Upstream);
             }
         );
+        var items = snapshot
+            .Items.Skip(position.Offset)
+            .Take(100)
+            .Select((item, index) => new ImportItem(item.Identifier, name, position.Offset + index))
+            .ToArray();
+        var nextOffset = position.Offset + items.Length;
+        DiscoveryCursor? next = null;
+
+        if (nextOffset < snapshot.Items.Length)
+        {
+            next = position with { Offset = nextOffset };
+        }
+        else if (snapshot.NextCursor != null)
+        {
+            if (snapshot.NextCursor == position.Upstream)
+            {
+                throw new ApplicationFailureException(
+                    "Provider discovery cursor did not advance.",
+                    nonRetryable: true
+                );
+            }
+
+            next = new DiscoveryCursor(snapshot.NextCursor);
+        }
+
+        return new ImportPage(items, next);
+    }
+
+    [Activity("Ingestion.ImportItem")]
+    public async Task<ItemImportResult> ImportItem(
+        ArtistImportRequest request,
+        string provider,
+        ImportItem? item
+    )
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        var identifier =
+            item?.Identifier
+            ?? request.Item
+            ?? throw new ArgumentException("An item identifier is required.");
+        var operation = "item/" + identifier;
+        var saved = await store.ReadReceiptAsync<ItemImportResult>(
+            request.Run!,
+            provider + "/" + operation
+        );
+        if (saved != null)
+        {
+            return saved;
+        }
+
+        var input =
+            item == null
+                ? new DiscoveredItem(identifier, "")
+                : await store.ReadItemAsync(request.Run!, item);
+        var (context, importer) = await Provider(request, provider, operation);
+        return await importer.ImportItemAsync(context, input);
+    }
+
+    [Activity("Ingestion.ReconcileProvider")]
+    public async Task<ProviderResult> ReconcileProvider(
+        ArtistImportRequest request,
+        string provider,
+        string[] ineligibleItems,
+        bool hasFailures
+    )
+    {
+        using var heartbeat = new ActivityHeartbeat();
+        var saved = await store.ReadReceiptAsync<ProviderResult>(
+            request.Run!,
+            provider + "/reconcile"
+        );
+        if (saved != null)
+        {
+            return saved;
+        }
+
+        var (context, importer) = await Provider(request, provider, "reconcile");
+        return await importer.ReconcileAsync(context, ineligibleItems, hasFailures);
     }
 
     [Activity("Ingestion.FinishArtist")]
     public async Task<ImportResult> FinishArtist(ArtistImportRequest request, ImportResult result)
     {
+        using var heartbeat = new ActivityHeartbeat();
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
-        return await store.ApplyOnceAsync(
-            request.RequestId,
-            "finished",
-            async () =>
-            {
-                var alwaysRebuild = artist.upstream_sources.Any(s =>
-                    (request.Provider == null || request.Provider == s.upstream_source.name)
-                    && s.upstream_source.name is "phish.net" or "phantasytour.com" or "local"
-                );
-                if (
-                    request.RebuildOnly
-                    || alwaysRebuild
-                    || result.Stats.Created + result.Stats.Updated + result.Stats.Removed > 0
-                )
-                    await importers.Rebuild(artist, null);
-                if (request.BackfillJerryVenues && result.FailedItems == 0)
-                {
-                    var jerry = artist
-                        .upstream_sources.Select(s => s.upstream_source.importer)
-                        .OfType<JerryGarciaComImporter>()
-                        .Single();
-                    result.Stats.Removed += await jerry.RemoveOrphanVenues(artist);
-                }
-                return result;
-            }
-        );
+
+        IngestionStore.RequireActive(request.Run!);
+        // Rebuild SQL owns its transactions and is safe to repeat. Wrapping it in
+        // an item receipt transaction would let its COMMIT close that transaction.
+        // Always rebuild: a cancelled earlier import may have committed items only.
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        cancellationToken.ThrowIfCancellationRequested();
+        await importers.Rebuild(artist, null);
+        cancellationToken.ThrowIfCancellationRequested();
+        return result;
     }
 
-    private Task MarkForFinalization(ArtistImportRequest request, ImportStats stats) =>
-        stats.Created + stats.Updated + stats.Removed == 0
-            ? Task.CompletedTask
-            : store.SaveAsync(
-                request.RequestId,
-                "needs-finalize",
-                new { reason = "Catalog changes committed" }
-            );
+    internal static string DiscoveryName(string provider, string? cursor) =>
+        provider + "/discovery/" + (cursor ?? "first");
 
-    private static string ItemKey(ImportItemRef item) => item.Page + "/item/" + item.Index;
-
-    private async Task<ProviderItem> Input(ImportItemRef item) =>
-        await store.ReadAsync<ProviderItem>(item.Request.RequestId, ItemKey(item))
-        ?? throw new InvalidOperationException("Item was not staged.");
-
-    private async Task<(ProviderContext, ImporterBase)> Context(
+    private async Task<(ProviderContext Context, IProviderIngestion Importer)> Provider(
         ArtistImportRequest request,
-        string provider
+        string provider,
+        string operation
     )
     {
+        IngestionStore.RequireActive(request.Run!);
         var artist =
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
-        var source = artist.upstream_sources.Single(s => s.upstream_source.name == provider);
+        var source = artist.upstream_sources.Single(source =>
+            source.upstream_source.name == provider
+        );
         var importer = source.upstream_source.importer!;
-        var endpoint = configuration["Ingestion:UpstreamBaseUrl"];
-        importer.UseIngestionHttpClient(
-            new HttpClient(
-                new IngestionHttpHandler(
-                    ActivityExecutionContext.Current.CancellationToken,
-                    endpoint == null ? null : new Uri(endpoint)
-                )
-            )
-            {
-                Timeout = TimeSpan.FromSeconds(60),
-            }
-        );
+        var cancellationToken = ActivityExecutionContext.Current.CancellationToken;
+        importer.UseIngestionHttpClient(httpClients.Create(cancellationToken));
         importer.CurrentImportOptions = new ImportOptions { OnlyYear = request.Year };
-        return (
-            new ProviderContext(
-                artist,
-                source,
-                request,
-                store,
-                ActivityExecutionContext.Current.CancellationToken
-            ),
-            importer
+        var context = new ProviderContext(
+            artist,
+            source,
+            request,
+            store,
+            operation,
+            cancellationToken
         );
+        return (context, (IProviderIngestion)importer);
     }
 }

@@ -1,184 +1,165 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Import;
-using Temporalio.Common;
-using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
 
-/// <summary>Refreshes an artist through shared provider activities; raw data never enters workflow history.</summary>
+/// <summary>
+/// Prepares an artist, imports each provider, then rebuilds the catalog. Helpers
+/// separate provider sequencing, page iteration, and checkpoint advancement.
+/// </summary>
 [Workflow]
 public class ArtistRefreshWorkflow
 {
+    private ArtistImportRequest request = null!;
+    private ImportCheckpoint progress = null!;
+    private int activityCount;
+
     [WorkflowRun]
-    public Task<ImportResult> RunAsync(
-        ArtistImportRequest request,
+    public async Task<ImportResult> RunAsync(
+        ArtistImportRequest input,
         ImportCheckpoint? checkpoint = null
-    ) => ImportComposition.RunAsync(request, checkpoint, false);
-}
-
-/// <summary>Reimports one item through the same activities as a full refresh.</summary>
-[Workflow]
-public class ReimportItemWorkflow
-{
-    [WorkflowRun]
-    public Task<ImportResult> RunAsync(
-        ArtistImportRequest request,
-        ImportCheckpoint? checkpoint = null
-    ) => ImportComposition.RunAsync(request, checkpoint, true);
-}
-
-// Plain workflow composition keeps two entry points without a child workflow per item.
-internal static class ImportComposition
-{
-    internal static ActivityOptions Options(string queue) =>
-        new()
-        {
-            TaskQueue = queue,
-            // Keep the artist workflow open until its current activity has stopped writing.
-            CancellationType = ActivityCancellationType.WaitCancellationCompleted,
-            StartToCloseTimeout = TimeSpan.FromMinutes(5),
-            ScheduleToCloseTimeout = TimeSpan.FromHours(6),
-            RetryPolicy = new RetryPolicy
-            {
-                MaximumAttempts = 5,
-                InitialInterval = TimeSpan.FromSeconds(2),
-                MaximumInterval = TimeSpan.FromMinutes(1),
-            },
-        };
-
-    internal static async Task<ImportResult> RunAsync(
-        ArtistImportRequest request,
-        ImportCheckpoint? checkpoint,
-        bool singleItem
     )
     {
-        var state = checkpoint ?? new ImportCheckpoint();
-        var db = Options(IngestionQueues.Database);
-        var plan = await Workflow.ExecuteActivityAsync(
-            (IIngestionActivities a) => a.Prepare(request),
-            db
-        );
-        var stats = state.Stats ?? new ImportStats();
-        var failures = state.FailedItems;
-        var calls = 1;
+        request = ImportWorkflowOptions.AssignRun(input);
+        progress = checkpoint ?? new ImportCheckpoint(Stats: new ImportStats());
+        if (progress.Providers == null)
+        {
+            var plan = await Workflow.ExecuteActivityAsync(
+                (IIngestionActivities activities) => activities.PrepareArtist(request),
+                ImportWorkflowOptions.Activity(IngestionQueues.Database)
+            );
+            progress = progress with { Providers = plan.Providers };
+        }
+
         if (!request.RebuildOnly)
         {
-            for (
-                var providerIndex = state.ProviderIndex;
-                providerIndex < plan.Providers.Length;
-                providerIndex++
-            )
+            while (progress.ProviderIndex < progress.Providers.Length)
             {
-                var provider = plan.Providers[providerIndex];
-                var http = Options(IngestionQueues.Providers[provider]);
-                var cursor = providerIndex == state.ProviderIndex ? state.Cursor : null;
-                var itemIndex = providerIndex == state.ProviderIndex ? state.ItemIndex : 0;
-                do
-                {
-                    if (calls >= 500 || Workflow.ContinueAsNewSuggested)
-                        Continue(
-                            new ImportCheckpoint(providerIndex, cursor, itemIndex, failures, stats)
-                        );
-                    var page = await Workflow.ExecuteActivityAsync(
-                        (IIngestionActivities a) => a.Discover(request, provider, cursor),
-                        http
-                    );
-                    calls++;
-                    for (; itemIndex < page.ItemCount; itemIndex++)
-                    {
-                        var item = new ImportItemRef(request, provider, page.Key, itemIndex);
-                        try
-                        {
-                            for (var part = 0; ; part++)
-                            {
-                                calls++;
-                                var done = await Workflow.ExecuteActivityAsync(
-                                    (IIngestionActivities a) => a.Fetch(item, part),
-                                    http
-                                );
-                                if (done)
-                                    break;
-                            }
-                            calls++;
-                            stats += await Workflow.ExecuteActivityAsync(
-                                (IIngestionActivities a) => a.Apply(item),
-                                db
-                            );
-                        }
-                        catch (ActivityFailureException error)
-                            when (!TemporalException.IsCanceledException(error))
-                        {
-                            failures++;
-                            calls++;
-                            await Workflow.ExecuteActivityAsync(
-                                (IIngestionActivities a) =>
-                                    a.RecordFailure(
-                                        item,
-                                        error.InnerException == null
-                                            ? error.Message
-                                            : error.InnerException.Message
-                                    ),
-                                db
-                            );
-                            if (
-                                error.InnerException is ApplicationFailureException
-                                {
-                                    ErrorType: "IngestionPrerequisiteFailure"
-                                }
-                            )
-                                throw;
-                        }
-                        // Finish the item before rollover; a restarted run reads the same staged page.
-                        if (calls >= 500 || Workflow.ContinueAsNewSuggested)
-                        {
-                            var next = new ImportCheckpoint(
-                                providerIndex,
-                                cursor,
-                                itemIndex + 1,
-                                failures,
-                                stats
-                            );
-                            Continue(next);
-                        }
-                    }
-                    cursor = page.NextCursor;
-                    itemIndex = 0;
-                } while (cursor != null);
-                calls += 2;
-                var candidates = await Workflow.ExecuteActivityAsync(
-                    (IIngestionActivities a) => a.Candidates(request, provider),
-                    db
-                );
-                foreach (var key in candidates)
-                {
-                    calls++;
-                    await Workflow.ExecuteActivityAsync(
-                        (IIngestionActivities a) => a.Verify(request, provider, key),
-                        http
-                    );
-                }
-                stats += await Workflow.ExecuteActivityAsync(
-                    (IIngestionActivities a) => a.FinishProvider(request, provider),
-                    db
-                );
+                await ImportProvider(progress.Providers[progress.ProviderIndex]);
+                AdvanceProvider();
+                ContinueIfNeeded();
             }
         }
-        var result = new ImportResult(request.RequestId, stats, failures);
-        return await Workflow.ExecuteActivityAsync(
-            (IIngestionActivities a) => a.FinishArtist(request, result),
-            db
-        );
 
-        void Continue(ImportCheckpoint next)
+        var result = new ImportResult(request.RequestId, progress.Stats!, progress.FailedItems);
+        return await Workflow.ExecuteActivityAsync(
+            (IIngestionActivities activities) => activities.FinishArtist(request, result),
+            ImportWorkflowOptions.Activity(IngestionQueues.Database)
+        );
+    }
+
+    private async Task ImportProvider(string provider)
+    {
+        var options = ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider]);
+        if (!progress.ProviderPrepared)
         {
-            if (singleItem)
-                throw Workflow.CreateContinueAsNewException(
-                    (ReimportItemWorkflow w) => w.RunAsync(request, next)
-                );
+            var stats = await Workflow.ExecuteActivityAsync(
+                (IIngestionActivities activities) => activities.PrepareProvider(request, provider),
+                options
+            );
+            progress = progress with { Stats = progress.Stats! + stats, ProviderPrepared = true };
+            activityCount++;
+        }
+
+        await ImportPages(provider);
+
+        var result = await Workflow.ExecuteActivityAsync(
+            (IIngestionActivities activities) =>
+                activities.ReconcileProvider(
+                    request,
+                    provider,
+                    progress.IneligibleItems ?? Array.Empty<string>(),
+                    progress.ProviderFailures > 0
+                ),
+            options
+        );
+        progress = progress with { Stats = progress.Stats! + result.Stats };
+        activityCount++;
+    }
+
+    private async Task ImportPages(string provider)
+    {
+        do
+        {
+            var page = await Workflow.ExecuteActivityAsync(
+                (IIngestionActivities activities) =>
+                    activities.DiscoverItems(request, provider, progress.Cursor),
+                ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider])
+            );
+            activityCount++;
+
+            await ImportPage(provider, page);
+            progress = progress with { Cursor = page.NextCursor, ItemIndex = 0 };
+
+            // After the final page, proceed directly to reconciliation. Rollover
+            // here would make a null cursor look like discovery had not started.
+            if (progress.Cursor != null)
+            {
+                ContinueIfNeeded();
+            }
+        } while (progress.Cursor != null);
+    }
+
+    private async Task ImportPage(string provider, ImportPage page)
+    {
+        while (progress.ItemIndex < page.Items.Length)
+        {
+            ContinueIfNeeded();
+            var item = page.Items[progress.ItemIndex];
+            var result = await ImportItemOperation.RunAsync(request, provider, item);
+            RecordItemResult(item.Identifier, result);
+            activityCount++;
+        }
+    }
+
+    private void RecordItemResult(string identifier, ItemImportResult? result)
+    {
+        if (result == null)
+        {
+            progress = progress with
+            {
+                ItemIndex = progress.ItemIndex + 1,
+                FailedItems = progress.FailedItems + 1,
+                ProviderFailures = progress.ProviderFailures + 1,
+            };
+            return;
+        }
+
+        var ineligible = progress.IneligibleItems ?? Array.Empty<string>();
+        if (result.Ineligible && ineligible.Length < 6)
+        {
+            // Six identifiers are enough to trip Archive's five-deletion guard.
+            ineligible = ineligible.Append(identifier).ToArray();
+        }
+
+        progress = progress with
+        {
+            ItemIndex = progress.ItemIndex + 1,
+            Stats = progress.Stats! + result.Stats,
+            IneligibleItems = ineligible,
+        };
+    }
+
+    private void AdvanceProvider() =>
+        progress = progress with
+        {
+            ProviderIndex = progress.ProviderIndex + 1,
+            Cursor = null,
+            ItemIndex = 0,
+            ProviderPrepared = false,
+            ProviderFailures = 0,
+            IneligibleItems = null,
+        };
+
+    private void ContinueIfNeeded()
+    {
+        if (activityCount >= 100 || Workflow.ContinueAsNewSuggested)
+        {
             throw Workflow.CreateContinueAsNewException(
-                (ArtistRefreshWorkflow w) => w.RunAsync(request, next)
+                (ArtistRefreshWorkflow workflow) => workflow.RunAsync(request, progress)
             );
         }
     }

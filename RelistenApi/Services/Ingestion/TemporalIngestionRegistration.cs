@@ -30,7 +30,9 @@ public static class TemporalIngestionRegistration
     )
     {
         services.AddTemporalIngestionClient(configuration);
-        services.AddScoped<ImportRunRepository>();
+        services.AddScoped<IngestionStore>();
+        services.AddSingleton<IngestionHttpClientFactory>();
+        services.AddHostedService<IngestionCleanupService>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Workflows)
             .AddWorkflow<ArtistRefreshWorkflow>()
@@ -52,7 +54,10 @@ public static class TemporalIngestionRegistration
                 .AddHostedTemporalWorker(queue)
                 .AddScopedActivities<IngestionActivities>();
             if (provider == "archive.org")
+            {
                 builder.AddScopedActivities<IngestionBatchActivities>();
+            }
+
             builder.ConfigureOptions(o =>
             {
                 o.MaxConcurrentActivities =
@@ -63,6 +68,7 @@ public static class TemporalIngestionRegistration
                 o.DisableEagerActivityExecution = true;
             });
         }
+
         return services;
     }
 }

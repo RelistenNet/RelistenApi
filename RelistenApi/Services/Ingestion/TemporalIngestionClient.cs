@@ -24,26 +24,38 @@ public sealed class TemporalIngestionClient(ITemporalClient client, IConfigurati
     public async Task<string> StartArtistAsync(ArtistImportRequest request)
     {
         if (!Guid.TryParse(request.Artist, out var artistUuid))
+        {
             throw new ArgumentException("Artist imports require a catalog UUID.", nameof(request));
+        }
+
         request = request with { Artist = artistUuid.ToString() };
         var id = "ingest/artist/" + request.Artist;
-        var options = new WorkflowOptions(id, IngestionQueues.Workflows);
+        var options = new WorkflowOptions(id, IngestionQueues.Workflows)
+        {
+            ExecutionTimeout = IngestionRun.MaximumDuration,
+        };
         try
         {
             if (request.Item == null)
+            {
                 await client.StartWorkflowAsync(
                     (ArtistRefreshWorkflow w) => w.RunAsync(request, null),
                     options
                 );
+            }
             else
+            {
                 await client.StartWorkflowAsync(
-                    (ReimportItemWorkflow w) => w.RunAsync(request, null),
+                    (ReimportItemWorkflow w) => w.RunAsync(request),
                     options
                 );
+            }
         }
         catch (WorkflowAlreadyStartedException)
-        { /* Preserve the current skip-overlap behavior. */
+        {
+            // Preserve the current skip-overlap behavior.
         }
+
         return id;
     }
 
@@ -51,19 +63,30 @@ public sealed class TemporalIngestionClient(ITemporalClient client, IConfigurati
     public async Task<string> StartBatchAsync(string mode)
     {
         if (mode is not ("discover" or "full" or "thin" or "rebuild"))
+        {
             throw new ArgumentException("Expected discover, full, thin or rebuild.", nameof(mode));
+        }
+
         var id = "ingest/" + mode + "/" + Guid.NewGuid();
-        var options = new WorkflowOptions(id, IngestionQueues.Workflows);
+        var options = new WorkflowOptions(id, IngestionQueues.Workflows)
+        {
+            ExecutionTimeout = IngestionRun.MaximumDuration,
+        };
         if (mode == "discover")
+        {
             await client.StartWorkflowAsync(
-                (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(id, null, 0),
+                (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(null, null, 0),
                 options
             );
+        }
         else
+        {
             await client.StartWorkflowAsync(
                 (RefreshBatchWorkflow w) => w.RunAsync(new ImportBatchRequest(mode, id)),
                 options
             );
+        }
+
         return id;
     }
 
@@ -80,10 +103,10 @@ public sealed class TemporalIngestionClient(ITemporalClient client, IConfigurati
         )
         {
             var id = "relisten-ingest-" + name;
-            var options = new WorkflowOptions(
-                "ingest/scheduled/" + name,
-                IngestionQueues.Workflows
-            );
+            var options = new WorkflowOptions("ingest/scheduled/" + name, IngestionQueues.Workflows)
+            {
+                ExecutionTimeout = IngestionRun.MaximumDuration,
+            };
             var action =
                 name == "discover"
                     ? ScheduleActionStartWorkflow.Create(

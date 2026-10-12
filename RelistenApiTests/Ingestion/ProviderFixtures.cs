@@ -142,7 +142,8 @@ internal static class ProviderFixtures
                 data = new
                 {
                     id,
-                    dateTimeUtc = $"2000-01-0{id}T00:00:00Z",
+                    dateTime = $"2000-01-0{id}T20:00:00-05:00",
+                    dateTimeUtc = $"2000-01-0{id + 1}T01:00:00Z",
                     venue = new
                     {
                         id = 1,

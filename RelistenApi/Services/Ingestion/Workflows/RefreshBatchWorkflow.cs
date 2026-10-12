@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Temporalio.Exceptions;
@@ -6,111 +5,117 @@ using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
 
-/// <summary>Runs the stored artist selection with at most ten active child workflows.</summary>
+/// <summary>Imports a stable artist selection, replacing finished children until the page is complete.</summary>
 [Workflow]
 public class RefreshBatchWorkflow
 {
     [WorkflowRun]
     public async Task<ImportBatchResult> RunAsync(ImportBatchRequest request)
     {
-        request = request with { RequestId = request.RequestId ?? Workflow.NewGuid().ToString() };
-        var page = await Workflow.ExecuteActivityAsync(
-            (IngestionBatchActivities a) => a.ListArtists(request),
-            ImportComposition.Options(IngestionQueues.Database)
-        );
-        var completed = request.Completed;
-        var failed = request.Failed;
-        var active = new List<Task<bool>>();
-        foreach (var artist in page.Artists)
+        var requestId = request.RequestId ?? Workflow.NewGuid().ToString();
+        request = request with
         {
-            active.Add(ImportArtist(artist));
-            if (active.Count == 10)
-                await FinishOne();
-        }
-        // Drain before rollover, but keep replacing finished artists while there
-        // is work. A slow artist must not leave nine provider slots idle.
-        while (active.Count > 0)
-            await FinishOne();
+            RequestId = requestId,
+            Run =
+                request.Run
+                ?? new IngestionRun(requestId, Workflow.UtcNow + IngestionRun.MaximumDuration),
+        };
+        var page = await Workflow.ExecuteActivityAsync(
+            (IngestionBatchActivities activities) => activities.ListArtists(request),
+            ImportWorkflowOptions.Activity(IngestionQueues.Database)
+        );
+        var result = await ImportArtists(request, page.Artists);
+
         if (page.NextOffset.HasValue)
         {
             var next = request with
             {
                 Offset = page.NextOffset.Value,
-                Completed = completed,
-                Failed = failed,
+                Completed = result.Completed,
+                Failed = result.Failed,
             };
             throw Workflow.CreateContinueAsNewException(
-                (RefreshBatchWorkflow w) => w.RunAsync(next)
+                (RefreshBatchWorkflow workflow) => workflow.RunAsync(next)
             );
         }
-        return new ImportBatchResult(completed, failed);
 
-        async Task FinishOne()
-        {
-            var finished = await Workflow.WhenAnyAsync(active);
-            active.Remove(finished);
-            if (await finished)
-                completed++;
-            else
-                failed++;
-        }
-
-        async Task<bool> ImportArtist(string artist)
-        {
-            var childRequest = new ArtistImportRequest(
-                artist,
-                request.RequestId + "/" + artist,
-                Year: request.Mode == "thin" ? Workflow.UtcNow.Year : null,
-                RebuildOnly: request.Mode == "rebuild"
-            );
-            try
-            {
-                var result = await Workflow.ExecuteChildWorkflowAsync(
-                    (ArtistRefreshWorkflow w) => w.RunAsync(childRequest, null),
-                    new ChildWorkflowOptions
-                    {
-                        Id = "ingest/artist/" + artist,
-                        TaskQueue = IngestionQueues.Workflows,
-                        ParentClosePolicy = ParentClosePolicy.RequestCancel,
-                    }
-                );
-                return result.FailedItems == 0;
-            }
-            catch (TemporalException error) when (!TemporalException.IsCanceledException(error))
-            {
-                // A conflicting manual import or failed artist is visible in the batch result.
-                return false;
-            }
-        }
+        return result;
     }
-}
 
-/// <summary>Indexes Archive artist collections one upstream page at a time.</summary>
-[Workflow]
-public class ArchiveArtistDiscoveryWorkflow
-{
-    [WorkflowRun]
-    public async Task<int> RunAsync(
-        string? requestId = null,
-        string? cursor = null,
-        int fetched = 0
+    private static async Task<ImportBatchResult> ImportArtists(
+        ImportBatchRequest request,
+        string[] artists
     )
     {
-        requestId ??= Workflow.NewGuid().ToString();
-        for (var pages = 0; ; pages++)
+        var result = new ImportBatchResult(request.Completed, request.Failed);
+        var active = new List<Task<bool>>();
+        foreach (var artist in artists)
         {
-            var page = await Workflow.ExecuteActivityAsync(
-                (IngestionBatchActivities a) => a.DiscoverArtists(requestId, cursor, fetched),
-                ImportComposition.Options(IngestionQueues.Providers["archive.org"])
+            active.Add(ImportArtist(request, artist));
+            if (active.Count == 10)
+            {
+                result = await FinishOne(active, result);
+            }
+        }
+
+        // Rollover must not strand active children. During admission, a slow artist
+        // does not block replacing any of the other nine completed children.
+        while (active.Count > 0)
+        {
+            result = await FinishOne(active, result);
+        }
+
+        return result;
+    }
+
+    private static async Task<ImportBatchResult> FinishOne(
+        List<Task<bool>> active,
+        ImportBatchResult result
+    )
+    {
+        var finished = await Workflow.WhenAnyAsync(active);
+        active.Remove(finished);
+        return await finished
+            ? result with
+            {
+                Completed = result.Completed + 1,
+            }
+            : result with
+            {
+                Failed = result.Failed + 1,
+            };
+    }
+
+    private static async Task<bool> ImportArtist(ImportBatchRequest batch, string artist)
+    {
+        var requestId = batch.RequestId + "/" + artist;
+        var request = new ArtistImportRequest(
+            artist,
+            requestId,
+            Year: batch.Mode == "thin" ? Workflow.UtcNow.Year : null,
+            RebuildOnly: batch.Mode == "rebuild",
+            Run: new IngestionRun(requestId, batch.Run!.Deadline)
+        );
+        var options = new ChildWorkflowOptions
+        {
+            Id = "ingest/artist/" + artist,
+            TaskQueue = IngestionQueues.Workflows,
+            ParentClosePolicy = ParentClosePolicy.RequestCancel,
+            ExecutionTimeout = IngestionRun.MaximumDuration,
+        };
+
+        try
+        {
+            var result = await Workflow.ExecuteChildWorkflowAsync(
+                (ArtistRefreshWorkflow workflow) => workflow.RunAsync(request, null),
+                options
             );
-            fetched += page.Count;
-            cursor = page.NextCursor;
-            if (cursor == null)
-                return fetched;
-            if (pages >= 100 || Workflow.ContinueAsNewSuggested)
-                throw Workflow.CreateContinueAsNewException(
-                    (ArchiveArtistDiscoveryWorkflow w) => w.RunAsync(requestId, cursor, fetched)
-                );
+            return result.FailedItems == 0;
+        }
+        catch (TemporalException error) when (!TemporalException.IsCanceledException(error))
+        {
+            // A conflicting manual import or failed artist remains visible in the batch result.
+            return false;
         }
     }
 }

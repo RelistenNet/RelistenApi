@@ -23,14 +23,13 @@ public class TestIngestionWorkflows
     public async Task StopServer() => await environment.DisposeAsync();
 
     [Test]
-    public async Task FullImportStagesDependenciesBeforeApplyingAndReportsFailures()
+    public async Task FullImportCommitsSuccessfulItemsAndReportsFailures()
     {
         var activities = new RecordingActivities(3, failedIndex: 1);
         var result = await Run(activities, false);
         result.Stats.Created.Should().Be(2);
         result.FailedItems.Should().Be(1);
         activities.Applied.Should().Equal(0, 2);
-        activities.Failures.Should().Equal(1);
         activities.Finished.Should().BeTrue();
     }
 
@@ -40,7 +39,8 @@ public class TestIngestionWorkflows
         var activities = new RecordingActivities(1);
         var result = await Run(activities, true);
         result.Stats.Created.Should().Be(1);
-        activities.Fetches.Should().Equal((0, 0), (0, 1));
+        activities.Discoveries.Should().Be(0);
+        activities.Reconciliations.Should().Be(0);
         activities.Applied.Should().Equal(0);
         activities.Finished.Should().BeTrue();
     }
@@ -52,7 +52,7 @@ public class TestIngestionWorkflows
         var result = await Run(activities, false);
         result.Stats.Created.Should().Be(180);
         activities.Applied.Should().Equal(Enumerable.Range(0, 180));
-        activities.Preparations.Should().BeGreaterThan(1);
+        activities.Preparations.Should().Be(1);
     }
 
     [Test]
@@ -62,7 +62,7 @@ public class TestIngestionWorkflows
         var result = await Run(activities, false);
         result.FailedItems.Should().Be(0);
         activities.Applied.Should().Equal(0);
-        activities.Fetches.Should().Equal((0, 0), (0, 0), (0, 1));
+        activities.Attempts.Should().Equal(0, 0);
     }
 
     [Test]
@@ -83,6 +83,7 @@ public class TestIngestionWorkflows
                 );
                 await activities.FetchEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 await handle.CancelAsync();
+                await activities.FetchCanceled.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 activities.ReleaseFetch.SetResult();
                 Func<Task> finish = async () => await handle.GetResultAsync();
                 var failure = await finish.Should().ThrowAsync<WorkflowFailedException>();
@@ -203,7 +204,7 @@ public class TestIngestionWorkflows
                     while (
                         !(await handle.FetchHistoryAsync()).Events.Any(e =>
                             e.ActivityTaskScheduledEventAttributes?.ActivityType.Name
-                            == "Ingestion.Discover"
+                            == "Ingestion.PrepareProvider"
                         )
                     )
                         await Task.Delay(25, timeout.Token);
@@ -224,6 +225,18 @@ public class TestIngestionWorkflows
         );
     }
 
+    [Test]
+    public async Task FailedPrerequisiteStopsBeforeDiscoveryAndReconciliation()
+    {
+        var activities = new RecordingActivities(3) { FailPreparation = true };
+        Func<Task> run = async () => await Run(activities, false);
+        await run.Should().ThrowAsync<WorkflowFailedException>();
+        activities.Discoveries.Should().Be(0);
+        activities.Applied.Should().BeEmpty();
+        activities.Reconciliations.Should().Be(0);
+        activities.Finished.Should().BeFalse();
+    }
+
     private async Task<ImportResult> Run(RecordingActivities activities, bool singleItem)
     {
         var request = new ArtistImportRequest(
@@ -241,7 +254,7 @@ public class TestIngestionWorkflows
                 );
                 var result = singleItem
                     ? await environment.Client.ExecuteWorkflowAsync(
-                        (ReimportItemWorkflow w) => w.RunAsync(request, null),
+                        (ReimportItemWorkflow w) => w.RunAsync(request),
                         options
                     )
                     : await environment.Client.ExecuteWorkflowAsync(
@@ -286,15 +299,17 @@ public class TestIngestionWorkflows
         );
     }
 
-    // These activities model observable provider behavior. They do not mock workflow internals.
+    // These activities model provider behavior at the actual Temporal activity boundary.
     public class RecordingActivities(int count, int? failedIndex = null) : IIngestionActivities
     {
-        public List<(int, int)> Fetches { get; } = new();
+        public List<int> Attempts { get; } = new();
         public List<int> Applied { get; } = new();
-        public List<int> Failures { get; } = new();
         public int Preparations { get; private set; }
+        public int Discoveries { get; private set; }
+        public int Reconciliations { get; private set; }
         public bool Finished { get; private set; }
         public bool FailFirstFetch { get; set; }
+        public bool FailPreparation { get; init; }
         public bool HoldFetch { get; init; }
         public bool FetchDelay { get; init; }
         public bool HoldFirstArtist { get; init; }
@@ -306,6 +321,8 @@ public class TestIngestionWorkflows
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource FetchEntered { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FetchCanceled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource ReleaseFetch { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -315,94 +332,142 @@ public class TestIngestionWorkflows
                 new ArtistBatchPage(
                     Enumerable
                         .Range(0, BatchArtists)
-                        .Select(i => request.RequestId + "/" + i)
+                        .Select(index => request.RequestId + "/" + index)
                         .ToArray(),
                     null
                 )
             );
 
-        [Activity("Ingestion.Prepare")]
-        public Task<ArtistImportPlan> Prepare(ArtistImportRequest request)
+        [Activity("Ingestion.PrepareArtist")]
+        public Task<ArtistImportPlan> PrepareArtist(ArtistImportRequest request)
         {
             lock (sync)
             {
                 Preparations++;
                 if (Preparations == 11)
+                {
                     EleventhArtistPrepared.TrySetResult();
+                }
             }
+
             return Task.FromResult(new ArtistImportPlan("artist", ["archive.org"]));
         }
 
-        [Activity("Ingestion.Discover")]
-        public Task<ImportPage> Discover(
+        [Activity("Ingestion.PrepareProvider")]
+        public Task<ImportStats> PrepareProvider(ArtistImportRequest request, string provider)
+        {
+            if (FailPreparation)
+            {
+                throw new ApplicationFailureException(
+                    "Required catalog unavailable",
+                    nonRetryable: true
+                );
+            }
+
+            return Task.FromResult(new ImportStats());
+        }
+
+        [Activity("Ingestion.DiscoverItems")]
+        public Task<ImportPage> DiscoverItems(
             ArtistImportRequest request,
             string provider,
-            string? cursor
-        ) => Task.FromResult(new ImportPage("page", count, null));
-
-        [Activity("Ingestion.Fetch")]
-        public async Task<bool> Fetch(ImportItemRef item, int part)
+            DiscoveryCursor? cursor
+        )
         {
             lock (sync)
             {
-                Fetches.Add((item.Index, part));
+                Discoveries++;
+            }
+
+            var offset = cursor?.Offset ?? 0;
+            var items = Enumerable
+                .Range(offset, Math.Min(40, count - offset))
+                .Select(index => new ImportItem(index.ToString(), "fixture", index))
+                .ToArray();
+            var next =
+                offset + items.Length < count
+                    ? new DiscoveryCursor(Offset: offset + items.Length)
+                    : null;
+            return Task.FromResult(new ImportPage(items, next));
+        }
+
+        [Activity("Ingestion.ImportItem")]
+        public async Task<ItemImportResult> ImportItem(
+            ArtistImportRequest request,
+            string provider,
+            ImportItem? item
+        )
+        {
+            var index = item?.Index ?? 0;
+            lock (sync)
+            {
+                Attempts.Add(index);
                 MaxActiveFetches = Math.Max(MaxActiveFetches, ++activeFetches);
             }
+
             try
             {
+                var activity = ActivityExecutionContext.Current;
+                using var registration = activity.CancellationToken.Register(() =>
+                    FetchCanceled.TrySetResult()
+                );
                 FetchEntered.TrySetResult();
-                if (HoldFetch || (HoldFirstArtist && item.Request.Artist.EndsWith("/0")))
-                    await ReleaseFetch.Task;
+                if (HoldFetch || (HoldFirstArtist && request.Artist.EndsWith("/0")))
+                {
+                    while (!ReleaseFetch.Task.IsCompleted)
+                    {
+                        activity.Heartbeat();
+                        await Task.WhenAny(ReleaseFetch.Task, Task.Delay(50));
+                        activity.CancellationToken.ThrowIfCancellationRequested();
+                    }
+                }
+
                 if (FetchDelay)
+                {
                     await Task.Delay(100);
+                }
+
                 if (FailFirstFetch)
                 {
                     FailFirstFetch = false;
                     throw new ApplicationFailureException("Temporary upstream error");
                 }
-                if (item.Index == failedIndex)
+
+                if (index == failedIndex)
+                {
                     throw new ApplicationFailureException(
                         "Invalid provider metadata",
                         nonRetryable: true
                     );
-                return part == 1;
+                }
+
+                lock (sync)
+                {
+                    Applied.Add(index);
+                }
+
+                return new ItemImportResult(new ImportStats { Created = 1 });
             }
             finally
             {
                 lock (sync)
+                {
                     activeFetches--;
+                }
             }
         }
 
-        [Activity("Ingestion.Apply")]
-        public Task<ImportStats> Apply(ImportItemRef item)
+        [Activity("Ingestion.ReconcileProvider")]
+        public Task<ProviderResult> ReconcileProvider(
+            ArtistImportRequest request,
+            string provider,
+            string[] ineligibleItems,
+            bool hasFailures
+        )
         {
-            lock (sync)
-            {
-                Fetches.Should().Contain((item.Index, 1));
-                Applied.Add(item.Index);
-            }
-            return Task.FromResult(new ImportStats { Created = 1 });
+            Reconciliations++;
+            return Task.FromResult(new ProviderResult(new ImportStats()));
         }
-
-        [Activity("Ingestion.RecordFailure")]
-        public Task RecordFailure(ImportItemRef item, string reason)
-        {
-            Failures.Add(item.Index);
-            return Task.CompletedTask;
-        }
-
-        [Activity("Ingestion.Candidates")]
-        public Task<string[]> Candidates(ArtistImportRequest request, string provider) =>
-            Task.FromResult(Array.Empty<string>());
-
-        [Activity("Ingestion.Verify")]
-        public Task Verify(ArtistImportRequest request, string provider, string key) =>
-            Task.CompletedTask;
-
-        [Activity("Ingestion.FinishProvider")]
-        public Task<ImportStats> FinishProvider(ArtistImportRequest request, string provider) =>
-            Task.FromResult(new ImportStats());
 
         [Activity("Ingestion.FinishArtist")]
         public Task<ImportResult> FinishArtist(ArtistImportRequest request, ImportResult result)

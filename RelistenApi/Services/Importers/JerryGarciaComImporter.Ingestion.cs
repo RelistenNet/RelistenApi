@@ -10,10 +10,8 @@ namespace Relisten.Import;
 public partial class JerryGarciaComImporter : IProviderIngestion
 {
     /// <inheritdoc />
-    public async Task<ProviderPage> DiscoverAsync(ProviderContext context, string? cursor)
+    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
     {
-        if (context.Request.Item != null)
-            return new ProviderPage(Array.Empty<ProviderItem>());
         using var response = await http.GetAsync(
             ShowPagesListingUrl(context.Source),
             context.CancellationToken
@@ -27,74 +25,98 @@ public partial class JerryGarciaComImporter : IProviderIngestion
                 "Jerry mirror returned an invalid page index."
             );
         await PreloadData(context.Artist);
-        return new ProviderPage(
+        return new DiscoverySnapshot(
             BuildFileMetaObjects(files)
                 .Where(f =>
                     context.Request.BackfillJerryVenues
                         ? existingSetlistShows.ContainsKey(f.Identifier)
                         : !existingSetlistShows.ContainsKey(f.Identifier)
                 )
-                .Select(f => new ProviderItem(f.Identifier, JsonConvert.SerializeObject(f)))
+                .Select(f => new DiscoveredItem(f.Identifier, JsonConvert.SerializeObject(f)))
                 .ToArray()
         );
     }
 
     /// <inheritdoc />
-    public async Task<ProviderFetch> FetchAsync(
+    public async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        ProviderItem item,
-        int part
+        DiscoveredItem item
     )
     {
-        var file = JsonConvert.DeserializeObject<FileMetaObject>(item.Body)!;
+        if (context.Request.Item != null)
+        {
+            return new ItemImportResult(new ImportStats());
+        }
+
+        var file = JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!;
         using var response = await http.GetAsync(
             ShowPageUrl(context.Source, file.FilePath),
             context.CancellationToken
         );
         response.EnsureSuccessStatusCode();
-        return new ProviderFetch(
-            await response.Content.ReadAsStringAsync(context.CancellationToken),
-            ModifiedAt: response.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow
-        );
+        var html = await response.Content.ReadAsStringAsync(context.CancellationToken);
+        var modifiedAt = response.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow;
+
+        return await context.CommitAsync(async () =>
+        {
+            await PreloadData(context.Artist);
+            foreach (var tour in existingTours.Values.Where(t => t != null))
+            {
+                if (tour!.start_date.HasValue)
+                {
+                    tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
+                }
+
+                if (tour.end_date.HasValue)
+                {
+                    tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
+                }
+            }
+            var stats = new ImportStats();
+            if (context.Request.BackfillJerryVenues)
+            {
+                await ApplyVenueBackfill(
+                    stats,
+                    context.Artist,
+                    JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!,
+                    html,
+                    modifiedAt
+                );
+                return new ItemImportResult(stats);
+            }
+            await ProcessPage(
+                stats,
+                context.Artist,
+                JsonConvert.DeserializeObject<FileMetaObject>(item.Metadata)!,
+                html,
+                modifiedAt,
+                null
+            );
+            if (context.Artist.features.tours && tourToStartDate.Count > 0)
+            {
+                await UpdateTourStartEndDates(context.Artist);
+            }
+
+            return new ItemImportResult(stats);
+        });
     }
 
     /// <inheritdoc />
-    public async Task<ImportStats> ApplyAsync(
+    public async Task<ProviderResult> ReconcileAsync(
         ProviderContext context,
-        ProviderItem item,
-        ProviderFetch[] fetched
+        string[] ineligibleItems,
+        bool hasFailures
     )
     {
-        await PreloadData(context.Artist);
-        foreach (var tour in existingTours.Values.Where(t => t != null))
+        if (!context.Request.BackfillJerryVenues || hasFailures)
         {
-            if (tour!.start_date.HasValue)
-                tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
-            if (tour.end_date.HasValue)
-                tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
+            return new ProviderResult(new ImportStats());
         }
-        var stats = new ImportStats();
-        if (context.Request.BackfillJerryVenues)
-        {
-            await ApplyVenueBackfill(
-                stats,
-                context.Artist,
-                JsonConvert.DeserializeObject<FileMetaObject>(item.Body)!,
-                fetched[0].Body,
-                fetched[0].ModifiedAt!.Value
-            );
-            return stats;
-        }
-        await ProcessPage(
-            stats,
-            context.Artist,
-            JsonConvert.DeserializeObject<FileMetaObject>(item.Body)!,
-            fetched[0].Body,
-            fetched[0].ModifiedAt!.Value,
-            null
+
+        return await context.CommitAsync(async () =>
+            new ProviderResult(
+                new ImportStats { Removed = await RemoveOrphanVenues(context.Artist) }
+            )
         );
-        if (context.Artist.features.tours && tourToStartDate.Count > 0)
-            await UpdateTourStartEndDates(context.Artist);
-        return stats;
     }
 }

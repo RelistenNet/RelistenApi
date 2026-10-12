@@ -4,7 +4,14 @@ using Relisten.Import;
 
 namespace Relisten.Ingestion;
 
-/// <summary>A logical ingestion request. RequestId survives retries and Continue-As-New.</summary>
+/// <summary>Identifies one import and the last time its retained inputs may be used.</summary>
+public record IngestionRun(string Id, DateTimeOffset Deadline)
+{
+    public static readonly TimeSpan MaximumDuration = TimeSpan.FromDays(7);
+    public DateTimeOffset RetainUntil => Deadline.AddDays(1);
+}
+
+/// <summary>An artist operation. The workflow assigns Run once and carries it through history rollover.</summary>
 public record ArtistImportRequest(
     string Artist,
     string RequestId,
@@ -12,31 +19,48 @@ public record ArtistImportRequest(
     string? Item = null,
     int? Year = null,
     bool RebuildOnly = false,
-    bool BackfillJerryVenues = false
+    bool BackfillJerryVenues = false,
+    IngestionRun? Run = null
 );
 
-/// <summary>Small workflow checkpoint. Upstream payloads stay in application storage.</summary>
+/// <summary>Position in an upstream page; large discovery snapshots are delivered in small slices.</summary>
+public record DiscoveryCursor(string? Upstream = null, int Offset = 0);
+
+/// <summary>Identifies an item in an immutable discovery snapshot, not a fetched item response.</summary>
+public record ImportItem(string Identifier, string Snapshot, int Index);
+
+/// <summary>A bounded page of item references and the next discovery position.</summary>
+public record ImportPage(ImportItem[] Items, DiscoveryCursor? NextCursor);
+
+/// <summary>Resume position carried by ContinueAsNew. Item responses are never checkpointed.</summary>
 public record ImportCheckpoint(
     int ProviderIndex = 0,
-    string? Cursor = null,
+    DiscoveryCursor? Cursor = null,
     int ItemIndex = 0,
+    bool ProviderPrepared = false,
     int FailedItems = 0,
-    ImportStats? Stats = null
+    int ProviderFailures = 0,
+    ImportStats? Stats = null,
+    string[]? IneligibleItems = null,
+    string[]? Providers = null
 );
 
-/// <summary>A page of staged work; item bodies are addressed by page and index.</summary>
-public record ImportPage(string Key, int ItemCount, string? NextCursor);
-
-/// <summary>Reference to one provider item, independent of a Temporal execution attempt.</summary>
-public record ImportItemRef(ArtistImportRequest Request, string Provider, string Page, int Index);
-
-/// <summary>Artist identity and ordered active providers resolved from the catalog.</summary>
+/// <summary>The artist's enabled provider mappings in import order.</summary>
 public record ArtistImportPlan(string ArtistUuid, string[] Providers);
 
-/// <summary>Compact final result; failures remain visible even when other items succeeded.</summary>
+/// <summary>Committed catalog changes and whether Archive metadata proved an item ineligible.</summary>
+public record ItemImportResult(ImportStats Stats, bool Ineligible = false);
+
+/// <summary>Evidence used for an Archive deletion decision; retained in the activity result and receipt.</summary>
+public record DeletionDecision(string Identifier, string Status, string Reason, bool Delete);
+
+/// <summary>Provider finalization result, including the evidence for reconciliation decisions.</summary>
+public record ProviderResult(ImportStats Stats, DeletionDecision[]? Decisions = null);
+
+/// <summary>Final import counts. Exhausted item failures remain visible as a partial result.</summary>
 public record ImportResult(string RequestId, ImportStats Stats, int FailedItems);
 
-/// <summary>Task queues shared by the API client and worker. PanicStream is intentionally absent.</summary>
+/// <summary>Native task queues. Provider limits apply to activities, which may issue several sequential GETs.</summary>
 public static class IngestionQueues
 {
     public const string Workflows = "ingest-workflows";
@@ -56,20 +80,21 @@ public static class IngestionQueues
     };
 }
 
-/// <summary>A scheduled or manual catalog operation; a request ID identifies its stable artist selection.</summary>
+/// <summary>Scheduled or manual batch with its stable selection and workflow rollover position.</summary>
 public record ImportBatchRequest(
     string Mode,
     string? RequestId = null,
     int Offset = 0,
     int Completed = 0,
-    int Failed = 0
+    int Failed = 0,
+    IngestionRun? Run = null
 );
 
-/// <summary>Bounded artist identifiers for a batch run.</summary>
+/// <summary>A bounded slice of the selected artist UUIDs.</summary>
 public record ArtistBatchPage(string[] Artists, int? NextOffset);
 
-/// <summary>Batch summary including artist workflows that failed or were already running.</summary>
+/// <summary>Batch counts; failed includes an artist already owned by another active import.</summary>
 public record ImportBatchResult(int Completed, int Failed);
 
-/// <summary>Cursor-only result of one Archive collection-discovery page.</summary>
+/// <summary>Result of indexing one Archive collection page.</summary>
 public record DiscoveryPage(string? NextCursor, int Count);

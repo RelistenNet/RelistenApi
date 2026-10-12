@@ -1,20 +1,21 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Relisten.Ingestion;
-using Relisten.Vendor;
 using Relisten.Vendor.PhantasyTour;
 
 namespace Relisten.Import;
 
+// Known shows need no detail fetch. Their dates are reconciled from the complete
+// listing at provider finalization, preserving the upstream's local calendar date.
 public partial class PhantasyTourImporter : IProviderIngestion
 {
     /// <inheritdoc />
-    public async Task<ProviderPage> DiscoverAsync(ProviderContext context, string? cursor)
+    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
     {
-        if (context.Request.Item != null)
-            return new ProviderPage(Array.Empty<ProviderItem>());
         var page = cursor == null ? 1u : uint.Parse(cursor);
         using var response = await http.GetAsync(
             UrlForArtist(context.Source, page),
@@ -24,56 +25,110 @@ public partial class PhantasyTourImporter : IProviderIngestion
         var shows =
             JsonConvert.DeserializeObject<PhantasyTourShowListing[]>(
                 await response.Content.ReadAsStringAsync(context.CancellationToken)
-            )
-            ?? throw new System.IO.InvalidDataException(
-                "Phantasy Tour returned an invalid listing."
-            );
+            ) ?? throw new InvalidDataException("Phantasy Tour returned an invalid listing.");
+        var dates = new Dictionary<string, DateTime>();
+        var selected = new List<DiscoveredItem>();
         await PreloadData(context.Artist);
-        var now = DateTime.UtcNow;
-        var selected = shows.Where(s =>
-            s.dateTime.ToUniversalTime() <= now
-            && !existingSetlistShows.ContainsKey(UpstreamIdentifierForPhantasyTourId(s.id))
-        );
-        return new ProviderPage(
-            selected
-                .Select(s => new ProviderItem(s.id.ToString(), JsonConvert.SerializeObject(s)))
-                .ToArray(),
-            shows.Length == ITEMS_PER_PAGE ? (page + 1).ToString() : null
-        );
+
+        foreach (var show in shows)
+        {
+            if (show.id <= 0 || show.dateTime == default)
+            {
+                throw new InvalidDataException(
+                    "Phantasy Tour returned a show without an ID or local date."
+                );
+            }
+
+            if (show.dateTime > DateTimeOffset.UtcNow)
+            {
+                continue;
+            }
+
+            var identifier = UpstreamIdentifierForPhantasyTourId(show.id);
+            AddListedDate(dates, identifier, show.dateTime.Date);
+            if (!existingSetlistShows.ContainsKey(identifier))
+            {
+                selected.Add(new DiscoveredItem(show.id.ToString(), ""));
+            }
+        }
+
+        var next = shows.Length == ITEMS_PER_PAGE ? (page + 1).ToString() : null;
+        return new DiscoverySnapshot(selected.ToArray(), next, SetlistDates: dates);
     }
 
     /// <inheritdoc />
-    public async Task<ProviderFetch> FetchAsync(
+    public async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        ProviderItem item,
-        int part
+        DiscoveredItem item
     )
     {
-        using var response = await http.GetAsync(
-            UrlForShow(int.Parse(item.Key)),
-            context.CancellationToken
-        );
+        if (context.Request.Item != null)
+        {
+            return new ItemImportResult(new ImportStats());
+        }
+
+        var showId = int.Parse(item.Identifier);
+        using var response = await http.GetAsync(UrlForShow(showId), context.CancellationToken);
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
-        if (JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data == null)
-            throw new System.IO.InvalidDataException(
-                "Phantasy Tour returned invalid show metadata."
-            );
-        return new ProviderFetch(body);
+
+        return await context.CommitAsync(async () =>
+        {
+            await PreloadData(context.Artist);
+            var stats = new ImportStats();
+            await ApplyShowBody(context.Artist, stats, null, showId, body);
+            return new ItemImportResult(stats);
+        });
     }
 
     /// <inheritdoc />
-    public async Task<ImportStats> ApplyAsync(
+    public async Task<ProviderResult> ReconcileAsync(
         ProviderContext context,
-        ProviderItem item,
-        ProviderFetch[] fetched
+        string[] ineligibleItems,
+        bool hasFailures
     )
     {
-        await PreloadData(context.Artist);
-        var stats = new ImportStats();
-        await ApplyShowBody(context.Artist, stats, null, int.Parse(item.Key), fetched[0].Body);
-        if (context.Artist.features.tours)
+        var dates = new Dictionary<string, DateTime>();
+        string? cursor = null;
+        do
+        {
+            var snapshot =
+                await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
+                    context.Run,
+                    IngestionActivities.DiscoveryName(DataSourceName, cursor)
+                )
+                ?? throw new InvalidOperationException(
+                    "Phantasy Tour discovery has not completed."
+                );
+            foreach (var (identifier, date) in snapshot.SetlistDates!)
+            {
+                AddListedDate(dates, identifier, date);
+            }
+
+            cursor = snapshot.NextCursor;
+        } while (cursor != null);
+
+        return await context.CommitAsync(async () =>
+        {
+            var corrected = await _setlistShowService.UpdateDates(context.Artist, dates);
             await UpdateTourStartEndDates(context.Artist);
-        return stats;
+            return new ProviderResult(new ImportStats { Updated = corrected });
+        });
+    }
+
+    private static void AddListedDate(
+        Dictionary<string, DateTime> dates,
+        string identifier,
+        DateTime date
+    )
+    {
+        if (dates.TryGetValue(identifier, out var previous) && previous != date)
+        {
+            throw new InvalidDataException(
+                $"Phantasy Tour returned conflicting dates for {identifier}."
+            );
+        }
+
+        dates[identifier] = date;
     }
 }

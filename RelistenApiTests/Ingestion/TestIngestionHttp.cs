@@ -10,16 +10,18 @@ namespace RelistenApiTests.Ingestion;
 public class TestIngestionHttp
 {
     [Test]
-    public async Task OneActivityCannotBypassTheQueueByIssuingMultipleRequests()
+    public async Task OneItemCanFollowARedirectAndFetchAnotherRelatedInput()
     {
         using var server = new FixtureHttpServer();
+        server.Redirects["/first"] = "/canonical";
         using var http = new HttpClient(
             new IngestionHttpHandler(CancellationToken.None, server.Address)
         );
-        using var response = await http.GetAsync("https://upstream.invalid/first");
-        Func<Task> second = async () => await http.GetAsync("https://upstream.invalid/second");
-        await second.Should().ThrowAsync<ApplicationFailureException>();
-        server.Requests.Should().Be(1);
+        using var first = await http.GetAsync("https://upstream.invalid/first");
+        using var second = await http.GetAsync("https://upstream.invalid/reviews");
+        first.IsSuccessStatusCode.Should().BeTrue();
+        second.IsSuccessStatusCode.Should().BeTrue();
+        server.Requests.Should().Be(3);
     }
 
     [Test]

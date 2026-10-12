@@ -7,25 +7,20 @@ using Temporalio.Exceptions;
 
 namespace Relisten.Ingestion;
 
-// One activity attempt corresponds to at most one request, so native queue limits
-// remain useful. The optional endpoint override is for isolated fixture servers.
+// GETs may repeat on activity retry. Queue limits control concurrent item operations.
 internal sealed class IngestionHttpHandler(CancellationToken activityCancellation, Uri? endpoint)
-    : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = false })
+    : DelegatingHandler(new HttpClientHandler { AllowAutoRedirect = true })
 {
-    private int requests;
-
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
     )
     {
-        if (Interlocked.Increment(ref requests) != 1)
-            throw new ApplicationFailureException(
-                "An ingestion fetch activity attempted multiple HTTP requests.",
-                nonRetryable: true
-            );
         if (endpoint != null)
+        {
             request.RequestUri = new Uri(endpoint, request.RequestUri!.PathAndQuery);
+        }
+
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             activityCancellation

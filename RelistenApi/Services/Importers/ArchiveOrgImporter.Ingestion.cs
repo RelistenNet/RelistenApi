@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
@@ -12,12 +13,12 @@ using InvalidDataException = System.IO.InvalidDataException;
 
 namespace Relisten.Import;
 
-// Temporal uses the existing metadata parser and catalog upserts, but keeps
-// discovery, each fetch, and reconciliation independently resumable.
+// Full discovery is a verified rows=* snapshot. Item metadata lives only for one
+// activity attempt; absence alone never authorizes a deletion.
 public partial class ArchiveOrgImporter : IProviderIngestion
 {
     /// <inheritdoc />
-    public async Task<ProviderPage> DiscoverAsync(ProviderContext context, string? cursor)
+    public async Task<DiscoverySnapshot> DiscoverAsync(ProviderContext context, string? cursor)
     {
         var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync(
             context.Source.upstream_identifier,
@@ -29,8 +30,6 @@ public partial class ArchiveOrgImporter : IProviderIngestion
         );
         var selected = docs.Where(doc =>
         {
-            if (context.Request.Item != null)
-                return doc.identifier == context.Request.Item;
             var source = existingSources.GetValue(doc.identifier);
             var review = existingSourceReviewInformation.GetValue(doc.identifier);
             var date = ArchiveOrgImporterUtils.FixDisplayDate(doc.raw_display_date, doc.identifier);
@@ -39,168 +38,178 @@ public partial class ArchiveOrgImporter : IProviderIngestion
                 || (date != null && source.display_date != date)
                 || (CurrentImportOptions.RescrapeRecentDays.HasValue && doc.addeddate > cutoff);
         });
-        return new ProviderPage(
+
+        return new DiscoverySnapshot(
             selected
-                .Select(d => new ProviderItem(d.identifier, JsonConvert.SerializeObject(d)))
+                .Select(doc => new DiscoveredItem(doc.identifier, JsonConvert.SerializeObject(doc)))
                 .ToArray(),
-            ObservedKeys: docs.Select(d => d.identifier).ToArray()
+            ObservedIdentifiers: docs.Select(doc => doc.identifier).ToArray()
         );
     }
 
     /// <inheritdoc />
-    public async Task<ProviderFetch> FetchAsync(
+    public async Task<ItemImportResult> ImportItemAsync(
         ProviderContext context,
-        ProviderItem item,
-        int part
+        DiscoveredItem item
     )
     {
+        var doc = string.IsNullOrEmpty(item.Metadata)
+            ? await new ArchiveOrgSearchClient(http).FetchItemAsync(
+                context.Source.upstream_identifier,
+                item.Identifier
+            )
+            : JsonConvert.DeserializeObject<SearchDoc>(item.Metadata)!;
+        if (doc == null)
+        {
+            throw new InvalidDataException(
+                "The requested Archive item was not found in its collection."
+            );
+        }
+
         using var response = await http.GetAsync(
-            DetailsUrlForIdentifier(item.Key),
+            DetailsUrlForIdentifier(item.Identifier),
             context.CancellationToken
         );
         response.EnsureSuccessStatusCode();
-        return new ProviderFetch(
-            await response.Content.ReadAsStringAsync(context.CancellationToken)
-        );
-    }
-
-    /// <inheritdoc />
-    public async Task<ImportStats> ApplyAsync(
-        ProviderContext context,
-        ProviderItem item,
-        ProviderFetch[] fetched
-    )
-    {
-        var doc = JsonConvert.DeserializeObject<SearchDoc>(item.Body)!;
         var details =
             JsonConvert.DeserializeObject<RootObject>(
-                fetched[0].Body,
+                await response.Content.ReadAsStringAsync(context.CancellationToken),
                 new TolerantStringConverter()
             ) ?? throw new InvalidDataException("Archive returned empty metadata.");
+
         if (details.is_dark == true)
-            return new ImportStats();
+        {
+            return new ItemImportResult(new ImportStats());
+        }
+
         if (
             !string.IsNullOrEmpty(details.error)
             || details.errcode.HasValue
-            || details.metadata?.identifier != item.Key
+            || details.metadata?.identifier != item.Identifier
         )
+        {
             throw new InvalidDataException("Archive returned erroneous or mismatched metadata.");
+        }
+
         var date =
             details.metadata.date == null
                 ? null
                 : ArchiveOrgImporterUtils.FixDisplayDate(details.metadata);
         if (date == null)
-            return new ImportStats(); // Preserve existing unsupported-date skip behavior.
-        if (HasNoVbrMp3Files(details))
         {
-            await context.Store.SaveAsync(
-                context.Request.RequestId,
-                "archive.org/no-mp3/" + item.Key,
-                new { confirmed = true }
-            );
-            return new ImportStats();
+            return new ItemImportResult(new ImportStats());
         }
-        // Fetch one source, rather than preloading the artist's entire catalog for every item.
-        var source = await db.WithWriteConnection(c =>
-            c.QuerySingleOrDefaultAsync<Source>(
-                "SELECT * FROM sources WHERE artist_id=@artistId AND upstream_identifier=@identifier",
-                new { artistId = context.Artist.id, identifier = item.Key }
-            )
-        );
-        return await ImportSingleIdentifier(
-            context.Artist,
-            source,
-            doc,
-            details,
-            context.Source,
-            date,
-            null
-        );
+
+        return await context.CommitAsync(async () =>
+        {
+            var source = await db.WithWriteConnection(connection =>
+                connection.QuerySingleOrDefaultAsync<Source>(
+                    "SELECT * FROM sources WHERE artist_id=@artistId AND upstream_identifier=@identifier",
+                    new { artistId = context.Artist.id, identifier = item.Identifier }
+                )
+            );
+            if (HasNoVbrMp3Files(details))
+            {
+                return new ItemImportResult(new ImportStats(), Ineligible: source != null);
+            }
+
+            var stats = await ImportSingleIdentifier(
+                context.Artist,
+                source,
+                doc,
+                details,
+                context.Source,
+                date,
+                null
+            );
+            return new ItemImportResult(stats);
+        });
     }
 
-    internal async Task<string[]> IngestionDeletionCandidates(ProviderContext context)
-    {
-        var requestId = context.Request.RequestId;
-        var saved = await context.Store.ReadAsync<string[]>(requestId, "archive.org/candidates");
-        if (saved != null)
-            return saved;
-        var observed =
-            await context.Store.ReadAsync<string[]>(requestId, "archive.org/observed")
-            ?? throw new InvalidOperationException("Archive discovery has not completed.");
-        var noMp3 = await context.Store.KeysAsync(requestId, "archive.org/no-mp3/");
-        var existing = await _sourceService.AllForArtistFromPrimary(context.Artist);
-        var candidates = existing
-            .Select(s => s.upstream_identifier)
-            .Except(observed.Except(noMp3))
-            .ToArray();
-        if (ExceedsDeletionLimit(candidates.Length))
-        {
-            await discordWebhookNotifier.SendAsync(
-                $"Archive deletion guard: {context.Artist.name} has {candidates.Length} candidates; none were deleted."
-            );
-            candidates = Array.Empty<string>();
-        }
-        await context.Store.SaveAsync(requestId, "archive.org/candidates", candidates);
-        return candidates;
-    }
-
-    internal async Task VerifyIngestionCandidate(ProviderContext context, string identifier)
-    {
-        var key = "archive.org/verification/" + identifier;
-        if (await context.Store.ReadAsync<DeletionEvidence>(context.Request.RequestId, key) != null)
-            return;
-        var noMp3 = await context.Store.KeysAsync(context.Request.RequestId, "archive.org/no-mp3/");
-        DeletionEvidence evidence;
-        if (noMp3.Contains(identifier))
-            evidence = new DeletionEvidence(
-                true,
-                "Ineligible",
-                "Metadata contains no VBR MP3 files"
-            );
-        else
-        {
-            var metadata = await new ArchiveOrgMetadataClient(http).CheckAsync(identifier);
-            evidence = new DeletionEvidence(
-                metadata.Status == ArchiveOrgItemStatus.Deleted,
-                metadata.Status.ToString(),
-                metadata.Reason
-            );
-        }
-        await context.Store.SaveAsync(context.Request.RequestId, key, evidence);
-    }
-
-    internal async Task<ImportStats> FinishIngestion(ProviderContext context)
+    /// <inheritdoc />
+    public async Task<ProviderResult> ReconcileAsync(
+        ProviderContext context,
+        string[] ineligibleItems,
+        bool hasFailures
+    )
     {
         if (context.Request.Year != null || context.Request.Item != null)
-            return new ImportStats();
-        var candidates =
-            await context.Store.ReadAsync<string[]>(
-                context.Request.RequestId,
-                "archive.org/candidates"
-            ) ?? Array.Empty<string>();
-        var deleted = new System.Collections.Generic.List<string>();
+        {
+            return new ProviderResult(new ImportStats());
+        }
+
+        var snapshot =
+            await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
+                context.Run,
+                IngestionActivities.DiscoveryName(DataSourceName, null)
+            ) ?? throw new InvalidOperationException("Archive discovery has not completed.");
+        var observed =
+            snapshot.ObservedIdentifiers
+            ?? throw new InvalidOperationException(
+                "Archive discovery did not record its observed identifiers."
+            );
+        var existing = await _sourceService.AllForArtistFromPrimary(context.Artist);
+        var candidates = existing
+            .Select(source => source.upstream_identifier)
+            .Except(observed.Except(ineligibleItems))
+            .ToArray();
+
+        if (ExceedsDeletionLimit(candidates.Length) || ExceedsDeletionLimit(ineligibleItems.Length))
+        {
+            return new ProviderResult(
+                new ImportStats(),
+                [
+                    new DeletionDecision(
+                        "*",
+                        "Guarded",
+                        "More than five deletion candidates; no sources were deleted.",
+                        false
+                    ),
+                ]
+            );
+        }
+
+        var decisions = new List<DeletionDecision>();
         foreach (var identifier in candidates)
         {
-            var evidence = await context.Store.ReadAsync<DeletionEvidence>(
-                context.Request.RequestId,
-                "archive.org/verification/" + identifier
+            if (ineligibleItems.Contains(identifier))
+            {
+                decisions.Add(
+                    new DeletionDecision(
+                        identifier,
+                        "Ineligible",
+                        "Metadata contains no VBR MP3 files",
+                        true
+                    )
+                );
+                continue;
+            }
+
+            var metadata = await new ArchiveOrgMetadataClient(http).CheckAsync(identifier);
+            decisions.Add(
+                new DeletionDecision(
+                    identifier,
+                    metadata.Status.ToString(),
+                    metadata.Reason,
+                    metadata.Status == ArchiveOrgItemStatus.Deleted
+                )
             );
-            if (evidence?.Confirmed == true)
-                deleted.Add(identifier);
         }
-        if (ExceedsDeletionLimit(deleted.Count))
-            return new ImportStats();
-        return new ImportStats
+
+        return await context.CommitAsync(async () =>
         {
-            Removed =
-                deleted.Count == 0
+            var deleted = decisions
+                .Where(decision => decision.Delete)
+                .Select(decision => decision.Identifier)
+                .ToArray();
+            var removed =
+                deleted.Length == 0
                     ? 0
                     : await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
                         context.Artist.id,
                         deleted
-                    ),
-        };
+                    );
+            return new ProviderResult(new ImportStats { Removed = removed }, decisions.ToArray());
+        });
     }
-
-    private record DeletionEvidence(bool Confirmed, string Status, string Reason);
 }

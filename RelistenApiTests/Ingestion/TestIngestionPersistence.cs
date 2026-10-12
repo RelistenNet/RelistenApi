@@ -1,4 +1,3 @@
-using System.Transactions;
 using Dapper;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
@@ -22,8 +21,9 @@ public class TestIngestionPersistence
     private IHost host = null!;
     private FixtureHttpServer upstream = null!;
     private DbService db = null!;
-    private ImportRunRepository store = null!;
+    private IngestionStore store = null!;
     private string requestId = null!;
+    private IngestionRun Run => new(requestId, DateTimeOffset.UtcNow.AddDays(7));
     private Guid artistUuid;
     private int artistId;
     private string originalWrite = null!;
@@ -37,12 +37,25 @@ public class TestIngestionPersistence
         originalWrite = DbService.ConnStr;
         originalRead = DbService.ReadOnlyConnStr;
         upstream = new FixtureHttpServer();
+        var testNamespace = "ingestion-tests-" + Guid.NewGuid().ToString("N");
+        var admin = await TemporalClient.ConnectAsync(
+            new TemporalClientConnectOptions("127.0.0.1:17233")
+        );
+        await admin.WorkflowService.RegisterNamespaceAsync(
+            new Temporalio.Api.WorkflowService.V1.RegisterNamespaceRequest
+            {
+                Namespace = testNamespace,
+                WorkflowExecutionRetentionPeriod =
+                    Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(TimeSpan.FromDays(1)),
+            }
+        );
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
         builder.Configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
                 ["Temporal:Address"] = "127.0.0.1:17233",
+                ["Temporal:Namespace"] = testNamespace,
                 ["Ingestion:Engine"] = "Temporal",
                 ["Ingestion:UpstreamBaseUrl"] = upstream.Address.ToString(),
             }
@@ -64,7 +77,7 @@ public class TestIngestionPersistence
         SqlMapper.AddTypeHandler(new DateTimeHandler());
         host = builder.Build();
         db = host.Services.GetRequiredService<DbService>();
-        store = new ImportRunRepository(db);
+        store = new IngestionStore(db);
         await host.StartAsync();
         await db.WithWriteConnection(c =>
             c.ExecuteAsync(
@@ -118,18 +131,18 @@ public class TestIngestionPersistence
     [Test]
     public async Task LostAcknowledgementReturnsCommittedReceiptWithoutRepeatingWrites()
     {
-        var first = await store.ApplyOnceAsync(requestId, "apply", Increment);
-        var second = await store.ApplyOnceAsync(requestId, "apply", Increment);
+        var first = await store.CommitAsync(Run, "apply", Increment);
+        var second = await store.CommitAsync(Run, "apply", Increment);
         second.Should().BeEquivalentTo(first);
         (await Featured()).Should().Be(1);
     }
 
     [Test]
-    public async Task FailedApplyRollsBackDomainWritesAndReceiptThenCanResume()
+    public async Task FailedCommitRollsBackCatalogAndReceiptBeforeRetry()
     {
         Func<Task> fail = async () =>
-            await store.ApplyOnceAsync<Receipt>(
-                requestId,
+            await store.CommitAsync<Receipt>(
+                Run,
                 "apply",
                 async () =>
                 {
@@ -139,16 +152,87 @@ public class TestIngestionPersistence
             );
         await fail.Should().ThrowAsync<InvalidDataException>();
         (await Featured()).Should().Be(0);
-        (await store.ReadAsync<Receipt>(requestId, "apply")).Should().BeNull();
-        (await store.ApplyOnceAsync(requestId, "apply", Increment)).Value.Should().Be(1);
+        (await store.ReadReceiptAsync<Receipt>(Run, "apply")).Should().BeNull();
+        (await store.CommitAsync(Run, "apply", Increment)).Value.Should().Be(1);
+    }
+
+    [Test]
+    public async Task CancellationBeforeCommitRollsBackCatalogChangesAndReceipt()
+    {
+        using var cancellation = new CancellationTokenSource();
+        Func<Task> attempt = async () =>
+            await store.CommitAsync(
+                Run,
+                "cancelled",
+                async () =>
+                {
+                    var result = await Increment();
+                    cancellation.Cancel();
+                    return result;
+                },
+                cancellation.Token
+            );
+
+        await attempt.Should().ThrowAsync<OperationCanceledException>();
+        (await Featured()).Should().Be(0);
+        (await store.ReadReceiptAsync<Receipt>(Run, "cancelled")).Should().BeNull();
+    }
+
+    [Test]
+    public async Task ItemRetryRefetchesMetadataInsteadOfReusingTheFailedResponse()
+    {
+        var attempts = 0;
+        upstream.Respond = uri =>
+        {
+            if (!uri.AbsolutePath.StartsWith("/metadata/"))
+            {
+                return Listing;
+            }
+
+            return Interlocked.Increment(ref attempts) == 1 ? "{}" : Metadata("Recovered title");
+        };
+
+        var result = await Import();
+        result.FailedItems.Should().Be(0);
+        attempts.Should().Be(2);
+        (await Catalog()).Should().ContainSingle().Which.title.Should().Be("Recovered title");
+    }
+
+    [Test]
+    public async Task RepeatedItemActivityReturnsItsReceiptWithoutRefetchingOrChangingCounts()
+    {
+        using var scope = host.Services.CreateScope();
+        var activities = ActivatorUtilities.CreateInstance<IngestionActivities>(
+            scope.ServiceProvider
+        );
+        var environment = new Temporalio.Testing.ActivityEnvironment();
+        var request = new ArtistImportRequest(artistUuid.ToString(), requestId, Run: Run);
+        var page = await environment.RunAsync(() =>
+            activities.DiscoverItems(request, "archive.org", null)
+        );
+        var first = await environment.RunAsync(() =>
+            activities.ImportItem(request, "archive.org", page.Items.Single())
+        );
+        var requests = upstream.Requests;
+        upstream.Respond = _ => "{}";
+        var repeated = await environment.RunAsync(() =>
+            activities.ImportItem(request, "archive.org", page.Items.Single())
+        );
+
+        repeated.Should().BeEquivalentTo(first);
+        upstream.Requests.Should().Be(requests);
+        await environment.RunAsync(() =>
+            activities.FinishArtist(request, new ImportResult(requestId, first.Stats, 0))
+        );
+        (await Catalog()).Should().ContainSingle().Which.title.Should().Be("First title");
     }
 
     [Test]
     public async Task OverlappingAttemptsCommitOnlyOnceWhenTheConflictIsRetried()
     {
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var first = store.ApplyOnceAsync(
-            requestId,
+        var first = store.CommitAsync(
+            Run,
             "apply",
             async () =>
             {
@@ -160,33 +244,31 @@ public class TestIngestionPersistence
         await entered.Task;
         try
         {
-            await store.ApplyOnceAsync(requestId, "apply", Increment);
+            await store.CommitAsync(Run, "apply", Increment);
         }
         catch (Exception error) when (HasSerializationConflict(error)) { }
         await first;
-        await store.ApplyOnceAsync(requestId, "apply", Increment);
+        await store.CommitAsync(Run, "apply", Increment);
         (await Featured()).Should().Be(1);
     }
 
     [Test]
-    public async Task PageRetryKeepsTheFirstSelectionAndItemBodiesTogether()
+    public async Task SnapshotRetryKeepsTheFirstDiscoverySelection()
     {
-        await store.SavePageAsync(
-            requestId,
-            "archive.org",
+        var first = new DiscoverySnapshot([new("a", "first")], ObservedIdentifiers: ["a"]);
+        await store.SnapshotAsync(Run, "page", () => Task.FromResult(first));
+        var retry = await store.SnapshotAsync(
+            Run,
             "page",
-            new ProviderPage([new("a", "first")], ObservedKeys: ["a"])
+            () =>
+                Task.FromResult(
+                    new DiscoverySnapshot([new("b", "later")], ObservedIdentifiers: ["b"])
+                )
         );
-        await store.SavePageAsync(
-            requestId,
-            "archive.org",
-            "page",
-            new ProviderPage([new("b", "later"), new("c", "extra")], ObservedKeys: ["b", "c"])
-        );
-        (await store.ReadAsync<ImportPage>(requestId, "page"))!.ItemCount.Should().Be(1);
-        (await store.ReadAsync<ProviderItem>(requestId, "page/item/0"))!.Key.Should().Be("a");
-        (await store.ReadAsync<ProviderItem>(requestId, "page/item/1")).Should().BeNull();
-        (await store.ReadAsync<string[]>(requestId, "archive.org/observed")).Should().Equal("a");
+        retry.Should().BeEquivalentTo(first);
+        (await store.ReadItemAsync(Run, new ImportItem("a", "page", 0)))
+            .Metadata.Should()
+            .Be("first");
     }
 
     [Test]
@@ -227,18 +309,29 @@ public class TestIngestionPersistence
     }
 
     [Test]
-    public async Task ReusingARequestForDifferentInputsFailsWithoutChangingTheCatalog()
+    public async Task ExpiredWorkCannotRecreateCleanedUpInputsOrRepeatCatalogWrites()
     {
-        await Import();
-        var client = host.Services.GetRequiredService<ITemporalClient>();
-        var wrongRequest = new ArtistImportRequest(artistUuid.ToString(), requestId, Year: 2026);
-        Func<Task> wrong = async () =>
-            await client.ExecuteWorkflowAsync(
-                (ArtistRefreshWorkflow w) => w.RunAsync(wrongRequest, null),
-                new WorkflowOptions("test/wrong/" + requestId, IngestionQueues.Workflows)
-            );
-        await wrong.Should().ThrowAsync<Temporalio.Exceptions.WorkflowFailedException>();
-        (await Catalog()).Should().ContainSingle();
+        await store.SnapshotAsync(Run, "page", () => Task.FromResult(new Receipt(1)));
+        await store.CommitAsync(Run, "apply", Increment);
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                """
+                UPDATE ingestion_snapshots SET expires_at=now()-interval '1 day' WHERE request_id=@requestId;
+                UPDATE ingestion_receipts SET expires_at=now()-interval '1 day' WHERE request_id=@requestId;
+                """,
+                new { requestId }
+            )
+        );
+        await store.DeleteExpiredAsync();
+        var expired = new IngestionRun(requestId, DateTimeOffset.UtcNow.AddDays(-2));
+        Func<Task> fetch = async () =>
+            await store.SnapshotAsync(expired, "page", () => Task.FromResult(new Receipt(2)));
+        Func<Task> apply = async () => await store.CommitAsync(expired, "apply", Increment);
+        await fetch.Should().ThrowAsync<Temporalio.Exceptions.ApplicationFailureException>();
+        await apply.Should().ThrowAsync<Temporalio.Exceptions.ApplicationFailureException>();
+        (await Featured()).Should().Be(1);
+        (await store.ReadSnapshotAsync<Receipt>(Run, "page")).Should().BeNull();
+        (await store.ReadReceiptAsync<Receipt>(Run, "apply")).Should().BeNull();
     }
 
     [TestCase("archive.org", 1)]
@@ -259,17 +352,6 @@ public class TestIngestionPersistence
             upstream.Respond = uri => ProviderFixtures.Response(provider, uri);
         Dictionary<string, string[]> expected;
         using (var scope = host.Services.CreateScope())
-        using (
-            var transaction = new TransactionScope(
-                TransactionScopeOption.Required,
-                new TransactionOptions
-                {
-                    IsolationLevel = IsolationLevel.RepeatableRead,
-                    Timeout = TimeSpan.FromMinutes(5),
-                },
-                TransactionScopeAsyncFlowOption.Enabled
-            )
-        )
         {
             var artist = (
                 await scope
@@ -283,16 +365,108 @@ public class TestIngestionPersistence
             );
             await importer.ImportDataForArtist(artist, source, null);
             expected = await Snapshot();
-            // Roll back the legacy write, then run Temporal against the same artist identity.
         }
         expected["sources"]
             .Concat(expected["setlists"])
             .Should()
             .NotBeEmpty("the fixture must exercise catalog writes");
+        // Rebuild SQL commits its own transactions, so an ambient test rollback cannot
+        // provide a clean baseline. Clear catalog rows while preserving the artist identity.
+        await ClearArtistCatalog();
+        (await Snapshot()).Values.Should().OnlyContain(rows => rows.Length == 0);
+
+        if (provider == "phish.net")
+        {
+            await ConfigureProvider("archive.org", 1);
+            upstream.Respond = uri =>
+                uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("First title") : Listing;
+            await Import();
+            await ConfigureProvider(provider, providerId);
+            upstream.Respond = uri => ProviderFixtures.Response(provider, uri);
+        }
+
         var result = await Import();
         result.FailedItems.Should().Be(0);
         (await Snapshot()).Should().BeEquivalentTo(expected);
     }
+
+    private Task ClearArtistCatalog() =>
+        db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                """
+                DELETE FROM setlist_songs_plays WHERE played_setlist_show_id IN
+                    (SELECT id FROM setlist_shows WHERE artist_id=@artistId);
+                DELETE FROM source_tracks WHERE artist_id=@artistId;
+                DELETE FROM sources WHERE artist_id=@artistId;
+                DELETE FROM shows WHERE artist_id=@artistId;
+                DELETE FROM setlist_shows WHERE artist_id=@artistId;
+                DELETE FROM setlist_songs WHERE artist_id=@artistId;
+                DELETE FROM tours WHERE artist_id=@artistId;
+                DELETE FROM venues WHERE artist_id=@artistId;
+                DELETE FROM eras WHERE artist_id=@artistId;
+                DELETE FROM years WHERE artist_id=@artistId;
+                """,
+                new { artistId }
+            )
+        );
+
+    [Test]
+    public async Task PhantasyTourRepairsExistingLocalDatesAndTourBoundsWithoutFetchingShowDetails()
+    {
+        await ConfigureProvider("phantasytour.com", 7);
+        upstream.Respond = uri => ProviderFixtures.Response("phantasytour.com", uri);
+        await Import();
+        var expected = await Snapshot();
+        await CorruptPhantasyDates();
+        var detailRequests = 0;
+        upstream.Respond = uri =>
+        {
+            if (uri.AbsolutePath.Contains("/shows/"))
+            {
+                Interlocked.Increment(ref detailRequests);
+            }
+
+            return ProviderFixtures.Response("phantasytour.com", uri);
+        };
+
+        var result = await Import();
+        result.Stats.Updated.Should().Be(2);
+        detailRequests.Should().Be(0);
+        (await Snapshot()).Should().BeEquivalentTo(expected);
+    }
+
+    [Test]
+    public async Task PhantasyTourDoesNotRepairDatesUntilEveryListingPageSucceeds()
+    {
+        await ConfigureProvider("phantasytour.com", 7);
+        upstream.Respond = uri => ProviderFixtures.Response("phantasytour.com", uri);
+        await Import();
+        await CorruptPhantasyDates();
+        var before = await Snapshot();
+        upstream.Respond = uri =>
+            uri.Query.Contains("page=2")
+                ? "{}"
+                : JsonConvert.SerializeObject(
+                    Enumerable
+                        .Range(0, 100)
+                        .Select(_ => new { id = 1, dateTime = "2000-01-01T20:00:00-05:00" })
+                );
+
+        Func<Task> import = async () => await Import();
+        await import.Should().ThrowAsync<Temporalio.Exceptions.WorkflowFailedException>();
+        (await Snapshot()).Should().BeEquivalentTo(before);
+    }
+
+    private Task CorruptPhantasyDates() =>
+        db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                """
+                UPDATE setlist_shows SET date=date + 1 WHERE artist_id=@artistId;
+                UPDATE tours SET start_date='1990-01-01', end_date='1990-01-02' WHERE artist_id=@artistId;
+                """,
+                new { artistId }
+            )
+        );
 
     private Task ConfigureProvider(string provider, int providerId) =>
         db.WithWriteConnection(c =>
@@ -482,32 +656,37 @@ public class TestIngestionPersistence
     }
 
     [Test]
-    public async Task LargeDiscoveryStagesEveryItemAndReturnsOnlyAPageReference()
+    public async Task LargeDiscoveryReturnsBoundedPagesWithoutRepeatingTheUpstreamListing()
     {
         var items = Enumerable
             .Range(0, 18386)
-            .Select(i => new ProviderItem("item-" + i, Metadata("Fixture track")))
+            .Select(index => new DiscoveredItem("item-" + index, "{}"))
             .ToArray();
-        var clock = System.Diagnostics.Stopwatch.StartNew();
-        var page = await store.SavePageAsync(
-            requestId,
-            "archive.org",
-            "large-page",
-            new ProviderPage(items)
+        await store.SnapshotAsync(
+            Run,
+            "archive.org/discovery/first",
+            () => Task.FromResult(new DiscoverySnapshot(items))
         );
-        page.ItemCount.Should().Be(items.Length);
-        (await store.ReadAsync<ProviderItem>(requestId, "large-page/item/18385"))!
-            .Should()
-            .Be(items[^1]);
-        var bytes = await db.WithWriteConnection(c =>
-            c.QuerySingleAsync<long>(
-                "SELECT sum(pg_column_size(payload)) FROM ingestion_records WHERE request_id=@requestId",
-                new { requestId }
-            )
+        using var scope = host.Services.CreateScope();
+        var activities = ActivatorUtilities.CreateInstance<IngestionActivities>(
+            scope.ServiceProvider
         );
-        TestContext.Progress.WriteLine(
-            $"Synthetic 18,386-item staging: {clock.Elapsed.TotalSeconds:F2}s, {bytes:N0} payload bytes; returned reference {JsonConvert.SerializeObject(page).Length} characters."
-        );
+        var request = new ArtistImportRequest(artistUuid.ToString(), requestId, Run: Run);
+        DiscoveryCursor? cursor = null;
+        var identifiers = new List<string>();
+        var requests = upstream.Requests;
+        do
+        {
+            var page = await new Temporalio.Testing.ActivityEnvironment().RunAsync(() =>
+                activities.DiscoverItems(request, "archive.org", cursor)
+            );
+            page.Items.Length.Should().BeInRange(1, 100);
+            identifiers.AddRange(page.Items.Select(item => item.Identifier));
+            cursor = page.NextCursor;
+        } while (cursor != null);
+
+        identifiers.Should().Equal(items.Select(item => item.Identifier));
+        upstream.Requests.Should().Be(requests);
     }
 
     private Task<int> Featured() =>

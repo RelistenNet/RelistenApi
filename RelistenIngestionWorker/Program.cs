@@ -40,6 +40,7 @@ builder.Services.AddSingleton(_ => new RedisService(
 builder.Services.AddRelistenCatalogServices();
 builder.Services.AddTemporalIngestionWorkers(builder.Configuration);
 using var host = builder.Build();
+
 if (migrate)
 {
     using var connection = host
@@ -50,19 +51,25 @@ if (migrate)
         new PostgresqlDatabaseProvider(connection)
     );
     migrator.Load();
+
     // The local schema fixture already contains the catalog through migration 12.
     // Existing installations retain their recorded migration version.
     if (migrator.CurrentMigration == null || migrator.CurrentMigration.Version == 0)
     {
         if (builder.Configuration["Ingestion:LocalSchemaBaseline"] != "12")
+        {
             throw new InvalidOperationException(
                 "No migration baseline. Use the documented local schema setup or restore the existing migration history."
             );
+        }
+
         migrator.Baseline(12);
     }
+
     migrator.MigrateTo(13);
     return;
 }
+
 if (registerSchedules)
 {
     await host.Services.GetRequiredService<TemporalIngestionClient>().RegisterSchedulesAsync();
@@ -79,22 +86,7 @@ if (builder.Configuration["cancel"] is { } workflowId)
     Console.WriteLine($"Cancellation requested for {workflowId}");
     return;
 }
-if (builder.Configuration["resume"] is { } requestId)
-{
-    using var scope = host.Services.CreateScope();
-    var store = scope.ServiceProvider.GetRequiredService<ImportRunRepository>();
-    var request =
-        await store.ReadAsync<ArtistImportRequest>(requestId, "request")
-        ?? throw new InvalidOperationException("Unknown artist request ID.");
-    if (await store.ReadAsync<ImportResult>(requestId, "finished") != null)
-        throw new InvalidOperationException(
-            "This request is finished. Start a new import to retry partial results."
-        );
-    Console.WriteLine(
-        await host.Services.GetRequiredService<TemporalIngestionClient>().StartArtistAsync(request)
-    );
-    return;
-}
+
 if (builder.Configuration["import"] is { } artistIdentifier)
 {
     using var scope = host.Services.CreateScope();
@@ -113,9 +105,9 @@ if (builder.Configuration["import"] is { } artistIdentifier)
     Console.WriteLine(
         await host.Services.GetRequiredService<TemporalIngestionClient>().StartArtistAsync(request)
     );
-    Console.WriteLine("Use the RequestId in the workflow input for --resume.");
     return;
 }
+
 if (builder.Configuration["batch"] is { } mode)
 {
     Console.WriteLine(
@@ -123,4 +115,5 @@ if (builder.Configuration["batch"] is { } mode)
     );
     return;
 }
+
 await host.RunAsync();
