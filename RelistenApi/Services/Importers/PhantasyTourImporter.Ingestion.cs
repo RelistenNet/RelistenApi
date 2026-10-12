@@ -72,7 +72,7 @@ public partial class PhantasyTourImporter : IProviderIngestion
         await PreloadData(context.Artist);
         var stats = new ImportStats();
         await ApplyShowBody(context.Artist, stats, null, int.Parse(item.Key), fetched[0].Body);
-        if (context.Artist.features.tours && tourToStartDate.Count > 0)
+        if (context.Artist.features.tours)
             await UpdateTourStartEndDates(context.Artist);
         return stats;
     }
