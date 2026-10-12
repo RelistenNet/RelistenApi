@@ -35,7 +35,7 @@ namespace Relisten.Import
             new Dictionary<string, VenueWithShowCount?>();
 
         public LocalImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -47,10 +47,9 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<LocalImporter> log,
-            IConfiguration configuration,
-            RedisService redisService
+            IConfiguration configuration
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;

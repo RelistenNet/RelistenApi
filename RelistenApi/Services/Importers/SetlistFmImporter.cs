@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading.Tasks;
-using Dapper;
 using Hangfire.Console;
 using Hangfire.Console.Progress;
 using Hangfire.Server;
@@ -49,16 +48,15 @@ namespace Relisten.Import
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
 
         public SetlistFmImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             SetlistShowService setlistShowService,
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
             ILogger<SetlistFmImporter> log,
-            LinkService linkService,
-            RedisService redisService
+            LinkService linkService
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             _linkService = linkService;
             _setlistShowService = setlistShowService;
@@ -429,30 +427,7 @@ namespace Relisten.Import
 
         private async Task UpdateTourStartEndDates(Artist artist)
         {
-            await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                UPDATE
-                    tours
-                SET
-                    start_date = @startDate,
-                    end_date = @endDate
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstream_identifier
-            ",
-                    tourToStartDate.Keys.Select(tourUpstreamId =>
-                    {
-                        return new
-                        {
-                            startDate = tourToStartDate[tourUpstreamId],
-                            endDate = tourToEndDate[tourUpstreamId],
-                            artistId = artist.id,
-                            upstream_identifier = tourUpstreamId,
-                        };
-                    })
-                )
-            );
+            await _tourService.UpdateDateBounds(artist, tourToStartDate, tourToEndDate);
 
             tourToStartDate = new Dictionary<string, DateTime>();
             tourToEndDate = new Dictionary<string, DateTime>();

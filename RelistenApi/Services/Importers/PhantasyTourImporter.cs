@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Dapper;
 using Hangfire.Console;
 using Hangfire.Server;
 using Newtonsoft.Json;
@@ -30,14 +29,13 @@ namespace Relisten.Import
         private readonly Dictionary<string, DateTime> listedDates = new();
 
         public PhantasyTourImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SetlistShowService setlistShowService,
-            SetlistSongService setlistSongService,
-            RedisService redisService
+            SetlistSongService setlistSongService
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
@@ -131,7 +129,7 @@ namespace Relisten.Import
             ctx?.WriteLine($"Corrected {correctedDates} Phantasy Tour setlist dates");
 
             ctx?.WriteLine("Updating tour start/end dates");
-            await UpdateTourStartEndDates(artist);
+            await _tourService.RefreshDatesFromSetlists(artist);
 
             // update shows
             await RebuildShows(artist);
@@ -417,27 +415,6 @@ namespace Relisten.Import
             }
 
             stats += await _setlistShowService.UpdateSongPlays(dbShow!, dbSongs);
-        }
-
-        private async Task UpdateTourStartEndDates(Artist artist)
-        {
-            await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                UPDATE tours t
-                SET start_date = dates.start_date, end_date = dates.end_date
-                FROM (
-                    SELECT tour_id, MIN(date) AS start_date, MAX(date) AS end_date
-                    FROM setlist_shows
-                    WHERE artist_id = @artistId AND tour_id IS NOT NULL
-                    GROUP BY tour_id
-                ) dates
-                WHERE t.id = dates.tour_id AND t.artist_id = @artistId
-                    AND (t.start_date, t.end_date) IS DISTINCT FROM (dates.start_date, dates.end_date)
-            ",
-                    new { artistId = artist.id }
-                )
-            );
         }
     }
 }

@@ -36,7 +36,7 @@ namespace Relisten.Import
             new Dictionary<string, VenueWithShowCount?>();
 
         public PhishinImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -48,10 +48,9 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<PhishinImporter> log,
-            IConfiguration configuration,
-            RedisService redisService
+            IConfiguration configuration
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;

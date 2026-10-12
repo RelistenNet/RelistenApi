@@ -37,7 +37,7 @@ namespace Relisten.Import
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
 
         public ArchiveOrgImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -45,10 +45,9 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            RedisService redisService,
             IDiscordWebhookNotifier discordWebhookNotifier
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             this.linkService = linkService;
             this.discordWebhookNotifier = discordWebhookNotifier;

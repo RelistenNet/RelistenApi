@@ -19,14 +19,13 @@ namespace Relisten.Import
         PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             SourceService sourceService,
             SourceReviewService sourceReviewService,
             LinkService linkService,
-            ILogger<PhishNetImporter> log,
-            RedisService redisService
+            ILogger<PhishNetImporter> log
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             this.linkService = linkService;
             _sourceService = sourceService;

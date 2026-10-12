@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -8,6 +9,50 @@ namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
+        /// <summary>Updates the date ranges accumulated while importing an artist's setlists.</summary>
+        public Task UpdateDateBounds(
+            Artist artist,
+            IDictionary<string, DateTime> starts,
+            IDictionary<string, DateTime> ends
+        ) =>
+            db.WithWriteConnection(connection =>
+                connection.ExecuteAsync(
+                    """
+                    UPDATE tours SET start_date=@startDate, end_date=@endDate
+                    WHERE artist_id=@artistId AND upstream_identifier=@identifier
+                    """,
+                    starts.Select(pair => new
+                    {
+                        artistId = artist.id,
+                        identifier = pair.Key,
+                        startDate = pair.Value,
+                        endDate = ends[pair.Key],
+                    })
+                )
+            );
+
+        /// <summary>Derives tour bounds from committed setlist dates after a complete upstream listing.</summary>
+        public async Task RefreshDatesFromSetlists(Artist artist)
+        {
+            await db.WithWriteConnection(con =>
+                con.ExecuteAsync(
+                    @"
+                UPDATE tours t
+                SET start_date = dates.start_date, end_date = dates.end_date
+                FROM (
+                    SELECT tour_id, MIN(date) AS start_date, MAX(date) AS end_date
+                    FROM setlist_shows
+                    WHERE artist_id = @artistId AND tour_id IS NOT NULL
+                    GROUP BY tour_id
+                ) dates
+                WHERE t.id = dates.tour_id AND t.artist_id = @artistId
+                    AND (t.start_date, t.end_date) IS DISTINCT FROM (dates.start_date, dates.end_date)
+            ",
+                    new { artistId = artist.id }
+                )
+            );
+        }
+
         public TourService(DbService db, ShowService showService)
             : base(db)
         {

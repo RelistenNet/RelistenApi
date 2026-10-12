@@ -15,6 +15,7 @@ public static class IngestionServiceRegistration
     /// <summary>Registers scoped catalog services. Hosts supply their own database, Redis and configuration singletons.</summary>
     public static IServiceCollection AddRelistenCatalogServices(this IServiceCollection services)
     {
+        services.AddScoped<CatalogRebuildService>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();

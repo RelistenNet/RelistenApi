@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Dapper;
 using Hangfire.Console;
 using Hangfire.Server;
 using HtmlAgilityPack;
@@ -32,15 +31,14 @@ namespace Relisten.Import
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
 
         public JerryGarciaComImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             SetlistShowService setlistShowService,
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
-            ILogger<JerryGarciaComImporter> log,
-            RedisService redisService
+            ILogger<JerryGarciaComImporter> log
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             _setlistShowService = setlistShowService;
             _venueService = venueService;
@@ -385,40 +383,9 @@ namespace Relisten.Import
                 ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
             }
 
-            stats.Removed += await RemoveOrphanVenues(artist);
+            stats.Removed += await _venueService.RemoveOrphansForArtist(artist);
 
             return stats;
-        }
-
-        internal async Task<int> RemoveOrphanVenues(Artist artist)
-        {
-            return await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                WITH orphaned AS (
-                    SELECT
-                        v.id
-                    FROM
-                        venues v
-                        LEFT JOIN sources s ON s.venue_id = v.id
-                        LEFT JOIN shows sh ON sh.venue_id = v.id
-                        LEFT JOIN setlist_shows ss ON ss.venue_id = v.id
-                    WHERE
-                        v.artist_id = @artistId
-                    GROUP BY
-                        v.id
-                    HAVING
-                        COUNT(s.id) = 0
-                        AND COUNT(sh.id) = 0
-                        AND COUNT(ss.id) = 0
-                )
-                DELETE FROM venues v
-                USING orphaned o
-                WHERE v.id = o.id
-            ",
-                    new { artistId = artist.id }
-                )
-            );
         }
 
         private async Task ApplyVenueBackfill(
@@ -560,30 +527,7 @@ namespace Relisten.Import
 
         private async Task UpdateTourStartEndDates(Artist artist)
         {
-            await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                UPDATE
-                    tours
-                SET
-                    start_date = @startDate,
-                    end_date = @endDate
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstream_identifier
-            ",
-                    tourToStartDate.Keys.Select(tourUpstreamId =>
-                    {
-                        return new
-                        {
-                            startDate = tourToStartDate[tourUpstreamId],
-                            endDate = tourToEndDate[tourUpstreamId],
-                            artistId = artist.id,
-                            upstream_identifier = tourUpstreamId,
-                        };
-                    })
-                )
-            );
+            await _tourService.UpdateDateBounds(artist, tourToStartDate, tourToEndDate);
 
             tourToStartDate = new Dictionary<string, DateTime>();
             tourToEndDate = new Dictionary<string, DateTime>();

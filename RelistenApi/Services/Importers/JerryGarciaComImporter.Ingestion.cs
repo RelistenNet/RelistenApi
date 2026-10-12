@@ -115,7 +115,10 @@ public partial class JerryGarciaComImporter : IProviderIngestion
 
         return await context.CommitAsync(async () =>
             new ProviderResult(
-                new ImportStats { Removed = await RemoveOrphanVenues(context.Artist) }
+                new ImportStats
+                {
+                    Removed = await _venueService.RemoveOrphansForArtist(context.Artist),
+                }
             )
         );
     }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Dapper;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
@@ -102,11 +101,9 @@ public partial class ArchiveOrgImporter : IProviderIngestion
 
         return await context.CommitAsync(async () =>
         {
-            var source = await db.WithWriteConnection(connection =>
-                connection.QuerySingleOrDefaultAsync<Source>(
-                    "SELECT * FROM sources WHERE artist_id=@artistId AND upstream_identifier=@identifier",
-                    new { artistId = context.Artist.id, identifier = item.Identifier }
-                )
+            var source = await _sourceService.ForUpstreamIdentifierFromPrimary(
+                context.Artist,
+                item.Identifier
             );
             if (HasNoVbrMp3Files(details))
             {

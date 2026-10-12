@@ -44,6 +44,24 @@ namespace Relisten.Data
 
         private SourceSetService _sourceSetService { get; }
 
+        /// <summary>Reads the current recording inside an import transaction, avoiding replica lag.</summary>
+        public Task<Source?> ForUpstreamIdentifierFromPrimary(Artist artist, string identifier) =>
+            db.WithWriteConnection(connection =>
+                connection.QuerySingleOrDefaultAsync<Source>(
+                    "SELECT * FROM sources WHERE artist_id=@artistId AND upstream_identifier=@identifier",
+                    new { artistId = artist.id, identifier }
+                )
+            );
+
+        /// <summary>Loads the selected recording from the primary, scoped to its artist.</summary>
+        public Task<Source> ForArtistFromPrimary(Artist artist, long sourceId) =>
+            db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<Source>(
+                    "SELECT * FROM sources WHERE artist_id=@artistId AND id=@sourceId",
+                    new { artistId = artist.id, sourceId }
+                )
+            );
+
         public async Task<Source?> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
             return await db.WithConnection(con =>

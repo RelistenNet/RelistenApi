@@ -47,7 +47,7 @@ namespace Relisten.Import
         }
 
         public PanicStreamComImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -56,10 +56,9 @@ namespace Relisten.Import
             SourceTrackService sourceTrackService,
             LinkService linkService,
             ILogger<PanicStreamComImporter> log,
-            IConfiguration configuration,
-            RedisService redisService
+            IConfiguration configuration
         )
-            : base(db, redisService)
+            : base(catalog)
         {
             this.linkService = linkService;
             _sourceService = sourceService;

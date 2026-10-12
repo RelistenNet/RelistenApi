@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Dapper;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Import.PhishNet;
@@ -59,12 +58,7 @@ public partial class PhishNetImporter : IProviderIngestion
         }
 
         var input = JsonConvert.DeserializeObject<SourceInput>(item.Metadata)!;
-        var source = await db.WithWriteConnection(connection =>
-            connection.QuerySingleAsync<Source>(
-                "SELECT * FROM sources WHERE artist_id=@artistId AND id=@id",
-                new { artistId = context.Artist.id, id = input.SourceId }
-            )
-        );
+        var source = await _sourceService.ForArtistFromPrimary(context.Artist, input.SourceId);
         var ratings = await new PhishNetRatingsScraper(http, source.display_date).ScrapeRatings();
         var reviews = Array.Empty<PhishNetApiReview>();
 

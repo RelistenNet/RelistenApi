@@ -111,7 +111,7 @@ public partial class PhantasyTourImporter : IProviderIngestion
         return await context.CommitAsync(async () =>
         {
             var corrected = await _setlistShowService.UpdateDates(context.Artist, dates);
-            await UpdateTourStartEndDates(context.Artist);
+            await _tourService.RefreshDatesFromSetlists(context.Artist);
             return new ProviderResult(new ImportStats { Updated = corrected });
         });
     }
