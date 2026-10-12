@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Relisten.Api.Models;
 using Relisten.Import;
 using Temporalio.Workflows;
 
@@ -51,7 +52,7 @@ public class ArtistRefreshWorkflow
         );
     }
 
-    private async Task ImportProvider(string provider)
+    private async Task ImportProvider(UpstreamProvider provider)
     {
         var options = ImportWorkflowOptions.Activity(IngestionQueues.Providers[provider]);
         if (!progress.ProviderPrepared)
@@ -80,7 +81,7 @@ public class ArtistRefreshWorkflow
         activityCount++;
     }
 
-    private async Task ImportPages(string provider)
+    private async Task ImportPages(UpstreamProvider provider)
     {
         do
         {
@@ -103,7 +104,7 @@ public class ArtistRefreshWorkflow
         } while (progress.Cursor != null);
     }
 
-    private async Task ImportPage(string provider, ImportPage page)
+    private async Task ImportPage(UpstreamProvider provider, ImportPage page)
     {
         while (progress.ItemIndex < page.Items.Length)
         {

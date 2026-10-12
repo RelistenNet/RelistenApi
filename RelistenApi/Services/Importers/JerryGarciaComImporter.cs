@@ -55,7 +55,7 @@ namespace Relisten.Import
         protected TourService _tourService { get; set; }
         protected ILogger<JerryGarciaComImporter> _log { get; set; }
 
-        public override string ImporterName => "jerrygarcia.com";
+        public override UpstreamProvider Provider => UpstreamProvider.JerryGarcia;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

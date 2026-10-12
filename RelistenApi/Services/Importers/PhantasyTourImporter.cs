@@ -18,8 +18,6 @@ namespace Relisten.Import
 {
     public partial class PhantasyTourImporter : ImporterBase
     {
-        public const string DataSourceName = "phantasytour.com";
-
         private const uint ITEMS_PER_PAGE = 100;
         private IDictionary<string, SetlistShow?> existingSetlistShows =
             new Dictionary<string, SetlistShow?>();
@@ -52,7 +50,7 @@ namespace Relisten.Import
         protected SetlistShowService _setlistShowService { get; set; }
         protected SetlistSongService _setlistSongService { get; set; }
 
-        public override string ImporterName => DataSourceName;
+        public override UpstreamProvider Provider => UpstreamProvider.PhantasyTour;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

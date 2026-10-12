@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
 using Temporalio.Activities;
@@ -25,7 +26,9 @@ public sealed class IngestionActivities(
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
         var providers = artist
-            .upstream_sources.Select(source => source.upstream_source.name)
+            .upstream_sources.Select(source => source.upstream_source.Provider)
+            .Where(provider => provider.HasValue)
+            .Select(provider => provider!.Value)
             .Where(IngestionQueues.Providers.ContainsKey)
             .Where(provider => request.Provider == null || provider == request.Provider)
             .ToArray();
@@ -42,10 +45,16 @@ public sealed class IngestionActivities(
     }
 
     [Activity("Ingestion.PrepareProvider")]
-    public async Task<ImportStats> PrepareProvider(ArtistImportRequest request, string provider)
+    public async Task<ImportStats> PrepareProvider(
+        ArtistImportRequest request,
+        UpstreamProvider provider
+    )
     {
         using var heartbeat = new ActivityHeartbeat();
-        var saved = await store.ReadReceiptAsync<ImportStats>(request.Run!, provider + "/prepare");
+        var saved = await store.ReadReceiptAsync<ImportStats>(
+            request.Run!,
+            provider.ToValue() + "/prepare"
+        );
         if (saved != null)
         {
             return saved;
@@ -58,7 +67,7 @@ public sealed class IngestionActivities(
     [Activity("Ingestion.DiscoverItems")]
     public async Task<ImportPage> DiscoverItems(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         DiscoveryCursor? cursor
     )
     {
@@ -105,7 +114,7 @@ public sealed class IngestionActivities(
     [Activity("Ingestion.ImportItem")]
     public async Task<ItemImportResult> ImportItem(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         ImportItem? item
     )
     {
@@ -117,7 +126,7 @@ public sealed class IngestionActivities(
         var operation = "item/" + identifier;
         var saved = await store.ReadReceiptAsync<ItemImportResult>(
             request.Run!,
-            provider + "/" + operation
+            provider.ToValue() + "/" + operation
         );
         if (saved != null)
         {
@@ -135,7 +144,7 @@ public sealed class IngestionActivities(
     [Activity("Ingestion.ReconcileProvider")]
     public async Task<ProviderResult> ReconcileProvider(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         string[] ineligibleItems,
         bool hasFailures
     )
@@ -143,7 +152,7 @@ public sealed class IngestionActivities(
         using var heartbeat = new ActivityHeartbeat();
         var saved = await store.ReadReceiptAsync<ProviderResult>(
             request.Run!,
-            provider + "/reconcile"
+            provider.ToValue() + "/reconcile"
         );
         if (saved != null)
         {
@@ -173,12 +182,12 @@ public sealed class IngestionActivities(
         return result;
     }
 
-    internal static string DiscoveryName(string provider, string? cursor) =>
-        provider + "/discovery/" + (cursor ?? "first");
+    internal static string DiscoveryName(UpstreamProvider provider, string? cursor) =>
+        provider.ToValue() + "/discovery/" + (cursor ?? "first");
 
     private async Task<(ProviderContext Context, IProviderIngestion Importer)> Provider(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         string operation
     )
     {
@@ -187,7 +196,7 @@ public sealed class IngestionActivities(
             await artists.FindArtistWithIdOrSlug(request.Artist)
             ?? throw new ApplicationFailureException("Artist not found.", nonRetryable: true);
         var source = artist.upstream_sources.Single(source =>
-            source.upstream_source.name == provider
+            source.upstream_source.Provider == provider
         );
         var importer = source.upstream_source.importer!;
         var cancellationToken = ActivityExecutionContext.Current.CancellationToken;

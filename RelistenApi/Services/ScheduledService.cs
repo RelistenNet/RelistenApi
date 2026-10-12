@@ -312,13 +312,13 @@ namespace Relisten
             }
 
             var src = artist.upstream_sources.FirstOrDefault(s =>
-                s.upstream_source.name == JerryGarciaComImporter.DataSourceName
+                s.upstream_source.Provider == UpstreamProvider.JerryGarcia
             );
 
             if (src == null)
             {
                 ctx?.WriteLine(
-                    $"No {JerryGarciaComImporter.DataSourceName} upstream source for {artist.name}"
+                    $"No {UpstreamProvider.JerryGarcia.ToValue()} upstream source for {artist.name}"
                 );
                 return;
             }

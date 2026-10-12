@@ -19,8 +19,6 @@ namespace Relisten.Import
 {
     public partial class LocalImporter : ImporterBase
     {
-        public const string DataSourceName = "relisten";
-
         private readonly LinkService linkService;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
@@ -81,7 +79,7 @@ namespace Relisten.Import
         protected ILogger<LocalImporter> _log { get; set; }
         public IConfiguration _configuration { get; }
 
-        public override string ImporterName => "local";
+        public override UpstreamProvider Provider => UpstreamProvider.Local;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

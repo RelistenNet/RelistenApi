@@ -153,7 +153,7 @@ public class ArchiveOrgArtistIndexer
     )
     {
         var upstreamSource =
-            await upstreamSourceLookup.FindUpstreamSourceByName(ArchiveOrgImporter.DataSourceName)
+            await upstreamSourceLookup.FindUpstreamSourceByName(UpstreamProvider.ArchiveOrg)
             ?? throw new InvalidOperationException("archive.org upstream source was not found.");
         context?.WriteLine($"archive.org collections fetched: {items.Count}");
         var existingArtists = await repository.LoadExistingArtists();

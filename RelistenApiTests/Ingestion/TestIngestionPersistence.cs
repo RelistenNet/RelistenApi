@@ -208,15 +208,15 @@ public class TestIngestionPersistence
         var environment = new Temporalio.Testing.ActivityEnvironment();
         var request = new ArtistImportRequest(artistUuid.ToString(), requestId, Run: Run);
         var page = await environment.RunAsync(() =>
-            activities.DiscoverItems(request, "archive.org", null)
+            activities.DiscoverItems(request, UpstreamProvider.ArchiveOrg, null)
         );
         var first = await environment.RunAsync(() =>
-            activities.ImportItem(request, "archive.org", page.Items.Single())
+            activities.ImportItem(request, UpstreamProvider.ArchiveOrg, page.Items.Single())
         );
         var requests = upstream.Requests;
         upstream.Respond = _ => "{}";
         var repeated = await environment.RunAsync(() =>
-            activities.ImportItem(request, "archive.org", page.Items.Single())
+            activities.ImportItem(request, UpstreamProvider.ArchiveOrg, page.Items.Single())
         );
 
         repeated.Should().BeEquivalentTo(first);
@@ -678,7 +678,7 @@ public class TestIngestionPersistence
         do
         {
             var page = await new Temporalio.Testing.ActivityEnvironment().RunAsync(() =>
-                activities.DiscoverItems(request, "archive.org", cursor)
+                activities.DiscoverItems(request, UpstreamProvider.ArchiveOrg, cursor)
             );
             page.Items.Length.Should().BeInRange(1, 100);
             identifiers.AddRange(page.Items.Select(item => item.Identifier));

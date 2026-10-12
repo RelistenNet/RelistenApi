@@ -25,8 +25,6 @@ namespace Relisten.Import
 {
     public partial class SetlistFmImporter : ImporterBase
     {
-        public const string DataSourceName = "setlist.fm";
-
         private readonly LinkService _linkService;
 
         private readonly AsyncRetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Policy
@@ -82,7 +80,7 @@ namespace Relisten.Import
         protected TourService _tourService { get; set; }
         protected ILogger<SetlistFmImporter> _log { get; set; }
 
-        public override string ImporterName => "setlist.fm";
+        public override UpstreamProvider Provider => UpstreamProvider.SetlistFm;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

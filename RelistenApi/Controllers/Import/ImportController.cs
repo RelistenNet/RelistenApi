@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api;
+using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Ingestion;
@@ -109,7 +110,7 @@ namespace Relisten.Controllers
                         new ArtistImportRequest(
                             artist.uuid.ToString(),
                             Guid.NewGuid().ToString(),
-                            Provider: "phish.in"
+                            Provider: UpstreamProvider.Phishin
                         )
                     )
                 );

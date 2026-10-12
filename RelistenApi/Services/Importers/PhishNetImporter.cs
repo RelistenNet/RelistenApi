@@ -15,8 +15,6 @@ namespace Relisten.Import
 {
     public partial class PhishNetImporter : ImporterBase
     {
-        public const string DataSourceName = "phish.net";
-
         readonly LinkService linkService;
         PhishNetApiClient phishNetApiClient;
 
@@ -42,7 +40,7 @@ namespace Relisten.Import
         protected SourceReviewService _sourceReviewService { get; set; }
         protected ILogger<PhishNetImporter> _log { get; set; }
 
-        public override string ImporterName => "phish.net";
+        public override UpstreamProvider Provider => UpstreamProvider.PhishNet;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

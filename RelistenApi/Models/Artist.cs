@@ -244,6 +244,13 @@ namespace Relisten.Api.Models
         [Required]
         public string name { get; set; } = null!;
 
+        // The raw name is the existing database/API field. Unknown catalog sources
+        // remain readable but cannot select an importer until a provider is defined.
+        [JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        public UpstreamProvider? Provider =>
+            UpstreamProviders.TryParse(name, out var provider) ? provider : null;
+
         [Required]
         public string url { get; set; } = null!;
 

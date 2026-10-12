@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Relisten.Api.Models;
 using Relisten.Import;
 
 namespace Relisten.Ingestion;
@@ -15,7 +16,7 @@ public record IngestionRun(string Id, DateTimeOffset Deadline)
 public record ArtistImportRequest(
     string Artist,
     string RequestId,
-    string? Provider = null,
+    UpstreamProvider? Provider = null,
     string? Item = null,
     int? Year = null,
     bool RebuildOnly = false,
@@ -42,11 +43,11 @@ public record ImportCheckpoint(
     int ProviderFailures = 0,
     ImportStats? Stats = null,
     string[]? IneligibleItems = null,
-    string[]? Providers = null
+    UpstreamProvider[]? Providers = null
 );
 
 /// <summary>The artist's enabled provider mappings in import order.</summary>
-public record ArtistImportPlan(string ArtistUuid, string[] Providers);
+public record ArtistImportPlan(string ArtistUuid, UpstreamProvider[] Providers);
 
 /// <summary>Committed catalog changes and whether Archive metadata proved an item ineligible.</summary>
 public record ItemImportResult(ImportStats Stats, bool Ineligible = false);
@@ -65,18 +66,18 @@ public static class IngestionQueues
 {
     public const string Workflows = "ingest-workflows";
     public const string Database = "ingest-db";
-    public static readonly IReadOnlyDictionary<string, string> Providers = new Dictionary<
-        string,
+    public static readonly IReadOnlyDictionary<UpstreamProvider, string> Providers = new Dictionary<
+        UpstreamProvider,
         string
     >
     {
-        ["archive.org"] = "ingest-archive",
-        ["phish.in"] = "ingest-phishin",
-        ["phish.net"] = "ingest-phishnet",
-        ["setlist.fm"] = "ingest-setlistfm",
-        ["phantasytour.com"] = "ingest-phantasytour",
-        ["jerrygarcia.com"] = "ingest-jerry",
-        ["local"] = "ingest-local",
+        [UpstreamProvider.ArchiveOrg] = "ingest-archive",
+        [UpstreamProvider.Phishin] = "ingest-phishin",
+        [UpstreamProvider.PhishNet] = "ingest-phishnet",
+        [UpstreamProvider.SetlistFm] = "ingest-setlistfm",
+        [UpstreamProvider.PhantasyTour] = "ingest-phantasytour",
+        [UpstreamProvider.JerryGarcia] = "ingest-jerry",
+        [UpstreamProvider.Local] = "ingest-local",
     };
 }
 

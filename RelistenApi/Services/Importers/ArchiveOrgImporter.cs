@@ -68,7 +68,7 @@ namespace Relisten.Import
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
 
-        public override string ImporterName => "archive.org";
+        public override UpstreamProvider Provider => UpstreamProvider.ArchiveOrg;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

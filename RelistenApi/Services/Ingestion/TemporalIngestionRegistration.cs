@@ -1,6 +1,7 @@
 using System;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Extensions.Hosting;
 
@@ -53,7 +54,7 @@ public static class TemporalIngestionRegistration
             var builder = services
                 .AddHostedTemporalWorker(queue)
                 .AddScopedActivities<IngestionActivities>();
-            if (provider == "archive.org")
+            if (provider == UpstreamProvider.ArchiveOrg)
             {
                 builder.AddScopedActivities<IngestionBatchActivities>();
             }

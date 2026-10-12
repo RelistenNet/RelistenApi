@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Relisten.Api.Models;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
@@ -22,7 +23,9 @@ public class ArchiveArtistDiscoveryWorkflow
         {
             var page = await Workflow.ExecuteActivityAsync(
                 (IngestionBatchActivities a) => a.DiscoverArtists(run, cursor, fetched),
-                ImportWorkflowOptions.Activity(IngestionQueues.Providers["archive.org"])
+                ImportWorkflowOptions.Activity(
+                    IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
+                )
             );
             fetched += page.Count;
             cursor = page.NextCursor;

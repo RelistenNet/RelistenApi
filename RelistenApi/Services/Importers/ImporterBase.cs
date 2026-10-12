@@ -72,26 +72,31 @@ namespace Relisten.Import
                 _local,
             };
 
-            importers = new Dictionary<string, ImporterBase>();
+            importers = new Dictionary<UpstreamProvider, ImporterBase>();
 
             foreach (var i in imps)
             {
-                importers[i.ImporterName] = i;
+                importers[i.Provider] = i;
             }
         }
 
-        private IDictionary<string, ImporterBase> importers { get; }
+        private IDictionary<UpstreamProvider, ImporterBase> importers { get; }
 
         public IEnumerable<ImporterBase> ImportersForArtist(Artist art)
         {
             return art
-                .upstream_sources.Where(s => importers.ContainsKey(s.upstream_source.name))
-                .Select(s => importers[s.upstream_source.name]);
+                .upstream_sources.Select(source =>
+                    ImporterForUpstreamSource(source.upstream_source)
+                )
+                .OfType<ImporterBase>();
         }
 
         public ImporterBase? ImporterForUpstreamSource(UpstreamSource source)
         {
-            return importers.TryGetValue(source.name, out var importer) ? importer : null;
+            return
+                source.Provider is { } provider && importers.TryGetValue(provider, out var importer)
+                ? importer
+                : null;
         }
 
         public Task<ImportStats> Import(
@@ -243,7 +248,7 @@ namespace Relisten.Import
             http = client;
         }
 
-        public abstract string ImporterName { get; }
+        public abstract UpstreamProvider Provider { get; }
 
         private IDictionary<string, int> trackSlugCounts { get; } = new Dictionary<string, int>();
 

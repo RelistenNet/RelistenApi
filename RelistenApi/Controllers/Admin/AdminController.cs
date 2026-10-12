@@ -327,7 +327,7 @@ namespace Relisten.Controllers.Admin
                     new ArtistImportRequest(
                         artist.uuid.ToString(),
                         Guid.NewGuid().ToString(),
-                        Provider: "jerrygarcia.com",
+                        Provider: UpstreamProvider.JerryGarcia,
                         BackfillJerryVenues: true
                     )
                 );

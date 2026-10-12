@@ -20,8 +20,6 @@ namespace Relisten.Import
 {
     public partial class PhishinImporter : ImporterBase
     {
-        public const string DataSourceName = "phish.in";
-
         private readonly LinkService linkService;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
@@ -87,7 +85,7 @@ namespace Relisten.Import
         protected ILogger<PhishinImporter> _log { get; set; }
         public IConfiguration _configuration { get; }
 
-        public override string ImporterName => "phish.in";
+        public override UpstreamProvider Provider => UpstreamProvider.Phishin;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

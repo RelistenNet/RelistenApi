@@ -98,7 +98,9 @@ if (builder.Configuration["import"] is { } artistIdentifier)
     var request = new ArtistImportRequest(
         artist.uuid.ToString(),
         Guid.NewGuid().ToString(),
-        builder.Configuration["provider"],
+        builder.Configuration["provider"] is { } provider
+            ? UpstreamProviders.Parse(provider)
+            : null,
         builder.Configuration["item"],
         builder.Configuration.GetValue<int?>("year")
     );

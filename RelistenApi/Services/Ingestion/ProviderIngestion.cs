@@ -39,7 +39,7 @@ public record ProviderContext(
         CancellationToken.ThrowIfCancellationRequested();
         return Store.CommitAsync(
             Run,
-            Source.upstream_source.name + "/" + Operation,
+            Source.upstream_source.Provider!.Value.ToValue() + "/" + Operation,
             apply,
             CancellationToken
         );

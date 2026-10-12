@@ -47,3 +47,9 @@ The build still reports the existing NU1903 advisory for `OpenTelemetry.Resource
 - The undeployed migration was replaced directly. There is no compatibility path for the previous draft schema, workflow protocol, or resume command. Public catalog/API behavior remains unchanged.
 
 No production infrastructure, deployment, production mutation, AI normalization, embeddings, or search indexing is part of this implementation. Future work should preserve the standards above and update this goal when the intended outcome changes.
+
+## Provider identifier follow-up
+
+Use one `UpstreamProvider` string-serialized enum throughout workflow contracts, activities, importer dispatch, and source lookups. Preserve existing JSON strings, database names, queue names, and snapshot/receipt keys. The upstream-source database/API `name` field remains the wire representation; its `Provider` property supplies the typed value for application code. Preserve unknown source names in catalog responses while excluding them from importer dispatch. PanicStream remains a known historical source but has no active ingestion registration.
+
+Verified this follow-up with 149 passing tests and 24 unrelated opt-in skips, plus a Release worker publish and CSharpier check. Provider tests round-trip the unchanged strings through Newtonsoft API JSON, Temporal payload conversion, and Dapper source mapping.

@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Relisten.Api.Models;
 using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
@@ -12,7 +13,7 @@ internal static class ImportItemOperation
     // caught here: failure there prevents provider finalization altogether.
     internal static async Task<ItemImportResult?> RunAsync(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         ImportItem? item
     )
     {
@@ -33,7 +34,7 @@ internal static class ImportItemOperation
             Workflow.Logger.LogWarning(
                 error,
                 "Import failed for {Provider} item {Item}",
-                provider,
+                provider.ToValue(),
                 item?.Identifier ?? request.Item
             );
             return null;

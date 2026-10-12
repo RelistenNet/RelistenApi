@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Relisten.Api.Models;
 using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
@@ -290,9 +291,9 @@ public class TestIngestionWorkflows
         );
         using var fetchWorker = new TemporalWorker(
             environment.Client,
-            new TemporalWorkerOptions(IngestionQueues.Providers["archive.org"]).AddAllActivities(
-                activities
-            )
+            new TemporalWorkerOptions(
+                IngestionQueues.Providers[UpstreamProvider.ArchiveOrg]
+            ).AddAllActivities(activities)
         );
         return await workflowWorker.ExecuteAsync(() =>
             dbWorker.ExecuteAsync(() => fetchWorker.ExecuteAsync(run))
@@ -350,11 +351,14 @@ public class TestIngestionWorkflows
                 }
             }
 
-            return Task.FromResult(new ArtistImportPlan("artist", ["archive.org"]));
+            return Task.FromResult(new ArtistImportPlan("artist", [UpstreamProvider.ArchiveOrg]));
         }
 
         [Activity("Ingestion.PrepareProvider")]
-        public Task<ImportStats> PrepareProvider(ArtistImportRequest request, string provider)
+        public Task<ImportStats> PrepareProvider(
+            ArtistImportRequest request,
+            UpstreamProvider provider
+        )
         {
             if (FailPreparation)
             {
@@ -370,7 +374,7 @@ public class TestIngestionWorkflows
         [Activity("Ingestion.DiscoverItems")]
         public Task<ImportPage> DiscoverItems(
             ArtistImportRequest request,
-            string provider,
+            UpstreamProvider provider,
             DiscoveryCursor? cursor
         )
         {
@@ -394,7 +398,7 @@ public class TestIngestionWorkflows
         [Activity("Ingestion.ImportItem")]
         public async Task<ItemImportResult> ImportItem(
             ArtistImportRequest request,
-            string provider,
+            UpstreamProvider provider,
             ImportItem? item
         )
         {
@@ -460,7 +464,7 @@ public class TestIngestionWorkflows
         [Activity("Ingestion.ReconcileProvider")]
         public Task<ProviderResult> ReconcileProvider(
             ArtistImportRequest request,
-            string provider,
+            UpstreamProvider provider,
             string[] ineligibleItems,
             bool hasFailures
         )

@@ -141,7 +141,7 @@ public partial class ArchiveOrgImporter : IProviderIngestion
         var snapshot =
             await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
                 context.Run,
-                IngestionActivities.DiscoveryName(DataSourceName, null)
+                IngestionActivities.DiscoveryName(Provider, null)
             ) ?? throw new InvalidOperationException("Archive discovery has not completed.");
         var observed =
             snapshot.ObservedIdentifiers

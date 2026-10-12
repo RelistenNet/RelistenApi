@@ -19,8 +19,6 @@ namespace Relisten.Import
 {
     public class PanicStreamComImporter : ImporterBase
     {
-        public const string DataSourceName = "panicstream.com";
-
         private static Regex ShowDirMatcher = new(
             @"href=""([0-9_]+)([a-z]?)\/"">[0-9_]+[a-z]?\/<\/a>\s+([0-9A-Za-z: -]+)\s+-"
         );
@@ -83,7 +81,7 @@ namespace Relisten.Import
         protected ILogger<PanicStreamComImporter> _log { get; set; }
         public IConfiguration _configuration { get; }
 
-        public override string ImporterName => "panicstream.com";
+        public override UpstreamProvider Provider => UpstreamProvider.PanicStream;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {

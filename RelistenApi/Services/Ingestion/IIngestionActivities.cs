@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using Relisten.Api.Models;
 using Relisten.Import;
 using Temporalio.Activities;
 
@@ -13,13 +14,13 @@ public interface IIngestionActivities
 
     /// <summary>Imports prerequisite catalogs before item discovery.</summary>
     [Activity("Ingestion.PrepareProvider")]
-    Task<ImportStats> PrepareProvider(ArtistImportRequest request, string provider);
+    Task<ImportStats> PrepareProvider(ArtistImportRequest request, UpstreamProvider provider);
 
     /// <summary>Returns a bounded slice of a stable provider discovery snapshot.</summary>
     [Activity("Ingestion.DiscoverItems")]
     Task<ImportPage> DiscoverItems(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         DiscoveryCursor? cursor
     );
 
@@ -27,7 +28,7 @@ public interface IIngestionActivities
     [Activity("Ingestion.ImportItem")]
     Task<ItemImportResult> ImportItem(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         ImportItem? item
     );
 
@@ -35,7 +36,7 @@ public interface IIngestionActivities
     [Activity("Ingestion.ReconcileProvider")]
     Task<ProviderResult> ReconcileProvider(
         ArtistImportRequest request,
-        string provider,
+        UpstreamProvider provider,
         string[] ineligibleItems,
         bool hasFailures
     );

@@ -95,7 +95,7 @@ public partial class PhantasyTourImporter : IProviderIngestion
             var snapshot =
                 await context.Store.ReadSnapshotAsync<DiscoverySnapshot>(
                     context.Run,
-                    IngestionActivities.DiscoveryName(DataSourceName, cursor)
+                    IngestionActivities.DiscoveryName(Provider, cursor)
                 )
                 ?? throw new InvalidOperationException(
                     "Phantasy Tour discovery has not completed."
