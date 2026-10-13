@@ -28,14 +28,6 @@ public sealed class TemporalIngestionClient
         this.client = client;
         this.configuration = configuration;
         this.catalog = catalog;
-
-        Archive = new ArchiveImportClient(this);
-        Jerry = new JerryImportClient(this);
-        PhishIn = new ProviderRefreshClient<RefreshPhishInArtist>(RefreshAsync);
-        PhishNet = new ProviderRefreshClient<RefreshPhishNetArtist>(RefreshAsync);
-        SetlistFm = new ProviderRefreshClient<RefreshSetlistFmArtist>(RefreshAsync);
-        PhantasyTour = new ProviderRefreshClient<RefreshPhantasyTourArtist>(RefreshAsync);
-        Local = new ProviderRefreshClient<RefreshLocalArtist>(RefreshAsync);
     }
 
     public bool Enabled =>
@@ -44,17 +36,6 @@ public sealed class TemporalIngestionClient
             "Temporal",
             StringComparison.OrdinalIgnoreCase
         );
-
-    public ArchiveImportClient Archive { get; }
-    public JerryImportClient Jerry { get; }
-    public ProviderRefreshClient<RefreshPhishInArtist> PhishIn { get; }
-    public ProviderRefreshClient<RefreshPhishNetArtist> PhishNet { get; }
-    public ProviderRefreshClient<RefreshSetlistFmArtist> SetlistFm { get; }
-    public ProviderRefreshClient<RefreshPhantasyTourArtist> PhantasyTour { get; }
-    public ProviderRefreshClient<RefreshLocalArtist> Local { get; }
-
-    public Task<ImportHandle<ArtistImportResult>> RefreshArtistAsync(RefreshArtist request) =>
-        RefreshAsync(request);
 
     /// <summary>Starts an explicit refresh scope, preserving each provider's filter meaning.</summary>
     public Task<ImportHandle<ArtistImportResult>> RefreshAsync(ArtistRefreshCommand request)
@@ -79,6 +60,31 @@ public sealed class TemporalIngestionClient
             (ArtistRefreshWorkflow workflow) => workflow.RunAsync(request, null)
         );
     }
+
+    /// <summary>Imports one Archive item under the same artist admission rule as a refresh.</summary>
+    public Task<ImportHandle<ArtistImportResult>> ImportArchiveItemAsync(ImportArchiveItem request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Item.Value))
+        {
+            throw new InvalidImportRequest("Archive item identifier must not be empty.");
+        }
+
+        return StartArtist(
+            request.Artist,
+            UpstreamProvider.ArchiveOrg,
+            (ArchiveItemImportWorkflow workflow) => workflow.RunAsync(request, null)
+        );
+    }
+
+    /// <summary>Repairs Jerry venue assignments without requesting a general artist refresh.</summary>
+    public Task<ImportHandle<ArtistImportResult>> RepairJerryVenuesAsync(
+        RepairJerryVenues request
+    ) =>
+        StartArtist(
+            request.Artist,
+            UpstreamProvider.JerryGarcia,
+            (JerryVenueRepairWorkflow workflow) => workflow.RunAsync(request, null)
+        );
 
     public Task<ImportHandle<ArtistImportResult>> RebuildArtistCatalogAsync(
         RebuildArtistCatalog request
@@ -229,51 +235,5 @@ public sealed class TemporalIngestionClient
             (RefreshBatchWorkflow workflow) => workflow.RunAsync(request, null, null),
             options
         );
-    }
-
-    /// <summary>Only Archive exposes a targeted import; unsupported providers have no successful no-op method.</summary>
-    public sealed class ArchiveImportClient(TemporalIngestionClient owner)
-    {
-        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(RefreshArchiveArtist request) =>
-            owner.RefreshAsync(request);
-
-        public Task<ImportHandle<ArtistImportResult>> ImportItemAsync(ImportArchiveItem request)
-        {
-            if (string.IsNullOrWhiteSpace(request.Item.Value))
-            {
-                throw new InvalidImportRequest("Archive item identifier must not be empty.");
-            }
-
-            return owner.StartArtist(
-                request.Artist,
-                UpstreamProvider.ArchiveOrg,
-                (ArchiveItemImportWorkflow workflow) => workflow.RunAsync(request, null)
-            );
-        }
-    }
-
-    public sealed class JerryImportClient(TemporalIngestionClient owner)
-    {
-        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(RefreshJerryArtist request) =>
-            owner.RefreshAsync(request);
-
-        public Task<ImportHandle<ArtistImportResult>> RepairVenuesAsync(
-            RepairJerryVenues request
-        ) =>
-            owner.StartArtist(
-                request.Artist,
-                UpstreamProvider.JerryGarcia,
-                (JerryVenueRepairWorkflow workflow) => workflow.RunAsync(request, null)
-            );
-    }
-
-    /// <summary>Offers a provider's typed refresh request without inventing optional lifecycle methods.</summary>
-    public sealed class ProviderRefreshClient<TRequest>(
-        Func<TRequest, Task<ImportHandle<ArtistImportResult>>> start
-    )
-        where TRequest : ArtistRefreshCommand
-    {
-        public Task<ImportHandle<ArtistImportResult>> RefreshAsync(TRequest request) =>
-            start(request);
     }
 }

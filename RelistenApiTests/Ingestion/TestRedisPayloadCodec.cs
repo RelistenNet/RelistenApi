@@ -224,20 +224,30 @@ public class TestRedisPayloadCodecPersistence
         );
     }
 
-    [Test]
-    public async Task ReuseCannotReplaceDifferentStoredBytes()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task EncodingAgainRepairsStoredPayload(bool wrongType)
     {
         var payload = TestRedisPayloadCodec.LargePayload();
-        var key = TrackKey((await codec.EncodeAsync([payload])).Single());
-        await database.StringSetAsync(key, "damaged");
-        Assert.That(
-            async () => await codec.EncodeAsync([payload]),
-            Throws
-                .TypeOf<RedisPayloadException>()
-                .With.Property("Code")
-                .EqualTo("PayloadContentConflict")
-        );
-        (await database.StringGetAsync(key)).ToString().Should().Be("damaged");
+        var reference = (await codec.EncodeAsync([payload])).Single();
+        var key = TrackKey(reference);
+        if (wrongType)
+        {
+            await database.KeyDeleteAsync(key);
+            await database.ListRightPushAsync(key, "damaged");
+        }
+        else
+        {
+            await database.StringSetAsync(key, "damaged");
+        }
+
+        (await codec.EncodeAsync([payload])).Single().Should().Be(reference);
+
+        // An existing workflow reference works again without changing its history.
+        (await codec.DecodeAsync([reference]))
+            .Single()
+            .Should()
+            .Be(payload);
     }
 
     [TestCase(false, "PayloadCorrupt")]

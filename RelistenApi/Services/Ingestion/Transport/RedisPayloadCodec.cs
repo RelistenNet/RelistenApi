@@ -23,21 +23,6 @@ public sealed class RedisPayloadCodec : IPayloadCodec
     public const string Encoding = "binary/relisten-redis-v1";
     public static readonly TimeSpan Retention = TimeSpan.FromDays(15);
 
-    // Compare and refresh in one Redis operation. A collision or damaged existing value
-    // must not silently replace bytes that another execution already references.
-    private const string StoreScript = """
-        local kind = redis.call('TYPE', KEYS[1]).ok
-        if kind ~= 'none' and kind ~= 'string' then return 0 end
-        local existing = redis.call('GET', KEYS[1])
-        if existing then
-            if existing ~= ARGV[1] then return 0 end
-            redis.call('PEXPIRE', KEYS[1], ARGV[2])
-        else
-            redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2])
-        end
-        return 1
-        """;
-
     // Check length at Redis before transferring bytes into the worker process.
     private const string ReadScript = """
         if redis.call('EXISTS', KEYS[1]) == 0 then return {0} end
@@ -104,16 +89,10 @@ public sealed class RedisPayloadCodec : IPayloadCodec
         var bytes = payload.ToByteArray();
         var digest = Convert.ToHexStringLower(SHA256.HashData(bytes));
         var key = keyPrefix + digest;
-        var stored = await database.ScriptEvaluateAsync(
-            StoreScript,
-            new RedisKey[] { key },
-            new RedisValue[] { bytes, (long)Retention.TotalMilliseconds }
-        );
 
-        if ((int)stored != 1)
-        {
-            throw Error("PayloadContentConflict", key);
-        }
+        // The content hash determines the key. SET refreshes retention atomically
+        // and repairs damaged stored bytes when the same payload is encoded again.
+        await database.StringSetAsync(key, bytes, Retention);
 
         // Return a reference only after Redis has stored or refreshed its immutable bytes.
         return new Payload

@@ -4,30 +4,24 @@ using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
-using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.PhantasyTour;
 
+/// <summary>Retains completed-page results and dates needed for final reconciliation.</summary>
 public sealed record PhantasyTourProgress(
-    ProviderStage Stage = ProviderStage.NotStarted,
-    int ItemIndex = 0,
-    PhantasyTourPage? Next = null,
-    PhantasyTourListedDate[]? ListedDates = null,
-    ProviderSummary? Summary = null
+    PhantasyTourPage NextPage,
+    PhantasyTourListedDate[] ListedDates,
+    ProviderSummary Summary
 );
 
-/// <summary>Retains every listed date, then repairs dates only after enumeration finishes.</summary>
+/// <summary>Imports show pages, then repairs dates only after enumeration finishes.</summary>
 [Workflow]
 public sealed class PhantasyTourWorkflow
 {
-    // Replay restores these fields within a run. Continuation passes the current
-    // page, its next item, and all listed dates to the next run explicitly.
     private ProviderRequest<RefreshPhantasyTourArtist> _input = null!;
     private ProviderWorkflowContext _context = null!;
     private ActivityOptions _options = null!;
-    private PhantasyTourDiscovery? _page;
-    private PhantasyTourProgress _progress = null!;
     private ProviderSummary _summary = null!;
     private Dictionary<PhantasyTourShowId, DateTime> _listedDates = null!;
     private int _activityCalls;
@@ -35,7 +29,6 @@ public sealed class PhantasyTourWorkflow
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
         ProviderRequest<RefreshPhantasyTourArtist> input,
-        PhantasyTourDiscovery? page = null,
         PhantasyTourProgress? progress = null
     )
     {
@@ -44,136 +37,94 @@ public sealed class PhantasyTourWorkflow
         _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.PhantasyTour]
         );
-        _page = page;
-        _progress = progress ?? new();
-        _summary = _progress.Summary ?? new();
-        _listedDates = (_progress.ListedDates ?? []).ToDictionary(
+        _summary = progress?.Summary ?? new();
+        _listedDates = (progress?.ListedDates ?? []).ToDictionary(
             entry => entry.Id,
             entry => entry.Date
         );
-        _activityCalls = 0;
 
-        await ImportShowPagesAsync();
+        await ImportShowPagesAsync(progress?.NextPage);
         await RepairListedDatesAsync();
 
         return _summary;
     }
 
-    private async Task ImportShowPagesAsync()
+    private async Task ImportShowPagesAsync(PhantasyTourPage? nextPage)
     {
-        while (
-            _progress.Stage != ProviderStage.Finalizing && _progress.Stage != ProviderStage.Complete
-        )
+        do
         {
-            ContinueBeforeNextStepIfNeeded();
+            ImportWorkflowOptions.RequireActive(_input.Execution);
+            var page = await ReadPageAsync(nextPage);
+            await ImportPageAsync(page);
 
-            if (_page == null)
+            nextPage = page.Next;
+            if (nextPage != null && ImportWorkflowOptions.ShouldContinue(_activityCalls))
             {
-                await ReadNextPageAsync();
-                continue;
+                var checkpoint = new PhantasyTourProgress(nextPage, DateEntries(), _summary);
+                throw Workflow.CreateContinueAsNewException(
+                    (PhantasyTourWorkflow workflow) => workflow.RunAsync(_input, checkpoint)
+                );
             }
-
-            if (_progress.ItemIndex < _page.Items.Length)
-            {
-                await ImportNextShowAsync();
-                continue;
-            }
-
-            _page = null;
-            _progress = _progress with
-            {
-                Stage = _progress.Next == null ? ProviderStage.Finalizing : ProviderStage.Importing,
-                ItemIndex = 0,
-            };
-        }
+        } while (nextPage != null);
     }
 
-    private async Task ReadNextPageAsync()
+    private async Task<PhantasyTourDiscovery> ReadPageAsync(PhantasyTourPage? cursor)
     {
-        _page = await Workflow.ExecuteActivityAsync(
-            (PhantasyTourActivities a) => a.ReadShowPageAsync(_context, _progress.Next),
+        var page = await Workflow.ExecuteActivityAsync(
+            (PhantasyTourActivities activities) => activities.ReadShowPageAsync(_context, cursor),
             _options
         );
         _activityCalls++;
 
-        // Listing dates also correct existing shows, including shows that did not
-        // need an item import. Conflicting dates cannot produce a safe repair set.
-        foreach (var entry in _page.ListedDates)
+        // Upstream pages can overlap while shows change. The last observed local
+        // date wins; a later sync can correct it without aborting this artist.
+        foreach (var entry in page.ListedDates)
         {
-            if (_listedDates.TryGetValue(entry.Id, out var prior) && prior != entry.Date)
-            {
-                throw new ApplicationFailureException(
-                    $"Phantasy Tour returned conflicting dates for {entry.Id.Value}.",
-                    "ConflictingListedDates",
-                    nonRetryable: true
-                );
-            }
-
             _listedDates[entry.Id] = entry.Date;
         }
 
-        _progress = _progress with
-        {
-            Stage = ProviderStage.Importing,
-            ItemIndex = 0,
-            Next = _page.Next,
-        };
+        return page;
     }
 
-    private async Task ImportNextShowAsync()
+    private async Task ImportPageAsync(PhantasyTourDiscovery page)
     {
-        var item = _page!.Items[_progress.ItemIndex];
-        var outcome = await ImportItemOperation.RunAsync(
-            item.Id,
-            () =>
-                Workflow.ExecuteActivityAsync(
-                    (PhantasyTourActivities a) => a.ImportShowAsync(_context, item),
-                    _options
-                )
-        );
-
-        _activityCalls++;
-        _summary =
-            outcome.Failure == null
-                ? _summary.Add(outcome.Result!.Disposition)
-                : _summary.AddFailure(outcome.Failure);
-        _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
-    }
-
-    private async Task RepairListedDatesAsync()
-    {
-        if (_progress.Stage == ProviderStage.Complete)
+        // Each fetched page is retained in Temporal history until all its items
+        // settle. Rollover can exceed the soft activity limit by one 100-show page.
+        foreach (var item in page.Items)
         {
-            return;
+            Workflow.CancellationToken.ThrowIfCancellationRequested();
+            ImportWorkflowOptions.RequireActive(_input.Execution);
+
+            var outcome = await ImportItemOperation.RunAsync(
+                item.Id,
+                () =>
+                    Workflow.ExecuteActivityAsync(
+                        (PhantasyTourActivities activities) =>
+                            activities.ImportShowAsync(_context, item),
+                        _options
+                    )
+            );
+            _activityCalls++;
+            _summary =
+                outcome.Failure == null
+                    ? _summary.Add(outcome.Result!.Disposition)
+                    : _summary.AddFailure(outcome.Failure);
         }
-
-        ContinueBeforeNextStepIfNeeded();
-
-        // Apply the complete listing only after enumeration ends. Item failures
-        // do not invalidate dates supplied independently by the listing itself.
-        await Workflow.ExecuteActivityAsync(
-            (PhantasyTourActivities a) =>
-                a.RepairListedDatesAsync(_context, DateEntries(_listedDates)),
-            _options
-        );
-        _progress = _progress with { Stage = ProviderStage.Complete };
     }
 
-    private void ContinueBeforeNextStepIfNeeded()
+    private Task RepairListedDatesAsync()
     {
         ImportWorkflowOptions.RequireActive(_input.Execution);
-        if (!ImportWorkflowOptions.ShouldContinue(_activityCalls))
-        {
-            return;
-        }
 
-        _progress = _progress with { Summary = _summary, ListedDates = DateEntries(_listedDates) };
-        throw Workflow.CreateContinueAsNewException(
-            (PhantasyTourWorkflow w) => w.RunAsync(_input, _page, _progress)
+        // Only a complete listing repairs dates. Item failures do not invalidate
+        // dates supplied independently by the listing itself.
+        return Workflow.ExecuteActivityAsync(
+            (PhantasyTourActivities activities) =>
+                activities.RepairListedDatesAsync(_context, DateEntries()),
+            _options
         );
     }
 
-    private static PhantasyTourListedDate[] DateEntries(
-        Dictionary<PhantasyTourShowId, DateTime> dates
-    ) => dates.Select(pair => new PhantasyTourListedDate(pair.Key, pair.Value)).ToArray();
+    private PhantasyTourListedDate[] DateEntries() =>
+        _listedDates.Select(pair => new PhantasyTourListedDate(pair.Key, pair.Value)).ToArray();
 }

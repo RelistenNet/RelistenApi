@@ -946,6 +946,33 @@ public class TestIngestionPersistence
     }
 
     [Test]
+    public async Task PhantasyTourUsesLastListedDateWhenAPageRepeatsAShow()
+    {
+        await ConfigureProvider("phantasytour.com", 7);
+        upstream.Respond = uri => ProviderFixtures.Response("phantasytour.com", uri);
+        await Import();
+        upstream.Respond = _ =>
+            JsonConvert.SerializeObject(
+                new[]
+                {
+                    new { id = 1, dateTime = "2000-01-01T20:00:00-05:00" },
+                    new { id = 1, dateTime = "2000-01-02T20:00:00-05:00" },
+                }
+            );
+
+        var result = await Import();
+
+        result.Status.Should().Be(ImportStatus.Completed);
+        var date = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<DateTime>(
+                "SELECT date FROM setlist_shows WHERE artist_id=@artistId AND upstream_identifier='pt:1'",
+                new { artistId }
+            )
+        );
+        date.Should().Be(new DateTime(2000, 1, 2));
+    }
+
+    [Test]
     public async Task PhantasyTourDoesNotRepairDatesUntilEveryListingPageSucceeds()
     {
         await ConfigureProvider("phantasytour.com", 7);
@@ -1156,14 +1183,13 @@ public class TestIngestionPersistence
         var client = host.Services.GetRequiredService<TemporalIngestionClient>();
         var artist = new ArtistId(artistUuid);
         var handle =
-            backfill ? await client.Jerry.RepairVenuesAsync(new RepairJerryVenues(artist))
+            backfill ? await client.RepairJerryVenuesAsync(new RepairJerryVenues(artist))
             : item != null
-                ? await client.Archive.ImportItemAsync(
+                ? await client.ImportArchiveItemAsync(
                     new ImportArchiveItem(artist, new ArchiveItemId(item))
                 )
-            : year.HasValue
-                ? await client.Archive.RefreshAsync(new RefreshArchiveArtist(artist, year))
-            : await client.RefreshArtistAsync(new RefreshArtist(artist));
+            : year.HasValue ? await client.RefreshAsync(new RefreshArchiveArtist(artist, year))
+            : await client.RefreshAsync(new RefreshArtist(artist));
         return await handle.GetResultAsync();
     }
 

@@ -36,7 +36,7 @@ internal sealed class IngestionOperatorCommands(
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
             "repair-jerry-venues" => (
-                await imports.Jerry.RepairVenuesAsync(new RepairJerryVenues(artistId))
+                await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))
             ).WorkflowId,
             "import" => await ImportArtistAsync(artistId),
             _ => throw new InvalidOperationException($"Unknown operator command: {operation}"),
@@ -126,7 +126,7 @@ internal sealed class IngestionOperatorCommands(
         }
 
         var request = new ImportArchiveItem(artistId, new ArchiveItemId(item));
-        return (await imports.Archive.ImportItemAsync(request)).WorkflowId;
+        return (await imports.ImportArchiveItemAsync(request)).WorkflowId;
     }
 
     private UpstreamProvider? ReadProvider()

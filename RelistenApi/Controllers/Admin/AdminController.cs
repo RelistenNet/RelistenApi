@@ -330,7 +330,7 @@ namespace Relisten.Controllers.Admin
                 }
 
                 jobId = (
-                    await _temporal.Jerry.RepairVenuesAsync(
+                    await _temporal.RepairJerryVenuesAsync(
                         new RepairJerryVenues(new ArtistId(artist.uuid))
                     )
                 ).WorkflowId;

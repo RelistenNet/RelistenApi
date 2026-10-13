@@ -5,14 +5,8 @@ using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.PhishIn;
 
-/// <summary>Retains an unfinished page and its item index without repeating upstream discovery.</summary>
-public sealed record PhishInProgress(
-    ProviderStage Stage = ProviderStage.NotStarted,
-    Page<DiscoveredItem<PhishInShowId, PhishInShowInput>, PhishInPage>? Page = null,
-    int ItemIndex = 0,
-    PhishInPage? NextPage = null,
-    ProviderSummary? Summary = null
-);
+/// <summary>Starts the next page after the preceding page has settled.</summary>
+public sealed record PhishInProgress(PhishInPage NextPage, ProviderSummary Summary);
 
 /// <summary>
 /// Prepares shared catalogs, then imports Phish.in show pages sequentially.
@@ -26,9 +20,8 @@ public sealed class PhishInWorkflow
     private ProviderWorkflowContext _context = null!;
     private ActivityOptions _options = null!;
     private PhishInCatalogs _catalogs = null!;
-    private PhishInProgress _progress = null!;
     private ProviderSummary _summary = null!;
-    private int _completedCalls;
+    private int _activityCalls;
 
     [WorkflowRun]
     public async Task<ProviderSummary> RunAsync(
@@ -37,131 +30,90 @@ public sealed class PhishInWorkflow
         PhishInProgress? progress = null
     )
     {
-        RestoreCheckpoint(input, catalogs, progress);
-        ImportWorkflowOptions.RequireActive(input.Execution);
-
-        await PrepareCatalogsIfNeededAsync();
-        await ImportShowPagesAsync();
-
-        return _summary;
-    }
-
-    private void RestoreCheckpoint(
-        ProviderRequest<RefreshPhishInArtist> input,
-        PhishInCatalogs? catalogs,
-        PhishInProgress? progress
-    )
-    {
-        // Replay reconstructs these fields. ContinueAsNew starts a fresh instance,
-        // so prepared catalogs and durable progress also travel in the run arguments.
         _input = input;
         _context = new ProviderWorkflowContext(input.Request.Artist, input.Execution);
         _options = ImportWorkflowOptions.Activity(
             IngestionQueues.Providers[UpstreamProvider.Phishin]
         );
-        _catalogs = catalogs!;
-        _progress = progress ?? new();
-        _summary = _progress.Summary ?? new();
-        _completedCalls = 0;
+        _summary = progress?.Summary ?? new();
+
+        ImportWorkflowOptions.RequireActive(input.Execution);
+        _catalogs = catalogs ?? await PrepareCatalogsAsync();
+        await ImportShowPagesAsync(progress?.NextPage);
+
+        return _summary;
     }
 
-    private async Task PrepareCatalogsIfNeededAsync()
+    private async Task<PhishInCatalogs> PrepareCatalogsAsync()
     {
-        if (_progress.Stage != ProviderStage.NotStarted)
-        {
-            return;
-        }
-
-        // Shows depend on these venues, songs, and tours. Preparation failure
-        // stops the provider before it begins importing any show.
-        _catalogs = await Workflow.ExecuteActivityAsync(
-            (PhishInActivities a) => a.PrepareCatalogsAsync(_context),
+        // Shows depend on these venues, songs, and tours. Retain their mappings
+        // across continuation instead of preparing them again for each run.
+        var catalogs = await Workflow.ExecuteActivityAsync(
+            (PhishInActivities activities) => activities.PrepareCatalogsAsync(_context),
             _options
         );
-        _completedCalls++;
-
-        _progress = _progress with { Stage = ProviderStage.Importing };
+        _activityCalls++;
+        return catalogs;
     }
 
-    private async Task ImportShowPagesAsync()
+    private async Task ImportShowPagesAsync(PhishInPage? nextPage)
     {
-        while (_progress.Stage == ProviderStage.Importing)
+        do
         {
             ImportWorkflowOptions.RequireActive(_input.Execution);
-            ContinueWithCheckpointIfNeeded();
+            var page = await ReadPageAsync(nextPage);
+            await ImportPageAsync(page);
 
-            if (_progress.Page == null)
+            // A filtered refresh can start with an empty probe page. Only the
+            // provider's cursor determines when enumeration is complete.
+            nextPage = page.Next;
+            if (nextPage != null && ImportWorkflowOptions.ShouldContinue(_activityCalls))
             {
-                await ReadNextShowPageAsync();
-                continue;
+                var checkpoint = new PhishInProgress(nextPage, _summary);
+                throw Workflow.CreateContinueAsNewException(
+                    (PhishInWorkflow workflow) => workflow.RunAsync(_input, _catalogs, checkpoint)
+                );
             }
-
-            if (_progress.ItemIndex < _progress.Page.Items.Length)
-            {
-                await ImportNextShowAsync();
-                continue;
-            }
-
-            // An empty page can still have a next cursor. Only the cursor decides
-            // whether discovery is complete.
-            _progress = _progress with
-            {
-                Stage =
-                    _progress.Page.Next == null ? ProviderStage.Complete : ProviderStage.Importing,
-                NextPage = _progress.Page.Next,
-                Page = null,
-                ItemIndex = 0,
-            };
-        }
+        } while (nextPage != null);
     }
 
-    private async Task ReadNextShowPageAsync()
+    private async Task<
+        Page<DiscoveredItem<PhishInShowId, PhishInShowInput>, PhishInPage>
+    > ReadPageAsync(PhishInPage? cursor)
     {
         var page = await Workflow.ExecuteActivityAsync(
-            (PhishInActivities a) => a.ReadShowPageAsync(_input, _progress.NextPage),
+            (PhishInActivities activities) => activities.ReadShowPageAsync(_input, cursor),
             _options
         );
-        _completedCalls++;
-
-        // Preserve this exact page until every item has an outcome. Rollover must
-        // not refetch a page whose contents could change between runs.
-        _progress = _progress with
-        {
-            Page = page,
-            ItemIndex = 0,
-        };
+        _activityCalls++;
+        return page;
     }
 
-    private async Task ImportNextShowAsync()
+    private async Task ImportPageAsync(
+        Page<DiscoveredItem<PhishInShowId, PhishInShowInput>, PhishInPage> page
+    )
     {
-        var item = _progress.Page!.Items[_progress.ItemIndex];
-        var outcome = await ImportItemOperation.RunAsync(
-            item.Id,
-            () =>
-                Workflow.ExecuteActivityAsync(
-                    (PhishInActivities a) => a.ImportShowAsync(_context, _catalogs, item),
-                    _options
-                )
-        );
-        _completedCalls++;
-
-        _summary =
-            outcome.Failure == null
-                ? _summary.Add(outcome.Result!.Disposition)
-                : _summary.AddFailure(outcome.Failure);
-        _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
-    }
-
-    private void ContinueWithCheckpointIfNeeded()
-    {
-        if (!ImportWorkflowOptions.ShouldContinue(_completedCalls))
+        // Complete a page before rollover. Temporal replays its recorded items
+        // after a restart; the soft history limit can overshoot by one 20-show page.
+        foreach (var item in page.Items)
         {
-            return;
+            Workflow.CancellationToken.ThrowIfCancellationRequested();
+            ImportWorkflowOptions.RequireActive(_input.Execution);
+
+            var outcome = await ImportItemOperation.RunAsync(
+                item.Id,
+                () =>
+                    Workflow.ExecuteActivityAsync(
+                        (PhishInActivities activities) =>
+                            activities.ImportShowAsync(_context, _catalogs, item),
+                        _options
+                    )
+            );
+            _activityCalls++;
+            _summary =
+                outcome.Failure == null
+                    ? _summary.Add(outcome.Result!.Disposition)
+                    : _summary.AddFailure(outcome.Failure);
         }
-
-        var checkpoint = _progress with { Summary = _summary };
-        throw Workflow.CreateContinueAsNewException(
-            (PhishInWorkflow w) => w.RunAsync(_input, _catalogs, checkpoint)
-        );
     }
 }

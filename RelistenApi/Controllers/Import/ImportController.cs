@@ -60,9 +60,7 @@ namespace Relisten.Controllers
 
                 var jobId = _temporal.Enabled
                     ? (
-                        await _temporal.RefreshArtistAsync(
-                            new RefreshArtist(new ArtistId(art.uuid))
-                        )
+                        await _temporal.RefreshAsync(new RefreshArtist(new ArtistId(art.uuid)))
                     ).WorkflowId
                     : BackgroundJob.Enqueue(() =>
                         _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
@@ -123,7 +121,7 @@ namespace Relisten.Controllers
                 return StatusCode(
                     201,
                     (
-                        await _temporal.PhishIn.RefreshAsync(
+                        await _temporal.RefreshAsync(
                             new RefreshPhishInArtist(new ArtistId(artist.uuid))
                         )
                     ).WorkflowId
@@ -170,7 +168,7 @@ namespace Relisten.Controllers
 
                 var jobId = _temporal.Enabled
                     ? (
-                        await _temporal.Archive.ImportItemAsync(
+                        await _temporal.ImportArchiveItemAsync(
                             new ImportArchiveItem(
                                 new ArtistId(art.uuid),
                                 new ArchiveItemId(showIdentifier)

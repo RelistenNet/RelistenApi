@@ -23,11 +23,11 @@ public class TestImportAdmission
     {
         var artist = new ArtistId(Guid.NewGuid());
         var client = Client(new Catalog([UpstreamProvider.ArchiveOrg]));
-        var owner = await client.RefreshArtistAsync(new RefreshArtist(artist));
+        var owner = await client.RefreshAsync(new RefreshArtist(artist));
         try
         {
             Func<Task> targeted = async () =>
-                await client.Archive.ImportItemAsync(
+                await client.ImportArchiveItemAsync(
                     new ImportArchiveItem(artist, new ArchiveItemId("one"))
                 );
             Func<Task> rebuild = async () =>
@@ -53,7 +53,7 @@ public class TestImportAdmission
         var client = Client(new Catalog([UpstreamProvider.ArchiveOrg]));
         var starts = new[]
         {
-            Capture(() => client.RefreshArtistAsync(new RefreshArtist(artist))),
+            Capture(() => client.RefreshAsync(new RefreshArtist(artist))),
             Capture(() => client.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artist))),
         };
         var outcomes = await Task.WhenAll(starts);
@@ -78,7 +78,7 @@ public class TestImportAdmission
     {
         var artist = new ArtistId(Guid.NewGuid());
         var client = Client(new Catalog([UpstreamProvider.ArchiveOrg]));
-        var first = await client.RefreshArtistAsync(new RefreshArtist(artist));
+        var first = await client.RefreshAsync(new RefreshArtist(artist));
         await environment
             .Client.GetWorkflowHandle(first.WorkflowId)
             .TerminateAsync("Finish first operation");
@@ -106,10 +106,10 @@ public class TestImportAdmission
     {
         var artist = new ArtistId(Guid.NewGuid());
         Func<Task> missing = async () =>
-            await Client(new Catalog(null)).RefreshArtistAsync(new RefreshArtist(artist));
+            await Client(new Catalog(null)).RefreshAsync(new RefreshArtist(artist));
         Func<Task> unsupported = async () =>
             await Client(new Catalog([UpstreamProvider.Local]))
-                .Archive.ImportItemAsync(new ImportArchiveItem(artist, new ArchiveItemId("one")));
+                .ImportArchiveItemAsync(new ImportArchiveItem(artist, new ArchiveItemId("one")));
         await missing.Should().ThrowAsync<ArtistNotFound>();
         await unsupported.Should().ThrowAsync<UnsupportedImportOperation>();
     }
@@ -120,9 +120,7 @@ public class TestImportAdmission
     {
         var client = Client(new Catalog([UpstreamProvider.ArchiveOrg]));
         Func<Task> start = async () =>
-            await client.Archive.RefreshAsync(
-                new RefreshArchiveArtist(new ArtistId(Guid.NewGuid()), year)
-            );
+            await client.RefreshAsync(new RefreshArchiveArtist(new ArtistId(Guid.NewGuid()), year));
         await start.Should().ThrowAsync<InvalidImportRequest>();
     }
 
@@ -132,7 +130,7 @@ public class TestImportAdmission
     {
         var client = Client(new Catalog([UpstreamProvider.ArchiveOrg]));
         Func<Task> start = async () =>
-            await client.Archive.ImportItemAsync(
+            await client.ImportArchiveItemAsync(
                 new ImportArchiveItem(new ArtistId(Guid.NewGuid()), new ArchiveItemId(item))
             );
         await start.Should().ThrowAsync<InvalidImportRequest>();

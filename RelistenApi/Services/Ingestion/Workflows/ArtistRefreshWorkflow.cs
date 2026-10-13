@@ -132,7 +132,7 @@ public class ArtistRefreshWorkflow
                 );
 
                 return Workflow.ExecuteChildWorkflowAsync(
-                    (SetlistFmWorkflow workflow) => workflow.RunAsync(providerRequest, null, null),
+                    (SetlistFmWorkflow workflow) => workflow.RunAsync(providerRequest, null),
                     options
                 );
             }
@@ -146,8 +146,7 @@ public class ArtistRefreshWorkflow
                 );
 
                 return Workflow.ExecuteChildWorkflowAsync(
-                    (PhantasyTourWorkflow workflow) =>
-                        workflow.RunAsync(providerRequest, null, null),
+                    (PhantasyTourWorkflow workflow) => workflow.RunAsync(providerRequest, null),
                     options
                 );
             }

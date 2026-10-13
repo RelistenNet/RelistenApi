@@ -50,8 +50,10 @@ public partial class PhantasyTourImporter
                 continue;
             }
 
+            // A repeated show may have changed while the listing was paged.
+            dates[new(show.id)] = show.dateTime.Date;
+
             var identifier = UpstreamIdentifierForPhantasyTourId(show.id);
-            AddListedDate(dates, new(show.id), show.dateTime.Date);
             if (!existingSetlistShows.ContainsKey(identifier))
             {
                 selected.Add(
@@ -129,7 +131,7 @@ public partial class PhantasyTourImporter
         var dates = new Dictionary<PhantasyTourShowId, DateTime>();
         foreach (var entry in listedDates)
         {
-            AddListedDate(dates, entry.Id, entry.Date);
+            dates[entry.Id] = entry.Date;
         }
 
         return context.CommitAsync(async () =>
@@ -144,21 +146,5 @@ public partial class PhantasyTourImporter
             await _tourService.RefreshDatesFromSetlists(context.Artist);
             return corrected;
         });
-    }
-
-    private static void AddListedDate(
-        Dictionary<PhantasyTourShowId, DateTime> dates,
-        PhantasyTourShowId identifier,
-        DateTime date
-    )
-    {
-        if (dates.TryGetValue(identifier, out var previous) && previous != date)
-        {
-            throw new InvalidDataException(
-                $"Phantasy Tour returned conflicting dates for {identifier.Value}."
-            );
-        }
-
-        dates[identifier] = date;
     }
 }
