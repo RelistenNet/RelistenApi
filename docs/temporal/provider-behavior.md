@@ -30,7 +30,7 @@ Targeted Archive imports call the same `ImportItem` activity with a requested id
 
 - Phish.in runs before Phish.net. A Phish.in year is a lower bound; Phish.net and Archive years are exact filters. A filtered artist command preserves the other providers' unfiltered refreshes.
 - Phish.net distinguishes reviews not fetched from a fetched empty list. If current catalog state requires reviews absent from the fetched inputs, `EnrichmentInputsChanged` rolls back and retries the activity with fresh HTTP inputs. It does not erase existing reviews based on an omitted fetch.
-- Phantasy Tour retains local calendar dates for every listed past show and rejects conflicting dates for one ID. Date/tour repair runs only after complete enumeration, including when a missing-show detail import failed. A listing failure suppresses repair.
+- Phantasy Tour retains local calendar dates for every listed past show; a later observation of the same ID replaces its earlier date. Date/tour repair runs only after complete enumeration, including when a missing-show detail import failed. A listing failure suppresses repair.
 - Jerry venue repair preserves successful item changes if another item fails. It refreshes tour bounds, but removes orphan venues only when all repair items succeeded. The existing no-Last-Modified fallback remains; its timestamp is not an exactly-once identity.
 - Local imports preserve the upstream date key and catalog UUID formulas. All directories for the date produce one source, its set, and its tracks. The activity fetches directory metadata before its write transaction.
 

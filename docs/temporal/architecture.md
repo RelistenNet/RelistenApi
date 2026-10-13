@@ -25,7 +25,7 @@ Item activities fetch their required upstream inputs before starting a catalog t
 | Responsibility | Entry point |
 |---|---|
 | Named commands and provider keys | [ImportCommands](../../RelistenApi/Services/Ingestion/ImportCommands.cs) |
-| Admission, schedules, provider client groups | [TemporalIngestionClient](../../RelistenApi/Services/Ingestion/TemporalIngestionClient.cs) |
+| Admission, schedules, named commands | [TemporalIngestionClient](../../RelistenApi/Services/Ingestion/TemporalIngestionClient.cs) |
 | Result, cancellation, and description of the admitted execution | [ImportHandle](../../RelistenApi/Services/Ingestion/ImportHandle.cs) |
 | Provider dispatch and final rebuild | [ArtistRefreshWorkflow](../../RelistenApi/Services/Ingestion/Workflows/ArtistRefreshWorkflow.cs) |
 | One requested Archive recording | [ArchiveItemImportWorkflow](../../RelistenApi/Services/Ingestion/Workflows/ArchiveItemImportWorkflow.cs) |
@@ -62,7 +62,7 @@ Activities heartbeat during HTTP and database waits. HTTP accepts cancellation. 
 
 An operation gets one logical execution ID and a seven-day deadline. Children inherit that deadline and receive only its remaining time. The logical ID is diagnostic context, not a catalog key. Continuation does not extend the deadline.
 
-Provider checkpoints contain a typed stage, current page or selection position, counters, and required reconciliation evidence. They distinguish unstarted discovery from a completed final page. Providers continue after 100 completed activity calls or when Temporal recommends it, between item operations. Immutable selections or prepared catalogs travel separately from changing progress, so the payload codec can reuse their serialized bytes.
+Fixed-selection providers checkpoint their selection position, counters, and required cleanup state between items. Phish.in, Setlist.fm, and Phantasy Tour finish a page before continuing; their checkpoints hold the next cursor and summary, plus prepared catalogs or date evidence where needed. The current run's history retains the fetched page for replay. ContinueAsNew is considered after 100 completed activity calls or when Temporal recommends it; paged providers can exceed that threshold by one page. Immutable selections or prepared catalogs travel separately from changing progress so the codec can reuse their serialized bytes.
 
 A batch selects artist UUIDs once and retains that array across runs. It fixes the thin-import year in UTC once, replaces completed children until ten are active, and drains children before a 250-artist segment or recommended continuation. Its result separately counts completed, partial, failed, and conflicting artists.
 
@@ -77,3 +77,11 @@ The codec removes large values from history events; it does not limit history ev
 ## Verification boundaries
 
 The [plan](provider-workflow-plan.md) tracks verification results. Meaningful checks exercise typed payload conversion, provider catalog output, repeated and overlapping writes, rollback, cancellation before commit, partial results, provider ordering, targeted imports, continuation/replay, worker replacement, batch concurrency, and handle isolation after workflow-ID reuse. Local tests use isolated services and fixture HTTP responses. Production behavior has not been verified by deployment.
+
+## Cache consistency and extension choices
+
+The imported catalog is a rebuildable cache of upstream recordings and setlists. A sync can miss a changing upstream page or leave an item stale; a later sync can repair it. Prioritize frequent refreshes for popular artists over making each sync a perfect upstream snapshot. The existing full and recently-active schedules remain unchanged; a new popularity-based cadence needs a defined popularity signal before implementation.
+
+Keep stable catalog IDs, compound-write transactions, artist admission, and conservative deletion checks. Those prevent duplicate identities, broken relationships, or accidental removal. Keep Temporal replay inputs and payload lifetimes intact because lost inputs prevent execution from resuming. Avoid additional receipts, exact mutation accounting, collision protocols, or compatibility layers for this undeployed branch.
+
+New provider behavior belongs in its concrete workflow and activities. Add a typed command when the operation has distinct semantics. Use the shared admission client directly; do not add forwarding client classes or a generic workflow lifecycle. Named domain phases and provider-specific cursors make the sequence visible without hiding it in an extension framework.
