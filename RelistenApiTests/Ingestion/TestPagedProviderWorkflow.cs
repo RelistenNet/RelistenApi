@@ -20,7 +20,7 @@ public class TestPagedProviderWorkflow
     public async Task RolloverFinishesTheCurrentPageAndEmptyPagesDoNotEndEnumeration(bool failItem)
     {
         await using var environment = await WorkflowEnvironment.StartLocalAsync();
-        var activities = new PagedActivities(failItem);
+        var activities = new PagedActivities(failItem, holdFirstItem: true);
         using var workflows = new TemporalWorker(
             environment.Client,
             new TemporalWorkerOptions(IngestionQueues.Workflows).AddWorkflow<SetlistFmWorkflow>()
@@ -42,12 +42,18 @@ public class TestPagedProviderWorkflow
                     (SetlistFmWorkflow workflow) => workflow.RunAsync(input, null),
                     new WorkflowOptions("pages/" + Guid.NewGuid(), IngestionQueues.Workflows)
                 );
+                // Keep the first item pending while later slots are reused. The
+                // page must finish before the workflow can continue to page two.
+                await activities.LastPageItemEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                activities.MaxActive.Should().BeInRange(2, 10);
+                activities.ReadPages.Should().Equal(1);
+                activities.ReleaseFirstItem.TrySetResult();
                 var result = await handle.GetResultAsync();
 
                 result.CompletedItems.Should().Be(failItem ? 121 : 122);
                 result.FailedItems.Should().Be(failItem ? 1 : 0);
                 activities.ReadPages.Should().Equal(1, 2, 3);
-                activities.Imported.Should().Equal(Enumerable.Range(0, 122));
+                activities.Imported.Should().BeEquivalentTo(Enumerable.Range(0, 122));
                 var firstHistory = await environment
                     .Client.GetWorkflowHandle(handle.Id, handle.ResultRunId)
                     .FetchHistoryAsync();
@@ -69,11 +75,14 @@ public class TestPagedProviderWorkflow
         );
     }
 
-    [Test]
-    public async Task CancellationWithinAPageStopsBeforeTheNextItemOrPage()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task CancellationOrExpiryDrainsStartedItemsAndStopsFurtherAdmission(
+        bool expireItem
+    )
     {
         await using var environment = await WorkflowEnvironment.StartLocalAsync();
-        var activities = new PagedActivities(false, holdItem: true);
+        var activities = new PagedActivities(false, holdAllItems: true, expireItem: expireItem);
         using var workflows = new TemporalWorker(
             environment.Client,
             new TemporalWorkerOptions(IngestionQueues.Workflows).AddWorkflow<SetlistFmWorkflow>()
@@ -96,26 +105,104 @@ public class TestPagedProviderWorkflow
                     (SetlistFmWorkflow workflow) => workflow.RunAsync(input, null),
                     new WorkflowOptions("cancel-page/" + Guid.NewGuid(), IngestionQueues.Workflows)
                 );
-                await activities.ItemEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
-                await handle.CancelAsync();
+                await activities.FirstWindowEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                if (expireItem)
+                {
+                    activities.ReleaseExpiration.TrySetResult();
+                    await activities.ExpirationReported.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                }
+                else
+                {
+                    await handle.CancelAsync();
+                    await activities.AllItemsCanceled.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                }
+
+                // Expiry leaves siblings running; cancellation deliberately holds
+                // one acknowledgement. Neither may close the provider prematurely.
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                var history = await handle.FetchHistoryAsync();
+                while (true)
+                {
+                    var settledItem = history.Events.FirstOrDefault(e =>
+                        e.ActivityTaskCanceledEventAttributes != null
+                        || e.ActivityTaskFailedEventAttributes != null
+                    );
+                    if (
+                        settledItem != null
+                        && history.Events.Any(e =>
+                            e.WorkflowTaskCompletedEventAttributes != null
+                            && e.EventId > settledItem.EventId
+                        )
+                    )
+                    {
+                        break;
+                    }
+
+                    await Task.Delay(20, timeout.Token);
+                    history = await handle.FetchHistoryAsync();
+                }
+                history
+                    .Events.Should()
+                    .NotContain(e =>
+                        e.WorkflowExecutionCanceledEventAttributes != null
+                        || e.WorkflowExecutionFailedEventAttributes != null
+                    );
+                activities.ReleaseFirstItem.TrySetResult();
+                activities.ReleaseCancellation.TrySetResult();
 
                 Func<Task> result = async () => await handle.GetResultAsync();
                 var failure = await result.Should().ThrowAsync<WorkflowFailedException>();
-                TemporalException
-                    .IsCanceledException(failure.Which.InnerException!)
-                    .Should()
-                    .BeTrue(failure.Which.ToString());
+                if (expireItem)
+                {
+                    failure
+                        .Which.InnerException.Should()
+                        .BeOfType<ActivityFailureException>()
+                        .Which.InnerException.Should()
+                        .BeOfType<ApplicationFailureException>()
+                        .Which.ErrorType.Should()
+                        .Be("ImportExpired");
+                }
+                else
+                {
+                    TemporalException
+                        .IsCanceledException(failure.Which.InnerException!)
+                        .Should()
+                        .BeTrue(failure.Which.ToString());
+                }
                 activities.ReadPages.Should().Equal(1);
-                activities.Imported.Should().Equal(Enumerable.Range(0, 51));
+                activities.Imported.Should().BeEquivalentTo(Enumerable.Range(0, 10));
+                activities.MaxActive.Should().Be(10);
+                activities.Active.Should().Be(0);
             })
         );
     }
 
-    public class PagedActivities(bool failItem, bool holdItem = false)
+    public class PagedActivities(
+        bool failItem,
+        bool holdFirstItem = false,
+        bool holdAllItems = false,
+        bool expireItem = false
+    )
     {
         public List<int> ReadPages { get; } = [];
         public List<int> Imported { get; } = [];
-        public TaskCompletionSource ItemEntered { get; } =
+        private readonly object sync = new();
+        public int Active { get; private set; }
+        public int MaxActive { get; private set; }
+        private int canceled;
+        public TaskCompletionSource ReleaseExpiration { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ExpirationReported { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource FirstWindowEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource LastPageItemEntered { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirstItem { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource AllItemsCanceled { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseCancellation { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         [Activity("SetlistFm.ReadSetlistPage")]
@@ -142,28 +229,84 @@ public class TestPagedProviderWorkflow
         )
         {
             var index = int.Parse(item.Id.Value);
-            Imported.Add(index);
-            if (holdItem && index == 50)
+            lock (sync)
             {
-                ItemEntered.TrySetResult();
-                var activity = ActivityExecutionContext.Current;
-                while (true)
+                Imported.Add(index);
+                MaxActive = Math.Max(MaxActive, ++Active);
+                if (Active == 10)
                 {
-                    activity.Heartbeat();
-                    await Task.Delay(100, activity.CancellationToken);
+                    FirstWindowEntered.TrySetResult();
+                }
+                if (index == 119)
+                {
+                    LastPageItemEntered.TrySetResult();
                 }
             }
 
-            if (failItem && index == 50)
+            try
             {
-                throw new ApplicationFailureException(
-                    "Fixture item cannot be imported.",
-                    "InvalidFixtureItem",
-                    nonRetryable: true
-                );
-            }
+                var activity = ActivityExecutionContext.Current;
+                if (expireItem && index == 0)
+                {
+                    await ReleaseExpiration.Task;
+                    ExpirationReported.TrySetResult();
+                    throw new ApplicationFailureException(
+                        "Import expired.",
+                        "ImportExpired",
+                        nonRetryable: true
+                    );
+                }
 
-            return new(item.Id, new(index + 1), ItemDisposition.Applied);
+                if (holdAllItems || holdFirstItem && index == 0)
+                {
+                    try
+                    {
+                        while (!ReleaseFirstItem.Task.IsCompleted)
+                        {
+                            activity.Heartbeat();
+                            await Task.Delay(50, activity.CancellationToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        lock (sync)
+                        {
+                            if (++canceled == 10)
+                            {
+                                AllItemsCanceled.TrySetResult();
+                            }
+                        }
+
+                        if (index == 0)
+                        {
+                            await ReleaseCancellation.Task;
+                        }
+                        throw;
+                    }
+                }
+                else
+                {
+                    await Task.Delay(20, activity.CancellationToken);
+                }
+
+                if (failItem && index == 50)
+                {
+                    throw new ApplicationFailureException(
+                        "Fixture item cannot be imported.",
+                        "InvalidFixtureItem",
+                        nonRetryable: true
+                    );
+                }
+
+                return new(item.Id, new(index + 1), ItemDisposition.Applied);
+            }
+            finally
+            {
+                lock (sync)
+                {
+                    Active--;
+                }
+            }
         }
 
         private static DiscoveredItem<SetlistFmId, Setlist>[] Items(int first, int count) =>

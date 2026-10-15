@@ -6,7 +6,7 @@ An artist workflow owns one artist operation. It starts the artist's provider wo
 flowchart TD
     Batch[Batch: stable artist selection] --> Artist[Artist coordinator: up to ten active artists]
     Artist --> Providers[Concrete provider children in catalog order]
-    Providers --> Steps[Provider selection and sequential item activities]
+    Providers --> Steps[Provider selection and up to ten item activities]
     Steps --> Finalize[Provider-specific finalization]
     Finalize --> Shows[Rebuild shows]
     Shows --> Years[Rebuild years]
@@ -42,9 +42,9 @@ Item activities fetch their required upstream inputs before starting a catalog t
 
 All artist operations use `ingest/artist/{uuid}`. Temporal rejects an active conflict; the client reports `ImportAlreadyRunning` with that workflow ID. A completed ID can be reused for a new operation. The returned handle retains the admitted run and follows only its continuation chain. It cannot silently attach to a later import that reused the same artist ID.
 
-`CatalogImportTransaction` serializes item and prerequisite writes with a transaction-scoped PostgreSQL advisory lock derived from the numeric artist ID. It acquires the lock before loading mutable sources, setlists, eras, or tours. The callback makes sequential data-service calls in one ambient ReadCommitted transaction. It does not fetch HTTP or open concurrent SQL connections. Data services continue to own UUID formulas, upserts, dependent rows, and deletions.
+`CatalogImportTransaction` commits each item in an ordinary ReadCommitted transaction. Different shows for one artist can write concurrently. Each transaction makes sequential data-service calls after fetching HTTP inputs. Existing unique constraints and conflict handling preserve shared identities; data services own UUID formulas, dependent rows, and deletions. Phish.net locks only the source row whose reviews it will replace. Venue and tour creation resolve conflicts to the existing row, and Setlist.fm and Jerry expand tour dates atomically with PostgreSQL `LEAST` and `GREATEST`.
 
-An activity retry may refetch HTTP inputs and repeat SQL. It reloads current catalog state and returns the current catalog identity. There is no saved commit receipt. `Applied` means processing succeeded; it does not establish how many rows changed in the first attempt.
+PostgreSQL deadlocks and serialization failures propagate to the existing Temporal retry policy: up to five attempts, each with a fresh importer and transaction. An activity retry may refetch HTTP inputs and repeat SQL. It reloads current catalog state and returns the current catalog identity. There is no saved commit receipt. `Applied` means processing succeeded; it does not establish how many rows changed in the first attempt.
 
 Archive artist collection discovery uses a separate global lock because creating an artist also allocates a slug across artists. [ArchiveArtistDiscoveryWorkflow](../../RelistenApi/Services/Ingestion/Workflows/ArchiveArtistDiscoveryWorkflow.cs) first records a fetched, validated page in history. A second activity applies that fixed page, creating an artist and its upstream mapping together. Application retries use that recorded page. A cursor that fails to advance, or a listing that ends before its declared total, fails discovery.
 
@@ -56,13 +56,13 @@ An exhausted item failure increments `FailedItems`; the provider continues with 
 
 Preparation and discovery failures stop the operation before its remaining finalization. Expiration and cancellation propagate; they are not partial success. Archive deletion and Jerry orphan cleanup retain their separate domain rules, described in the [provider guide](provider-behavior.md). A failed rebuild fails the artist operation even if item writes already committed.
 
-Activities heartbeat during HTTP and database waits. HTTP accepts cancellation. The transaction runner checks cancellation and the inherited deadline after locking and before commit. Existing Dapper calls use bounded SQL timeouts; not every query stops immediately when cancellation arrives. Rebuild SQL can finish committed work before it observes cancellation. Cancellation never undoes an earlier committed item.
+Activities heartbeat during HTTP and database waits. HTTP accepts cancellation. The transaction runner checks cancellation and the inherited deadline before applying writes and before commit. Existing Dapper calls use bounded SQL timeouts; not every query stops immediately when cancellation arrives. Rebuild SQL can finish committed work before it observes cancellation. Cancellation never undoes an earlier committed item.
 
 ## Continuation and retained inputs
 
 An operation gets one logical execution ID and a seven-day deadline. Children inherit that deadline and receive only its remaining time. The logical ID is diagnostic context, not a catalog key. Continuation does not extend the deadline.
 
-Fixed-selection providers checkpoint their selection position, counters, and required cleanup state between items. Phish.in, Setlist.fm, and Phantasy Tour finish a page before continuing; their checkpoints hold the next cursor and summary, plus prepared catalogs or date evidence where needed. The current run's history retains the fetched page for replay. ContinueAsNew is considered after 100 completed activity calls or when Temporal recommends it; paged providers can exceed that threshold by one page. Immutable selections or prepared catalogs travel separately from changing progress so the codec can reuse their serialized bytes.
+Each provider workflow admits up to ten item activities at once. Fixed-selection providers process segments of at most 100 items, then wait for every admitted item before advancing their checkpoint. Checkpoints retain the next selection position, counters, and required cleanup state. Phish.in, Setlist.fm, and Phantasy Tour finish a page before continuing; their checkpoints hold the next cursor and summary, plus prepared catalogs or date evidence where needed. All items in a page finish before advancing its cursor or starting finalization. The current run's history retains the fetched page for replay. ContinueAsNew is considered after 100 completed activity calls or when Temporal recommends it; paged providers can exceed that threshold by one page. Immutable selections or prepared catalogs travel separately from changing progress so the codec can reuse their serialized bytes.
 
 A batch selects artist UUIDs once and retains that array across runs. It fixes the thin-import year in UTC once, replaces completed children until ten are active, and drains children before a 250-artist segment or recommended continuation. Its result separately counts completed, partial, failed, and conflicting artists.
 
@@ -76,7 +76,7 @@ The codec removes large values from history events; it does not limit history ev
 
 ## Verification boundaries
 
-The [plan](provider-workflow-plan.md) tracks verification results. Meaningful checks exercise typed payload conversion, provider catalog output, repeated and overlapping writes, rollback, cancellation before commit, partial results, provider ordering, targeted imports, continuation/replay, worker replacement, batch concurrency, and handle isolation after workflow-ID reuse. Local tests use isolated services and fixture HTTP responses. Production behavior has not been verified by deployment.
+The [plan](provider-workflow-plan.md) tracks verification results. Meaningful checks exercise typed payload conversion, provider catalog output, repeated and overlapping writes, rollback, cancellation before commit, partial results, provider ordering, targeted imports, continuation/replay, worker replacement, batch concurrency, and handle isolation after workflow-ID reuse. Local tests use isolated services and fixture HTTP responses. Read-only schema inspection confirmed the existing catalog identity constraints in both local and production PostgreSQL; no new constraint migration is needed. Deployment performance remains unverified.
 
 ## Cache consistency and extension choices
 

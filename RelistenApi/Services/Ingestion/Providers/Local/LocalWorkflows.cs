@@ -1,6 +1,8 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
+using Relisten.Vendor.Local;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.Local;
@@ -71,23 +73,36 @@ public sealed class LocalWorkflow
         {
             ContinueBeforeNextDateIfNeeded();
 
-            var item = _selection.Items[_progress.NextItem];
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (LocalActivities a) => a.ImportDate(_context, item),
-                        _options
-                    )
+            var segment = _selection
+                .Items.Skip(_progress.NextItem)
+                .Take(ImportItemOperation.CheckpointBatchSize)
+                .ToArray();
+            await ImportItemOperation.RunConcurrentlyAsync(
+                segment,
+                _input.Execution,
+                ImportDateAsync
             );
 
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-            _progress = _progress with { NextItem = _progress.NextItem + 1 };
+            _progress = _progress with { NextItem = _progress.NextItem + segment.Length };
         }
+    }
+
+    private async Task ImportDateAsync(DiscoveredItem<LocalShowDate, LocalShow[]> item)
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (LocalActivities a) => a.ImportDate(_context, item),
+                    _options
+                )
+        );
+
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 
     private void ContinueBeforeNextDateIfNeeded()
@@ -98,7 +113,7 @@ public sealed class LocalWorkflow
             return;
         }
 
-        // Advance only after a date has an outcome. A new run resumes the fixed
+        // Advance only after every date in the segment has an outcome. A new run resumes the fixed
         // selection instead of fetching a changed root and choosing different work.
         var continuation = _progress with
         {

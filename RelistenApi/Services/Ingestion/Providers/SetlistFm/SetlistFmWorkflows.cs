@@ -76,25 +76,28 @@ public sealed class SetlistFmWorkflow
     {
         // Temporal records the fetched page and each completed item in this run's
         // history. Rollover may exceed its soft activity limit by one upstream page.
-        foreach (var item in page.Items)
-        {
-            Workflow.CancellationToken.ThrowIfCancellationRequested();
-            ImportWorkflowOptions.RequireActive(_input.Execution);
+        await ImportItemOperation.RunConcurrentlyAsync(
+            page.Items,
+            _input.Execution,
+            ImportSetlistAsync
+        );
+    }
 
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (SetlistFmActivities activities) =>
-                            activities.ImportSetlistAsync(_context, item),
-                        _options
-                    )
-            );
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-        }
+    private async Task ImportSetlistAsync(DiscoveredItem<SetlistFmId, Setlist> item)
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (SetlistFmActivities activities) =>
+                        activities.ImportSetlistAsync(_context, item),
+                    _options
+                )
+        );
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 }

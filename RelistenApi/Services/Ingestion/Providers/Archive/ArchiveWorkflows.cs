@@ -91,15 +91,29 @@ public sealed class ArchiveWorkflow
             ImportWorkflowOptions.RequireActive(_input.Execution);
             ContinueWithCheckpointIfNeeded();
 
-            await ImportNextRecordingAsync();
+            var segment = _selection
+                .Items.Skip(_progress.NextItem)
+                .Take(ImportItemOperation.CheckpointBatchSize)
+                .ToArray();
+            await ImportItemOperation.RunConcurrentlyAsync(
+                segment,
+                _input.Execution,
+                ImportRecordingAsync
+            );
+
+            // Every item in this segment now has an outcome. No active activity
+            // or partially completed segment crosses a continuation.
+            _progress = _progress with
+            {
+                NextItem = _progress.NextItem + segment.Length,
+            };
         }
 
         _progress = _progress with { Stage = ProviderStage.Finalizing };
     }
 
-    private async Task ImportNextRecordingAsync()
+    private async Task ImportRecordingAsync(DiscoveredItem<ArchiveItemId, ArchiveSelectedItem> item)
     {
-        var item = _selection.Items[_progress.NextItem];
         var outcome = await ImportItemOperation.RunAsync(
             item.Id,
             () =>
@@ -126,12 +140,6 @@ public sealed class ArchiveWorkflow
                 _noMp3.Add(item.Id);
             }
         }
-
-        // Failed items count as finished attempts; a fresh refresh can retry them.
-        _progress = _progress with
-        {
-            NextItem = _progress.NextItem + 1,
-        };
     }
 
     private async Task ReconcileDeletionsForFullRefreshAsync()

@@ -1,5 +1,7 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
+using Relisten.Import;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Workflows;
 
@@ -74,23 +76,38 @@ public sealed class JerryWorkflow
         {
             ContinueBeforeNextPageIfNeeded();
 
-            var item = _selection.Items[_progress.ItemIndex];
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (JerryActivities a) => a.ImportPageAsync(_context, item),
-                        _options
-                    )
+            var segment = _selection
+                .Items.Skip(_progress.ItemIndex)
+                .Take(ImportItemOperation.CheckpointBatchSize)
+                .ToArray();
+            await ImportItemOperation.RunConcurrentlyAsync(
+                segment,
+                _input.Execution,
+                ImportPageAsync
             );
 
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-            _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
+            _progress = _progress with { ItemIndex = _progress.ItemIndex + segment.Length };
         }
+    }
+
+    private async Task ImportPageAsync(
+        DiscoveredItem<JerryShowId, JerryGarciaComImporter.FileMetaObject> item
+    )
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (JerryActivities a) => a.ImportPageAsync(_context, item),
+                    _options
+                )
+        );
+
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 
     private void ContinueBeforeNextPageIfNeeded()
@@ -177,23 +194,38 @@ public sealed class JerryVenueRepairProviderWorkflow
         {
             ContinueBeforeNextStepIfNeeded();
 
-            var item = _selection.Items[_progress.ItemIndex];
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (JerryActivities a) => a.RepairVenueAsync(_context, item),
-                        _options
-                    )
+            var segment = _selection
+                .Items.Skip(_progress.ItemIndex)
+                .Take(ImportItemOperation.CheckpointBatchSize)
+                .ToArray();
+            await ImportItemOperation.RunConcurrentlyAsync(
+                segment,
+                _input.Execution,
+                RepairVenueAsync
             );
 
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-            _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
+            _progress = _progress with { ItemIndex = _progress.ItemIndex + segment.Length };
         }
+    }
+
+    private async Task RepairVenueAsync(
+        DiscoveredItem<JerryShowId, JerryGarciaComImporter.FileMetaObject> item
+    )
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (JerryActivities a) => a.RepairVenueAsync(_context, item),
+                    _options
+                )
+        );
+
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 
     private async Task FinishVenueRepairAsync()

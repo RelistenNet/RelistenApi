@@ -6,7 +6,7 @@ using Temporalio.Activities;
 
 namespace Relisten.Ingestion.Providers.Local;
 
-/// <summary>Separates upstream fetches from locked catalog updates while retaining the root selection input.</summary>
+/// <summary>Separates upstream fetches from catalog transactions while retaining the root selection input.</summary>
 public sealed class LocalActivities(ProviderActivityRunner runner)
 {
     [Activity("Local.FetchRootAndPrepareVenues")]

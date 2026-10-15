@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
+using Relisten.Vendor.PhantasyTour;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Providers.PhantasyTour;
@@ -90,26 +91,31 @@ public sealed class PhantasyTourWorkflow
     {
         // Each fetched page is retained in Temporal history until all its items
         // settle. Rollover can exceed the soft activity limit by one 100-show page.
-        foreach (var item in page.Items)
-        {
-            Workflow.CancellationToken.ThrowIfCancellationRequested();
-            ImportWorkflowOptions.RequireActive(_input.Execution);
+        await ImportItemOperation.RunConcurrentlyAsync(
+            page.Items,
+            _input.Execution,
+            ImportShowAsync
+        );
+    }
 
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (PhantasyTourActivities activities) =>
-                            activities.ImportShowAsync(_context, item),
-                        _options
-                    )
-            );
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-        }
+    private async Task ImportShowAsync(
+        DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing> item
+    )
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (PhantasyTourActivities activities) =>
+                        activities.ImportShowAsync(_context, item),
+                    _options
+                )
+        );
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 
     private Task RepairListedDatesAsync()

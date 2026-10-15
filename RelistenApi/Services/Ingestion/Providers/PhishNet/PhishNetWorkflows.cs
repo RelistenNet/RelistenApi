@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Workflows;
@@ -89,13 +90,21 @@ public sealed class PhishNetWorkflow
             ImportWorkflowOptions.RequireActive(_input.Execution);
             ContinueWithCheckpointIfNeeded();
 
-            await EnrichNextSourceAsync();
+            var segment = _selection
+                .Skip(_progress.ItemIndex)
+                .Take(ImportItemOperation.CheckpointBatchSize)
+                .ToArray();
+            await ImportItemOperation.RunConcurrentlyAsync(
+                segment,
+                _input.Execution,
+                EnrichSourceAsync
+            );
+            _progress = _progress with { ItemIndex = _progress.ItemIndex + segment.Length };
         }
     }
 
-    private async Task EnrichNextSourceAsync()
+    private async Task EnrichSourceAsync(DiscoveredItem<CatalogSourceId, PhishNetSourceInput> item)
     {
-        var item = _selection[_progress.ItemIndex];
         var outcome = await ImportItemOperation.RunAsync(
             item.Id,
             () =>
@@ -110,7 +119,6 @@ public sealed class PhishNetWorkflow
             outcome.Failure == null
                 ? _summary.Add(outcome.Result!.Disposition)
                 : _summary.AddFailure(outcome.Failure);
-        _progress = _progress with { ItemIndex = _progress.ItemIndex + 1 };
     }
 
     private void ContinueWithCheckpointIfNeeded()

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FluentAssertions;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
@@ -47,7 +48,7 @@ public class TestPagedProviderCheckpoints
                 result.CompletedItems.Should().Be(120);
                 activities.Preparations.Should().Be(1);
                 activities.ReadPages.Should().Equal(Enumerable.Range(1, 6));
-                activities.Imported.Should().Equal(Enumerable.Range(1, 120));
+                activities.Imported.Should().BeEquivalentTo(Enumerable.Range(1, 120));
                 var history = await environment
                     .Client.GetWorkflowHandle(handle.Id, handle.ResultRunId)
                     .FetchHistoryAsync();
@@ -92,7 +93,7 @@ public class TestPagedProviderCheckpoints
 
                 result.CompletedItems.Should().Be(100);
                 activities.ReadPages.Should().Equal(1, 2);
-                activities.Imported.Should().Equal(Enumerable.Range(1, 100));
+                activities.Imported.Should().BeEquivalentTo(Enumerable.Range(1, 100));
                 activities.Repairs.Should().Be(1);
                 activities.RepairedDates.Should().HaveCount(100);
                 activities
@@ -119,7 +120,7 @@ public class TestPagedProviderCheckpoints
     {
         public int Preparations { get; private set; }
         public List<int> ReadPages { get; } = [];
-        public List<int> Imported { get; } = [];
+        public ConcurrentQueue<int> Imported { get; } = new();
 
         [Activity("PhishIn.PrepareCatalogs")]
         public PhishInCatalogs PrepareCatalogsAsync(ProviderWorkflowContext context)
@@ -156,7 +157,7 @@ public class TestPagedProviderCheckpoints
         )
         {
             catalogs.Songs.Should().Equal(new PhishInSongMapping(42, "prepared-song"));
-            Imported.Add(item.Id.Value);
+            Imported.Enqueue(item.Id.Value);
             return new(item.Id, ItemDisposition.Applied, new(item.Id.Value), new(item.Id.Value));
         }
     }
@@ -164,7 +165,7 @@ public class TestPagedProviderCheckpoints
     public class PhantasyTourActivitiesFixture
     {
         public List<int> ReadPages { get; } = [];
-        public List<int> Imported { get; } = [];
+        public ConcurrentQueue<int> Imported { get; } = new();
         public int Repairs { get; private set; }
         public PhantasyTourListedDate[] RepairedDates { get; private set; } = [];
 
@@ -203,7 +204,7 @@ public class TestPagedProviderCheckpoints
             DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing> item
         )
         {
-            Imported.Add(item.Id.Value);
+            Imported.Enqueue(item.Id.Value);
             return new(item.Id, new(item.Id.Value), ItemDisposition.Applied);
         }
 

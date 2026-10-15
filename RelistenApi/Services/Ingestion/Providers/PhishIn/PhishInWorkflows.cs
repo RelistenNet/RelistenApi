@@ -95,25 +95,28 @@ public sealed class PhishInWorkflow
     {
         // Complete a page before rollover. Temporal replays its recorded items
         // after a restart; the soft history limit can overshoot by one 20-show page.
-        foreach (var item in page.Items)
-        {
-            Workflow.CancellationToken.ThrowIfCancellationRequested();
-            ImportWorkflowOptions.RequireActive(_input.Execution);
+        await ImportItemOperation.RunConcurrentlyAsync(
+            page.Items,
+            _input.Execution,
+            ImportShowAsync
+        );
+    }
 
-            var outcome = await ImportItemOperation.RunAsync(
-                item.Id,
-                () =>
-                    Workflow.ExecuteActivityAsync(
-                        (PhishInActivities activities) =>
-                            activities.ImportShowAsync(_context, _catalogs, item),
-                        _options
-                    )
-            );
-            _activityCalls++;
-            _summary =
-                outcome.Failure == null
-                    ? _summary.Add(outcome.Result!.Disposition)
-                    : _summary.AddFailure(outcome.Failure);
-        }
+    private async Task ImportShowAsync(DiscoveredItem<PhishInShowId, PhishInShowInput> item)
+    {
+        var outcome = await ImportItemOperation.RunAsync(
+            item.Id,
+            () =>
+                Workflow.ExecuteActivityAsync(
+                    (PhishInActivities activities) =>
+                        activities.ImportShowAsync(_context, _catalogs, item),
+                    _options
+                )
+        );
+        _activityCalls++;
+        _summary =
+            outcome.Failure == null
+                ? _summary.Add(outcome.Result!.Disposition)
+                : _summary.AddFailure(outcome.Failure);
     }
 }

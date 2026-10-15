@@ -15,7 +15,7 @@
 | `Ingestion__Concurrency__ingest-archive=10` | Example provider activity concurrency override; each provider defaults to ten |
 | `Ingestion__Rate__ingest-archive` | Optional queue activities-per-second limit |
 
-`Ingestion__Engine` does not pause an already running worker. Pause schedules and stop admission in addition to canceling or draining work. Use one worker host initially. Provider concurrency is per worker; another host multiplies it. Queue rate settings must agree across pollers. They count activities, not individual HTTP requests.
+`Ingestion__Engine` does not pause an already running worker. Pause schedules and stop admission in addition to canceling or draining work. Use one worker host initially. Each provider workflow admits at most ten item activities. The worker's provider concurrency setting limits how many activities execute across all artists on that worker; another host multiplies worker capacity. A batch separately allows ten active artist workflows. Queue rate settings must agree across pollers. They count activities, not individual HTTP requests.
 
 Publish with `dotnet publish RelistenIngestionWorker -c Release`, or build with `docker build -f RelistenIngestionWorker/Dockerfile .`. Run `dotnet RelistenIngestionWorker.dll` from its publish directory. The API runs separately.
 
@@ -60,7 +60,7 @@ Workers resume open executions after a restart. A completed artist can have stat
 
 Each operation has a seven-day deadline shared across children and continuation runs. Do not reset or retry an old execution beyond that deadline. A fresh import is the normal recovery after item failures, cancellation, or expiry. A standalone artist rebuild repairs derived data without requiring upstream availability. Every completed artist import rebuilds, including when it selects no items.
 
-Cancellation reaches activities through heartbeats. HTTP accepts the cancellation token. Catalog transactions check it after acquiring the lock and before commit. Existing Dapper calls have bounded SQL timeouts; cancellation does not immediately interrupt every query. Rebuild SQL owns its transactions and may complete some work before observing cancellation. Wait for the worker's activities to stop before handing ingestion to another owner. Committed catalog changes remain committed.
+Cancellation reaches activities through heartbeats. HTTP accepts the cancellation token. Catalog transactions check it before applying writes and before commit. Different shows for one artist write concurrently; constraints and row locks coordinate shared records. Existing Dapper calls have bounded SQL timeouts; cancellation does not immediately interrupt every query. Rebuild SQL owns its transactions and may complete some work before observing cancellation. Wait for the worker's activities to stop before handing ingestion to another owner. Committed catalog changes remain committed.
 
 Archive verification results include fixed deletion evidence in Temporal history. Only errcode 104 proves upstream deletion. The completeness checks and five-candidate guard apply independently of workflow status. A guarded result must remain visible in logs even if an external alert fails.
 
@@ -73,7 +73,7 @@ Watch queue wait, activity failures, upstream 429/5xx responses, Temporal histor
 3. Set `Ingestion__Engine=Temporal` on the API and restart it. This stops ingestion recurring registration and the `artist_import` Hangfire server. Already queued ingestion methods return without importing in this mode. Popularity/cache jobs and the default Hangfire server remain.
 4. Start one ingestion worker. Verify a manual import, then register schedules explicitly. Archive discovery runs at 06:30 UTC; full refresh at 07:00 UTC; thin refresh at 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 UTC. Overlap policy is Skip. Repeated registration preserves existing schedules, including paused ones.
 
-Stopping recurring registration does not remove jobs already stored in Hangfire. Drain both scheduled and manually admitted ingestion before switching. The artist lock serializes Temporal attempts; it does not make simultaneous Hangfire and Temporal ingestion safe.
+Stopping recurring registration does not remove jobs already stored in Hangfire. Drain both scheduled and manually admitted ingestion before switching. Artist workflow admission applies only to Temporal. It does not coordinate admission or finalization with Hangfire; drain the old engine before switching.
 
 Rollback: pause Temporal schedules and manual admission, cancel/drain work, and stop the worker. Verify no activity is still writing before selecting Hangfire on the API. Review the old `artist_import` queue and discard obsolete queued work where appropriate. Restarting the API in Hangfire mode restores its recurring registrations. Keep committed catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 

@@ -34,7 +34,7 @@ public class TestIngestionWorkflows
         result.SkippedItems.Should().Be(1);
         result.FailedItems.Should().Be(1);
         result.Status.Should().Be(ImportStatus.Partial);
-        activities.Applied.Should().Equal(0, 3);
+        activities.Applied.Should().BeEquivalentTo([0, 3]);
         activities.Rebuilds.Should().Equal("shows", "years", "cache");
         activities.DeletionApplications.Should().Be(1);
     }
@@ -98,7 +98,7 @@ public class TestIngestionWorkflows
                 );
                 var result = await handle.GetResultAsync();
                 result.CompletedItems.Should().Be(180);
-                activities.Applied.Should().Equal(Enumerable.Range(0, 180));
+                activities.Applied.Should().BeEquivalentTo(Enumerable.Range(0, 180));
                 activities.Discoveries.Should().Be(1);
                 activities.Verifications.Should().Be(1);
                 activities.DeletionApplications.Should().Be(1);
@@ -108,6 +108,13 @@ public class TestIngestionWorkflows
                 firstHistory
                     .Events.Should()
                     .Contain(e => e.WorkflowExecutionContinuedAsNewEventAttributes != null);
+                firstHistory
+                    .Events.Count(e =>
+                        e.ActivityTaskScheduledEventAttributes?.ActivityType.Name
+                        == "Archive.ImportItem"
+                    )
+                    .Should()
+                    .Be(100);
                 await new WorkflowReplayer(
                     new WorkflowReplayerOptions().AddWorkflow<ArchiveWorkflow>()
                 ).ReplayWorkflowAsync(firstHistory);
@@ -138,7 +145,12 @@ public class TestIngestionWorkflows
                     .Failures!.Cast<ItemFailure<ArchiveItemId>>()
                     .Select(failure => failure.Key.Value)
                     .Should()
-                    .Equal(Enumerable.Range(0, 20).Select(index => index.ToString()));
+                    .OnlyHaveUniqueItems();
+                result
+                    .Failures!.Cast<ItemFailure<ArchiveItemId>>()
+                    .Select(failure => int.Parse(failure.Key.Value))
+                    .Should()
+                    .OnlyContain(index => index >= 0 && index < 25);
                 result.CompletedItems.Should().Be(0);
                 return true;
             }
@@ -197,7 +209,10 @@ public class TestIngestionWorkflows
                 await activities.FetchEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 await handle.CancelAsync();
                 await activities.FetchCanceled.Task.WaitAsync(TimeSpan.FromSeconds(20));
-                activities.ReleaseFetch.TrySetResult();
+
+                // Each active fetch must receive its own cancellation. Releasing
+                // siblings after the first acknowledgement would let them apply
+                // before their next heartbeat observes the cancellation request.
                 Func<Task> finish = async () => await handle.GetResultAsync();
                 var failure = await finish.Should().ThrowAsync<WorkflowFailedException>();
                 TemporalException
@@ -205,7 +220,7 @@ public class TestIngestionWorkflows
                     .Should()
                     .BeTrue("{0}", failure.Which.ToString());
                 activities.Applied.Should().BeEmpty();
-                activities.Attempts.Should().Equal(0);
+                activities.Attempts.Should().OnlyContain(index => index == 0 || index == 1);
                 activities.Rebuilds.Should().BeEmpty();
                 return true;
             }
@@ -395,7 +410,7 @@ public class TestIngestionWorkflows
                 (await handle.GetResultAsync()).CompletedItems.Should().Be(2);
                 restarted.Preparations.Should().Be(0);
                 restarted.Discoveries.Should().Be(1);
-                restarted.Applied.Should().Equal(0, 1);
+                restarted.Applied.Should().BeEquivalentTo([0, 1]);
                 return true;
             }
         );
