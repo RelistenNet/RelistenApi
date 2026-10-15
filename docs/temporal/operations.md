@@ -1,6 +1,6 @@
 # Operate the ingestion worker
 
-`RelistenIngestionWorker` runs workflows and activities using the API project's catalog services and parsers. It starts no API or Hangfire server. [Local setup](../../local-dev/temporal/README.md) provides isolated PostgreSQL, Redis, and Temporal services for development. This document describes the intended operating procedure; no production deployment is part of this change.
+`RelistenIngestionWorker` runs workflows and activities using the API project's catalog services and parsers. It starts no API or Hangfire server. [Local setup](../../local-dev/README.md) uses the normal development PostgreSQL and Redis services. Tests create disposable databases and temporary Temporal servers. This document describes the intended operating procedure; no production deployment is part of this change.
 
 ## Configuration
 
@@ -77,7 +77,7 @@ Stopping recurring registration does not remove jobs already stored in Hangfire.
 
 Rollback: pause Temporal schedules and manual admission, cancel/drain work, and stop the worker. Verify no activity is still writing before selecting Hangfire on the API. Review the old `artist_import` queue and discard obsolete queued work where appropriate. Restarting the API in Hangfire mode restores its recurring registrations. Keep committed catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
-The branch is undeployed, so there is no compatibility procedure for its earlier draft workflows or migration 13. Reset an old disposable local stack as described in [local setup](../../local-dev/temporal/README.md). Future deployments must drain incompatible open workflow histories or adopt Temporal workflow versioning.
+The branch is undeployed, so there is no compatibility procedure for its earlier draft workflows or migration 13. Current tests start with fresh databases and Temporal servers; see [local setup](../../local-dev/README.md). Future deployments must drain incompatible open workflow histories or adopt Temporal workflow versioning.
 
 ## Storage, backups, and recovery
 

@@ -6,7 +6,7 @@ This record covers the undeployed provider-workflow refactor. It uses synthetic 
 
 .NET SDK 10.0.100; Temporal .NET SDK 1.20.0; Compose Temporal server 1.29.1; PostgreSQL 17.10; Redis 7.4. Workflow-only tests also start the SDK's ephemeral local Temporal server. The SDK manages that binary; it is not a production server pin.
 
-Run the setup in [the local guide](../../../local-dev/temporal/README.md), then:
+Run the setup in [the local guide](../../../local-dev/README.md), then:
 
 ```sh
 dotnet build RelistenApi.sln --nologo

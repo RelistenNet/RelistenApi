@@ -21,13 +21,16 @@ public class TestRedisPayloadWorkflowTransport
     public async Task OversizedResultSurvivesWorkerRestartActivityHandoffContinuationAndReplay()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
-            Assert.Ignore("Start local-dev/temporal and set RELISTEN_LOCAL_INGESTION_TESTS=1.");
-        using var redis = await ConnectionMultiplexer.ConnectAsync("127.0.0.1:16380");
+            Assert.Ignore("Run ./test-local.sh to include local integration tests.");
+        using var redis = await ConnectionMultiplexer.ConnectAsync("127.0.0.1:16379");
         var database = redis.GetDatabase();
         await using var environment = await WorkflowEnvironment.StartLocalAsync();
+        // The temporary server uses "default", but Redis is shared with other
+        // test processes and manual workers. Own the keys this test deletes.
+        var payloadNamespace = "transport-test-" + Guid.NewGuid().ToString("N");
         var converter = DataConverter.Default with
         {
-            PayloadCodec = new RedisPayloadCodec(database, environment.Client.Options.Namespace),
+            PayloadCodec = new RedisPayloadCodec(database, payloadNamespace),
         };
         var client = new TemporalClient(
             environment.Client.Connection,

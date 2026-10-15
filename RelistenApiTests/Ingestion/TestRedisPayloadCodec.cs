@@ -116,7 +116,7 @@ public class TestRedisPayloadCodec
     }
 }
 
-/// <summary>Uses only uniquely named keys in the isolated local-dev/temporal Redis.</summary>
+/// <summary>Uses only uniquely named keys in the normal local Redis instance.</summary>
 [TestFixture, Category("LocalIngestion")]
 public class TestRedisPayloadCodecPersistence
 {
@@ -130,8 +130,8 @@ public class TestRedisPayloadCodecPersistence
     public async Task Connect()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
-            Assert.Ignore("Start local-dev/temporal and set RELISTEN_LOCAL_INGESTION_TESTS=1.");
-        connection = await ConnectionMultiplexer.ConnectAsync("127.0.0.1:16380");
+            Assert.Ignore("Run ./test-local.sh to include local integration tests.");
+        connection = await ConnectionMultiplexer.ConnectAsync("127.0.0.1:16379");
         database = connection.GetDatabase();
         var ns = "codec-test:" + Guid.NewGuid().ToString("N");
         codec = new RedisPayloadCodec(database, ns);

@@ -70,9 +70,9 @@ The previous chat, [Explore Temporal ingestion architecture](codex://threads/01a
 | Archive reconciliation currently determines candidates, verifies, and deletes in one receipted activity. | Split read-only verification from applying its fixed deletion list. An apply retry must not discover another group of candidates. |
 | `CatalogRebuildService.RebuildYears` also invalidates cache. Both rebuild methods own SQL transactions. | Extract cache invalidation; reuse three ordered activities. Do not wrap rebuild SQL in an item transaction. |
 | Installed Temporal .NET SDK is 1.20.0 and supports asynchronous `IPayloadCodec`, client converter configuration, and a separate replay converter. | A custom Redis codec fits the installed SDK. Configure every client and replay worker consistently. |
-| Current local Redis has no persistence volume. | Restart loss is a testable accepted failure mode. Do not promise that histories survive Redis loss. |
+| Development Redis uses the main local stack and its existing data directory. | Keep Redis data while manual workflow histories matter. Tests own uniquely scoped payload keys; deleting Redis data can still make retained histories unreadable. |
 
-Current source map: [transaction runner](../../RelistenApi/Services/Data/CatalogImportTransaction.cs), [database routing](../../RelistenApi/Services/DbService.cs), [data services](../../RelistenApi/Services/Data/), [provider adapters](../../RelistenApi/Services/Importers/), [batch workflow](../../RelistenApi/Services/Ingestion/Workflows/RefreshBatchWorkflow.cs), [worker registration](../../RelistenApi/Services/Ingestion/TemporalIngestionRegistration.cs), [local stack](../../local-dev/temporal/docker-compose.yml). The official [Temporal .NET data-handling guide](https://docs.temporal.io/develop/dotnet/best-practices/data-handling) explains the converter/codec boundary.
+Current source map: [transaction runner](../../RelistenApi/Services/Data/CatalogImportTransaction.cs), [database routing](../../RelistenApi/Services/DbService.cs), [data services](../../RelistenApi/Services/Data/), [provider adapters](../../RelistenApi/Services/Importers/), [batch workflow](../../RelistenApi/Services/Ingestion/Workflows/RefreshBatchWorkflow.cs), [worker registration](../../RelistenApi/Services/Ingestion/TemporalIngestionRegistration.cs), [local stack](../../local-dev/docker-compose.yml). The official [Temporal .NET data-handling guide](https://docs.temporal.io/develop/dotnet/best-practices/data-handling) explains the converter/codec boundary.
 
 ## Implementation steps
 
@@ -142,7 +142,7 @@ Dependency: all providers and codec/retry tests passed. A fresh reviewer checks 
 
 ## Verification and evidence to retain
 
-Run from the repository root. Use the dedicated [local ingestion stack](../../local-dev/temporal/README.md), whose synthetic upstream server exists only in the test project. This plan does not require live upstream requests or production writes. Do not route test traffic through production configuration switches.
+Run from the repository root. Use `./test-local.sh` from [local setup](../../local-dev/README.md). It reuses development PostgreSQL and Redis while tests own their catalog databases, Temporal servers, and synthetic upstream responses. This plan does not require live upstream requests or production writes. Do not route test traffic through production configuration switches.
 
 First run the affected contract tests after each step. Build the API/worker after public types change. Once the integrated refactor is ready:
 

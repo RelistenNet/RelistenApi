@@ -50,11 +50,11 @@ public class TestImportHttpAdapters
     public async Task Start()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
-            Assert.Ignore("Start local-dev/temporal and set RELISTEN_LOCAL_INGESTION_TESTS=1.");
+            Assert.Ignore("Run ./test-local.sh to include local integration tests.");
         previousWrite = DbService.ConnStr;
         previousRead = DbService.ReadOnlyConnStr;
         var db = new DbService(
-            "postgres://relisten:local_ingestion@127.0.0.1:15433/relisten_ingestion",
+            LocalTestDatabase.DatabaseUrl,
             null,
             null,
             new HostingEnvironment { EnvironmentName = Environments.Production },

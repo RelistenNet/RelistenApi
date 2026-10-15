@@ -4,7 +4,7 @@ Relisten imports recordings and setlists in a separate .NET worker. Temporal rec
 
 The catalog is a rebuildable upstream cache. A later sync can repair occasional stale or missed metadata. Keep identity and deletion safeguards, but avoid machinery that tries to make every sync a perfect snapshot. See [cache consistency and extension choices](architecture.md#cache-consistency-and-extension-choices).
 
-Start with [the execution graph and code map](architecture.md). Read [provider behavior](provider-behavior.md) for each provider's operations and deletion rules. Use [operations](operations.md) for commands, recovery, and the Hangfire handoff, or [local setup](../../local-dev/temporal/README.md) to run isolated services and tests.
+Start with [the execution graph and code map](architecture.md). Read [provider behavior](provider-behavior.md) for each provider's operations and deletion rules. Use [operations](operations.md) for commands, recovery, and the Hangfire handoff, or [local setup](../../local-dev/README.md) to run development services and isolated tests.
 
 The [implementation plan](provider-workflow-plan.md) and [contract reference](provider-workflow-contracts.md) explain the intended outcome, decisions, and verification requirements. [GOAL.md](GOAL.md) records the work's scope and standards. [Verification evidence](evidence/provider-workflow-verification.md) records the checks, reproduction steps, and remaining rollout limits. These documents are written for engineers who know the Relisten app but may be new to its importers or Temporal.
 

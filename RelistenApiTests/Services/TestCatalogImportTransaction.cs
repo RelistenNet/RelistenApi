@@ -13,7 +13,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>
 /// Exercises the real Npgsql ambient transaction and public catalog services against
-/// an isolated schema. Start local-dev/temporal's PostgreSQL before running this fixture.
+/// an isolated schema. The test setup creates its database on the normal local PostgreSQL server.
 /// </summary>
 [TestFixture]
 [NonParallelizable]
@@ -33,10 +33,9 @@ public class TestCatalogImportTransaction
     public async Task CreateIsolatedSchema()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
-            Assert.Ignore("Start local-dev/temporal and set RELISTEN_LOCAL_INGESTION_TESTS=1.");
+            Assert.Ignore("Run ./test-local.sh to include local integration tests.");
 
-        adminConnectionString =
-            "Host=127.0.0.1;Port=15433;Database=relisten_ingestion;Username=relisten;Password=local_ingestion";
+        adminConnectionString = LocalTestDatabase.ConnectionString;
         await using var admin = new NpgsqlConnection(adminConnectionString);
         await admin.OpenAsync();
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
@@ -52,7 +51,7 @@ public class TestCatalogImportTransaction
             ApplicationName = schema,
         }.ConnectionString;
         db = new DbService(
-            "postgresql://relisten:local_ingestion@127.0.0.1:15433/relisten_ingestion",
+            LocalTestDatabase.DatabaseUrl,
             null,
             null,
             new ProductionEnvironment(),

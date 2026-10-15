@@ -1,0 +1,35 @@
+{
+  "exported_at": "2026-10-15T18:49:49.845046+00:00",
+  "artist_ids": [
+    1,
+    4,
+    9,
+    287,
+    292
+  ],
+  "shows_per_artist": 8,
+  "sources_per_show": 2,
+  "reviews_per_source": 10,
+  "rows": {
+    "upstream_sources": 8,
+    "artists": 5,
+    "features": 5,
+    "artists_upstream_sources": 9,
+    "eras": 4,
+    "tours": 5,
+    "venues": 56,
+    "years": 8,
+    "shows": 40,
+    "sources": 54,
+    "source_sets": 70,
+    "source_tracks": 1028,
+    "source_reviews": 136,
+    "links": 70,
+    "setlist_shows": 40,
+    "setlist_songs": 236,
+    "setlist_songs_plays": 404,
+    "versioninfo": 12
+  },
+  "compressed_bytes": 178564,
+  "sha256": "9ee3aea5557a058157a8c0d55e84a57dd5c1e274013b8c5352020bdcbd9b5567"
+}

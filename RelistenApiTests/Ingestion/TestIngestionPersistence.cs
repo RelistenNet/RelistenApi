@@ -21,16 +21,18 @@ using Relisten.Ingestion.Providers.SetlistFm;
 using Relisten.Ingestion.Workflows;
 using Relisten.Services.Notifications;
 using Temporalio.Client;
+using Temporalio.Testing;
 
 namespace RelistenApiTests.Ingestion;
 
-/// <summary>Opt-in tests against the dedicated local-dev/temporal stack, never the application's configured database.</summary>
+/// <summary>Opt-in tests use a disposable catalog database and a Temporal server owned by this fixture.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestIngestionPersistence
 {
     private readonly IngestionLogCapture logs = new();
     private readonly RecordingNotifier notifications = new();
     private IHost host = null!;
+    private WorkflowEnvironment? temporal;
     private FixtureHttpServer upstream = null!;
     private DbService db = null!;
     private Guid artistUuid;
@@ -42,15 +44,15 @@ public class TestIngestionPersistence
     public async Task Start()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
-            Assert.Ignore("Start local-dev/temporal and set RELISTEN_LOCAL_INGESTION_TESTS=1.");
+            Assert.Ignore("Run ./test-local.sh to include local integration tests.");
         originalWrite = DbService.ConnStr;
         originalRead = DbService.ReadOnlyConnStr;
         upstream = new FixtureHttpServer();
+        temporal = await WorkflowEnvironment.StartLocalAsync();
+        // The server belongs to this fixture; the namespace also keeps its Redis
+        // payload keys separate from other tests and manual development imports.
         var testNamespace = "ingestion-tests-" + Guid.NewGuid().ToString("N");
-        var admin = await TemporalClient.ConnectAsync(
-            new TemporalClientConnectOptions("127.0.0.1:17233")
-        );
-        await admin.WorkflowService.RegisterNamespaceAsync(
+        await temporal.Client.WorkflowService.RegisterNamespaceAsync(
             new Temporalio.Api.WorkflowService.V1.RegisterNamespaceRequest
             {
                 Namespace = testNamespace,
@@ -64,20 +66,20 @@ public class TestIngestionPersistence
         builder.Configuration.AddInMemoryCollection(
             new Dictionary<string, string?>
             {
-                ["Temporal:Address"] = "127.0.0.1:17233",
+                ["Temporal:Address"] = temporal.Client.Connection.Options.TargetHost,
                 ["Temporal:Namespace"] = testNamespace,
                 ["Ingestion:Engine"] = "Temporal",
             }
         );
         builder.Services.AddSingleton(sp => new DbService(
-            "postgresql://relisten:local_ingestion@127.0.0.1:15433/relisten_ingestion",
+            LocalTestDatabase.DatabaseUrl,
             null,
             null,
             builder.Environment,
             sp.GetRequiredService<ILogger<DbService>>()
         ));
         builder.Services.AddSingleton(_ => new RedisService(
-            RedisService.BuildConfiguration("redis://127.0.0.1:16380")
+            RedisService.BuildConfiguration("redis://127.0.0.1:16379")
         ));
         builder
             .Services.AddRelistenCatalogServices()
@@ -132,14 +134,24 @@ public class TestIngestionPersistence
     [OneTimeTearDown]
     public async Task Stop()
     {
-        if (host == null)
-            return;
-        await host.StopAsync();
-        host.Services.GetRequiredService<RedisService>().connection.Dispose();
-        host.Dispose();
-        upstream.Dispose();
-        DbService.ConnStr = originalWrite;
-        DbService.ReadOnlyConnStr = originalRead;
+        if (host != null)
+        {
+            await host.StopAsync();
+            host.Services.GetRequiredService<RedisService>().connection.Dispose();
+            host.Dispose();
+        }
+
+        if (temporal != null)
+        {
+            await temporal.DisposeAsync();
+        }
+
+        upstream?.Dispose();
+        if (originalWrite != null)
+        {
+            DbService.ConnStr = originalWrite;
+            DbService.ReadOnlyConnStr = originalRead;
+        }
     }
 
     [TestCase(false)]
