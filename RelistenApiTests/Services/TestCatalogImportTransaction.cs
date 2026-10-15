@@ -68,14 +68,9 @@ public class TestCatalogImportTransaction
         transactions = new CatalogImportTransaction(db);
         await using var connection = await OpenConnection();
         // These tables reproduce the columns and constraints used by the public services
-        // below. They deliberately have no era uniqueness constraint: the artist lock
-        // must protect that existing check-then-insert operation.
+        // below, including the provider identity used by the setlist-show upsert.
         await connection.ExecuteAsync(
             """
-            CREATE TABLE eras (
-                id serial PRIMARY KEY, artist_id integer NOT NULL, name text NOT NULL,
-                "order" integer NOT NULL, updated_at timestamptz NOT NULL
-            );
             CREATE TABLE setlist_shows (
                 id serial PRIMARY KEY, artist_id integer NOT NULL, venue_id integer NOT NULL,
                 tour_id integer, date date NOT NULL, upstream_identifier text NOT NULL,
@@ -97,7 +92,7 @@ public class TestCatalogImportTransaction
     {
         await using var connection = await OpenConnection();
         await connection.ExecuteAsync(
-            "TRUNCATE eras, setlist_songs_plays, setlist_shows RESTART IDENTITY"
+            "TRUNCATE setlist_songs_plays, setlist_shows RESTART IDENTITY"
         );
     }
 
@@ -115,12 +110,11 @@ public class TestCatalogImportTransaction
     }
 
     [Test]
-    public async Task SequentialServiceCallsReuseTheLockedPrimaryConnection()
+    public async Task SequentialServiceCallsReuseTheTransactionalPrimaryConnection()
     {
         var shows = new SetlistShowService(db);
         var artist = new Artist { id = 42 };
         var saved = await transactions.RunAsync(
-            artist.id,
             FutureDeadline,
             CancellationToken.None,
             async () =>
@@ -154,7 +148,6 @@ public class TestCatalogImportTransaction
         var shows = new SetlistShowService(db);
         Func<Task> apply = () =>
             transactions.RunAsync<int>(
-                42,
                 FutureDeadline,
                 CancellationToken.None,
                 async () =>
@@ -175,7 +168,6 @@ public class TestCatalogImportTransaction
         using var cancellation = new CancellationTokenSource();
         Func<Task> apply = () =>
             transactions.RunAsync(
-                42,
                 FutureDeadline,
                 cancellation.Token,
                 async () =>
@@ -196,7 +188,6 @@ public class TestCatalogImportTransaction
         var deadline = DateTimeOffset.UtcNow.AddSeconds(1);
         Func<Task> apply = () =>
             transactions.RunAsync(
-                42,
                 deadline,
                 CancellationToken.None,
                 async () =>
@@ -212,70 +203,54 @@ public class TestCatalogImportTransaction
     }
 
     [Test]
-    public async Task OverlappingArtistAttemptsReadCommittedErasAfterTheLock()
+    public async Task DifferentShowsForOneArtistCanCommitConcurrently()
     {
-        // EraService's ShowService constructor dependency is unused by these operations.
-        var eras = new EraService(db, null!);
-        var artist = new Artist { id = 42 };
-        var firstEntered = new TaskCompletionSource(
+        var shows = new SetlistShowService(db);
+        var firstInserted = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         var releaseFirst = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
         var first = transactions.RunAsync(
-            artist.id,
             FutureDeadline,
             CancellationToken.None,
             async () =>
             {
-                (await eras.ForName(artist, "3.0")).Should().BeNull();
-                firstEntered.SetResult();
+                var saved = await shows.Save(NewShow());
+                firstInserted.SetResult();
                 await releaseFirst.Task;
-                return await eras.Save(
-                    new Era
-                    {
-                        artist_id = artist.id,
-                        name = "3.0",
-                        order = 3,
-                        updated_at = DateTime.UtcNow,
-                    }
-                );
+                return saved;
             }
         );
-        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var second = transactions.RunAsync(
-            artist.id,
-            FutureDeadline,
-            CancellationToken.None,
-            async () =>
-            {
-                var existing = await eras.ForName(artist, "3.0");
-                return existing
-                    ?? await eras.Save(
-                        new Era
-                        {
-                            artist_id = artist.id,
-                            name = "3.0",
-                            order = 3,
-                            updated_at = DateTime.UtcNow,
-                        }
-                    );
-            }
-        );
+        await firstInserted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var differentShow = NewShow();
+        differentShow.upstream_identifier = "show-456";
         try
         {
-            await WaitForAdvisoryLockWait();
-            second.IsCompleted.Should().BeFalse();
+            // Commit a different show while the first transaction is still open. An
+            // artist-wide lock would block this write until the first callback returns.
+            var second = await transactions
+                .RunAsync(FutureDeadline, CancellationToken.None, () => shows.Save(differentShow))
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            first.IsCompleted.Should().BeFalse();
+
+            await using var connection = await OpenConnection();
+            (await connection.QuerySingleAsync<int>("SELECT id FROM setlist_shows"))
+                .Should()
+                .Be(second.id);
         }
         finally
         {
             releaseFirst.TrySetResult();
+            await first.WaitAsync(TimeSpan.FromSeconds(5));
         }
-        var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
-        results[1].id.Should().Be(results[0].id);
-        await using var connection = await OpenConnection();
-        (await connection.QuerySingleAsync<int>("SELECT count(*) FROM eras")).Should().Be(1);
+
+        await using var committed = await OpenConnection();
+        (await committed.QuerySingleAsync<int>("SELECT count(*) FROM setlist_shows"))
+            .Should()
+            .Be(2);
     }
 
     [Test]
@@ -301,7 +276,7 @@ public class TestCatalogImportTransaction
         );
         try
         {
-            await WaitForAdvisoryLockWait();
+            await WaitForDatabaseLockWait("advisory");
             second.IsCompleted.Should().BeFalse();
         }
         finally
@@ -312,13 +287,12 @@ public class TestCatalogImportTransaction
     }
 
     [Test]
-    public async Task CancellationWhileWaitingForArtistLockNeverAppliesWrites()
+    public async Task CancellationWhileWaitingForCollectionLockNeverAppliesWrites()
     {
         using var cancellation = new CancellationTokenSource();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var first = transactions.RunAsync(
-            42,
+        var first = transactions.RunCollectionPageAsync(
             FutureDeadline,
             CancellationToken.None,
             async () =>
@@ -330,8 +304,7 @@ public class TestCatalogImportTransaction
         );
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var callbackEntered = false;
-        var second = transactions.RunAsync(
-            42,
+        var second = transactions.RunCollectionPageAsync(
             FutureDeadline,
             cancellation.Token,
             async () =>
@@ -342,7 +315,7 @@ public class TestCatalogImportTransaction
         );
         try
         {
-            await WaitForAdvisoryLockWait();
+            await WaitForDatabaseLockWait("advisory");
             cancellation.Cancel();
             Func<Task> waitForSecond = async () => await second.WaitAsync(TimeSpan.FromSeconds(5));
             await waitForSecond.Should().ThrowAsync<OperationCanceledException>();
@@ -361,7 +334,6 @@ public class TestCatalogImportTransaction
     {
         var shows = new SetlistShowService(db);
         var original = await transactions.RunAsync(
-            42,
             FutureDeadline,
             CancellationToken.None,
             async () =>
@@ -375,7 +347,6 @@ public class TestCatalogImportTransaction
         repeated.date = new DateTime(2024, 7, 21);
         repeated.venue_id = 8;
         var updated = await transactions.RunAsync(
-            42,
             FutureDeadline,
             CancellationToken.None,
             () => shows.Save(repeated)
@@ -398,18 +369,18 @@ public class TestCatalogImportTransaction
     }
 
     [Test]
-    public async Task OverlappingArtistImportsReturnTheSameSetlistIdentity()
+    public async Task OverlappingShowImportsPreserveIdentityAndReplaceSongPlaysTogether()
     {
         var shows = new SetlistShowService(db);
         var inserted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = transactions.RunAsync(
-            42,
             FutureDeadline,
             CancellationToken.None,
             async () =>
             {
                 var saved = await shows.Save(NewShow());
+                await shows.UpdateSongPlays(saved, [new SetlistSong { id = 17 }]);
                 inserted.SetResult();
                 await release.Task;
                 return saved;
@@ -420,14 +391,18 @@ public class TestCatalogImportTransaction
         // first committed, even when its caller prepared an insert before waiting.
         var repeatedInsert = NewShow();
         var second = transactions.RunAsync(
-            42,
             FutureDeadline,
             CancellationToken.None,
-            () => shows.Save(repeatedInsert)
+            async () =>
+            {
+                var saved = await shows.Save(repeatedInsert);
+                await shows.UpdateSongPlays(saved, [new SetlistSong { id = 23 }]);
+                return saved;
+            }
         );
         try
         {
-            await WaitForAdvisoryLockWait();
+            await WaitForDatabaseLockWait("transactionid");
             second.IsCompleted.Should().BeFalse();
         }
         finally
@@ -441,6 +416,13 @@ public class TestCatalogImportTransaction
         (await connection.QuerySingleAsync<int>("SELECT count(*) FROM setlist_shows"))
             .Should()
             .Be(1);
+        (
+            await connection.QuerySingleAsync<int>(
+                "SELECT played_setlist_song_id FROM setlist_songs_plays"
+            )
+        )
+            .Should()
+            .Be(23);
     }
 
     private static DateTimeOffset FutureDeadline => DateTimeOffset.UtcNow.AddMinutes(1);
@@ -466,14 +448,14 @@ public class TestCatalogImportTransaction
             .Be(0);
     }
 
-    private async Task WaitForAdvisoryLockWait()
+    private async Task WaitForDatabaseLockWait(string waitEvent)
     {
         await using var connection = await OpenConnection();
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         while (
             !await connection.QuerySingleAsync<bool>(
-                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = @schema AND wait_event = 'advisory')",
-                new { schema }
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = @schema AND wait_event = @waitEvent)",
+                new { schema, waitEvent }
             )
         )
         {

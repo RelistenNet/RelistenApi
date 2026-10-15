@@ -7,41 +7,20 @@ using Dapper;
 namespace Relisten.Data;
 
 /// <summary>
-/// Serializes one catalog change and commits its sequential data-service calls together.
-/// Fetch provider responses before entering this transaction. Load mutable catalog rows
-/// inside the callback, after the lock, so an overlapping attempt sees committed changes.
+/// Commits one catalog change atomically. Separate shows can write concurrently; normal
+/// PostgreSQL row locks and unique constraints coordinate shared records. Fetch provider
+/// responses before entering the transaction and load mutable catalog rows inside it.
 /// </summary>
 public sealed class CatalogImportTransaction(DbService db)
 {
-    // PostgreSQL's two-int advisory keys keep item locks ("RLIM", artist ID)
-    // separate from the global collection-index lock ("RLCO", 0).
-    private const int ArtistLockNamespace = 0x524C494D;
     private const int CollectionLockNamespace = 0x524C434F;
 
     /// <summary>
-    /// Applies one artist's catalog writes. The callback must use sequential DbService
-    /// calls, without parallel SQL, HTTP requests, or separately held connections.
+    /// Applies one catalog change. The callback must use sequential DbService calls,
+    /// without parallel SQL, HTTP requests, or separately held connections. Database
+    /// conflicts propagate to Temporal, which retries with a fresh importer and transaction.
     /// </summary>
-    public Task<T> RunAsync<T>(
-        int artistId,
-        DateTimeOffset deadline,
-        CancellationToken token,
-        Func<Task<T>> apply
-    ) => RunLockedAsync(ArtistLockNamespace, artistId, deadline, token, apply);
-
-    /// <summary>
-    /// Applies a fetched Archive collection page. One global lock protects artist creation,
-    /// upstream mappings, and slug allocation, including artists whose IDs are not yet known.
-    /// </summary>
-    public Task<T> RunCollectionPageAsync<T>(
-        DateTimeOffset deadline,
-        CancellationToken token,
-        Func<Task<T>> apply
-    ) => RunLockedAsync(CollectionLockNamespace, 0, deadline, token, apply);
-
-    private async Task<T> RunLockedAsync<T>(
-        int lockNamespace,
-        int lockKey,
+    public async Task<T> RunAsync<T>(
         DateTimeOffset deadline,
         CancellationToken token,
         Func<Task<T>> apply
@@ -62,16 +41,11 @@ public sealed class CatalogImportTransaction(DbService db)
         await db.WithWriteConnection(connection =>
             connection.ExecuteAsync(
                 new CommandDefinition(
-                    """
-                    SELECT set_config('statement_timeout', @timeout, true);
-                    SELECT pg_advisory_xact_lock(@lockNamespace, @lockKey);
-                    """,
+                    "SELECT set_config('statement_timeout', @timeout, true)",
                     new
                     {
                         timeout = Math.Max(1, (int)timeout)
                             .ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        lockNamespace,
-                        lockKey,
                     },
                     commandTimeout: (int)Math.Ceiling(Math.Max(1, timeout) / 1000),
                     cancellationToken: token
@@ -80,7 +54,7 @@ public sealed class CatalogImportTransaction(DbService db)
         );
 
         // Close the wrapper before the callback. Npgsql keeps its enlisted physical
-        // connection for this ambient transaction, so later calls retain the lock.
+        // connection for this ambient transaction, so later calls share its writes.
         RequireActive(deadline, token);
         var result = await apply();
 
@@ -91,11 +65,43 @@ public sealed class CatalogImportTransaction(DbService db)
         return result;
     }
 
+    /// <summary>
+    /// Applies a fetched Archive collection page. A global lock protects artist creation
+    /// and slug allocation, which happen before artist IDs exist. Show imports do not use it.
+    /// </summary>
+    public Task<T> RunCollectionPageAsync<T>(
+        DateTimeOffset deadline,
+        CancellationToken token,
+        Func<Task<T>> apply
+    ) =>
+        RunAsync(
+            deadline,
+            token,
+            async () =>
+            {
+                await db.WithWriteConnection(connection =>
+                    connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "SELECT pg_advisory_xact_lock(@lockNamespace, 0)",
+                            new { lockNamespace = CollectionLockNamespace },
+                            commandTimeout: 300,
+                            cancellationToken: token
+                        )
+                    )
+                );
+
+                RequireActive(deadline, token);
+                return await apply();
+            }
+        );
+
     private static void RequireActive(DateTimeOffset deadline, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         if (DateTimeOffset.UtcNow >= deadline)
+        {
             throw new CatalogImportExpiredException();
+        }
     }
 }
 

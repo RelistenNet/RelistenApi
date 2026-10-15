@@ -44,7 +44,7 @@ public partial class ArchiveOrgImporter
         );
     }
 
-    /// <summary>Fetches one item and applies valid recording metadata under the artist lock.</summary>
+    /// <summary>Fetches one item and applies valid recording metadata in a catalog transaction.</summary>
     public async Task<ArchiveItemResult> ImportArchiveItemAsync(
         ProviderContext context,
         ArchiveItemInput input
@@ -71,8 +71,8 @@ public partial class ArchiveOrgImporter
             return new(item.Id, ItemDisposition.Skipped, null, skip, diagnostic);
         }
 
-        // Each retry may fetch new metadata. Read the catalog again only after the
-        // artist lock is held, so an earlier attempt's committed source is reused.
+        // Each retry may fetch new metadata. Read current catalog state inside the
+        // transaction; the source upsert preserves identity if another attempt committed.
         return await context.CommitAsync(async () =>
         {
             var source = await _sourceService.ForUpstreamIdentifierFromPrimary(

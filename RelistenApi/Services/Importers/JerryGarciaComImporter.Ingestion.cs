@@ -38,7 +38,7 @@ public partial class JerryGarciaComImporter
         );
     }
 
-    /// <summary>Imports one missing page and preserves tour bounds from earlier committed pages.</summary>
+    /// <summary>Imports one missing page and extends the shared tour date range.</summary>
     public Task<JerryItemResult> ImportPageAsync(
         ProviderContext context,
         DiscoveredItem<JerryShowId, FileMetaObject> item
@@ -82,7 +82,7 @@ public partial class JerryGarciaComImporter
         return await context.CommitAsync(async () =>
         {
             // Fresh importer dictionaries belong to this activity attempt. Reload
-            // after acquiring the artist lock before testing catalog membership.
+            // in the transaction before testing catalog membership.
             await PreloadData(context.Artist);
 
             return repairVenue
@@ -132,7 +132,6 @@ public partial class JerryGarciaComImporter
             return new(item.Id, new(previous.id), ItemDisposition.Unchanged);
         }
 
-        RestoreCommittedTourBounds();
         await ProcessPage(new ImportStats(), context.Artist, item.Input, html, modifiedAt, null);
 
         if (context.Artist.features.tours && tourToStartDate.Count > 0)
@@ -141,23 +140,5 @@ public partial class JerryGarciaComImporter
         }
 
         return new(item.Id, new(existingSetlistShows[item.Id.Value]!.id), ItemDisposition.Applied);
-    }
-
-    private void RestoreCommittedTourBounds()
-    {
-        // Activities do not share these dictionaries. Preserve dates committed by
-        // earlier pages so importing the next page can only extend tour bounds.
-        foreach (var tour in existingTours.Values.Where(tour => tour != null))
-        {
-            if (tour!.start_date.HasValue)
-            {
-                tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
-            }
-
-            if (tour.end_date.HasValue)
-            {
-                tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
-            }
-        }
     }
 }

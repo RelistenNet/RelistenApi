@@ -9,7 +9,7 @@ namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
-        /// <summary>Updates the date ranges accumulated while importing an artist's setlists.</summary>
+        /// <summary>Extends tour dates with an imported setlist range without losing concurrent extensions.</summary>
         public Task UpdateDateBounds(
             Artist artist,
             IDictionary<string, DateTime> starts,
@@ -18,7 +18,8 @@ namespace Relisten.Data
             db.WithWriteConnection(connection =>
                 connection.ExecuteAsync(
                     """
-                    UPDATE tours SET start_date=@startDate, end_date=@endDate
+                    UPDATE tours SET start_date=LEAST(start_date, @startDate),
+                        end_date=GREATEST(end_date, @endDate)
                     WHERE artist_id=@artistId AND upstream_identifier=@identifier
                     """,
                     starts.Select(pair => new
@@ -206,8 +207,11 @@ namespace Relisten.Data
                 );
             }
 
-            return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<Tour>(
+            // Different shows can discover the same tour before either commits.
+            // Reuse the winning row, including any dates it has already accumulated.
+            return await db.WithWriteConnection(async con =>
+            {
+                var inserted = await con.QuerySingleOrDefaultAsync<Tour>(
                     @"
                     INSERT INTO
                         tours
@@ -233,11 +237,20 @@ namespace Relisten.Data
                             @updated_at,
                             md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                         )
+                    ON CONFLICT DO NOTHING
                     RETURNING *
                 ",
                     p
-                )
-            );
+                );
+
+                // Both UUID and upstream identity are unique. Handle either
+                // conflict, then use a new statement to see the winning commit.
+                return inserted
+                    ?? await con.QuerySingleAsync<Tour>(
+                        "SELECT * FROM tours WHERE artist_id=@artist_id AND upstream_identifier=@upstream_identifier",
+                        p
+                    );
+            });
         }
     }
 }

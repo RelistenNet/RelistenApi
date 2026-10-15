@@ -303,8 +303,11 @@ namespace Relisten.Data
                 );
             }
 
-            return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<Venue>(
+            // Concurrent shows can discover one venue. Keep the first committed
+            // metadata and return its identity for both shows.
+            return await db.WithWriteConnection(async con =>
+            {
+                var inserted = await con.QuerySingleOrDefaultAsync<Venue>(
                     @"
                     INSERT INTO
                         venues
@@ -334,11 +337,20 @@ namespace Relisten.Data
                             @slug,
                             md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                         )
+                    ON CONFLICT DO NOTHING
                     RETURNING *
                 ",
                     p
-                )
-            );
+                );
+
+                // Both UUID and upstream identity are unique. Handle either
+                // conflict, then use a new statement to see the winning commit.
+                return inserted
+                    ?? await con.QuerySingleAsync<Venue>(
+                        "SELECT * FROM venues WHERE artist_id=@artist_id AND upstream_identifier=@upstream_identifier",
+                        p
+                    );
+            });
         }
     }
 }

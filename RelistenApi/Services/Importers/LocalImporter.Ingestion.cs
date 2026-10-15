@@ -65,7 +65,7 @@ public partial class LocalImporter
         DiscoveredItem<LocalShowDate, LocalShow[]> item
     )
     {
-        // Fetch all directories before taking the artist lock. The transaction
+        // Fetch all directories before opening the transaction. The transaction
         // merges them into one source for this date, retaining its catalog UUID.
         var metadata = await FetchDirectoryMetadataAsync(context, item.Input);
 

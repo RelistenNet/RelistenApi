@@ -8,8 +8,8 @@ using Relisten.Ingestion.Providers.PhishNet;
 
 namespace Relisten.Import;
 
-// Network reads happen before the lock. The transaction reloads its source so an
-// overlapping attempt cannot overwrite recording fields from an earlier snapshot.
+// Fetch upstream data before the transaction. Only attempts updating the same
+// recording wait for each other while replacing its reviews and metadata.
 public partial class PhishNetImporter
 {
     public override void UseIngestionHttpClient(HttpClient client)
@@ -64,9 +64,14 @@ public partial class PhishNetImporter
 
         return await context.CommitAsync(async () =>
         {
-            var current = await _sourceService.ForArtistFromPrimary(context.Artist, item.Id.Value);
+            // ProcessSource replaces reviews before saving the source. Lock this
+            // recording so overlapping attempts cannot mix those compound writes.
+            var current = await _sourceService.ForArtistAndIdForUpdate(
+                context.Artist,
+                item.Id.Value
+            );
 
-            // HTTP inputs were fetched before locking. If they no longer describe
+            // HTTP inputs were fetched before this transaction. If they no longer describe
             // the current recording, retry the whole activity to fetch fresh data.
             if (
                 current.display_date != before.display_date
@@ -105,6 +110,6 @@ public partial class PhishNetImporter
     }
 }
 
-/// <summary>A concurrent write changed enrichment prerequisites; retry must fetch fresh inputs before locking.</summary>
+/// <summary>A concurrent write changed enrichment prerequisites; retry must fetch fresh inputs before applying them.</summary>
 public sealed class EnrichmentInputsChangedException()
     : Exception("The recording changed while fetching enrichment inputs.");

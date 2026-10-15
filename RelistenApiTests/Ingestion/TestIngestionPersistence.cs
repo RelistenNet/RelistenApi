@@ -442,6 +442,204 @@ public class TestIngestionPersistence
         (await Catalog()).Should().ContainSingle().Which.title.Should().Be("Recovered title");
     }
 
+    [TestCase("40001")]
+    [TestCase("40P01")]
+    public async Task DatabaseConflictRetriesTheWholeItemWithFreshImporterState(string sqlState)
+    {
+        // Sequences survive rollback. Fail the first track write, after the source
+        // and set have been written, then let the next activity attempt commit.
+        var objectName = "ingestion_retry_" + artistId;
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                $"""
+                CREATE SEQUENCE {objectName};
+                CREATE FUNCTION {objectName}() RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    IF NEW.artist_id = {artistId} AND nextval('{objectName}') = 1 THEN
+                        RAISE EXCEPTION 'Injected catalog conflict' USING ERRCODE = '{sqlState}';
+                    END IF;
+                    RETURN NEW;
+                END $$;
+                CREATE TRIGGER {objectName} BEFORE INSERT ON source_tracks
+                    FOR EACH ROW EXECUTE FUNCTION {objectName}();
+                """
+            )
+        );
+
+        var metadataRequests = 0;
+        upstream.Respond = uri =>
+        {
+            if (!uri.AbsolutePath.StartsWith("/metadata/"))
+            {
+                return Listing;
+            }
+
+            Interlocked.Increment(ref metadataRequests);
+            return Metadata("Recovered title");
+        };
+
+        try
+        {
+            var result = await Import();
+
+            result.FailedItems.Should().Be(0);
+            metadataRequests.Should().Be(2, "the whole item activity must retry after rollback");
+            (await Catalog()).Should().ContainSingle().Which.title.Should().Be("Recovered title");
+            var counts = await db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<(int Sources, int Sets, int Tracks)>(
+                    """
+                    SELECT
+                        (SELECT count(*)::int FROM sources WHERE artist_id=@artistId),
+                        (SELECT count(*)::int FROM source_sets ss JOIN sources s ON s.id=ss.source_id WHERE s.artist_id=@artistId),
+                        (SELECT count(*)::int FROM source_tracks WHERE artist_id=@artistId)
+                    """,
+                    new { artistId }
+                )
+            );
+            counts.Should().Be((1, 1, 1));
+        }
+        finally
+        {
+            await db.WithWriteConnection(connection =>
+                connection.ExecuteAsync(
+                    $"""
+                    DROP TRIGGER {objectName} ON source_tracks;
+                    DROP FUNCTION {objectName}();
+                    DROP SEQUENCE {objectName};
+                    """
+                )
+            );
+        }
+    }
+
+    [Test]
+    public async Task ConcurrentSetlistsShareVenueTourAndSongsAndPreserveTourRange()
+    {
+        await ConfigureProvider("setlist.fm", 6);
+        upstream.Respond = uri => ProviderFixtures.Response("setlist.fm", uri);
+        var activities = host.Services.GetRequiredService<SetlistFmActivities>();
+        var environment = new Temporalio.Testing.ActivityEnvironment();
+        var context = new ProviderWorkflowContext(
+            new ArtistId(artistUuid),
+            new IngestionExecution(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddDays(7))
+        );
+        var page = await environment.RunAsync(() => activities.ReadSetlistPageAsync(context, null));
+
+        await Task.WhenAll(
+            page.Items.Select(item =>
+                new Temporalio.Testing.ActivityEnvironment().RunAsync(() =>
+                    activities.ImportSetlistAsync(context, item)
+                )
+            )
+        );
+
+        var snapshot = await Snapshot();
+        snapshot["setlists"].Should().HaveCount(2);
+        snapshot["songs"].Should().ContainSingle();
+        snapshot["plays"].Should().HaveCount(2);
+        var artist = await host
+            .Services.GetRequiredService<ArtistService>()
+            .FindArtistForImport(artistUuid.ToString());
+        var tours = host.Services.GetRequiredService<TourService>();
+        var venues = host.Services.GetRequiredService<VenueService>();
+        var tour = (await tours.AllForArtist(artist!)).Should().ContainSingle().Subject;
+        var venue = (await venues.AllIncludingUnusedForArtist(artist!))
+            .Should()
+            .ContainSingle()
+            .Subject;
+        tour.start_date.Should().Be(new DateTime(2000, 1, 1));
+        tour.end_date.Should().Be(new DateTime(2000, 1, 2));
+
+        // These callers made their create decisions before seeing the committed
+        // rows. Both saves must reuse the winner without clearing its tour dates.
+        var repeatedTour = await tours.Save(
+            new Tour
+            {
+                artist_id = artistId,
+                upstream_identifier = tour.upstream_identifier,
+                name = tour.name,
+                slug = tour.slug,
+                updated_at = tour.updated_at,
+            }
+        );
+        var repeatedVenue = await venues.Save(
+            new Venue
+            {
+                artist_id = artistId,
+                upstream_identifier = venue.upstream_identifier,
+                name = venue.name,
+                slug = venue.slug,
+                location = venue.location,
+                updated_at = venue.updated_at,
+            }
+        );
+        repeatedTour.id.Should().Be(tour.id);
+        repeatedVenue.id.Should().Be(venue.id);
+        repeatedTour.start_date.Should().Be(tour.start_date);
+        repeatedTour.end_date.Should().Be(tour.end_date);
+
+        // Each item can hold a different stale range. The database must extend
+        // both ends without replacing the other item's committed extension.
+        await Task.WhenAll(
+            tours.UpdateDateBounds(
+                artist!,
+                new Dictionary<string, DateTime> { [tour.upstream_identifier] = new(1999, 12, 31) },
+                new Dictionary<string, DateTime> { [tour.upstream_identifier] = new(2000, 1, 2) }
+            ),
+            tours.UpdateDateBounds(
+                artist!,
+                new Dictionary<string, DateTime> { [tour.upstream_identifier] = new(2000, 1, 1) },
+                new Dictionary<string, DateTime> { [tour.upstream_identifier] = new(2000, 1, 3) }
+            )
+        );
+        tour = (await tours.AllForArtist(artist!)).Single();
+        tour.start_date.Should().Be(new DateTime(1999, 12, 31));
+        tour.end_date.Should().Be(new DateTime(2000, 1, 3));
+    }
+
+    [Test]
+    public async Task ConcurrentPhishNetEnrichmentKeepsOneCompleteReviewSet()
+    {
+        await Import();
+        await ConfigureProvider("phish.net", 3);
+        upstream.Respond = uri => ProviderFixtures.Response("phish.net", uri);
+        var activities = host.Services.GetRequiredService<PhishNetActivities>();
+        var environment = new Temporalio.Testing.ActivityEnvironment();
+        var context = new ProviderWorkflowContext(
+            new ArtistId(artistUuid),
+            new IngestionExecution(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddDays(7))
+        );
+        var items = await environment.RunAsync(() =>
+            activities.SelectSourcesAsync(
+                new ProviderRequest<RefreshPhishNetArtist>(new(context.Artist), context.Execution)
+            )
+        );
+        var item = items.Single();
+
+        // Temporal can retry an activity whose completion was lost. Both attempts
+        // must preserve the recording and apply reviews as one compound change.
+        var results = await Task.WhenAll(
+            new Temporalio.Testing.ActivityEnvironment().RunAsync(() =>
+                activities.EnrichSourceAsync(context, item)
+            ),
+            new Temporalio.Testing.ActivityEnvironment().RunAsync(() =>
+                activities.EnrichSourceAsync(context, item)
+            )
+        );
+
+        results.Select(result => result.Source).Should().OnlyContain(source => source == item.Id);
+        var snapshot = await Snapshot();
+        snapshot["sources"].Should().ContainSingle();
+        snapshot["reviews"].Should().ContainSingle().Which.Should().Contain("Fixture review");
+        var reviewCount = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<int>(
+                "SELECT num_reviews FROM sources WHERE artist_id=@artistId AND id=@sourceId",
+                new { artistId, sourceId = item.Id.Value }
+            )
+        );
+        reviewCount.Should().Be(1);
+    }
+
     [Test]
     public async Task LostItemAcknowledgementRefetchesAndConvergesOnTheExistingCatalogIdentity()
     {

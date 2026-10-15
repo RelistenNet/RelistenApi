@@ -128,7 +128,8 @@ namespace Relisten.Data
         /// <summary>
         /// Saves provider metadata and returns the catalog identity. A repeated insert
         /// resolves the existing show before callers write its song performances.
-        /// Compound imports serialize their writes through CatalogImportTransaction.
+        /// The upsert locks this show until its transaction completes, so replacement
+        /// song performances can be committed with the metadata as one change.
         /// </summary>
         public async Task<SetlistShow> Save(SetlistShow show)
         {

@@ -10,7 +10,7 @@ using Relisten.Vendor.SetlistFm;
 namespace Relisten.Import;
 
 // Keeps tolerant upstream parsing separate from catalog writes. Each item reloads
-// current rows under the artist lock, including tour bounds from earlier items.
+// current rows in its transaction; PostgreSQL merges shared tour date extensions.
 public partial class SetlistFmImporter
 {
     /// <summary>Reads one upstream page while preserving the tolerant setlist parser.</summary>
@@ -54,7 +54,7 @@ public partial class SetlistFmImporter
         );
     }
 
-    /// <summary>Applies a setlist under the artist lock and returns its current catalog identity.</summary>
+    /// <summary>Applies a setlist in one transaction and returns its current catalog identity.</summary>
     public async Task<SetlistFmItemResult> ImportSetlistAsync(
         ProviderContext context,
         DiscoveredItem<SetlistFmId, Setlist> item
@@ -63,7 +63,6 @@ public partial class SetlistFmImporter
         return await context.CommitAsync(async () =>
         {
             await PreloadData(context.Artist);
-            RestoreCommittedTourBounds();
 
             var unchanged =
                 existingSetlistShows.TryGetValue(item.Id.Value, out var previous)
@@ -82,23 +81,5 @@ public partial class SetlistFmImporter
                 unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied
             );
         });
-    }
-
-    private void RestoreCommittedTourBounds()
-    {
-        // Item activities do not share dictionaries. Preserve committed bounds so
-        // applying the next item cannot shrink a previously imported tour.
-        foreach (var tour in existingTours.Values.Where(tour => tour != null))
-        {
-            if (tour!.start_date.HasValue)
-            {
-                tourToStartDate[tour.upstream_identifier] = tour.start_date.Value;
-            }
-
-            if (tour.end_date.HasValue)
-            {
-                tourToEndDate[tour.upstream_identifier] = tour.end_date.Value;
-            }
-        }
     }
 }

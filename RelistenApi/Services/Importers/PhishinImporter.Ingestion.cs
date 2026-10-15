@@ -10,7 +10,7 @@ using Relisten.Vendor.Phishin;
 
 namespace Relisten.Import;
 
-// Fetch provider catalogs before the write lock. Item attempts reload current catalog rows
+// Fetch provider catalogs before opening a transaction. Item attempts reload current catalog rows
 // and restore only the stable upstream era/song mappings from preparation.
 public partial class PhishinImporter
 {

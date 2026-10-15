@@ -62,6 +62,18 @@ namespace Relisten.Data
                 )
             );
 
+        /// <summary>
+        /// Reads and locks one recording for compound updates to its reviews and metadata.
+        /// Call inside a transaction; PostgreSQL releases the row lock when it finishes.
+        /// </summary>
+        public Task<Source> ForArtistAndIdForUpdate(Artist artist, long sourceId) =>
+            db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<Source>(
+                    "SELECT * FROM sources WHERE artist_id=@artistId AND id=@sourceId FOR UPDATE",
+                    new { artistId = artist.id, sourceId }
+                )
+            );
+
         public async Task<Source?> ForUpstreamIdentifier(Artist artist, string upstreamId)
         {
             return await db.WithConnection(con =>
