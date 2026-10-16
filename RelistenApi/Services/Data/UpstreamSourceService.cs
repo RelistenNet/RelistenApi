@@ -25,7 +25,7 @@ namespace Relisten.Data
             );
         }
 
-        public async Task<UpstreamSource?> FindUpstreamSourceByName(string name)
+        public async Task<UpstreamSource?> FindUpstreamSourceByName(UpstreamProvider provider)
         {
             return await db.WithConnection(conn =>
                 conn.QuerySingleOrDefaultAsync<UpstreamSource>(
@@ -37,7 +37,7 @@ namespace Relisten.Data
                 WHERE
                     name = @name
             ",
-                    new { name }
+                    new { name = provider.ToValue() }
                 )
             );
         }

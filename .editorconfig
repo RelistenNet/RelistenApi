@@ -6,3 +6,16 @@ dotnet_diagnostic.CA1707.severity = none
 
 [*.{config,csproj,props,slnx,targets,xaml,xml}]
 end_of_line = lf
+
+# New ingestion code keeps control-flow blocks explicit after CSharpier formatting.
+[RelistenApi/Services/Ingestion/**.cs]
+csharp_prefer_braces = true
+dotnet_diagnostic.IDE0011.severity = error
+
+[RelistenApi/Services/Importers/*.Ingestion.cs]
+csharp_prefer_braces = true
+dotnet_diagnostic.IDE0011.severity = error
+
+[RelistenIngestionWorker/*.cs]
+csharp_prefer_braces = true
+dotnet_diagnostic.IDE0011.severity = error

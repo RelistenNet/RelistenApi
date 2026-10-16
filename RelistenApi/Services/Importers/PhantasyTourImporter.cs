@@ -1,25 +1,23 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Dapper;
 using Hangfire.Console;
 using Hangfire.Server;
 using Newtonsoft.Json;
 using Polly;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.PhantasyTour;
 
 namespace Relisten.Import
 {
-    public class PhantasyTourImporter : ImporterBase
+    public partial class PhantasyTourImporter : ImporterBase
     {
-        public const string DataSourceName = "phantasytour.com";
-
         private const uint ITEMS_PER_PAGE = 100;
         private IDictionary<string, SetlistShow?> existingSetlistShows =
             new Dictionary<string, SetlistShow?>();
@@ -32,14 +30,14 @@ namespace Relisten.Import
         private readonly Dictionary<string, DateTime> listedDates = new();
 
         public PhantasyTourImporter(
-            DbService db,
+            CatalogRebuildService catalog,
+            Microsoft.Extensions.Logging.ILogger<PhantasyTourImporter> log,
             VenueService venueService,
             TourService tourService,
             SetlistShowService setlistShowService,
-            SetlistSongService setlistSongService,
-            RedisService redisService
+            SetlistSongService setlistSongService
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
@@ -52,7 +50,7 @@ namespace Relisten.Import
         protected SetlistShowService _setlistShowService { get; set; }
         protected SetlistSongService _setlistSongService { get; set; }
 
-        public override string ImporterName => DataSourceName;
+        public override UpstreamProvider Provider => UpstreamProvider.PhantasyTour;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -113,7 +111,7 @@ namespace Relisten.Import
 
             await PreloadData(artist);
 
-            ctx?.WriteLine($"Requesting page #{page}");
+            ImportProgress.WriteLine(log, ctx, $"Requesting page #{page}");
 
             while (
                 await ImportPage(artist, stats, ctx, await http.GetAsync(UrlForArtist(src, page)))
@@ -123,17 +121,21 @@ namespace Relisten.Import
 
                 await Task.Delay(100);
 
-                ctx?.WriteLine($"Requesting page #{page}");
+                ImportProgress.WriteLine(log, ctx, $"Requesting page #{page}");
             }
 
             // The listing carries local dates even for known shows. Repair historical UTC
             // truncation only after every page succeeds, before rebuilding date-based joins.
             var correctedDates = await _setlistShowService.UpdateDates(artist, listedDates);
             stats.Updated += correctedDates;
-            ctx?.WriteLine($"Corrected {correctedDates} Phantasy Tour setlist dates");
+            ImportProgress.WriteLine(
+                log,
+                ctx,
+                $"Corrected {correctedDates} Phantasy Tour setlist dates"
+            );
 
-            ctx?.WriteLine("Updating tour start/end dates");
-            await UpdateTourStartEndDates(artist);
+            ImportProgress.WriteLine(log, ctx, "Updating tour start/end dates");
+            await _tourService.RefreshDatesFromSetlists(artist);
 
             // update shows
             await RebuildShows(artist);
@@ -174,8 +176,14 @@ namespace Relisten.Import
             }
             catch
             {
-                ctx?.WriteLine("Improper response from phantasytour.com: " + body);
-                ctx?.WriteLine(
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "Improper response from phantasytour.com: " + body
+                );
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
                     $"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}"
                 );
                 var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
@@ -188,7 +196,11 @@ namespace Relisten.Import
                             )
                         )
                         : "<unknown>";
-                ctx?.WriteLine($"Request url: {requestUri}. Headers: {requestHeaders}");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    $"Request url: {requestUri}. Headers: {requestHeaders}"
+                );
                 throw;
             }
 
@@ -267,22 +279,37 @@ namespace Relisten.Import
             int showId
         )
         {
-            ctx?.WriteLine($"Requesting page for show id {showId}");
+            ImportProgress.WriteLine(log, ctx, $"Requesting page for show id {showId}");
 
             var res = await http.GetAsync(UrlForShow(showId));
 
             var body = await res.Content.ReadAsStringAsync();
 
-            ctx?.WriteLine($"Result: [{res.StatusCode}]: {body.Length}");
+            ImportProgress.WriteLine(log, ctx, $"Result: [{res.StatusCode}]: {body.Length}");
             res.EnsureSuccessStatusCode();
 
+            await ApplyShowBody(artist, stats, ctx, showId, body);
+        }
+
+        private async Task ApplyShowBody(
+            Artist artist,
+            ImportStats stats,
+            PerformContext? ctx,
+            int showId,
+            string body
+        )
+        {
             var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data;
 
             var now = DateTime.UtcNow;
 
             if (json == null || json.id != showId || json.dateTime == default)
             {
-                ctx?.WriteLine($"Improper response for show id {showId}: {body}");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    $"Improper response for show id {showId}: {body}"
+                );
                 throw new InvalidDataException(
                     $"Phantasy Tour returned invalid details for show {showId}."
                 );
@@ -314,7 +341,7 @@ namespace Relisten.Import
                 stats.Created++;
             }
 
-            ctx?.WriteLine($"Importing show id {showId}");
+            ImportProgress.WriteLine(log, ctx, $"Importing show id {showId}");
 
             // tour
             Tour? dbTour = null;
@@ -408,27 +435,6 @@ namespace Relisten.Import
             }
 
             stats += await _setlistShowService.UpdateSongPlays(dbShow!, dbSongs);
-        }
-
-        private async Task UpdateTourStartEndDates(Artist artist)
-        {
-            await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                UPDATE tours t
-                SET start_date = dates.start_date, end_date = dates.end_date
-                FROM (
-                    SELECT tour_id, MIN(date) AS start_date, MAX(date) AS end_date
-                    FROM setlist_shows
-                    WHERE artist_id = @artistId AND tour_id IS NOT NULL
-                    GROUP BY tour_id
-                ) dates
-                WHERE t.id = dates.tour_id AND t.artist_id = @artistId
-                    AND (t.start_date, t.end_date) IS DISTINCT FROM (dates.start_date, dates.end_date)
-            ",
-                    new { artistId = artist.id }
-                )
-            );
         }
     }
 }

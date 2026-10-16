@@ -42,6 +42,27 @@ public sealed class ArchiveOrgSearchClient
         return result.docs;
     }
 
+    /// <summary>Finds one item within its artist collection without enumerating the entire collection.</summary>
+    public async Task<SearchDoc?> FetchItemAsync(string? collection, string identifier)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(collection);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+        var quotedIdentifier = identifier.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        var result = await FetchAsync(
+            $"collection:{collection} AND identifier:\"{quotedIdentifier}\"",
+            null
+        );
+        if (
+            result.docs.Count != result.numFound
+            || result.docs.Any(doc => doc.identifier != identifier)
+        )
+        {
+            throw new InvalidDataException("Archive returned an invalid targeted search result.");
+        }
+
+        return result.docs.SingleOrDefault();
+    }
+
     private async Task<SearchResponse> FetchAsync(string query, Action<string>? log)
     {
         // Let Archive choose the retrieval path from the hit count; a large numeric rows

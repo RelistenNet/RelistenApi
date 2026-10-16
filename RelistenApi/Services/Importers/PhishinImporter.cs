@@ -12,16 +12,15 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.Phishin;
 using Sentry;
 
 namespace Relisten.Import
 {
-    public class PhishinImporter : ImporterBase
+    public partial class PhishinImporter : ImporterBase
     {
-        public const string DataSourceName = "phish.in";
-
         private readonly LinkService linkService;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
@@ -38,7 +37,7 @@ namespace Relisten.Import
             new Dictionary<string, VenueWithShowCount?>();
 
         public PhishinImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -50,10 +49,9 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<PhishinImporter> log,
-            IConfiguration configuration,
-            RedisService redisService
+            IConfiguration configuration
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;
@@ -87,7 +85,7 @@ namespace Relisten.Import
         protected ILogger<PhishinImporter> _log { get; set; }
         public IConfiguration _configuration { get; }
 
-        public override string ImporterName => "phish.in";
+        public override UpstreamProvider Provider => UpstreamProvider.Phishin;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -108,33 +106,37 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
-            ctx?.WriteLine("Processing Eras");
+            ImportProgress.WriteLine(log, ctx, "Processing Eras");
             stats += await ProcessEras(artist, ctx);
 
-            ctx?.WriteLine("Processing Tours");
+            ImportProgress.WriteLine(log, ctx, "Processing Tours");
             stats += await ProcessTours(artist, ctx);
 
-            ctx?.WriteLine("Processing Songs");
+            ImportProgress.WriteLine(log, ctx, "Processing Songs");
             stats += await ProcessSongs(artist, ctx);
 
-            ctx?.WriteLine("Processing Venues");
+            ImportProgress.WriteLine(log, ctx, "Processing Venues");
             stats += await ProcessVenues(artist, ctx);
 
-            ctx?.WriteLine("Processing Shows");
+            ImportProgress.WriteLine(log, ctx, "Processing Shows");
             stats += await ProcessShows(artist, src, ctx);
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows and years...");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows and years...");
                 await RebuildShows(artist);
                 await RebuildYears(artist);
-                ctx?.WriteLine("--> rebuilt!");
+                ImportProgress.WriteLine(log, ctx, "--> rebuilt!");
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
             return stats;
@@ -185,7 +187,11 @@ namespace Relisten.Import
             int? page = null
         )
         {
-            return $"https://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
+            // Phish.in ignores sorting unless both parameters are supplied. Show
+            // pagination relies on ascending dates to stop at the thin-scrape cutoff.
+            var sorting = sort_attr == null ? "" : $"&sort_attr={sort_attr}&sort_dir=asc";
+
+            return $"https://phish.in/api/v1/{api}.json?per_page={per_page}{sorting}{(page != null ? "&page=" + page.Value : "")}";
         }
 
         private async Task<PhishinRootObject<T>> PhishinApiRequest<T>(
@@ -197,21 +203,30 @@ namespace Relisten.Import
         )
         {
             var url = PhishinApiUrl(apiRoute, sort_attr, per_page, page);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
-            return JsonConvert.DeserializeObject<PhishinRootObject<T>>(
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
+            using var resp = await http.GetAsync(url);
+            resp.EnsureSuccessStatusCode();
+            var result = JsonConvert.DeserializeObject<PhishinRootObject<T>>(
                 await resp.Content.ReadAsStringAsync()
-            )!;
+            );
+            if (result == null || !result.success || result.data == null)
+                throw new System.IO.InvalidDataException("Phish.in returned an invalid response.");
+            return result;
         }
 
-        public async Task<ImportStats> ProcessTours(Artist artist, PerformContext? ctx)
+        public async Task<ImportStats> ProcessTours(
+            Artist artist,
+            PerformContext? ctx,
+            IEnumerable<PhishinSmallTour>? staged = null
+        )
         {
             var stats = new ImportStats();
 
             foreach (
                 var tour in (
-                    await PhishinApiRequest<IEnumerable<PhishinSmallTour>>("tours", ctx)
-                ).data
+                    staged
+                    ?? (await PhishinApiRequest<IEnumerable<PhishinSmallTour>>("tours", ctx)).data
+                )
             )
             {
                 Tour? dbTour = existingTours.GetValue(tour.id.ToString());
@@ -252,7 +267,11 @@ namespace Relisten.Import
             return stats;
         }
 
-        public async Task<ImportStats> ProcessEras(Artist artist, PerformContext? ctx)
+        public async Task<ImportStats> ProcessEras(
+            Artist artist,
+            PerformContext? ctx,
+            IDictionary<string, IList<string>>? staged = null
+        )
         {
             var stats = new ImportStats();
 
@@ -260,8 +279,11 @@ namespace Relisten.Import
 
             foreach (
                 var era in (
-                    await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", ctx)
-                ).data
+                    staged
+                    ?? (
+                        await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", ctx)
+                    ).data
+                )
             )
             {
                 Era? dbEra = existingEras.GetValue(era.Key);
@@ -294,12 +316,19 @@ namespace Relisten.Import
             return stats;
         }
 
-        public async Task<ImportStats> ProcessSongs(Artist artist, PerformContext? ctx)
+        public async Task<ImportStats> ProcessSongs(
+            Artist artist,
+            PerformContext? ctx,
+            IEnumerable<PhishinSmallSong>? staged = null
+        )
         {
             var stats = new ImportStats();
 
             var songsToSave = new List<SetlistSong>();
-            var songs = (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data;
+            var songs = (
+                staged
+                ?? (await PhishinApiRequest<IEnumerable<PhishinSmallSong>>("songs", ctx)).data
+            );
 
             foreach (var song in songs)
             {
@@ -343,14 +372,19 @@ namespace Relisten.Import
             return stats;
         }
 
-        public async Task<ImportStats> ProcessVenues(Artist artist, PerformContext? ctx)
+        public async Task<ImportStats> ProcessVenues(
+            Artist artist,
+            PerformContext? ctx,
+            IEnumerable<PhishinSmallVenue>? staged = null
+        )
         {
             var stats = new ImportStats();
 
             foreach (
                 var venue in (
-                    await PhishinApiRequest<IEnumerable<PhishinSmallVenue>>("venues", ctx)
-                ).data
+                    staged
+                    ?? (await PhishinApiRequest<IEnumerable<PhishinSmallVenue>>("venues", ctx)).data
+                )
             )
             {
                 VenueWithShowCount? dbVenue = existingVenues.GetValue(venue.id.ToString());
@@ -466,6 +500,8 @@ namespace Relisten.Import
 
                 addSongs = true;
             }
+
+            existingSetlistShows[show.date] = dbShow;
 
             if (addSongs)
             {
@@ -650,14 +686,16 @@ namespace Relisten.Import
 
                     try
                     {
-                        await processShow(show);
+                        await ProcessOneShow(stats, artist, src, show, ctx);
                     }
                     catch (Exception e)
                     {
-                        ctx?.WriteLine(
+                        ImportProgress.WriteLine(
+                            log,
+                            ctx,
                             $"Error processing show (but continuing): {show.date} (id: {show.id})"
                         );
-                        ctx?.LogException(e);
+                        ImportProgress.LogException(log, ctx, e);
 
                         e.Data["phishin_show_date"] = show.date;
                         e.Data["phishin_show_id"] = show.id;
@@ -674,90 +712,115 @@ namespace Relisten.Import
                 // all remaining pages (earlier dates) won't either
                 if (isThinScrape && !processedAnyOnPage)
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"Thin scrape: no shows on page {currentPage} matched year {CurrentImportOptions.OnlyYear}, stopping"
                     );
                     allShowsBeforeCutoff = true;
                 }
             }
 
-            async Task processShow(PhishinShow show)
+            return stats;
+        }
+
+        private async Task ProcessOneShow(
+            ImportStats stats,
+            Artist artist,
+            ArtistUpstreamSource src,
+            PhishinShow show,
+            PerformContext? ctx
+        )
+        {
+            using var scope = new TransactionScope(
+                TransactionScopeOption.Required,
+                new TransactionOptions()
+                {
+                    IsolationLevel =
+                        Transaction.Current?.IsolationLevel ?? IsolationLevel.RepeatableRead,
+                },
+                TransactionScopeAsyncFlowOption.Enabled
+            );
+
+            Source? dbSource = existingSources.GetValue(show.id.ToString());
+
+            if (dbSource == null)
             {
-                using var scope = new TransactionScope(
-                    TransactionScopeOption.Required,
-                    new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
-                    TransactionScopeAsyncFlowOption.Enabled
+                dbSource = await ProcessShow(
+                    stats,
+                    artist,
+                    show,
+                    src,
+                    new Source
+                    {
+                        updated_at = show.updated_at,
+                        artist_id = artist.id,
+                        venue_id = existingVenues[show.venue.id.ToString()]!.id,
+                        display_date = show.date,
+                        upstream_identifier = show.id.ToString(),
+                        is_soundboard = show.sbd,
+                        is_remaster = show.remastered,
+                        description = "",
+                        taper_notes = show.taper_notes,
+                    },
+                    ctx
                 );
 
-                Source? dbSource = existingSources.GetValue(show.id.ToString());
+                existingSources[dbSource.upstream_identifier] = dbSource!;
 
-                if (dbSource == null)
-                {
-                    dbSource = await ProcessShow(
-                        stats,
-                        artist,
-                        show,
-                        src,
-                        new Source
+                stats.Created++;
+
+                stats.Created += (
+                    await linkService.AddLinksForSource(
+                        dbSource,
+                        new[]
                         {
-                            updated_at = show.updated_at,
-                            artist_id = artist.id,
-                            venue_id = existingVenues[show.venue.id.ToString()]!.id,
-                            display_date = show.date,
-                            upstream_identifier = show.id.ToString(),
-                            is_soundboard = show.sbd,
-                            is_remaster = show.remastered,
-                            description = "",
-                            taper_notes = show.taper_notes,
-                        },
-                        ctx
-                    );
-
-                    existingSources[dbSource.upstream_identifier] = dbSource!;
-
-                    stats.Created++;
-
-                    stats.Created += (
-                        await linkService.AddLinksForSource(
-                            dbSource,
-                            new[]
+                            new Link
                             {
-                                new Link
-                                {
-                                    source_id = dbSource.id,
-                                    for_ratings = false,
-                                    for_source = true,
-                                    for_reviews = false,
-                                    upstream_source_id = src.upstream_source_id,
-                                    url = $"https://phish.in/{dbSource.display_date}",
-                                    label = "View on phish.in",
-                                },
-                            }
-                        )
-                    ).Count();
-                }
-                else if (show.updated_at > dbSource.updated_at)
-                {
-                    dbSource.updated_at = show.updated_at;
-                    dbSource.venue_id = existingVenues[show.venue.id.ToString()]!.id;
-                    dbSource.display_date = show.date;
-                    dbSource.upstream_identifier = show.id.ToString();
-                    dbSource.is_soundboard = show.sbd;
-                    dbSource.is_remaster = show.remastered;
-                    dbSource.description = "";
-                    dbSource.taper_notes = show.taper_notes;
+                                source_id = dbSource.id,
+                                for_ratings = false,
+                                for_source = true,
+                                for_reviews = false,
+                                upstream_source_id = src.upstream_source_id,
+                                url = $"https://phish.in/{dbSource.display_date}",
+                                label = "View on phish.in",
+                            },
+                        }
+                    )
+                ).Count();
+            }
+            else if (show.updated_at > dbSource.updated_at)
+            {
+                dbSource.updated_at = show.updated_at;
+                dbSource.venue_id = existingVenues[show.venue.id.ToString()]!.id;
+                dbSource.display_date = show.date;
+                dbSource.upstream_identifier = show.id.ToString();
+                dbSource.is_soundboard = show.sbd;
+                dbSource.is_remaster = show.remastered;
+                dbSource.description = "";
+                dbSource.taper_notes = show.taper_notes;
 
-                    dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
+                dbSource = await ProcessShow(stats, artist, show, src, dbSource, ctx);
 
-                    existingSources[dbSource.upstream_identifier] = dbSource!;
+                existingSources[dbSource.upstream_identifier] = dbSource!;
 
-                    stats.Updated++;
-                }
-
-                scope.Complete();
+                stats.Updated++;
+            }
+            else if (!existingSetlistShows.ContainsKey(show.date))
+            {
+                // A recording can outlive its setlist row. Restore that identity without
+                // overwriting newer recording metadata with this listing's older fields.
+                await ProcessSetlistShow(
+                    stats,
+                    show,
+                    artist,
+                    src,
+                    dbSource,
+                    new Dictionary<string, SourceSet?>()
+                );
             }
 
-            return stats;
+            scope.Complete();
         }
     }
 }

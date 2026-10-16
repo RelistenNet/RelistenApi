@@ -69,6 +69,38 @@ namespace Relisten.Data
 
     public class VenueService : RelistenDataServiceBase
     {
+        /// <summary>Removes this artist's venues only when no recording, show, or setlist references them.</summary>
+        public async Task<int> RemoveOrphansForArtist(Artist artist)
+        {
+            return await db.WithWriteConnection(con =>
+                con.ExecuteAsync(
+                    @"
+                WITH orphaned AS (
+                    SELECT
+                        v.id
+                    FROM
+                        venues v
+                        LEFT JOIN sources s ON s.venue_id = v.id
+                        LEFT JOIN shows sh ON sh.venue_id = v.id
+                        LEFT JOIN setlist_shows ss ON ss.venue_id = v.id
+                    WHERE
+                        v.artist_id = @artistId
+                    GROUP BY
+                        v.id
+                    HAVING
+                        COUNT(s.id) = 0
+                        AND COUNT(sh.id) = 0
+                        AND COUNT(ss.id) = 0
+                )
+                DELETE FROM venues v
+                USING orphaned o
+                WHERE v.id = o.id
+            ",
+                    new { artistId = artist.id }
+                )
+            );
+        }
+
         public VenueService(DbService db, ShowService showService)
             : base(db)
         {
@@ -271,8 +303,11 @@ namespace Relisten.Data
                 );
             }
 
-            return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<Venue>(
+            // Concurrent shows can discover one venue. Keep the first committed
+            // metadata and return its identity for both shows.
+            return await db.WithWriteConnection(async con =>
+            {
+                var inserted = await con.QuerySingleOrDefaultAsync<Venue>(
                     @"
                     INSERT INTO
                         venues
@@ -302,11 +337,20 @@ namespace Relisten.Data
                             @slug,
                             md5(@artist_id || '::venue::' || @upstream_identifier)::uuid
                         )
+                    ON CONFLICT DO NOTHING
                     RETURNING *
                 ",
                     p
-                )
-            );
+                );
+
+                // Both UUID and upstream identity are unique. Handle either
+                // conflict, then use a new statement to see the winning commit.
+                return inserted
+                    ?? await con.QuerySingleAsync<Venue>(
+                        "SELECT * FROM venues WHERE artist_id=@artist_id AND upstream_identifier=@upstream_identifier",
+                        p
+                    );
+            });
         }
     }
 }

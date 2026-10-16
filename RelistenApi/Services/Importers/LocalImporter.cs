@@ -11,16 +11,15 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 using Relisten.Vendor.Local;
 using Sentry;
 
 namespace Relisten.Import
 {
-    public class LocalImporter : ImporterBase
+    public partial class LocalImporter : ImporterBase
     {
-        public const string DataSourceName = "relisten";
-
         private readonly LinkService linkService;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
@@ -37,7 +36,7 @@ namespace Relisten.Import
             new Dictionary<string, VenueWithShowCount?>();
 
         public LocalImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -49,10 +48,9 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<LocalImporter> log,
-            IConfiguration configuration,
-            RedisService redisService
+            IConfiguration configuration
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _setlistSongService = setlistSongService;
@@ -81,7 +79,7 @@ namespace Relisten.Import
         protected ILogger<LocalImporter> _log { get; set; }
         public IConfiguration _configuration { get; }
 
-        public override string ImporterName => "local";
+        public override UpstreamProvider Provider => UpstreamProvider.Local;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -102,13 +100,13 @@ namespace Relisten.Import
 
             var stats = new ImportStats();
 
-            ctx?.WriteLine("Processing Venues");
+            ImportProgress.WriteLine(log, ctx, "Processing Venues");
             stats += await ProcessVenues(artist, src, ctx);
 
-            ctx?.WriteLine("Processing Shows");
+            ImportProgress.WriteLine(log, ctx, "Processing Shows");
             stats += await ProcessShows(artist, src, ctx);
 
-            ctx?.WriteLine("Rebuilding");
+            ImportProgress.WriteLine(log, ctx, "Rebuilding");
             await RebuildShows(artist);
             await RebuildYears(artist);
 
@@ -165,8 +163,9 @@ namespace Relisten.Import
         )
         {
             var url = LocalApiUrl(apiRoute);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
+            using var resp = await http.GetAsync(url);
+            resp.EnsureSuccessStatusCode();
             return JsonConvert.DeserializeObject<LocalRootObject<T>>(
                 await resp.Content.ReadAsStringAsync()
             )!;
@@ -175,8 +174,9 @@ namespace Relisten.Import
         private async Task<LocalShowObject> LocalShowRequest(string apiRoute, PerformContext? ctx)
         {
             var url = LocalApiUrl(apiRoute);
-            ctx?.WriteLine($"Requesting {url}");
-            var resp = await http.GetAsync(url);
+            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
+            using var resp = await http.GetAsync(url);
+            resp.EnsureSuccessStatusCode();
             return JsonConvert.DeserializeObject<LocalShowObject>(
                 await resp.Content.ReadAsStringAsync()
             )!;
@@ -185,14 +185,16 @@ namespace Relisten.Import
         public async Task<ImportStats> ProcessVenues(
             Artist artist,
             ArtistUpstreamSource src,
-            PerformContext? ctx
+            PerformContext? ctx,
+            LocalRootObject<LocalShow>? staged = null
         )
         {
             var stats = new ImportStats();
 
             foreach (
                 var day in (
-                    await LocalApiRequest<LocalShow>($"{src.upstream_identifier}/metadata", ctx)
+                    staged
+                    ?? await LocalApiRequest<LocalShow>($"{src.upstream_identifier}/metadata", ctx)
                 )
                     .data
                     .Values
@@ -353,7 +355,8 @@ namespace Relisten.Import
             IList<LocalShow> fullShows,
             ArtistUpstreamSource src,
             Source dbSource,
-            PerformContext? ctx
+            PerformContext? ctx,
+            IDictionary<string, LocalShowObject>? staged = null
         )
         {
             var sets = new Dictionary<string, SourceSet>();
@@ -387,10 +390,13 @@ namespace Relisten.Import
 
             foreach (var (idx, fullShow) in fullShows.Select((value, i) => (i, value)))
             {
-                var apiShow = await LocalShowRequest(
-                    $"{src.upstream_identifier}/{fullShow.dir}/metadata",
-                    ctx
-                );
+                var apiShow =
+                    staged != null
+                        ? staged[fullShow.dir]
+                        : await LocalShowRequest(
+                            $"{src.upstream_identifier}/{fullShow.dir}/metadata",
+                            ctx
+                        );
 
                 var tracks = apiShow.tracks.ToList();
 
@@ -467,97 +473,123 @@ namespace Relisten.Import
             {
                 try
                 {
-                    await processDay(date, day);
+                    await ProcessOneDay(stats, artist, src, date, day, ctx);
                 }
                 catch (Exception e)
                 {
-                    ctx?.WriteLine($"Error processing show (but continuing): {date}");
-                    ctx?.LogException(e);
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
+                        $"Error processing show (but continuing): {date}"
+                    );
+                    ImportProgress.LogException(log, ctx, e);
 
                     SentrySdk.CaptureException(e);
                 }
                 prog?.SetValue(100.0 * (++idx / totalShows));
-                ctx?.WriteLine($"Processing Show {idx} of {totalShows}");
-            }
-
-            async Task processDay(string date, IList<LocalShow> shows)
-            {
-                using var scope = new TransactionScope(
-                    TransactionScopeOption.Required,
-                    new TransactionOptions() { IsolationLevel = IsolationLevel.RepeatableRead },
-                    TransactionScopeAsyncFlowOption.Enabled
-                );
-
-                var firstShow = shows.First();
-                Source? dbSource = existingSources.GetValue(date);
-                var venueUpstreamId = $"{firstShow.venue} {firstShow.city}, {firstShow.state}";
-
-                if (dbSource == null)
-                {
-                    dbSource = await ProcessShow(
-                        stats,
-                        artist,
-                        date,
-                        shows,
-                        src,
-                        new Source
-                        {
-                            updated_at = firstShow.updated_at,
-                            artist_id = artist.id,
-                            venue_id = existingVenues[venueUpstreamId]!.id,
-                            display_date = date,
-                            upstream_identifier = date,
-                            is_soundboard = false,
-                            is_remaster = false,
-                            description = "",
-                            taper_notes = "",
-                        },
-                        ctx
-                    );
-
-                    existingSources[dbSource.upstream_identifier] = dbSource!;
-
-                    stats.Created++;
-
-                    await linkService.AddLinksForSource(
-                        dbSource,
-                        new[]
-                        {
-                            new Link
-                            {
-                                source_id = dbSource.id,
-                                for_ratings = true,
-                                for_source = false,
-                                for_reviews = true,
-                                upstream_source_id = src.upstream_source_id,
-                                url = "http://phish.net/setlists/?d=" + dbSource.display_date,
-                                label = "View on phish.net",
-                            },
-                        }
-                    );
-                }
-                else if (firstShow.updated_at > dbSource.updated_at)
-                {
-                    dbSource.updated_at = firstShow.updated_at;
-                    dbSource.venue_id = existingVenues[venueUpstreamId]!.id;
-                    dbSource.display_date = date;
-                    dbSource.upstream_identifier = date;
-                    dbSource.is_soundboard = firstShow.sbd;
-                    dbSource.is_remaster = firstShow.remastered;
-                    dbSource.description = "";
-                    dbSource.taper_notes = "";
-
-                    dbSource = await ProcessShow(stats, artist, date, shows, src, dbSource, ctx);
-
-                    existingSources[dbSource.upstream_identifier] = dbSource!;
-
-                    stats.Updated++;
-                }
-
-                scope.Complete();
+                ImportProgress.WriteLine(log, ctx, $"Processing Show {idx} of {totalShows}");
             }
 
             return stats;
+        }
+
+        private async Task ProcessOneDay(
+            ImportStats stats,
+            Artist artist,
+            ArtistUpstreamSource src,
+            string date,
+            IList<LocalShow> shows,
+            PerformContext? ctx,
+            IDictionary<string, LocalShowObject>? staged = null
+        )
+        {
+            using var scope = new TransactionScope(
+                TransactionScopeOption.Required,
+                new TransactionOptions()
+                {
+                    IsolationLevel =
+                        Transaction.Current?.IsolationLevel ?? IsolationLevel.RepeatableRead,
+                },
+                TransactionScopeAsyncFlowOption.Enabled
+            );
+
+            var firstShow = shows.First();
+            Source? dbSource = existingSources.GetValue(date);
+            var venueUpstreamId = $"{firstShow.venue} {firstShow.city}, {firstShow.state}";
+
+            if (dbSource == null)
+            {
+                dbSource = await ProcessShow(
+                    stats,
+                    artist,
+                    date,
+                    shows,
+                    src,
+                    new Source
+                    {
+                        updated_at = firstShow.updated_at,
+                        artist_id = artist.id,
+                        venue_id = existingVenues[venueUpstreamId]!.id,
+                        display_date = date,
+                        upstream_identifier = date,
+                        is_soundboard = false,
+                        is_remaster = false,
+                        description = "",
+                        taper_notes = "",
+                    },
+                    ctx,
+                    staged
+                );
+
+                existingSources[dbSource.upstream_identifier] = dbSource!;
+
+                stats.Created++;
+
+                await linkService.AddLinksForSource(
+                    dbSource,
+                    new[]
+                    {
+                        new Link
+                        {
+                            source_id = dbSource.id,
+                            for_ratings = true,
+                            for_source = false,
+                            for_reviews = true,
+                            upstream_source_id = src.upstream_source_id,
+                            url = "http://phish.net/setlists/?d=" + dbSource.display_date,
+                            label = "View on phish.net",
+                        },
+                    }
+                );
+            }
+            else if (firstShow.updated_at > dbSource.updated_at)
+            {
+                dbSource.updated_at = firstShow.updated_at;
+                dbSource.venue_id = existingVenues[venueUpstreamId]!.id;
+                dbSource.display_date = date;
+                dbSource.upstream_identifier = date;
+                dbSource.is_soundboard = firstShow.sbd;
+                dbSource.is_remaster = firstShow.remastered;
+                dbSource.description = "";
+                dbSource.taper_notes = "";
+
+                dbSource = await ProcessShow(
+                    stats,
+                    artist,
+                    date,
+                    shows,
+                    src,
+                    dbSource,
+                    ctx,
+                    staged
+                );
+
+                existingSources[dbSource.upstream_identifier] = dbSource!;
+
+                stats.Updated++;
+            }
+
+            scope.Complete();
         }
     }
 }

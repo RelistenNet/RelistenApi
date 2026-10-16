@@ -13,7 +13,7 @@ namespace Relisten.Data
         public ShowService(
             DbService db,
             SourceService sourceService,
-            PopularityService popularityService
+            Lazy<PopularityService> popularityService
         )
             : base(db)
         {
@@ -22,7 +22,9 @@ namespace Relisten.Data
         }
 
         private SourceService _sourceService { get; }
-        private readonly PopularityService popularityService;
+
+        // Ingestion uses catalog writes without constructing API-only background job dependencies.
+        private readonly Lazy<PopularityService> popularityService;
 
         public async Task<IEnumerable<T>> ShowsForCriteriaGeneric<T>(
             Artist? artist,
@@ -420,19 +422,19 @@ namespace Relisten.Data
 
             if (artist != null)
             {
-                var showPopularity = await popularityService.GetShowPopularityMapForArtist(
+                var showPopularity = await popularityService.Value.GetShowPopularityMapForArtist(
                     artist.uuid
                 );
-                popularityService.ApplyShowPopularity(shows, showPopularity);
+                popularityService.Value.ApplyShowPopularity(shows, showPopularity);
                 return;
             }
 
             foreach (var group in shows.GroupBy(show => show.artist_uuid))
             {
-                var showPopularity = await popularityService.GetShowPopularityMapForArtist(
+                var showPopularity = await popularityService.Value.GetShowPopularityMapForArtist(
                     group.Key
                 );
-                popularityService.ApplyShowPopularity(group.ToList(), showPopularity);
+                popularityService.Value.ApplyShowPopularity(group.ToList(), showPopularity);
             }
         }
 

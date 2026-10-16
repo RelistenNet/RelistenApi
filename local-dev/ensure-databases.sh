@@ -5,7 +5,7 @@ set -Eeuo pipefail
 readonly DB_SERVICE="relisten-db"
 readonly DB_USER="relisten"
 readonly EXPECTED_TIMESCALEDB_VERSION="2.28.2"
-readonly DATABASES=(relisten_db temporal temporal_visibility)
+readonly DATABASES=(relisten_db)
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 compose_file="$script_dir/docker-compose.yml"
@@ -38,7 +38,7 @@ wait_for_postgres() {
 command -v docker >/dev/null 2>&1 || die "Docker is required"
 docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required"
 
-"${compose[@]}" up -d "$DB_SERVICE"
+"${compose[@]}" up -d --no-recreate "$DB_SERVICE"
 db_container="$("${compose[@]}" ps -q "$DB_SERVICE")"
 [[ -n "$db_container" ]] || die "could not find the $DB_SERVICE container"
 wait_for_postgres

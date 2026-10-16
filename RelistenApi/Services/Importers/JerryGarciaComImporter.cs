@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Dapper;
 using Hangfire.Console;
 using Hangfire.Server;
 using HtmlAgilityPack;
@@ -12,13 +11,13 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Vendor;
 
 namespace Relisten.Import
 {
-    public class JerryGarciaComImporter : ImporterBase
+    public partial class JerryGarciaComImporter : ImporterBase
     {
-        public const string DataSourceName = "jerrygarcia.com";
         private IDictionary<string, SetlistShow?> existingSetlistShows =
             new Dictionary<string, SetlistShow?>();
         private IDictionary<string, SetlistSong?> existingSetlistSongs =
@@ -32,15 +31,14 @@ namespace Relisten.Import
         private IDictionary<string, DateTime> tourToStartDate = new Dictionary<string, DateTime>();
 
         public JerryGarciaComImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             SetlistShowService setlistShowService,
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
-            ILogger<JerryGarciaComImporter> log,
-            RedisService redisService
+            ILogger<JerryGarciaComImporter> log
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             _setlistShowService = setlistShowService;
             _venueService = venueService;
@@ -55,7 +53,7 @@ namespace Relisten.Import
         protected TourService _tourService { get; set; }
         protected ILogger<JerryGarciaComImporter> _log { get; set; }
 
-        public override string ImporterName => "jerrygarcia.com";
+        public override UpstreamProvider Provider => UpstreamProvider.JerryGarcia;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -93,7 +91,7 @@ namespace Relisten.Import
 
             var files = BuildFileMetaObjects(showFiles);
 
-            ctx?.WriteLine($"Checking {files.Count} html files");
+            ImportProgress.WriteLine(log, ctx, $"Checking {files.Count} html files");
             var prog = ctx?.WriteProgressBar();
 
             Func<FileMetaObject, Task> processFile = async f =>
@@ -135,17 +133,21 @@ namespace Relisten.Import
                 await UpdateTourStartEndDates(artist);
             }
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows and years");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows and years");
                 await RebuildShows(artist);
                 await RebuildYears(artist);
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
             return stats;
@@ -196,7 +198,7 @@ namespace Relisten.Import
                 return;
             }
 
-            ctx?.WriteLine($"Processing: {meta.FilePath}");
+            ImportProgress.WriteLine(log, ctx, $"Processing: {meta.FilePath}");
 
             var parsedPage = ParseShowPage(pageContents);
             if (parsedPage == null)
@@ -334,7 +336,11 @@ namespace Relisten.Import
 
             var files = BuildFileMetaObjects(showFiles);
 
-            ctx?.WriteLine($"Checking {files.Count} html files for venue backfill");
+            ImportProgress.WriteLine(
+                log,
+                ctx,
+                $"Checking {files.Count} html files for venue backfill"
+            );
             var prog = ctx?.WriteProgressBar();
 
             Func<FileMetaObject, Task> processBackfill = async f =>
@@ -351,27 +357,13 @@ namespace Relisten.Import
                 var pageResp = await http.GetAsync(url);
                 var pageContents = await pageResp.Content.ReadAsStringAsync();
 
-                var parsedPage = ParseShowPage(pageContents);
-                if (parsedPage == null)
-                {
-                    return;
-                }
-
-                var venueResult = await EnsureVenue(
+                await ApplyVenueBackfill(
+                    stats,
                     artist,
-                    parsedPage,
+                    f,
+                    pageContents,
                     pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow
                 );
-                var dbVenue = venueResult.venue;
-                stats.Created += venueResult.created ? 1 : 0;
-
-                if (dbShow.venue_id != dbVenue.id)
-                {
-                    dbShow.venue_id = dbVenue.id;
-                    dbShow.updated_at = DateTime.UtcNow;
-                    await _setlistShowService.Save(dbShow);
-                    stats.Updated++;
-                }
             };
 
             if (prog == null)
@@ -386,48 +378,55 @@ namespace Relisten.Import
                 await files.AsyncForEachWithProgress(prog, processBackfill);
             }
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows and years");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows and years");
                 await RebuildShows(artist);
                 await RebuildYears(artist);
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
-            stats.Removed += await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                WITH orphaned AS (
-                    SELECT
-                        v.id
-                    FROM
-                        venues v
-                        LEFT JOIN sources s ON s.venue_id = v.id
-                        LEFT JOIN shows sh ON sh.venue_id = v.id
-                        LEFT JOIN setlist_shows ss ON ss.venue_id = v.id
-                    WHERE
-                        v.artist_id = @artistId
-                    GROUP BY
-                        v.id
-                    HAVING
-                        COUNT(s.id) = 0
-                        AND COUNT(sh.id) = 0
-                        AND COUNT(ss.id) = 0
-                )
-                DELETE FROM venues v
-                USING orphaned o
-                WHERE v.id = o.id
-            ",
-                    new { artistId = artist.id }
-                )
-            );
+            stats.Removed += await _venueService.RemoveOrphansForArtist(artist);
 
             return stats;
+        }
+
+        private async Task ApplyVenueBackfill(
+            ImportStats stats,
+            Artist artist,
+            FileMetaObject f,
+            string pageContents,
+            DateTime updatedAt
+        )
+        {
+            if (!existingSetlistShows.TryGetValue(f.Identifier, out var dbShow) || dbShow == null)
+                return;
+            var parsedPage = ParseShowPage(pageContents);
+            if (parsedPage == null)
+            {
+                return;
+            }
+
+            var venueResult = await EnsureVenue(artist, parsedPage, updatedAt);
+            var dbVenue = venueResult.venue;
+            stats.Created += venueResult.created ? 1 : 0;
+
+            if (dbShow!.venue_id != dbVenue.id)
+            {
+                dbShow!.venue_id = dbVenue.id;
+                dbShow!.updated_at = DateTime.UtcNow;
+                await _setlistShowService.Save(dbShow);
+                stats.Updated++;
+            }
         }
 
         private static string BuildVenueLocation(string venueCityOrCityState, string venueCountry)
@@ -540,36 +539,14 @@ namespace Relisten.Import
 
         private async Task UpdateTourStartEndDates(Artist artist)
         {
-            await db.WithWriteConnection(con =>
-                con.ExecuteAsync(
-                    @"
-                UPDATE
-                    tours
-                SET
-                    start_date = @startDate,
-                    end_date = @endDate
-                WHERE
-                    artist_id = @artistId
-                    AND upstream_identifier = @upstream_identifier
-            ",
-                    tourToStartDate.Keys.Select(tourUpstreamId =>
-                    {
-                        return new
-                        {
-                            startDate = tourToStartDate[tourUpstreamId],
-                            endDate = tourToEndDate[tourUpstreamId],
-                            artistId = artist.id,
-                            upstream_identifier = tourUpstreamId,
-                        };
-                    })
-                )
-            );
+            await _tourService.UpdateDateBounds(artist, tourToStartDate, tourToEndDate);
 
             tourToStartDate = new Dictionary<string, DateTime>();
             tourToEndDate = new Dictionary<string, DateTime>();
         }
 
-        private class FileMetaObject
+        /// <summary>Mirror index data needed to fetch and identify one show page.</summary>
+        public class FileMetaObject
         {
             public string DisplayDate { get; set; } = null!;
             public DateTime Date { get; set; }

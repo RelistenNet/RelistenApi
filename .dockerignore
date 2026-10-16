@@ -11,3 +11,14 @@
 /RelistenUserServiceTests/bin/
 /RelistenUserServiceTests/obj/
 /.git/
+
+/RelistenIngestionWorker/bin/
+/RelistenIngestionWorker/obj/
+/RelistenApiTests/bin/
+/RelistenApiTests/obj/
+
+# Local credentials and editor caches are not image inputs.
+/.env
+/.env.*
+/.idea/
+/.codex/

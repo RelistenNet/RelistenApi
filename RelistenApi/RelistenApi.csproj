@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <PreserveCompilationContext>true</PreserveCompilationContext>
     <OutputPath>bin</OutputPath>
     <PublishWithAspNetCoreTargetManifest>false</PublishWithAspNetCoreTargetManifest>
@@ -11,6 +12,7 @@
     <DebugType>portable</DebugType>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Temporalio.Extensions.Hosting" Version="1.20.0" />
     <PackageReference Include="Dapper" Version="2.1.66" />
     <PackageReference Include="Hangfire.Console" Version="1.4.3" />
     <PackageReference Include="HtmlAgilityPack.NetCore" Version="1.5.0.1" />

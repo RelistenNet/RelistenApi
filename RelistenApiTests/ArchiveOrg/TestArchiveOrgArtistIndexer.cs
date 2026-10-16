@@ -153,9 +153,9 @@ public class TestArchiveOrgArtistIndexer
             this.upstreamSource = upstreamSource;
         }
 
-        public Task<UpstreamSource?> FindUpstreamSourceByName(string name)
+        public Task<UpstreamSource?> FindUpstreamSourceByName(UpstreamProvider provider)
         {
-            return Task.FromResult(name == upstreamSource.name ? upstreamSource : null);
+            return Task.FromResult(provider == upstreamSource.Provider ? upstreamSource : null);
         }
     }
 

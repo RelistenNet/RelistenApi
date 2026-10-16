@@ -6,8 +6,7 @@ Redis, and Adminer.
 ## Prerequisites
 
 1. Docker with Compose v2
-2. Visual Studio Code (with C# extension)
-3. .NET 10 SDK
+2. .NET 10 SDK
 
 ## Database Setup
 
@@ -17,13 +16,14 @@ Start the local services:
 ./start-local-databases.sh
 ```
 
-Startup is non-destructive. It preserves `relisten_db` and ensures that the
-`relisten_db`, `temporal`, and `temporal_visibility` databases exist under the
-local `relisten` login. Restoring the catalog snapshot is a separate, explicit
-command because it replaces `relisten_db`.
+Startup loads the checked-in development seed only when `relisten_db` is empty.
+It preserves existing data and starts no imports. No AWS access or database
+download is required.
 
 See [local-dev/README.md](local-dev/README.md) for connection details, the
-guarded S3 restore procedure, User Service startup, and reset warnings.
+seed and explicit restore procedures, User Service startup, and manual ingestion.
+Run `./test-local.sh` for tests against disposable databases on the same local
+PostgreSQL and Redis services. Temporal test servers start automatically.
 
 Adminer is available at [http://localhost:18080](http://localhost:18080).
 
@@ -35,11 +35,33 @@ Stop the containers without deleting their data:
 
 ## Code Setup
 
-1. Open this repo folder in Visual Studio Code
-2. If prompted, restore the packages for the project
-3. Debug > Start Debugging (F5) or Debug > Start without Debugging (shift+F5)
+Run the API from the repository root:
+
+```sh
+dotnet run --project RelistenApi/RelistenApi.csproj
+```
+
+You can also open the repository in your C# editor and use its debugger.
 
 Open the API Server at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs)
+
+## Ingestion and operations
+
+`RelistenIngestionWorker` runs Temporal ingestion separately from the API.
+Temporal records execution progress so imports can resume after worker restarts.
+Hangfire still runs cache and popularity jobs in production.
+
+Start with the [ingestion overview](docs/ingestion/README.md) for architecture,
+provider behavior, and design contracts. Use the
+[operations guide](docs/ingestion/operations.md) for imports, schedules, and recovery,
+or [local setup](local-dev/README.md#run-an-ingestion-worker-manually) for development commands.
+Importing a seed artist can fetch its full upstream catalog; the seed does not
+limit import work.
+
+The API and standalone ingestion worker initialize Sentry independently when
+`SENTRY_DSN` is configured. Scheduled-run monitoring is not enabled.
+See [diagnostics and monitoring](docs/ingestion/operations.md#diagnostics-and-monitoring)
+for coverage and the remaining work.
 
 ## Formatting
 

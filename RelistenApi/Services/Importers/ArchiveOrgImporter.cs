@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -8,22 +8,22 @@ using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
 using Hangfire.Server;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Services.Notifications;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
 using Relisten.Vendor.ArchiveOrg.Metadata;
 using Sentry;
-using Serilog;
 using InvalidDataException = System.IO.InvalidDataException;
 
 namespace Relisten.Import
 {
-    public class ArchiveOrgImporter : ImporterBase
+    public partial class ArchiveOrgImporter : ImporterBase
     {
-        public const string DataSourceName = "archive.org";
         private const int MaxSourcesDeletedPerSync = 5;
 
         private static readonly ActivitySource ActivitySource = new("Relisten.Import");
@@ -37,7 +37,8 @@ namespace Relisten.Import
         private IDictionary<string, Source?> existingSources = new Dictionary<string, Source?>();
 
         public ArchiveOrgImporter(
-            DbService db,
+            CatalogRebuildService catalog,
+            Microsoft.Extensions.Logging.ILogger<ArchiveOrgImporter> log,
             VenueService venueService,
             TourService tourService,
             SourceService sourceService,
@@ -45,10 +46,9 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            RedisService redisService,
             IDiscordWebhookNotifier discordWebhookNotifier
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             this.discordWebhookNotifier = discordWebhookNotifier;
@@ -68,7 +68,7 @@ namespace Relisten.Import
         protected VenueService _venueService { get; set; }
         protected TourService _tourService { get; set; }
 
-        public override string ImporterName => "archive.org";
+        public override UpstreamProvider Provider => UpstreamProvider.ArchiveOrg;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -107,7 +107,7 @@ namespace Relisten.Import
             var docs = await new ArchiveOrgSearchClient(http).FetchAllAsync(
                 src.upstream_identifier,
                 CurrentImportOptions.OnlyYear,
-                message => ctx?.WriteLine(message)
+                message => ImportProgress.WriteLine(log, ctx, message)
             );
 
             return await ProcessIdentifiers(artist, docs, src, showIdentifier, ctx);
@@ -133,239 +133,78 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             artistActivity?.SetTag("source_count", docs.Count);
-            ctx?.WriteLine($"Checking {docs.Count} archive.org results");
+            ImportProgress.WriteLine(log, ctx, $"Checking {docs.Count} archive.org results");
 
             var prog = ctx?.WriteProgressBar();
 
             var identifiersWithoutMP3s = new HashSet<string>();
 
-            Func<SearchDoc, Task> processDoc = async doc =>
+            async Task ProcessDocument(SearchDoc doc)
             {
                 try
                 {
-                    var currentIsTargetedShow = doc.identifier == showIdentifier;
-
-                    if (showIdentifier != null && !currentIsTargetedShow)
+                    var source = existingSources.GetValue(doc.identifier);
+                    var reason = ImportReason(
+                        doc,
+                        source,
+                        existingSourceReviewInformation.GetValue(doc.identifier),
+                        showIdentifier
+                    );
+                    if (reason == null)
                     {
                         return;
                     }
 
-                    var dbShow = existingSources.GetValue(doc.identifier);
-
-                    var maxSourceInformation = existingSourceReviewInformation.GetValue(
-                        doc.identifier
-                    );
-                    var isNew = dbShow == null;
-                    var needsToUpdateReviews =
-                        maxSourceInformation != null
-                        && doc.max_review_date > maxSourceInformation.review_max_updated_at;
-
-                    var cleanedApiDate = ArchiveOrgImporterUtils.FixDisplayDate(
-                        doc.raw_display_date,
-                        doc.identifier
-                    );
-                    var needsDateUpdate =
-                        dbShow != null
-                        && cleanedApiDate != null
-                        && dbShow.display_date != cleanedApiDate;
-
-                    var recentCutoff = CurrentImportOptions.RescrapeRecentDays.HasValue
-                        ? DateTime.UtcNow.AddDays(-CurrentImportOptions.RescrapeRecentDays.Value)
-                        : (DateTime?)null;
-                    var recentlyAdded =
-                        recentCutoff.HasValue
-                        && dbShow != null
-                        && doc.addeddate.HasValue
-                        && doc.addeddate.Value > recentCutoff.Value;
-
-                    if (
-                        currentIsTargetedShow
-                        || isNew
-                        || needsToUpdateReviews
-                        || needsDateUpdate
-                        || recentlyAdded
-                    )
+                    var metadata = await FetchItemMetadata(artist, doc, reason, ctx);
+                    if (metadata == null)
                     {
-                        var reason =
-                            isNew ? "new_source"
-                            : needsToUpdateReviews ? "reviews_updated"
-                            : needsDateUpdate ? "date_updated"
-                            : recentlyAdded ? "recently_added"
-                            : "targeted_show";
-
-                        using var sourceActivity = ActivitySource.StartActivity(
-                            $"import-source:{doc.identifier}"
-                        );
-                        sourceActivity?.SetTag("import.reason", reason);
-                        sourceActivity?.SetTag("archive.identifier because", doc.identifier);
-
-                        ctx?.WriteLine(
-                            "Pulling https://archive.org/metadata/{0} because '{1}'",
-                            doc.identifier,
-                            reason
-                        );
-
-                        using var detailRes = await http.GetAsync(
-                            DetailsUrlForIdentifier(doc.identifier)
-                        );
-                        detailRes.EnsureSuccessStatusCode();
-                        var detailsJson = await detailRes.Content.ReadAsStringAsync();
-                        var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
-                            detailsJson,
-                            new TolerantStringConverter()
-                        );
-
-                        if (detailsRoot == null)
-                        {
-                            throw new InvalidDataException(
-                                "Archive.org returned empty item metadata."
-                            );
-                        }
-
-                        if (detailsRoot.is_dark ?? false)
-                        {
-                            ctx?.WriteLine("\tis_dark == true, skipping...");
-                            return;
-                        }
-
-                        if (
-                            !string.IsNullOrEmpty(detailsRoot.error) || detailsRoot.errcode.HasValue
-                        )
-                        {
-                            throw new InvalidDataException(
-                                "Archive.org returned an item metadata error."
-                            );
-                        }
-
-                        if (detailsRoot.metadata?.identifier != doc.identifier)
-                        {
-                            throw new InvalidDataException(
-                                "Archive.org returned missing or mismatched item metadata."
-                            );
-                        }
-
-                        // in the future it might be better to retry intead of skipping
-                        if (detailsRoot.metadata?.date == null)
-                        {
-                            Log.Warning(
-                                "[MISSING_DATE]: {Identifier}: Skipping because metadata date is null, Artist={Artist}",
-                                doc.identifier,
-                                artist.name
-                            );
-                            ctx?.WriteLine(
-                                "\tSkipping {0} because it has an invalid, unrecoverable metadata (e.g. date missing): {1}",
-                                doc.identifier,
-                                detailsRoot.metadata
-                            );
-
-                            var e = new ArgumentException("Invalid, unrecoverable metadata")
-                            {
-                                Data =
-                                {
-                                    ["artist"] = artist.name,
-                                    ["archive_identifier"] = doc.identifier,
-                                    ["background_job_id"] = ctx?.BackgroundJob.Id,
-                                },
-                            };
-
-                            SentrySdk.CaptureException(e);
-
-                            return;
-                        }
-
-                        var properDate = ArchiveOrgImporterUtils.FixDisplayDate(
-                            detailsRoot.metadata
-                        );
-
-                        // Log if date was remapped (invalid month/day converted to XX)
-                        var originalDate = detailsRoot.metadata?.date;
-                        if (
-                            properDate != null
-                            && originalDate != null
-                            && properDate != originalDate
-                        )
-                        {
-                            ctx?.WriteLine(
-                                $"[REMAP_DATE] {doc.identifier}: '{originalDate}' → '{properDate}'"
-                            );
-                        }
-
-                        if (properDate == null)
-                        {
-                            ctx?.WriteLine(
-                                "\tSkipping {0} because it has an invalid, unrecoverable date: {1}",
-                                doc.identifier,
-                                detailsRoot.metadata?.date
-                            );
-
-                            var e = new ArgumentException(
-                                "Skipping doc because it has an invalid, unrecoverable date"
-                            )
-                            {
-                                Data =
-                                {
-                                    ["artist"] = artist.name,
-                                    ["archive_identifier"] = doc.identifier,
-                                    ["date"] = detailsRoot.metadata?.date,
-                                },
-                            };
-
-                            SentrySdk.CaptureException(e);
-
-                            return;
-                        }
-
-                        using var scope = new TransactionScope(
-                            TransactionScopeOption.Required,
-                            new TransactionOptions()
-                            {
-                                IsolationLevel = IsolationLevel.RepeatableRead,
-                            },
-                            TransactionScopeAsyncFlowOption.Enabled
-                        );
-
-                        try
-                        {
-                            stats += await ImportSingleIdentifier(
-                                artist,
-                                dbShow,
-                                doc,
-                                detailsRoot,
-                                src,
-                                properDate,
-                                ctx
-                            );
-                        }
-                        catch (NoVBRMp3FilesException)
-                        {
-                            identifiersWithoutMP3s.Add(doc.identifier);
-                        }
-
-                        scope.Complete();
+                        return;
                     }
+
+                    using var scope = new TransactionScope(
+                        TransactionScopeOption.Required,
+                        new TransactionOptions { IsolationLevel = IsolationLevel.RepeatableRead },
+                        TransactionScopeAsyncFlowOption.Enabled
+                    );
+                    try
+                    {
+                        stats += await ImportSingleIdentifier(
+                            artist,
+                            source,
+                            doc,
+                            metadata.Details,
+                            src,
+                            metadata.DisplayDate,
+                            ctx
+                        );
+                    }
+                    catch (NoVBRMp3FilesException)
+                    {
+                        identifiersWithoutMP3s.Add(doc.identifier);
+                    }
+
+                    scope.Complete();
                 }
-                catch (Exception e)
+                catch (Exception error)
                 {
-                    ctx?.WriteLine($"Error processing {doc.identifier}:");
-                    ctx?.LogException(e);
-
-                    e.Data["artist"] = artist.name;
-                    e.Data["archive_org_identifier"] = doc.identifier;
-
-                    SentrySdk.CaptureException(e);
+                    ImportProgress.WriteLine(log, ctx, $"Error processing {doc.identifier}:");
+                    ImportProgress.LogException(log, ctx, error);
+                    error.Data["artist"] = artist.name;
+                    error.Data["archive_org_identifier"] = doc.identifier;
+                    SentrySdk.CaptureException(error);
                 }
-            };
+            }
 
             if (prog == null)
             {
                 foreach (var doc in docs)
                 {
-                    await processDoc(doc);
+                    await ProcessDocument(doc);
                 }
             }
             else
             {
-                await docs.AsyncForEachWithProgress(prog, processDoc);
+                await docs.AsyncForEachWithProgress(prog, ProcessDocument);
             }
 
             if (!CurrentImportOptions.IsThinScrape)
@@ -383,51 +222,19 @@ namespace Relisten.Import
                     http,
                     message =>
                     {
-                        ctx?.WriteLine(message);
-                        Log.Information("{ArchiveDeletionVerification}", message);
+                        ImportProgress.WriteLine(log, ctx, message);
                     }
                 );
 
                 if (verification.Guarded)
                 {
-                    foreach (var identifier in deletedSourceUpstreamIdentifiers)
-                    {
-                        Log.Warning(
-                            "Archive.org deletion guard: would have deleted source "
-                                + "{Identifier} (https://archive.org/details/{Identifier}) for {ArtistName} ({ArtistSlug})",
-                            identifier,
-                            identifier,
-                            artist.name,
-                            artist.slug
-                        );
-                    }
-
-                    var message =
-                        $"🛑 Archive.org deletion guard blocked {deletedSourceUpstreamIdentifiers.Count} source "
-                        + $"deletions for {artist.name} ({artist.slug}); threshold is "
-                        + $"{MaxSourcesDeletedPerSync}. No sources were deleted.";
-
-                    var jobId = ctx?.BackgroundJob.Id;
-                    if (jobId != null)
-                    {
-                        message +=
-                            $"\n\nHangfire job: /relisten-admin/hangfire/jobs/details/{jobId}";
-                    }
-
-                    ctx?.WriteLine(message);
-                    Log.Warning(
-                        "Archive.org deletion guard blocked {SourceDeletionCount} source deletions for "
-                            + "{ArtistName} ({ArtistSlug}); threshold is {DeletionThreshold}",
-                        deletedSourceUpstreamIdentifiers.Count,
-                        artist.name,
-                        artist.slug,
-                        MaxSourcesDeletedPerSync
-                    );
-                    await discordWebhookNotifier.SendAsync(message);
+                    await ReportDeletionGuard(artist, deletedSourceUpstreamIdentifiers, ctx);
                 }
                 else if (verification.Identifiers.Count > 0)
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"Removing {verification.Identifiers.Count} sources "
                             + $"confirmed deleted upstream or without VBR MP3 files: "
                             + string.Join(',', verification.Identifiers)
@@ -439,65 +246,85 @@ namespace Relisten.Import
                 }
             }
 
-            ctx?.WriteLine($"Import stats: {stats}");
+            ImportProgress.WriteLine(log, ctx, $"Import stats: {stats}");
 
             if (stats.Created > 0 || stats.Updated > 0 || stats.Removed > 0)
             {
-                ctx?.WriteLine("Rebuilding shows...");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding shows...");
                 await RebuildShows(artist);
 
-                ctx?.WriteLine("--> rebuilt shows!");
-                ctx?.WriteLine("Rebuilding years...");
+                ImportProgress.WriteLine(log, ctx, "--> rebuilt shows!");
+                ImportProgress.WriteLine(log, ctx, "Rebuilding years...");
 
                 await RebuildYears(artist);
 
-                ctx?.WriteLine("--> rebuilt years!");
+                ImportProgress.WriteLine(log, ctx, "--> rebuilt years!");
             }
             else
             {
-                ctx?.WriteLine("No changes detected, skipping show/year rebuild.");
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "No changes detected, skipping show/year rebuild."
+                );
             }
 
             return stats;
         }
 
-        internal static async Task<(
-            bool Guarded,
-            List<string> Identifiers
-        )> VerifyDeletionCandidatesAsync(
+        internal static async Task<ArchiveDeletionVerification> VerifyDeletionCandidatesAsync(
             IReadOnlyCollection<string> candidates,
             ISet<string> identifiersWithoutMP3s,
             HttpClient httpClient,
             Action<string> log
         )
         {
-            // Preserve the bulk guard before making any additional upstream requests.
             if (ExceedsDeletionLimit(candidates.Count))
             {
-                return (true, new List<string>());
+                return new ArchiveDeletionVerification(true, []);
             }
 
-            var verified = new List<string>();
+            var decisions = new List<DeletionDecision>();
             var metadataClient = new ArchiveOrgMetadataClient(httpClient);
             foreach (var identifier in candidates)
             {
-                // This separate eligibility decision already came from item metadata.
+                DeletionDecision decision;
                 if (identifiersWithoutMP3s.Contains(identifier))
                 {
-                    verified.Add(identifier);
-                    log($"Archive.org deletion check {identifier}: confirmed no VBR MP3 files");
-                    continue;
+                    decision = new DeletionDecision(
+                        identifier,
+                        "Ineligible",
+                        "Metadata contains no VBR MP3 files",
+                        true
+                    );
+                }
+                else
+                {
+                    var result = await metadataClient.CheckAsync(identifier);
+                    decision = new DeletionDecision(
+                        identifier,
+                        result.Status.ToString(),
+                        result.Reason,
+                        result.Status == ArchiveOrgItemStatus.Deleted
+                    );
                 }
 
-                var result = await metadataClient.CheckAsync(identifier);
-                log($"Archive.org deletion check {identifier}: {result.Status} ({result.Reason})");
-                if (result.Status == ArchiveOrgItemStatus.Deleted)
-                {
-                    verified.Add(identifier);
-                }
+                decisions.Add(decision);
+                log(
+                    $"Archive.org deletion check {identifier}: {decision.Status} ({decision.Reason})"
+                );
             }
 
-            return (false, verified);
+            return new ArchiveDeletionVerification(false, decisions.ToArray());
+        }
+
+        internal record ArchiveDeletionVerification(bool Guarded, DeletionDecision[] Decisions)
+        {
+            internal List<string> Identifiers =>
+                Decisions
+                    .Where(decision => decision.Delete)
+                    .Select(decision => decision.Identifier)
+                    .ToList();
         }
 
         internal static bool HasNoVbrMp3Files(RootObject details)
@@ -544,7 +371,12 @@ namespace Relisten.Import
 
             if (HasNoVbrMp3Files(detailsRoot))
             {
-                ctx?.WriteLine("\tNo VBR MP3 files found for {0}", searchDoc.identifier);
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
+                    "\tNo VBR MP3 files found for {0}",
+                    searchDoc.identifier
+                );
 
                 throw new NoVBRMp3FilesException();
             }
@@ -608,10 +440,18 @@ namespace Relisten.Import
                     properDisplayDate
                 );
                 src.id = dbSource!.id;
-                src.venue_id = dbVenue!.id;
+                src.venue_id = dbVenue?.id;
+
+                // Rebuild owns reassociation after a date change. Keep an already
+                // correct association so ordinary metadata updates remain playable.
+                if (src.display_date == dbSource.display_date)
+                {
+                    src.show_id = dbSource.show_id;
+                }
 
                 dbSource = await _sourceService.Save(src);
-                dbSource.venue = dbVenue;
+                if (dbVenue != null)
+                    dbSource.venue = dbVenue;
 
                 stats.Updated++;
             }

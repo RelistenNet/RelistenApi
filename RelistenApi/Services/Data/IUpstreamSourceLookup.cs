@@ -5,5 +5,5 @@ namespace Relisten.Data;
 
 public interface IUpstreamSourceLookup
 {
-    Task<UpstreamSource?> FindUpstreamSourceByName(string name);
+    Task<UpstreamSource?> FindUpstreamSourceByName(UpstreamProvider provider);
 }

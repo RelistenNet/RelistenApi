@@ -60,6 +60,8 @@ namespace Relisten.Vendor.ArchiveOrg
         )
         {
             var token = JToken.Load(reader);
+            if (token.Type == JTokenType.Null)
+                return null;
             if (token.Type == JTokenType.Array)
             {
                 return token.ToObject<List<T>>();
@@ -271,6 +273,7 @@ namespace Relisten.Vendor.ArchiveOrg
         public string raw_display_date { get; set; } = null!;
 
         [JsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
         public DateTime date =>
             DateTime.TryParse(raw_display_date, out var d) ? d : DateTime.MinValue;
         public string identifier { get; set; } = null!;
@@ -283,6 +286,7 @@ namespace Relisten.Vendor.ArchiveOrg
         public DateTime? reviewdate { get; set; }
         public DateTime? indexdate { get; set; }
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public DateTime max_review_date
         {
             get
@@ -304,6 +308,7 @@ namespace Relisten.Vendor.ArchiveOrg
             }
         }
 
+        [System.Text.Json.Serialization.JsonIgnore]
         public DateTime max_updated_at
         {
             get

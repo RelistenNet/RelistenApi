@@ -125,6 +125,12 @@ namespace Relisten.Data
             );
         }
 
+        /// <summary>
+        /// Saves provider metadata and returns the catalog identity. A repeated insert
+        /// resolves the existing show before callers write its song performances.
+        /// The upsert locks this show until its transaction completes, so replacement
+        /// song performances can be committed with the metadata as one change.
+        /// </summary>
         public async Task<SetlistShow> Save(SetlistShow show)
         {
             var p = new
@@ -187,6 +193,11 @@ namespace Relisten.Data
                             @updated_at,
                             md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
                         )
+                    ON CONFLICT (artist_id, upstream_identifier) DO UPDATE SET
+                        venue_id = EXCLUDED.venue_id,
+                        date = EXCLUDED.date,
+                        tour_id = EXCLUDED.tour_id,
+                        updated_at = EXCLUDED.updated_at
                     RETURNING *
                 ",
                     p

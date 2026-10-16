@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Threading.Tasks;
@@ -9,14 +9,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Relisten.Api.Models;
 using Relisten.Data;
+using Relisten.Ingestion;
 using Relisten.Services.Auth;
 using Relisten.Services.Popularity;
 
 namespace Relisten.Controllers.Admin
 {
     [ApiExplorerSettings(IgnoreApi = true)]
+    [ImportAdmissionErrors]
     public class AdminController : Controller
     {
+        private readonly TemporalIngestionClient _temporal;
         private readonly ArtistService _artistService;
         private readonly ILogger _logger;
         private readonly PopularityCacheService _popularityCacheService;
@@ -34,10 +37,12 @@ namespace Relisten.Controllers.Admin
             ScheduledService scheduledService,
             UpstreamSourceService upstreamSourceService,
             PopularityJobs popularityJobs,
-            PopularityCacheService popularityCacheService
+            PopularityCacheService popularityCacheService,
+            TemporalIngestionClient temporal
         )
         {
             _upstreamSourceService = upstreamSourceService;
+            _temporal = temporal;
             _userManager = userManager;
             _signInManager = signInManager;
             _logger = loggerFactory.CreateLogger<AdminController>();
@@ -285,33 +290,58 @@ namespace Relisten.Controllers.Admin
 
         [HttpPost("/relisten-admin/index-archiveorg")]
         [Authorize]
-        public IActionResult IndexArchiveOrgArtists()
+        public async Task<IActionResult> IndexArchiveOrgArtists()
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
-                _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true)
-            );
+            var jobId = _temporal.Enabled
+                ? (
+                    await _temporal.DiscoverArchiveArtistsAsync(new DiscoverArchiveArtists())
+                ).WorkflowId
+                : Hangfire.BackgroundJob.Enqueue(() =>
+                    _scheduledService.IndexArchiveOrgArtists(null, allowedInDev: true)
+                );
             return Json(new { message = $"Queued as job {jobId}!" });
         }
 
         [HttpPost("/relisten-admin/refresh-all-artists")]
         [Authorize]
-        public IActionResult RefreshAllArtists()
+        public async Task<IActionResult> RefreshAllArtists()
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
-                _scheduledService.RefreshAllArtists(null, allowedInDev: true)
-            );
+            var jobId = _temporal.Enabled
+                ? (await _temporal.RefreshCatalogAsync(new RefreshCatalog())).WorkflowId
+                : Hangfire.BackgroundJob.Enqueue(() =>
+                    _scheduledService.RefreshAllArtists(null, allowedInDev: true)
+                );
             return Json(new { message = $"Queued as job {jobId}!" });
         }
 
         [HttpPost("/relisten-admin/backfill-jerrygarcia-venues")]
         [Authorize]
-        public IActionResult BackfillJerryGarciaVenues(
+        public async Task<IActionResult> BackfillJerryGarciaVenues(
             [FromQuery] string artistSlug = "grateful-dead"
         )
         {
-            var jobId = Hangfire.BackgroundJob.Enqueue(() =>
-                _scheduledService.BackfillJerryGarciaVenues(artistSlug, null)
-            );
+            string jobId;
+            if (_temporal.Enabled)
+            {
+                var artist = await _artistService.FindArtistForImport(artistSlug);
+                if (artist == null)
+                {
+                    return NotFound();
+                }
+
+                jobId = (
+                    await _temporal.RepairJerryVenuesAsync(
+                        new RepairJerryVenues(new ArtistId(artist.uuid))
+                    )
+                ).WorkflowId;
+            }
+            else
+            {
+                jobId = Hangfire.BackgroundJob.Enqueue(() =>
+                    _scheduledService.BackfillJerryGarciaVenues(artistSlug, null)
+                );
+            }
+
             return Json(new { message = $"Queued as job {jobId}!" });
         }
 

@@ -1,0 +1,98 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.SetlistFm;
+using Relisten.Vendor;
+using Relisten.Vendor.SetlistFm;
+
+namespace Relisten.Import;
+
+// Keeps tolerant upstream parsing separate from catalog writes. Each item reloads
+// current rows in its transaction; PostgreSQL merges shared tour date extensions.
+public partial class SetlistFmImporter
+{
+    /// <summary>Reads one upstream page while preserving the tolerant setlist parser.</summary>
+    public async Task<
+        Page<DiscoveredItem<SetlistFmId, Setlist>, SetlistFmPage>
+    > ReadSetlistPageAsync(ProviderContext context, SetlistFmPage? cursor)
+    {
+        var page = cursor?.Number ?? 1;
+        using var response = await http.GetAsync(
+            SetlistUrlForArtist(context.Artist, page),
+            context.CancellationToken
+        );
+        response.EnsureSuccessStatusCode();
+
+        var root =
+            JsonConvert.DeserializeObject<SetlistsRootObject>(
+                await response.Content.ReadAsStringAsync(context.CancellationToken),
+                new TolerantListConverter<Song>(),
+                new TolerantListConverter<Set>(),
+                new TolerantListConverter<Setlist>(),
+                new TolerantSetsConverter()
+            ) ?? throw new System.IO.InvalidDataException("Setlist.fm returned an empty page.");
+
+        if (root.setlist == null || root.itemsPerPage <= 0 || root.page != page || root.total < 0)
+        {
+            throw new System.IO.InvalidDataException(
+                "Setlist.fm returned invalid pagination metadata."
+            );
+        }
+
+        var next =
+            root.page < Math.Ceiling((double)root.total / root.itemsPerPage)
+                ? new SetlistFmPage(page + 1)
+                : null;
+
+        return new Page<DiscoveredItem<SetlistFmId, Setlist>, SetlistFmPage>(
+            root.setlist.Where(s => s.sets.set.Count > 0)
+                .Select(s => new DiscoveredItem<SetlistFmId, Setlist>(new(s.id), s))
+                .ToArray(),
+            next
+        );
+    }
+
+    /// <summary>Reconciles tour bounds from committed setlists after complete pagination.</summary>
+    public Task<int> RefreshTourDatesAsync(ProviderContext context)
+    {
+        if (!context.Artist.features.tours)
+        {
+            return Task.FromResult(0);
+        }
+
+        // Concurrent items only extend ranges. Recompute once they have settled
+        // so corrections that move a boundary inward also reach the catalog.
+        return context.CommitAsync(() => _tourService.RefreshDatesFromSetlists(context.Artist));
+    }
+
+    /// <summary>Applies a setlist in one transaction and returns its current catalog identity.</summary>
+    public async Task<SetlistFmItemResult> ImportSetlistAsync(
+        ProviderContext context,
+        DiscoveredItem<SetlistFmId, Setlist> item
+    )
+    {
+        return await context.CommitAsync(async () =>
+        {
+            await PreloadData(context.Artist);
+
+            var unchanged =
+                existingSetlistShows.TryGetValue(item.Id.Value, out var previous)
+                && previous != null
+                && previous.updated_at >= item.Input.lastUpdated;
+
+            await ProcessSetlist(context.Artist, item.Input);
+            if (context.Artist.features.tours && tourToStartDate.Count > 0)
+            {
+                await UpdateTourStartEndDates(context.Artist);
+            }
+
+            return new SetlistFmItemResult(
+                item.Id,
+                new(existingSetlistShows[item.Id.Value]!.id),
+                unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied
+            );
+        });
+    }
+}

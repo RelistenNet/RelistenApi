@@ -22,9 +22,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RelistenApi\RelistenApi.csproj" />
+    <ProjectReference Include="../RelistenIngestionWorker/RelistenIngestionWorker.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content
+      Include="../local-dev/seed/schema.sql"
+      Link="Fixtures/catalog-schema.sql"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content Include="Fixtures\**\*.*">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

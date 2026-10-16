@@ -1,16 +1,20 @@
+using System;
 using System.Threading.Tasks;
 using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api;
+using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Ingestion;
 
 namespace Relisten.Controllers
 {
     [Route("api/v2/import/")]
     [ApiExplorerSettings(IgnoreApi = true)]
+    [ImportAdmissionErrors]
     public class ImportController : RelistenBaseController
     {
         public ImportController(
@@ -19,15 +23,18 @@ namespace Relisten.Controllers
             ArtistService artistService,
             ImporterService importer,
             ScheduledService scheduledService,
-            IConfiguration configuration
+            IConfiguration configuration,
+            TemporalIngestionClient temporal
         )
             : base(redis, db, artistService)
         {
             _configuration = configuration;
+            _temporal = temporal;
             _scheduledService = scheduledService;
             _importer = importer;
         }
 
+        private readonly TemporalIngestionClient _temporal;
         private readonly ImporterService _importer;
         private readonly ScheduledService _scheduledService;
         private readonly IConfiguration _configuration;
@@ -39,12 +46,25 @@ namespace Relisten.Controllers
             [FromQuery] bool deleteOldContent = false
         )
         {
-            var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            var art = _temporal.Enabled
+                ? await _artistService.FindArtistForImport(idOrSlug)
+                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
-                );
+                if (_temporal.Enabled && deleteOldContent)
+                {
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
+                    );
+                }
+
+                var jobId = _temporal.Enabled
+                    ? (
+                        await _temporal.RefreshAsync(new RefreshArtist(new ArtistId(art.uuid)))
+                    ).WorkflowId
+                    : BackgroundJob.Enqueue(() =>
+                        _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null)
+                    );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -59,9 +79,18 @@ namespace Relisten.Controllers
             [FromQuery] bool deleteOldContent = false
         )
         {
-            var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            var art = _temporal.Enabled
+                ? await _artistService.FindArtistForImport(idOrSlug)
+                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
+                if (_temporal.Enabled)
+                {
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
+                    );
+                }
+
                 await _scheduledService.RefreshArtist(idOrSlug, deleteOldContent, null);
 
                 return StatusCode(201, "done!");
@@ -71,7 +100,7 @@ namespace Relisten.Controllers
         }
 
         [HttpPost("phishin")]
-        public IActionResult JustRefreshPhishin()
+        public async Task<IActionResult> JustRefreshPhishin()
         {
             if (
                 !Request.Headers.TryGetValue("X-Relisten-Api-Key", out var key)
@@ -79,6 +108,24 @@ namespace Relisten.Controllers
             )
             {
                 return Unauthorized();
+            }
+
+            if (_temporal.Enabled)
+            {
+                var artist = await _artistService.FindArtistForImport("phish");
+                if (artist == null)
+                {
+                    return JsonNotFound(false);
+                }
+
+                return StatusCode(
+                    201,
+                    (
+                        await _temporal.RefreshAsync(
+                            new RefreshPhishInArtist(new ArtistId(artist.uuid))
+                        )
+                    ).WorkflowId
+                );
             }
 
             return StatusCode(
@@ -89,11 +136,13 @@ namespace Relisten.Controllers
 
         [HttpPost("all-years-and-shows")]
         [Authorize]
-        public IActionResult AllYearsAndShows()
+        public async Task<IActionResult> AllYearsAndShows()
         {
             return StatusCode(
                 201,
-                BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
+                _temporal.Enabled
+                    ? (await _temporal.RebuildCatalogAsync(new RebuildCatalog())).WorkflowId
+                    : BackgroundJob.Enqueue(() => _scheduledService.RebuildAllArtists(null))
             );
         }
 
@@ -105,17 +154,35 @@ namespace Relisten.Controllers
             [FromQuery] bool deleteOldContent = false
         )
         {
-            var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            var art = _temporal.Enabled
+                ? await _artistService.FindArtistForImport(idOrSlug)
+                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
-                var jobId = BackgroundJob.Enqueue(() =>
-                    _scheduledService.RefreshArtist(
-                        idOrSlug,
-                        showIdentifier,
-                        deleteOldContent,
-                        null
-                    )
-                );
+                if (_temporal.Enabled && deleteOldContent)
+                {
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a destructive reimport."
+                    );
+                }
+
+                var jobId = _temporal.Enabled
+                    ? (
+                        await _temporal.ImportArchiveItemAsync(
+                            new ImportArchiveItem(
+                                new ArtistId(art.uuid),
+                                new ArchiveItemId(showIdentifier)
+                            )
+                        )
+                    ).WorkflowId
+                    : BackgroundJob.Enqueue(() =>
+                        _scheduledService.RefreshArtist(
+                            idOrSlug,
+                            showIdentifier,
+                            deleteOldContent,
+                            null
+                        )
+                    );
 
                 return StatusCode(201, $"Queued as job {jobId}!");
             }
@@ -131,9 +198,18 @@ namespace Relisten.Controllers
             [FromQuery] bool deleteOldContent = false
         )
         {
-            var art = await _artistService.FindArtistWithIdOrSlug(idOrSlug);
+            var art = _temporal.Enabled
+                ? await _artistService.FindArtistForImport(idOrSlug)
+                : await _artistService.FindArtistWithIdOrSlug(idOrSlug);
             if (art != null)
             {
+                if (_temporal.Enabled)
+                {
+                    return Conflict(
+                        "Stop Temporal ingestion and select Hangfire before a synchronous debug import."
+                    );
+                }
+
                 await _scheduledService.RefreshArtist(
                     idOrSlug,
                     showIdentifier,

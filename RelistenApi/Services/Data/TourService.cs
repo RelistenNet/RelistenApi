@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -8,6 +9,52 @@ namespace Relisten.Data
 {
     public class TourService : RelistenDataServiceBase
     {
+        /// <summary>Extends tour dates with an imported setlist range without losing concurrent extensions.</summary>
+        public Task UpdateDateBounds(
+            Artist artist,
+            IDictionary<string, DateTime> starts,
+            IDictionary<string, DateTime> ends
+        ) =>
+            db.WithWriteConnection(connection =>
+                connection.ExecuteAsync(
+                    """
+                    UPDATE tours SET start_date=LEAST(start_date, @startDate),
+                        end_date=GREATEST(end_date, @endDate)
+                    WHERE artist_id=@artistId AND upstream_identifier=@identifier
+                    """,
+                    starts.Select(pair => new
+                    {
+                        artistId = artist.id,
+                        identifier = pair.Key,
+                        startDate = pair.Value,
+                        endDate = ends[pair.Key],
+                    })
+                )
+            );
+
+        /// <summary>Recomputes all nonempty tour ranges for an artist from committed setlists.</summary>
+        /// <returns>The number changed by this attempt. Tours with no setlists remain unchanged.</returns>
+        public Task<int> RefreshDatesFromSetlists(Artist artist)
+        {
+            return db.WithWriteConnection(con =>
+                con.ExecuteAsync(
+                    @"
+                UPDATE tours t
+                SET start_date = dates.start_date, end_date = dates.end_date
+                FROM (
+                    SELECT tour_id, MIN(date) AS start_date, MAX(date) AS end_date
+                    FROM setlist_shows
+                    WHERE artist_id = @artistId AND tour_id IS NOT NULL
+                    GROUP BY tour_id
+                ) dates
+                WHERE t.id = dates.tour_id AND t.artist_id = @artistId
+                    AND (t.start_date, t.end_date) IS DISTINCT FROM (dates.start_date, dates.end_date)
+            ",
+                    new { artistId = artist.id }
+                )
+            );
+        }
+
         public TourService(DbService db, ShowService showService)
             : base(db)
         {
@@ -161,8 +208,11 @@ namespace Relisten.Data
                 );
             }
 
-            return await db.WithWriteConnection(con =>
-                con.QuerySingleAsync<Tour>(
+            // Different shows can discover the same tour before either commits.
+            // Reuse the winning row, including any dates it has already accumulated.
+            return await db.WithWriteConnection(async con =>
+            {
+                var inserted = await con.QuerySingleOrDefaultAsync<Tour>(
                     @"
                     INSERT INTO
                         tours
@@ -188,11 +238,20 @@ namespace Relisten.Data
                             @updated_at,
                             md5(@artist_id || '::tour::' || @upstream_identifier)::uuid
                         )
+                    ON CONFLICT DO NOTHING
                     RETURNING *
                 ",
                     p
-                )
-            );
+                );
+
+                // Both UUID and upstream identity are unique. Handle either
+                // conflict, then use a new statement to see the winning commit.
+                return inserted
+                    ?? await con.QuerySingleAsync<Tour>(
+                        "SELECT * FROM tours WHERE artist_id=@artist_id AND upstream_identifier=@upstream_identifier",
+                        p
+                    );
+            });
         }
     }
 }

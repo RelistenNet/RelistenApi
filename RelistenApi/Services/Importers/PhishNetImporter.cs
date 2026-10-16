@@ -10,25 +10,23 @@ using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Import.PhishNet;
+using Relisten.Ingestion;
 
 namespace Relisten.Import
 {
-    public class PhishNetImporter : ImporterBase
+    public partial class PhishNetImporter : ImporterBase
     {
-        public const string DataSourceName = "phish.net";
-
         readonly LinkService linkService;
-        readonly PhishNetApiClient phishNetApiClient;
+        PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
-            DbService db,
+            CatalogRebuildService catalog,
             SourceService sourceService,
             SourceReviewService sourceReviewService,
             LinkService linkService,
-            ILogger<PhishNetImporter> log,
-            RedisService redisService
+            ILogger<PhishNetImporter> log
         )
-            : base(db, redisService)
+            : base(catalog, log)
         {
             this.linkService = linkService;
             _sourceService = sourceService;
@@ -42,7 +40,7 @@ namespace Relisten.Import
         protected SourceReviewService _sourceReviewService { get; set; }
         protected ILogger<PhishNetImporter> _log { get; set; }
 
-        public override string ImporterName => "phish.net";
+        public override UpstreamProvider Provider => UpstreamProvider.PhishNet;
 
         public override ImportableData ImportableDataForArtist(Artist artist)
         {
@@ -73,7 +71,9 @@ namespace Relisten.Import
 
             var prog = ctx?.WriteProgressBar();
 
-            ctx?.WriteLine(
+            ImportProgress.WriteLine(
+                log,
+                ctx,
                 $"Processing {shows.Count} shows{(CurrentImportOptions.IsThinScrape ? $" (filtered to year {CurrentImportOptions.OnlyYear}, {allShows.Count} total)" : "")}"
             );
 
@@ -98,7 +98,7 @@ namespace Relisten.Import
                 );
             }
 
-            ctx?.WriteLine("Rebuilding...");
+            ImportProgress.WriteLine(log, ctx, "Rebuilding...");
 
             await RebuildShows(artist);
             await RebuildYears(artist);
@@ -122,7 +122,9 @@ namespace Relisten.Import
         )
         {
             var ratingScraper = new PhishNetRatingsScraper(http, dbSource.display_date);
-            ctx?.WriteLine(
+            ImportProgress.WriteLine(
+                log,
+                ctx,
                 $"Requesting {PhishNetRatingsScraper.PhishNetUrlForSource(dbSource.display_date)}"
             );
 
@@ -134,17 +136,21 @@ namespace Relisten.Import
             ArtistUpstreamSource src,
             Source dbSource,
             IList<PhishNetApiShow> phishNetApiShows,
-            PerformContext? ctx
+            PerformContext? ctx,
+            PhishNetScrapeResults? stagedRatings = null,
+            IEnumerable<PhishNetApiReview>? stagedReviews = null
         )
         {
             var stats = new ImportStats();
 
-            var ratings = await ScrapePhishNetForSource(dbSource, ctx);
+            var ratings = stagedRatings ?? await ScrapePhishNetForSource(dbSource, ctx);
             var dirty = false;
 
             if (!ratings.RatingMatched)
             {
-                ctx?.WriteLine(
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
                     $"{dbSource.display_date} skipping — failed to scrape ratings from phish.net"
                 );
             }
@@ -157,7 +163,9 @@ namespace Relisten.Import
                     || Math.Abs(dbSource.avg_rating - newAvgRating) > 0.001
                 )
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"{dbSource.display_date} ratings changed: num_ratings {dbSource.num_ratings} → {ratings.RatingVotesCast}, avg_rating {dbSource.avg_rating} → {newAvgRating}"
                     );
                     dbSource.num_ratings = ratings.RatingVotesCast;
@@ -168,10 +176,14 @@ namespace Relisten.Import
 
                 if (dbSource.num_reviews != ratings.NumberOfReviewsWritten)
                 {
-                    ctx?.WriteLine(
+                    ImportProgress.WriteLine(
+                        log,
+                        ctx,
                         $"{dbSource.display_date} reviews changed: {dbSource.num_reviews} → {ratings.NumberOfReviewsWritten}"
                     );
-                    var reviews = await phishNetApiClient.Reviews(dbSource.display_date, ctx);
+                    var reviews =
+                        stagedReviews
+                        ?? await phishNetApiClient.Reviews(dbSource.display_date, ctx);
 
                     var dbReviews = reviews
                         .Select(rev => new SourceReview
@@ -196,9 +208,14 @@ namespace Relisten.Import
                 pnetShow.showdate == dbSource.display_date
             );
 
-            if (!dbSource.description.Contains(phishNetApiShow!.setlist_notes))
+            if (
+                phishNetApiShow?.setlist_notes is { } notes
+                && !dbSource.description.Contains(notes)
+            )
             {
-                ctx?.WriteLine(
+                ImportProgress.WriteLine(
+                    log,
+                    ctx,
                     $"{dbSource.display_date} setlist_notes changed: [{dbSource.description.Length} chars] → [{phishNetApiShow.setlist_notes.Length} chars]"
                 );
                 dbSource.description = phishNetApiShow.setlist_notes;
@@ -208,7 +225,7 @@ namespace Relisten.Import
 
             if (dirty)
             {
-                ctx?.WriteLine($"{dbSource.display_date} changed!");
+                ImportProgress.WriteLine(log, ctx, $"{dbSource.display_date} changed!");
                 await _sourceService.Save(dbSource);
                 stats.Updated++;
             }
