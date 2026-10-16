@@ -68,6 +68,8 @@ A batch selects artist UUIDs once and retains that array across runs. It fixes t
 
 ## Payload storage
 
+Clients and workers use the same payload store. `Temporal__PayloadRedisUrl` selects a dedicated Redis connection; when unset, local development reuses the catalog cache. Production uses a separate persistent Redis so replacing the application cache does not remove workflow inputs.
+
 Temporal stores event history in its own PostgreSQL databases. The shared data converter keeps complete serialized protobuf payloads of at most 256 KiB inline. Larger payloads, up to 64 MiB, go to Redis under a namespace-specific content hash. The history contains a versioned reference. Both original metadata and data are preserved.
 
 Successful encoding or reuse refreshes the content key's 15-day expiry. Decoding checks the reference, length, and digest. It never substitutes a new provider fetch for missing bytes. Redis loss can prevent workflow activation or history replay, even though the catalog and Temporal databases remain available. See [storage and recovery](operations.md#storage-backups-and-recovery) before rollout.

@@ -11,6 +11,12 @@ on:
         options:
           - api
           - user-service
+          - ingestion-worker
+      deploy:
+        description: Restart production deployments after publishing
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -18,9 +24,6 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ${{ inputs.component == 'user-service' && 'relistennet/relisten-user-service' || 'relistennet/relistenapi' }}
-  DOCKERFILE: ${{ inputs.component == 'user-service' && 'RelistenUserService/Dockerfile' || 'Dockerfile' }}
-  DEPLOYMENTS: ${{ inputs.component == 'user-service' && 'relisten-user-service' || 'relistenapi relistenapi-worker' }}
   REGISTRY: ghcr.io
   KEEP_GHCR_SHA_VERSIONS: "5"
 
@@ -44,23 +47,52 @@ jobs:
 
       - name: Compute image metadata
         id: meta
+        env:
+          COMPONENT: ${{ inputs.component }}
         run: |
+          set -euo pipefail
+          case "$COMPONENT" in
+            api)
+              image_name=relistennet/relistenapi
+              dockerfile=Dockerfile
+              deployments="relistenapi relistenapi-worker"
+              ;;
+            user-service)
+              image_name=relistennet/relisten-user-service
+              dockerfile=RelistenUserService/Dockerfile
+              deployments=relisten-user-service
+              ;;
+            ingestion-worker)
+              image_name=relistennet/relistenapi-ingestion-worker
+              dockerfile=RelistenIngestionWorker/Dockerfile
+              deployments=relistenapi-ingestion-worker
+              ;;
+            *)
+              echo "::error::Unknown component: $COMPONENT"
+              exit 1
+              ;;
+          esac
+
           short_sha="${GITHUB_SHA::12}"
           build_date="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
-          echo "build_date=$build_date" >> "$GITHUB_OUTPUT"
-          echo "image=${REGISTRY}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
-          echo "package=${IMAGE_NAME#relistennet/}" >> "$GITHUB_OUTPUT"
+          {
+            echo "short_sha=$short_sha"
+            echo "build_date=$build_date"
+            echo "image=${REGISTRY}/${image_name}"
+            echo "package=${image_name#relistennet/}"
+            echo "dockerfile=$dockerfile"
+            echo "deployments=$deployments"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ env.DOCKERFILE }}
+          file: ${{ steps.meta.outputs.dockerfile }}
           platforms: linux/amd64
           tags: |
-            ${{ steps.meta.outputs.image }}:latest
             ${{ steps.meta.outputs.image }}:sha-${{ steps.meta.outputs.short_sha }}
+            ${{ inputs.deploy && format('{0}:latest', steps.meta.outputs.image) || '' }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -117,6 +149,7 @@ jobs:
           done <<< "$ids"
 
       - name: Connect to Tailscale
+        if: ${{ inputs.deploy }}
         uses: tailscale/github-action@v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -127,11 +160,13 @@ jobs:
           version: latest
 
       - name: Set up kubectl
+        if: ${{ inputs.deploy }}
         uses: azure/setup-kubectl@v5
         with:
           version: v1.36.2
 
       - name: Configure relisten3 kubeconfig
+        if: ${{ inputs.deploy }}
         env:
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
         run: |
@@ -142,6 +177,9 @@ jobs:
           kubectl config use-context relisten3-k3s
 
       - name: Restart relisten3 deployments
+        if: ${{ inputs.deploy }}
+        env:
+          DEPLOYMENTS: ${{ steps.meta.outputs.deployments }}
         run: |
           set -euo pipefail
           for deployment in $DEPLOYMENTS; do

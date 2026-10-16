@@ -1,13 +1,14 @@
 # Operate the ingestion worker
 
-`RelistenIngestionWorker` runs workflows and activities using the API project's catalog services and parsers. It starts no API or Hangfire server. [Local setup](../../local-dev/README.md) uses the normal development PostgreSQL and Redis services. Tests create disposable databases and temporary Temporal servers. This document describes the intended operating procedure; no production deployment is part of this change.
+`RelistenIngestionWorker` runs workflows and activities using the API project's catalog services and parsers. It starts no API or Hangfire server. [Local setup](../../local-dev/README.md) uses the normal development PostgreSQL and Redis services. Tests create disposable databases and temporary Temporal servers. Use [the production cutover guide](production-cutover.md) for the staged handoff and live checks.
 
 ## Configuration
 
 | Setting | Use |
 |---|---|
 | `DATABASE_URL` | Application catalog PostgreSQL URL |
-| `REDIS_URL` | Catalog cache and temporary oversized Temporal payload bytes |
+| `REDIS_URL` | Catalog cache and local default for oversized Temporal payload bytes |
+| `Temporal__PayloadRedisUrl` | Optional separate Redis for payload bytes. Production uses the persistent payload store; configure the same URL on API clients and workers. |
 | `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing |
 | `Temporal__Address` | Temporal gRPC endpoint; default `localhost:7233` |
 | `Temporal__Namespace` | Namespace; default `default` |
@@ -70,14 +71,14 @@ Watch queue wait, activity failures, upstream 429/5xx responses, Temporal histor
 
 1. Stop manual ingestion admission. Disable or remove the three Hangfire ingestion recurring jobs: Archive discovery, full refresh, and thin refresh. Let existing work finish, or stop its process and verify that writes have ended.
 2. Verify catalog migration history, Temporal namespace retention of at most seven days, and Redis persistence/eviction settings. This refactor adds no application ingestion tables. Existing catalog installations retain their normal migration history; do not use the disposable local baseline flag.
-3. Set `Ingestion__Engine=Temporal` on the API and restart it. This stops ingestion recurring registration and the `artist_import` Hangfire server. Already queued ingestion methods return without importing in this mode. Popularity/cache jobs and the default Hangfire server remain.
+3. Set `Ingestion__Engine=Temporal` on both the `relistenapi` and `relistenapi-worker` deployments in the same rollout as the reviewed API image. Set the same Temporal address, namespace, and payload Redis URL on those deployments and the new ingestion worker. This stops ingestion recurring registration and the `artist_import` Hangfire server. Already queued ingestion methods return without importing in this mode. Popularity/cache jobs and the default Hangfire server remain.
 4. Start one ingestion worker. Verify a manual import, then register schedules explicitly. Archive discovery runs at 06:30 UTC; full refresh at 07:00 UTC; thin refresh at 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00, 20:00, and 22:00 UTC. Overlap policy is Skip. Repeated registration preserves existing schedules, including paused ones.
 
 Stopping recurring registration does not remove jobs already stored in Hangfire. Drain both scheduled and manually admitted ingestion before switching. Artist workflow admission applies only to Temporal. It does not coordinate admission or finalization with Hangfire; drain the old engine before switching.
 
 Rollback: pause Temporal schedules and manual admission, cancel/drain work, and stop the worker. Verify no activity is still writing before selecting Hangfire on the API. Review the old `artist_import` queue and discard obsolete queued work where appropriate. Restarting the API in Hangfire mode restores its recurring registrations. Keep committed catalog changes. Do not reset Temporal workflows while Hangfire owns ingestion.
 
-The branch is undeployed, so there is no compatibility procedure for its earlier draft workflows or migration 13. Current tests start with fresh databases and Temporal servers; see [local setup](../../local-dev/README.md). Future deployments must drain incompatible open workflow histories or adopt Temporal workflow versioning.
+Current tests start with fresh databases and Temporal servers; see [local setup](../../local-dev/README.md). In production, drain incompatible open workflow histories or adopt Temporal workflow versioning before changing workflow behavior.
 
 ## Storage, backups, and recovery
 
@@ -85,10 +86,14 @@ There are no application ingestion snapshot or receipt tables. Temporal stores w
 
 Fifteen days covers the seven-day execution limit, at most seven days of closed-history retention, and one day of margin. If closed-history retention must exceed seven days, increase payload retention by the same amount before adopting that policy. Saved schedules contain small commands rather than expiring payload references. Replay fixtures that outlive the TTL need their referenced bytes retained in isolated test storage or regenerated histories.
 
+Production uses the separate `relisten-temporal-payloads` Redis with a persistent volume, AOF writes every second, and no eviction. API clients and workers must use its URL before creating production workflows. The default shared-cache setting remains suitable for disposable local tests. A crash can still lose the last second of AOF writes.
+
 Redis loss or eviction can make referenced history unreadable. The codec reports missing, corrupt, oversized, or unsupported payloads; it never refetches upstream inputs to conceal the loss. There is no web codec endpoint, so Temporal UI shows references for offloaded values. Keep small command/result summaries and structured logs available for diagnosis.
 
 If required bytes cannot be recovered, stop new admission and pause affected schedules. Attempt cancellation and drain running activities. If decoding prevents cancellation from being processed, stop the worker and verify that activity writes have ended before terminating the unreadable execution. Start fresh only after the old execution and its activities can no longer write. A fresh artist import or standalone rebuild repairs derived data. Do not delete arbitrary Redis keys as a recovery step.
 
-A production backup design must account for application catalog data, Temporal persistence/visibility, and Redis bytes needed by retained histories. Existing Redis settings determine durability; this change adds no new guarantee. Restore with ingestion stopped, then verify matched histories and payload access before starting pollers. Application-only restoration cannot restore workflow history.
+Production logical backups dump only the `app` database. Temporal uses separate `temporal` and `temporal_visibility` databases in the same PostgreSQL cluster, so these dumps exclude workflow state without schema filters. The prepared deployment does not add backups or archival for Temporal or its payload Redis. Persistent storage supports pod restarts; it is not a backup guarantee.
 
-The local auto-setup image creates separate Temporal databases. A hosted installation should use explicit schema setup/update jobs, separate credentials, and normal frontend/UI access controls. Pin Temporal server and SDK versions and follow the server's supported upgrade order. Production infrastructure, backups, and deployment remain separate work.
+After catalog restoration or loss of Temporal/payload storage, keep ingestion stopped. Discard unmatched workflow state, recreate the namespace and schedules, and start fresh imports from the restored catalog. Do not resume old histories against a catalog or payload store restored to a different point. This recovery policy trades saved progress for simpler backups of rebuildable imports. A future physical PostgreSQL cluster backup would include all databases; it cannot exclude Temporal with `pg_dump` flags.
+
+The prepared manifests live in `../relisten-flux/clusters/relisten3-k3s/temporal/`. Explicit versioned Jobs initialize the two SQL schemas and the seven-day namespace. The server uses its own database role; frontend and UI Services remain private. The cluster uses manual manifest application. Follow that bundle's README and the [production cutover guide](production-cutover.md); applying the bundle alone does not switch API admission or enable ingestion schedules.

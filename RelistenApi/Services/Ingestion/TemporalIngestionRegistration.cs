@@ -20,23 +20,33 @@ namespace Relisten.Ingestion;
 /// <summary>Registers the shared client and independent queue workers using native Temporal controls.</summary>
 public static class TemporalIngestionRegistration
 {
-    /// <summary>Registers a lazy Temporal client without starting workers.</summary>
+    /// <summary>
+    /// Registers a lazy Temporal client without starting workers. Temporal:PayloadRedisUrl
+    /// selects a dedicated payload store; when unset, payloads use the shared RedisService.
+    /// </summary>
     public static IServiceCollection AddTemporalIngestionClient(
         this IServiceCollection services,
         IConfiguration configuration
     )
     {
         var temporalNamespace = configuration["Temporal:Namespace"] ?? "default";
+        var payloadRedisUrl = configuration["Temporal:PayloadRedisUrl"];
+        services.AddSingleton(provider =>
+            string.IsNullOrWhiteSpace(payloadRedisUrl)
+                ? new TemporalPayloadRedis(provider.GetRequiredService<RedisService>().db)
+                : new TemporalPayloadRedis(payloadRedisUrl)
+        );
+
         services
             .AddTemporalClient(
                 configuration["Temporal:Address"] ?? "localhost:7233",
                 temporalNamespace
             )
-            .Configure<RedisService>(
+            .Configure<TemporalPayloadRedis>(
                 (options, redis) =>
                     options.DataConverter = DataConverter.Default with
                     {
-                        PayloadCodec = new RedisPayloadCodec(redis.db, temporalNamespace),
+                        PayloadCodec = new RedisPayloadCodec(redis.Database, temporalNamespace),
                     }
             );
         services.AddSingleton<IImportAdmissionCatalog, ImportAdmissionCatalog>();
