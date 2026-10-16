@@ -9,6 +9,7 @@ using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
 using RelistenIngestionWorker;
+using Sentry;
 using SimpleMigrations;
 using SimpleMigrations.DatabaseProvider;
 
@@ -17,6 +18,8 @@ using SimpleMigrations.DatabaseProvider;
 var registerSchedules = args.Contains("--register-schedules");
 var migrate = args.Contains("--migrate");
 var builder = CreateWorkerBuilder(args);
+var sentryOptions = WorkerLogging.Configure(builder);
+using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
 
 var operations = new[] { "import", "batch", "cancel", "rebuild-artist", "repair-jerry-venues" }
@@ -77,10 +80,6 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
             .Where(argument => argument != "--register-schedules" && argument != "--migrate")
             .ToArray()
     );
-    // Keep Temporal and importer scope fields searchable in pod logs. The simple
-    // formatter prints dictionary scopes as type names and loses their context.
-    builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
-
     SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
     SqlMapper.AddTypeHandler(new DateTimeHandler());
     JsonConvert.DefaultSettings = () =>

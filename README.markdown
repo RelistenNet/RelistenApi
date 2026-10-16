@@ -58,8 +58,8 @@ or [local setup](local-dev/README.md#run-an-ingestion-worker-manually) for devel
 Importing a seed artist can fetch its full upstream catalog; the seed does not
 limit import work.
 
-The API initializes Sentry when `SENTRY_DSN` is configured. The standalone
-ingestion worker currently has no Sentry initialization or scheduled-run monitor.
+The API and standalone ingestion worker initialize Sentry independently when
+`SENTRY_DSN` is configured. Scheduled-run monitoring is not enabled.
 See [diagnostics and monitoring](docs/temporal/operations.md#diagnostics-and-monitoring)
 for coverage and the remaining work.
 

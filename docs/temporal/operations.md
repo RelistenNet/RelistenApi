@@ -7,6 +7,7 @@
 | Setting | Use |
 |---|---|
 | `DATABASE_URL` | Application catalog PostgreSQL URL |
+| `SENTRY_DSN` | Optional Sentry error reporting; omitted for local development |
 | `REDIS_URL` | Catalog cache and local default for oversized Temporal payload bytes |
 | `Temporal__PayloadRedisUrl` | Optional separate Redis for payload bytes. Production uses the persistent payload store; configure the same URL on API clients and workers. |
 | `PGBOUNCER_WRITE_HOST`, `PGBOUNCER_READ_ONLY_HOST` | Optional existing database routing |
@@ -80,23 +81,23 @@ The worker writes JSON console logs with Temporal and importer scopes. Use
 upstream response or item result to its workflow. Item results distinguish applied,
 unchanged, and skipped inputs; they are not counts of newly created catalog rows.
 
-The API initializes Sentry through `UseSentry` when `SENTRY_DSN` is configured.
-Production supplies that setting to the API. The standalone ingestion worker
-does not run the API's host setup: it currently neither initializes Sentry nor
-receives `SENTRY_DSN` in its deployment. Existing importer calls to
-`SentrySdk.CaptureException` therefore do not establish Sentry coverage there.
-Temporal history and worker logs are the current sources for ingestion failures.
+The API and standalone worker initialize Sentry independently when `SENTRY_DSN`
+is configured. The worker reports error-level logs and existing importer
+`SentrySdk.CaptureException` calls. Information and warning logs become
+breadcrumbs attached to subsequent errors, rather than separate error events.
+Logging scopes include artist, provider, workflow, activity, and attempt where
+those fields are available. The worker uses its host environment name and keeps
+Sentry's default personal-data collection disabled.
 
-Scheduled-run monitoring remains unimplemented. Sentry's
-[.NET Cron Monitoring](https://docs.sentry.io/platforms/dotnet/crons/)
-supports check-ins for missed starts, excessive runtime, and reported failures.
-The installed Sentry 6.0 SDK already exposes manual check-ins. A worker
-integration must send external reports from activities, preserve the check-in
-identity across retries and workflow continuations, and evaluate typed results:
-a completed batch can contain partial or failed artist imports. Expected skips
-and attempts that later succeed should not generate separate failure alerts.
-Sentry initialization and deployment configuration are both required before
-this coverage can be claimed.
+The worker owns the SDK lifetime explicitly and disposes it after the host,
+which flushes pending events on normal shutdown and after operator commands.
+No DSN is required for local development. The production worker manifest reads
+`SENTRY_DSN` from the existing `relistenapi-secrets` secret. This requires both
+the updated worker image and manifest; the integration has not yet been deployed.
+
+Sentry error capture does not turn every partial or failed workflow result into
+an event. Temporal history remains the source for typed import outcomes and
+retries. Scheduled-run and batch-result monitoring are not enabled.
 
 ## Switch from Hangfire
 

@@ -50,7 +50,7 @@ Targeted Archive imports call the same `ImportItem` activity with a requested id
 
 Shared importer messages use `ILogger` and also the Hangfire console when a `PerformContext` exists. Passing a null Hangfire context does not suppress Archive validation, date-repair, or guard diagnostics. Provider activity scopes identify execution, artist, provider, workflow, activity, and attempt. Typed item inputs/results and bounded failure samples remain in workflow history.
 
-HTTP logs omit query parameters because some providers put credentials there. The standalone worker does not initialize Sentry, so existing parser capture calls do not establish error reporting there. See [diagnostics and monitoring](operations.md#diagnostics-and-monitoring) for current coverage and remaining work. Temporal UI supplies retries, cancellation state, and workflow failures. Large offloaded inputs appear as Redis references unless inspected with the configured converter.
+HTTP logs omit query parameters because some providers put credentials there. The standalone worker initializes Sentry when `SENTRY_DSN` is configured; error logs and existing parser capture calls report through the same SDK. See [diagnostics and monitoring](operations.md#diagnostics-and-monitoring) for current coverage and remaining work. Temporal UI supplies retries, cancellation state, and workflow failures. Large offloaded inputs appear as Redis references unless inspected with the configured converter.
 
 ## Shared behavior and verification
 
