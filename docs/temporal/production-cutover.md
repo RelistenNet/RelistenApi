@@ -19,9 +19,9 @@ Publish both images from the same reviewed commit without restarting production:
 
 ```sh
 gh workflow run build_and_push_image.yml --repo RelistenNet/RelistenApi \
-  --ref COMMIT_OR_BRANCH -f component=api -f deploy=false
+  --ref REVIEWED_BRANCH_OR_TAG -f component=api -f deploy=false
 gh workflow run build_and_push_image.yml --repo RelistenNet/RelistenApi \
-  --ref COMMIT_OR_BRANCH -f component=ingestion-worker -f deploy=false
+  --ref REVIEWED_BRANCH_OR_TAG -f component=ingestion-worker -f deploy=false
 ```
 
 Wait for both builds. Record their image digests and use those digests for the
@@ -42,7 +42,9 @@ All API clients and the worker must use
 persistent store holds workflow inputs separately from the disposable cache.
 See [worker configuration](operations.md#configuration) for application settings.
 
-Keep `relistenapi-ingestion-worker` at zero replicas during provisioning. Start
+For a fresh cutover, set `replicas: 0` in the worker manifest before applying
+the bundle. The checked-in manifest records the accepted production state of one
+worker. Keep `relistenapi-ingestion-worker` at zero replicas during provisioning. Start
 one replica after the Hangfire drain and API handoff below. Starting a worker
 creates no schedules or imports. Do not run `--register-schedules` yet: it creates
 missing schedules **active immediately**.

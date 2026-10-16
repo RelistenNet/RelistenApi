@@ -12,7 +12,7 @@ The implementation preserves catalog identities, listener API bodies, the seven 
 
 Temporal owns execution progress. PostgreSQL owns catalog rows. A Redis payload codec stores oversized serialized Temporal values for 15 days; small values remain in history. There are no application ingestion snapshots, commit receipts, or database resume commands. Item retries converge through existing unique constraints, conflict handling, and ordinary PostgreSQL transactions. They do not promise exact first-attempt mutation counts.
 
-This branch has never been deployed. Its earlier workflow protocols and draft migration have been replaced directly. Production infrastructure and a staged cutover are prepared in the linked guides. Applying production changes is a separate operator action. AI processing and search indexing remain outside this work.
+Production was deployed from the unmerged branches on October 16. See the [production validation record](evidence/production-cutover-2026-10-16.md) for tested images, provider results, fixes, and operating state. Earlier workflow protocols and the draft migration were replaced directly before deployment. AI processing and search indexing remain outside this work.
 
 The [readability follow-up](readability-follow-up.md) records the full-branch review, code-reading acceptance criteria, and copy-ready prompt-template changes.
 
