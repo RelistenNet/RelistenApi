@@ -2,6 +2,7 @@ using FluentAssertions;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Archive;
+using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Ingestion.Providers.PhishIn;
 using Relisten.Ingestion.Workflows;
 using Relisten.Vendor.ArchiveOrg;
@@ -228,7 +229,7 @@ public class TestIngestionWorkflows
     }
 
     [Test]
-    public async Task FailedDiscoveryPreventsItemsReconciliationAndRebuild()
+    public async Task FailedDiscoveryPreventsItemsAndReconciliationButRebuildsTheCatalog()
     {
         var activities = new RecordingActivities(3) { FailDiscovery = true };
         Func<Task> run = async () => await Run(activities);
@@ -236,16 +237,94 @@ public class TestIngestionWorkflows
         activities.Applied.Should().BeEmpty();
         activities.Verifications.Should().Be(0);
         activities.DeletionApplications.Should().Be(0);
-        activities.Rebuilds.Should().BeEmpty();
+        activities.Rebuilds.Should().Equal("shows", "years", "cache");
     }
 
     [Test]
-    public async Task FailedPhishInPreparationPreventsListingAndRebuild()
+    public async Task FailedPhishInPreparationPreventsListingButRebuildsTheCatalog()
     {
         var activities = new RecordingActivities(1) { Provider = UpstreamProvider.Phishin };
         Func<Task> run = async () => await Run(activities);
         await run.Should().ThrowAsync<WorkflowFailedException>();
         activities.PhishListings.Should().Be(0);
+        activities.Applied.Should().BeEmpty();
+        activities.Rebuilds.Should().Equal("shows", "years", "cache");
+    }
+
+    [Test]
+    public async Task LaterProviderFailureRebuildsCommittedItemsAndPreservesTheFailedOutcome()
+    {
+        var activities = new RecordingActivities(2)
+        {
+            Providers = [UpstreamProvider.ArchiveOrg, UpstreamProvider.PhantasyTour],
+        };
+        using var phantasyWorker = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(
+                IngestionQueues.Providers[UpstreamProvider.PhantasyTour]
+            ).AddAllActivities(activities)
+        );
+
+        await phantasyWorker.ExecuteAsync(() =>
+            WithWorkers(
+                activities,
+                async () =>
+                {
+                    var handle = await environment.Client.StartWorkflowAsync(
+                        (ArtistRefreshWorkflow workflow) =>
+                            workflow.RunAsync(
+                                new RefreshArtist(new ArtistId(Guid.NewGuid())),
+                                null
+                            ),
+                        Options()
+                    );
+                    Func<Task> finish = async () => await handle.GetResultAsync();
+                    var failure = await finish.Should().ThrowAsync<WorkflowFailedException>();
+
+                    failure
+                        .Which.InnerException.Should()
+                        .BeOfType<ChildWorkflowFailureException>()
+                        .Which.InnerException.Should()
+                        .BeOfType<ActivityFailureException>()
+                        .Which.InnerException.Should()
+                        .BeOfType<ApplicationFailureException>()
+                        .Which.ErrorType.Should()
+                        .Be("PhantasyTourForbidden");
+                    activities.Applied.Should().BeEquivalentTo([0, 1]);
+                    activities.Rebuilds.Should().Equal("shows", "years", "cache");
+
+                    var replayer = new WorkflowReplayer(
+                        new WorkflowReplayerOptions().AddWorkflow<ArtistRefreshWorkflow>()
+                    );
+                    await replayer.ReplayWorkflowAsync(await handle.FetchHistoryAsync());
+                    return true;
+                }
+            )
+        );
+    }
+
+    [Test]
+    public async Task FailedArtistPreparationDoesNotRebuild()
+    {
+        var activities = new RecordingActivities(1) { FailArtistPreparation = true };
+        Func<Task> run = async () => await Run(activities);
+
+        await run.Should().ThrowAsync<WorkflowFailedException>();
+        activities.Discoveries.Should().Be(0);
+        activities.Rebuilds.Should().BeEmpty();
+    }
+
+    [Test]
+    public async Task ExpirationInsideAProviderDoesNotRebuild()
+    {
+        var activities = new RecordingActivities(1)
+        {
+            FailDiscovery = true,
+            DiscoveryFailureType = "ImportExpired",
+        };
+        Func<Task> run = async () => await Run(activities);
+
+        await run.Should().ThrowAsync<WorkflowFailedException>();
         activities.Applied.Should().BeEmpty();
         activities.Rebuilds.Should().BeEmpty();
     }
@@ -462,6 +541,7 @@ public class TestIngestionWorkflows
                 .AddWorkflow<ArchiveItemImportWorkflow>()
                 .AddWorkflow<ArchiveWorkflow>()
                 .AddWorkflow<PhishInWorkflow>()
+                .AddWorkflow<PhantasyTourWorkflow>()
                 .AddWorkflow<RefreshBatchWorkflow>()
         );
 
@@ -492,6 +572,9 @@ public class TestIngestionWorkflows
     public class RecordingActivities(int count)
     {
         public UpstreamProvider Provider { get; init; } = UpstreamProvider.ArchiveOrg;
+        public UpstreamProvider[]? Providers { get; init; }
+        public bool FailArtistPreparation { get; init; }
+        public string? DiscoveryFailureType { get; init; }
         public int PhishListings { get; private set; }
         public List<int> Attempts { get; } = [];
         public List<int> Applied { get; } = [];
@@ -541,6 +624,11 @@ public class TestIngestionWorkflows
             IngestionExecution execution
         )
         {
+            if (FailArtistPreparation)
+            {
+                throw new ApplicationFailureException("Artist is missing", nonRetryable: true);
+            }
+
             lock (sync)
             {
                 Preparations++;
@@ -548,8 +636,19 @@ public class TestIngestionWorkflows
                 if (Preparations == 11)
                     EleventhArtistPrepared.TrySetResult();
             }
-            return new(request.Artist, [Provider]);
+            return new(request.Artist, Providers ?? [Provider]);
         }
+
+        [Activity("PhantasyTour.ReadShowPage")]
+        public PhantasyTourDiscovery ReadPhantasyTourPage(
+            ProviderWorkflowContext context,
+            PhantasyTourPage? cursor
+        ) =>
+            throw new ApplicationFailureException(
+                "Phantasy Tour returned HTTP 403",
+                "PhantasyTourForbidden",
+                nonRetryable: true
+            );
 
         [Activity("PhishIn.PrepareCatalogs")]
         public PhishInCatalogs PrepareCatalogsAsync(ProviderWorkflowContext context) =>
@@ -580,6 +679,7 @@ public class TestIngestionWorkflows
             if (FailDiscovery)
                 throw new ApplicationFailureException(
                     "Required upstream listing unavailable",
+                    DiscoveryFailureType,
                     nonRetryable: true
                 );
             var items = Enumerable

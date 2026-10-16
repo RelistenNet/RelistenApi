@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Relisten.Api.Models;
 using Relisten.Ingestion.Providers.Archive;
@@ -30,14 +31,30 @@ public class ArtistRefreshWorkflow
             ImportWorkflowOptions.Activity(IngestionQueues.Database)
         );
 
-        var result = await RefreshProvidersAsync(request, execution, plan.Providers);
+        ArtistImportResult result;
+        try
+        {
+            result = await RefreshProvidersAsync(request, execution, plan.Providers);
+        }
+        catch (ChildWorkflowFailureException error)
+            when (!TemporalException.IsCanceledException(error) && !ContainsExpiration(error))
+        {
+            // A provider can fail after it or an earlier provider committed sources.
+            // Restore their show/year associations before reporting the failed import;
+            // another provider's outage must not hide already imported recordings.
+            await CatalogSteps.RebuildArtist(request.Artist, execution);
+            throw;
+        }
 
         // Partial and empty imports also repair derived data left by earlier failed work.
-        // Cancellation and failed prerequisites propagate before reaching this step.
         await CatalogSteps.RebuildArtist(request.Artist, execution);
 
         return result;
     }
+
+    private static bool ContainsExpiration(Exception error) =>
+        error is ApplicationFailureException { ErrorType: "ImportExpired" }
+        || error.InnerException != null && ContainsExpiration(error.InnerException);
 
     private static async Task<ArtistImportResult> RefreshProvidersAsync(
         ArtistRefreshCommand request,
