@@ -54,6 +54,19 @@ public partial class SetlistFmImporter
         );
     }
 
+    /// <summary>Reconciles tour bounds from committed setlists after complete pagination.</summary>
+    public Task<int> RefreshTourDatesAsync(ProviderContext context)
+    {
+        if (!context.Artist.features.tours)
+        {
+            return Task.FromResult(0);
+        }
+
+        // Concurrent items only extend ranges. Recompute once they have settled
+        // so corrections that move a boundary inward also reach the catalog.
+        return context.CommitAsync(() => _tourService.RefreshDatesFromSetlists(context.Artist));
+    }
+
     /// <summary>Applies a setlist in one transaction and returns its current catalog identity.</summary>
     public async Task<SetlistFmItemResult> ImportSetlistAsync(
         ProviderContext context,

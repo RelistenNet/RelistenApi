@@ -47,12 +47,16 @@ public class TestPagedProviderWorkflow
                 await activities.LastPageItemEntered.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 activities.MaxActive.Should().BeInRange(2, 10);
                 activities.ReadPages.Should().Equal(1);
+                activities.FinalizationCalls.Should().Be(0);
                 activities.ReleaseFirstItem.TrySetResult();
                 var result = await handle.GetResultAsync();
 
                 result.CompletedItems.Should().Be(failItem ? 121 : 122);
                 result.FailedItems.Should().Be(failItem ? 1 : 0);
                 activities.ReadPages.Should().Equal(1, 2, 3);
+                activities.FinalizationCalls.Should().Be(1);
+                activities.ActiveDuringFinalization.Should().Be(0);
+                activities.PagesAtFinalization.Should().Equal(1, 2, 3);
                 activities.Imported.Should().BeEquivalentTo(Enumerable.Range(0, 122));
                 var firstHistory = await environment
                     .Client.GetWorkflowHandle(handle.Id, handle.ResultRunId)
@@ -71,6 +75,44 @@ public class TestPagedProviderWorkflow
                 await new WorkflowReplayer(
                     new WorkflowReplayerOptions().AddWorkflow<SetlistFmWorkflow>()
                 ).ReplayWorkflowAsync(firstHistory);
+            })
+        );
+    }
+
+    [Test]
+    public async Task FailedListingAfterRolloverDoesNotFinalizeTourDates()
+    {
+        await using var environment = await WorkflowEnvironment.StartLocalAsync();
+        var activities = new PagedActivities(false, failListing: true);
+        using var workflows = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Workflows).AddWorkflow<SetlistFmWorkflow>()
+        );
+        using var provider = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(
+                IngestionQueues.Providers[UpstreamProvider.SetlistFm]
+            ).AddAllActivities(activities)
+        );
+
+        await workflows.ExecuteAsync(() =>
+            provider.ExecuteAsync(async () =>
+            {
+                var input = new ProviderRequest<RefreshSetlistFmArtist>(
+                    new(new ArtistId(Guid.NewGuid())),
+                    new(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddHours(1))
+                );
+                var handle = await environment.Client.StartWorkflowAsync(
+                    (SetlistFmWorkflow workflow) => workflow.RunAsync(input, null),
+                    new WorkflowOptions("failed-page/" + Guid.NewGuid(), IngestionQueues.Workflows)
+                );
+
+                Func<Task> result = async () => await handle.GetResultAsync();
+                await result.Should().ThrowAsync<WorkflowFailedException>();
+
+                activities.ReadPages.Should().Equal(1, 2);
+                activities.Imported.Should().BeEquivalentTo(Enumerable.Range(0, 120));
+                activities.FinalizationCalls.Should().Be(0);
             })
         );
     }
@@ -173,6 +215,7 @@ public class TestPagedProviderWorkflow
                 activities.Imported.Should().BeEquivalentTo(Enumerable.Range(0, 10));
                 activities.MaxActive.Should().Be(10);
                 activities.Active.Should().Be(0);
+                activities.FinalizationCalls.Should().Be(0);
             })
         );
     }
@@ -181,11 +224,15 @@ public class TestPagedProviderWorkflow
         bool failItem,
         bool holdFirstItem = false,
         bool holdAllItems = false,
-        bool expireItem = false
+        bool expireItem = false,
+        bool failListing = false
     )
     {
         public List<int> ReadPages { get; } = [];
         public List<int> Imported { get; } = [];
+        public int FinalizationCalls { get; private set; }
+        public int ActiveDuringFinalization { get; private set; }
+        public int[] PagesAtFinalization { get; private set; } = [];
         private readonly object sync = new();
         public int Active { get; private set; }
         public int MaxActive { get; private set; }
@@ -213,6 +260,15 @@ public class TestPagedProviderWorkflow
         {
             var page = cursor?.Number ?? 1;
             ReadPages.Add(page);
+            if (failListing && page == 2)
+            {
+                throw new ApplicationFailureException(
+                    "Fixture listing is unavailable.",
+                    "UnavailableFixturePage",
+                    nonRetryable: true
+                );
+            }
+
             return page switch
             {
                 1 => new(Items(0, 120), new(2)),
@@ -220,6 +276,15 @@ public class TestPagedProviderWorkflow
                 3 => new(Items(120, 2), null),
                 _ => throw new InvalidOperationException("Unexpected cursor"),
             };
+        }
+
+        [Activity("SetlistFm.RefreshTourDates")]
+        public int RefreshTourDatesAsync(ProviderWorkflowContext context)
+        {
+            FinalizationCalls++;
+            ActiveDuringFinalization = Active;
+            PagesAtFinalization = ReadPages.ToArray();
+            return 0;
         }
 
         [Activity("SetlistFm.ImportSetlist")]

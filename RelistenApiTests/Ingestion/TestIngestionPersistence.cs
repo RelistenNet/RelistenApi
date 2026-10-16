@@ -661,6 +661,56 @@ public class TestIngestionPersistence
     }
 
     [Test]
+    public async Task SetlistFmCorrectsTourBoundsAfterAChangedShowAndAnUnchangedRefresh()
+    {
+        await ConfigureProvider("setlist.fm", 6);
+        var listing = JObject.Parse(
+            ProviderFixtures.Response("setlist.fm", new Uri("https://fixture/setlists"))
+        );
+        var setlists = listing["setlist"]!.Children<JObject>().ToArray();
+        var firstShow = setlists.Single(setlist => (string?)setlist["id"] == "setlist-1");
+        var lastShow = setlists.Single(setlist => (string?)setlist["id"] == "setlist-2");
+        lastShow["eventDate"] = "10-01-2000";
+        upstream.Respond = _ => listing.ToString();
+
+        (await Import()).CompletedItems.Should().Be(2);
+        var originalShows = await db.WithWriteConnection(connection =>
+            connection.QueryAsync<(long Id, Guid Uuid)>(
+                "SELECT id, uuid FROM setlist_shows WHERE artist_id=@artistId ORDER BY id",
+                new { artistId }
+            )
+        );
+        var artist = (
+            await host.Services.GetRequiredService<ArtistService>().FindArtistById(artistId)
+        )!;
+        var tours = host.Services.GetRequiredService<TourService>();
+        var initialTour = (await tours.AllForArtist(artist)).Should().ContainSingle().Subject;
+        initialTour.start_date.Should().Be(new DateTime(2000, 1, 1));
+        initialTour.end_date.Should().Be(new DateTime(2000, 1, 10));
+
+        // The boundary moves inward. Incremental LEAST/GREATEST updates cannot
+        // repair it, so the completed provider refresh must recompute the range.
+        firstShow["eventDate"] = "05-01-2000";
+        firstShow["lastUpdated"] = "2026-01-02T00:00:00Z";
+        (await Import()).Status.Should().Be(ImportStatus.Completed);
+        var correctedTour = (await tours.AllForArtist(artist)).Single();
+        correctedTour.start_date.Should().Be(new DateTime(2000, 1, 5));
+        correctedTour.end_date.Should().Be(new DateTime(2000, 1, 10));
+
+        (await Import()).Status.Should().Be(ImportStatus.Completed);
+        var repeatedTour = (await tours.AllForArtist(artist)).Single();
+        repeatedTour.start_date.Should().Be(correctedTour.start_date);
+        repeatedTour.end_date.Should().Be(correctedTour.end_date);
+        var repeatedShows = await db.WithWriteConnection(connection =>
+            connection.QueryAsync<(long Id, Guid Uuid)>(
+                "SELECT id, uuid FROM setlist_shows WHERE artist_id=@artistId ORDER BY id",
+                new { artistId }
+            )
+        );
+        repeatedShows.Should().Equal(originalShows);
+    }
+
+    [Test]
     public async Task ConcurrentSetlistsShareVenueTourAndSongsAndPreserveTourRange()
     {
         await ConfigureProvider("setlist.fm", 6);

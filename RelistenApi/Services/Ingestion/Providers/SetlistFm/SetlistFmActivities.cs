@@ -23,6 +23,15 @@ public sealed class SetlistFmActivities(ProviderActivityRunner runner)
             (importer, provider) => importer.ReadSetlistPageAsync(provider, page)
         );
 
+    /// <summary>Returns an attempt-local changed-tour count, separate from completed show items.</summary>
+    [Activity("SetlistFm.RefreshTourDates")]
+    public Task<int> RefreshTourDatesAsync(ProviderWorkflowContext context) =>
+        runner.RunAsync<SetlistFmImporter, int>(
+            context,
+            UpstreamProvider.SetlistFm,
+            (importer, provider) => importer.RefreshTourDatesAsync(provider)
+        );
+
     [Activity("SetlistFm.ImportSetlist")]
     public Task<SetlistFmItemResult> ImportSetlistAsync(
         ProviderWorkflowContext context,

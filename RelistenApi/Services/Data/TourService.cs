@@ -32,10 +32,11 @@ namespace Relisten.Data
                 )
             );
 
-        /// <summary>Derives tour bounds from committed setlist dates after a complete upstream listing.</summary>
-        public async Task RefreshDatesFromSetlists(Artist artist)
+        /// <summary>Recomputes all nonempty tour ranges for an artist from committed setlists.</summary>
+        /// <returns>The number changed by this attempt. Tours with no setlists remain unchanged.</returns>
+        public Task<int> RefreshDatesFromSetlists(Artist artist)
         {
-            await db.WithWriteConnection(con =>
+            return db.WithWriteConnection(con =>
                 con.ExecuteAsync(
                     @"
                 UPDATE tours t

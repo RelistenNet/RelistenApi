@@ -9,7 +9,7 @@ namespace Relisten.Ingestion.Providers.SetlistFm;
 /// <summary>Starts the next page after the preceding page has settled.</summary>
 public sealed record SetlistFmProgress(SetlistFmPage NextPage, ProviderSummary Summary);
 
-/// <summary>Reads and applies one page at a time, continuing between completed pages.</summary>
+/// <summary>Imports setlist pages, then reconciles tour bounds after every page has settled.</summary>
 [Workflow]
 public sealed class SetlistFmWorkflow
 {
@@ -33,6 +33,7 @@ public sealed class SetlistFmWorkflow
         _summary = progress?.Summary ?? new();
 
         await ImportSetlistPagesAsync(progress?.NextPage);
+        await RefreshTourDatesAsync();
 
         return _summary;
     }
@@ -80,6 +81,18 @@ public sealed class SetlistFmWorkflow
             page.Items,
             _input.Execution,
             ImportSetlistAsync
+        );
+    }
+
+    private Task RefreshTourDatesAsync()
+    {
+        ImportWorkflowOptions.RequireActive(_input.Execution);
+
+        // A failed listing must not finalize. Item failures can still leave
+        // useful committed setlists, whose dates define the cached tour range.
+        return Workflow.ExecuteActivityAsync(
+            (SetlistFmActivities activities) => activities.RefreshTourDatesAsync(_context),
+            _options
         );
     }
 
