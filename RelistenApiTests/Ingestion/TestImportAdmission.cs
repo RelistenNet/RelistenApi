@@ -2,7 +2,11 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Workflows;
+using Temporalio.Activities;
+using Temporalio.Client.Schedules;
 using Temporalio.Testing;
+using Temporalio.Worker;
 
 namespace RelistenApiTests.Ingestion;
 
@@ -134,6 +138,89 @@ public class TestImportAdmission
                 new ImportArchiveItem(new ArtistId(Guid.NewGuid()), new ArchiveItemId(item))
             );
         await start.Should().ThrowAsync<InvalidImportRequest>();
+    }
+
+    [Test]
+    public async Task RegisteredScheduleExecutesThinRefreshAndRegistrationPreservesPause()
+    {
+        var client = Client(new Catalog([]));
+        var scheduleIds = new[]
+        {
+            "relisten-ingest-discover",
+            "relisten-ingest-full",
+            "relisten-ingest-thin",
+        };
+
+        await client.RegisterSchedulesAsync();
+
+        try
+        {
+            foreach (var id in scheduleIds)
+            {
+                var schedule = environment.Client.GetScheduleHandle(id);
+                var description = await schedule.DescribeAsync();
+                description.Schedule.Action.Should().BeOfType<ScheduleActionStartWorkflow>();
+
+                // Keep the test independent of the wall-clock cron boundary.
+                await schedule.PauseAsync("Test operator pause");
+            }
+
+            await client.RegisterSchedulesAsync();
+            var thin = environment.Client.GetScheduleHandle("relisten-ingest-thin");
+            (await thin.DescribeAsync()).Schedule.State.Paused.Should().BeTrue();
+
+            var activities = new ScheduledBatchActivities();
+            using var workflows = new TemporalWorker(
+                environment.Client,
+                new TemporalWorkerOptions(
+                    IngestionQueues.Workflows
+                ).AddWorkflow<RefreshBatchWorkflow>()
+            );
+            using var database = new TemporalWorker(
+                environment.Client,
+                new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(activities)
+            );
+
+            await workflows.ExecuteAsync(() =>
+                database.ExecuteAsync(async () =>
+                {
+                    // Triggering a paused schedule is an explicit operator action.
+                    await thin.TriggerAsync();
+                    var workflowId = await activities.Started.Task.WaitAsync(
+                        TimeSpan.FromSeconds(20)
+                    );
+                    var result = await environment
+                        .Client.GetWorkflowHandle(workflowId)
+                        .GetResultAsync<ImportBatchResult>()
+                        .WaitAsync(TimeSpan.FromSeconds(20));
+
+                    activities.Request.Should().BeOfType<RefreshRecentlyActiveArtists>();
+                    result.Should().Be(new ImportBatchResult());
+                })
+            );
+        }
+        finally
+        {
+            foreach (var id in scheduleIds)
+            {
+                await environment.Client.GetScheduleHandle(id).DeleteAsync();
+            }
+        }
+    }
+
+    public sealed class ScheduledBatchActivities
+    {
+        public TaskCompletionSource<string> Started { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public CatalogBatchCommand? Request { get; private set; }
+
+        [Activity("Ingestion.SelectArtists")]
+        public ArtistId[] SelectArtists(CatalogBatchCommand request, IngestionExecution execution)
+        {
+            Request = request;
+            Started.TrySetResult(ActivityExecutionContext.Current.Info.WorkflowId!);
+            return [];
+        }
     }
 
     private TemporalIngestionClient Client(IImportAdmissionCatalog catalog) =>

@@ -167,11 +167,12 @@ public sealed class TemporalIngestionClient
         }
     }
 
+    // Leave IdConflictPolicy at the SDK default: overlapping starts fail,
+    // and schedule serialization rejects an explicit policy.
     private static WorkflowOptions Options(string id) =>
         new(id, IngestionQueues.Workflows)
         {
             ExecutionTimeout = TimeSpan.FromDays(7),
-            IdConflictPolicy = WorkflowIdConflictPolicy.Fail,
             IdReusePolicy = WorkflowIdReusePolicy.AllowDuplicate,
         };
 
