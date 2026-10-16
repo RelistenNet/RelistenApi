@@ -45,6 +45,24 @@ You can also open the repository in your C# editor and use its debugger.
 
 Open the API Server at: [http://localhost:3823/api-docs](http://localhost:3823/api-docs)
 
+## Ingestion and operations
+
+`RelistenIngestionWorker` runs Temporal ingestion separately from the API.
+Temporal records execution progress so imports can resume after worker restarts.
+Hangfire still runs cache and popularity jobs in production.
+
+Start with the [ingestion overview](docs/temporal/README.md) for architecture,
+provider behavior, and production validation. Use the
+[operations guide](docs/temporal/operations.md) for imports, schedules, and recovery,
+or [local setup](local-dev/README.md#run-an-ingestion-worker-manually) for development commands.
+Importing a seed artist can fetch its full upstream catalog; the seed does not
+limit import work.
+
+The API initializes Sentry when `SENTRY_DSN` is configured. The standalone
+ingestion worker currently has no Sentry initialization or scheduled-run monitor.
+See [diagnostics and monitoring](docs/temporal/operations.md#diagnostics-and-monitoring)
+for coverage and the remaining work.
+
 ## Formatting
 
 Restore the repository-local CSharpier tool, then format the codebase:

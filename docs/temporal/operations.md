@@ -61,16 +61,42 @@ Workers resume open executions after a restart. A completed artist can have stat
 
 Each operation has a seven-day deadline shared across children and continuation runs. Do not reset or retry an old execution beyond that deadline. A fresh import is the normal recovery after item failures, cancellation, or expiry. A standalone artist rebuild repairs derived data without requiring upstream availability. Every completed artist import rebuilds, including when it selects no items.
 
+An ordinary provider failure also triggers an artist rebuild before the workflow
+reports failure, because earlier item activities may have committed catalog
+changes. Cancellation and expiry skip that recovery rebuild. If recovery fails,
+inspect the workflow history and run a standalone rebuild after resolving the
+cause.
+
 Cancellation reaches activities through heartbeats. HTTP accepts the cancellation token. Catalog transactions check it before applying writes and before commit. Different shows for one artist write concurrently; constraints and row locks coordinate shared records. Existing Dapper calls have bounded SQL timeouts; cancellation does not immediately interrupt every query. Rebuild SQL owns its transactions and may complete some work before observing cancellation. Wait for the worker's activities to stop before handing ingestion to another owner. Committed catalog changes remain committed.
 
 Archive verification results include fixed deletion evidence in Temporal history. Only errcode 104 proves upstream deletion. The completeness checks and five-candidate guard apply independently of workflow status. A guarded result must remain visible in logs even if an external alert fails.
 
 Watch queue wait, activity failures, upstream 429/5xx responses, Temporal history growth, and Redis eviction/persistence. HTTP requests have a 60-second timeout and 64 MiB response limit. Activity attempts have a five-minute timeout, five attempts, a ten-second heartbeat timeout, and six hours including queue/retry delays. Positive `Retry-After` values influence retry timing. These bounds do not establish production capacity; use the [queue guide](upstream-throttling.md) for tuning.
 
+## Diagnostics and monitoring
+
 The worker writes JSON console logs with Temporal and importer scopes. Use
 `WorkflowId`, `ActivityId`, `Artist`, `Provider`, and `Attempt` to connect an
 upstream response or item result to its workflow. Item results distinguish applied,
 unchanged, and skipped inputs; they are not counts of newly created catalog rows.
+
+The API initializes Sentry through `UseSentry` when `SENTRY_DSN` is configured.
+Production supplies that setting to the API. The standalone ingestion worker
+does not run the API's host setup: it currently neither initializes Sentry nor
+receives `SENTRY_DSN` in its deployment. Existing importer calls to
+`SentrySdk.CaptureException` therefore do not establish Sentry coverage there.
+Temporal history and worker logs are the current sources for ingestion failures.
+
+Scheduled-run monitoring remains unimplemented. Sentry's
+[.NET Cron Monitoring](https://docs.sentry.io/platforms/dotnet/crons/)
+supports check-ins for missed starts, excessive runtime, and reported failures.
+The installed Sentry 6.0 SDK already exposes manual check-ins. A worker
+integration must send external reports from activities, preserve the check-in
+identity across retries and workflow continuations, and evaluate typed results:
+a completed batch can contain partial or failed artist imports. Expected skips
+and attempts that later succeed should not generate separate failure alerts.
+Sentry initialization and deployment configuration are both required before
+this coverage can be claimed.
 
 ## Switch from Hangfire
 
@@ -97,8 +123,16 @@ Redis loss or eviction can make referenced history unreadable. The codec reports
 
 If required bytes cannot be recovered, stop new admission and pause affected schedules. Attempt cancellation and drain running activities. If decoding prevents cancellation from being processed, stop the worker and verify that activity writes have ended before terminating the unreadable execution. Start fresh only after the old execution and its activities can no longer write. A fresh artist import or standalone rebuild repairs derived data. Do not delete arbitrary Redis keys as a recovery step.
 
-Production logical backups dump only the `app` database. Temporal uses separate `temporal` and `temporal_visibility` databases in the same PostgreSQL cluster, so these dumps exclude workflow state without schema filters. The prepared deployment does not add backups or archival for Temporal or its payload Redis. Persistent storage supports pod restarts; it is not a backup guarantee.
+Production logical backups dump only the `app` database. Temporal uses separate `temporal` and `temporal_visibility` databases in the same PostgreSQL cluster, so these dumps exclude workflow state without schema filters. The deployment adds no backups or archival for Temporal or its payload Redis. Persistent storage supports pod restarts; it is not a backup guarantee.
 
 After catalog restoration or loss of Temporal/payload storage, keep ingestion stopped. Discard unmatched workflow state, recreate the namespace and schedules, and start fresh imports from the restored catalog. Do not resume old histories against a catalog or payload store restored to a different point. This recovery policy trades saved progress for simpler backups of rebuildable imports. A future physical PostgreSQL cluster backup would include all databases; it cannot exclude Temporal with `pg_dump` flags.
 
-The prepared manifests live in `../relisten-flux/clusters/relisten3-k3s/temporal/`. Explicit versioned Jobs initialize the two SQL schemas and the seven-day namespace. The server uses its own database role; frontend and UI Services remain private. The cluster uses manual manifest application. Follow that bundle's README and the [production cutover guide](production-cutover.md); applying the bundle alone does not switch API admission or enable ingestion schedules.
+The manifests live in `clusters/relisten3-k3s/temporal/` in the infrastructure
+repository. Until [infrastructure PR #22](https://github.com/RelistenNet/relisten-flux/pull/22)
+merges, use its `codex/temporal-production` branch; a checkout of `main` may not
+contain the bundle. Explicit versioned Jobs initialize the two SQL schemas and
+the seven-day namespace. The server uses its own database role; frontend and UI
+Services remain private. The cluster uses manual manifest application. Follow
+that bundle's README and the [production cutover guide](production-cutover.md);
+applying the bundle alone does not switch API admission or enable ingestion
+schedules.

@@ -60,7 +60,9 @@ Pass ordinary `dotnet test` options through the script, for example:
 
 A plain `dotnet test RelistenApiTests` skips PostgreSQL/Redis integration tests
 unless `RELISTEN_LOCAL_INGESTION_TESTS=1` is set. Tests for the separate tour
-fixture keep their existing opt-in configuration.
+fixture require `RELISTEN_TOUR_TEST_DATABASE_URL` pointing to a disposable local
+database. See [the tour fixture](../RelistenApiTests/Controllers/TestToursController.cs)
+for its setup and cleanup behavior.
 
 ## Replace the local catalog explicitly
 

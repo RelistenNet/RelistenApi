@@ -4,15 +4,18 @@
 - `RelistenApi/` contains the ASP.NET Core API (controllers, services, models, importers, views, and `wwwroot/` assets).
 - `RelistenApiTests/` holds NUnit tests and fixtures (HTML snapshots in `RelistenApiTests/Fixtures/`).
 - `RelistenApi/Migrations/` includes database schema and data migrations.
+- `RelistenIngestionWorker/` hosts Temporal ingestion and operator commands without starting the API or Hangfire. Workflows, activities, and contracts live in `RelistenApi/Services/Ingestion/`.
+- `docs/temporal/README.md` links the ingestion architecture, provider contracts, operations, and production evidence. Read the relevant contracts before changing workflow behavior.
 - `local-dev/` contains Docker Compose for Postgres/Redis; helper scripts live at the repo root (`start-local-databases.sh`, `stop-local-databases.sh`).
 - Root files like `RelistenApi.sln`, `Dockerfile`, and `Jenkinsfile` describe solution/build entry points.
 
 ## Build, Test, and Development Commands
-- `./start-local-databases.sh` starts Postgres/Redis and restores a dev backup; use `./stop-local-databases.sh` to shut them down.
-- `docker-compose -f local-dev/docker-compose.yml up -d` starts databases without refreshing the backup.
+- `./start-local-databases.sh` starts the local services and loads the checked-in seed only into an empty catalog. It preserves existing data and starts no imports or schedules. Use `./stop-local-databases.sh` to stop services without deleting data.
+- `local-dev/README.md` is the canonical setup guide. No AWS access, backup download, or separate Temporal database container is needed for tests.
 - `dotnet build RelistenApi.sln` builds the solution.
 - `dotnet run --project RelistenApi/RelistenApi.csproj` runs the API locally (see `README.markdown` for URLs).
-- `dotnet test RelistenApiTests/RelistenApiTests.csproj` runs the test suite.
+- `./test-local.sh` runs tests, including PostgreSQL/Redis integration tests, against disposable databases on the shared local services. Pass filters and other `dotnet test` options through this script.
+- Plain `dotnet test RelistenApiTests/RelistenApiTests.csproj` skips those integration tests unless `RELISTEN_LOCAL_INGESTION_TESTS=1` is set.
 
 ## Coding Style & Naming Conventions
 - C# uses standard conventions: PascalCase for types/methods, camelCase for locals/parameters, and private fields commonly prefixed with `_`.
@@ -25,6 +28,8 @@
 - Tests use NUnit with FluentAssertions; new tests should live in `RelistenApiTests/` alongside related fixtures.
 - Name test classes `Test*` and keep `[TestFixture]`/`[Test]` attributes aligned with existing patterns.
 - There are no explicit coverage gates; run targeted tests when changing importer logic or data services.
+- Temporal tests use SDK-managed temporary servers and synthetic upstream responses. Do not start production schedules or import real provider catalogs to verify local behavior.
+- Verify success, partial failure, and recovery through workflow results and catalog service contracts. A completed Temporal workflow can still report partial or failed imports.
 
 ## Commit & Pull Request Guidelines
 - Commit messages are short, imperative, and scoped (e.g., “Fix 3 phish.in import issues”).
@@ -34,6 +39,8 @@
 ## Configuration & Data Notes
 - Local configuration lives in `RelistenApi/appsettings.json`; use environment variables for overrides (e.g., `ASPNETCORE_ENVIRONMENT=Development`).
 - Database access is expected via the local Docker containers (see `README.markdown` for ports/credentials).
+- The standalone worker uses its own host configuration; it does not execute API `Program` or `Startup` setup. Dependencies and telemetry configured there do not automatically apply to the worker. See `docs/temporal/operations.md` for worker settings and current Sentry coverage.
+- Keep workflow code deterministic. Network calls, database writes, and external reporting belong in activities. Drain incompatible open histories before deploying changed workflow behavior, or use Temporal versioning.
 
 ## Database & Postgres Tips
 - Local Postgres runs on `127.0.0.1:15432` with database `relisten_db`, user `relisten`, password `local_dev_password`.
