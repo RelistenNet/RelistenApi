@@ -17,6 +17,10 @@ Production was deployed from the unmerged branches on October 16. See the [produ
 The [full daily sync record](evidence/full-sync-2026-10-16.md) reports the completed
 4,379-artist run, measured catalog growth, throughput, failures, and their fixes.
 
+The [provider audit](evidence/provider-audit-2026-10-16.md) checks the other six
+providers’ counting, skips, and finalization after the Archive guard fix. It
+records the Jerry repair and Setlist.fm corrections and their verification.
+
 The [readability follow-up](readability-follow-up.md) records the full-branch review, code-reading acceptance criteria, and copy-ready prompt-template changes.
 
 ## Earlier research

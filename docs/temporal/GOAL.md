@@ -48,6 +48,15 @@ check are recorded with the measurements. All three schedules are active again.
 Phantasy Tour access failures remain an upstream limitation; no capacity increase
 is indicated by the observed load.
 
+**October 16 provider audit: two finalization fixes verified on the branch.**
+The [audit record](evidence/provider-audit-2026-10-16.md) covers the other six
+providers’ counting, skips, and finalization. Jerry venue repair now publishes
+committed changes before reporting an ordinary provider failure. Setlist.fm
+recomputes nonempty tour ranges after complete enumeration, so corrected show
+dates can move boundaries inward. The full suite passed 294 tests with 24
+existing tour fixture skips; the solution build, formatting, and independent
+review passed. These follow-ups await deployment; production remains on `0a5b85e`.
+
 The earlier cache-simplification pass passed 256 local-stack tests with zero failures and 24 unrelated opt-in tour skips. Solution build, formatting, whitespace, and documentation links passed. A fresh correctness and source-reading review found no actionable issue. See [the October 12 plan update](provider-workflow-plan.md#cache-oriented-simplification-october-12) for changes, trade-offs, and checks. The earlier [readability follow-up](readability-follow-up.md) and [245-test verification record](evidence/provider-workflow-verification.md) preserve baseline evidence, including Release publishes and CLI rejection checks. Those earlier checks did not include production verification or deployment.
 
 ## Earlier implementation approaches
