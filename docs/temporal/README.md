@@ -14,6 +14,9 @@ Temporal owns execution progress. PostgreSQL owns catalog rows. A Redis payload 
 
 Production was deployed from the unmerged branches on October 16. See the [production validation record](evidence/production-cutover-2026-10-16.md) for tested images, provider results, fixes, and operating state. Earlier workflow protocols and the draft migration were replaced directly before deployment. AI processing and search indexing remain outside this work.
 
+The [full daily sync record](evidence/full-sync-2026-10-16.md) reports the completed
+4,379-artist run, measured catalog growth, throughput, failures, and their fixes.
+
 The [readability follow-up](readability-follow-up.md) records the full-branch review, code-reading acceptance criteria, and copy-ready prompt-template changes.
 
 ## Earlier research

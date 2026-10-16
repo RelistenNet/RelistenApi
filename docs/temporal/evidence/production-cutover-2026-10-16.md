@@ -111,19 +111,22 @@ changes included seven reviews on Phish's 1983 show, eleven on its October 12,
 Phantasy Tour finalization. Live popularity values also changed. The Archive
 canary, Dead show, and Trey show responses were fully unchanged.
 
-## Operating state
+## Operating state after the initial cutover
 
 All three Temporal schedules are active with overlap policy `Skip`:
 
-- `relisten-ingest-thin`: next at October 16, 20:00 UTC (13:00 PDT).
-- `relisten-ingest-discover`: next at October 17, 06:30 UTC (October 16, 23:30 PDT).
-- `relisten-ingest-full`: next at October 17, 07:00 UTC (00:00 PDT).
+- `relisten-ingest-thin`: at 00:00, 02:00, 04:00, 12:00, 14:00, 16:00, 18:00,
+  20:00, and 22:00 UTC. It skips the discovery/full-refresh window.
+- `relisten-ingest-discover`: daily at 06:30 UTC.
+- `relisten-ingest-full`: daily at 07:00 UTC.
 
 After registration, the thin schedule was explicitly triggered. Its execution
 `ingest/scheduled/thin-2026-10-16T18:07:17Z` completed **46 artists**, with zero
 partial results, failures, or conflicts. This tested the actual scheduled action
-and batch workflow; it did not wait for the next cron boundary. The overnight
-full catalog and artist-discovery runs have not yet executed under Temporal.
+and batch workflow; it did not wait for the next cron boundary. The later
+supervised discovery and full-catalog runs are recorded in the
+[full-sync evidence](full-sync-2026-10-16.md), together with the resulting fixes,
+new release images, and restored operating state.
 
 Both API deployments select Temporal admission and the dedicated payload Redis.
 Hangfire has one live server polling only `default`; its three saved ingestion
@@ -133,9 +136,9 @@ tracked manifest retains that replica and the tested image digests.
 The independent final check found listener readiness passing, healthy PostgreSQL
 replication, and stable fresh public API identities and playback URLs. During the
 scheduled thin run, the worker used about 0.83 CPU cores and 245 MiB; its node used
-45% CPU and 51% memory. Replica replay lag was 0.037 seconds. These are observed
-canary loads, not capacity guarantees for the overnight full import. Payload Redis
-reported healthy AOF writes and no evictions.
+45% CPU and 51% memory. Replica replay lag was 0.037 seconds. These observations
+describe the initial canaries. The full-sync record measures the larger catalog
+run. Payload Redis reported healthy AOF writes and no evictions.
 
 Both pull requests remain unmerged. Use the cutover procedure to return ownership
 to Hangfire if needed. Preserve committed catalog changes and stop Temporal work
