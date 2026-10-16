@@ -127,7 +127,9 @@ public partial class ArchiveOrgImporter
             .Except(observed.Except(ineligible))
             .ToArray();
 
-        if (ExceedsDeletionLimit(candidates.Length) || ExceedsDeletionLimit(noMp3.Length))
+        // The guard limits stored recordings at risk, not skipped upstream items.
+        // Candidates already include existing recordings that lost their MP3s.
+        if (ExceedsDeletionLimit(candidates.Length))
         {
             await ReportDeletionGuard(context.Artist, candidates, null);
             return new(ArchiveDeletionDisposition.Guarded, []);

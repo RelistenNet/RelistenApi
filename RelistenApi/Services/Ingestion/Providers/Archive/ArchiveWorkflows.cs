@@ -133,9 +133,14 @@ public sealed class ArchiveWorkflow
         {
             _summary = _summary.Add(outcome.Result!.Disposition);
 
-            // Six candidates are enough to trigger the existing five-deletion
-            // guard. Retaining more would only enlarge the continuation payload.
-            if (outcome.Result.SkipReason == ArchiveSkipReason.NoVbrMp3 && _noMp3.Count < 6)
+            // New unplayable items have no stored recording to delete. Only keep
+            // existing recordings here; six are enough to trigger the deletion
+            // guard without enlarging the continuation payload further.
+            if (
+                outcome.Result.SkipReason == ArchiveSkipReason.NoVbrMp3
+                && outcome.Result.Source != null
+                && _noMp3.Count < 6
+            )
             {
                 _noMp3.Add(item.Id);
             }

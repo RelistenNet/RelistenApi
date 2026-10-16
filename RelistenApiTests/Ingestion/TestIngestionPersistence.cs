@@ -460,6 +460,83 @@ public class TestIngestionPersistence
         notifications.Messages.Should().ContainSingle();
     }
 
+    [TestCase(0)]
+    [TestCase(1)]
+    [TestCase(6)]
+    public async Task ArchiveDeletionGuardCountsStoredRecordingsNotNewUnplayableItems(
+        int existingCount
+    )
+    {
+        var existing = Enumerable.Range(0, existingCount).Select(i => $"fixture-existing-{i}");
+        var newItems = Enumerable.Range(0, 6).Select(i => $"fixture-new-{i}");
+
+        string ListingFor(IEnumerable<string> identifiers)
+        {
+            var listing = JObject.Parse(Listing);
+            var template = listing["response"]!["docs"]![0]!;
+            var documents = new JArray(
+                identifiers.Select(identifier =>
+                {
+                    var document = template.DeepClone();
+                    document["identifier"] = identifier;
+                    document["addeddate"] = DateTime.UtcNow.ToString("O");
+                    return document;
+                })
+            );
+            listing["response"]!["docs"] = documents;
+            listing["response"]!["numFound"] = documents.Count;
+            return listing.ToString();
+        }
+
+        if (existingCount > 0)
+        {
+            var initialListing = ListingFor(existing);
+            upstream.Respond = uri =>
+                uri.AbsolutePath.StartsWith("/metadata/")
+                    ? Metadata("Playable").Replace("fixture-2000-01-01", uri.Segments.Last())
+                    : initialListing;
+            await Import();
+            (await Catalog()).Should().HaveCount(existingCount);
+        }
+
+        // Every item loses its MP3, but the six new items have never had catalog
+        // rows. They must neither alert nor consume the bounded deletion evidence.
+        var unplayableListing = ListingFor(newItems.Concat(existing));
+        upstream.Respond = uri =>
+        {
+            if (!uri.AbsolutePath.StartsWith("/metadata/"))
+            {
+                return unplayableListing;
+            }
+
+            var metadata = JObject.Parse(
+                Metadata("Unplayable").Replace("fixture-2000-01-01", uri.Segments.Last())
+            );
+            metadata["files"] = new JArray();
+            return metadata.ToString();
+        };
+        logs.Entries.Clear();
+        notifications.Messages.Clear();
+
+        var result = await Import();
+
+        result.Status.Should().Be(ImportStatus.Completed);
+        result.SkippedItems.Should().Be(6 + existingCount);
+        var guards = logs.Entries.Where(entry => entry.Event == ImportEvents.ArchiveDeletionGuard);
+        if (existingCount > 5)
+        {
+            (await Catalog()).Should().HaveCount(existingCount);
+            guards.Should().ContainSingle().Which.Fields["SourceDeletionCount"].Should().Be(6);
+            notifications.Messages.Should().ContainSingle();
+        }
+        else
+        {
+            (await Catalog()).Should().BeEmpty();
+            guards.Should().BeEmpty();
+            notifications.Messages.Should().BeEmpty();
+        }
+    }
+
     private async Task<ArtistImportResult?> RunArchive(bool temporal)
     {
         if (temporal)
