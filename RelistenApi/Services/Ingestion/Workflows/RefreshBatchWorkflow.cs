@@ -176,15 +176,13 @@ public class RefreshBatchWorkflow
             return ArtistOutcome.Conflict;
         }
         catch (TemporalException error)
-            when (!TemporalException.IsCanceledException(error) && !ContainsExpiration(error))
+            when (!TemporalException.IsCanceledException(error)
+                && !ImportWorkflowOptions.ContainsExpiration(error)
+            )
         {
             return ContainsConflict(error) ? ArtistOutcome.Conflict : ArtistOutcome.Failed;
         }
     }
-
-    private static bool ContainsExpiration(Exception error) =>
-        error is ApplicationFailureException { ErrorType: "ImportExpired" }
-        || error.InnerException != null && ContainsExpiration(error.InnerException);
 
     private static bool ContainsConflict(Exception error) =>
         error is WorkflowAlreadyStartedException

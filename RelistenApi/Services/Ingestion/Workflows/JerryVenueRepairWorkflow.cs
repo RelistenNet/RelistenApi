@@ -1,5 +1,6 @@
 using System.Threading.Tasks;
 using Relisten.Ingestion.Providers.Jerry;
+using Temporalio.Exceptions;
 using Temporalio.Workflows;
 
 namespace Relisten.Ingestion.Workflows;
@@ -17,14 +18,28 @@ public class JerryVenueRepairWorkflow
         execution = ImportWorkflowOptions.AssignExecution(execution);
 
         var providerRequest = new ProviderRequest<RepairJerryVenues>(request, execution);
-        var summary = await Workflow.ExecuteChildWorkflowAsync(
-            (JerryVenueRepairProviderWorkflow workflow) =>
-                workflow.RunAsync(providerRequest, null, null),
-            CoordinatorOptions.Child(
-                $"{Workflow.Info.WorkflowId}/provider/jerry-venue-repair",
-                execution
+        ProviderSummary summary;
+        try
+        {
+            summary = await Workflow.ExecuteChildWorkflowAsync(
+                (JerryVenueRepairProviderWorkflow workflow) =>
+                    workflow.RunAsync(providerRequest, null, null),
+                CoordinatorOptions.Child(
+                    $"{Workflow.Info.WorkflowId}/provider/jerry-venue-repair",
+                    execution
+                )
+            );
+        }
+        catch (ChildWorkflowFailureException error)
+            when (!TemporalException.IsCanceledException(error)
+                && !ImportWorkflowOptions.ContainsExpiration(error)
             )
-        );
+        {
+            // Repairs commit before provider finalization. Publish those venue changes
+            // to derived shows and cached responses even when finalization fails.
+            await CatalogSteps.RebuildArtist(request.Artist, execution);
+            throw;
+        }
 
         await CatalogSteps.RebuildArtist(request.Artist, execution);
 

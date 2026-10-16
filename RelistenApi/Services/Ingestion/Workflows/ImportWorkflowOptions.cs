@@ -46,6 +46,10 @@ internal static class ImportWorkflowOptions
         }
     }
 
+    internal static bool ContainsExpiration(Exception error) =>
+        error is ApplicationFailureException { ErrorType: "ImportExpired" }
+        || error.InnerException != null && ContainsExpiration(error.InnerException);
+
     internal static bool ShouldContinue(int completedCalls) =>
         completedCalls >= 100 || Workflow.ContinueAsNewSuggested;
 }
