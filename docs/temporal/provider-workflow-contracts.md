@@ -111,7 +111,16 @@ The initial provider guide must list these entrypoints and link each visible wor
 
 The earlier incident showed that a self-consistent partial upstream listing can still be incomplete. Preserve the existing completeness checks and direct metadata evidence independently of Temporal's execution status. Absence alone never permits deletion.
 
-`VerifyDeletionCandidates` takes the fixed discovery's observed IDs and at most six item IDs proved to have no VBR MP3. Six is enough to trip the existing five-candidate guard. It loads the current catalog candidate set, applies the guard, and performs direct verification for missing-listing candidates. Its typed result contains an overall `Allowed`, `Guarded`, or `NotApplicable` disposition and at most five item decisions when allowed. A guard is an overall result, never a fake `"*"` item.
+`VerifyDeletionCandidates` takes the fixed discovery’s observed IDs and at most
+six `ArchiveItemId` values for stored recordings proved to have no VBR MP3. For
+these skips, the item result includes the existing `CatalogSourceId` when present.
+An upstream item with no stored recording cannot become deletion evidence.
+
+Verification loads the current catalog candidates and applies the five-candidate
+guard. Six existing recordings are enough to trip it. Allowed candidates missing
+from the listing receive direct upstream verification. The typed result contains
+an overall `Allowed`, `Guarded`, or `NotApplicable` disposition and at most five
+item decisions when allowed. A guard is an overall result, never a fake `"*"` item.
 
 Each decision names `ArchiveItemId`, the evidence (`Present`, `Deleted`, `Unknown`, or `NoVbrMp3`), action (`Keep` or `Delete`), and reason. Only the existing upstream errcode 104 establishes Deleted. A 404, empty response, or dark flag alone cannot. No-VBR-MP3 evidence comes from the item metadata decision, as today. Item failures do not imply deletion and do not manufacture no-MP3 evidence; the current independent verification policy remains in force.
 

@@ -22,7 +22,15 @@ Hangfire's `ProcessDocument` and Temporal's item activity share selection reason
 
 A full refresh records the complete listing's observed IDs. Verification loads current catalog candidates and checks missing-listing items directly. Only upstream errcode 104 proves deletion. A 404, empty response, or dark flag alone does not. No-VBR-MP3 evidence comes from successful metadata validation; an exhausted item failure cannot manufacture that evidence.
 
-The existing five-candidate guard remains independent of workflow success. The provider keeps at most six no-MP3 IDs because six already trips that guard. Verification returns an overall allowed, guarded, or not-applicable result. Transactional deletion applies only the fixed verified decisions; it does not enumerate new candidates on retry. Guard notifications are best effort and may repeat after an activity retry.
+The existing five-candidate guard remains independent of workflow success. The
+provider keeps at most six IDs of stored recordings that lost their MP3s because
+six already trips that guard. New unplayable upstream items are skipped without
+consuming this evidence or counting as deletions.
+
+Verification returns an overall allowed, guarded, or not-applicable result.
+Transactional deletion applies only the fixed verified decisions; it does not
+enumerate new candidates on retry. Guard notifications are best effort and may
+repeat after an activity retry.
 
 Targeted Archive imports call the same `ImportItem` activity with a requested identifier. They do not enumerate or reconcile unrelated sources. An item outside the artist's Archive collection fails explicitly. Exact-year Archive imports also omit reconciliation. Other providers cannot accept targeted item commands.
 

@@ -40,9 +40,13 @@ three failed, and zero conflicts. The [measurement record](evidence/full-sync-20
 separates original results from later recovery. Fixes for failed-provider
 finalization, partial dates, review deduplication, and repeated history payloads
 passed 283 local-stack tests with 24 existing tour skips and two independent
-reviews. Release `684ec4b` is deployed; targeted recovery passed and all three
-schedules are active again. Phantasy Tour access failures remain an upstream
-limitation; no capacity increase is indicated by the observed load.
+reviews. Targeted recovery passed. A later alert audit found that new upstream
+items without VBR MP3 files were incorrectly counted as deletion risks. The
+`0a5b85e` follow-up counts only stored recordings; six focused integration tests
+passed, including the genuine six-recording guard. Its release and live no-alert
+check are recorded with the measurements. All three schedules are active again.
+Phantasy Tour access failures remain an upstream limitation; no capacity increase
+is indicated by the observed load.
 
 The earlier cache-simplification pass passed 256 local-stack tests with zero failures and 24 unrelated opt-in tour skips. Solution build, formatting, whitespace, and documentation links passed. A fresh correctness and source-reading review found no actionable issue. See [the October 12 plan update](provider-workflow-plan.md#cache-oriented-simplification-october-12) for changes, trade-offs, and checks. The earlier [readability follow-up](readability-follow-up.md) and [245-test verification record](evidence/provider-workflow-verification.md) preserve baseline evidence, including Release publishes and CLI rejection checks. Those earlier checks did not include production verification or deployment.
 

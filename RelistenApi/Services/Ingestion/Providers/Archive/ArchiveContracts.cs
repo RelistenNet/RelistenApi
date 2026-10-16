@@ -30,8 +30,8 @@ public enum ArchiveSkipReason
 }
 
 /// <summary>
-/// Reports an item outcome. Source identifies the stored recording even when
-/// skipped for missing MP3s; null means there is no recording to reconcile.
+/// Reports an item outcome. For NoVbrMp3 skips, Source identifies the stored
+/// recording or is null when the upstream item has not been imported.
 /// </summary>
 public sealed record ArchiveItemResult(
     ArchiveItemId Item,
