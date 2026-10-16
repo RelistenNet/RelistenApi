@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -76,7 +77,7 @@ public class PhishNetApiReview
     public string username { get; set; } = null!;
     public string review_text { get; set; } = null!;
 
-    [JsonConverter(typeof(DateFormatConverter), "yyyy-MM-dd HH:mm:ss")]
+    [JsonConverter(typeof(PhishNetReviewDateConverter))]
     public DateTime posted_at { get; set; }
     public int score { get; set; }
     public int showid { get; set; }
@@ -89,6 +90,18 @@ public class PhishNetApiReview
     public string city { get; set; } = null!;
     public string state { get; set; } = null!;
     public string country { get; set; } = null!;
+}
+
+/// <summary>Accepts Phish.net review dates with either an hour offset or no offset.</summary>
+internal sealed class PhishNetReviewDateConverter : IsoDateTimeConverter
+{
+    public PhishNetReviewDateConverter()
+    {
+        Culture = CultureInfo.InvariantCulture;
+        // Explicit offsets describe an instant. Normalize them before persistence;
+        // older offset-free values retain their existing unspecified-time behavior.
+        DateTimeStyles = DateTimeStyles.AdjustToUniversal;
+    }
 }
 
 public class PhishNetApiShow

@@ -1,0 +1,23 @@
+{
+  "error": false,
+  "data": [
+    {
+      "reviewid": 1,
+      "username": "fixture-reviewer",
+      "review_text": "A review with the upstream hour-only offset.",
+      "posted_at": "2010-09-27 17:30:43-04"
+    },
+    {
+      "reviewid": 2,
+      "username": "fixture-reviewer",
+      "review_text": "A review with a full offset.",
+      "posted_at": "2010-09-27 17:30:43-04:00"
+    },
+    {
+      "reviewid": 3,
+      "username": "fixture-reviewer",
+      "review_text": "An older review without an offset.",
+      "posted_at": "2010-09-27 17:30:43"
+    }
+  ]
+}

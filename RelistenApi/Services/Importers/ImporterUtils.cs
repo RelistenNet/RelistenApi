@@ -1,5 +1,4 @@
 using System;
-using Newtonsoft.Json.Converters;
 
 namespace Relisten.Import;
 
@@ -20,13 +19,5 @@ public class ImporterUtils
     public static decimal TryParseDecimal(string str)
     {
         return decimal.TryParse(str, out var i) ? i : 0;
-    }
-}
-
-public class DateFormatConverter : IsoDateTimeConverter
-{
-    public DateFormatConverter(string format)
-    {
-        DateTimeFormat = format;
     }
 }
