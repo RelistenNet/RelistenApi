@@ -28,8 +28,9 @@ Wait for both builds. Record their image digests and use those digests for the
 cutover. With `deploy=false`, the workflow publishes only the commit's `sha-` tag
 and skips Tailscale, Kubernetes setup, and deployment restarts. It leaves `latest`
 unchanged, so an unrelated production pod restart cannot pick up the canary image.
-Existing workflow commands still update `latest` and restart deployments because
-`deploy` defaults to `true`.
+With `deploy=true` (the default), the workflow also updates `latest` and sets each
+deployment to the newly built image digest before waiting for its rollout. This
+updates deployments even when the preceding release was pinned to a digest.
 
 Provision Temporal persistence and visibility in separate databases, initialize
 its schemas, and create the application namespace with at most seven days of

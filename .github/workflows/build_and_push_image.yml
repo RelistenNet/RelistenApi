@@ -85,6 +85,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -176,15 +177,20 @@ jobs:
           chmod 600 "$HOME/.kube/config"
           kubectl config use-context relisten3-k3s
 
-      - name: Restart relisten3 deployments
+      - name: Deploy image to relisten3
         if: ${{ inputs.deploy }}
         env:
           DEPLOYMENTS: ${{ steps.meta.outputs.deployments }}
+          IMAGE: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           for deployment in $DEPLOYMENTS; do
             if kubectl -n default get "deployment/$deployment" >/dev/null 2>&1; then
-              kubectl -n default rollout restart "deployment/$deployment"
+              container="$deployment"
+              if [ "$deployment" = "relistenapi-ingestion-worker" ]; then
+                container=worker
+              fi
+              kubectl -n default set image "deployment/$deployment" "$container=$IMAGE"
             else
               echo "Deployment $deployment does not exist yet; image publication is complete."
             fi
