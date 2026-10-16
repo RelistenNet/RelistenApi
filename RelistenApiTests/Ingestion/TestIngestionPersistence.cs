@@ -154,6 +154,65 @@ public class TestIngestionPersistence
         }
     }
 
+    [Test]
+    public async Task ArchiveDuplicateReviewsKeepTheLastBodyAndPreserveIdentityOnReimport()
+    {
+        var metadata = JObject.Parse(Metadata("Fixture track"));
+        JObject Review(string author, string body) =>
+            new()
+            {
+                ["stars"] = 5,
+                ["reviewtitle"] = "A review",
+                ["reviewer"] = author,
+                ["reviewbody"] = body,
+                ["reviewdate"] = "2026-10-01T12:00:00Z",
+            };
+
+        // These first two rows have the same persisted identity. Their bodies
+        // differ, as they can in an upstream response containing an edited review.
+        metadata["reviews"] = new JArray(
+            Review("Listener", "Earlier body"),
+            Review("Listener", "Latest body"),
+            Review("Removed listener", "No longer listed on the next import")
+        );
+        upstream.Respond = uri =>
+            uri.AbsolutePath.StartsWith("/metadata/") ? metadata.ToString() : Listing;
+
+        var firstResult = await Import(item: "fixture-2000-01-01");
+        firstResult.Status.Should().Be(ImportStatus.Completed);
+        firstResult.FailedItems.Should().Be(0);
+        var reviews = host.Services.GetRequiredService<SourceReviewService>();
+        var source = (
+            await host
+                .Services.GetRequiredService<SourceService>()
+                .AllForArtistFromPrimary(new Artist { id = artistId })
+        ).Single();
+        var first = (await reviews.AllForSources([source.id])).ToArray();
+        first.Should().HaveCount(2);
+        var original = first.Single(review => review.author == "Listener");
+        original.review.Should().Be("Latest body");
+
+        metadata["reviews"] = new JArray(
+            Review("Listener", "Intermediate revision"),
+            Review("Listener", "Final revision"),
+            Review("Another listener", "A distinct review")
+        );
+        var repeatedResult = await Import(item: "fixture-2000-01-01");
+        repeatedResult.Status.Should().Be(ImportStatus.Completed);
+        repeatedResult.FailedItems.Should().Be(0);
+
+        var repeated = (await reviews.AllForSources([source.id])).ToArray();
+        repeated.Should().HaveCount(2);
+        repeated
+            .Select(review => review.author)
+            .Should()
+            .BeEquivalentTo("Listener", "Another listener");
+        var revised = repeated.Single(review => review.author == "Listener");
+        revised.id.Should().Be(original.id);
+        revised.uuid.Should().Be(original.uuid);
+        revised.review.Should().Be("Final revision");
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task ArchiveMissingReviewTimestampsDoNotBlockOtherRecordings(bool temporal)
@@ -759,8 +818,9 @@ public class TestIngestionPersistence
         retained.Should().Equal(laterItem);
     }
 
-    [Test]
-    public async Task ArchiveWorkflowReimportPreservesSourceAndTrackIdentityAndUpdatesMetadata()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task ArchiveItemUpdatePreservesValidShowAssociationUntilRebuild(bool changeDate)
     {
         var first = await Import();
         first.FailedItems.Should().Be(0);
@@ -768,14 +828,75 @@ public class TestIngestionPersistence
         var before = await Catalog();
         before.Should().ContainSingle();
         before[0].title.Should().Be("First title");
+        var artist = (
+            await host
+                .Services.GetRequiredService<ArtistService>()
+                .FindArtistForImport(artistUuid.ToString())
+        )!;
+        var sources = host.Services.GetRequiredService<SourceService>();
+        var existing = (
+            await sources.ForUpstreamIdentifierFromPrimary(artist, "fixture-2000-01-01")
+        )!;
+        var oldShow = new Show { id = existing.show_id!.Value };
+        var metadata = JObject.Parse(Metadata("Updated title"));
+        var updatedDate = changeDate ? "2000-01-02" : existing.display_date;
+        metadata["metadata"]!["date"] = updatedDate;
         upstream.Respond = uri =>
-            uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("Updated title") : Listing;
-        await Import(item: "fixture-2000-01-01");
+            uri.AbsolutePath.StartsWith("/metadata/") ? metadata.ToString() : Listing;
+
+        // Run the item without its coordinator's final rebuild. Listener reads must
+        // retain an unchanged-date recording, but must not attach a moved one to the old show.
+        var activities = host.Services.GetRequiredService<ArchiveActivities>();
+        var environment = new ActivityEnvironment();
+        var context = new ProviderWorkflowContext(
+            new ArtistId(artistUuid),
+            new IngestionExecution(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddHours(1))
+        );
+        await environment.RunAsync(() =>
+            activities.ImportItem(
+                context,
+                new RequestedArchiveItem(new ArchiveItemId(existing.upstream_identifier))
+            )
+        );
+        var visibleSources = await sources.FullSourcesForShow(artist, oldShow);
+        if (changeDate)
+        {
+            visibleSources.Should().BeEmpty();
+        }
+        else
+        {
+            var visible = visibleSources.Should().ContainSingle().Subject;
+            visible.uuid.Should().Be(existing.uuid);
+            visible
+                .sets.SelectMany(set => set.tracks)
+                .Should()
+                .ContainSingle()
+                .Which.title.Should()
+                .Be("Updated title");
+        }
+
+        var client = host.Services.GetRequiredService<TemporalIngestionClient>();
+        var rebuild = await client.RebuildArtistCatalogAsync(
+            new RebuildArtistCatalog(context.Artist)
+        );
+        (await rebuild.GetResultAsync()).Status.Should().Be(ImportStatus.Completed);
         var after = await Catalog();
         after.Should().ContainSingle();
         after[0].source_uuid.Should().Be(before[0].source_uuid);
         after[0].track_uuid.Should().Be(before[0].track_uuid);
-        after[0].show_uuid.Should().Be(before[0].show_uuid);
+        if (changeDate)
+        {
+            after[0].show_uuid.Should().NotBe(before[0].show_uuid);
+        }
+        else
+        {
+            after[0].show_uuid.Should().Be(before[0].show_uuid);
+        }
+        var current = (
+            await sources.ForUpstreamIdentifierFromPrimary(artist, existing.upstream_identifier)
+        )!;
+        current.display_date.Should().Be(updatedDate);
+        current.show_id.Should().NotBeNull();
         after[0].title.Should().Be("Updated title");
     }
 

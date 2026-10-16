@@ -264,25 +264,36 @@ WHERE
 	AND s.duration IS DISTINCT FROM d.duration
 ;
 
--- Generate shows table without years or rating information
+-- Archive dates can contain XX (in either case) for an unknown month or day.
+-- Preserve that display label and identity, using the first known year/month day
+-- only for sorting. Invalid dates stay on their sources until an upstream fix;
+-- they must not prevent the other recordings from rebuilding.
+WITH source_dates AS (
+    SELECT source.*,
+        CASE
+            WHEN UPPER(display_date) LIKE '____-XX-%' THEN LEFT(display_date, 4) || '-01-01'
+            WHEN UPPER(display_date) LIKE '____-__-XX%' THEN LEFT(display_date, 7) || '-01'
+            WHEN UPPER(display_date) LIKE '%X%' THEN LEFT(display_date, 4) || '-01-01'
+            ELSE LEFT(display_date, 10)
+        END AS sortable_date
+    FROM sources source
+    WHERE source.artist_id = @id
+), dated_sources AS (
+    SELECT source_dates.*,
+        CASE
+            WHEN sortable_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                AND pg_input_is_valid(sortable_date, 'date') THEN sortable_date::date
+        END AS catalog_date
+    FROM source_dates
+)
 INSERT INTO
 	shows
 
 	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration, uuid)
 
 	SELECT
-		--array_agg(source.id) as srcs,
-		--array_agg(setlist_show.id) as setls,
-		--array_agg(source.display_date),
-		--array_agg(setlist_show.date),
 		source.artist_id,
-		COALESCE(setlist_show.date, CASE
-			WHEN MIN(source.display_date) LIKE '____-XX-XX%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
-			WHEN MIN(source.display_date) LIKE '____-XX-%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
-			WHEN MIN(source.display_date) LIKE '____-__-XX%' THEN to_date(LEFT(MIN(source.display_date), 7), 'YYYY-MM')
-			WHEN MIN(source.display_date) LIKE '%X%' THEN to_date(LEFT(MIN(source.display_date), 4), 'YYYY')
-			ELSE to_date(LEFT(MIN(source.display_date), 10), 'YYYY-MM-DD')
-		END) as date,
+		COALESCE(setlist_show.date, source.catalog_date) as date,
 		MIN(source.display_date) as display_date,
 		-- Show.updated_at is catalog freshness. Upstream source freshness is retained
 		-- separately in show_source_information.max_updated_at.
@@ -293,13 +304,13 @@ INSERT INTO
 		MAX(source.duration) as avg_duration,
 		md5(source.artist_id || '::show::' || source.display_date)::uuid
 	FROM
-		sources source
+		dated_sources source
 		LEFT JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date AND setlist_show.artist_id = @id
 	WHERE
 		(setlist_show.artist_id = @id OR setlist_show.artist_id IS NULL)
-		AND source.artist_id = @id
+		AND source.catalog_date IS NOT NULL
 	GROUP BY
-		date, source.display_date, source.artist_id
+		setlist_show.date, source.catalog_date, source.display_date, source.artist_id
 	ORDER BY
 		setlist_show.date
 ON CONFLICT ON CONSTRAINT shows_uuid_key

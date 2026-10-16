@@ -442,6 +442,13 @@ namespace Relisten.Import
                 src.id = dbSource!.id;
                 src.venue_id = dbVenue?.id;
 
+                // Rebuild owns reassociation after a date change. Keep an already
+                // correct association so ordinary metadata updates remain playable.
+                if (src.display_date == dbSource.display_date)
+                {
+                    src.show_id = dbSource.show_id;
+                }
+
                 dbSource = await _sourceService.Save(src);
                 if (dbVenue != null)
                     dbSource.venue = dbVenue;

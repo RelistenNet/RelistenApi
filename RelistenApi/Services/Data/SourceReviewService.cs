@@ -1,8 +1,5 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -31,6 +28,10 @@ namespace Relisten.Data
             );
         }
 
+        /// <summary>
+        /// Upserts a source's review snapshot and removes reviews absent from a nonempty snapshot.
+        /// Repeated identities use the last supplied review body and retain their existing UUID.
+        /// </summary>
         public async Task<IEnumerable<SourceReview>> UpdateAll(
             Source source,
             IEnumerable<SourceReview> reviews
@@ -44,10 +45,32 @@ namespace Relisten.Data
 
             return await db.WithWriteConnection(async con =>
             {
-                // Batch insert using UNNEST for all reviews at once
+                // Upstream responses can repeat a review identity, including with a revised
+                // body. Deduplicate the actual database UUID before the upsert: PostgreSQL
+                // cannot update the same conflict row twice within one INSERT.
                 var inserted = (
                     await con.QueryAsync<SourceReview>(
                         @"
+                    WITH incoming AS (
+                        SELECT *,
+                            md5(
+                                source_id || '::review::'
+                                || COALESCE('' || rating, 'NULL')
+                                || COALESCE('' || title, 'NULL')
+                                || COALESCE('' || author, 'NULL')
+                                || updated_at
+                            )::uuid AS uuid
+                        FROM UNNEST(
+                            @source_ids::int[],
+                            @ratings::decimal[],
+                            @titles::text[],
+                            @reviews::text[],
+                            @authors::text[],
+                            @updated_ats::timestamp with time zone[]
+                        ) WITH ORDINALITY AS t(
+                            source_id, rating, title, review, author, updated_at, position
+                        )
+                    )
                     INSERT INTO
                         source_reviews
                         (
@@ -59,22 +82,16 @@ namespace Relisten.Data
                             updated_at,
                             uuid
                         )
-                    SELECT
+                    SELECT DISTINCT ON (uuid)
                         source_id,
                         rating,
                         title,
                         COALESCE(review, ''),
                         author,
                         updated_at,
-                        md5(source_id || '::review::' || COALESCE('' || rating, 'NULL') || COALESCE('' || title, 'NULL') || COALESCE('' || author, 'NULL') || updated_at)::uuid
-                    FROM UNNEST(
-                        @source_ids::int[],
-                        @ratings::decimal[],
-                        @titles::text[],
-                        @reviews::text[],
-                        @authors::text[],
-                        @updated_ats::timestamp with time zone[]
-                    ) AS t(source_id, rating, title, review, author, updated_at)
+                        uuid
+                    FROM incoming
+                    ORDER BY uuid, position DESC
                     ON CONFLICT ON CONSTRAINT source_reviews_uuid
                     DO
                         UPDATE SET
@@ -111,19 +128,6 @@ namespace Relisten.Data
 
                 return inserted;
             });
-        }
-
-        private Guid GuidForReview(SourceReview review)
-        {
-            using (var md5 = MD5.Create())
-            {
-                var hash = md5.ComputeHash(
-                    Encoding.Default.GetBytes(
-                        $"{review.source_id}::review::{review.rating?.ToString() ?? "NULL"}{review.title ?? "NULL"}{review.author ?? "NULL"}"
-                    )
-                );
-                return new Guid(hash);
-            }
         }
     }
 }
