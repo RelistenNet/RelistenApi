@@ -23,8 +23,8 @@ public class TestRedisPayloadCodec
     {
         var first = new Payload { Data = ByteString.CopyFromUtf8("first") };
         first.Metadata.Add("custom", ByteString.CopyFrom(new byte[] { 0, 255 }));
-        var threshold = new Payload { Data = ByteString.CopyFrom(new byte[256 * 1024 - 4]) };
-        threshold.CalculateSize().Should().Be(256 * 1024);
+        var threshold = new Payload { Data = ByteString.CopyFrom(new byte[32 * 1024 - 4]) };
+        threshold.CalculateSize().Should().Be(32 * 1024);
         Payload[] originals = [first, threshold];
         var encoded = await codec.EncodeAsync(originals);
         var decoded = await codec.DecodeAsync(encoded);
@@ -167,7 +167,7 @@ public class TestRedisPayloadCodecPersistence
         var payload = new Payload
         {
             Data = ByteString.CopyFromUtf8("small body"),
-            Metadata = { ["catalog"] = ByteString.CopyFrom(new byte[256 * 1024]) },
+            Metadata = { ["catalog"] = ByteString.CopyFrom(new byte[32 * 1024]) },
         };
         var reference = (await codec.EncodeAsync([payload])).Single();
         TrackKey(reference);

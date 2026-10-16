@@ -67,6 +67,11 @@ Archive verification results include fixed deletion evidence in Temporal history
 
 Watch queue wait, activity failures, upstream 429/5xx responses, Temporal history growth, and Redis eviction/persistence. HTTP requests have a 60-second timeout and 64 MiB response limit. Activity attempts have a five-minute timeout, five attempts, a ten-second heartbeat timeout, and six hours including queue/retry delays. Positive `Retry-After` values influence retry timing. These bounds do not establish production capacity; use the [queue guide](upstream-throttling.md) for tuning.
 
+The worker writes JSON console logs with Temporal and importer scopes. Use
+`WorkflowId`, `ActivityId`, `Artist`, `Provider`, and `Attempt` to connect an
+upstream response or item result to its workflow. Item results distinguish applied,
+unchanged, and skipped inputs; they are not counts of newly created catalog rows.
+
 ## Switch from Hangfire
 
 1. Stop manual ingestion admission. Disable or remove the three Hangfire ingestion recurring jobs: Archive discovery, full refresh, and thin refresh. Let existing work finish, or stop its process and verify that writes have ended.
@@ -82,7 +87,7 @@ Current tests start with fresh databases and Temporal servers; see [local setup]
 
 ## Storage, backups, and recovery
 
-There are no application ingestion snapshot or receipt tables. Temporal stores workflow history in its own PostgreSQL persistence and visibility databases. The Redis codec stores complete serialized payloads larger than 256 KiB and no larger than 64 MiB. Content keys include the Temporal namespace and SHA-256 digest. Each successful encode or reuse refreshes a 15-day expiry. Decoding does not extend retention or delete bytes.
+There are no application ingestion snapshot or receipt tables. Temporal stores workflow history in its own PostgreSQL persistence and visibility databases. The Redis codec stores complete serialized payloads larger than 32 KiB and no larger than 64 MiB. Content keys include the Temporal namespace and SHA-256 digest. Each successful encode or reuse refreshes a 15-day expiry. Decoding does not extend retention or delete bytes.
 
 Fifteen days covers the seven-day execution limit, at most seven days of closed-history retention, and one day of margin. If closed-history retention must exceed seven days, increase payload retention by the same amount before adopting that policy. Saved schedules contain small commands rather than expiring payload references. Replay fixtures that outlive the TTL need their referenced bytes retained in isolated test storage or regenerated histories.
 

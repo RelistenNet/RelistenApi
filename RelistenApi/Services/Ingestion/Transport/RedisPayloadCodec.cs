@@ -18,7 +18,9 @@ namespace Relisten.Ingestion.Transport;
 /// </summary>
 public sealed class RedisPayloadCodec : IPayloadCodec
 {
-    public const int InlineThreshold = 256 * 1024;
+    // Prepared catalogs are reused by many activities. Offload modest catalogs too,
+    // so their identical bytes do not accumulate in every scheduled activity event.
+    public const int InlineThreshold = 32 * 1024;
     public const int MaximumPayloadSize = 64 * 1024 * 1024;
     public const string Encoding = "binary/relisten-redis-v1";
     public static readonly TimeSpan Retention = TimeSpan.FromDays(15);

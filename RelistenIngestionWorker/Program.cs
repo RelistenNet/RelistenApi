@@ -77,7 +77,9 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
             .Where(argument => argument != "--register-schedules" && argument != "--migrate")
             .ToArray()
     );
-    builder.Logging.AddSimpleConsole(options => options.IncludeScopes = true);
+    // Keep Temporal and importer scope fields searchable in pod logs. The simple
+    // formatter prints dictionary scopes as type names and loses their context.
+    builder.Logging.AddJsonConsole(options => options.IncludeScopes = true);
 
     SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
     SqlMapper.AddTypeHandler(new DateTimeHandler());

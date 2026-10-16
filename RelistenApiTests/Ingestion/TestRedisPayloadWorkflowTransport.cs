@@ -17,8 +17,11 @@ namespace RelistenApiTests.Ingestion;
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public class TestRedisPayloadWorkflowTransport
 {
-    [Test]
-    public async Task OversizedResultSurvivesWorkerRestartActivityHandoffContinuationAndReplay()
+    [TestCase(35 * 1024)]
+    [TestCase(3 * 1024 * 1024)]
+    public async Task SharedResultSurvivesWorkerRestartActivityHandoffContinuationAndReplay(
+        int sharedValueBytes
+    )
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
             Assert.Ignore("Run ./test-local.sh to include local integration tests.");
@@ -42,7 +45,9 @@ public class TestRedisPayloadWorkflowTransport
         );
         var workflowQueue = "codec-workflow-" + Guid.NewGuid();
         var consumeQueue = "codec-consumer-" + Guid.NewGuid();
-        var activities = new TransportActivities();
+        // The smaller case matches the prepared catalog repeated in real Phish.in
+        // activity inputs; the larger case also exceeds Temporal’s message limit.
+        var activities = new TransportActivities(sharedValueBytes);
         var handle = await client.StartWorkflowAsync(
             (TransportWorkflow workflow) => workflow.RunAsync(consumeQueue, null, 0),
             new WorkflowOptions("codec-transport-" + Guid.NewGuid(), workflowQueue)
@@ -163,10 +168,10 @@ public class TestRedisPayloadWorkflowTransport
 
     public record TransportResult(int Consumed, int Length);
 
-    public class TransportActivities
+    public class TransportActivities(int sharedValueBytes)
     {
         public Selection Value { get; } =
-            new(Guid.NewGuid().ToString(), new string('x', 3 * 1024 * 1024));
+            new(Guid.NewGuid().ToString(), new string('x', sharedValueBytes));
         public int Produced { get; private set; }
         public int Consumed { get; private set; }
 
