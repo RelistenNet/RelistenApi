@@ -187,7 +187,11 @@ namespace Relisten.Import
             int? page = null
         )
         {
-            return $"https://phish.in/api/v1/{api}.json?per_page={per_page}{(sort_attr != null ? "&sort_attr=" + sort_attr : "")}{(page != null ? "&page=" + page.Value : "")}";
+            // Phish.in ignores sorting unless both parameters are supplied. Show
+            // pagination relies on ascending dates to stop at the thin-scrape cutoff.
+            var sorting = sort_attr == null ? "" : $"&sort_attr={sort_attr}&sort_dir=asc";
+
+            return $"https://phish.in/api/v1/{api}.json?per_page={per_page}{sorting}{(page != null ? "&page=" + page.Value : "")}";
         }
 
         private async Task<PhishinRootObject<T>> PhishinApiRequest<T>(
