@@ -5,7 +5,7 @@
 - `RelistenApiTests/` holds NUnit tests and fixtures (HTML snapshots in `RelistenApiTests/Fixtures/`).
 - `RelistenApi/Migrations/` includes database schema and data migrations.
 - `RelistenIngestionWorker/` hosts Temporal ingestion and operator commands without starting the API or Hangfire. Workflows, activities, and contracts live in `RelistenApi/Services/Ingestion/`.
-- `docs/temporal/README.md` links the ingestion architecture, provider contracts, operations, and production evidence. Read the relevant contracts before changing workflow behavior.
+- `docs/ingestion/README.md` explains ingestion architecture and shared contracts, with links to provider rules and operations. Read the relevant contracts before changing workflow behavior.
 - `local-dev/` contains Docker Compose for Postgres/Redis; helper scripts live at the repo root (`start-local-databases.sh`, `stop-local-databases.sh`).
 - Root files like `RelistenApi.sln`, `Dockerfile`, and `Jenkinsfile` describe solution/build entry points.
 
@@ -39,7 +39,7 @@
 ## Configuration & Data Notes
 - Local configuration lives in `RelistenApi/appsettings.json`; use environment variables for overrides (e.g., `ASPNETCORE_ENVIRONMENT=Development`).
 - Database access is expected via the local Docker containers (see `README.markdown` for ports/credentials).
-- The standalone worker uses its own host configuration; it does not execute API `Program` or `Startup` setup. Dependencies and telemetry configured there do not automatically apply to the worker. See `docs/temporal/operations.md` for worker settings and current Sentry coverage.
+- The standalone worker uses its own host configuration; it does not execute API `Program` or `Startup` setup. Dependencies and telemetry configured there do not automatically apply to the worker. See `docs/ingestion/operations.md` for worker settings and current Sentry coverage.
 - Keep workflow code deterministic. Network calls, database writes, and external reporting belong in activities. Drain incompatible open histories before deploying changed workflow behavior, or use Temporal versioning.
 
 ## Database & Postgres Tips

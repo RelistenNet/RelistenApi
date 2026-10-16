@@ -161,7 +161,7 @@ The synthetic tests cover all seven providers without these live fetches.
 Do not register recurring schedules as part of local setup. The explicit
 `--register-schedules` command creates active full-catalog and discovery schedules.
 A worker also resumes any previously started workflows on its namespace.
-See [ingestion operations](../docs/temporal/operations.md) for operator commands.
+See [ingestion operations](../docs/ingestion/operations.md) for operator commands.
 
 Redis stores oversized Temporal payloads as well as API caches. Keep Redis while
 manual workflow histories matter; clearing its data can make those histories

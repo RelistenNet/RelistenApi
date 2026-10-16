@@ -1,4 +1,0 @@
-scenario,source_items,artist_requests,provider_scans,modeled_activities,modeled_events,history_GB_at_1KiB_per_event,repeats,HTTP_hours_at_1_RPS,HTTP_hours_at_5_RPS,HTTP_hours_at_10_RPS
-daily_low,500,4707,4712,14621,97140,0.0995,30,1.448,0.29,0.145
-daily_high,5000,4707,4712,19121,124140,0.1271,30,2.698,0.54,0.27
-full_catalog_once,289718,4707,4712,303839,1832448,1.8764,1,81.786,16.357,8.179

@@ -51,16 +51,16 @@ Open the API Server at: [http://localhost:3823/api-docs](http://localhost:3823/a
 Temporal records execution progress so imports can resume after worker restarts.
 Hangfire still runs cache and popularity jobs in production.
 
-Start with the [ingestion overview](docs/temporal/README.md) for architecture,
-provider behavior, and production validation. Use the
-[operations guide](docs/temporal/operations.md) for imports, schedules, and recovery,
+Start with the [ingestion overview](docs/ingestion/README.md) for architecture,
+provider behavior, and design contracts. Use the
+[operations guide](docs/ingestion/operations.md) for imports, schedules, and recovery,
 or [local setup](local-dev/README.md#run-an-ingestion-worker-manually) for development commands.
 Importing a seed artist can fetch its full upstream catalog; the seed does not
 limit import work.
 
 The API and standalone ingestion worker initialize Sentry independently when
 `SENTRY_DSN` is configured. Scheduled-run monitoring is not enabled.
-See [diagnostics and monitoring](docs/temporal/operations.md#diagnostics-and-monitoring)
+See [diagnostics and monitoring](docs/ingestion/operations.md#diagnostics-and-monitoring)
 for coverage and the remaining work.
 
 ## Formatting
