@@ -1,5 +1,8 @@
 using System;
+using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Normalization;
@@ -26,8 +29,23 @@ public static class IngestionServiceRegistration
         services.AddScoped<CatalogImportTransaction>();
         services.AddScoped<NormalizationEvidenceService>();
         services.AddScoped<NormalizationWorkService>();
+        services.AddScoped<NormalizedPeopleService>();
+        services.AddScoped<NormalizedVenueService>();
+        services.AddScoped<NormalizedMusicService>();
+        services.AddScoped<NormalizationExtractionCacheService>();
+        services.AddScoped<NormalizationReadService>();
+        services.AddOptions<NormalizationReadOptions>().BindConfiguration("Normalization:Reads");
+        services.AddOptions<LunaCreditExtractionOptions>().BindConfiguration("Normalization:Luna");
+        services.AddHttpClient("normalization-luna").RemoveAllLoggers();
+        services.AddScoped(sp => new LunaRecordingCreditExtractor(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("normalization-luna"),
+            sp.GetRequiredService<NormalizationExtractionCacheService>(),
+            sp.GetRequiredService<IOptions<LunaCreditExtractionOptions>>().Value,
+            () => Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? ""
+        ));
         services.AddSingleton<RecordingCreditExtractor>();
         services.AddSingleton<TrackTitleExtractor>();
+        services.AddSingleton<IdentityCandidateMatcher>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();
