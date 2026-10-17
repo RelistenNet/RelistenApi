@@ -75,45 +75,22 @@ or justify stale wording.
 
 ## Keep lookup outcomes separate from extraction
 
-The remaining coordinator uses a separate `lookups / recording` work owner,
-keyed by a durable lookup registration UUID. The stable registration key contains
-lookup mode, exact provider resource or legacy source UUID, and nullable expected
-artist. Input revisions and processing version belong to each immutable attempt,
-so new evidence can create another attempt for the same lookup.
+The [recording lookup coordinator](lookup-enrollment.md) now retains positive and
+negative outcomes under separate `lookups / recording` owners. A processed
+negative acknowledges only its lookup watermark. A bound outcome commits its
+handoff with that watermark; dispatch uses the original preparation and stable
+processing attempt UUID. Neither operation can clear accepted normalization or
+a successful extraction on its own.
 
-The proposed entrypoints are `LookupLegacyAsync(attemptUuid, sourceUuid,
-expectedArtistUuid?, ct)` and `LookupRetainedAsync(attemptUuid, inputReference,
-expectedArtistUuid?, ct)`. Retained provider lookup requires actual evidence.
-Missing provider input belongs to the capture coordinator; do not fabricate an
-input revision or admit that condition as a catalog absence. A real retained
-input can produce a supported negative catalog binding.
+Legacy retries can reuse their published capture when its revision remains
+current and checked binding validates its original producer clocks. This lets
+independent lookup scopes settle shared evidence without repeated fetches.
+Changed facts require a complete refresh.
 
-Persist the original preparation before work admission. Reuse Work admission,
-publication and pending queries; the lookup store owns immutable requests,
-preparations, outcomes and handoffs rather than a second clock protocol. A
-processed negative acknowledges only its lookup watermark. It must not
-acknowledge a successful extraction owner's inputs or replace accepted data.
-
-For a bound result, write the outcome and immutable downstream handoff in the
-same publication callback transaction. Dispatch happens after commit. Each
-handoff retains a stable downstream attempt UUID, original input/binding read
-set and delivery state. A crash after lookup publication must not lose the
-handoff; a crash after downstream publication replays that same downstream UUID.
-Callback failure rolls back the outcome, handoff and lookup watermark together.
-
-A legacy handoff retains the original `NormalizationRecordingPreparation`.
-Dispatch calls proposal-store `GetOrCreateAttemptAsync`, `SavePreparationAsync`,
-then processor `ProcessAsync`. The saved preparation makes processing skip a
-second refresh. Calling the processor before installing that preparation would
-advance the input generation again and could repeatedly make the lookup pending.
-Archive/Phish handoffs need the direct-provider consumer: current legacy
-preparation validation cannot process their retained bindings. Keep those
-handoffs durable and actionable until that consumer exists. Enrollment alone
-does not establish completed provider extraction.
-
-Local and setlist coordinators need the same enrollment discipline for their
-existing mapping/artist fences. These coordinators remain implementation work;
-installing clocks alone does not schedule a retry.
+See the [enrollment contract](lookup-enrollment.md) for entry points, storage,
+atomic handoffs and failure recovery. Legacy dispatch is implemented. Retained
+Archive/Phish handoffs await a direct provider consumer; Local and setlist
+coordinators also remain required. Clocks alone do not schedule retries.
 
 ## Compatibility and verification
 

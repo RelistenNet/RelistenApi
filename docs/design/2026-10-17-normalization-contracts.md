@@ -70,7 +70,9 @@ The four typed [candidate-facts readers](../plans/active/2026-10-17-full-normali
 
 Migration 33 adds [source UUID lookup fences](../plans/active/2026-10-17-full-normalization/lookup-fences.md), including original zero observations for absent UUIDs and unresolved provider identifiers. Catalog callbacks cover related ownership/qualification changes in the existing lock order. Recording binders return consumed lookup clocks even for negative outcomes; the evidence-free presence probe supports missing legacy sources. Recording processing and proposal saving share one complete-read-set contract, preserving unconsumed peer work. The changed preparation protocol has explicit older-attempt handling.
 
-Direct provider coordinators, durable lookup outcomes and retry enrollment, the multi-candidate resolver, independent evaluation and full backfill remain required. A bound lookup must commit its downstream handoff before acknowledging its watermark; retry enrollment alone cannot establish completed provider extraction.
+Migration 34 adds [durable recording lookup outcomes and processing handoffs](../plans/active/2026-10-17-full-normalization/lookup-enrollment.md). Lookup owners remain separate from extraction owners. Publication commits a bound handoff with the outcome and watermark; dispatch reuses its exact prepared input and stable downstream attempt UUID. Delivery acknowledgement verifies the durable terminal processing receipt and its original preparation. Negative lookup publication never clears successful extraction. Legacy dispatch is implemented; retained Archive/Phish handoffs stay pending until a direct provider consumer exists.
+
+Direct provider, Local and setlist coordinators, the multi-candidate resolver, independent evaluation and full backfill remain required. Retry enrollment alone cannot establish completed provider extraction.
 
 [`NormalizationProviderInputService`](../../RelistenApi/Services/Data/NormalizationProviderInputService.cs) captures validated provider responses before legacy conversion and catalog transactions. `Normalization:Capture:Enabled` defaults to false independently of reads. All seven configured importers and Archive intake/discovery use this lifecycle; Phish.in adds a pre-request generation snapshot for stable per-show resources across changing pages. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md) defines representation versions, keys, partial-page recovery and remaining refresh work. Capture fences admission, while later domain publication still requires the work-service read-set comparison.
 
@@ -124,6 +126,7 @@ Typed writers also enforce the subject's ownership. The registry UUID identifies
 
 | Domain and subject kind | Entity UUID and responsibility |
 | --- | --- |
+| `lookups / recording` | Lookup registration UUID; positive or negative catalog association and atomic processing handoffs. Completing a lookup does not acknowledge extraction or accepted relationships. |
 | `extractions / recording` | Source UUID; prepared evidence and local credit/title proposals. Completing extraction does not publish accepted relationships. |
 | `people / recording` | Source UUID; that recording's credits. |
 | `people / person` | Person UUID; the identity, aliases, external IDs and explicit corrections. |

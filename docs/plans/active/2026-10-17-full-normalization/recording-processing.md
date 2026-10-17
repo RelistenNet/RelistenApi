@@ -11,6 +11,12 @@ provider accounts and automatic resolution remain required by
 the [main plan](README.md). A stored snapshot cannot recover upstream information
 that an older importer discarded.
 
+The [lookup coordinator and dispatcher](lookup-enrollment.md) provide a separate
+entry point for durable positive and negative catalog association. A bound legacy
+handoff installs its original preparation before calling this processor, so
+dispatch does not refresh the recording again. Lookup publication and extraction
+publication have independent owners and watermarks.
+
 ## Ownership and retained results
 
 Migration 26 adds `normalization.recording_processing_attempts` and the work-owner
@@ -135,7 +141,8 @@ new page UUID covering that recording's range, or invoke the single-recording
 processor with a new attempt UUID. Replaying the old page does not refresh it.
 
 The worker command requires the catalog's `DATABASE_URL` and migrations through
-27. Build the worker first; keep build output separate from command receipts:
+33. Lookup enrollment and dispatch additionally require migration 34. Build the
+worker first; keep build output separate from command receipts:
 
 ```sh
 dotnet build RelistenIngestionWorker/RelistenIngestionWorker.csproj
@@ -208,8 +215,9 @@ executable under Test and Development environments. Pure extraction cases includ
 wording from several artists; they verify reproducibility and evidence handling,
 not identity-matching accuracy. The [main plan](README.md#progress) records results.
 
-Install migration 26 before invoking the single-recording processor, and migration
-27 before running pages. Migration 27 builds a regular `(artist_id, uuid)` index
+The current processor and page command require migrations through 33, including
+the original processing/page storage from migrations 26–27 and the later lookup
+clock contracts. Migration 27 builds a regular `(artist_id, uuid)` index
 on `sources`; measure the build on a representative database and allow for blocked
 source writes during production migration. Registration in the shared
 catalog container starts no work. On rollback, stop processors and retain attempts,

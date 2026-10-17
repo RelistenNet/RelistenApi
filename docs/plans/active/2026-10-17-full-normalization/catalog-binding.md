@@ -79,7 +79,8 @@ Legacy consumes its requested source UUID; Archive also consumes retained
 canonical/published UUIDs read by its resolver. These clocks survive deletion
 and detect a retained UUID arriving under a different upstream identifier.
 See [lookup fences](lookup-fences.md) for original-read-set admission, contributor
-ownership and the remaining durable-outcome coordinator.
+ownership, and [lookup enrollment](lookup-enrollment.md) for durable outcomes
+and processing handoffs.
 
 Local additionally returns `MappingRegistry`, a singleton revision that detects
 a root acquiring another artist before that artist has any recordings. It
@@ -99,10 +100,12 @@ bindings and use a new work UUID. An exact retry reuses its original UUID and
 request; replay returns its saved result.
 
 Legacy, Archive, Phish and Local recording lookups return the catalog fences
-their resolvers consumed, including unresolved outcomes. A coordinator must
-still register durable lookup owners and retries for those outcomes.
-Preserve unresolved results for reconciliation; absence from the pending-owner
-query does not establish completion.
+their resolvers consumed, including unresolved outcomes. The
+[recording lookup coordinator](lookup-enrollment.md) retains legacy and supported
+Archive/Phish outcomes independently from extraction. Local enrollment and
+complete-input provider processing remain required. Preserve unresolved results
+for reconciliation; absence from the pending-owner query does not establish
+completion.
 
 ## Preserve every contributor's inputs
 
@@ -212,8 +215,9 @@ Binding refreshes associations and clocks, **not retained wording**. The
 its producer clocks before binding. Historical seed and association-only APIs
 retain their original behavior.
 
-Remaining work includes unresolved-lookup registration, complete-ticket coordinators,
-multi-candidate resolution and evaluated automatic acceptance. A recording read
+Legacy and supported Archive/Phish recording lookups now have durable enrollment.
+Remaining work includes Local/setlist enrollment, complete-ticket provider
+processing, multi-candidate resolution and evaluated automatic acceptance. A recording read
 set does not authorize unrelated unbound context facts; each new domain binder
 must define their ownership and freshness. Model comparison, backfill and rollout
 rehearsal remain requirements of the [main plan](README.md). This increment does
@@ -244,12 +248,13 @@ their evidence and admission revision belong to the containing repertoire input
 resource. The legacy song/show membership table supplies neither repeated
 occurrences nor order. Those require retained provider accounts or file evidence.
 
-The [lookup-fence foundation](lookup-fences.md) now supplies identifier and
-source UUID absence checks. Durable lookup outcomes remain required, separate
-from extraction batches. A processed lookup can consume its own watermark and
-sleep until evidence changes; it must not replace a prior successful extraction
-or accepted relationship. Retry enrollment must preserve other contributors'
-inputs and retain a durable handoff when a recording becomes bound.
+The [lookup-fence foundation](lookup-fences.md) supplies identifier and source
+UUID absence checks. [Durable lookup outcomes](lookup-enrollment.md) remain
+separate from extraction batches. A processed lookup can consume its own
+watermark and sleep until evidence changes; it cannot replace a prior successful
+extraction or accepted relationship. A bound outcome commits its handoff with
+that watermark. The legacy dispatcher consumes its original preparation;
+retained-provider handoffs await their direct consumer.
 
 ## Verify the contracts
 
