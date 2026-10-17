@@ -30,6 +30,7 @@ internal static class LocalTestDatabase
             Path.Combine(AppContext.BaseDirectory, "Fixtures", "catalog-schema.sql")
         );
         await catalog.ExecuteAsync(schema, commandTimeout: 120);
+        await catalog.ExecuteAsync(Migrations.AddArchiveIntake.SchemaSql, commandTimeout: 120);
     }
 
     public static async Task DropAsync()
