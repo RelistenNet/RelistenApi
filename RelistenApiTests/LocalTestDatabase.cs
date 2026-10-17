@@ -74,6 +74,10 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationRecordingProcessing.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationRecordingPages.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
