@@ -15,6 +15,8 @@ namespace Relisten.Data;
 /// Owns publication freshness and the append-only review ledger. Domain services own typed
 /// accepted rows and write them through transaction callbacks. Callbacks must use only the
 /// supplied transaction, make no network requests, and never lock input resources themselves.
+/// Catalog bindings are checked before publication. Callbacks may read catalog rows but must
+/// neither lock nor change them: catalog clocks are locked before resources and work owners.
 /// A fresh run does not authorize replacing reviewed data: typed domain writers retain reviewed
 /// assignments/exclusions and propose conflicts according to their own domain contracts.
 /// </summary>
@@ -43,144 +45,339 @@ public sealed partial class NormalizationWorkService(DbService db)
         IReadOnlyList<NormalizationResourceKey> resourceKeys,
         IReadOnlyList<Guid> dependencySubjectUuids,
         long? expectedConfigurationGeneration = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<NormalizationCatalogDependency>? catalogInputs = null,
+        IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
-        var resources = resourceKeys
-            .Distinct()
-            .OrderBy(k => k.Provider, StringComparer.Ordinal)
-            .ThenBy(k => k.ResourceType, StringComparer.Ordinal)
-            .ThenBy(k => k.ProviderKey, StringComparer.Ordinal)
-            .ToArray();
-        var dependencies = dependencySubjectUuids.Distinct().Order().ToArray();
-        var configurationHash = Hash(
-            JsonSerializer.SerializeToElement(
-                new
-                {
-                    policyVersion,
-                    resources,
-                    dependencies,
-                }
-            )
+        var expectedCatalog = NormalizeCatalogInputs(catalogInputs);
+        var expectedSources = NormalizeSourceInputs(sourceIdentities);
+        var bindings = WorkBindingSet.Create(
+            resourceKeys,
+            dependencySubjectUuids,
+            expectedCatalog.Select(input => input.ArtistUuid),
+            expectedSources.Select(input => input.UpstreamIdentifier)
         );
-        var requestHash = Hash(
-            JsonSerializer.SerializeToElement(
-                new
-                {
-                    subject,
-                    configurationHash,
-                    expectedConfigurationGeneration,
-                }
-            )
+        var configurationHash = bindings.ConfigurationHash(policyVersion);
+        // Preserve existing run hashes when no catalog snapshot was supplied.
+        var requestHash =
+            expectedCatalog.Length == 0 && expectedSources.Length == 0
+                ? Hash(
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            subject,
+                            configurationHash,
+                            expectedConfigurationGeneration,
+                        }
+                    )
+                )
+                : Hash(
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            subject,
+                            configurationHash,
+                            expectedConfigurationGeneration,
+                            catalogInputs = expectedCatalog,
+                            sourceIdentities = expectedSources,
+                        }
+                    )
+                );
+        var request = new WorkStartRequest(
+            workUuid,
+            subject,
+            policyVersion,
+            bindings,
+            expectedConfigurationGeneration,
+            requestHash,
+            expectedCatalog,
+            expectedSources
         );
         return InTransaction(
             async (connection, transaction) =>
             {
-                await LockOperation(connection, transaction, "work", workUuid, cancellationToken);
-                var replay = await ReadRun(connection, transaction, workUuid, cancellationToken);
+                var replay = await ReadWorkReplay(
+                    connection,
+                    transaction,
+                    workUuid,
+                    requestHash,
+                    cancellationToken
+                );
                 if (replay != null)
                 {
-                    if (replay.RequestHash != requestHash)
-                    {
-                        throw new NormalizationConflictException(
-                            "Work UUID is already bound to a different request."
-                        );
-                    }
-                    return replay.ToTicket();
+                    return replay;
                 }
-
-                // Dependency graph edits serialize before resource/subject locks. Normal runs and
-                // publication do not take this registry lock. Recheck bindings under owner locks.
-                var dependencyRegistryLocked = await LockDependencyChanges(
+                await LockConfiguration(connection, transaction, subject, cancellationToken);
+                return await StartConfiguredWork(
                     connection,
                     transaction,
-                    subject,
-                    dependencies,
+                    request,
                     cancellationToken
                 );
-
-                // Input capture locks resources only. Always take resources before any subjects,
-                // including dependency subjects, so capture and publication have one lock order.
-                var inputs = await LockInputs(
-                    connection,
-                    transaction,
-                    resources,
-                    cancellationToken
-                );
-                var subjectUuid = await FindOrCreateSubject(
-                    connection,
-                    transaction,
-                    subject,
-                    policyVersion,
-                    configurationHash,
-                    cancellationToken
-                );
-                if (dependencies.Contains(subjectUuid))
-                {
-                    throw new ArgumentException(
-                        "A subject cannot depend on itself.",
-                        nameof(dependencySubjectUuids)
-                    );
-                }
-                var subjects = await LockSubjects(
-                    connection,
-                    transaction,
-                    dependencies.Append(subjectUuid),
-                    cancellationToken
-                );
-                var owner = subjects.Single(s => s.Uuid == subjectUuid);
-                await ConfigureBindings(
-                    connection,
-                    transaction,
-                    owner,
-                    policyVersion,
-                    configurationHash,
-                    inputs,
-                    dependencies,
-                    expectedConfigurationGeneration,
-                    dependencyRegistryLocked,
-                    cancellationToken
-                );
-                var ticket = new NormalizationWorkTicket(
-                    workUuid,
-                    subjectUuid,
-                    owner.DesiredGeneration,
-                    owner.EditorialRevision,
-                    policyVersion,
-                    owner.PublishedWorkUuid,
-                    inputs,
-                    subjects
-                        .Where(s => s.Uuid != subjectUuid)
-                        .Select(s => new NormalizationSubjectDependency(
-                            s.Uuid,
-                            s.DesiredGeneration,
-                            s.EditorialRevision,
-                            s.PublishedWorkUuid
-                        ))
-                        .ToArray()
-                );
-                await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        INSERT INTO normalization.work_runs(uuid,subject_uuid,request_hash,ticket)
-                        VALUES(@workUuid,@subjectUuid,@requestHash,@ticket::jsonb)
-                        """,
-                        new
-                        {
-                            workUuid,
-                            subjectUuid,
-                            requestHash,
-                            ticket = JsonSerializer.Serialize(ticket),
-                        },
-                        transaction,
-                        cancellationToken: cancellationToken
-                    )
-                );
-                return ticket;
             },
             cancellationToken
         );
+    }
+
+    private static async Task<NormalizationWorkTicket?> ReadWorkReplay(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid workUuid,
+        string requestHash,
+        CancellationToken ct
+    )
+    {
+        await LockOperation(connection, transaction, "work", workUuid, ct);
+        var replay = await ReadRun(connection, transaction, workUuid, ct);
+        if (replay == null)
+        {
+            return null;
+        }
+        if (replay.RequestHash != requestHash)
+        {
+            throw new NormalizationConflictException(
+                "Work UUID is already bound to a different request."
+            );
+        }
+        return replay.ToTicket();
+    }
+
+    private static Task LockConfiguration(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        NormalizationSubjectKey subject,
+        CancellationToken ct
+    ) =>
+        connection.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",
+                new
+                {
+                    key = $"normalization:configuration:{subject.Domain}:{subject.Kind}:{subject.Uuid}",
+                },
+                transaction,
+                cancellationToken: ct
+            )
+        );
+
+    private static async Task<NormalizationWorkTicket> StartConfiguredWork(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        WorkStartRequest request,
+        CancellationToken ct
+    )
+    {
+        // Configuration edits serialize before graph, catalog, resource and subject locks.
+        // Ordinary publication never needs this configuration lock.
+        var bindings = request.Bindings;
+        var graphLocked = await LockDependencyChanges(
+            connection,
+            transaction,
+            request.Subject,
+            bindings.Dependencies,
+            ct
+        );
+        var catalog = await LockCatalogReadSet(
+            connection,
+            transaction,
+            bindings.CatalogArtists,
+            bindings.SourceIdentifiers,
+            ct
+        );
+        RequireCatalogReadSet(catalog, request.CatalogInputs, request.SourceIdentities);
+        var inputs = await LockInputs(connection, transaction, bindings.Resources, ct);
+        var configurationHash = bindings.ConfigurationHash(request.PolicyVersion);
+        var subjectUuid = await FindOrCreateSubject(
+            connection,
+            transaction,
+            request.Subject,
+            request.PolicyVersion,
+            configurationHash,
+            ct
+        );
+        if (bindings.Dependencies.Contains(subjectUuid))
+        {
+            throw new ArgumentException("A subject cannot depend on itself.");
+        }
+        var subjects = await LockSubjects(
+            connection,
+            transaction,
+            bindings.Dependencies.Append(subjectUuid),
+            ct
+        );
+        var owner = subjects.Single(subject => subject.Uuid == subjectUuid);
+        var expectedGeneration = request.ExpectedConfigurationGeneration;
+        if (request.Contribution != null)
+        {
+            if (owner.PolicyVersion == request.PolicyVersion)
+            {
+                // The held owner-configuration lock makes this a current union, rather than
+                // letting one recording reinstall the owner's earlier partial configuration.
+                expectedGeneration = owner.DesiredGeneration;
+            }
+            await ApplyContribution(connection, transaction, owner.Uuid, request.Contribution, ct);
+        }
+        if (request.Contribution == null)
+        {
+            await RequireContributionUnion(connection, transaction, owner.Uuid, bindings, ct);
+        }
+        await ConfigureBindings(
+            connection,
+            transaction,
+            owner,
+            request.PolicyVersion,
+            configurationHash,
+            inputs,
+            bindings.Dependencies,
+            expectedGeneration,
+            graphLocked,
+            ct
+        );
+        await ConfigureCatalogBindings(connection, transaction, owner.Uuid, catalog, ct);
+        var ticket = new NormalizationWorkTicket(
+            request.WorkUuid,
+            subjectUuid,
+            owner.DesiredGeneration,
+            owner.EditorialRevision,
+            request.PolicyVersion,
+            owner.PublishedWorkUuid,
+            inputs,
+            subjects
+                .Where(subject => subject.Uuid != subjectUuid)
+                .Select(subject => new NormalizationSubjectDependency(
+                    subject.Uuid,
+                    subject.DesiredGeneration,
+                    subject.EditorialRevision,
+                    subject.PublishedWorkUuid
+                ))
+                .ToArray(),
+            catalog.Artists.Count == 0 ? null : catalog.Artists,
+            catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities
+        );
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "INSERT INTO normalization.work_runs(uuid,subject_uuid,request_hash,ticket) VALUES(@workUuid,@subjectUuid,@requestHash,@ticket::jsonb)",
+                new
+                {
+                    workUuid = request.WorkUuid,
+                    subjectUuid,
+                    requestHash = request.RequestHash,
+                    ticket = JsonSerializer.Serialize(ticket),
+                },
+                transaction,
+                cancellationToken: ct
+            )
+        );
+        return ticket;
+    }
+
+    private sealed record WorkStartRequest(
+        Guid WorkUuid,
+        NormalizationSubjectKey Subject,
+        string PolicyVersion,
+        WorkBindingSet Bindings,
+        long? ExpectedConfigurationGeneration,
+        string RequestHash,
+        NormalizationCatalogDependency[] CatalogInputs,
+        NormalizationSourceIdentityDependency[] SourceIdentities,
+        ContributionChange? Contribution = null
+    );
+
+    private sealed record WorkBindingSet(
+        NormalizationResourceKey[] Resources,
+        Guid[] Dependencies,
+        Guid[] CatalogArtists,
+        string[] SourceIdentifiers
+    )
+    {
+        public static WorkBindingSet Create(
+            IEnumerable<NormalizationResourceKey> resources,
+            IEnumerable<Guid> dependencies,
+            IEnumerable<Guid> catalogArtists,
+            IEnumerable<string> sourceIdentifiers
+        ) =>
+            new(
+                resources
+                    .Distinct()
+                    .OrderBy(key => key.Provider, StringComparer.Ordinal)
+                    .ThenBy(key => key.ResourceType, StringComparer.Ordinal)
+                    .ThenBy(key => key.ProviderKey, StringComparer.Ordinal)
+                    .ToArray(),
+                dependencies.Distinct().Order().ToArray(),
+                catalogArtists.Distinct().Order().ToArray(),
+                sourceIdentifiers
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal)
+                    .ToArray()
+            );
+
+        public string ConfigurationHash(string policyVersion) =>
+            CatalogArtists.Length == 0 && SourceIdentifiers.Length == 0
+                ? Hash(
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            policyVersion,
+                            resources = Resources,
+                            dependencies = Dependencies,
+                        }
+                    )
+                )
+                : Hash(
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            policyVersion,
+                            resources = Resources,
+                            dependencies = Dependencies,
+                            catalogArtists = CatalogArtists,
+                            sourceIdentifiers = SourceIdentifiers,
+                        }
+                    )
+                );
+    }
+
+    private static NormalizationCatalogDependency[] NormalizeCatalogInputs(
+        IReadOnlyList<NormalizationCatalogDependency>? inputs
+    )
+    {
+        var result = (inputs ?? [])
+            .Distinct()
+            .OrderBy(input => input.ArtistUuid)
+            .ThenBy(input => input.Generation)
+            .ToArray();
+        if (result.GroupBy(input => input.ArtistUuid).Any(group => group.Count() != 1))
+        {
+            throw new ArgumentException(
+                "An artist snapshot cannot contain conflicting generations."
+            );
+        }
+        return result;
+    }
+
+    private static NormalizationSourceIdentityDependency[] NormalizeSourceInputs(
+        IReadOnlyList<NormalizationSourceIdentityDependency>? inputs
+    )
+    {
+        var result = (inputs ?? [])
+            .Distinct()
+            .OrderBy(input => input.UpstreamIdentifier, StringComparer.Ordinal)
+            .ThenBy(input => input.Generation)
+            .ToArray();
+        if (
+            result
+                .GroupBy(input => input.UpstreamIdentifier, StringComparer.Ordinal)
+                .Any(group => group.Count() != 1)
+            || result.Any(input => string.IsNullOrWhiteSpace(input.UpstreamIdentifier))
+        )
+        {
+            throw new ArgumentException(
+                "A source identity snapshot requires unique identifiers and consistent generations."
+            );
+        }
+        return result;
     }
 
     /// <summary>
@@ -209,6 +406,15 @@ public sealed partial class NormalizationWorkService(DbService db)
                     );
                 }
                 var ticket = run.ToTicket();
+                var catalog = await LockCatalogReadSet(
+                    connection,
+                    transaction,
+                    (ticket.CatalogInputs ?? []).Select(input => input.ArtistUuid).ToArray(),
+                    (ticket.SourceIdentities ?? [])
+                        .Select(input => input.UpstreamIdentifier)
+                        .ToArray(),
+                    cancellationToken
+                );
                 var inputs = await LockInputUuids(
                     connection,
                     transaction,
@@ -222,12 +428,19 @@ public sealed partial class NormalizationWorkService(DbService db)
                     cancellationToken
                 );
                 var owner = subjects.Single(s => s.Uuid == ticket.SubjectUuid);
-                var current = IsCurrent(ticket, inputs, subjects, owner);
+                var current =
+                    CatalogIsCurrent(ticket, catalog) && IsCurrent(ticket, inputs, subjects, owner);
                 if (current)
                 {
                     await publish(connection, transaction, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
                     await RecordPublication(connection, transaction, ticket, cancellationToken);
+                    await RecordCatalogPublication(
+                        connection,
+                        transaction,
+                        ticket,
+                        cancellationToken
+                    );
                 }
                 var state = current ? "published" : "stale";
                 await connection.ExecuteAsync(
@@ -375,7 +588,11 @@ public sealed partial class NormalizationWorkService(DbService db)
                             OR EXISTS(SELECT 1 FROM normalization.work_dependencies d JOIN normalization.work_subjects ds ON ds.uuid=d.dependency_uuid
                                 WHERE d.subject_uuid=s.uuid AND (d.published_generation IS DISTINCT FROM ds.desired_generation
                                     OR d.published_editorial_revision IS DISTINCT FROM ds.editorial_revision
-                                    OR d.published_work_uuid IS DISTINCT FROM ds.published_work_uuid)))
+                                    OR d.published_work_uuid IS DISTINCT FROM ds.published_work_uuid))
+                            OR EXISTS(SELECT 1 FROM normalization.work_catalog_inputs i JOIN normalization.catalog_artist_revisions r ON r.artist_uuid=i.artist_uuid
+                                WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
+                            OR EXISTS(SELECT 1 FROM normalization.work_source_identity_inputs i JOIN normalization.catalog_source_identity_revisions r ON r.upstream_identifier=i.upstream_identifier
+                                WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation))
                         ORDER BY s.uuid LIMIT @limit
                         """,
                         new { afterUuid, limit },

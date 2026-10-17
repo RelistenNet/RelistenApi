@@ -302,34 +302,24 @@ public sealed partial class NormalizationWorkService
             );
             owner.DesiredGeneration++;
         }
-        foreach (var input in inputs)
-        {
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    INSERT INTO normalization.work_inputs(subject_uuid,resource_uuid) VALUES(@subjectUuid,@ResourceUuid)
-                    ON CONFLICT DO NOTHING
-                    """,
-                    new { subjectUuid, input.ResourceUuid },
-                    transaction,
-                    cancellationToken: cancellationToken
-                )
-            );
-        }
-        foreach (var dependency in dependencies)
-        {
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    """
-                    INSERT INTO normalization.work_dependencies(subject_uuid,dependency_uuid) VALUES(@subjectUuid,@dependency)
-                    ON CONFLICT DO NOTHING
-                    """,
-                    new { subjectUuid, dependency },
-                    transaction,
-                    cancellationToken: cancellationToken
-                )
-            );
-        }
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO normalization.work_inputs(subject_uuid,resource_uuid)
+                    SELECT @subjectUuid,unnest(@resources::uuid[]) ON CONFLICT DO NOTHING;
+                INSERT INTO normalization.work_dependencies(subject_uuid,dependency_uuid)
+                    SELECT @subjectUuid,unnest(@dependencies::uuid[]) ON CONFLICT DO NOTHING
+                """,
+                new
+                {
+                    subjectUuid,
+                    resources = inputs.Select(input => input.ResourceUuid).ToArray(),
+                    dependencies,
+                },
+                transaction,
+                cancellationToken: cancellationToken
+            )
+        );
     }
 
     private static bool IsCurrent(

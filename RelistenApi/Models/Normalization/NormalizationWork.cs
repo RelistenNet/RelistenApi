@@ -23,6 +23,21 @@ public sealed record NormalizationSubjectDependency(
 );
 
 /// <summary>
+/// A primary catalog snapshot's artist watermark. It covers binding and stored metadata changes;
+/// it is an opaque revision, not a count of recordings or committed transactions.
+/// </summary>
+public sealed record NormalizationCatalogDependency(Guid ArtistUuid, long Generation);
+
+/// <summary>
+/// Fences a global source-identifier lookup, including a matching source arriving under
+/// another artist. Artist clocks alone cannot establish that a global match remains unique.
+/// </summary>
+public sealed record NormalizationSourceIdentityDependency(
+    string UpstreamIdentifier,
+    long Generation
+);
+
+/// <summary>
 /// Durable read set captured before extraction. Load immutable input bytes by RevisionUuid.
 /// A retry reuses WorkUuid; a new attempt after changed evidence needs a new WorkUuid.
 /// </summary>
@@ -34,7 +49,9 @@ public sealed record NormalizationWorkTicket(
     string PolicyVersion,
     Guid? PreviousPublishedWorkUuid,
     IReadOnlyList<NormalizationInputDependency> Inputs,
-    IReadOnlyList<NormalizationSubjectDependency> Dependencies
+    IReadOnlyList<NormalizationSubjectDependency> Dependencies,
+    IReadOnlyList<NormalizationCatalogDependency>? CatalogInputs = null,
+    IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null
 );
 
 public enum NormalizationPublicationStatus
