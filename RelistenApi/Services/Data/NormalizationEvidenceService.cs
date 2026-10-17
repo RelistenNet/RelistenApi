@@ -183,6 +183,59 @@ public sealed class NormalizationEvidenceService(DbService db)
         });
     }
 
+    /// <summary>
+    /// Reads a complete, bounded generation snapshot for a provider resource type before a listing fetch.
+    /// Response identities absent from this snapshot must use generation zero. Exceeding the bound
+    /// fails instead of omitting existing resources and treating them as newly discovered identities.
+    /// </summary>
+    public Task<IReadOnlyDictionary<string, long>> GetResourceGenerationsAsync(
+        string provider,
+        string resourceType,
+        int maxResources = 100000,
+        CancellationToken cancellationToken = default
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(resourceType);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maxResources, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(maxResources, 100000);
+
+        return db.WithWriteConnection<IReadOnlyDictionary<string, long>>(async connection =>
+        {
+            var rows = (
+                await connection.QueryAsync<ResourceGenerationRow>(
+                    new CommandDefinition(
+                        """
+                        SELECT provider_key AS "ProviderKey",generation AS "Generation"
+                        FROM normalization.input_resources
+                        WHERE provider=@provider AND resource_type=@resourceType
+                        ORDER BY provider_key LIMIT @limit
+                        """,
+                        new
+                        {
+                            provider,
+                            resourceType,
+                            limit = maxResources + 1,
+                        },
+                        cancellationToken: cancellationToken
+                    )
+                )
+            ).AsList();
+            if (rows.Count > maxResources)
+            {
+                throw new InvalidOperationException(
+                    "The provider resource generation snapshot exceeds its configured bound."
+                );
+            }
+
+            return rows.ToDictionary(
+                row => row.ProviderKey,
+                row => row.Generation,
+                StringComparer.Ordinal
+            );
+        });
+    }
+
     /// <summary>Pages committed fetch receipts by sequence; stale captures and unchanged fetches are included.</summary>
     public Task<IReadOnlyList<NormalizationInputFetch>> GetFetchHistoryAsync(
         NormalizationResourceKey resource,
@@ -444,6 +497,12 @@ public sealed class NormalizationEvidenceService(DbService db)
         public Guid Uuid { get; init; }
         public long Generation { get; init; }
         public Guid? CurrentRevisionUuid { get; init; }
+    }
+
+    private sealed class ResourceGenerationRow
+    {
+        public string ProviderKey { get; init; } = null!;
+        public long Generation { get; init; }
     }
 
     private sealed class RevisionRow
