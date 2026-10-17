@@ -5,6 +5,11 @@ catalog UUIDs and supplies revisions that publication must check. This protects
 normalization from a moved source, changed media URL or newly conflicting provider
 identifier. It does not accept a person, venue, song or composition match.
 
+The separate [setlist-account binder](setlist-binding.md) associates retained
+Jerry, Setlist.fm, Phantasy Tour and explicitly artist-scoped Phish.net accounts.
+Artist, imported-setlist and performance results are independent; a missing
+recording does not discard the account's ordered passages.
+
 Read [provider decoding](provider-decoding.md) for retained assertions and exact
 citations, and the [domain contracts](../../../design/2026-10-17-normalization-contracts.md)
 for accepted data and review. This guide covers the binding, catalog invalidation
@@ -190,13 +195,45 @@ Binding refreshes associations and clocks, **not retained wording**. The
 its producer clocks before binding. Historical seed and association-only APIs
 retain their original behavior.
 
-Remaining work includes Jerry and enrichment account binding, imported venue and
-repertoire binding, unresolved-lookup registration, complete-ticket coordinators,
+Remaining work includes imported venue and repertoire binding,
+unresolved-lookup registration, complete-ticket coordinators,
 multi-candidate resolution and evaluated automatic acceptance. A recording read
 set does not authorize unrelated unbound context facts; each new domain binder
 must define their ownership and freshness. Model comparison, backfill and rollout
 rehearsal remain requirements of the [main plan](README.md). This increment does
 not enable a production resolver or establish matching accuracy.
+
+### Imported venue and repertoire prerequisites
+
+Imported catalog facts require retained snapshots and their original producer
+revisions before they can support canonical assignments. Bind stored UUIDs.
+`SetlistSongService` can update a song's upstream identifier without replacing its
+UUID; `VenueService` can replace a venue UUID during an ownership/identifier edit.
+Recomputing either identity from current labels would lose those contracts.
+
+An imported venue can have no artist and no catalog users. Artist clocks alone
+cannot protect that row. Add a retained per-venue UUID clock, including old/new
+UUIDs on replacement and tombstones after deletion. Integrate its dependency into
+work admission, publication, contributor unions and pending-owner queries before
+publishing from an imported-venue snapshot. Do not assign a global venue to an
+arbitrary artist to obtain a clock. Legacy coordinates have unknown precision:
+the Setlist.fm importer stores city coordinates in venue columns. Preserve
+`past_names` as original prose until an evidenced interpretation is available.
+
+An artist's imported repertoire can use the existing artist clock. Retain one
+bounded, complete snapshot of its song rows; reject oversized snapshots instead
+of truncating them. Individual song observations keep their stored UUIDs, but
+their evidence and admission revision belong to the containing repertoire input
+resource. The legacy song/show membership table supplies neither repeated
+occurrences nor order. Those require retained provider accounts or file evidence.
+
+Unresolved provider lookups also need durable outcomes, separate from current
+extraction batches. Reuse global source-identifier clocks for Archive/Phish
+absence checks, with generation zero admitted under the same lock protocol.
+Missing legacy sources need a source-UUID lookup clock because their upstream
+identifier is unknown. A processed lookup can consume its watermark and sleep
+until evidence changes; it must not replace a prior successful extraction or an
+accepted relationship. Retry enrollment must preserve other contributors' inputs.
 
 ## Verify the contracts
 

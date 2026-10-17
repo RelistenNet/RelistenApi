@@ -122,6 +122,11 @@ binding outcomes still need retry registration. Direct provider
 coordinators, the remaining bindings and the evaluated resolver remain required
 before automatic normalization.
 
+Retained Jerry and enrichment accounts now have a separate
+[setlist binding contract](setlist-binding.md). It preserves the distinction
+between provider evidence, an imported setlist and a performance association;
+it does not derive ordered occurrences from legacy song/show memberships.
+
 ## Verification
 
 From the repository root, run the affected normalization and playback contracts:

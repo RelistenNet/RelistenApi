@@ -17,10 +17,11 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 - [x] Implement local credit/title extraction, indexed candidate retrieval, typed pair comparison and bounded cached Luna extraction. A two-input [connectivity receipt](../../../research/2026-10-17-full-normalization/scale/evidence/luna-connectivity.json) verifies API integration and key-free cache replay for $0.0001745. No matching policy is active.
 - [x] Implement [capture adapters](provider-capture.md) for all seven configured importers and Archive intake/discovery, plus [typed decoding and legacy recording seeds](provider-decoding.md).
 - [x] Implement [catalog binding and contributed input sets](catalog-binding.md) for legacy, Archive and Phish.in recordings/files, with transactional artist/global-identifier clocks and publication watermarks. Add [joint Local binding](local-binding.md), mapping-registry invalidation and [v2 recording refresh](catalog-refresh.md) with exact input-revision admission.
-- [x] Verify binding, refresh, input admission and single-recording processing: the full local API suite passes 1,240 tests with 24 existing tour-contract skips and zero failures. The combined recording/work/music/reviewed-performer run passes 120 without skips. The solution builds, formatting passes, and fresh correctness/readability reviews cover failure and recovery. These results precede bounded page processing.
+- [x] Verify binding, refresh, input admission and recording pages: the full local API suite passes 1,280 tests with 24 existing tour-contract skips and zero failures. The solution builds, formatting passes, and fresh correctness/readability reviews cover failure and recovery. These results precede setlist-account binding.
 - [x] Implement [resumable recording processing](recording-processing.md), with immutable preparation and extraction checkpoints, complete read-set checks, exact replay and historical stale proposals. Extraction never writes accepted identities.
-- [x] Add bounded recording pages and the explicit worker command, with saved selections, partial-failure receipts and resumable attempts. All 40 focused page/store/worker-process checks pass, including Test and Development environments; the full suite is being rerun after separating API popularity services from worker registration.
-- [ ] Complete the targeted relationship/provider audit, remaining Jerry/enrichment and imported venue/repertoire bindings, negative-lookup retry registration and direct provider coordinators.
+- [x] Add bounded recording pages and the explicit worker command, with saved selections, partial-failure receipts and resumable attempts. All 40 focused page/store/worker-process checks pass, including Test and Development environments. API-only popularity services are registered separately so the standalone worker passes dependency validation without Hangfire.
+- [x] Add [setlist-account binding](setlist-binding.md) for Jerry, Setlist.fm, Phantasy Tour and explicitly artist-scoped Phish.net accounts. Independent artist/imported-setlist/performance outcomes preserve passages when playback context is missing. All 80 focused binding/decoder/registry cases and 765 normalization regressions pass, including the importer boundary and controlled race regressions. The full suite is being rerun for this increment.
+- [ ] Complete imported venue/repertoire snapshots and binding, negative-lookup retry registration, candidate-facts snapshots/universe fences and direct provider coordinators.
 - [ ] Independently verify and expand held-out labels, then train and compare automatic matching and Luna routing as specified in [evaluation-strategy.md](evaluation-strategy.md). Development labels, extraction throughput and pair comparisons cannot authorize a production policy.
 - [ ] Implement and evaluate multi-candidate automatic resolution; ambiguity and conflicting identity merges enter bulk review.
 - [ ] Backfill every artist, verify public behavior and recovery, select public evidence excerpts, then rehearse and stage rollout.
@@ -52,6 +53,26 @@ Retain original source and lineage prose as evidence for named recording credits
 Use one shared evidence and decision system, with domain-specific extractors and matchers. Direct input invalidation uses the durable resource generation plus each subject's published-input watermark; publication compares that read set atomically. This avoids eager per-input fan-out while preserving pending work and stale-result fencing. Catalog binding returns artist and global source-identifier revisions, plus a mapping-registry revision for Local; catalog mutations advance them transactionally. V2 recording refresh carries the original catalog read set, and work admission checks the exact consumed input revision UUIDs. Fresh clocks cannot justify stale facts. Each contributor owns its complete input and dependency sets, and the work service configures their union atomically. Shared canonical-identity edits use dependency revision checks. Configuration changes require an explicit generation compare-and-swap, and work dependencies must be acyclic. Processing follows retained input, structured extraction, candidate retrieval, matching, acceptance or bulk review, then public read projection. Do not require an artist to have a curated repertoire dictionary. Artist context helps interpret titles and credits; people, venues and compositions resolve globally.
 
 `NormalizationCandidateService` now retrieves accepted names, aliases and qualified provider IDs through indexed queries with bounded returned pools. It scopes repertoire by artist and resolves global people, venues and compositions through redirects. Identifier hits survive the name limit; a truncation flag prevents treating an incomplete name pool as exhaustive. Equal-score cutoff ties can vary, and the pool limit does not guarantee bounded database work or catalog throughput. Resolvers must capture candidate-owner dependencies and reload matching facts before publication. Retrieval is implemented; multi-candidate decisions and measured recall remain work.
+
+The next candidate-facts reader must retrieve accepted assertions and complete owner
+states in the same primary snapshot as candidate selection. Public display DTOs
+cannot supply this contract. Current storage does not establish provider-handle
+classification, geographic locality keys, exclusive authority identifiers or a
+complete composition-author list. Preserve those facts as unknown. Return all
+supported dated venue assertions rather than choosing an arbitrary location;
+derive person artist context from accepted credits, including recordings that
+are not currently playable.
+
+Known candidate-owner revisions alone do not fence a new rival or a newly added
+matching alias. Add durable candidate-universe generations for global people,
+venues and compositions, and per-artist repertoire. Capture and check them at
+admission and publication, including an empty result. Changes that add accepted
+relationship context, such as a new credit owner for an existing person, also need
+a consumed membership revision; they cannot be hidden behind the person's
+unchanged identity revision. Start with conservative generations that cover
+these changes, declare and lock affected scopes before domain writes, then
+measure contention before refining their granularity. A stable generation does
+not make a truncated candidate pool exhaustive.
 
 Reviewed metadata commands cover person aliases/external IDs and venue names/locations/external IDs, plus display-identity replacement. They preserve basis, assertion revisions and history. Acceptance or replacement cites an input resource bound to the original owner; reviewed retractions cannot be undone by automatic refresh. Corrections after a merge also invalidate the survivor's owner. The [contracts](../../../design/2026-10-17-normalization-contracts.md) specify the command fields and concurrency behavior.
 
