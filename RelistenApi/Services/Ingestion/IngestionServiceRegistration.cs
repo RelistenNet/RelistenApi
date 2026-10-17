@@ -28,8 +28,11 @@ public static class IngestionServiceRegistration
         services.AddScoped<ArchiveIntakeService>();
         services.AddScoped<CatalogImportTransaction>();
         services.AddScoped<NormalizationEvidenceService>();
+        services.AddScoped<NormalizationLegacyInputService>();
         services.AddScoped<NormalizationProviderInputService>();
         services.AddScoped<NormalizationPhishInInputService>();
+        services.AddSingleton<NormalizationProviderDecoder>();
+        services.AddSingleton<RetainedRecordingCreditExtractor>();
         services
             .AddOptions<NormalizationProviderCaptureOptions>()
             .BindConfiguration("Normalization:Capture");
