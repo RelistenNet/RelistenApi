@@ -90,6 +90,7 @@ public partial class TestIngestionPersistence
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
         SqlMapper.AddTypeHandler(new DateTimeHandler());
         builder.Services.AddSingleton<IDiscordWebhookNotifier>(notifications);
+        builder.Services.AddSingleton<Hangfire.IBackgroundJobClient, IgnoredPopularityJobs>();
         host = builder.Build();
         db = host.Services.GetRequiredService<DbService>();
         await host.StartAsync();
@@ -1856,6 +1857,17 @@ public partial class TestIngestionPersistence
                 )
             ).ToArray()
         );
+
+    // Public show reads can request popularity refreshes. This fixture runs only
+    // Temporal workers, so those unrelated background jobs are acknowledged locally.
+    private sealed class IgnoredPopularityJobs : Hangfire.IBackgroundJobClient
+    {
+        public string Create(Hangfire.Common.Job job, Hangfire.States.IState state) =>
+            "fixture-popularity";
+
+        public bool ChangeState(string jobId, Hangfire.States.IState state, string expectedState) =>
+            true;
+    }
 
     public class CatalogRow
     {
