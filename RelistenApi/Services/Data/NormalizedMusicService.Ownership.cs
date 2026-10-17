@@ -37,6 +37,7 @@ public sealed partial class NormalizedMusicService
             if (
                 publication.Compositions.Count
                     + publication.WorkCredits.Count
+                    + (publication.AuthorshipAssertions?.Count ?? 0)
                     + publication.Editions.Count
                     + publication.Occurrences.Count
                     + publication.TrackContents.Count
@@ -155,6 +156,7 @@ public sealed partial class NormalizedMusicService
                 var uuid in publication
                     .Compositions.Select(x => x.Uuid)
                     .Concat(publication.WorkCredits.Select(x => x.CompositionUuid))
+                    .Concat((publication.AuthorshipAssertions ?? []).Select(x => x.CompositionUuid))
                     .Concat(
                         publication.ExternalIdentities.Select(x => x.CompositionUuid ?? Guid.Empty)
                     )
@@ -205,6 +207,7 @@ public sealed partial class NormalizedMusicService
                 + p.ImportedSongs.Count
                 + p.CompositionLinks.Count
                 + p.WorkCredits.Count
+                + (p.AuthorshipAssertions?.Count ?? 0)
                 + p.ExternalIdentities.Count
                 + p.Merges.Count
                 + p.Splits.Count
@@ -302,6 +305,29 @@ public sealed partial class NormalizedMusicService
             );
             required.Add(("people", "person", person));
         }
+        foreach (
+            var member in (publication.AuthorshipAssertions ?? [])
+                .SelectMany(x => x.Authors)
+                .Where(x => x.PersonUuid.HasValue)
+        )
+        {
+            var person = await NormalizedPeopleService.ResolvePersonUuidAsync(
+                c,
+                t,
+                member.PersonUuid!.Value,
+                ct
+            );
+            required.Add(("people", "person", person));
+        }
+        foreach (
+            var uuid in publication
+                .CompositionLinks.Where(link => link.MatchReason == "writer_evidence")
+                .SelectMany(link => link.MatchedAuthorUuids)
+        )
+        {
+            var person = await NormalizedPeopleService.ResolvePersonUuidAsync(c, t, uuid, ct);
+            required.Add(("people", "person", person));
+        }
         foreach (var merge in publication.Merges.Where(x => x.Domain == "compositions"))
         {
             required.Add(("compositions", "composition", merge.SurvivorUuid));
@@ -338,6 +364,7 @@ public sealed partial class NormalizedMusicService
                 )
             )
             .Concat(p.WorkCredits.Select(x => x.CompositionUuid))
+            .Concat((p.AuthorshipAssertions ?? []).Select(x => x.CompositionUuid))
             .Concat(p.Splits.SelectMany(x => x.Targets ?? []).Select(x => x.Uuid))
             .Concat(
                 p.Occurrences.SelectMany(x =>

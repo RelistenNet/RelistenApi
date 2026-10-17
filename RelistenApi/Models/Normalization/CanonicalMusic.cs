@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -50,6 +51,26 @@ public sealed record WorkCreditChange : MusicChange
     public Guid? PersonUuid { get; init; }
     public Guid? ArtistUuid { get; init; }
 }
+
+/// <summary>
+/// One source's stated author list, independent of individual work-credit rows. CompleteAuthorship
+/// records an explicit exhaustive-list assertion, never completeness inferred from populated credits.
+/// Unresolved members remain in the list; only canonical person identities can establish an author match.
+/// </summary>
+public sealed record CompositionAuthorshipChange : MusicChange
+{
+    public Guid CompositionUuid { get; init; }
+    public bool CompleteAuthorship { get; init; }
+    public IReadOnlyList<CompositionAuthorMember> Authors { get; init; } = [];
+}
+
+/// <summary>Role is writer, composer or lyricist. Person includes canonical person/group identities, not catalog artists.</summary>
+public sealed record CompositionAuthorMember(
+    string Role,
+    string OriginalText,
+    Guid? PersonUuid = null,
+    NormalizedEvidenceReference? Evidence = null
+);
 
 /// <summary>Provider identity is qualified by resource; a date alone is not an engagement identity.</summary>
 public sealed record SetlistEditionChange : MusicChange
@@ -127,6 +148,10 @@ public sealed record MusicPublication
     public IReadOnlyList<ImportedSongAssignmentChange> ImportedSongs { get; init; } = [];
     public IReadOnlyList<RepertoireCompositionChange> CompositionLinks { get; init; } = [];
     public IReadOnlyList<WorkCreditChange> WorkCredits { get; init; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CompositionAuthorshipChange>? AuthorshipAssertions { get; init; }
+
     public IReadOnlyList<SetlistEditionChange> Editions { get; init; } = [];
     public IReadOnlyList<SongOccurrenceChange> Occurrences { get; init; } = [];
     public IReadOnlyList<TrackContentChange> TrackContents { get; init; } = [];

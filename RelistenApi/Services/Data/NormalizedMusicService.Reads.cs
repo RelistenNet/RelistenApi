@@ -149,6 +149,28 @@ public sealed partial class NormalizedMusicService
             cancellationToken
         );
 
+    /// <summary>Reads each accepted source author-list assertion without combining incompatible lists.</summary>
+    public Task<
+        IReadOnlyList<MusicRecord<CompositionAuthorshipChange>>
+    > GetCompositionAuthorshipAsync(
+        Guid compositionUuid,
+        Guid? afterUuid = null,
+        int limit = 50,
+        CancellationToken cancellationToken = default
+    ) =>
+        ReadMany<CompositionAuthorshipChange>(
+            "composition_authorship_assertions",
+            "x.composition_uuid=@compositionUuid AND (@afterUuid::uuid IS NULL OR x.uuid>@afterUuid)",
+            "x.uuid",
+            new
+            {
+                compositionUuid,
+                afterUuid,
+                limit = ValidateLimit(limit),
+            },
+            cancellationToken
+        );
+
     public Task<IReadOnlyList<MusicRecord<SetlistEditionChange>>> GetArtistEditionsAsync(
         Guid artistUuid,
         string? afterLiteralDate = null,

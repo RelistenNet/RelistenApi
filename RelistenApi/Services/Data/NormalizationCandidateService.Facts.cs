@@ -15,7 +15,7 @@ namespace Relisten.Data;
 public sealed partial class NormalizationCandidateService
 {
     /// <summary>Projection version included in lookup fingerprints and retained matching receipts.</summary>
-    public const string FactsVersion = "candidate-facts-v1";
+    public const string FactsVersion = "candidate-facts-v2";
 
     /// <summary>
     /// Reads global person candidates, original-owner assertions and exact accepted-credit

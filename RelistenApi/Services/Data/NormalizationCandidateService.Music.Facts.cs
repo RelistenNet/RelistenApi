@@ -119,7 +119,7 @@ public sealed partial class NormalizationCandidateService
                 context,
                 ct
             );
-            var credits = await ReadCompositionCredits(
+            var authorship = await ReadCompositionAuthorshipRows(
                 c,
                 t,
                 identities,
@@ -128,6 +128,51 @@ public sealed partial class NormalizationCandidateService
                 context,
                 ct
             );
+            var credits = await ReadCompositionCredits(
+                c,
+                t,
+                identities,
+                authorship
+                    .SelectMany(row => row.Authors)
+                    .Where(author => author.PersonUuid.HasValue)
+                    .Select(author => author.PersonUuid!.Value)
+                    .ToArray(),
+                hit.Uuid,
+                limits,
+                context,
+                ct
+            );
+            var authorFacts = AuthorshipFacts(
+                authorship,
+                identities,
+                credits.People,
+                hit.Uuid,
+                limits,
+                context
+            );
+            // An omitted member or conflicting account cannot expose a convenient complete
+            // subset. Source completeness remains on each raw assertion for inspection.
+            var completeAuthors = context.Issues.Any(issue =>
+                issue.PreventsAutomaticAcceptance
+                && (issue.CandidateUuid == hit.Uuid || issue.CandidateUuid == null)
+            )
+                ? null
+                : CompositionAuthorshipAgreement.CompleteAuthors(
+                    authorFacts.Select(assertion =>
+                        (
+                            assertion.CompleteAuthorship,
+                            (IReadOnlyList<Guid?>)
+                                assertion
+                                    .Authors.Select(author => author.ResolvedPersonUuid)
+                                    .ToArray()
+                        )
+                    ),
+                    credits
+                        .Credits.Where(credit =>
+                            CompositionAuthorshipAgreement.IsAuthorRole(credit.Role)
+                        )
+                        .Select(credit => credit.ResolvedPersonUuid)
+                );
             result.Add(
                 new CompositionCandidateFacts
                 {
@@ -140,6 +185,8 @@ public sealed partial class NormalizationCandidateService
                     WorkCredits = credits.Credits,
                     PersonCreditTargets = credits.People,
                     ArtistCreditTargets = credits.Artists,
+                    AuthorshipAssertions = authorFacts,
+                    AuthorUuids = completeAuthors ?? new HashSet<Guid>(),
                 }
             );
         }
@@ -546,6 +593,7 @@ public sealed partial class NormalizationCandidateService
         NpgsqlConnection c,
         NpgsqlTransaction t,
         MusicFactIdentity[] identities,
+        Guid[] authorPeople,
         Guid candidate,
         CandidateFactsLimits limits,
         CandidateFactsContext context,
@@ -585,6 +633,7 @@ public sealed partial class NormalizationCandidateService
         foreach (
             var uuid in rows.Where(row => row.PersonUuid.HasValue)
                 .Select(row => row.PersonUuid!.Value)
+                .Concat(authorPeople)
                 .Distinct()
                 .Order()
         )

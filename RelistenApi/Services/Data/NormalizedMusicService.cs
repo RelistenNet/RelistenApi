@@ -189,6 +189,10 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         {
             await SaveWorkCredit(c, t, credit, decisionUuid, reviewed, ct);
         }
+        foreach (var assertion in publication.AuthorshipAssertions ?? [])
+        {
+            await SaveAuthorship(c, t, assertion, decisionUuid, reviewed, ct);
+        }
         foreach (var link in publication.CompositionLinks.OrderByDescending(x => x.Retracted))
         {
             await SaveCompositionLink(c, t, link, decisionUuid, reviewed, ct);
@@ -413,6 +417,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
             .Concat(publication.ExternalIdentities)
             .Concat(publication.ImportedSongs)
             .Concat(publication.WorkCredits)
+            .Concat(publication.AuthorshipAssertions ?? [])
             .Concat(publication.CompositionLinks)
             .Concat(publication.Editions)
             .Concat(publication.Occurrences)
@@ -631,6 +636,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                     "repertoire_songs"
                     or "compositions"
                     or "work_credits"
+                    or "composition_authorship_assertions"
                     or "imported_song_assignments"
                     or "repertoire_compositions"
                     or "music_external_identities"

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -147,26 +148,19 @@ public sealed partial class NormalizedMusicService
                     "A writer match requires a complete, resolved author set observed in its supporting evidence."
                 );
             }
-            var authors = (
-                await c.QueryAsync<Guid?>(
-                    new CommandDefinition(
-                        "SELECT COALESCE(person_uuid,artist_uuid) FROM normalization.work_credits WHERE composition_uuid=@uuid AND role IN ('writer','composer','lyricist') AND NOT retracted",
-                        new { uuid = link.CompositionUuid },
-                        t,
-                        cancellationToken: ct
-                    )
-                )
-            ).ToArray();
-            if (
-                authors.Length == 0
-                || authors.Any(x => !x.HasValue)
-                || !authors.Select(x => x!.Value).ToHashSet().SetEquals(link.MatchedAuthorUuids)
-            )
+            var matched = new HashSet<Guid>();
+            foreach (var author in link.MatchedAuthorUuids)
+            {
+                matched.Add(await NormalizedPeopleService.ResolvePersonUuidAsync(c, t, author, ct));
+            }
+            var authors = await ReadCompleteCompositionAuthors(c, t, link.CompositionUuid, ct);
+            if (authors == null || !authors.SetEquals(matched))
             {
                 throw new ArgumentException(
-                    "The observed complete author set does not establish this composition."
+                    "Consistent complete source author assertions do not establish this composition."
                 );
             }
+            link = link with { MatchedAuthorUuids = matched.Order().ToArray() };
         }
         await Persist(
             c,

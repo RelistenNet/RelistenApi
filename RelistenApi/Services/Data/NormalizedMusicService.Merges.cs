@@ -110,6 +110,7 @@ public sealed partial class NormalizedMusicService
                 """
                 SELECT NOT EXISTS(SELECT 1 FROM normalization.repertoire_compositions WHERE composition_uuid=@RetiredUuid AND NOT retracted)
                 AND NOT EXISTS(SELECT 1 FROM normalization.work_credits WHERE composition_uuid=@RetiredUuid AND NOT retracted)
+                AND NOT EXISTS(SELECT 1 FROM normalization.composition_authorship_assertions WHERE composition_uuid=@RetiredUuid AND NOT retracted)
                 AND NOT EXISTS(SELECT 1 FROM normalization.music_external_identities WHERE composition_uuid=@RetiredUuid AND NOT retracted)
                 """,
                 merge,

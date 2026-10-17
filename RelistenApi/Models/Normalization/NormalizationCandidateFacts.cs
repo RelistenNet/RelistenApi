@@ -282,6 +282,22 @@ public sealed record CandidateArtistCreditTarget(
     string? Slug
 );
 
+/// <summary>One retained source author-list claim. Stored and resolved person identities remain separate.</summary>
+public sealed record CompositionAuthorFact(
+    string Role,
+    string OriginalText,
+    Guid? StoredPersonUuid,
+    Guid? ResolvedPersonUuid,
+    NormalizedEvidenceReference? Evidence
+);
+
+public sealed record CompositionAuthorshipFact(
+    CandidateAssertionProvenance Provenance,
+    Guid StoredCompositionUuid,
+    bool CompleteAuthorship,
+    IReadOnlyList<CompositionAuthorFact> Authors
+);
+
 public sealed record CompositionCandidateFacts
 {
     public required NormalizationCandidateHit Hit { get; init; }
@@ -292,11 +308,15 @@ public sealed record CompositionCandidateFacts
     public IReadOnlyList<CandidateExternalIdentityFact> ExternalIdentities { get; init; } = [];
     public IReadOnlyList<CompositionWorkCreditFact> WorkCredits { get; init; } = [];
 
-    // These targets cover every credit role. Only WorkCredits in writer/composer/lyricist
-    // roles supply authorship; resolving an arranger or performer does not make them an author.
+    // These targets cover every credit role and author-list member. Writer/composer/lyricist
+    // credits can contradict a complete source list; arrangers and performers cannot establish authorship.
     public IReadOnlyList<CandidatePersonCreditTarget> PersonCreditTargets { get; init; } = [];
     public IReadOnlyList<CandidateArtistCreditTarget> ArtistCreditTargets { get; init; } = [];
 
-    // The current work-credit model supplies individual claims, not an exhaustive author list.
-    public bool CompleteAuthorship => false;
+    public IReadOnlyList<CompositionAuthorshipFact> AuthorshipAssertions { get; init; } = [];
+
+    // Empty when source lists conflict, an author is unresolved, or the bounded author
+    // projection is incomplete. This aggregate never replaces the individual assertions.
+    public IReadOnlySet<Guid> AuthorUuids { get; init; } = new HashSet<Guid>();
+    public bool CompleteAuthorship => AuthorUuids.Count > 0;
 }

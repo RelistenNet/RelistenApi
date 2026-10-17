@@ -59,6 +59,10 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     ) =>
         publication.WorkCredits.Any(x => x.PersonUuid.HasValue)
+        || (publication.AuthorshipAssertions ?? [])
+            .SelectMany(x => x.Authors)
+            .Any(x => x.PersonUuid.HasValue)
+        || publication.CompositionLinks.Any(x => x.MatchReason == "writer_evidence")
             ? c.ExecuteAsync(
                 new CommandDefinition(
                     "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:people:identity',0))",
