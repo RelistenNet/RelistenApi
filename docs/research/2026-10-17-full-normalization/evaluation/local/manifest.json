@@ -1,0 +1,29 @@
+{
+  "kind": "snapshot",
+  "is_replica": false,
+  "snapshot_utc": "2026-10-17T16:52:08.708315+00:00",
+  "postgres_version": "PostgreSQL 17.10 on aarch64-unknown-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+  "transaction_read_only": "on",
+  "database": "relisten_jerry_20261017",
+  "origin": "local",
+  "endpoint": "127.0.0.1:15432",
+  "selection": "Curated development inputs selected by executed.sql. Not a random or representative accuracy sample.",
+  "record_counts": {
+    "evidence": 16,
+    "artists": 8
+  },
+  "counts_by_kind": {
+    "source": 8,
+    "track": 8
+  },
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "8b036e154c136330677e5b7216895ccbc29536415f22c5fca6a1fd33a2ae3f23"
+    },
+    {
+      "path": "executed.sql",
+      "sha256": "634f7fc0753040e6a66d64a395d759d186a4a208ee7acba8a91cc4f8e13c3981"
+    }
+  ]
+}

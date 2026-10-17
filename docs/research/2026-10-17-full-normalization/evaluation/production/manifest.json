@@ -1,0 +1,31 @@
+{
+  "kind": "snapshot",
+  "is_replica": true,
+  "snapshot_utc": "2026-10-17T16:50:48.388319+00:00",
+  "postgres_version": "PostgreSQL 17.10 (Ubuntu 17.10-1.pgdg22.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0, 64-bit",
+  "transaction_read_only": "on",
+  "database": "app",
+  "endpoint": "relisten-db-ro.tail09dbf.ts.net:5432",
+  "selection": "Curated 16-artist cohort, bounded source and track examples, shared-name venues and repertoire, and unordered provider setlist memberships. Not a random or representative accuracy sample.",
+  "record_counts": {
+    "evidence": 106,
+    "artists": 16
+  },
+  "counts_by_kind": {
+    "setlist": 4,
+    "song": 16,
+    "source": 34,
+    "track": 32,
+    "venue": 20
+  },
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "a0f24c1ed158abfa2f866e0c46e61fe838c63082487b536ba9aff740c642bf7e"
+    },
+    {
+      "path": "executed.sql",
+      "sha256": "24fb7402ac75ef27292e9792b87624a30b15debb90aae9a2cadee673513b4076"
+    }
+  ]
+}

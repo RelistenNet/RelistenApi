@@ -1,0 +1,149 @@
+{
+  "validation": "corpus integrity only",
+  "limitations": [
+    "Quotes establish traceability, not the correctness of labels or identity links.",
+    "Coverage is descriptive; no extraction or matching accuracy has been measured.",
+    "Evaluation labels need independent review before they can support acceptance decisions."
+  ],
+  "manifest_verified": true,
+  "case_digest_verified": true,
+  "evidence_rows": 132,
+  "used_evidence_rows": 84,
+  "cases": 102,
+  "artists": [
+    {
+      "id": "14",
+      "name": "Furthur"
+    },
+    {
+      "id": "161",
+      "name": "moe."
+    },
+    {
+      "id": "166",
+      "name": "Tedeschi Trucks Band"
+    },
+    {
+      "id": "167",
+      "name": "Ratdog"
+    },
+    {
+      "id": "17",
+      "name": "Disco Biscuits"
+    },
+    {
+      "id": "175",
+      "name": "Ween"
+    },
+    {
+      "id": "180",
+      "name": "Godspeed You Black Emperor!"
+    },
+    {
+      "id": "202",
+      "name": "Billy Strings"
+    },
+    {
+      "id": "2291",
+      "name": "Math the Band"
+    },
+    {
+      "id": "278",
+      "name": "Yes"
+    },
+    {
+      "id": "286",
+      "name": "Choice And Company"
+    },
+    {
+      "id": "293",
+      "name": "Jerry Garcia Band"
+    },
+    {
+      "id": "294",
+      "name": "Legion of Mary"
+    },
+    {
+      "id": "295",
+      "name": "Garcia/Saunders"
+    },
+    {
+      "id": "296",
+      "name": "Reconstruction"
+    },
+    {
+      "id": "301",
+      "name": "The Eternals"
+    },
+    {
+      "id": "304",
+      "name": "Wire"
+    },
+    {
+      "id": "309",
+      "name": "Cheer-Accident"
+    },
+    {
+      "id": "327",
+      "name": "3fifths"
+    },
+    {
+      "id": "343",
+      "name": "Tiny Fireflies"
+    },
+    {
+      "id": "4",
+      "name": "Phish"
+    },
+    {
+      "id": "4411",
+      "name": "Claudia Jane"
+    },
+    {
+      "id": "5",
+      "name": "Widespread Panic"
+    },
+    {
+      "id": "9",
+      "name": "Grateful Dead"
+    },
+    {
+      "id": "external:bob-dylan",
+      "name": "Bob Dylan"
+    }
+  ],
+  "providers": [
+    "archive.org",
+    "artist-provider-association",
+    "bobdylan.com",
+    "jerrygarcia.com",
+    "phantasytour.com",
+    "phish.in",
+    "phish.net",
+    "setlist.fm"
+  ],
+  "cases_by_domain": {
+    "compositions": 8,
+    "lineage": 15,
+    "people": 44,
+    "songs": 28,
+    "venues": 7
+  },
+  "cases_by_task": {
+    "extract": 76,
+    "match": 20,
+    "relationship": 6
+  },
+  "cases_by_split": {
+    "development": 66,
+    "evaluation": 36
+  },
+  "cases_by_annotation_status": {
+    "development_labeled": 102
+  },
+  "cases_by_expected_status": {
+    "different": 2,
+    "supported": 77,
+    "unresolved": 23
+  }
+}

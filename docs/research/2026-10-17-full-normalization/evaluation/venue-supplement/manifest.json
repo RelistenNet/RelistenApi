@@ -1,0 +1,28 @@
+{
+  "kind": "snapshot",
+  "is_replica": true,
+  "snapshot_utc": "2026-10-17T16:51:52.088487+00:00",
+  "postgres_version": "PostgreSQL 17.10 (Ubuntu 17.10-1.pgdg22.04+1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0, 64-bit",
+  "transaction_read_only": "on",
+  "database": "app",
+  "origin": "production",
+  "endpoint": "relisten-db-ro.tail09dbf.ts.net:5432",
+  "selection": "Curated development inputs selected by executed.sql. Not a random or representative accuracy sample.",
+  "record_counts": {
+    "evidence": 8,
+    "artists": 4
+  },
+  "counts_by_kind": {
+    "venue": 8
+  },
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "7f94e664ac60948c67219bdf28a3c5a8f2fd7402bf365f88f12c8733d369941c"
+    },
+    {
+      "path": "executed.sql",
+      "sha256": "d32d73bf4d7cf3c3c554b2b9811ab2e665fe791b48f12c63ecfdb905c5beb3ae"
+    }
+  ]
+}

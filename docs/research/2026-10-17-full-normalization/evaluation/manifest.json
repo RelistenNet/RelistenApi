@@ -1,0 +1,81 @@
+{
+  "corpus_version": 1,
+  "created_at_utc": "2026-10-17T16:57:54.891834+00:00",
+  "record_counts": {
+    "evidence": 132,
+    "cases": 102
+  },
+  "selection": "Curated real-data challenge corpus; not a random catalog accuracy sample.",
+  "annotation": {
+    "method": "Codex development reasoning",
+    "status": "development_labeled",
+    "second_developer_review": "All 102 cases reviewed; writer role retained, extraction and identity separated, no known referenced-recording/family leakage. This is not independent blind adjudication."
+  },
+  "partition": {
+    "development": 66,
+    "evaluation": 36,
+    "evaluation_status": "reserved development-labeled cases; independent verification and expansion required before acceptance calibration"
+  },
+  "api_usage": {
+    "paid_model_requests": 0,
+    "paid_model_spend_usd": 0
+  },
+  "files": [
+    {
+      "path": "evidence.jsonl",
+      "sha256": "1f1d47e6b29d4b16418854b704e5ca06c70935bdcce16c63068ed04559bb09c4"
+    },
+    {
+      "path": "cases.jsonl",
+      "sha256": "9f05f4ddcb8a85bb8578a203be56f2ee10d6f07aa19605e8bcf2b172d25f1040"
+    },
+    {
+      "path": "references/evidence.jsonl",
+      "sha256": "8d1f85c2edc9738c36e727c7bdc1a6ff2ab7194fcb85ff75bc8c4d5afa1aee73"
+    },
+    {
+      "path": "assertions.md",
+      "sha256": "5f5eae97ab4e594fb57b5b077b326aba1c00f0737e8fe74c857e145b52b55746"
+    },
+    {
+      "path": "format.md",
+      "sha256": "ea257b89ed806869e4d1cd9ca7707091448e5027f1e6206781cda5e3791f3d61"
+    },
+    {
+      "path": "production/evidence.jsonl",
+      "sha256": "a0f24c1ed158abfa2f866e0c46e61fe838c63082487b536ba9aff740c642bf7e"
+    },
+    {
+      "path": "production/manifest.json",
+      "sha256": "f04bad1623bdec9e4f2f4bffd9e1521ca4740c045174618c6b60663ec3d5a596"
+    },
+    {
+      "path": "production/executed.sql",
+      "sha256": "24fb7402ac75ef27292e9792b87624a30b15debb90aae9a2cadee673513b4076"
+    },
+    {
+      "path": "venue-supplement/evidence.jsonl",
+      "sha256": "7f94e664ac60948c67219bdf28a3c5a8f2fd7402bf365f88f12c8733d369941c"
+    },
+    {
+      "path": "venue-supplement/manifest.json",
+      "sha256": "12e5c790ff7fd9a8ad4a872afb57b9159759878ac9dd1d3c7e91abfe8670bc33"
+    },
+    {
+      "path": "venue-supplement/executed.sql",
+      "sha256": "d32d73bf4d7cf3c3c554b2b9811ab2e665fe791b48f12c63ecfdb905c5beb3ae"
+    },
+    {
+      "path": "local/evidence.jsonl",
+      "sha256": "8b036e154c136330677e5b7216895ccbc29536415f22c5fca6a1fd33a2ae3f23"
+    },
+    {
+      "path": "local/manifest.json",
+      "sha256": "60278bf7ce270879e566f9118e999a9cdd733a42571e71539db34efbf0c94d7c"
+    },
+    {
+      "path": "local/executed.sql",
+      "sha256": "634f7fc0753040e6a66d64a395d759d186a4a208ee7acba8a91cc4f8e13c3981"
+    }
+  ]
+}
