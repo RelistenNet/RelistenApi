@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -344,19 +345,16 @@ public sealed partial class NormalizedVenueService
         CancellationToken ct
     )
     {
-        var payload = await c.QuerySingleAsync<byte[]>(
+        var input = await c.QuerySingleAsync<NormalizationInputRevision>(
             new CommandDefinition(
-                "SELECT payload FROM normalization.input_revisions WHERE uuid=@InputRevisionUuid",
+                "SELECT uuid, payload, media_type AS \"MediaType\" FROM normalization.input_revisions WHERE uuid=@InputRevisionUuid",
                 location.Evidence,
                 t,
                 cancellationToken: ct
             )
         );
-        using var document = JsonDocument.Parse(payload);
-        var value = NormalizedPeopleService.ResolveMetadataPointer(
-            document.RootElement,
-            location.Evidence.JsonPointer
-        );
+        using var document = NormalizationRetainedDocument.Open(input, ct);
+        var value = document.Resolve(location.Evidence.JsonPointer);
         if (
             value.ValueKind == JsonValueKind.String
             && location.Country == null

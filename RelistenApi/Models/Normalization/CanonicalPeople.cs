@@ -3,7 +3,10 @@ using System.Collections.Generic;
 
 namespace Relisten.Api.Models.Normalization;
 
-/// <summary>Exact retained JSON value, optionally narrowed to a Unicode code-point text span.</summary>
+/// <summary>
+/// Exact retained value identified by JSON Pointer, or by the empty locator for HTML/plain text.
+/// Optional text spans count Unicode code points in the original decoded value.
+/// </summary>
 public sealed record NormalizedEvidenceReference(
     Guid InputRevisionUuid,
     string JsonPointer,

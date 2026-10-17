@@ -2,13 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -24,55 +24,23 @@ public sealed partial class NormalizedPeopleService
     {
         foreach (var revision in evidence.GroupBy(e => e.InputRevisionUuid))
         {
-            var payload = await connection.QuerySingleOrDefaultAsync<byte[]>(
+            var input = await connection.QuerySingleOrDefaultAsync<NormalizationInputRevision>(
                 new CommandDefinition(
-                    "SELECT payload FROM normalization.input_revisions WHERE uuid=@uuid",
+                    "SELECT uuid, payload, media_type AS \"MediaType\" FROM normalization.input_revisions WHERE uuid=@uuid",
                     new { uuid = revision.Key },
                     transaction,
                     cancellationToken: cancellationToken
                 )
             );
-            if (payload == null)
+            if (input == null)
             {
                 throw new ArgumentException("Evidence input revision does not exist.");
             }
-            using var document = JsonDocument.Parse(payload);
+
+            using var document = NormalizationRetainedDocument.Open(input, cancellationToken);
             foreach (var reference in revision)
             {
-                var value = ResolveMetadataPointer(document.RootElement, reference.JsonPointer);
-                if (
-                    reference.StartCodePoint == null
-                    && reference.EndCodePoint == null
-                    && reference.Quote == null
-                )
-                {
-                    continue;
-                }
-                if (
-                    value.ValueKind != JsonValueKind.String
-                    || reference.StartCodePoint == null
-                    || reference.EndCodePoint == null
-                    || reference.Quote == null
-                )
-                {
-                    throw new ArgumentException(
-                        "Text evidence requires a string value, both offsets and an exact quote."
-                    );
-                }
-                var runes = value.GetString()!.EnumerateRunes().ToArray();
-                var start = reference.StartCodePoint.Value;
-                var end = reference.EndCodePoint.Value;
-                if (
-                    start < 0
-                    || end < start
-                    || end > runes.Length
-                    || string.Concat(runes[start..end].Select(r => r.ToString())) != reference.Quote
-                )
-                {
-                    throw new ArgumentException(
-                        "Evidence quote does not match its Unicode code-point span."
-                    );
-                }
+                document.ValidateEvidence(reference);
             }
         }
     }
@@ -94,16 +62,16 @@ public sealed partial class NormalizedPeopleService
         }
         else
         {
-            var payload = await c.QuerySingleAsync<byte[]>(
+            var input = await c.QuerySingleAsync<NormalizationInputRevision>(
                 new CommandDefinition(
-                    "SELECT payload FROM normalization.input_revisions WHERE uuid=@InputRevisionUuid",
+                    "SELECT uuid, payload, media_type AS \"MediaType\" FROM normalization.input_revisions WHERE uuid=@InputRevisionUuid",
                     evidence,
                     t,
                     cancellationToken: ct
                 )
             );
-            using var document = JsonDocument.Parse(payload);
-            var value = ResolveMetadataPointer(document.RootElement, evidence.JsonPointer);
+            using var document = NormalizationRetainedDocument.Open(input, ct);
+            var value = document.Resolve(evidence.JsonPointer);
             if (value.ValueKind != JsonValueKind.String)
             {
                 throw new ArgumentException(
@@ -236,41 +204,5 @@ public sealed partial class NormalizedPeopleService
             )
         );
         await ValidateOwnerAsync(c, t, subjectUuid, domain, kind, entityUuid, ct);
-    }
-
-    internal static JsonElement ResolveMetadataPointer(JsonElement root, string pointer)
-    {
-        if (pointer.Length == 0)
-        {
-            return root;
-        }
-        if (!pointer.StartsWith('/'))
-        {
-            throw new ArgumentException("Evidence locator must be a JSON Pointer.");
-        }
-        foreach (var encoded in pointer[1..].Split('/'))
-        {
-            var token = encoded.Replace("~1", "/").Replace("~0", "~");
-            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(token, out var value))
-            {
-                root = value;
-            }
-            else if (
-                root.ValueKind == JsonValueKind.Array
-                && int.TryParse(token, out var index)
-                && index >= 0
-                && index < root.GetArrayLength()
-            )
-            {
-                root = root[index];
-            }
-            else
-            {
-                throw new ArgumentException(
-                    "Evidence JSON Pointer does not identify a retained value."
-                );
-            }
-        }
-        return root;
     }
 }
