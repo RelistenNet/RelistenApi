@@ -1,0 +1,215 @@
+using System;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Threading;
+using Relisten.Api.Models.Normalization;
+
+namespace Relisten.Normalization;
+
+/// <summary>
+/// Builds local recording proposals from retained assertions and their checked catalog associations.
+/// It does not search candidates, allocate canonical identities or accept inferred matches.
+/// </summary>
+public sealed class NormalizationRecordingExtractor(
+    RetainedRecordingCreditExtractor credits,
+    TrackTitleExtractor titles
+)
+{
+    public const string Version =
+        "recording-extraction-v1/"
+        + RetainedRecordingCreditExtractor.Version
+        + "/"
+        + TrackTitleExtractor.Version;
+
+    /// <summary>
+    /// Extracts source credits even when playback context is incomplete. Only positively bound
+    /// files receive title proposals. Callers must retain the binding, unresolved credits and
+    /// decoder issues with this result; an unresolved file must not disappear from the batch.
+    /// </summary>
+    /// <remarks>
+    /// Proposal UUIDs identify evidenced mentions within this extractor version, not people or
+    /// songs. Title segment offsets remain relative to the exact original title string; they
+    /// describe neither audio boundaries nor separate performances.
+    /// </remarks>
+    public NormalizationRecordingExtraction Extract(
+        NormalizationInputRevision input,
+        ProviderDecodeResult decoded,
+        NormalizationRecordingBindingSnapshot binding,
+        CancellationToken cancellationToken = default
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var recording = RequireRecording(input, decoded, binding);
+        var owner = binding.Recording.Value!;
+        using var document = NormalizationRetainedDocument.Open(input, cancellationToken);
+        document.ValidateEvidence(recording.Origin.Evidence);
+        foreach (var issue in decoded.Issues)
+        {
+            document.ValidateEvidence(issue.Evidence);
+        }
+
+        var extractedCredits = credits.Extract(input, recording.Text, cancellationToken);
+        var creditProposals = extractedCredits
+            .Credits.Select(
+                (mention, ordinal) =>
+                    new NormalizationRecordingCreditProposal(
+                        ProposalUuid(
+                            "credit",
+                            new
+                            {
+                                input.Uuid,
+                                recording.Origin,
+                                owner.SourceUuid,
+                                ordinal,
+                                mention,
+                            }
+                        ),
+                        mention
+                    )
+            )
+            .ToArray();
+        var titleProposals = binding
+            .Files.Where(file => file.Binding.Status == NormalizationCatalogBindingStatus.Bound)
+            .Select(file => ExtractTitle(input, document, file, owner, cancellationToken))
+            .ToArray();
+        return new(creditProposals, extractedCredits.Unresolved, titleProposals, decoded.Issues);
+    }
+
+    private static ProviderRecordingObservation RequireRecording(
+        NormalizationInputRevision input,
+        ProviderDecodeResult decoded,
+        NormalizationRecordingBindingSnapshot binding
+    )
+    {
+        if (
+            input.Uuid == Guid.Empty
+            || binding.InputRevisionUuid != input.Uuid
+            || binding.Resource != input.Resource
+            || decoded.InputRevisionUuid != input.Uuid
+            || decoded.Resource != input.Resource
+            || decoded.Recordings.Count != 1
+        )
+        {
+            throw new ArgumentException(
+                "Recording extraction requires one decoded recording and its exact retained binding."
+            );
+        }
+        var recording = decoded.Recordings[0];
+        if (
+            recording.Origin.Item != input.Resource
+            || recording.Origin.Evidence.InputRevisionUuid != input.Uuid
+            || binding.Recording.Status != NormalizationCatalogBindingStatus.Bound
+            || binding.Recording.Value == null
+        )
+        {
+            throw new ArgumentException(
+                "Recording extraction requires a positively bound recording from this input."
+            );
+        }
+
+        // File association belongs to the binder. Match its original assertions by cited origin,
+        // never by a title or track position, before using the existing catalog UUIDs it returned.
+        if (
+            binding.Files.Count != recording.Files.Count
+            || recording.Files.Select(file => file.Origin).Distinct().Count()
+                != recording.Files.Count
+            || binding.Files.Select(file => file.Observation.Origin).Distinct().Count()
+                != binding.Files.Count
+        )
+        {
+            throw new ArgumentException(
+                "File bindings must retain the decoded recording's exact file assertions."
+            );
+        }
+        var observedFiles = recording.Files.ToDictionary(file => file.Origin);
+        if (
+            binding.Files.Any(file =>
+                !observedFiles.TryGetValue(file.Observation.Origin, out var observed)
+                || observed.Title != file.Observation.Title
+            )
+        )
+        {
+            throw new ArgumentException(
+                "File bindings must retain the decoded recording's exact file assertions."
+            );
+        }
+        return recording;
+    }
+
+    private NormalizationRecordingTitleProposal ExtractTitle(
+        NormalizationInputRevision input,
+        NormalizationRetainedDocument document,
+        NormalizationFileBinding file,
+        NormalizationCatalogRecordingReference owner,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var reference = file.Binding.Value;
+        if (
+            reference == null
+            || reference.SourceUuid != owner.SourceUuid
+            || reference.ArtistUuid != owner.ArtistUuid
+        )
+        {
+            throw new ArgumentException(
+                "A positively bound file must belong to the bound recording and artist."
+            );
+        }
+        var observation = file.Observation;
+        document.ValidateEvidence(observation.Origin.Evidence);
+        var title = observation.Title;
+        if (title != null)
+        {
+            document.ValidateEvidence(title.Evidence);
+            var retained = document.Resolve(title.Evidence.JsonPointer);
+            var exactText =
+                title.Evidence.Quote
+                ?? (retained.ValueKind == JsonValueKind.String ? retained.GetString() : null);
+            if (title.Value != exactText)
+            {
+                throw new ArgumentException(
+                    "A title proposal must retain the exact cited original title."
+                );
+            }
+        }
+        var proposalUuid = ProposalUuid(
+            "title",
+            new
+            {
+                input.Uuid,
+                observation.Origin,
+                reference.SourceUuid,
+                reference.TrackUuid,
+                title,
+            }
+        );
+        return new(
+            proposalUuid,
+            reference.TrackUuid,
+            title,
+            title == null ? null : titles.Extract(owner.ArtistUuid, title.Value),
+            title == null ? "missing_title" : null
+        );
+    }
+
+    private static Guid ProposalUuid(string kind, object mention)
+    {
+        // Structured serialization keeps separators, Unicode and repeated mention ordinals
+        // unambiguous. The digest is a proposal key only; no catalog identity is derived here.
+        var digest = SHA256.HashData(
+            JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    Version,
+                    kind,
+                    mention,
+                }
+            )
+        );
+        digest[6] = (byte)((digest[6] & 0x0f) | 0x80);
+        digest[8] = (byte)((digest[8] & 0x3f) | 0x80);
+        return new Guid(digest.AsSpan(0, 16), bigEndian: true);
+    }
+}
