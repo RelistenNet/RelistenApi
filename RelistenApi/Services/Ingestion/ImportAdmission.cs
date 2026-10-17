@@ -11,11 +11,22 @@ namespace Relisten.Ingestion;
 public interface IImportAdmissionCatalog
 {
     Task<UpstreamProvider[]?> ProvidersForArtistAsync(ArtistId artist);
+
+    /// <summary>Checks durable intake membership independently of provider collection mappings.</summary>
+    Task<bool> IsTapersSectionCohortArtistAsync(ArtistId artist);
 }
 
 /// <summary>The singleton client resolves scoped catalog services only during admission.</summary>
 public sealed class ImportAdmissionCatalog(IServiceScopeFactory scopes) : IImportAdmissionCatalog
 {
+    public async Task<bool> IsTapersSectionCohortArtistAsync(ArtistId artist)
+    {
+        using var scope = scopes.CreateScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<ArchiveIntakeService>()
+            .IsCohortArtistAsync(artist);
+    }
+
     public async Task<UpstreamProvider[]?> ProvidersForArtistAsync(ArtistId artist)
     {
         using var scope = scopes.CreateScope();

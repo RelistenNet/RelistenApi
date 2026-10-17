@@ -264,6 +264,9 @@ public class TestImportHttpAdapters
 
     private sealed class Catalog(Guid supportedArtist) : IImportAdmissionCatalog
     {
+        public Task<bool> IsTapersSectionCohortArtistAsync(ArtistId artist) =>
+            Task.FromResult(false);
+
         public Task<UpstreamProvider[]?> ProvidersForArtistAsync(ArtistId artist) =>
             Task.FromResult<UpstreamProvider[]?>(
                 artist.Value == supportedArtist

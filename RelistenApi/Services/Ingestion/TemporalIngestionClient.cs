@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
+using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
@@ -113,6 +114,113 @@ public sealed class TemporalIngestionClient
         );
 
         return new ImportHandle<int>(handle);
+    }
+
+    /// <summary>Starts one exclusive identifier discovery; bounded requests report limited coverage.</summary>
+    public Task<ImportHandle<TapersSectionSummary>> DiscoverTapersSectionAsync(
+        DiscoverTapersSection request
+    )
+    {
+        if (request.MaxItems is <= 0)
+        {
+            throw new InvalidImportRequest("Maximum items must be positive.");
+        }
+
+        return StartIntake(
+            "ingest/taperssection/discovery",
+            (TapersSectionDiscoveryWorkflow w) => w.RunAsync(request, null)
+        );
+    }
+
+    /// <summary>Starts the exclusive coordinator for approved candidates and dirty cohort artists.</summary>
+    public Task<ImportHandle<TapersSectionSummary>> RefreshTapersSectionAsync(
+        RefreshTapersSection request
+    ) =>
+        StartIntake(
+            "ingest/taperssection/refresh",
+            (TapersSectionRefreshWorkflow w) => w.RunAsync(request, null, null)
+        );
+
+    /// <summary>Validates durable cohort membership, without requiring an Archive collection mapping.</summary>
+    public async Task<ImportHandle<TapersSectionArtistResult>> RefreshTapersSectionArtistAsync(
+        RefreshTapersSectionArtist request
+    )
+    {
+        if (request.Artist.Value == Guid.Empty)
+        {
+            throw new InvalidImportRequest("Artist UUID must not be empty.");
+        }
+
+        if (!await catalog.IsTapersSectionCohortArtistAsync(request.Artist))
+        {
+            throw new UnsupportedImportOperation(
+                "Artist is not a mapped Taper's Section cohort member."
+            );
+        }
+
+        return await StartIntake(
+            "ingest/artist/" + request.Artist,
+            (TapersSectionArtistWorkflow w) => w.RunAsync(request, null, null, null)
+        );
+    }
+
+    private async Task<ImportHandle<TResult>> StartIntake<TWorkflow, TResult>(
+        string workflowId,
+        Expression<Func<TWorkflow, Task<TResult>>> run
+    )
+    {
+        try
+        {
+            return new(await client.StartWorkflowAsync(run, Options(workflowId)));
+        }
+        catch (WorkflowAlreadyStartedException)
+        {
+            throw new ImportAlreadyRunning(workflowId);
+        }
+    }
+
+    /// <summary>Creates missing intake schedules paused; existing operator state is retained.</summary>
+    public async Task RegisterTapersSectionSchedulesAsync()
+    {
+        foreach (
+            var (name, cron) in new[]
+            {
+                ("taperssection-discovery", "0 8 * * *"),
+                ("taperssection-refresh", "0 9 * * *"),
+            }
+        )
+        {
+            var action =
+                name == "taperssection-discovery"
+                    ? ScheduleActionStartWorkflow.Create(
+                        (TapersSectionDiscoveryWorkflow w) => w.RunAsync(new(), null),
+                        Options("ingest/taperssection/discovery")
+                    )
+                    : ScheduleActionStartWorkflow.Create(
+                        (TapersSectionRefreshWorkflow w) => w.RunAsync(new(), null, null),
+                        Options("ingest/taperssection/refresh")
+                    );
+            var schedule = new Schedule(
+                action,
+                new ScheduleSpec { CronExpressions = [cron], TimeZoneName = "UTC" }
+            )
+            {
+                Policy = new SchedulePolicy { Overlap = ScheduleOverlapPolicy.Skip },
+                State = new ScheduleState
+                {
+                    Paused = true,
+                    Note = "Approve pilot artists and verify discovery before enabling intake.",
+                },
+            };
+            try
+            {
+                await client.CreateScheduleAsync("relisten-ingest-" + name, schedule);
+            }
+            catch (ScheduleAlreadyRunningException)
+            {
+                // Existing schedules, including pause state, belong to the operator.
+            }
+        }
     }
 
     private async Task<ImportHandle<ImportBatchResult>> StartBatch(CatalogBatchCommand request)

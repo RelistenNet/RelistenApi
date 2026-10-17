@@ -47,6 +47,7 @@ public enum ImportStatus
 /// <summary>A bounded failure sample. Keys retain their provider-specific wire type.</summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
 [JsonDerivedType(typeof(ItemFailure<ArchiveItemId>), "archive")]
+[JsonDerivedType(typeof(ItemFailure<ArtistId>), "artist")]
 [JsonDerivedType(typeof(ItemFailure<PhishInShowId>), "phish-in")]
 [JsonDerivedType(typeof(ItemFailure<CatalogSourceId>), "source")]
 [JsonDerivedType(typeof(ItemFailure<SetlistFmId>), "setlist-fm")]

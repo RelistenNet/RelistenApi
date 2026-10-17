@@ -267,13 +267,23 @@ public class TestTapersSectionEvidence
     }
 
     [Test]
-    public void ReasonWireValuesRemainReadableAndStable()
+    public void PersistedInterpretationRetainsItsAssignmentAndConflict()
     {
-        // This wire contract is stored in PostgreSQL interpretation JSON and Temporal payloads.
-        JsonSerializer
-            .Serialize(TapersSectionReason.PublishedAssignmentConflict)
-            .Should()
-            .Be("\"published_assignment_conflict\"");
+        // Existing PostgreSQL evidence must remain readable after a worker update.
+        var persisted = """
+            {"RulesVersion":1,"CreatorKeys":["PERFORMER"],"CandidateId":"11111111-1111-1111-1111-111111111111",
+             "DisplayDate":"2024-07-20","Evidence":[],"Reasons":["published_assignment_conflict"]}
+            """;
+        var interpretation = JsonSerializer.Deserialize<TapersSectionInterpretation>(persisted)!;
+
+        interpretation.CandidateId.Should().Be(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        interpretation.DisplayDate.Should().Be("2024-07-20");
+        interpretation.Reasons.Should().Equal(TapersSectionReason.PublishedAssignmentConflict);
+        interpretation.IsEligible.Should().BeFalse();
+        var restored = JsonSerializer.Deserialize<TapersSectionInterpretation>(
+            JsonSerializer.Serialize(interpretation)
+        )!;
+        restored.Should().BeEquivalentTo(interpretation);
     }
 
     private static ArchiveObservationProjection Project(string raw) =>

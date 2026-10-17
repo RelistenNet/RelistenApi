@@ -87,18 +87,37 @@ public sealed class AddArchiveIntake : Migration
 
         CREATE VIEW normalization.archive_artist_review AS
         SELECT c.*, counts.item_count, counts.eligible_count,
-            evidence.item_identifier AS example_item, evidence.payload AS example_metadata
+            counts.first_performance_date, counts.last_performance_date,
+            reason_counts.by_reason,
+            evidence.item_identifier AS example_item, evidence.provider_url AS example_provider_url,
+            evidence.payload AS example_metadata,
+            representatives.items AS representative_items
         FROM normalization.archive_artist_candidates c
         LEFT JOIN LATERAL (
             SELECT count(*) AS item_count,
-                count(*) FILTER (WHERE i.status IN ('awaiting_artist_approval','eligible','published')) AS eligible_count
+                count(*) FILTER (WHERE i.status IN ('awaiting_artist_approval','eligible','published')) AS eligible_count,
+                min(i.interpretation->>'DisplayDate') AS first_performance_date,
+                max(i.interpretation->>'DisplayDate') AS last_performance_date
             FROM normalization.archive_item_intake i WHERE i.candidate_id = c.candidate_id
         ) counts ON true
         LEFT JOIN LATERAL (
-            SELECT o.item_identifier, o.payload FROM normalization.archive_item_observations o
+            SELECT o.item_identifier, o.provider_url, o.payload FROM normalization.archive_item_observations o
             WHERE o.observation_id = ANY(c.representative_observation_ids)
             ORDER BY o.observed_at DESC LIMIT 1
-        ) evidence ON true;
+        ) evidence ON true
+        LEFT JOIN LATERAL (
+            SELECT jsonb_object_agg(reason,total) AS by_reason FROM (
+                SELECT COALESCE(i.reason,i.status) AS reason,count(*) AS total
+                FROM normalization.archive_item_intake i WHERE i.candidate_id=c.candidate_id
+                GROUP BY COALESCE(i.reason,i.status)
+            ) grouped_reasons
+        ) reason_counts ON true
+        LEFT JOIN LATERAL (
+            SELECT jsonb_agg(jsonb_build_object('item_identifier',o.item_identifier,
+                'provider_url',o.provider_url,'creator',o.payload->'metadata'->'creator')) AS items
+            FROM normalization.archive_item_observations o
+            WHERE o.observation_id=ANY(c.representative_observation_ids)
+        ) representatives ON true;
         """;
 
     protected override void Up() => Execute(SchemaSql);

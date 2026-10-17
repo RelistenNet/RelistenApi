@@ -16,17 +16,37 @@ using SimpleMigrations.DatabaseProvider;
 // This host owns workers and operator commands. It deliberately does not construct
 // Startup's HTTP server, authentication middleware, Hangfire server, or migrations.
 var registerSchedules = args.Contains("--register-schedules");
+var registerIntakeSchedules = args.Contains("--register-taperssection-schedules");
 var migrate = args.Contains("--migrate");
 var builder = CreateWorkerBuilder(args);
 var sentryOptions = WorkerLogging.Configure(builder);
 using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
 
-var operations = new[] { "import", "batch", "cancel", "rebuild-artist", "repair-jerry-venues" }
+var operations = new[]
+{
+    "import",
+    "batch",
+    "cancel",
+    "rebuild-artist",
+    "repair-jerry-venues",
+    "taperssection-discover",
+    "taperssection-refresh",
+    "taperssection-artist",
+    "taperssection-status",
+}
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
 
-if (!ValidateOperationSelection(builder.Configuration, operations, migrate, registerSchedules))
+if (
+    !ValidateOperationSelection(
+        builder.Configuration,
+        operations,
+        migrate,
+        registerSchedules,
+        registerIntakeSchedules
+    )
+)
 {
     Environment.ExitCode = 1;
     return;
@@ -42,6 +62,14 @@ if (migrate)
 if (registerSchedules)
 {
     await host.Services.GetRequiredService<TemporalIngestionClient>().RegisterSchedulesAsync();
+    return;
+}
+
+if (registerIntakeSchedules)
+{
+    await host
+        .Services.GetRequiredService<TemporalIngestionClient>()
+        .RegisterTapersSectionSchedulesAsync();
     return;
 }
 
@@ -75,11 +103,32 @@ catch (Exception error)
 
 static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
 {
+    var switches = new[]
+    {
+        "--register-schedules",
+        "--register-taperssection-schedules",
+        "--migrate",
+        "--taperssection-discover",
+        "--taperssection-refresh",
+        "--taperssection-status",
+    };
     var builder = Host.CreateApplicationBuilder(
-        arguments
-            .Where(argument => argument != "--register-schedules" && argument != "--migrate")
-            .ToArray()
+        arguments.Where(argument => !switches.Contains(argument)).ToArray()
     );
+    foreach (
+        var operation in new[]
+        {
+            "taperssection-discover",
+            "taperssection-refresh",
+            "taperssection-status",
+        }
+    )
+    {
+        if (arguments.Contains("--" + operation))
+        {
+            builder.Configuration[operation] = "true";
+        }
+    }
     SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
     SqlMapper.AddTypeHandler(new DateTimeHandler());
     JsonConvert.DefaultSettings = () =>
@@ -110,24 +159,38 @@ static bool ValidateOperationSelection(
     IConfiguration configuration,
     string[] operations,
     bool migrate,
-    bool registerSchedules
+    bool registerSchedules,
+    bool registerIntakeSchedules
 )
 {
-    var operationCount = operations.Length + (migrate ? 1 : 0) + (registerSchedules ? 1 : 0);
+    var operationCount =
+        operations.Length
+        + (migrate ? 1 : 0)
+        + (registerSchedules ? 1 : 0)
+        + (registerIntakeSchedules ? 1 : 0);
     if (operationCount > 1)
     {
-        Console.Error.WriteLine(
-            "Choose one import, batch, cancel, rebuild, repair, migration, or schedule operation."
-        );
+        Console.Error.WriteLine("Choose one ingestion, status, migration, or schedule operation.");
         return false;
     }
 
     if (
         configuration["import"] == null
-        && new[] { "provider", "item", "year" }.Any(key => configuration[key] != null)
+        && (
+            new[] { "provider", "year" }.Any(key => configuration[key] != null)
+            || configuration["item"] != null && configuration["taperssection-status"] == null
+        )
     )
     {
-        Console.Error.WriteLine("Provider, item, and year options require --import.");
+        Console.Error.WriteLine(
+            "Provider and year options require --import. Item requires --import or --taperssection-status."
+        );
+        return false;
+    }
+
+    if (configuration["max-items"] != null && configuration["taperssection-discover"] == null)
+    {
+        Console.Error.WriteLine("Maximum items requires --taperssection-discover.");
         return false;
     }
 

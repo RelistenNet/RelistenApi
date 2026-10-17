@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Hosting.Internal;
@@ -22,6 +23,7 @@ using Relisten.Api.Models;
 using Relisten.Controllers;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Ingestion;
 using Relisten.Services.Indexing;
 using Relisten.Vendor.ArchiveOrg;
 
@@ -34,6 +36,9 @@ public class TestTapersSectionArtistRegistry
     private DbService db = null!;
     private ArtistService artists = null!;
     private CatalogImportTransaction transactions = null!;
+    private ServiceProvider services = null!;
+    private AsyncServiceScope catalogScope;
+    private RedisService redis = null!;
     private string previousWrite = "";
     private string previousRead = "";
     private int? ownedArchiveSourceId;
@@ -60,8 +65,19 @@ public class TestTapersSectionArtistRegistry
             new HostingEnvironment { EnvironmentName = Environments.Production },
             NullLogger<DbService>.Instance
         );
-        artists = new ArtistService(db, null!);
-        transactions = new CatalogImportTransaction(db);
+        redis = new RedisService(RedisService.BuildConfiguration("redis://127.0.0.1:16379"));
+        // Collection discovery loads the whole disposable artist registry, including
+        // mapped artists from other fixtures. Their enrichment needs real importers.
+        var registrations = new ServiceCollection();
+        registrations.AddLogging();
+        registrations.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        registrations.AddSingleton(db);
+        registrations.AddSingleton(redis);
+        registrations.AddRelistenCatalogServices();
+        services = registrations.BuildServiceProvider();
+        catalogScope = services.CreateAsyncScope();
+        artists = catalogScope.ServiceProvider.GetRequiredService<ArtistService>();
+        transactions = catalogScope.ServiceProvider.GetRequiredService<CatalogImportTransaction>();
         ownedArchiveSourceId = await db.WithWriteConnection(connection =>
             connection.QuerySingleOrDefaultAsync<int?>(
                 """
@@ -113,6 +129,9 @@ public class TestTapersSectionArtistRegistry
                 )
             );
         }
+        await catalogScope.DisposeAsync();
+        await services.DisposeAsync();
+        await redis.connection.DisposeAsync();
         DbService.ConnStr = previousWrite;
         DbService.ReadOnlyConnStr = previousRead;
     }

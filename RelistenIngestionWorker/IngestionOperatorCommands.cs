@@ -1,8 +1,10 @@
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.TapersSection;
 using Temporalio.Client;
 
 namespace RelistenIngestionWorker;
@@ -18,6 +20,11 @@ internal sealed class IngestionOperatorCommands(
 {
     public async Task<string> RunAsync(string operation)
     {
+        if (operation.StartsWith("taperssection-", StringComparison.Ordinal))
+        {
+            return await RunIntakeAsync(operation);
+        }
+
         if (operation == "cancel")
         {
             return await CancelAsync(configuration[operation]!);
@@ -42,6 +49,62 @@ internal sealed class IngestionOperatorCommands(
             _ => throw new InvalidOperationException($"Unknown operator command: {operation}"),
         };
     }
+
+    private async Task<string> RunIntakeAsync(string operation)
+    {
+        if (operation == "taperssection-status")
+        {
+            using var scope = scopeFactory.CreateScope();
+            var status = await scope
+                .ServiceProvider.GetRequiredService<ArchiveIntakeService>()
+                .StatusAsync(configuration["item"]);
+            return JsonSerializer.Serialize(
+                status,
+                new JsonSerializerOptions { WriteIndented = true }
+            );
+        }
+
+        if (operation == "taperssection-discover")
+        {
+            int? maximum = null;
+            if (configuration["max-items"] is { } text)
+            {
+                if (!int.TryParse(text, out var value) || value <= 0)
+                {
+                    throw new InvalidImportRequest("Maximum items must be a positive integer.");
+                }
+
+                maximum = value;
+            }
+
+            return Describe(await imports.DiscoverTapersSectionAsync(new(maximum)));
+        }
+
+        if (operation == "taperssection-refresh")
+        {
+            return Describe(await imports.RefreshTapersSectionAsync(new()));
+        }
+
+        if (
+            !Guid.TryParse(configuration["taperssection-artist"], out var artist)
+            || artist == Guid.Empty
+        )
+        {
+            throw new InvalidImportRequest("Taper's Section artist must be a catalog UUID.");
+        }
+
+        return Describe(await imports.RefreshTapersSectionArtistAsync(new(new ArtistId(artist))));
+    }
+
+    private static string Describe<TResult>(ImportHandle<TResult> handle) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                workflow_id = handle.WorkflowId,
+                first_execution_run_id = handle.FirstExecutionRunId,
+                result_run_id = handle.ResultRunId,
+            }
+        );
 
     private async Task<ArtistId> ResolveArtistAsync(string identifier)
     {

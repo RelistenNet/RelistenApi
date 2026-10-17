@@ -16,6 +16,8 @@ public static class IngestionServiceRegistration
     public static IServiceCollection AddRelistenCatalogServices(this IServiceCollection services)
     {
         services.AddScoped<CatalogRebuildService>();
+        services.AddScoped<ArchiveIntakeService>();
+        services.AddScoped<CatalogImportTransaction>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();

@@ -10,6 +10,7 @@ using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Ingestion.Providers.PhishIn;
 using Relisten.Ingestion.Providers.PhishNet;
 using Relisten.Ingestion.Providers.SetlistFm;
+using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Ingestion.Transport;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Converters;
@@ -61,7 +62,6 @@ public static class TemporalIngestionRegistration
     )
     {
         services.AddTemporalIngestionClient(configuration);
-        services.AddScoped<CatalogImportTransaction>();
         services.AddSingleton<ProviderActivityRunner>();
         services.AddSingleton<IngestionHttpClientFactory>();
         // IngestionHttpHandler logs paths without query parameters that may contain credentials.
@@ -81,11 +81,15 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<JerryVenueRepairProviderWorkflow>()
             .AddWorkflow<LocalWorkflow>()
             .AddWorkflow<RefreshBatchWorkflow>()
-            .AddWorkflow<ArchiveArtistDiscoveryWorkflow>();
+            .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
+            .AddWorkflow<TapersSectionDiscoveryWorkflow>()
+            .AddWorkflow<TapersSectionRefreshWorkflow>()
+            .AddWorkflow<TapersSectionArtistWorkflow>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
             .AddScopedActivities<CatalogActivities>()
             .AddScopedActivities<IngestionBatchActivities>()
+            .AddScopedActivities<TapersSectionActivities>()
             .ConfigureOptions(o =>
             {
                 o.MaxConcurrentActivities = 10;
@@ -98,6 +102,7 @@ public static class TemporalIngestionRegistration
             {
                 case UpstreamProvider.ArchiveOrg:
                     builder.AddScopedActivities<ArchiveActivities>();
+                    builder.AddScopedActivities<TapersSectionActivities>();
                     break;
                 case UpstreamProvider.Phishin:
                     builder.AddScopedActivities<PhishInActivities>();

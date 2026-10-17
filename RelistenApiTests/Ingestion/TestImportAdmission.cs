@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Activities;
 using Temporalio.Client.Schedules;
@@ -47,6 +48,55 @@ public class TestImportAdmission
             await environment
                 .Client.GetWorkflowHandle(owner.WorkflowId)
                 .TerminateAsync("Test cleanup");
+        }
+    }
+
+    [Test]
+    public async Task CohortAdmissionDoesNotNeedCollectionMappingAndExcludesOrdinaryArtistOperations()
+    {
+        var artist = new ArtistId(Guid.NewGuid());
+        var client = Client(new Catalog([], cohort: true));
+        var owner = await client.RefreshTapersSectionArtistAsync(new(artist));
+        try
+        {
+            Func<Task> ordinary = async () => await client.RefreshAsync(new RefreshArtist(artist));
+            var conflict = await ordinary.Should().ThrowAsync<ImportAlreadyRunning>();
+            conflict.Which.WorkflowId.Should().Be(owner.WorkflowId);
+        }
+        finally
+        {
+            await environment
+                .Client.GetWorkflowHandle(owner.WorkflowId)
+                .TerminateAsync("Test cleanup");
+        }
+
+        Func<Task> nonCohort = async () =>
+            await Client(new Catalog([])).RefreshTapersSectionArtistAsync(new(artist));
+        await nonCohort.Should().ThrowAsync<UnsupportedImportOperation>();
+    }
+
+    [Test]
+    public async Task IntakeSchedulesStartPausedAndRepeatRegistrationPreservesOperatorState()
+    {
+        var client = Client(new Catalog([]));
+        var discovery = environment.Client.GetScheduleHandle(
+            "relisten-ingest-taperssection-discovery"
+        );
+        var refresh = environment.Client.GetScheduleHandle("relisten-ingest-taperssection-refresh");
+        await client.RegisterTapersSectionSchedulesAsync();
+        try
+        {
+            (await discovery.DescribeAsync()).Schedule.State.Paused.Should().BeTrue();
+            (await refresh.DescribeAsync()).Schedule.State.Paused.Should().BeTrue();
+            await refresh.UnpauseAsync();
+            await client.RegisterTapersSectionSchedulesAsync();
+            (await discovery.DescribeAsync()).Schedule.State.Paused.Should().BeTrue();
+            (await refresh.DescribeAsync()).Schedule.State.Paused.Should().BeFalse();
+        }
+        finally
+        {
+            await discovery.DeleteAsync();
+            await refresh.DeleteAsync();
         }
     }
 
@@ -240,8 +290,12 @@ public class TestImportAdmission
         }
     }
 
-    private sealed class Catalog(UpstreamProvider[]? providers) : IImportAdmissionCatalog
+    private sealed class Catalog(UpstreamProvider[]? providers, bool cohort = false)
+        : IImportAdmissionCatalog
     {
+        public Task<bool> IsTapersSectionCohortArtistAsync(ArtistId artist) =>
+            Task.FromResult(cohort);
+
         public Task<UpstreamProvider[]?> ProvidersForArtistAsync(ArtistId artist) =>
             Task.FromResult(providers);
     }
