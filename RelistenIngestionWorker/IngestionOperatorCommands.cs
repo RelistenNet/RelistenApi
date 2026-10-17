@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.ArchiveCollections;
 using Relisten.Ingestion.Providers.TapersSection;
 using Temporalio.Client;
 
@@ -23,6 +24,30 @@ internal sealed class IngestionOperatorCommands(
         if (operation.StartsWith("taperssection-", StringComparison.Ordinal))
         {
             return await RunIntakeAsync(operation);
+        }
+
+        if (operation == "collection-discover")
+        {
+            if (
+                !Guid.TryParse(configuration[operation], out var selector)
+                || selector == Guid.Empty
+            )
+            {
+                throw new InvalidImportRequest("Collection selector must be a UUID.");
+            }
+
+            int? maximum = null;
+            if (configuration["max-pages"] is { } text)
+            {
+                if (!int.TryParse(text, out var value) || value <= 0)
+                {
+                    throw new InvalidImportRequest("Maximum pages must be a positive integer.");
+                }
+
+                maximum = value;
+            }
+
+            return Describe(await imports.DiscoverArchiveCollectionAsync(new(selector, maximum)));
         }
 
         if (operation == "cancel")

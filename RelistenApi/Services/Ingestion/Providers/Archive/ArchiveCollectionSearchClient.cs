@@ -5,27 +5,42 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
+using Relisten.Ingestion.Providers.TapersSection;
 
-namespace Relisten.Ingestion.Providers.TapersSection;
+namespace Relisten.Ingestion.Providers.Archive;
 
 /// <summary>A received page must be persisted before its cursor becomes a durable checkpoint.</summary>
-public sealed record TapersSectionSearchPage(ArchiveItemId[] Items, string? Cursor, int Total);
+public sealed record ArchiveCollectionSearchPage(ArchiveItemId[] Items, string? Cursor, int Total);
 
 /// <summary>
-/// Reads identifier pages from Archive's mixed collection. Search hints cannot authorize publication;
+/// Reads identifier pages from one Archive audio collection. Search hints cannot authorize publication;
 /// publication requires a separate current item metadata observation.
 /// </summary>
-public sealed class TapersSectionSearchClient(HttpClient http)
+public sealed class ArchiveCollectionSearchClient(HttpClient http, string collectionIdentifier)
 {
-    public async Task<TapersSectionSearchPage> FetchPageAsync(
+    /// <summary>Reads and validates a page for the configured collection; a cursor alone does not authorize its items.</summary>
+    public async Task<ArchiveCollectionSearchPage> FetchPageAsync(
         string? cursor = null,
         CancellationToken cancellationToken = default
     )
     {
+        if (
+            !System.Text.RegularExpressions.Regex.IsMatch(
+                collectionIdentifier,
+                @"^[A-Za-z0-9_.-]+$"
+            )
+        )
+        {
+            throw new ArgumentException(
+                "An Archive collection identifier is required.",
+                nameof(collectionIdentifier)
+            );
+        }
+
         var url =
             "https://archive.org/services/search/v1/scrape?"
             + "q="
-            + Uri.EscapeDataString("collection:taperssection AND mediatype:audio")
+            + Uri.EscapeDataString("collection:" + collectionIdentifier + " AND mediatype:audio")
             + "&fields=identifier,collection,mediatype";
         // Identifier-only field selection has returned unrelated results from Archive.
         // Request membership fields and validate each row before retaining its identifier.
@@ -90,7 +105,7 @@ public sealed class TapersSectionSearchClient(HttpClient http)
         if (items.Any(item => !MatchesCollectionQuery((JObject)item)))
         {
             throw new InvalidDataException(
-                "Archive item discovery returned a row outside Taper's Section audio."
+                "Archive item discovery returned a row outside the requested audio collection."
             );
         }
 
@@ -99,7 +114,7 @@ public sealed class TapersSectionSearchClient(HttpClient http)
             throw new InvalidDataException("Archive item discovery ended with unreturned items.");
         }
 
-        return new TapersSectionSearchPage(
+        return new ArchiveCollectionSearchPage(
             items
                 .Select(item => (string)item["identifier"]!)
                 .Distinct(StringComparer.Ordinal)
@@ -110,15 +125,15 @@ public sealed class TapersSectionSearchClient(HttpClient http)
         );
     }
 
-    private static bool MatchesCollectionQuery(JObject item) =>
+    private bool MatchesCollectionQuery(JObject item) =>
         item["mediatype"]?.Type == JTokenType.String
         && (string?)item["mediatype"] == "audio"
         && (
             item["collection"] is JArray collections
                 ? collections.Any(value =>
-                    value.Type == JTokenType.String && (string?)value == "taperssection"
+                    value.Type == JTokenType.String && (string?)value == collectionIdentifier
                 )
                 : item["collection"]?.Type == JTokenType.String
-                    && (string?)item["collection"] == "taperssection"
+                    && (string?)item["collection"] == collectionIdentifier
         );
 }

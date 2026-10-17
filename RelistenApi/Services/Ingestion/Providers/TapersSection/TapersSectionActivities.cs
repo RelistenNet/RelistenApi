@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Relisten.Data;
+using Relisten.Ingestion.Providers.Archive;
 using Temporalio.Activities;
 using Temporalio.Exceptions;
 
@@ -13,7 +14,7 @@ public sealed class TapersSectionActivities(
 )
 {
     [Activity("TapersSection.FetchPage")]
-    public async Task<TapersSectionSearchPage> FetchPage(
+    public async Task<ArchiveCollectionSearchPage> FetchPage(
         IngestionExecution execution,
         string? cursor
     )
@@ -22,7 +23,10 @@ public sealed class TapersSectionActivities(
         RequireActive(execution);
         var token = ActivityExecutionContext.Current.CancellationToken;
         using var http = httpClients.Create(token);
-        return await new TapersSectionSearchClient(http).FetchPageAsync(cursor, token);
+        return await new ArchiveCollectionSearchClient(http, "taperssection").FetchPageAsync(
+            cursor,
+            token
+        );
     }
 
     [Activity("TapersSection.PersistDiscovery")]

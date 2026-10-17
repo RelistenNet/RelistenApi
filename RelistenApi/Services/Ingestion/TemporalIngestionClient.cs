@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
+using Relisten.Ingestion.Providers.ArchiveCollections;
 using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Api.Enums.V1;
@@ -129,6 +130,22 @@ public sealed class TemporalIngestionClient
         return StartIntake(
             "ingest/taperssection/discovery",
             (TapersSectionDiscoveryWorkflow w) => w.RunAsync(request, null)
+        );
+    }
+
+    /// <summary>Discovers one configured Archive collection and links exact existing recordings. A page limit leaves resumable work.</summary>
+    public Task<ImportHandle<ArchiveCollectionDiscoverySummary>> DiscoverArchiveCollectionAsync(
+        DiscoverArchiveCollection request
+    )
+    {
+        if (request.SelectorUuid == Guid.Empty || request.MaxPages is <= 0)
+        {
+            throw new InvalidImportRequest("A selector UUID and positive page limit are required.");
+        }
+
+        return StartIntake(
+            "ingest/collection/" + request.SelectorUuid,
+            (ArchiveCollectionDiscoveryWorkflow w) => w.RunAsync(request, null)
         );
     }
 

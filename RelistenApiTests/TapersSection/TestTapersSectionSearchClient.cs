@@ -2,6 +2,7 @@ using System.Net;
 using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Newtonsoft.Json;
+using Relisten.Ingestion.Providers.Archive;
 using Relisten.Ingestion.Providers.TapersSection;
 
 namespace RelistenApiTests.TapersSection;
@@ -10,11 +11,43 @@ namespace RelistenApiTests.TapersSection;
 public class TestTapersSectionSearchClient
 {
     [Test]
+    public async Task ConfiguredAadamCollectionReadsItsOwnItems()
+    {
+        using var handler = new SearchHandler(
+            """
+            {"items":[{"identifier":"aadam-recording","collection":["aadamjacobs","audio"],"mediatype":"audio"}],"total":1}
+            """
+        );
+        using var http = new HttpClient(handler);
+
+        var page = await new ArchiveCollectionSearchClient(http, "aadamjacobs").FetchPageAsync();
+
+        page.Items.Select(item => item.Value).Should().Equal("aadam-recording");
+        page.Cursor.Should().BeNull();
+        QueryHelpers
+            .ParseQuery(handler.Requests.Single().Query)["q"]
+            .ToString()
+            .Should()
+            .Be("collection:aadamjacobs AND mediatype:audio");
+    }
+
+    [Test]
+    public async Task AConfiguredCollectionCannotAcceptAnotherCollectionsItems()
+    {
+        using var handler = new SearchHandler(Page(1, 1, null));
+        using var http = new HttpClient(handler);
+
+        var act = () => new ArchiveCollectionSearchClient(http, "aadamjacobs").FetchPageAsync();
+
+        await act.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Test]
     public async Task ReadsLargeContinuationWithoutCountAndAcceptsDecreasingTotals()
     {
         using var handler = new SearchHandler(Page(100, 30180, "A"), Page(5000, 30080, "B"));
         using var http = new HttpClient(handler);
-        var client = new TapersSectionSearchClient(http);
+        var client = new ArchiveCollectionSearchClient(http, "taperssection");
         var first = await client.FetchPageAsync();
         var next = await client.FetchPageAsync(first.Cursor);
         first.Items.Should().HaveCount(100);
@@ -46,7 +79,7 @@ public class TestTapersSectionSearchClient
             """
         );
         using var http = new HttpClient(handler);
-        var client = new TapersSectionSearchClient(http);
+        var client = new ArchiveCollectionSearchClient(http, "taperssection");
         var first = await client.FetchPageAsync();
         first.Items.Should().BeEmpty();
         first.Cursor.Should().Be("A");
@@ -68,7 +101,8 @@ public class TestTapersSectionSearchClient
     {
         using var handler = new SearchHandler(body);
         using var http = new HttpClient(handler);
-        var act = () => new TapersSectionSearchClient(http).FetchPageAsync("A");
+        var act = () =>
+            new ArchiveCollectionSearchClient(http, "taperssection").FetchPageAsync("A");
         await act.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -84,7 +118,7 @@ public class TestTapersSectionSearchClient
     {
         using var handler = new SearchHandler("{\"items\":[" + item + "],\"total\":1}");
         using var http = new HttpClient(handler);
-        var act = () => new TapersSectionSearchClient(http).FetchPageAsync();
+        var act = () => new ArchiveCollectionSearchClient(http, "taperssection").FetchPageAsync();
 
         await act.Should().ThrowAsync<InvalidDataException>();
     }
@@ -97,7 +131,8 @@ public class TestTapersSectionSearchClient
             StatusCode = HttpStatusCode.BadRequest,
         };
         using var http = new HttpClient(handler);
-        var act = () => new TapersSectionSearchClient(http).FetchPageAsync("old");
+        var act = () =>
+            new ArchiveCollectionSearchClient(http, "taperssection").FetchPageAsync("old");
         await act.Should().ThrowAsync<HttpRequestException>();
     }
 
@@ -106,7 +141,8 @@ public class TestTapersSectionSearchClient
     {
         using var handler = new SearchHandler(Page(5001, 5001, "B"));
         using var http = new HttpClient(handler);
-        var act = () => new TapersSectionSearchClient(http).FetchPageAsync("A");
+        var act = () =>
+            new ArchiveCollectionSearchClient(http, "taperssection").FetchPageAsync("A");
         await act.Should().ThrowAsync<InvalidDataException>();
     }
 

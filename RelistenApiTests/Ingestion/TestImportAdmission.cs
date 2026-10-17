@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.ArchiveCollections;
 using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Ingestion.Workflows;
 using Temporalio.Activities;
@@ -73,6 +74,44 @@ public class TestImportAdmission
         Func<Task> nonCohort = async () =>
             await Client(new Catalog([])).RefreshTapersSectionArtistAsync(new(artist));
         await nonCohort.Should().ThrowAsync<UnsupportedImportOperation>();
+    }
+
+    [Test]
+    public async Task CollectionSelectorsSerializeTheirOwnScansAndRemainIndependent()
+    {
+        var client = Client(new Catalog([]));
+        var selector = Guid.NewGuid();
+        var first = await client.DiscoverArchiveCollectionAsync(new(selector));
+        var other = await client.DiscoverArchiveCollectionAsync(new(Guid.NewGuid(), 1));
+        try
+        {
+            Func<Task> duplicate = async () =>
+                await client.DiscoverArchiveCollectionAsync(new(selector, 2));
+            var conflict = await duplicate.Should().ThrowAsync<ImportAlreadyRunning>();
+            conflict.Which.WorkflowId.Should().Be(first.WorkflowId);
+            other.WorkflowId.Should().NotBe(first.WorkflowId);
+        }
+        finally
+        {
+            await environment
+                .Client.GetWorkflowHandle(first.WorkflowId)
+                .TerminateAsync("Test cleanup");
+            await environment
+                .Client.GetWorkflowHandle(other.WorkflowId)
+                .TerminateAsync("Test cleanup");
+        }
+    }
+
+    [Test]
+    public async Task InvalidCollectionScopesAreRejectedBeforeAdmission()
+    {
+        var client = Client(new Catalog([]));
+        Func<Task> missing = async () =>
+            await client.DiscoverArchiveCollectionAsync(new(Guid.Empty));
+        Func<Task> invalidBudget = async () =>
+            await client.DiscoverArchiveCollectionAsync(new(Guid.NewGuid(), 0));
+        await missing.Should().ThrowAsync<InvalidImportRequest>();
+        await invalidBudget.Should().ThrowAsync<InvalidImportRequest>();
     }
 
     [Test]

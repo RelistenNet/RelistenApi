@@ -34,6 +34,7 @@ var operations = new[]
     "taperssection-refresh",
     "taperssection-artist",
     "taperssection-status",
+    "collection-discover",
 }
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
@@ -191,6 +192,12 @@ static bool ValidateOperationSelection(
     if (configuration["max-items"] != null && configuration["taperssection-discover"] == null)
     {
         Console.Error.WriteLine("Maximum items requires --taperssection-discover.");
+        return false;
+    }
+
+    if (configuration["max-pages"] != null && configuration["collection-discover"] == null)
+    {
+        Console.Error.WriteLine("Maximum pages requires --collection-discover.");
         return false;
     }
 

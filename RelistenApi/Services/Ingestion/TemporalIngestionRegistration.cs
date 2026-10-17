@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion.Providers.Archive;
+using Relisten.Ingestion.Providers.ArchiveCollections;
 using Relisten.Ingestion.Providers.Jerry;
 using Relisten.Ingestion.Providers.Local;
 using Relisten.Ingestion.Providers.PhantasyTour;
@@ -84,12 +85,14 @@ public static class TemporalIngestionRegistration
             .AddWorkflow<ArchiveArtistDiscoveryWorkflow>()
             .AddWorkflow<TapersSectionDiscoveryWorkflow>()
             .AddWorkflow<TapersSectionRefreshWorkflow>()
-            .AddWorkflow<TapersSectionArtistWorkflow>();
+            .AddWorkflow<TapersSectionArtistWorkflow>()
+            .AddWorkflow<ArchiveCollectionDiscoveryWorkflow>();
         services
             .AddHostedTemporalWorker(IngestionQueues.Database)
             .AddScopedActivities<CatalogActivities>()
             .AddScopedActivities<IngestionBatchActivities>()
             .AddScopedActivities<TapersSectionActivities>()
+            .AddScopedActivities<ArchiveCollectionDiscoveryActivities>()
             .ConfigureOptions(o =>
             {
                 o.MaxConcurrentActivities = 10;
@@ -102,7 +105,9 @@ public static class TemporalIngestionRegistration
             {
                 case UpstreamProvider.ArchiveOrg:
                     builder.AddScopedActivities<ArchiveActivities>();
-                    builder.AddScopedActivities<TapersSectionActivities>();
+                    builder
+                        .AddScopedActivities<TapersSectionActivities>()
+                        .AddScopedActivities<ArchiveCollectionDiscoveryActivities>();
                     break;
                 case UpstreamProvider.Phishin:
                     builder.AddScopedActivities<PhishInActivities>();

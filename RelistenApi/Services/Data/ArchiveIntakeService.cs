@@ -127,6 +127,16 @@ public sealed partial class ArchiveIntakeService(
         );
     }
 
+    /// <summary>
+    /// Retains collection evidence without assigning an artist or claiming recording ownership.
+    /// Native recordings can be linked into collections while their current importer remains in charge.
+    /// </summary>
+    public Task<Guid> RetainObservationAsync(
+        ArchiveObservationProjection observation,
+        CancellationToken token = default,
+        DateTimeOffset? deadline = null
+    ) => InTransaction(token, () => SaveObservationAsync(observation), deadline);
+
     private Task<Guid> SaveObservationAsync(ArchiveObservationProjection observation) =>
         db.WithWriteConnection(connection =>
             connection.QuerySingleAsync<Guid>(

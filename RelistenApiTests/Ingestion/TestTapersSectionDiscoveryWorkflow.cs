@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using FluentAssertions;
 using Relisten.Api.Models;
 using Relisten.Ingestion;
+using Relisten.Ingestion.Providers.Archive;
 using Relisten.Ingestion.Providers.TapersSection;
 using Temporalio.Activities;
 using Temporalio.Client;
@@ -131,7 +132,7 @@ public sealed class TestTapersSectionDiscoveryWorkflow
         }
 
         [Activity("TapersSection.FetchPage")]
-        public TapersSectionSearchPage FetchPage(IngestionExecution execution, string? cursor)
+        public ArchiveCollectionSearchPage FetchPage(IngestionExecution execution, string? cursor)
         {
             if (cursor != null)
             {
