@@ -7,6 +7,51 @@ services. Tests create disposable databases and temporary Temporal servers. Use
 [deployment](#deploy-or-update) for release checks and [engine
 handoff](#switch-from-hangfire) when changing ingestion ownership.
 
+## Taper’s Section intake
+
+Taper’s Section item discovery is separate from Archive artist-collection discovery.
+It retains metadata for review and publishes recordings only for approved artists
+that entered Relisten through this intake. Existing artists remain deferred. The
+[implementation contracts](../plans/active/2026-10-16-taperssection-intake/contracts.md)
+describe the retained evidence and artist identity rules.
+
+Run these one-shot commands in the same configured worker environment:
+
+```sh
+dotnet run --project RelistenIngestionWorker -- --taperssection-discover --max-items=100
+dotnet run --project RelistenIngestionWorker -- --taperssection-status
+dotnet run --project RelistenIngestionWorker -- --taperssection-status --item=ARCHIVE_IDENTIFIER
+dotnet run --project RelistenIngestionWorker -- --taperssection-refresh
+dotnet run --project RelistenIngestionWorker -- --taperssection-artist=ARTIST_UUID
+dotnet run --project RelistenIngestionWorker -- --register-taperssection-schedules
+```
+
+Discovery and refresh starts return JSON containing the workflow ID and the admitted
+execution's run IDs. A successful start means queued. Inspect the typed workflow
+result for publication, held items, failed items and artist admission conflicts.
+`Observed` counts successful activity results that retained metadata. Failed attempts may also retain evidence; use status to inspect those rows. `Unchanged` refers to assignment evidence; eligible refreshes still update ancillary recording metadata and rebuild the committed revision.
+
+Discovery with `--max-items` returns `Limited=true` when it stops before completing
+the traversal. Status reads PostgreSQL and remains available while Temporal is down.
+
+Review `normalization.archive_artist_review` alongside its representative item
+observations. The view includes date range, counts by reason and the original metadata sample; treat retained HTML as data when inspecting it. Status returns at most 100 item rows and 100 candidate summaries, without embedding full provider payloads. Set `approved=true` in bulk for reviewed new artists. Approval permits
+later clear items to publish automatically. An artist name that matches a pre-existing
+Relisten artist remains deferred even if its candidate is approved. Clearing approval
+pauses future publication and visibility promotion. Existing recordings remain; dirty
+catalog revisions still rebuild on the next refresh.
+
+Registration creates `relisten-ingest-taperssection-discovery` at 08:00 UTC and
+`relisten-ingest-taperssection-refresh` at 09:00 UTC, both paused, with overlap skipped.
+Repeat registration preserves each existing schedule and its pause state. Complete
+the pilot and pagination checks in the [rollout checklist](../plans/active/2026-10-16-taperssection-intake/verification-and-operations.md)
+before enabling schedules. Pause both schedules and stop manual starts to halt new
+intake. For code rollback, drain the new workflows and keep the normalization tables
+and published catalog identities. Retain the registry/ownership guards in the rollback
+image, or keep Archive discovery, full/thin schedules and manual Archive starts stopped,
+including Hangfire. Older images can change intake-owned sources after a dedicated
+collection is attached. Rollback does not retract imported recordings.
+
 ## Configuration
 
 | Setting | Use |

@@ -182,6 +182,24 @@ its write transaction. It merges the date's directories into one source, its
 set, and tracks. Splitting directories into separate recording identities would
 change the catalog contract.
 
+## Taper’s Section item intake
+
+`TapersSectionDiscoveryWorkflow` records each search page before observing item
+metadata. It continues after settled batches and retains the cursor and pending page.
+Search continuation requests omit `count`; repeated cursors and pages containing no
+new identifiers fail discovery. Empty advancing pages continue the traversal.
+
+`TapersSectionRefreshWorkflow` materializes approved new artists and selects both
+approved artists and artists with catalog revisions that still need rebuilding.
+`TapersSectionArtistWorkflow` owns item writes under `ingest/artist/{uuid}`, settles
+its item activities, captures dirty revisions, rebuilds shows and years, invalidates
+cache, then records completed revisions and promotes approved artists to visibility.
+A paused artist can finish a required rebuild without publishing new items.
+
+Unavailable items and conflicting new metadata retain their last catalog assignment.
+Intake does not infer deletion from collection absence. Ordinary Archive imports
+skip intake-owned items and exclude their sources from collection deletion checks.
+
 ## Provider verification
 
 Verify behavior through workflow results and catalog services: selection,

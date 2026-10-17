@@ -36,6 +36,14 @@ flowchart TD
 The diagram shows successful execution. Item failures can produce partial results;
 provider failure and cancellation have different rebuild rules, described below.
 
+Taper’s Section has a separate discovery and cohort refresh coordinator. Discovery
+retains Archive item identifiers and metadata for review. An operator approves each
+new artist once in PostgreSQL. Refresh then publishes clear recordings through the
+same Archive recording writer and rebuild steps. It uses the existing artist workflow
+ID to exclude overlapping ordinary imports. It does not fabricate an Archive artist
+collection mapping. See [intake operations](operations.md#tapers-section-intake) and
+the [intake contracts](../plans/active/2026-10-16-taperssection-intake/contracts.md).
+
 An artist workflow runs enabled provider mappings in catalog order. Phish.in must
 precede Phish.net because Phish.net enriches its recordings. Providers select or
 page through their own items, process them, and perform their own finalization.
