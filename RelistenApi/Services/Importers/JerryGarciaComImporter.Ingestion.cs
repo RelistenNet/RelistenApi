@@ -1,7 +1,12 @@
 using System;
+using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using HtmlAgilityPack;
 using Newtonsoft.Json;
+using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Jerry;
 using Relisten.Vendor;
@@ -64,17 +69,8 @@ public partial class JerryGarciaComImporter
         bool repairVenue
     )
     {
-        using var response = await http.GetAsync(
-            ShowPageUrl(context.Source, item.Input.FilePath),
-            context.CancellationToken
-        );
-        response.EnsureSuccessStatusCode();
-        var html = await response.Content.ReadAsStringAsync(context.CancellationToken);
-        var modifiedAt = response.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow;
-
-        // The legacy parser deliberately ignores pages without show details. Make
-        // that outcome visible instead of reporting an import with no identity.
-        if (ParseShowPage(html) == null)
+        var page = await FetchShowPageAsync(context.Source, item.Input, context.CancellationToken);
+        if (page == null)
         {
             return new(item.Id, null, ItemDisposition.Skipped, JerrySkipReason.MissingShowDetails);
         }
@@ -86,8 +82,8 @@ public partial class JerryGarciaComImporter
             await PreloadData(context.Artist);
 
             return repairVenue
-                ? await ApplyVenueRepairAsync(context, item, html, modifiedAt)
-                : await ApplyMissingPageAsync(context, item, html, modifiedAt);
+                ? await ApplyVenueRepairAsync(context, item, page.Html, page.ModifiedAt)
+                : await ApplyMissingPageAsync(context, item, page.Html, page.ModifiedAt);
         });
     }
 
@@ -141,4 +137,90 @@ public partial class JerryGarciaComImporter
 
         return new(item.Id, new(existingSetlistShows[item.Id.Value]!.id), ItemDisposition.Applied);
     }
+
+    // Native refresh, Temporal import and venue repair consume the same retained response.
+    // The mirror prefix distinguishes provider catalogs; the show ID stays stable if a file moves.
+    private async Task<FetchedShowPage?> FetchShowPageAsync(
+        ArtistUpstreamSource source,
+        FileMetaObject item,
+        CancellationToken ct = default
+    )
+    {
+        var resource = new NormalizationResourceKey(
+            "jerrygarcia.com",
+            "mirror_show_page",
+            $"{source.upstream_identifier}/{item.Identifier}"
+        );
+
+        try
+        {
+            return await normalizationInputs.FetchAsync(
+                resource,
+                "jerry-mirror-html:1",
+                async token =>
+                {
+                    using var response = await http.GetAsync(
+                        ShowPageUrl(source, item.FilePath),
+                        token
+                    );
+                    response.EnsureSuccessStatusCode();
+                    var bytes = await response.Content.ReadAsByteArrayAsync(token);
+                    // HttpContent buffers its original bytes and applies the provider's declared charset.
+                    var html = await response.Content.ReadAsStringAsync(token);
+                    ValidateShowDetails(html);
+
+                    var modified = response.Content.Headers.LastModified;
+                    var etag = response.Headers.ETag?.ToString();
+                    var revision = string.Join(
+                        ";",
+                        new[]
+                        {
+                            etag == null ? null : $"etag:{etag}",
+                            modified == null ? null : $"last-modified:{modified.Value:R}",
+                        }.Where(value => value != null)
+                    );
+
+                    return new NormalizationProviderResponse<FetchedShowPage>(
+                        new(html, modified?.UtcDateTime ?? DateTime.UtcNow),
+                        bytes,
+                        response.Content.Headers.ContentType?.ToString() ?? "text/html",
+                        revision.Length == 0 ? null : revision
+                    );
+                },
+                ct
+            );
+        }
+        catch (MissingShowDetailsException)
+        {
+            // A mirror placeholder is a supported skip, not a current show input.
+            return null;
+        }
+    }
+
+    private static void ValidateShowDetails(string html)
+    {
+        var document = new HtmlDocument();
+        document.LoadHtml(html);
+        var root = document.DocumentNode;
+        var names = root.DescendantsWithClass("venue-name").ToArray();
+        if (names.Length == 0)
+        {
+            throw new MissingShowDetailsException();
+        }
+
+        // Validate the existing parser's required fields before advancing the evidence generation.
+        // Song nodes remain untouched, including links, set order, repeats and segue markers.
+        if (
+            string.IsNullOrWhiteSpace(names[0].InnerText)
+            || root.DescendantsWithClass("venue-address").Count() != 1
+            || root.DescendantsWithClass("venue-country").Count() != 1
+        )
+        {
+            throw new InvalidDataException("Jerry mirror returned incomplete show details.");
+        }
+    }
+
+    private sealed record FetchedShowPage(string Html, DateTime ModifiedAt);
+
+    private sealed class MissingShowDetailsException : Exception { }
 }

@@ -36,7 +36,8 @@ namespace Relisten.Import
             VenueService venueService,
             TourService tourService,
             SetlistSongService setlistSongService,
-            ILogger<JerryGarciaComImporter> log
+            ILogger<JerryGarciaComImporter> log,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
@@ -45,7 +46,10 @@ namespace Relisten.Import
             _tourService = tourService;
             _setlistSongService = setlistSongService;
             _log = log;
+            this.normalizationInputs = normalizationInputs;
         }
+
+        private readonly NormalizationProviderInputService normalizationInputs;
 
         protected SetlistShowService _setlistShowService { get; set; }
         protected SetlistSongService _setlistSongService { get; set; }
@@ -101,18 +105,13 @@ namespace Relisten.Import
                     return;
                 }
 
-                var url = ShowPageUrl(src, f.FilePath);
-                var pageResp = await http.GetAsync(url);
-                var pageContents = await pageResp.Content.ReadAsStringAsync();
+                var page = await FetchShowPageAsync(src, f);
+                if (page == null)
+                {
+                    return;
+                }
 
-                await ProcessPage(
-                    stats,
-                    artist,
-                    f,
-                    pageContents,
-                    pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow,
-                    ctx
-                );
+                await ProcessPage(stats, artist, f, page.Html, page.ModifiedAt, ctx);
             };
 
             if (prog == null)
@@ -353,17 +352,13 @@ namespace Relisten.Import
                     return;
                 }
 
-                var url = ShowPageUrl(src, f.FilePath);
-                var pageResp = await http.GetAsync(url);
-                var pageContents = await pageResp.Content.ReadAsStringAsync();
+                var page = await FetchShowPageAsync(src, f);
+                if (page == null)
+                {
+                    return;
+                }
 
-                await ApplyVenueBackfill(
-                    stats,
-                    artist,
-                    f,
-                    pageContents,
-                    pageResp.Content.Headers.LastModified?.UtcDateTime ?? DateTime.UtcNow
-                );
+                await ApplyVenueBackfill(stats, artist, f, page.Html, page.ModifiedAt);
             };
 
             if (prog == null)
