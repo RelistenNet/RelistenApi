@@ -175,7 +175,8 @@ public sealed partial class NormalizedVenueService
                     )
                 );
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
     }
 

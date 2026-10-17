@@ -373,6 +373,29 @@ public sealed class TestNormalizationRecordingProposals
         (await Publish(supported)).Status.Should().Be(NormalizationPublicationStatus.Published);
     }
 
+    [Test]
+    public async Task CandidatePoolOutsideCurrentBatchFormatCannotBeAcknowledged()
+    {
+        var source = await fixture.Source();
+        var batch = await Batch(
+            source,
+            candidateUniverses:
+            [
+                new(NormalizationCandidateUniverseKey.ForRepertoire(Guid.NewGuid()), 0),
+            ]
+        );
+        batch.Ticket.CandidateUniverses.Should().ContainSingle();
+
+        Func<Task> save = () => proposals.SaveExtractionAsync(batch);
+        await save.Should().ThrowAsync<ArgumentException>().WithMessage("*candidate pool facts*");
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(Owner(source)))!.PublishedWorkUuid.Should().BeNull();
+
+        var supported = await Batch(source);
+        (await Publish(supported)).Status.Should().Be(NormalizationPublicationStatus.Published);
+    }
+
     [TestCase("source")]
     [TestCase("version")]
     public async Task TerminalExtractionRejectsChangedHeadersButKeepsItsFirstOutcome(string field)
@@ -621,7 +644,8 @@ public sealed class TestNormalizationRecordingProposals
             NormalizationRecordingPreparation,
             NormalizationRecordingPreparation
         >? changePreparation = null,
-        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null
+        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null
     )
     {
         await fixture.Db.WithWriteConnection(c =>
@@ -653,7 +677,8 @@ public sealed class TestNormalizationRecordingProposals
             sourceIdentities: preparation.Binding.SourceIdentities,
             mappingRegistry: preparation.Binding.MappingRegistry,
             expectedInputRevisions: preparation.Binding.Inputs,
-            importedVenues: importedVenues
+            importedVenues: importedVenues,
+            candidateUniverses: candidateUniverses
         );
         var input = (
             await new NormalizationEvidenceService(fixture.Db).GetCaptureAsync(

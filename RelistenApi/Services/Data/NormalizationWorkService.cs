@@ -42,6 +42,8 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// importedVenues contains the caller's observed catalog venue clocks, including missing venues.
     /// Admission initializes absent clocks at zero and compares the original observation. Adding or
     /// removing venue keys changes configuration; a new generation for the same keys does not.
+    /// candidateUniverses pins the candidate facts snapshot, including an empty pool. Its
+    /// generations must come from the same snapshot as the matching facts, never a later refresh.
     /// Changing input bytes needs no fan-out write:
     /// pending queries and publication compare the durable resource generations directly.
     /// </summary>
@@ -57,20 +59,23 @@ public sealed partial class NormalizationWorkService(DbService db)
         IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null,
         NormalizationMappingRegistryDependency? mappingRegistry = null,
         IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null,
-        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null
+        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
         var expectedCatalog = NormalizeCatalogInputs(catalogInputs);
         var expectedSources = NormalizeSourceInputs(sourceIdentities);
         var expectedVenues = NormalizeImportedVenues(importedVenues);
+        var expectedCandidates = NormalizeCandidateUniverses(candidateUniverses);
         var bindings = WorkBindingSet.Create(
             resourceKeys,
             dependencySubjectUuids,
             expectedCatalog.Select(input => input.ArtistUuid),
             expectedSources.Select(input => input.UpstreamIdentifier),
             mappingRegistry != null,
-            expectedVenues.Select(input => input.VenueUuid)
+            expectedVenues.Select(input => input.VenueUuid),
+            expectedCandidates.Select(input => input.Universe)
         );
         var configurationHash = bindings.ConfigurationHash(policyVersion);
         var expectedInputs = NormalizeExpectedInputRevisions(
@@ -102,7 +107,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             requestPayload,
             mappingRegistry,
             expectedInputs,
-            expectedVenues
+            expectedVenues,
+            expectedCandidates
         );
         var request = new WorkStartRequest(
             workUuid,
@@ -115,7 +121,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             expectedSources,
             mappingRegistry,
             expectedInputs,
-            expectedVenues
+            expectedVenues,
+            expectedCandidates
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -218,6 +225,15 @@ public sealed partial class NormalizationWorkService(DbService db)
             request.ImportedVenues,
             request.MappingRegistry
         );
+        var candidates = await LockCandidateUniverses(
+            connection,
+            transaction,
+            bindings.CandidateUniverses ?? [],
+            [],
+            initializeConsumed: true,
+            ct
+        );
+        RequireCandidateUniverses(candidates, request.CandidateUniverses);
         var inputs = await LockInputs(connection, transaction, bindings.Resources, ct);
         await RequireExpectedInputRevisions(
             connection,
@@ -273,6 +289,7 @@ public sealed partial class NormalizationWorkService(DbService db)
             ct
         );
         await ConfigureCatalogBindings(connection, transaction, owner.Uuid, catalog, ct);
+        await ConfigureCandidateBindings(connection, transaction, owner.Uuid, candidates, ct);
         var ticket = new NormalizationWorkTicket(
             request.WorkUuid,
             subjectUuid,
@@ -293,7 +310,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             catalog.Artists.Count == 0 ? null : catalog.Artists,
             catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities,
             catalog.MappingRegistry,
-            catalog.ImportedVenues.Count == 0 ? null : catalog.ImportedVenues
+            catalog.ImportedVenues.Count == 0 ? null : catalog.ImportedVenues,
+            candidates.Length == 0 ? null : candidates
         );
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -324,6 +342,7 @@ public sealed partial class NormalizationWorkService(DbService db)
         NormalizationMappingRegistryDependency? MappingRegistry,
         NormalizationBindingInputReference[] ExpectedInputRevisions,
         NormalizationImportedVenueDependency[] ImportedVenues,
+        NormalizationCandidateUniverseDependency[] CandidateUniverses,
         ContributionChange? Contribution = null
     );
 
@@ -339,7 +358,9 @@ public sealed partial class NormalizationWorkService(DbService db)
         // Keep old contributed request JSON unchanged when venue inputs were not supplied.
         [property: JsonIgnore(
             Condition = JsonIgnoreCondition.WhenWritingNull
-        )] Guid[]? ImportedVenueUuids = null
+        )] Guid[]? ImportedVenueUuids = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            NormalizationCandidateUniverseKey[]? CandidateUniverses = null
     )
     {
         public static WorkBindingSet Create(
@@ -348,7 +369,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             IEnumerable<Guid> catalogArtists,
             IEnumerable<string> sourceIdentifiers,
             bool usesMappingRegistry = false,
-            IEnumerable<Guid>? importedVenueUuids = null
+            IEnumerable<Guid>? importedVenueUuids = null,
+            IEnumerable<NormalizationCandidateUniverseKey>? candidateUniverses = null
         ) =>
             new(
                 resources
@@ -364,7 +386,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                     .Order(StringComparer.Ordinal)
                     .ToArray(),
                 usesMappingRegistry,
-                NormalizeVenueKeys(importedVenueUuids)
+                NormalizeVenueKeys(importedVenueUuids),
+                NormalizeCandidateBindingKeys(candidateUniverses)
             );
 
         public string ConfigurationHash(string policyVersion)
@@ -401,15 +424,33 @@ public sealed partial class NormalizationWorkService(DbService db)
                         sourceIdentifiers = SourceIdentifiers,
                     }
                 );
-            if (ImportedVenueUuids == null)
+            if (ImportedVenueUuids == null && CandidateUniverses == null)
             {
                 return Hash(configuration);
             }
             var fields = configuration
                 .EnumerateObject()
                 .ToDictionary(property => property.Name, property => property.Value);
-            fields.Add("importedVenues", JsonSerializer.SerializeToElement(ImportedVenueUuids));
+            if (ImportedVenueUuids != null)
+            {
+                fields.Add("importedVenues", JsonSerializer.SerializeToElement(ImportedVenueUuids));
+            }
+            if (CandidateUniverses != null)
+            {
+                fields.Add(
+                    "candidateUniverses",
+                    JsonSerializer.SerializeToElement(CandidateUniverses)
+                );
+            }
             return Hash(JsonSerializer.SerializeToElement(fields));
+        }
+
+        private static NormalizationCandidateUniverseKey[]? NormalizeCandidateBindingKeys(
+            IEnumerable<NormalizationCandidateUniverseKey>? keys
+        )
+        {
+            var normalized = NormalizeCandidateKeys(keys);
+            return normalized.Length == 0 ? null : normalized;
         }
 
         private static Guid[]? NormalizeVenueKeys(IEnumerable<Guid>? keys)
@@ -485,13 +526,20 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// Publishes typed domain changes exactly once per committed run. Stale/replayed runs never call
     /// publish. Callback failure or cancellation rolls back both domain writes and publication, so
     /// the same work UUID can retry. External side effects do not belong in this callback.
+    /// Typed writers declare every candidateWriteScope they may change. The store locks these
+    /// keys exclusively before resources and owners; writers supply no replacement generations.
+    /// Consumed scopes acknowledge changes made by this callback, while the audit ticket retains
+    /// the original read generations. Replays do not reacquire write scopes or invoke the callback.
     /// </summary>
     public Task<NormalizationPublicationResult> TryPublishAsync(
         Guid workUuid,
         Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task> publish,
-        CancellationToken cancellationToken = default
-    ) =>
-        InTransaction(
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<NormalizationCandidateUniverseKey>? candidateWriteScopes = null
+    )
+    {
+        var writeScopes = NormalizeCandidateKeys(candidateWriteScopes);
+        return InTransaction(
             async (connection, transaction) =>
             {
                 await LockOperation(connection, transaction, "work", workUuid, cancellationToken);
@@ -519,6 +567,14 @@ public sealed partial class NormalizationWorkService(DbService db)
                     initializeVenueClocks: false,
                     cancellationToken
                 );
+                var candidates = await LockCandidateUniverses(
+                    connection,
+                    transaction,
+                    (ticket.CandidateUniverses ?? []).Select(input => input.Universe).ToArray(),
+                    writeScopes,
+                    initializeConsumed: false,
+                    cancellationToken
+                );
                 var inputs = await LockInputUuids(
                     connection,
                     transaction,
@@ -533,12 +589,22 @@ public sealed partial class NormalizationWorkService(DbService db)
                 );
                 var owner = subjects.Single(s => s.Uuid == ticket.SubjectUuid);
                 var current =
-                    CatalogIsCurrent(ticket, catalog) && IsCurrent(ticket, inputs, subjects, owner);
+                    CatalogIsCurrent(ticket, catalog)
+                    && (ticket.CandidateUniverses ?? []).SequenceEqual(candidates)
+                    && IsCurrent(ticket, inputs, subjects, owner);
                 if (current)
                 {
                     await publish(connection, transaction, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
                     await RecordPublication(connection, transaction, ticket, cancellationToken);
+                    // Exclusive write scopes remain locked through this read. A publication
+                    // acknowledges its own accepted changes without rewriting its audit ticket.
+                    await RecordCandidatePublication(
+                        connection,
+                        transaction,
+                        ticket,
+                        cancellationToken
+                    );
                     await RecordCatalogPublication(
                         connection,
                         transaction,
@@ -561,6 +627,7 @@ public sealed partial class NormalizationWorkService(DbService db)
             },
             cancellationToken
         );
+    }
 
     /// <summary>
     /// Applies a trusted domain correction and immutable audit receipt in one transaction. Operator
@@ -568,15 +635,19 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// accepted graph; the callback must validate and write the domain's typed records.
     /// Declare all additional identity owners before calling: the store locks and increments each
     /// owner once. Callbacks must not acquire additional subject locks after domain writes begin.
+    /// candidateWriteScopes declares the complete matching pools the typed command can change.
+    /// These coordination keys are locked before owners and do not alter the command replay identity.
     /// </summary>
     public Task<NormalizationReviewResult> ApplyReviewAsync(
         NormalizationReviewCommand command,
         Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task> apply,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<NormalizationCandidateUniverseKey>? candidateWriteScopes = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Reason);
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Operator);
+        var writeScopes = NormalizeCandidateKeys(candidateWriteScopes);
         var payload = command.Payload.Clone();
         var additionalSubjects = (command.AdditionalSubjectUuids ?? [])
             .Where(uuid => uuid != command.SubjectUuid)
@@ -621,6 +692,14 @@ public sealed partial class NormalizationWorkService(DbService db)
                         true
                     );
                 }
+                await LockCandidateUniverses(
+                    connection,
+                    transaction,
+                    [],
+                    writeScopes,
+                    initializeConsumed: false,
+                    cancellationToken
+                );
                 var affectedOwners = await LockSubjects(
                     connection,
                     transaction,
@@ -698,6 +777,9 @@ public sealed partial class NormalizationWorkService(DbService db)
                             OR EXISTS(SELECT 1 FROM normalization.work_source_identity_inputs i JOIN normalization.catalog_source_identity_revisions r ON r.upstream_identifier=i.upstream_identifier
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_venue_inputs i JOIN normalization.catalog_venue_revisions r ON r.venue_uuid=i.venue_uuid
+                                WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
+                            OR EXISTS(SELECT 1 FROM normalization.work_candidate_inputs i JOIN normalization.candidate_universe_revisions r
+                                ON r.domain=i.domain AND r.scope_uuid=i.scope_uuid
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs i CROSS JOIN normalization.catalog_mapping_registry_revision r
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation))

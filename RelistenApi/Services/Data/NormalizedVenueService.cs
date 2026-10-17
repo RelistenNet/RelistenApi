@@ -13,6 +13,11 @@ namespace Relisten.Data;
 /// <summary>Physical sites and rooms remain distinct from artist-scoped imported venue labels.</summary>
 public sealed partial class NormalizedVenueService(DbService db, NormalizationWorkService work)
 {
+    private static readonly NormalizationCandidateUniverseKey[] IdentityCandidateWriteScopes =
+    [
+        NormalizationCandidateUniverseKey.Venues,
+    ];
+
     public Task<NormalizationPublicationResult> PublishAsync(
         Guid workUuid,
         VenuePublication publication,
@@ -139,7 +144,8 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     await WriteAutomaticAssignment(c, t, assignment, true, workUuid, ct);
                 }
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
 
     private static async Task<int> WriteNames(
@@ -413,7 +419,8 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     ct
                 );
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
 
     public Task<IReadOnlyList<CanonicalVenue>> FindCandidatesAsync(

@@ -19,12 +19,12 @@ namespace Relisten.Data;
 /// </summary>
 public sealed partial class NormalizedMusicService(DbService db, NormalizationWorkService work)
 {
-    public Task<NormalizationPublicationResult> PublishAsync(
+    public async Task<NormalizationPublicationResult> PublishAsync(
         Guid workUuid,
         MusicPublication publication,
         CancellationToken cancellationToken = default
     ) =>
-        work.TryPublishAsync(
+        await work.TryPublishAsync(
             workUuid,
             async (c, t, ct) =>
             {
@@ -61,7 +61,11 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                 await ValidateDependencies(c, t, ticket, publication, ct);
                 await Apply(c, t, publication, workUuid, false, ct);
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: await ReadWorkCandidateWriteScopesAsync(
+                workUuid,
+                cancellationToken
+            )
         );
 
     public async Task<NormalizationReviewResult> ApplyDecisionAsync(
@@ -130,7 +134,11 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                     await Apply(c, t, publication, operationUuid, true, ct);
                 }
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: await ReadSubjectCandidateWriteScopesAsync(
+                subjectUuid,
+                cancellationToken
+            )
         );
     }
 

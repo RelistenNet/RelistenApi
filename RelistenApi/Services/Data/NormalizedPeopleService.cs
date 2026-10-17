@@ -14,6 +14,15 @@ namespace Relisten.Data;
 /// <summary>Global identities and evidenced recording credits; equal names only retrieve candidates.</summary>
 public sealed partial class NormalizedPeopleService(DbService db, NormalizationWorkService work)
 {
+    // Reserve both scopes before owner locks: person identity edits also change resolved
+    // composition authors. Automatic credit-only changes advance only people; reviewed
+    // credits also update the linked person's identity revision.
+    private static readonly NormalizationCandidateUniverseKey[] IdentityCandidateWriteScopes =
+    [
+        NormalizationCandidateUniverseKey.Compositions,
+        NormalizationCandidateUniverseKey.People,
+    ];
+
     public Task<NormalizationPublicationResult> PublishAsync(
         Guid workUuid,
         PeoplePublication publication,
@@ -142,7 +151,8 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                     await WriteCredit(connection, transaction, credit, workUuid, false, 0, ct);
                 }
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
 
     private static async Task<int> WriteAliases(
@@ -316,7 +326,8 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                     ct
                 );
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
 
     public Task<IReadOnlyList<CanonicalPerson>> FindCandidatesAsync(

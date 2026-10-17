@@ -67,7 +67,9 @@ public sealed record NormalizationWorkTicket(
     IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null,
     NormalizationMappingRegistryDependency? MappingRegistry = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<NormalizationImportedVenueDependency>? ImportedVenues = null
+        IReadOnlyList<NormalizationImportedVenueDependency>? ImportedVenues = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? CandidateUniverses = null
 );
 
 public enum NormalizationPublicationStatus

@@ -77,7 +77,8 @@ public sealed partial class NormalizedPeopleService
                 await ApplyPersonMetadata(c, t, command, ct);
                 await BumpMetadataIdentity(c, t, "people", command.PersonUuid, ct);
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
     }
 

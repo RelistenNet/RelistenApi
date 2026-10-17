@@ -28,5 +28,6 @@ public sealed record NormalizationInputContributionState(
     IReadOnlyList<Guid> CatalogArtistUuids,
     IReadOnlyList<string> SourceIdentifiers,
     bool UsesMappingRegistry = false,
-    IReadOnlyList<Guid>? ImportedVenueUuids = null
+    IReadOnlyList<Guid>? ImportedVenueUuids = null,
+    IReadOnlyList<NormalizationCandidateUniverseKey>? CandidateUniverses = null
 );

@@ -615,13 +615,24 @@ public sealed class TestNormalizedMetadata
                 "operator",
                 timeout.Token
             );
+            // Candidate-pool writers now serialize before the identity advisory lock.
+            // Observe the parent waiting on the paused child at that earlier boundary.
             await WaitFor(async () =>
                 parentTask.IsCompleted
                 || await fixture.Db.WithWriteConnection(c =>
-                    c.ExecuteScalarAsync<int>(
-                        "SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted"
+                    c.ExecuteScalarAsync<bool>(
+                        """
+                        SELECT EXISTS(
+                            SELECT 1 FROM pg_stat_activity waiting
+                            JOIN pg_locks paused_child ON paused_child.pid=ANY(pg_blocking_pids(waiting.pid))
+                            WHERE waiting.wait_event_type='Lock'
+                                AND waiting.query LIKE '%normalization.candidate_universe_revisions%'
+                                AND paused_child.locktype='advisory' AND paused_child.objid=@barrierKey::oid
+                                AND NOT paused_child.granted)
+                        """,
+                        new { barrierKey }
                     )
-                ) >= 2
+                )
             );
         }
         finally

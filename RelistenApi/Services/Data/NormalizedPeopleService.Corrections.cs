@@ -210,7 +210,8 @@ public sealed partial class NormalizedPeopleService
                     )
                 );
             },
-            cancellationToken
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
         );
     }
 

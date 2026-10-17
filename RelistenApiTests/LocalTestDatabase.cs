@@ -86,6 +86,10 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationImportedVenueBindings.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationCandidateUniverses.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

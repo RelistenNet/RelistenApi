@@ -53,10 +53,16 @@ public sealed partial class NormalizationWorkService
         JsonElement request,
         NormalizationMappingRegistryDependency? mappingRegistry,
         NormalizationBindingInputReference[] expectedInputs,
-        NormalizationImportedVenueDependency[] importedVenues
+        NormalizationImportedVenueDependency[] importedVenues,
+        NormalizationCandidateUniverseDependency[] candidateUniverses
     )
     {
-        if (mappingRegistry == null && expectedInputs.Length == 0 && importedVenues.Length == 0)
+        if (
+            mappingRegistry == null
+            && expectedInputs.Length == 0
+            && importedVenues.Length == 0
+            && candidateUniverses.Length == 0
+        )
         {
             return Hash(request);
         }
@@ -74,6 +80,10 @@ public sealed partial class NormalizationWorkService
         if (importedVenues.Length > 0)
         {
             fields.Add("importedVenues", JsonSerializer.SerializeToElement(importedVenues));
+        }
+        if (candidateUniverses.Length > 0)
+        {
+            fields.Add("candidateUniverses", JsonSerializer.SerializeToElement(candidateUniverses));
         }
         return Hash(JsonSerializer.SerializeToElement(fields));
     }
