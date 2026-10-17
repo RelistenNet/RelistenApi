@@ -106,6 +106,12 @@ public sealed partial class ArchiveIntakeService(
         DateTimeOffset? deadline = null
     )
     {
+        var nativeResolution = await ResolveReviewedNativeAsync(observation, token, deadline);
+        if (nativeResolution != null)
+        {
+            return nativeResolution;
+        }
+
         await EnsureItemAsync(observation.Item, token, deadline);
         return await InTransaction(
             token,
@@ -166,6 +172,17 @@ public sealed partial class ArchiveIntakeService(
         Guid observationId
     )
     {
+        var performerDecision = await performerReviews.FindPerformerDecisionAsync(
+            observation.Item.Value
+        );
+        if (performerDecision != null)
+        {
+            // A retained item decision wins over broad creator grouping, even when paused
+            // or stale. Ordinary observation must never overwrite that reviewed routing.
+            return (await LoadCandidatesAsync()).SingleOrDefault(candidate =>
+                candidate.candidate_id == performerDecision.CandidateId
+            );
+        }
         if (observation.IsAvailabilityOnly)
         {
             return null;
@@ -300,6 +317,9 @@ public sealed partial class ArchiveIntakeService(
     )
     {
         var candidates = await LoadCandidatesAsync();
+        var performerDecision = await performerReviews.FindPerformerDecisionForUpdateAsync(
+            observation.Item.Value
+        );
         return evaluator.Evaluate(
             observation,
             candidates
@@ -316,7 +336,8 @@ public sealed partial class ArchiveIntakeService(
                         )
                 ))
                 .ToArray(),
-            item.Assignment
+            item.Assignment,
+            performerDecision
         );
     }
 

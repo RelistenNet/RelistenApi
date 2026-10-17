@@ -157,6 +157,12 @@ public sealed partial class ArchiveIntakeService
             );
         }
 
+        var nativeResolution = await ResolveReviewedNativeAsync(observation, token, deadline);
+        if (nativeResolution != null)
+        {
+            return nativeResolution;
+        }
+
         await RecordObservationAsync(observation, token, deadline);
         return await InTransaction(
             token,
@@ -237,6 +243,22 @@ public sealed partial class ArchiveIntakeService
                         new TolerantStringConverter()
                     ) ?? throw new System.IO.InvalidDataException("Archive metadata was empty.")
                 );
+                var performerDecision = await performerReviews.FindPerformerDecisionForUpdateAsync(
+                    input.Item.Value
+                );
+                if (performerDecision != null)
+                {
+                    // Accept current metadata with the owned source in the same transaction.
+                    // Native source linking uses the separate conservative resolution policy.
+                    await new ArchiveItemResolutionService(db).BindPublishedAsync(
+                        input.Item.Value,
+                        capturedId,
+                        artist.uuid,
+                        source.uuid,
+                        token,
+                        deadline
+                    );
+                }
                 return new(
                     input.Item,
                     sameEvidence

@@ -81,7 +81,15 @@ public sealed partial class ArchiveIntakeService
                 FROM normalization.archive_item_intake i
                 JOIN normalization.archive_artist_candidates c ON c.candidate_id=i.candidate_id
                 WHERE c.artist_uuid=@uuid AND c.approved
-                ORDER BY i.item_identifier
+                UNION
+                -- Explicit item decisions can exist before intake classification. Select them
+                -- under the same reviewed project's writer and rebuild lock, without making
+                -- the broad provider creator a shared artist alias.
+                SELECT r.item_identifier,c.candidate_id
+                FROM normalization.archive_item_resolutions r
+                JOIN normalization.archive_artist_candidates c ON c.candidate_id=r.performer_candidate_id
+                WHERE c.artist_uuid=@uuid AND c.approved AND r.performer_approved
+                ORDER BY item_identifier
                 """,
                 new { uuid = artist.Value }
             )

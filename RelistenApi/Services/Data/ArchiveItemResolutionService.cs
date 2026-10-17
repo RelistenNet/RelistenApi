@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Newtonsoft.Json.Linq;
 using Relisten.Api.Models;
+using Relisten.Ingestion.Providers.TapersSection;
 
 namespace Relisten.Data;
 
@@ -49,27 +50,25 @@ public sealed class ArchiveItemResolutionService(DbService db)
             {
                 await ValidateEvidenceAsync(request);
                 var prior = await LockResolutionAsync(request.item_identifier);
-                var matches = (
-                    await db.WithWriteConnection(connection =>
-                        connection.QueryAsync<CanonicalMatch>(
-                            """
-                            SELECT s.uuid AS source_uuid,a.uuid AS artist_uuid
-                            FROM sources s JOIN artists a ON a.id=s.artist_id
-                            WHERE s.upstream_identifier=@item AND EXISTS (
-                                SELECT 1 FROM links l JOIN upstream_sources provider ON provider.id=l.upstream_source_id
-                                WHERE l.source_id=s.id AND l.for_source AND provider.name='archive.org'
-                            ) ORDER BY s.uuid LIMIT 2
-                            """,
-                            new { item = request.item_identifier }
-                        )
-                    )
-                ).ToArray();
+                // Read the project identity without locking its candidate here: writers use
+                // candidate -> intake item -> resolution, and we already hold resolution.
+                var performer = await new ArchivePerformerReviewService(
+                    db
+                ).FindPerformerDecisionAsync(request.item_identifier);
+                var reviewedArtist = performer?.SelectedArtistUuid;
+                var matches = await LoadCanonicalMatchesAsync(request.item_identifier);
 
                 var conflict = !string.IsNullOrWhiteSpace(request.conflict_reason)
                     ? request.conflict_reason
                     : await MetadataChangeReasonAsync(prior, request);
+                if (performer != null)
+                {
+                    conflict =
+                        await PerformerReviewConflictAsync(performer, prior, request) ?? conflict;
+                }
                 if (
-                    prior.selected_artist_uuid != null
+                    prior.canonical_source_uuid != null
+                    && prior.selected_artist_uuid != null
                     && request.expected_artist_uuid != null
                     && prior.selected_artist_uuid != request.expected_artist_uuid
                 )
@@ -83,7 +82,12 @@ public sealed class ArchiveItemResolutionService(DbService db)
                         "Several Archive sources match this exact provider item; catalog repair is required.";
                 }
                 var match = matches.Length == 1 ? matches[0] : null;
-                var expectedArtist = prior.selected_artist_uuid ?? request.expected_artist_uuid;
+                var expectedArtist =
+                    prior.canonical_source_uuid != null
+                        ? prior.selected_artist_uuid
+                        : request.expected_artist_uuid
+                            ?? reviewedArtist
+                            ?? prior.selected_artist_uuid;
                 if (match != null && expectedArtist != null && match.artist_uuid != expectedArtist)
                 {
                     conflict =
@@ -105,8 +109,10 @@ public sealed class ArchiveItemResolutionService(DbService db)
                 var sourceUuid =
                     prior.canonical_source_uuid ?? (resolved ? match!.source_uuid : (Guid?)null);
                 var artistUuid =
-                    prior.selected_artist_uuid
+                    (prior.canonical_source_uuid != null ? prior.selected_artist_uuid : null)
                     ?? request.expected_artist_uuid
+                    ?? reviewedArtist
+                    ?? prior.selected_artist_uuid
                     ?? (resolved ? match!.artist_uuid : (Guid?)null);
                 var status =
                     !string.IsNullOrWhiteSpace(conflict) ? "conflict"
@@ -119,7 +125,13 @@ public sealed class ArchiveItemResolutionService(DbService db)
                         : request.decision_basis;
                 var acceptedObservation =
                     prior.accepted_observation_id
-                    ?? (resolved ? request.observation_id ?? prior.observation_id : null);
+                    ?? (
+                        resolved
+                            ? request.observation_id
+                                ?? prior.observation_id
+                                ?? performer?.SupportingObservationId
+                            : null
+                    );
                 return await db.WithWriteConnection(connection =>
                     connection.QuerySingleAsync<ArchiveItemResolution>(
                         """
@@ -150,6 +162,179 @@ public sealed class ArchiveItemResolutionService(DbService db)
                 );
             }
         );
+    }
+
+    /// <summary>
+    /// Acknowledges an owned publication and advances its accepted metadata. Unlike native source
+    /// reuse, this requires matching intake publication references and an approved, applicable item
+    /// review. It cannot acquire ownership or replace an accepted canonical artist/source.
+    /// </summary>
+    public Task<ArchiveItemResolution> BindPublishedAsync(
+        string itemIdentifier,
+        Guid observationId,
+        Guid artistUuid,
+        Guid sourceUuid,
+        CancellationToken token = default,
+        DateTimeOffset? deadline = null
+    ) =>
+        new CatalogImportTransaction(db).RunAsync(
+            deadline ?? DateTimeOffset.UtcNow.AddMinutes(5),
+            token,
+            async () =>
+            {
+                var publication = await db.WithWriteConnection(connection =>
+                    connection.QuerySingleOrDefaultAsync<OwnedPublication>(
+                        """
+                        SELECT i.published_observation_id,i.published_artist_uuid,i.published_source_uuid,c.artist_uuid AS cohort_artist_uuid
+                        FROM normalization.archive_item_intake i
+                        JOIN normalization.archive_artist_candidates c ON c.candidate_id=i.candidate_id
+                        WHERE i.item_identifier=@itemIdentifier FOR UPDATE OF i
+                        """,
+                        new { itemIdentifier }
+                    )
+                );
+                if (
+                    publication == null
+                    || publication.published_observation_id != observationId
+                    || publication.published_artist_uuid != artistUuid
+                    || publication.cohort_artist_uuid != artistUuid
+                    || publication.published_source_uuid != sourceUuid
+                )
+                {
+                    throw new InvalidOperationException(
+                        "Only the current owned intake publication can advance accepted item metadata."
+                    );
+                }
+                var prior = await LockResolutionAsync(itemIdentifier);
+                if (
+                    prior.canonical_source_uuid != null
+                    && (
+                        prior.canonical_source_uuid != sourceUuid
+                        || prior.selected_artist_uuid != artistUuid
+                    )
+                )
+                {
+                    throw new InvalidOperationException(
+                        "The accepted canonical identity requires reviewed catalog repair before replacement."
+                    );
+                }
+                var matches = await LoadCanonicalMatchesAsync(itemIdentifier);
+                if (
+                    matches.Length != 1
+                    || matches[0].source_uuid != sourceUuid
+                    || matches[0].artist_uuid != artistUuid
+                )
+                {
+                    throw new InvalidOperationException(
+                        "The owned publication must be the unique exact Archive source for this item."
+                    );
+                }
+                var performer =
+                    await new ArchivePerformerReviewService(db).FindPerformerDecisionAsync(
+                        itemIdentifier
+                    )
+                    ?? throw new InvalidOperationException(
+                        "The owned item requires a retained performer review."
+                    );
+                var request = new ArchiveItemResolutionRequest(itemIdentifier)
+                {
+                    observation_id = observationId,
+                    expected_artist_uuid = artistUuid,
+                    decision_basis = performer.ReviewBasis,
+                };
+                var conflict = await PerformerReviewConflictAsync(performer, prior, request);
+                if (conflict != null)
+                {
+                    throw new InvalidOperationException(conflict);
+                }
+                return await db.WithWriteConnection(connection =>
+                    connection.QuerySingleAsync<ArchiveItemResolution>(
+                        """
+                        UPDATE normalization.archive_item_resolutions SET observation_id=@observationId,
+                            accepted_observation_id=@observationId,selected_artist_uuid=@artistUuid,canonical_source_uuid=@sourceUuid,
+                            decision_basis=@basis,status='resolved',reason=NULL,last_error=NULL,last_attempt_at=now(),updated_at=now()
+                        WHERE item_identifier=@itemIdentifier RETURNING *
+                        """,
+                        new
+                        {
+                            itemIdentifier,
+                            observationId,
+                            artistUuid,
+                            sourceUuid,
+                            basis = prior.canonical_source_uuid != null
+                                ? prior.decision_basis
+                                : performer.ReviewBasis,
+                        }
+                    )
+                );
+            }
+        );
+
+    private async Task<CanonicalMatch[]> LoadCanonicalMatchesAsync(string itemIdentifier) =>
+        (
+            await db.WithWriteConnection(connection =>
+                connection.QueryAsync<CanonicalMatch>(
+                    """
+                    SELECT s.uuid AS source_uuid,a.uuid AS artist_uuid
+                    FROM sources s JOIN artists a ON a.id=s.artist_id
+                    WHERE s.upstream_identifier=@item AND EXISTS (
+                        SELECT 1 FROM links l JOIN upstream_sources provider ON provider.id=l.upstream_source_id
+                        WHERE l.source_id=s.id AND l.for_source AND provider.name='archive.org'
+                    ) ORDER BY s.uuid LIMIT 2
+                    """,
+                    new { item = itemIdentifier }
+                )
+            )
+        ).ToArray();
+
+    private async Task<string?> PerformerReviewConflictAsync(
+        ArchivePerformerDecision performer,
+        ArchiveItemResolution prior,
+        ArchiveItemResolutionRequest request
+    )
+    {
+        if (!performer.Approved)
+        {
+            return "The retained performer review is not approved.";
+        }
+        if (performer.Alternatives.Length > 0)
+        {
+            return "The performer review still has unresolved alternatives.";
+        }
+        if (performer.SelectedArtistUuid == null)
+        {
+            return "The reviewed project has no unambiguous catalog artist yet.";
+        }
+        if (
+            request.expected_artist_uuid != null
+            && request.expected_artist_uuid != performer.SelectedArtistUuid
+        )
+        {
+            return "The requested performer conflicts with the retained project review.";
+        }
+        if (
+            prior.canonical_source_uuid != null
+            && prior.selected_artist_uuid != performer.SelectedArtistUuid
+        )
+        {
+            return "The retained project review conflicts with the accepted canonical performer.";
+        }
+        var currentObservationId =
+            request.observation_id ?? prior.observation_id ?? performer.SupportingObservationId;
+        var payload =
+            currentObservationId == performer.SupportingObservationId
+                ? performer.SupportingPayloadJson
+                : await db.WithWriteConnection(connection =>
+                    connection.QuerySingleAsync<string>(
+                        "SELECT payload::text FROM normalization.archive_item_observations WHERE observation_id=@id",
+                        new { id = currentObservationId }
+                    )
+                );
+        return
+            ArchivePerformerEvidence.IsApplicable(performer, JObject.Parse(payload))
+            && ArchivePerformerEvidence.SupportsProject(performer.ProjectLabels, performer.Evidence)
+            ? null
+            : "The retained project evidence no longer supports this current observation.";
     }
 
     private async Task<string?> MetadataChangeReasonAsync(
@@ -281,6 +466,14 @@ public sealed class ArchiveItemResolutionService(DbService db)
                 new { itemIdentifier }
             );
         });
+
+    private sealed class OwnedPublication
+    {
+        public Guid? published_observation_id { get; set; }
+        public Guid? published_artist_uuid { get; set; }
+        public Guid? published_source_uuid { get; set; }
+        public Guid? cohort_artist_uuid { get; set; }
+    }
 
     private sealed class CanonicalMatch
     {

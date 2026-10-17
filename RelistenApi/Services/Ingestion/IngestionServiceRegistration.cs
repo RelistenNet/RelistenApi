@@ -19,6 +19,7 @@ public static class IngestionServiceRegistration
         services.AddScoped<CollectionService>();
         services.AddScoped<CollectionDiscoveryService>();
         services.AddScoped<ArchiveItemResolutionService>();
+        services.AddScoped<ArchivePerformerReviewService>();
         services.AddScoped<ArchiveIntakeService>();
         services.AddScoped<CatalogImportTransaction>();
         services.AddScoped<SetlistShowService, SetlistShowService>();

@@ -6,6 +6,7 @@ using System.Net;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
+using Relisten.Api.Models;
 using Relisten.Data;
 
 namespace Relisten.Ingestion.Providers.TapersSection;
@@ -57,6 +58,9 @@ public enum TapersSectionReason
 
     [JsonStringEnumMemberName("invalid_metadata")]
     InvalidMetadata,
+
+    [JsonStringEnumMemberName("performer_review_required")]
+    PerformerReviewRequired,
 }
 
 /// <summary>Reviewed intake vocabulary and current catalog matching, supplied by the database owner.</summary>
@@ -102,11 +106,12 @@ public sealed record TapersSectionInterpretation(
 
 /// <summary>
 /// Applies the first-release attribution rules. Structured creators remain whole labels;
-/// descriptions can prevent an unsafe assignment but cannot supply its performer or date.
+/// descriptions can support an explicitly reviewed per-item performer decision. Ordinary
+/// discovery still requires a single structured creator; date policy applies to both routes.
 /// </summary>
 public sealed class TapersSectionEligibilityEvaluator
 {
-    public const int RulesVersion = 7;
+    public const int RulesVersion = 8;
 
     // Event wording can hold attribution. A venue's "Memorial" name alone cannot.
     private static readonly Regex Tribute = new(
@@ -138,7 +143,8 @@ public sealed class TapersSectionEligibilityEvaluator
     public TapersSectionInterpretation Evaluate(
         ArchiveObservationProjection observation,
         IReadOnlyList<TapersSectionCandidateIdentity> candidates,
-        TapersSectionPublishedAssignment? published = null
+        TapersSectionPublishedAssignment? published = null,
+        ArchivePerformerDecision? performerDecision = null
     )
     {
         var root = ArchiveObservationProjector.ParseObject(observation.PayloadJson);
@@ -150,10 +156,29 @@ public sealed class TapersSectionEligibilityEvaluator
             .Select(ArtistRegistryService.NormalizeIdentityKey)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var candidate = MatchCreator(metadata["creator"], creators, candidates, reasons);
+        var reviewedEvidenceApplies =
+            performerDecision != null
+            && performerDecision.ItemIdentifier == observation.Item.Value
+            && ArchivePerformerEvidence.IsApplicable(performerDecision, root);
+        var candidate =
+            performerDecision == null
+                ? MatchCreator(metadata["creator"], creators, candidates, reasons)
+                : MatchReviewedPerformer(
+                    metadata["creator"],
+                    creators,
+                    candidates,
+                    performerDecision,
+                    reviewedEvidenceApplies,
+                    reasons,
+                    evidence
+                );
 
         CheckContext(metadata, root["files"] as JArray, reasons, evidence);
-        CheckTitlePerformer(metadata, candidate, reasons, evidence);
+        var permittedTitleCreators =
+            performerDecision != null && reviewedEvidenceApplies
+                ? Strings(metadata["creator"]).ToArray()
+                : [];
+        CheckTitlePerformer(metadata, candidate, reasons, evidence, permittedTitleCreators);
         var date = new TapersSectionDateResolver().Resolve(
             metadata,
             observation.Item,
@@ -185,6 +210,53 @@ public sealed class TapersSectionEligibilityEvaluator
             reasons.Distinct().ToArray(),
             date.Details
         );
+    }
+
+    private static TapersSectionCandidateIdentity? MatchReviewedPerformer(
+        JToken? creator,
+        string[] creatorKeys,
+        IReadOnlyList<TapersSectionCandidateIdentity> candidates,
+        ArchivePerformerDecision decision,
+        bool reviewedEvidenceApplies,
+        List<TapersSectionReason> reasons,
+        List<TapersSectionEvidence> evidence
+    )
+    {
+        var candidate = candidates.SingleOrDefault(value =>
+            value.CandidateId == decision.CandidateId
+        );
+        if (
+            candidate == null
+            || !decision.Approved
+            || !reviewedEvidenceApplies
+            || !ArchivePerformerEvidence.SupportsProject(
+                candidate.ReviewedCreatorKeys,
+                decision.Evidence
+            )
+        )
+        {
+            reasons.Add(TapersSectionReason.PerformerReviewRequired);
+        }
+        else
+        {
+            evidence.AddRange(decision.Evidence);
+        }
+
+        // Alternatives name unresolved possible projects, not rejected hypotheses.
+        // Approval cannot collapse a recording that may contain several projects into one.
+        if (creatorKeys.Length == 0)
+        {
+            reasons.Add(TapersSectionReason.MissingCreator);
+        }
+        if (creatorKeys.Length > 1 || !HasOnlyStrings(creator) || decision.Alternatives.Length > 0)
+        {
+            reasons.Add(TapersSectionReason.AmbiguousCreator);
+        }
+        if (candidate != null)
+        {
+            CheckCandidate(candidate, reasons);
+        }
+        return candidate;
     }
 
     private static TapersSectionCandidateIdentity? MatchCreator(
@@ -226,6 +298,15 @@ public sealed class TapersSectionEligibilityEvaluator
         }
 
         var selected = matches[0];
+        CheckCandidate(selected, reasons);
+        return selected;
+    }
+
+    private static void CheckCandidate(
+        TapersSectionCandidateIdentity selected,
+        List<TapersSectionReason> reasons
+    )
+    {
         if (selected.AmbiguousIdentity)
         {
             reasons.Add(TapersSectionReason.AmbiguousCreator);
@@ -238,8 +319,6 @@ public sealed class TapersSectionEligibilityEvaluator
         {
             reasons.Add(TapersSectionReason.UnapprovedArtist);
         }
-
-        return selected;
     }
 
     private static void CheckPlayableFiles(JObject root, List<TapersSectionReason> reasons)
@@ -455,7 +534,8 @@ public sealed class TapersSectionEligibilityEvaluator
         JObject metadata,
         TapersSectionCandidateIdentity? candidate,
         List<TapersSectionReason> reasons,
-        List<TapersSectionEvidence> evidence
+        List<TapersSectionEvidence> evidence,
+        string[] permittedCreatorLabels
     )
     {
         if (candidate == null)
@@ -475,7 +555,7 @@ public sealed class TapersSectionEligibilityEvaluator
                 match.Success
                 && !MatchesReviewedTitlePerformer(
                     match.Groups["performer"].Value,
-                    candidate.ReviewedCreatorKeys
+                    candidate.ReviewedCreatorKeys.Concat(permittedCreatorLabels).ToArray()
                 )
             )
             {

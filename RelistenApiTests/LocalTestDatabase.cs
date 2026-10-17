@@ -35,6 +35,10 @@ internal static class LocalTestDatabase
             Migrations.AddRelistenCollections.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddArchivePerformerReviews.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
