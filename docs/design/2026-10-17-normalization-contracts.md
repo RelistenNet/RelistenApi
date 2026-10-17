@@ -90,6 +90,16 @@ The [catalog-binding contract](../plans/active/2026-10-17-full-normalization/cat
 
 Binding does not refresh retained wording or accept a normalized identity. Publication callbacks may read catalog rows but must not lock or change them; catalog mutation belongs in a separate phase.
 
+### Resolution and accepted-write contracts
+
+[People-resolution processing](../plans/active/2026-10-17-full-normalization/people-resolution.md) consumes a published recording extraction and preserves its original receipt, complete candidate snapshots and reviewed context in durable proposals. Its separate owner cannot write accepted credits or activate a policy. Unsupported names and unbound files remain explicit.
+
+[Credit reconciliation](../plans/active/2026-10-17-full-normalization/credit-reconciliation.md) replaces one contributor's support only within explicitly complete role/file scopes. Exact extracted mentions authorize the evidence; missing inputs, unresolved scope and decoder failures cannot authorize withdrawal. Shared support, append-publication baselines and reviewed claims survive independently.
+
+[Composition authorship](../plans/active/2026-10-17-full-normalization/composition-authorship.md) records each source's explicit complete or partial author list. Canonical people, including credited groups, are distinct from catalog artists. Writer-based composition links require compatible complete assertions and cannot infer completeness from a collection of individual credits.
+
+[Reviewed venue creation and assignment context](../plans/active/2026-10-17-full-normalization/venue-review-context.md) provide first-identity review and preserve current assignments, historical exclusions and omitted assignment targets alongside the global candidate pool. These operations do not establish automatic venue identity.
+
 ## Shared evidence and decision contracts
 
 ### Identifiers and retained inputs
@@ -260,6 +270,8 @@ A normalization job keys work by resource revision, domain and processing versio
 ## Migration, release and contract verification
 
 Add identities and relations in the `normalization` schema beside existing intake/collection tables; do not recreate that schema or attach normalization lifetime to a collection. Snapshot retained legacy fields, bridge imported venue/song UUIDs, and leave missing canonical assignments null. Rebuild normalized read indexes from accepted relationships. Never cascade deletion of a missing catalog source into retained evidence or identity history; mark its playback reference unavailable.
+
+Apply migrations 37–40 before the corresponding binary, including migration 37 before existing append-style people publication. They add contributor support history, composition-author assertions, durable people-resolution checkpoints and venue assignment indexes. Binary rollback retains these additive tables, indexes and histories; stop new processors rather than deleting their evidence.
 
 Separate write enablement from read enablement. Run shadow reads, compare existing playback identities/URLs, then enable new routes after measured domain evaluation. Rollback disables normalized reads and pauses workers; it keeps evidence and accepted/review history. The old API remains usable. Database restore rehearsal covers both catalog and normalization state before production migration/backfill.
 
