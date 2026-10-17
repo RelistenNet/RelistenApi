@@ -1,6 +1,7 @@
 using System;
 using System.Data;
 using System.Globalization;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Transactions;
 using Dapper;
@@ -23,7 +24,7 @@ public enum PerformanceType
 /// A source keeps one primary show for existing playback contracts. Combined or unresolved
 /// coverage retains that association without authorizing performance-specific enrichment.
 /// </summary>
-public sealed class ShowPerformanceService(DbService db)
+public sealed partial class ShowPerformanceService(DbService db)
 {
     // Rebuilds and explicit assignments share this artist lock. It serializes the one-time
     // survivor claim and source moves, including when called inside an import transaction.
@@ -330,28 +331,32 @@ public sealed class ShowPerformanceService(DbService db)
         string displayDate,
         DateTime date,
         PerformanceType performanceType,
-        string? label
+        string? label,
+        CancellationToken cancellationToken = default
     ) =>
         connection.ExecuteAsync(
-            """
-            UPDATE shows sh SET performance_key=@performanceKey,date=@date,display_date=@displayDate,
-                performance_type=@type,performance_label=@label,
-                is_legacy_survivor=sh.is_legacy_survivor AND NOT EXISTS(
-                    SELECT 1 FROM shows other WHERE other.artist_id=sh.artist_id
-                        AND other.display_date=@displayDate AND other.is_legacy_survivor AND other.id<>sh.id),
-                updated_at=statement_timestamp()
-            WHERE sh.id=@showId AND (sh.performance_key,sh.date,sh.display_date,sh.performance_type,sh.performance_label)
-                IS DISTINCT FROM (@performanceKey,@date,@displayDate,@type,@label);
-            """,
-            new
-            {
-                performanceKey,
-                date,
-                displayDate,
-                type = performanceType.ToString().ToLowerInvariant(),
-                label,
-                showId,
-            }
+            new CommandDefinition(
+                """
+                UPDATE shows sh SET performance_key=@performanceKey,date=@date,display_date=@displayDate,
+                    performance_type=@type,performance_label=@label,
+                    is_legacy_survivor=sh.is_legacy_survivor AND NOT EXISTS(
+                        SELECT 1 FROM shows other WHERE other.artist_id=sh.artist_id
+                            AND other.display_date=@displayDate AND other.is_legacy_survivor AND other.id<>sh.id),
+                    updated_at=statement_timestamp()
+                WHERE sh.id=@showId AND (sh.performance_key,sh.date,sh.display_date,sh.performance_type,sh.performance_label)
+                    IS DISTINCT FROM (@performanceKey,@date,@displayDate,@type,@label);
+                """,
+                new
+                {
+                    performanceKey,
+                    date,
+                    displayDate,
+                    type = performanceType.ToString().ToLowerInvariant(),
+                    label,
+                    showId,
+                },
+                cancellationToken: cancellationToken
+            )
         );
 
     private static async Task<Show> ResolveAcceptedPerformanceAsync(
@@ -363,13 +368,7 @@ public sealed class ShowPerformanceService(DbService db)
         DateTime date
     )
     {
-        var show = await connection.QuerySingleOrDefaultAsync<Show>(
-            """
-            SELECT sh.* FROM shows sh JOIN show_performance_keys k ON k.show_id=sh.id
-            WHERE k.artist_id=@artistId AND k.performance_key=@performanceKey
-            """,
-            new { artistId = artist.id, performanceKey }
-        );
+        var show = await ReadRegisteredPerformanceAsync(connection, artist.id, performanceKey);
 
         if (show == null)
         {
