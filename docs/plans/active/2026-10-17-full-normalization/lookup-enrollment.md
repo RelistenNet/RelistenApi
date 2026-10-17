@@ -7,9 +7,9 @@ makes that lookup pending through the [original lookup clocks](lookup-fences.md)
 For a bound recording, publication also commits a durable processing handoff.
 
 These are internal .NET service contracts. This increment adds no HTTP route,
-scheduled worker, automatic matching policy or public read enablement. Legacy
-handoffs have a consumer; retained Archive and Phish handoffs await the direct
-provider processor. A stored handoff alone does not mean extraction completed.
+scheduled worker, automatic matching policy or public read enablement. Legacy,
+Archive and Phish handoffs use the [shared complete-input processor](provider-processing.md).
+A stored handoff alone does not mean extraction completed.
 
 ## Entry points and ownership
 
@@ -69,22 +69,31 @@ audit and leaves the prior publication current and pending.
 ## Dispatch and recovery
 
 Call `NormalizationRecordingLookupDispatcher.DispatchAsync(handoffUuid, ct)`
-after publication commits. For legacy recordings, the dispatcher installs the
-original `NormalizationRecordingPreparation` in the proposal store before
-calling the [recording processor](recording-processing.md). Processing therefore
-uses the retained capture instead of fetching it again. The extraction owner
+after publication commits. The dispatcher freezes the initiating handoff in the
+processing header, then calls the legacy or retained-provider entry point of the
+[shared recording processor](provider-processing.md). That processor preserves
+the original initiating evidence and prepares the complete owner input set.
+Legacy delivery uses the retained capture instead of fetching it again. The extraction owner
 and its `relisten / recording / sourceUuid` contributor remain separate from
 the lookup owner.
 
 The dispatcher acknowledges delivery only against a durable terminal processing
-receipt for the exact source, attempt, version and saved preparation. `Completed` describes delivery;
-the extraction receipt can still report `Stale` or `Unresolved`. For retained
-provider handoffs, `AwaitingProviderConsumer` leaves the handoff pending. It never
-substitutes a legacy refresh for richer provider evidence.
+receipt for the exact source, attempt, version and original initiating evidence.
+The complete preparation may also contain peer inputs. A returned dispatch result
+confirms delivery; its processing receipt can still report `Stale` or `Unresolved`.
+An unresolved attempt that stops before preparation must still identify the
+actual initiating handoff. Retained provider processing never substitutes legacy
+wording for that handoff's input.
+
+A retained handoff's target version remains null because it was created before
+consumer admission. The processing header fixes the actual consumer version.
+Legacy handoffs retain their originally prepared target version and admission
+values. Historical terminal receipts keep exact replay. An older legacy header
+left without preparation can acknowledge only its verified version-change
+`Unresolved` receipt; it cannot claim published extraction.
 
 `GetPendingHandoffsAsync` supports a mode filter, bounded pages and a stable UUID
-cursor. Legacy delivery can proceed without being starved by retained-provider
-handoffs that have no consumer yet. Enrollment and delivery are explicit service
+cursor. Operators can process either mode in bounded pages. Enrollment and delivery are explicit service
 operations; clocks alone do not schedule them.
 
 | Interruption or change | Recovery |
@@ -111,9 +120,10 @@ delivery crashes and exact replay. They also check that lookup and extraction
 acknowledgements remain separate and dispatch does not refresh the capture.
 These tests establish recovery contracts, not matching accuracy or throughput.
 
-Apply migrations through 34 before using these services. Stop incompatible
+Apply migrations through 34 for lookup registration and through 35 for current
+processing and dispatch. Stop incompatible
 normalization workers before changing processing versions. Do not drop retained
 lookup history on binary rollback: stop enrollment and dispatch, retain the
-tables, evidence and clocks, and keep existing playback operational. Direct
-provider, Local and setlist coordinators, automatic resolution, evaluation,
+tables, evidence and clocks, and keep existing playback operational. Local and
+setlist coordinators, automatic resolution, evaluation,
 full backfill and deployment rehearsal remain required by the [main plan](README.md).

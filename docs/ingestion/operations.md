@@ -113,12 +113,18 @@ backfill work.
 
 ### Recording extraction commands
 
-The standalone worker can now extract credit and title proposals from a saved
+The standalone worker extracts credit and title proposals from a saved
 page of catalog recordings with `--normalize-recordings=PAGE_UUID`. Optional
 `--artist=ARTIST_UUID`, `--after=SOURCE_UUID` and `--limit=25` select up to 100
-recordings. The command requires a writable catalog with migrations through 27;
+recordings. The command requires a writable catalog with migrations through 35;
 it does not start imports, hosted workers or schedules, or call Luna. It needs
 no Redis or Temporal connection. It does not accept identities or change playback.
+
+Each recording run consumes its complete supported legacy/Archive/Phish input
+set. Retained provider accounts must already be enrolled with that extraction
+owner; this command does not discover or fetch them. See the
+[complete-input contract](../plans/active/2026-10-17-full-normalization/provider-processing.md)
+for contributor ownership, file-credit scope and delivery recovery.
 
 Save the page UUID and selectors, then reuse them after interruption. The command
 writes JSON to stdout on exits 0 and 2, with diagnostics on stderr. Exits 1 and

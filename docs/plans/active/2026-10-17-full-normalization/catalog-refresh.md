@@ -73,11 +73,13 @@ original read set and result.
 For contributed work, the expected revision list describes the incoming
 contributor's consumed inputs. The returned ticket can contain other contributors' inputs. Consume that complete
 ticket before extraction and matching; do not replace an artist's repertoire
-with proposals computed from only the incoming recording. Direct provider
-coordinators, dependency reconciliation and the automatic resolver still need
-implementation. The [recording processor and page runner](recording-processing.md)
-implement this lifecycle for stored recordings and retain completed extractions
-separately from acceptance.
+with proposals computed from only the incoming recording. The
+[complete-input recording processor](provider-processing.md) uses a separate
+batch admission method to pin all prepared legacy/Archive/Phish inputs and their
+original contributor membership. Local/setlist coordinators, dependency
+reconciliation and the automatic resolver remain required. The
+[recording processor and page runner](recording-processing.md) retain completed
+extractions separately from acceptance.
 
 ## Failure and recovery
 

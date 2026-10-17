@@ -88,9 +88,9 @@ independent lookup scopes settle shared evidence without repeated fetches.
 Changed facts require a complete refresh.
 
 See the [enrollment contract](lookup-enrollment.md) for entry points, storage,
-atomic handoffs and failure recovery. Legacy dispatch is implemented. Retained
-Archive/Phish handoffs await a direct provider consumer; Local and setlist
-coordinators also remain required. Clocks alone do not schedule retries.
+atomic handoffs and failure recovery. Legacy, Archive and Phish handoffs use the
+[complete-input recording processor](provider-processing.md). Local and setlist
+coordinators remain required. Clocks alone do not schedule retries.
 
 ## Compatibility and verification
 

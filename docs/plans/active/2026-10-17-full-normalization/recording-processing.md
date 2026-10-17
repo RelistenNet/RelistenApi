@@ -1,20 +1,21 @@
 # Process recording evidence with durable recovery
 
 `NormalizationRecordingProcessor.ProcessAsync(attemptUuid, sourceUuid,
-cancellationToken)` refreshes one catalog recording and saves local credit and
-title proposals. It works from stored fields for any artist, without requiring
-a repertoire dictionary. It does not accept person, song or composition matches,
+cancellationToken)` prepares one recording's complete retained evidence set and
+saves local credit and title proposals. It starts from stored fields for any
+artist and includes supported provider inputs already owned by that recording.
+It requires no repertoire dictionary. It does not accept person, song or composition matches,
 change playback, call Luna or enable public normalization reads.
 
-This is the catalog-recording producer. Direct processing of richer retained
-provider accounts and automatic resolution remain required by
-the [main plan](README.md). A stored snapshot cannot recover upstream information
-that an older importer discarded.
+The shared processor also consumes [retained Archive and Phish accounts](provider-processing.md)
+through lookup handoffs. A stored legacy snapshot cannot recover upstream
+information that an older importer discarded. Automatic resolution remains
+required by the [main plan](README.md).
 
 The [lookup coordinator and dispatcher](lookup-enrollment.md) provide a separate
 entry point for durable positive and negative catalog association. A bound legacy
-handoff installs its original preparation before calling this processor, so
-dispatch does not refresh the recording again. Lookup publication and extraction
+handoff freezes its original evidence before this processor prepares the complete
+owner set, so dispatch does not refresh that initiating input. Lookup publication and extraction
 publication have independent owners and watermarks.
 
 ## Ownership and retained results
@@ -24,10 +25,11 @@ domain `extractions`. One source uses owner `(extractions, recording, sourceUuid
 That owner is separate from accepted recording credits and song contents. Saving
 an extraction must not mark those domain owners successfully normalized.
 
-Each attempt retains its source UUID, processing version, original preparation
-and terminal result. Preparation names the exact fetch receipt, original producer
-catalog revisions, checked binding and admission revisions. Published batches add
-the complete work ticket, evidenced credit mentions, unresolved credit text,
+Each attempt retains its source UUID, processing version, optional initiating
+handoff, original preparation and terminal result. Preparation names each input's
+exact revision, checked binding and admission revisions. Legacy inputs also retain
+actual fetch receipts and original producer catalog revisions. Published batches add
+the complete work ticket, separate per-input credit mentions, unresolved credit text,
 bound-file title interpretations and decoder issues. Unresolved file associations
 remain in the binding. Candidate search is explicitly `not_run`.
 
@@ -41,15 +43,17 @@ mentions remain distinct. Title-segment offsets refer to the retained title,
 without inferred audio times or performance positions.
 
 Attempts retain history after catalog deletion and have no cascading source FK.
-The preparation references an immutable fetch receipt. Headers, saved preparations
+Legacy preparation references an immutable fetch receipt; raw provider input needs
+no invented legacy receipt. Headers, saved preparations
 and terminal outcomes cannot be replaced. The processing version includes the
 catalog representation, decoder and extractor versions. Reusing an attempt UUID
 for another source raises `NormalizationConflictException`. The proposal store
 also rejects a changed processing version; processor compatibility behavior is
 specified below.
 
-The processor preparation contract is version 2. It carries source UUID lookup
-clocks alongside the original producer and binding read set. The processor
+The processor preparation contract is version 3. It carries complete per-input
+preparations and original contributor membership alongside producer, catalog,
+identifier and UUID read sets. The processor
 returns a saved same-source terminal result before applying the current version.
 An unfinished older-version attempt ends as `Unresolved` with
 `processing_version_changed`; use a new attempt UUID to prepare current evidence.
@@ -61,14 +65,16 @@ Existing pages encode the processor version; start a new page after this change.
 
 1. Create or replay the attempt. A terminal replay returns its original outcome
    without fetching evidence or changing work configuration.
-2. Refresh the recording through the [v2 catalog path](catalog-refresh.md), decode
-   its exact input and check its binding. Save the preparation before admission.
-3. Admit or replay contributed work using that saved request. The stable
-   `relisten / recording / sourceUuid` contributor owns its complete input set.
-   Supply every catalog dependency and exact input-revision expectation.
-4. Recover the saved fetch, check its original producer revisions, and reproduce
-   and compare the complete saved binding. Extract source credits and titles of
-   positively bound files. Missing show,
+2. Read complete contributor ownership. Prepare the initiating legacy snapshot
+   through the [v2 catalog path](catalog-refresh.md), or preserve the exact handoff
+   evidence. Prepare supported peers, then save the complete immutable preparation.
+3. Admit or replay the prepared contributions atomically, with their original
+   membership, catalog dependencies and input revisions. The stable
+   `relisten / recording / sourceUuid` contributor keeps legacy input ownership;
+   provider accounts keep their own resource-based contributor keys.
+4. Recover every saved input, check original legacy producer revisions, and
+   reproduce each complete binding. Extract recording/file credits and titles of
+   positively bound files into separate account groups. Missing show,
    venue or sibling-file context does not withhold usable source credits.
 5. Save the completed extraction as an immutable checkpoint. Then mark the batch
    current and save its terminal published result in the work publication
@@ -112,13 +118,12 @@ contract. Extra resources, artist or identifier clocks, source UUIDs, causal
 owners, imported venues or candidate facts cannot be acknowledged by a batch
 that did not consume them.
 
-The current producer consumes one legacy recording input. Contributed admission
-preserves other contributors' inputs, but this producer must not publish a subset
-of their union. An unexpected union returns `unsupported_owner_inputs`, retains
-the full bindings and leaves its work unpublished and pending for reconciliation.
-It does not consume those publication watermarks. A later provider coordinator
-must process the complete input set and check each producer's original read set;
-capturing newer union clocks cannot make older catalog facts current.
+The processor consumes legacy, Archive and Phish recording inputs. Unsupported
+contributors, unmanaged baseline bindings or an unexpected union return an
+explicit attention outcome and leave the owner unpublished and pending for
+reconciliation. They cannot consume those publication watermarks. See the
+[complete-input contract](provider-processing.md) for membership races,
+file-credit scope, per-account conflicts and handoff recovery.
 
 ## Run a bounded recording page
 
@@ -141,7 +146,7 @@ new page UUID covering that recording's range, or invoke the single-recording
 processor with a new attempt UUID. Replaying the old page does not refresh it.
 
 The worker command requires the catalog's `DATABASE_URL` and migrations through
-33. Lookup enrollment and dispatch additionally require migration 34. Build the
+35. Lookup registration requires migrations through 34. Build the
 worker first; keep build output separate from command receipts:
 
 ```sh
@@ -215,9 +220,9 @@ executable under Test and Development environments. Pure extraction cases includ
 wording from several artists; they verify reproducibility and evidence handling,
 not identity-matching accuracy. The [main plan](README.md#progress) records results.
 
-The current processor and page command require migrations through 33, including
+The current processor and page command require migrations through 35, including
 the original processing/page storage from migrations 26–27 and the later lookup
-clock contracts. Migration 27 builds a regular `(artist_id, uuid)` index
+clock and complete-input contracts. Migration 27 builds a regular `(artist_id, uuid)` index
 on `sources`; measure the build on a representative database and allow for blocked
 source writes during production migration. Registration in the shared
 catalog container starts no work. On rollback, stop processors and retain attempts,

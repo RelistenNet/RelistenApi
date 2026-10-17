@@ -102,8 +102,9 @@ request; replay returns its saved result.
 Legacy, Archive, Phish and Local recording lookups return the catalog fences
 their resolvers consumed, including unresolved outcomes. The
 [recording lookup coordinator](lookup-enrollment.md) retains legacy and supported
-Archive/Phish outcomes independently from extraction. Local enrollment and
-complete-input provider processing remain required. Preserve unresolved results
+Archive/Phish outcomes independently from extraction. The
+[recording processor](provider-processing.md) consumes those supported inputs
+together. Local enrollment and setlist processing remain required. Preserve unresolved results
 for reconciliation; absence from the pending-owner query does not establish
 completion.
 
@@ -200,7 +201,8 @@ registry lock; retrying only that statement does not recover the transaction.
 Before enabling publication, install the catalog-binding migrations through 33 and their triggers with
 catalog writers and normalization publishers stopped. Drain or explicitly
 recreate older work tickets that lack catalog fences; adding the migration does
-not repair those tickets. Validate trigger coverage and writer overhead against
+not repair those tickets. The current [recording processor](provider-processing.md)
+also requires migration 35. Validate trigger coverage and writer overhead against
 representative imports before starting the pending-owner worker. Keep accepted
 data, evidence, clocks and contribution revisions on rollback; disable the new
 publication path rather than dropping them.
@@ -216,8 +218,8 @@ its producer clocks before binding. Historical seed and association-only APIs
 retain their original behavior.
 
 Legacy and supported Archive/Phish recording lookups now have durable enrollment.
-Remaining work includes Local/setlist enrollment, complete-ticket provider
-processing, multi-candidate resolution and evaluated automatic acceptance. A recording read
+Remaining work includes Local/setlist enrollment and processing, multi-candidate
+resolution and evaluated automatic acceptance. A recording read
 set does not authorize unrelated unbound context facts; each new domain binder
 must define their ownership and freshness. Model comparison, backfill and rollout
 rehearsal remain requirements of the [main plan](README.md). This increment does
@@ -253,8 +255,8 @@ UUID absence checks. [Durable lookup outcomes](lookup-enrollment.md) remain
 separate from extraction batches. A processed lookup can consume its own
 watermark and sleep until evidence changes; it cannot replace a prior successful
 extraction or accepted relationship. A bound outcome commits its handoff with
-that watermark. The legacy dispatcher consumes its original preparation;
-retained-provider handoffs await their direct consumer.
+that watermark. The [shared processor](provider-processing.md) preserves the
+initiating legacy or provider evidence while preparing the complete owner set.
 
 ## Verify the contracts
 
