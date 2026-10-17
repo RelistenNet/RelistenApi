@@ -308,19 +308,25 @@ public sealed class TestNormalizationEvidence
             new { initial.Resource.ProviderKey },
             transaction
         );
+
+        // Activity snapshots can be cached for a transaction. Observe through a separate
+        // autocommit connection so every poll sees current waits, not the blocker's first snapshot.
+        await using var observer = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await observer.OpenAsync();
         using var cancellation = new CancellationTokenSource();
         var pending = evidence.CaptureInputAsync(update, cancellation.Token);
         var deadline = DateTime.UtcNow.AddSeconds(5);
         var waiting = false;
         while (!waiting && DateTime.UtcNow < deadline)
         {
-            waiting = await blocker.QuerySingleAsync<bool>(
+            waiting = await observer.QuerySingleAsync<bool>(
                 """
                 SELECT EXISTS(SELECT 1 FROM pg_stat_activity
                     WHERE datname=current_database() AND wait_event_type='Lock'
+                    AND @blockerPid=ANY(pg_blocking_pids(pid))
                     AND query LIKE '%normalization.input_resources%')
                 """,
-                transaction: transaction
+                new { blockerPid = blocker.ProcessID }
             );
             if (!waiting)
             {
