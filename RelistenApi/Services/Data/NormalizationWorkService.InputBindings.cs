@@ -150,15 +150,24 @@ public sealed partial class NormalizationWorkService
         );
     }
 
-    private static async Task<(
-        WorkBindingSet Bindings,
-        ContributionChange Change
-    )> PrepareContribution(
+    private static Task<(WorkBindingSet Bindings, ContributionChange Change)> PrepareContribution(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         NormalizationSubjectKey subject,
         ContributionReplacement replacement,
         CancellationToken ct
+    ) => PrepareContributions(connection, transaction, subject, [replacement], ct);
+
+    private static async Task<(
+        WorkBindingSet Bindings,
+        ContributionChange Change
+    )> PrepareContributions(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        NormalizationSubjectKey subject,
+        ContributionReplacement[] replacements,
+        CancellationToken ct,
+        NormalizationInputContributionRevision[]? expectedContributionRevisions = null
     )
     {
         var ownerUuid = await FindContributionOwner(connection, transaction, subject, ct);
@@ -166,6 +175,12 @@ public sealed partial class NormalizationWorkService
             ownerUuid == null
                 ? []
                 : await ReadContributionStates(connection, transaction, ownerUuid.Value, null, ct);
+        var originalRevisions = states
+            .Select(state => new NormalizationInputContributionRevision(
+                state.Contributor,
+                state.Revision
+            ))
+            .ToList();
         ContributionReplacement? baseline = null;
         if (ownerUuid != null && states.Length == 0)
         {
@@ -195,46 +210,65 @@ public sealed partial class NormalizationWorkService
                     0,
                     previous
                 );
+                originalRevisions.Add(new(baseline.Contributor, 0));
                 states = [ToContributionState(ownerUuid.Value, baseline, 1)];
             }
         }
-        var current = states.SingleOrDefault(state => state.Contributor == replacement.Contributor);
-        if ((current?.Revision ?? 0) != replacement.ExpectedRevision)
+        if (
+            expectedContributionRevisions != null
+            && !NormalizeContributionRevisions(originalRevisions)
+                .SequenceEqual(expectedContributionRevisions)
+        )
         {
             throw new NormalizationConflictException(
-                "Input contribution revision changed; reload its complete bindings."
+                "Input contributor membership changed after preparation; reload every contributor before admission."
             );
         }
-        var retained = states
-            .Where(state => state.Contributor != replacement.Contributor)
+        foreach (var replacement in replacements)
+        {
+            var current = states.SingleOrDefault(state =>
+                state.Contributor == replacement.Contributor
+            );
+            if ((current?.Revision ?? 0) != replacement.ExpectedRevision)
+            {
+                throw new NormalizationConflictException(
+                    "Input contribution revision changed; reload its complete bindings."
+                );
+            }
+        }
+        var replacedKeys = replacements.Select(replacement => replacement.Contributor).ToHashSet();
+        var combined = states
+            .Where(state => !replacedKeys.Contains(state.Contributor))
+            .Concat(
+                replacements.Select(replacement =>
+                    ToContributionState(
+                        ownerUuid ?? Guid.Empty,
+                        replacement,
+                        replacement.ExpectedRevision + 1
+                    )
+                )
+            )
             .ToArray();
-        var union = WorkBindingSet.Create(
-            retained.SelectMany(state => state.Resources).Concat(replacement.Bindings.Resources),
-            retained
-                .SelectMany(state => state.DependencySubjectUuids)
-                .Concat(replacement.Bindings.Dependencies),
-            retained
-                .SelectMany(state => state.CatalogArtistUuids)
-                .Concat(replacement.Bindings.CatalogArtists),
-            retained
-                .SelectMany(state => state.SourceIdentifiers)
-                .Concat(replacement.Bindings.SourceIdentifiers),
-            retained.Any(state => state.UsesMappingRegistry)
-                || replacement.Bindings.UsesMappingRegistry,
-            retained
-                .SelectMany(state => state.ImportedVenueUuids ?? [])
-                .Concat(replacement.Bindings.ImportedVenueUuids ?? []),
-            retained
-                .SelectMany(state => state.CandidateUniverses ?? [])
-                .Concat(replacement.Bindings.CandidateUniverses ?? []),
-            retained
-                .SelectMany(state => state.OwnerObservationSubjectUuids ?? [])
-                .Concat(replacement.Bindings.ObservedSubjects ?? []),
-            retained
-                .SelectMany(state => state.SourceUuids ?? [])
-                .Concat(replacement.Bindings.SourceUuids ?? [])
+        var union = ContributionUnion(combined);
+        return (union, new(replacements[0], baseline, replacements.Skip(1).ToArray()));
+    }
+
+    private static WorkBindingSet ContributionUnion(
+        IEnumerable<NormalizationInputContributionState> states
+    )
+    {
+        var entries = states.ToArray();
+        return WorkBindingSet.Create(
+            entries.SelectMany(state => state.Resources),
+            entries.SelectMany(state => state.DependencySubjectUuids),
+            entries.SelectMany(state => state.CatalogArtistUuids),
+            entries.SelectMany(state => state.SourceIdentifiers),
+            entries.Any(state => state.UsesMappingRegistry),
+            entries.SelectMany(state => state.ImportedVenueUuids ?? []),
+            entries.SelectMany(state => state.CandidateUniverses ?? []),
+            entries.SelectMany(state => state.OwnerObservationSubjectUuids ?? []),
+            entries.SelectMany(state => state.SourceUuids ?? [])
         );
-        return (union, new(replacement, baseline));
     }
 
     /// <summary>Reads one contributor, including an empty tombstone, from a primary repeatable-read snapshot.</summary>
@@ -308,6 +342,10 @@ public sealed partial class NormalizationWorkService
             await ReplaceContribution(connection, transaction, subjectUuid, change.Baseline, ct);
         }
         await ReplaceContribution(connection, transaction, subjectUuid, change.Replacement, ct);
+        foreach (var replacement in change.AdditionalReplacements ?? [])
+        {
+            await ReplaceContribution(connection, transaction, subjectUuid, replacement, ct);
+        }
     }
 
     private static async Task ReplaceContribution(
@@ -416,17 +454,7 @@ public sealed partial class NormalizationWorkService
         {
             return;
         }
-        var union = WorkBindingSet.Create(
-            states.SelectMany(state => state.Resources),
-            states.SelectMany(state => state.DependencySubjectUuids),
-            states.SelectMany(state => state.CatalogArtistUuids),
-            states.SelectMany(state => state.SourceIdentifiers),
-            states.Any(state => state.UsesMappingRegistry),
-            states.SelectMany(state => state.ImportedVenueUuids ?? []),
-            states.SelectMany(state => state.CandidateUniverses ?? []),
-            states.SelectMany(state => state.OwnerObservationSubjectUuids ?? []),
-            states.SelectMany(state => state.SourceUuids ?? [])
-        );
+        var union = ContributionUnion(states);
         if (
             !union.Resources.SequenceEqual(requested.Resources)
             || !union.Dependencies.SequenceEqual(requested.Dependencies)
@@ -609,7 +637,8 @@ public sealed partial class NormalizationWorkService
 
     private sealed record ContributionChange(
         ContributionReplacement Replacement,
-        ContributionReplacement? Baseline
+        ContributionReplacement? Baseline,
+        ContributionReplacement[]? AdditionalReplacements = null
     );
 
     private sealed record ContributionHeader(

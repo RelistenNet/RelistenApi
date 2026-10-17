@@ -39,3 +39,44 @@ public sealed record NormalizationInputContributionState(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         IReadOnlyList<Guid>? SourceUuids = null
 );
+
+/// <summary>
+/// Original evidence and catalog preconditions for one replacement. Every owned resource
+/// requires its consumed revision. Keys define this contributor's complete membership;
+/// different versions of a shared key cannot be combined into one prepared batch.
+/// </summary>
+public sealed record NormalizationPreparedInputContribution(
+    NormalizationInputContribution Contribution,
+    IReadOnlyList<NormalizationBindingInputReference> ExpectedInputRevisions,
+    IReadOnlyList<NormalizationCatalogDependency>? CatalogInputs = null,
+    IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null,
+    NormalizationMappingRegistryDependency? MappingRegistry = null,
+    IReadOnlyList<NormalizationImportedVenueDependency>? ImportedVenues = null,
+    IReadOnlyList<NormalizationCandidateUniverseDependency>? CandidateUniverses = null,
+    IReadOnlyList<NormalizationSubjectObservation>? ExpectedOwnerObservations = null,
+    IReadOnlyList<NormalizationSourceUuidDependency>? SourceUuids = null
+);
+
+/// <summary>Oversized snapshots fail before materializing bindings; no partial result is returned.</summary>
+public sealed record NormalizationInputContributionsLimits(
+    int MaximumContributors = 100,
+    int MaximumBindings = 10000
+);
+
+/// <summary>
+/// Owner state and complete contributor memberships from one primary read-only snapshot.
+/// UnmanagedBaseline exposes pre-contribution bindings with revision zero and their reserved
+/// baseline key. It is not persisted by this read; first contributed admission adopts those
+/// bindings under the existing baseline contract. Consumers must handle or reject it explicitly.
+/// </summary>
+public sealed record NormalizationInputContributionsSnapshot(
+    NormalizationSubjectState? Owner,
+    IReadOnlyList<NormalizationInputContributionState> Contributions,
+    NormalizationInputContributionState? UnmanagedBaseline = null
+);
+
+/// <summary>A complete contributor-membership observation, including retained empty tombstones.</summary>
+public sealed record NormalizationInputContributionRevision(
+    NormalizationResourceKey Contributor,
+    long Revision
+);
