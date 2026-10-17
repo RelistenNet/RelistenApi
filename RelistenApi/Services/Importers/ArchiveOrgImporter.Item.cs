@@ -7,6 +7,7 @@ using Hangfire.Server;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
+using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Archive;
 using Relisten.Vendor;
 using Relisten.Vendor.ArchiveOrg;
@@ -97,12 +98,12 @@ public partial class ArchiveOrgImporter
             reason
         );
 
-        using var detailRes = await http.GetAsync(
-            DetailsUrlForIdentifier(doc.identifier),
+        var detailsJson = await ArchiveNormalizationInput.FetchAsync(
+            http,
+            normalizationInputs,
+            new ArchiveItemId(doc.identifier),
             cancellationToken
         );
-        detailRes.EnsureSuccessStatusCode();
-        var detailsJson = await detailRes.Content.ReadAsStringAsync(cancellationToken);
         var detailsRoot = JsonConvert.DeserializeObject<RootObject>(
             detailsJson,
             new TolerantStringConverter()

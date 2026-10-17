@@ -10,7 +10,8 @@ namespace Relisten.Ingestion.Providers.TapersSection;
 /// <summary>Fetches current Archive evidence before catalog transactions. Each attempt uses fresh metadata.</summary>
 public sealed class TapersSectionActivities(
     ArchiveIntakeService intake,
-    IngestionHttpClientFactory httpClients
+    IngestionHttpClientFactory httpClients,
+    NormalizationProviderInputService normalizationInputs
 )
 {
     [Activity("TapersSection.FetchPage")]
@@ -167,12 +168,12 @@ public sealed class TapersSectionActivities(
     {
         var token = ActivityExecutionContext.Current.CancellationToken;
         using var http = httpClients.Create(token);
-        using var response = await http.GetAsync(
-            "https://archive.org/metadata/" + Uri.EscapeDataString(item.Value),
+        var raw = await ArchiveNormalizationInput.FetchAsync(
+            http,
+            normalizationInputs,
+            item,
             token
         );
-        response.EnsureSuccessStatusCode();
-        var raw = await response.Content.ReadAsStringAsync(token);
         return (ArchiveObservationProjector.Project(item, raw), raw);
     }
 

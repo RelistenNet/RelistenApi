@@ -30,6 +30,7 @@ namespace Relisten.Import
         private readonly LinkService linkService;
         private readonly IDiscordWebhookNotifier discordWebhookNotifier;
         private readonly ArchivePerformanceAssignmentService performanceAssignments;
+        private readonly NormalizationProviderInputService normalizationInputs;
 
         private IDictionary<string, SourceReviewInformation?> existingSourceReviewInformation =
             new Dictionary<string, SourceReviewInformation?>();
@@ -47,13 +48,15 @@ namespace Relisten.Import
             LinkService linkService,
             SourceTrackService sourceTrackService,
             IDiscordWebhookNotifier discordWebhookNotifier,
-            ArchivePerformanceAssignmentService performanceAssignments
+            ArchivePerformanceAssignmentService performanceAssignments,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
             this.discordWebhookNotifier = discordWebhookNotifier;
             this.performanceAssignments = performanceAssignments;
+            this.normalizationInputs = normalizationInputs;
             _sourceService = sourceService;
             _venueService = venueService;
             _tourService = tourService;
@@ -113,11 +116,6 @@ namespace Relisten.Import
             );
 
             return await ProcessIdentifiers(artist, docs, src, showIdentifier, ctx);
-        }
-
-        private static string DetailsUrlForIdentifier(string identifier)
-        {
-            return $"https://archive.org/metadata/{Uri.EscapeDataString(identifier)}";
         }
 
         private async Task<ImportStats> ProcessIdentifiers(

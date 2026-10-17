@@ -17,7 +17,8 @@ public sealed class ArchiveCollectionDiscoveryActivities(
     CollectionDiscoveryService discovery,
     ArchiveIntakeService intake,
     ArchiveItemResolutionService resolutions,
-    IngestionHttpClientFactory httpClients
+    IngestionHttpClientFactory httpClients,
+    NormalizationProviderInputService normalizationInputs
 )
 {
     [Activity("ArchiveCollections.BeginOrResume")]
@@ -92,12 +93,12 @@ public sealed class ArchiveCollectionDiscoveryActivities(
         try
         {
             using var http = httpClients.Create(token);
-            using var response = await http.GetAsync(
-                "https://archive.org/metadata/" + Uri.EscapeDataString(item.Value),
+            var raw = await ArchiveNormalizationInput.FetchAsync(
+                http,
+                normalizationInputs,
+                item,
                 token
             );
-            response.EnsureSuccessStatusCode();
-            var raw = await response.Content.ReadAsStringAsync(token);
             var projection = ArchiveObservationProjector.Project(item, raw);
             RequireActive(execution);
             var observationId = await intake.RetainObservationAsync(
