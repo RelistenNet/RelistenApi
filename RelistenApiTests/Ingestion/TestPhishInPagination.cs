@@ -3,8 +3,11 @@ using FluentAssertions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
+using Relisten.Data;
 using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.PhishIn;
@@ -69,7 +72,14 @@ public class TestPhishInPagination
             null!,
             NullLogger<PhishinImporter>.Instance,
             new ConfigurationBuilder().AddInMemoryCollection().Build(),
-            null!
+            null!,
+            new NormalizationPhishInInputService(
+                null!,
+                new NormalizationProviderInputService(
+                    null!,
+                    Options.Create(new NormalizationProviderCaptureOptions())
+                )
+            )
         );
 
     private sealed class PhishInListing : HttpMessageHandler

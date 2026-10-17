@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Vendor;
@@ -23,6 +25,7 @@ namespace Relisten.Import
     {
         private readonly LinkService linkService;
         private readonly ShowPerformanceService performances;
+        private readonly NormalizationPhishInInputService inputs;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
             new Dictionary<string, Era?>();
@@ -51,12 +54,14 @@ namespace Relisten.Import
             EraService eraService,
             ILogger<PhishinImporter> log,
             IConfiguration configuration,
-            ShowPerformanceService performances
+            ShowPerformanceService performances,
+            NormalizationPhishInInputService inputs
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
             this.performances = performances;
+            this.inputs = inputs;
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
             _sourceService = sourceService;
@@ -202,19 +207,40 @@ namespace Relisten.Import
             PerformContext? ctx,
             string? sort_attr = null,
             int per_page = 99999,
-            int? page = null
+            int? page = null,
+            CancellationToken ct = default
         )
         {
             var url = PhishinApiUrl(apiRoute, sort_attr, per_page, page);
             ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
-            using var resp = await http.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            var result = JsonConvert.DeserializeObject<PhishinRootObject<T>>(
-                await resp.Content.ReadAsStringAsync()
-            );
-            if (result == null || !result.success || result.data == null)
-                throw new System.IO.InvalidDataException("Phish.in returned an invalid response.");
-            return result;
+
+            async Task<NormalizationProviderResponse<PhishinRootObject<T>>> Fetch(
+                CancellationToken cancellationToken
+            )
+            {
+                using var resp = await http.GetAsync(url, cancellationToken);
+                resp.EnsureSuccessStatusCode();
+                var result = JsonConvert.DeserializeObject<PhishinRootObject<T>>(
+                    await resp.Content.ReadAsStringAsync(cancellationToken)
+                );
+                if (result == null || !result.success || result.data == null)
+                {
+                    throw new System.IO.InvalidDataException(
+                        "Phish.in returned an invalid response."
+                    );
+                }
+
+                return new(
+                    result,
+                    await resp.Content.ReadAsByteArrayAsync(cancellationToken),
+                    resp.Content.Headers.ContentType?.ToString() ?? "application/json",
+                    resp.Headers.ETag?.ToString()
+                );
+            }
+
+            return apiRoute == "shows"
+                ? await inputs.FetchShowsAsync(Fetch, ct)
+                : await inputs.FetchCatalogAsync(apiRoute, Fetch, ct);
         }
 
         public async Task<ImportStats> ProcessTours(

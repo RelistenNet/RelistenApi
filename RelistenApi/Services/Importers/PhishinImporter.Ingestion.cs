@@ -17,10 +17,34 @@ public partial class PhishinImporter
     /// <summary>Fetches and commits prerequisite catalogs, then returns the mappings used by shows.</summary>
     public async Task<PhishInCatalogs> PrepareCatalogsAsync(ProviderContext context)
     {
-        var eras = (await PhishinApiRequest<IDictionary<string, IList<string>>>("eras", null)).data;
-        var tours = (await PhishinApiRequest<PhishinSmallTour[]>("tours", null)).data;
-        var songs = (await PhishinApiRequest<PhishinSmallSong[]>("songs", null)).data;
-        var venues = (await PhishinApiRequest<PhishinSmallVenue[]>("venues", null)).data;
+        var eras = (
+            await PhishinApiRequest<IDictionary<string, IList<string>>>(
+                "eras",
+                null,
+                ct: context.CancellationToken
+            )
+        ).data;
+        var tours = (
+            await PhishinApiRequest<PhishinSmallTour[]>(
+                "tours",
+                null,
+                ct: context.CancellationToken
+            )
+        ).data;
+        var songs = (
+            await PhishinApiRequest<PhishinSmallSong[]>(
+                "songs",
+                null,
+                ct: context.CancellationToken
+            )
+        ).data;
+        var venues = (
+            await PhishinApiRequest<PhishinSmallVenue[]>(
+                "venues",
+                null,
+                ct: context.CancellationToken
+            )
+        ).data;
 
         return await context.CommitAsync(async () =>
         {
@@ -46,7 +70,14 @@ public partial class PhishinImporter
     > ReadShowPageAsync(ProviderContext context, int? fromYear, PhishInPage? cursor)
     {
         var page = cursor?.Number ?? 1;
-        var listing = await PhishinApiRequest<PhishinShow[]>("shows", null, "date", 20, page);
+        var listing = await PhishinApiRequest<PhishinShow[]>(
+            "shows",
+            null,
+            "date",
+            20,
+            page,
+            context.CancellationToken
+        );
         if (listing.total_pages < 0)
         {
             throw new InvalidDataException("Phish.in returned an invalid show page.");
