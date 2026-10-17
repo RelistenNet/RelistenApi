@@ -16,9 +16,10 @@ public partial class LocalImporter
         ProviderContext context
     )
     {
-        var root = await LocalApiRequest<LocalShow>(
-            $"{context.Source.upstream_identifier}/metadata",
-            null
+        var root = await LocalRootRequest(
+            RequireMetadataRoot(context.Source),
+            null,
+            context.CancellationToken
         );
         if (root?.data == null)
         {
@@ -67,7 +68,12 @@ public partial class LocalImporter
     {
         // Fetch all directories before opening the transaction. The transaction
         // merges them into one source for this date, retaining its catalog UUID.
-        var metadata = await FetchDirectoryMetadataAsync(context, item.Input);
+        var metadata = await FetchDirectoryMetadataAsync(
+            RequireMetadataRoot(context.Source),
+            item.Input,
+            null,
+            context.CancellationToken
+        );
 
         return await context.CommitAsync(async () =>
         {
@@ -100,24 +106,5 @@ public partial class LocalImporter
                 new(source.id)
             );
         });
-    }
-
-    private async Task<Dictionary<string, LocalShowObject>> FetchDirectoryMetadataAsync(
-        ProviderContext context,
-        LocalShow[] shows
-    )
-    {
-        var metadata = new Dictionary<string, LocalShowObject>();
-        foreach (var directory in shows.Select(show => show.dir).Distinct())
-        {
-            metadata[directory] =
-                await LocalShowRequest(
-                    $"{context.Source.upstream_identifier}/{directory}/metadata",
-                    null
-                )
-                ?? throw new System.IO.InvalidDataException("Local directory metadata is missing.");
-        }
-
-        return metadata;
     }
 }

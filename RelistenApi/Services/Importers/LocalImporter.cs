@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Transactions;
 using Hangfire.Console;
 using Hangfire.Server;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Ingestion;
@@ -21,6 +19,7 @@ namespace Relisten.Import
     public partial class LocalImporter : ImporterBase
     {
         private readonly LinkService linkService;
+        private readonly NormalizationProviderInputService normalizationInputs;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
             new Dictionary<string, Era?>();
@@ -48,11 +47,13 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<LocalImporter> log,
-            IConfiguration configuration
+            IConfiguration configuration,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
+            this.normalizationInputs = normalizationInputs;
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
             _sourceService = sourceService;
@@ -157,31 +158,6 @@ namespace Relisten.Import
             return $"https://audio.relisten.net/{api}.json";
         }
 
-        private async Task<LocalRootObject<T>> LocalApiRequest<T>(
-            string apiRoute,
-            PerformContext? ctx
-        )
-        {
-            var url = LocalApiUrl(apiRoute);
-            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
-            using var resp = await http.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            return JsonConvert.DeserializeObject<LocalRootObject<T>>(
-                await resp.Content.ReadAsStringAsync()
-            )!;
-        }
-
-        private async Task<LocalShowObject> LocalShowRequest(string apiRoute, PerformContext? ctx)
-        {
-            var url = LocalApiUrl(apiRoute);
-            ImportProgress.WriteLine(log, ctx, $"Requesting {url}");
-            using var resp = await http.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            return JsonConvert.DeserializeObject<LocalShowObject>(
-                await resp.Content.ReadAsStringAsync()
-            )!;
-        }
-
         public async Task<ImportStats> ProcessVenues(
             Artist artist,
             ArtistUpstreamSource src,
@@ -192,10 +168,7 @@ namespace Relisten.Import
             var stats = new ImportStats();
 
             foreach (
-                var day in (
-                    staged
-                    ?? await LocalApiRequest<LocalShow>($"{src.upstream_identifier}/metadata", ctx)
-                )
+                var day in (staged ?? await LocalRootRequest(RequireMetadataRoot(src), ctx))
                     .data
                     .Values
             )
@@ -351,12 +324,10 @@ namespace Relisten.Import
         private async Task<Source> ProcessShow(
             ImportStats stats,
             Artist artist,
-            string date,
             IList<LocalShow> fullShows,
             ArtistUpstreamSource src,
             Source dbSource,
-            PerformContext? ctx,
-            IDictionary<string, LocalShowObject>? staged = null
+            IDictionary<string, LocalShowObject> staged
         )
         {
             var sets = new Dictionary<string, SourceSet>();
@@ -390,13 +361,7 @@ namespace Relisten.Import
 
             foreach (var (idx, fullShow) in fullShows.Select((value, i) => (i, value)))
             {
-                var apiShow =
-                    staged != null
-                        ? staged[fullShow.dir]
-                        : await LocalShowRequest(
-                            $"{src.upstream_identifier}/{fullShow.dir}/metadata",
-                            ctx
-                        );
+                var apiShow = staged[fullShow.dir];
 
                 var tracks = apiShow.tracks.ToList();
 
@@ -459,10 +424,7 @@ namespace Relisten.Import
 
             var prog = ctx?.WriteProgressBar();
 
-            var apiShows = await LocalApiRequest<LocalShow>(
-                $"{src.upstream_identifier}/metadata",
-                ctx
-            );
+            var apiShows = await LocalRootRequest(RequireMetadataRoot(src), ctx);
 
             var shows = apiShows.data;
             var totalShows = shows.Count;
@@ -503,6 +465,20 @@ namespace Relisten.Import
             IDictionary<string, LocalShowObject>? staged = null
         )
         {
+            // Native imports use the same fetch-before-write boundary as Temporal activities.
+            // Keep each directory's notes and tags as evidence before merging the date's source.
+            if (
+                staged == null
+                && (
+                    !existingSources.TryGetValue(date, out var current)
+                    || current == null
+                    || shows[0].updated_at > current.updated_at
+                )
+            )
+            {
+                staged = await FetchDirectoryMetadataAsync(RequireMetadataRoot(src), shows, ctx);
+            }
+
             using var scope = new TransactionScope(
                 TransactionScopeOption.Required,
                 new TransactionOptions()
@@ -522,7 +498,6 @@ namespace Relisten.Import
                 dbSource = await ProcessShow(
                     stats,
                     artist,
-                    date,
                     shows,
                     src,
                     new Source
@@ -537,8 +512,7 @@ namespace Relisten.Import
                         description = "",
                         taper_notes = "",
                     },
-                    ctx,
-                    staged
+                    staged!
                 );
 
                 existingSources[dbSource.upstream_identifier] = dbSource!;
@@ -573,16 +547,7 @@ namespace Relisten.Import
                 dbSource.description = "";
                 dbSource.taper_notes = "";
 
-                dbSource = await ProcessShow(
-                    stats,
-                    artist,
-                    date,
-                    shows,
-                    src,
-                    dbSource,
-                    ctx,
-                    staged
-                );
+                dbSource = await ProcessShow(stats, artist, shows, src, dbSource, staged!);
 
                 existingSources[dbSource.upstream_identifier] = dbSource!;
 
