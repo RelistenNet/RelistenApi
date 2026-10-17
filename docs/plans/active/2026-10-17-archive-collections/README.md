@@ -13,6 +13,8 @@ This overview is for the Relisten engineer and reviewer/operator. Read the [coll
 
 These are local results. Production rollout and a full Aadam or Jerry inventory import remain separate work. The final [API verification](evidence/final-api-read.json) passed 300 HTTP checks after restarting both test APIs from commit `7a65d46`; it preserved the Mule and Jerry playback results without restarting workers or importing again.
 
+The next work follows the [show-performance plan](../2026-10-17-show-performances/README.md): define compatibility and implement distinct shows on the same date, verify Phish, then run larger Jerry and Aadam samples. Aadam's publication sample also requires supported writes for missing recordings under existing artists. The earlier show totals below count the implemented artist/date aggregates; they do not prove distinct-performance support.
+
 ## 1. Reproduce the complete Gov’t Mule verification
 
 The [Mule record](govt-mule-smoke.md) retains the frozen query, finite spelling variants, exclusions, per-item outcomes and workflow IDs. It distinguishes the search’s 298 supplied date values from the final 285 published shows. Two `Gov't Mule & Friends` items were excluded from the 381-item selection rather than accepted as spelling variants.

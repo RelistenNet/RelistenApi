@@ -8,7 +8,7 @@ This document is for the Relisten engineer and reviewer/operator. Collection ide
 
 An **artist** identifies the performer or performing project to which a recording is assigned. Jerry Garcia Band, Legion of Mary, and Garcia/Saunders remain distinct performing projects. A collection may bring them together for browsing. It does not make their names interchangeable.
 
-A **recording** is the existing Relisten `Source`, with its ordered sets and playable `SourceTrack` rows. A **show** is the existing artist-and-display-date aggregate. Collection membership does not change either identity rule, infer an independent performance, or resolve an early/late show.
+A **recording** is the existing Relisten `Source`, with its ordered sets and playable `SourceTrack` rows. The implemented **show** is an artist-and-display-date aggregate. The agreed next change makes `Show` one performance, permits several shows on one date, and preserves date browsing and saved references. The [show-performance plan](../plans/active/2026-10-17-show-performances/README.md) defines the sequence and remaining migration contracts. Collection membership itself does not infer or resolve an early/late assignment.
 
 A **Relisten collection** has its own stable UUID, name, slug, and description. It groups catalog identities without becoming their performing artist or ingestion owner. Both an artist and a recording can belong to several collections. There is no single parent artist or required collection hierarchy.
 
