@@ -30,10 +30,13 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationEvidenceService>();
         services.AddScoped<NormalizationLegacyInputService>();
         services.AddScoped<NormalizationCatalogBindingService>();
+        services.AddScoped<NormalizationRecordingProposalService>();
+        services.AddScoped<NormalizationRecordingProcessor>();
         services.AddScoped<NormalizationProviderInputService>();
         services.AddScoped<NormalizationPhishInInputService>();
         services.AddSingleton<NormalizationProviderDecoder>();
         services.AddSingleton<RetainedRecordingCreditExtractor>();
+        services.AddSingleton<NormalizationRecordingExtractor>();
         services
             .AddOptions<NormalizationProviderCaptureOptions>()
             .BindConfiguration("Normalization:Capture");

@@ -651,6 +651,23 @@ public sealed partial class NormalizationWorkService(DbService db)
         );
     }
 
+    /// <summary>Finds durable owner revisions by domain identity on the primary; an absent owner returns null.</summary>
+    public Task<NormalizationSubjectState?> GetSubjectAsync(
+        NormalizationSubjectKey subject,
+        CancellationToken cancellationToken = default
+    ) =>
+        db.WithWriteConnection(async connection =>
+            (
+                await connection.QuerySingleOrDefaultAsync<SubjectRow>(
+                    new CommandDefinition(
+                        $"SELECT {SubjectColumns} FROM normalization.work_subjects WHERE domain=@Domain AND subject_kind=@Kind AND subject_uuid=@Uuid",
+                        subject,
+                        cancellationToken: cancellationToken
+                    )
+                )
+            )?.ToState()
+        );
+
     /// <summary>Reads durable owner revisions from the primary database; absent subjects return null.</summary>
     public Task<NormalizationSubjectState?> GetSubjectAsync(
         Guid subjectUuid,
