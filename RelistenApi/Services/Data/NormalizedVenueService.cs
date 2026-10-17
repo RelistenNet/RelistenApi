@@ -201,13 +201,17 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                 new
                 {
                     key = NormalizedPeopleService.NameKey(name.Wording),
+                    name.Wording,
                     name.Language,
                     name.Uuid,
                     ValidFrom = name.ValidFrom?.ToDateTime(TimeOnly.MinValue),
                     ValidTo = name.ValidTo?.ToDateTime(TimeOnly.MinValue),
                 },
                 name.Evidence,
-                ct
+                ct,
+                exactFactPredicate: "wording=@Wording AND language IS NOT DISTINCT FROM @Language::text AND valid_from IS NOT DISTINCT FROM @ValidFrom::date AND valid_to IS NOT DISTINCT FROM @ValidTo::date",
+                basis: name.Basis,
+                assertionUuid: name.Uuid
             );
             if (state == null)
             {
@@ -257,6 +261,13 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
         CancellationToken ct
     )
     {
+        const string exactLocation = """
+            original_locality=@OriginalLocality AND country IS NOT DISTINCT FROM @Country::text
+                AND region IS NOT DISTINCT FROM @Region::text AND city IS NOT DISTINCT FROM @City::text
+                AND address IS NOT DISTINCT FROM @Address::text AND latitude IS NOT DISTINCT FROM @Latitude::double precision
+                AND longitude IS NOT DISTINCT FROM @Longitude::double precision AND coordinate_precision IS NOT DISTINCT FROM @CoordinatePrecision::text
+                AND valid_from IS NOT DISTINCT FROM @ValidFrom::date AND valid_to IS NOT DISTINCT FROM @ValidTo::date
+            """;
         var inserted = 0;
         foreach (var originalLocation in assertions)
         {
@@ -290,13 +301,7 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                 "venue_locations",
                 "venue_uuid",
                 location.VenueUuid,
-                """
-                (original_locality=@OriginalLocality AND country IS NOT DISTINCT FROM @Country::text
-                    AND region IS NOT DISTINCT FROM @Region::text AND city IS NOT DISTINCT FROM @City::text
-                    AND address IS NOT DISTINCT FROM @Address::text AND latitude IS NOT DISTINCT FROM @Latitude::double precision
-                    AND longitude IS NOT DISTINCT FROM @Longitude::double precision AND coordinate_precision IS NOT DISTINCT FROM @CoordinatePrecision::text
-                    AND valid_from IS NOT DISTINCT FROM @ValidFrom::date AND valid_to IS NOT DISTINCT FROM @ValidTo::date) OR uuid=@Uuid
-                """,
+                $"({exactLocation}) OR uuid=@Uuid",
                 new
                 {
                     location.Uuid,
@@ -312,7 +317,10 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     ValidTo = location.ValidTo?.ToDateTime(TimeOnly.MinValue),
                 },
                 location.Evidence,
-                ct
+                ct,
+                exactFactPredicate: exactLocation,
+                basis: location.Basis,
+                assertionUuid: location.Uuid
             );
             if (state == null)
             {
@@ -553,7 +561,10 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
             "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
             identity,
             identity.Evidence,
-            ct
+            ct,
+            exactFactPredicate: "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+            basis: identity.Basis,
+            assertionUuid: identity.Uuid
         );
         if (state == null)
         {
@@ -603,284 +614,14 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                 "Provider identity already belongs to a different physical venue."
             );
         }
+        if (state == "accepted" && inserted == 0)
+        {
+            // One accepted row owns this qualified provider key. The exact replay was
+            // handled above; silently ignoring this insert would discard different support.
+            throw new NormalizationConflictException(
+                "Provider identity already has different evidence or authority basis."
+            );
+        }
         return inserted;
-    }
-
-    private static Task WriteAutomaticAssignment(
-        NpgsqlConnection c,
-        NpgsqlTransaction t,
-        VenueAssignment assignment,
-        bool isShow,
-        Guid workUuid,
-        CancellationToken ct
-    )
-    {
-        if (assignment.Basis == "reviewed")
-        {
-            throw new ArgumentException("Automatic publication cannot claim reviewed authority.");
-        }
-        return WriteAssignment(c, t, assignment, isShow, workUuid, false, 0, ct);
-    }
-
-    private static async Task WriteAssignment(
-        NpgsqlConnection c,
-        NpgsqlTransaction t,
-        VenueAssignment assignment,
-        bool isShow,
-        Guid decisionUuid,
-        bool reviewed,
-        long expectedRevision,
-        CancellationToken ct
-    )
-    {
-        if (assignment.Evidence.Count == 0)
-        {
-            throw new ArgumentException("Venue assignments require evidence.");
-        }
-        assignment = assignment with
-        {
-            VenueUuid = await ResolveVenueUuidAsync(c, t, assignment.VenueUuid, ct),
-        };
-        // Only these two typed relations are selected here; callers never supply table or column names.
-        var table = isShow ? "show_venue_assignments" : "imported_venue_assignments";
-        var catalogColumn = isShow ? "show_uuid" : "imported_venue_uuid";
-        var evidenceColumn = isShow ? "show_assignment_uuid" : "imported_assignment_uuid";
-        await c.ExecuteAsync(
-            new CommandDefinition(
-                "SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",
-                new { key = $"normalization:{table}:{assignment.CatalogUuid}" },
-                t,
-                cancellationToken: ct
-            )
-        );
-        var current = await c.QuerySingleOrDefaultAsync<AssignmentRow>(
-            new CommandDefinition(
-                $"SELECT uuid AS \"Uuid\",{catalogColumn} AS \"CatalogUuid\",revision AS \"Revision\",basis AS \"Basis\",state AS \"State\",canonical_venue_uuid AS \"VenueUuid\" FROM normalization.{table} WHERE uuid=@Uuid FOR UPDATE",
-                assignment,
-                t,
-                cancellationToken: ct
-            )
-        );
-        if (!reviewed)
-        {
-            var prior = await c.QuerySingleOrDefaultAsync<AssignmentRow>(
-                new CommandDefinition(
-                    $"""
-                    SELECT uuid AS "Uuid",{catalogColumn} AS "CatalogUuid",revision AS "Revision",basis AS "Basis",state AS "State",canonical_venue_uuid AS "VenueUuid"
-                    FROM normalization.{table} WHERE {catalogColumn}=@CatalogUuid AND canonical_venue_uuid=@VenueUuid AND state<>'superseded'
-                    ORDER BY (basis='reviewed') DESC,(state='accepted') DESC,uuid LIMIT 1 FOR UPDATE
-                    """,
-                    assignment,
-                    t,
-                    cancellationToken: ct
-                )
-            );
-            if (prior?.Basis == "reviewed" || current?.Basis == "reviewed")
-            {
-                prior ??= current;
-                var sameEvidence = await c.ExecuteScalarAsync<bool>(
-                    new CommandDefinition(
-                        $"SELECT EXISTS(SELECT 1 FROM normalization.venue_assignment_evidence WHERE {evidenceColumn}=@uuid AND input_revision_uuid=ANY(@revisions))",
-                        new
-                        {
-                            uuid = prior!.Uuid,
-                            revisions = assignment
-                                .Evidence.Select(e => e.InputRevisionUuid)
-                                .ToArray(),
-                        },
-                        t,
-                        cancellationToken: ct
-                    )
-                );
-                if (sameEvidence)
-                {
-                    return;
-                }
-                assignment = assignment with
-                {
-                    Uuid = Guid.NewGuid(),
-                    State = "pending",
-                    ReasonCode = "changed_evidence_reviewed_claim",
-                };
-                current = null;
-            }
-            else if (prior != null)
-            {
-                assignment = assignment with { Uuid = prior.Uuid };
-                current = prior;
-            }
-        }
-        if (reviewed && (current?.Revision ?? 0) != expectedRevision)
-        {
-            throw new NormalizationConflictException(
-                "Venue assignment changed after review was prepared."
-            );
-        }
-        if (current == null)
-        {
-            var catalogTable = isShow ? "shows" : "venues";
-            if (
-                !await c.ExecuteScalarAsync<bool>(
-                    new CommandDefinition(
-                        $"SELECT EXISTS(SELECT 1 FROM {catalogTable} WHERE uuid=@CatalogUuid)",
-                        assignment,
-                        t,
-                        cancellationToken: ct
-                    )
-                )
-            )
-            {
-                throw new ArgumentException("Venue assignment catalog reference is unavailable.");
-            }
-        }
-        else if (current.CatalogUuid != assignment.CatalogUuid)
-        {
-            throw new NormalizationConflictException(
-                "An assignment UUID cannot be rebound to a different catalog object."
-            );
-        }
-        var accepted = await c.QuerySingleOrDefaultAsync<AssignmentRow>(
-            new CommandDefinition(
-                $"SELECT uuid AS \"Uuid\",{catalogColumn} AS \"CatalogUuid\",revision AS \"Revision\",basis AS \"Basis\",state AS \"State\",canonical_venue_uuid AS \"VenueUuid\" FROM normalization.{table} WHERE {catalogColumn}=@CatalogUuid AND state='accepted' AND uuid<>@Uuid FOR UPDATE",
-                assignment,
-                t,
-                cancellationToken: ct
-            )
-        );
-        if (accepted != null && assignment.State == "accepted")
-        {
-            if (reviewed)
-            {
-                // Superseding retains the old row and its evidence for inspection and replay.
-                await c.ExecuteAsync(
-                    new CommandDefinition(
-                        $"INSERT INTO normalization.{table}_history SELECT *,@decisionUuid FROM normalization.{table} WHERE uuid=@uuid; UPDATE normalization.{table} SET state='superseded',revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@uuid",
-                        new { uuid = accepted.Uuid, decisionUuid },
-                        t,
-                        cancellationToken: ct
-                    )
-                );
-            }
-            else
-            {
-                if (
-                    accepted.Basis == "reviewed"
-                    && await c.ExecuteScalarAsync<bool>(
-                        new CommandDefinition(
-                            $"SELECT EXISTS(SELECT 1 FROM normalization.venue_assignment_evidence WHERE {evidenceColumn}=@uuid AND input_revision_uuid=ANY(@revisions))",
-                            new
-                            {
-                                uuid = accepted.Uuid,
-                                revisions = assignment
-                                    .Evidence.Select(e => e.InputRevisionUuid)
-                                    .ToArray(),
-                            },
-                            t,
-                            cancellationToken: ct
-                        )
-                    )
-                )
-                {
-                    return;
-                }
-                assignment = assignment with
-                {
-                    State = "pending",
-                    ReasonCode = "conflicting_evidence",
-                };
-            }
-        }
-        if (
-            !reviewed
-            && assignment.State == "pending"
-            && await c.ExecuteScalarAsync<bool>(
-                new CommandDefinition(
-                    $"""
-                    SELECT EXISTS(SELECT 1 FROM normalization.{table} a
-                        WHERE a.{catalogColumn}=@CatalogUuid AND a.canonical_venue_uuid=@VenueUuid AND a.state='pending'
-                          AND (SELECT coalesce(array_agg(DISTINCT e.input_revision_uuid),ARRAY[]::uuid[]) FROM normalization.venue_assignment_evidence e
-                               WHERE e.{evidenceColumn}=a.uuid AND e.assignment_revision=a.revision) @> @revisions::uuid[]
-                          AND (SELECT coalesce(array_agg(DISTINCT e.input_revision_uuid),ARRAY[]::uuid[]) FROM normalization.venue_assignment_evidence e
-                               WHERE e.{evidenceColumn}=a.uuid AND e.assignment_revision=a.revision) <@ @revisions::uuid[])
-                    """,
-                    new
-                    {
-                        assignment.CatalogUuid,
-                        assignment.VenueUuid,
-                        revisions = assignment
-                            .Evidence.Select(e => e.InputRevisionUuid)
-                            .Distinct()
-                            .ToArray(),
-                    },
-                    t,
-                    cancellationToken: ct
-                )
-            )
-        )
-        {
-            return;
-        }
-        if (current != null)
-        {
-            await c.ExecuteAsync(
-                new CommandDefinition(
-                    $"INSERT INTO normalization.{table}_history SELECT *,@decisionUuid FROM normalization.{table} WHERE uuid=@Uuid",
-                    new { assignment.Uuid, decisionUuid },
-                    t,
-                    cancellationToken: ct
-                )
-            );
-        }
-        await c.ExecuteAsync(
-            new CommandDefinition(
-                $"""
-                INSERT INTO normalization.{table}(uuid,{catalogColumn},canonical_venue_uuid,state,basis,reason_code,decision_uuid)
-                VALUES(@Uuid,@CatalogUuid,@VenueUuid,@State,@Basis,@ReasonCode,@decisionUuid)
-                ON CONFLICT(uuid) DO UPDATE SET canonical_venue_uuid=EXCLUDED.canonical_venue_uuid,state=EXCLUDED.state,basis=EXCLUDED.basis,reason_code=EXCLUDED.reason_code,
-                    decision_uuid=EXCLUDED.decision_uuid,revision={table}.revision+1,updated_at=clock_timestamp()
-                """,
-                new
-                {
-                    assignment.Uuid,
-                    assignment.CatalogUuid,
-                    assignment.VenueUuid,
-                    assignment.State,
-                    assignment.Basis,
-                    assignment.ReasonCode,
-                    decisionUuid,
-                },
-                t,
-                cancellationToken: ct
-            )
-        );
-        foreach (var e in assignment.Evidence)
-        {
-            await c.ExecuteAsync(
-                new CommandDefinition(
-                    $"INSERT INTO normalization.venue_assignment_evidence({evidenceColumn},input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,assignment_revision) SELECT @Uuid,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,revision FROM normalization.{table} WHERE uuid=@Uuid",
-                    new
-                    {
-                        assignment.Uuid,
-                        e.InputRevisionUuid,
-                        e.JsonPointer,
-                        e.StartCodePoint,
-                        e.EndCodePoint,
-                        e.Quote,
-                    },
-                    t,
-                    cancellationToken: ct
-                )
-            );
-        }
-    }
-
-    private sealed class AssignmentRow
-    {
-        public Guid Uuid { get; init; }
-        public Guid CatalogUuid { get; init; }
-        public long Revision { get; init; }
-        public Guid VenueUuid { get; init; }
-        public string Basis { get; init; } = null!;
-        public string State { get; init; } = null!;
     }
 }

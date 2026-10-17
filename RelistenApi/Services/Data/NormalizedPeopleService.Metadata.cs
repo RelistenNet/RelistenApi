@@ -563,10 +563,13 @@ public sealed partial class NormalizedPeopleService
         string table,
         string ownerColumn,
         Guid owner,
-        string predicate,
+        string reviewClaimPredicate,
         object values,
         NormalizedEvidenceReference evidence,
-        CancellationToken ct
+        CancellationToken ct,
+        string exactFactPredicate,
+        string basis,
+        Guid? assertionUuid
     )
     {
         var args = new DynamicParameters(values);
@@ -576,15 +579,22 @@ public sealed partial class NormalizedPeopleService
         args.Add("StartCodePoint", evidence.StartCodePoint);
         args.Add("EndCodePoint", evidence.EndCodePoint);
         args.Add("Quote", evidence.Quote);
+
+        const string sameCitation = """
+            input_revision_uuid=@InputRevisionUuid AND json_pointer=@JsonPointer
+            AND start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer
+            AND end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer
+            AND quote IS NOT DISTINCT FROM @Quote::text
+            """;
+        // Review controls a natural claim, which can be broader than identical raw wording.
+        // Preserve that authority before deciding whether an automatic assertion is a duplicate.
         var reviewed = await c.QueryAsync<bool>(
             new CommandDefinition(
                 $"""
-                SELECT input_revision_uuid=@InputRevisionUuid AND json_pointer=@JsonPointer AND start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer
-                    AND end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer AND quote IS NOT DISTINCT FROM @Quote::text
-                FROM normalization.{table} WHERE {ownerColumn}=@owner AND basis='reviewed' AND ({predicate})
-                UNION ALL SELECT input_revision_uuid=@InputRevisionUuid AND json_pointer=@JsonPointer AND start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer
-                    AND end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer AND quote IS NOT DISTINCT FROM @Quote::text
-                FROM normalization.{table}_history WHERE {ownerColumn}=@owner AND ({predicate})
+                SELECT {sameCitation}
+                FROM normalization.{table} WHERE {ownerColumn}=@owner AND basis='reviewed' AND ({reviewClaimPredicate})
+                UNION ALL SELECT {sameCitation}
+                FROM normalization.{table}_history WHERE {ownerColumn}=@owner AND ({reviewClaimPredicate})
                 """,
                 args,
                 t,
@@ -592,27 +602,54 @@ public sealed partial class NormalizedPeopleService
             )
         );
         var matches = reviewed.ToArray();
-        if (matches.Length == 0)
-        {
-            return "accepted";
-        }
         if (matches.Any(same => same))
         {
             return null;
         }
-        var pending = await c.ExecuteScalarAsync<bool>(
+
+        var state = matches.Length == 0 ? "accepted" : "pending";
+        args.Add("assertionUuid", assertionUuid);
+        args.Add("assertionBasis", basis);
+        if (state == "accepted" && assertionUuid.HasValue)
+        {
+            // Check the supplied UUID globally before a different row can satisfy the semantic
+            // duplicate probe. Reviewed retries instead retain the existing pending reroute.
+            var misbound = await c.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    $"""
+                    SELECT EXISTS(SELECT 1 FROM normalization.{table} WHERE uuid=@assertionUuid
+                        AND NOT ({ownerColumn}=@owner AND ({exactFactPredicate})
+                            AND basis=@assertionBasis AND {sameCitation}))
+                    """,
+                    args,
+                    t,
+                    cancellationToken: ct
+                )
+            );
+            if (misbound)
+            {
+                throw new NormalizationConflictException(
+                    "Metadata assertion UUID is already bound to different facts, identity, basis or evidence."
+                );
+            }
+        }
+
+        args.Add("automaticState", state);
+        // Candidate write scopes serialize this probe and the caller's insert. Raw facts,
+        // authority basis and the complete citation must agree; normalized names are not enough.
+        var duplicate = await c.ExecuteScalarAsync<bool>(
             new CommandDefinition(
                 $"""
-                SELECT EXISTS(SELECT 1 FROM normalization.{table} WHERE {ownerColumn}=@owner AND state='pending' AND ({predicate})
-                    AND input_revision_uuid=@InputRevisionUuid AND json_pointer=@JsonPointer AND start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer
-                    AND end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer AND quote IS NOT DISTINCT FROM @Quote::text)
+                SELECT EXISTS(SELECT 1 FROM normalization.{table}
+                    WHERE {ownerColumn}=@owner AND state=@automaticState AND ({exactFactPredicate})
+                        AND basis=@assertionBasis AND {sameCitation})
                 """,
                 args,
                 t,
                 cancellationToken: ct
             )
         );
-        return pending ? null : "pending";
+        return duplicate ? null : state;
     }
 
     private sealed class MetadataAssertionRow

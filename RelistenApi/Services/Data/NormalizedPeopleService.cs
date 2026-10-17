@@ -205,9 +205,17 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                 "person_uuid",
                 alias.PersonUuid,
                 "name_key=@key OR uuid=@Uuid",
-                new { key = NameKey(alias.Wording), alias.Uuid },
+                new
+                {
+                    key = NameKey(alias.Wording),
+                    alias.Uuid,
+                    alias.Wording,
+                },
                 alias.Evidence,
-                ct
+                ct,
+                exactFactPredicate: "wording=@Wording",
+                basis: alias.Basis,
+                assertionUuid: alias.Uuid
             );
             if (state == null)
             {
@@ -454,7 +462,10 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
             identity,
             identity.Evidence,
-            ct
+            ct,
+            exactFactPredicate: "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+            basis: identity.Basis,
+            assertionUuid: identity.Uuid
         );
         if (state == null)
         {
@@ -504,8 +515,22 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                 "Provider identity already belongs to a different person."
             );
         }
+        if (state == "accepted" && inserted == 0)
+        {
+            // One accepted row owns this qualified provider key. The exact replay was
+            // handled above; silently ignoring this insert would discard different support.
+            throw new NormalizationConflictException(
+                "Provider identity already has different evidence or authority basis."
+            );
+        }
         return inserted;
     }
+
+    private const string CreditColumns = """
+        uuid AS "Uuid",revision AS "Revision",basis AS "Basis",state AS "State",
+        source_uuid AS "SourceUuid",scope_track_uuid AS "ScopeTrackUuid",person_uuid AS "PersonUuid",
+        role AS "Role",original_text AS "OriginalText",reason_code AS "ReasonCode"
+        """;
 
     private static async Task WriteCredit(
         NpgsqlConnection c,
@@ -539,12 +564,18 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         );
         var current = await c.QuerySingleOrDefaultAsync<CreditRow>(
             new CommandDefinition(
-                "SELECT uuid AS \"Uuid\",revision AS \"Revision\",basis AS \"Basis\",state AS \"State\",source_uuid AS \"SourceUuid\",scope_track_uuid AS \"ScopeTrackUuid\" FROM normalization.recording_credits WHERE uuid=@Uuid FOR UPDATE",
+                $"SELECT {CreditColumns} FROM normalization.recording_credits WHERE uuid=@Uuid FOR UPDATE",
                 credit,
                 t,
                 cancellationToken: ct
             )
         );
+        if (current != null)
+        {
+            // Check the supplied UUID before claim resolution can select a different row.
+            // Coalescing evidence never authorizes moving that UUID to another recording scope.
+            await ValidateCreditScope(c, t, credit, current, ct);
+        }
         if (!reviewed)
         {
             var resolved = await ResolveAutomaticCredit(c, t, credit, current, ct);
@@ -560,6 +591,13 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             throw new NormalizationConflictException("Credit changed after review was prepared.");
         }
         await ValidateCreditScope(c, t, credit, current, ct);
+        if (!reviewed && current != null && current.HasSameAssertion(credit))
+        {
+            // A new extraction run is not a new credit interpretation. Preserve the current
+            // assertion revision, while retaining each new supporting citation.
+            await AppendCreditEvidence(c, t, credit.Uuid, credit.Evidence, ct);
+            return;
+        }
         await StoreCreditRevision(c, t, credit, current, decisionUuid, reviewed, ct);
     }
 
@@ -721,8 +759,8 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         }
         var claim = await c.QuerySingleOrDefaultAsync<CreditRow>(
             new CommandDefinition(
-                """
-                SELECT uuid AS "Uuid",revision AS "Revision",basis AS "Basis",state AS "State",source_uuid AS "SourceUuid",scope_track_uuid AS "ScopeTrackUuid",person_uuid AS "PersonUuid"
+                $"""
+                SELECT {CreditColumns}
                 FROM normalization.recording_credits WHERE source_uuid=@SourceUuid AND role=@Role
                   AND scope_track_uuid IS NOT DISTINCT FROM @ScopeTrackUuid::uuid AND original_text=@OriginalText
                   AND state<>'superseded' ORDER BY (basis='reviewed') DESC,(state='accepted') DESC,uuid LIMIT 1 FOR UPDATE
@@ -774,14 +812,18 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             };
             current = null;
         }
-        if (
-            credit.State == "pending"
-            && await c.ExecuteScalarAsync<bool>(
+        if (credit.State == "pending")
+        {
+            var pending = await c.QuerySingleOrDefaultAsync<CreditRow>(
                 new CommandDefinition(
-                    """
-                    SELECT EXISTS(SELECT 1 FROM normalization.recording_credits a JOIN normalization.recording_credit_evidence e ON e.credit_uuid=a.uuid AND e.credit_revision=a.revision
-                        WHERE a.source_uuid=@SourceUuid AND a.role=@Role AND a.original_text=@OriginalText AND a.person_uuid IS NOT DISTINCT FROM @PersonUuid::uuid
-                          AND a.scope_track_uuid IS NOT DISTINCT FROM @ScopeTrackUuid::uuid AND a.state='pending' AND e.input_revision_uuid=ANY(@revisions))
+                    $"""
+                    SELECT {CreditColumns} FROM normalization.recording_credits a
+                    WHERE a.source_uuid=@SourceUuid AND a.role=@Role AND a.original_text=@OriginalText
+                        AND a.person_uuid IS NOT DISTINCT FROM @PersonUuid::uuid
+                        AND a.scope_track_uuid IS NOT DISTINCT FROM @ScopeTrackUuid::uuid AND a.state='pending'
+                        AND EXISTS(SELECT 1 FROM normalization.recording_credit_evidence e
+                            WHERE e.credit_uuid=a.uuid AND e.credit_revision=a.revision AND e.input_revision_uuid=ANY(@revisions))
+                    ORDER BY a.uuid LIMIT 1 FOR UPDATE OF a
                     """,
                     new
                     {
@@ -795,17 +837,24 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                     t,
                     cancellationToken: ct
                 )
-            )
-        )
-        {
-            return null;
+            );
+            if (pending != null)
+            {
+                // Keep the existing pending claim, including additional locators in the same
+                // retained input. A repeated extraction must not drop their evidence or multiply claims.
+                credit = credit with
+                {
+                    Uuid = pending.Uuid,
+                };
+                current = pending;
+            }
         }
         if (credit.State == "accepted" && credit.PersonUuid.HasValue)
         {
             var duplicate = await c.QuerySingleOrDefaultAsync<CreditRow>(
                 new CommandDefinition(
-                    """
-                    SELECT uuid AS "Uuid",revision AS "Revision",basis AS "Basis",state AS "State",source_uuid AS "SourceUuid",scope_track_uuid AS "ScopeTrackUuid",person_uuid AS "PersonUuid"
+                    $"""
+                    SELECT {CreditColumns}
                     FROM normalization.recording_credits WHERE source_uuid=@SourceUuid AND role=@Role AND person_uuid=@PersonUuid
                     AND scope_track_uuid IS NOT DISTINCT FROM @ScopeTrackUuid::uuid AND state='accepted' AND uuid<>@Uuid FOR UPDATE
                     """,
@@ -816,6 +865,7 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             );
             if (duplicate != null)
             {
+                await ValidateCreditScope(c, t, credit, duplicate, ct);
                 await AppendCreditEvidence(c, t, duplicate.Uuid, credit.Evidence, ct);
                 return null;
             }
@@ -833,13 +883,20 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         CancellationToken ct
     )
     {
-        foreach (var e in evidence)
+        foreach (var e in evidence.Distinct())
         {
             await c.ExecuteAsync(
                 new CommandDefinition(
                     """
                     INSERT INTO normalization.recording_credit_evidence(credit_uuid,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,credit_revision)
-                    SELECT @uuid,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,revision FROM normalization.recording_credits WHERE uuid=@uuid
+                    SELECT a.uuid,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,a.revision
+                    FROM normalization.recording_credits a WHERE a.uuid=@uuid AND NOT EXISTS(
+                        SELECT 1 FROM normalization.recording_credit_evidence e
+                        WHERE e.credit_uuid=a.uuid AND e.credit_revision=a.revision
+                            AND e.input_revision_uuid=@InputRevisionUuid AND e.json_pointer=@JsonPointer
+                            AND e.start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer
+                            AND e.end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer
+                            AND e.quote IS NOT DISTINCT FROM @Quote::text)
                     """,
                     new
                     {
@@ -866,5 +923,18 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         public string State { get; init; } = null!;
         public Guid SourceUuid { get; init; }
         public Guid? ScopeTrackUuid { get; init; }
+        public string Role { get; init; } = null!;
+        public string OriginalText { get; init; } = null!;
+        public string ReasonCode { get; init; } = null!;
+
+        public bool HasSameAssertion(RecordingCredit credit) =>
+            SourceUuid == credit.SourceUuid
+            && ScopeTrackUuid == credit.ScopeTrackUuid
+            && Role == credit.Role
+            && OriginalText == credit.OriginalText
+            && PersonUuid == credit.PersonUuid
+            && State == credit.State
+            && Basis == credit.Basis
+            && ReasonCode == credit.ReasonCode;
     }
 }
