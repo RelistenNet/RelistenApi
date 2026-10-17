@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Npgsql;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -69,30 +70,7 @@ public sealed partial class NormalizationRecordingProposalService
                 }
 
                 ValidateBatch(frozen);
-                var evidence = frozen
-                    .Extraction.Credits.Select(credit => credit.Mention.Evidence)
-                    .Concat(frozen.Extraction.UnresolvedCredits.Select(issue => issue.Evidence))
-                    .Concat(frozen.Extraction.DecodeIssues.Select(issue => issue.Evidence))
-                    .Concat(
-                        frozen
-                            .Extraction.Titles.Where(title => title.Title != null)
-                            .Select(title => title.Title!.Evidence)
-                    )
-                    .Concat(TitleSegmentEvidence(frozen.Extraction.Titles))
-                    .ToArray();
-                var consumed = frozen.Ticket.Inputs.Select(input => input.RevisionUuid).ToHashSet();
-                if (evidence.Any(reference => !consumed.Contains(reference.InputRevisionUuid)))
-                {
-                    throw new ArgumentException(
-                        "Recording proposals cite evidence outside their publication ticket."
-                    );
-                }
-                await NormalizedPeopleService.ValidateEvidenceAsync(
-                    connection,
-                    transaction,
-                    evidence,
-                    ct
-                );
+                await ValidateExtractionEvidence(connection, transaction, frozen, ct);
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
@@ -181,62 +159,34 @@ public sealed partial class NormalizationRecordingProposalService
 
     private static void ValidateBatch(NormalizationRecordingProposalBatch batch)
     {
+        ValidateCurrentPreparation(batch.ProcessingVersion, batch.Preparation);
         ValidatePreparation(batch.SourceUuid, batch.Preparation);
-        if ((batch.Ticket.ImportedVenues?.Count ?? 0) > 0)
-        {
-            // This batch format has no separately consumed imported-venue facts.
-            // Saving it must not let publication acknowledge another contributor's clock.
-            throw new ArgumentException(
-                "Recording proposals do not yet consume imported venue inputs."
-            );
-        }
-
-        if ((batch.Ticket.OwnerObservations?.Count ?? 0) > 0)
-        {
-            throw new ArgumentException(
-                "Recording proposals do not yet consume candidate owner observations."
-            );
-        }
-
-        if ((batch.Ticket.CandidateUniverses?.Count ?? 0) > 0)
-        {
-            throw new ArgumentException(
-                "Recording proposals do not yet consume candidate pool facts."
-            );
-        }
-        var sourceUuids = batch.Preparation.Binding.SourceUuids ?? [];
-        if (
-            sourceUuids.Count != 1
-            || sourceUuids[0].SourceUuid != batch.SourceUuid
-            || sourceUuids[0].Generation < 0
-        )
-        {
-            throw new ArgumentException(
-                "Recording proposals require the checked recording's source UUID fence."
-            );
-        }
-        var recording = batch.Preparation.Binding.Recording;
-        if (
-            recording.Status != NormalizationCatalogBindingStatus.Bound
-            || recording.Value == null
-            || recording.Value.SourceUuid != batch.SourceUuid
-            || recording.Value.ArtistUuid != batch.ArtistUuid
-        )
-        {
-            throw new ArgumentException(
-                "Published recording proposals require their positively bound artist and source."
-            );
-        }
         if (!NormalizationRecordingReadSet.IsComplete(batch.Ticket, batch.Preparation))
         {
             throw new ArgumentException(
                 "Published proposals must consume the complete saved binding read set."
             );
         }
-
-        var proposalUuids = batch
-            .Extraction.Credits.Select(credit => credit.ProposalUuid)
-            .Concat(batch.Extraction.Titles.Select(title => title.ProposalUuid))
+        var inputs = NormalizationRecordingReadSet.Inputs(batch.Preparation);
+        var groups = ExtractionGroups(batch);
+        if (
+            groups.Select(group => group.InputRevisionUuid).Distinct().Count() != groups.Length
+            || !groups
+                .Select(group => group.InputRevisionUuid)
+                .ToHashSet()
+                .SetEquals(inputs.Select(input => input.Binding.InputRevisionUuid))
+        )
+        {
+            throw new ArgumentException(
+                "Recording proposals require one extraction for every distinct prepared input."
+            );
+        }
+        var proposalUuids = groups
+            .SelectMany(group =>
+                group
+                    .Extraction.Credits.Select(credit => credit.ProposalUuid)
+                    .Concat(group.Extraction.Titles.Select(title => title.ProposalUuid))
+            )
             .ToArray();
         if (
             proposalUuids.Any(uuid => uuid == Guid.Empty)
@@ -247,37 +197,254 @@ public sealed partial class NormalizationRecordingProposalService
                 "Recording proposals need distinct nonempty proposal UUIDs."
             );
         }
-        var files = batch
-            .Preparation.Binding.Files.Where(file =>
-                file.Binding.Status == NormalizationCatalogBindingStatus.Bound
-            )
-            .ToDictionary(file => file.Binding.Value!.TrackUuid);
-        var titleTracks = batch.Extraction.Titles.Select(title => title.TrackUuid).ToArray();
-        if (
-            titleTracks.Distinct().Count() != titleTracks.Length
-            || !files.Keys.ToHashSet().SetEquals(titleTracks)
-            || files.Values.Any(file =>
-                file.Binding.Value!.SourceUuid != batch.SourceUuid
-                || file.Binding.Value.ArtistUuid != batch.ArtistUuid
-            )
-            || batch.Extraction.Titles.Any(title =>
-                title.Title != files[title.TrackUuid].Observation.Title
-                || ((title.Title == null) != (title.Extraction == null))
-                || (
-                    title.Extraction != null
-                    && (
-                        title.Extraction.ArtistUuid != batch.ArtistUuid
-                        || title.Extraction.OriginalTitle != title.Title?.Value
-                    )
+        foreach (var group in groups)
+        {
+            foreach (
+                var input in inputs.Where(input =>
+                    input.Binding.InputRevisionUuid == group.InputRevisionUuid
                 )
+            )
+            {
+                ValidateInputExtraction(
+                    batch.SourceUuid,
+                    batch.ArtistUuid,
+                    input.Binding,
+                    group.Extraction
+                );
+            }
+        }
+    }
+
+    private static NormalizationRecordingInputExtraction[] ExtractionGroups(
+        NormalizationRecordingProposalBatch batch
+    ) =>
+        [
+            new(batch.Preparation.Binding.InputRevisionUuid, batch.Extraction),
+            .. batch.AdditionalExtractions ?? [],
+        ];
+
+    private static void ValidateInputExtraction(
+        Guid sourceUuid,
+        Guid artistUuid,
+        NormalizationRecordingBindingSnapshot binding,
+        NormalizationRecordingExtraction extraction
+    )
+    {
+        var sourceUuids = binding.SourceUuids ?? [];
+        // Legacy capture reads an exact source UUID. Provider accounts ordinarily resolve
+        // by qualified identifier; only actual retained-UUID lookups add UUID fences.
+        if (
+            binding.Resource.Provider == "legacy_catalog"
+            && (
+                sourceUuids.Count != 1
+                || sourceUuids[0].SourceUuid != sourceUuid
+                || sourceUuids[0].Generation < 0
             )
         )
         {
             throw new ArgumentException(
-                "Title proposals must cover each positively bound file once and retain its exact original title and recording scope."
+                "Recording proposals require the checked recording's source UUID fence."
+            );
+        }
+        var recording = binding.Recording;
+        if (
+            recording.Status != NormalizationCatalogBindingStatus.Bound
+            || recording.Value == null
+            || recording.Value.SourceUuid != sourceUuid
+            || recording.Value.ArtistUuid != artistUuid
+        )
+        {
+            throw new ArgumentException(
+                "Published recording proposals require their positively bound artist and source."
+            );
+        }
+        var files = binding
+            .Files.Where(file => file.Binding.Status == NormalizationCatalogBindingStatus.Bound)
+            .ToDictionary(file => file.Binding.Value!.TrackUuid);
+        var titleTracks = extraction.Titles.Select(title => title.TrackUuid).ToArray();
+        if (
+            titleTracks.Distinct().Count() != titleTracks.Length
+            || !files.Keys.ToHashSet().SetEquals(titleTracks)
+            || files.Values.Any(file =>
+                file.Binding.Value!.SourceUuid != sourceUuid
+                || file.Binding.Value.ArtistUuid != artistUuid
+            )
+            || extraction.Titles.Any(title =>
+                title.Title != files[title.TrackUuid].Observation.Title
+                || ((title.Title == null) != (title.Extraction == null))
+                || title.Extraction != null
+                    && (
+                        title.Extraction.ArtistUuid != artistUuid
+                        || title.Extraction.OriginalTitle != title.Title?.Value
+                    )
+            )
+        )
+        {
+            throw new ArgumentException(
+                "Each input's title proposals must cover its bound files once and retain their exact titles and recording scope."
             );
         }
     }
+
+    private static async Task ValidateExtractionEvidence(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        NormalizationRecordingProposalBatch batch,
+        CancellationToken ct
+    )
+    {
+        foreach (var group in ExtractionGroups(batch))
+        {
+            var inputRow =
+                await c.QuerySingleOrDefaultAsync<ExtractionInputRow>(
+                    new CommandDefinition(
+                        """
+                        SELECT r.uuid AS "Uuid",p.provider AS "Provider",p.resource_type AS "ResourceType",p.provider_key AS "ProviderKey",
+                            r.payload AS "Payload",r.media_type AS "MediaType",r.capture_version AS "CaptureVersion",r.sha256 AS "Sha256",r.captured_at AS "CapturedAt"
+                        FROM normalization.input_revisions r JOIN normalization.input_resources p ON p.uuid=r.resource_uuid
+                        WHERE r.uuid=@InputRevisionUuid
+                        """,
+                        group,
+                        t,
+                        cancellationToken: ct
+                    )
+                ) ?? throw new ArgumentException("Recording extraction input does not exist.");
+            var input = inputRow.ToRevision();
+            using var document = NormalizationRetainedDocument.Open(input, ct);
+            foreach (var reference in ExtractionEvidence(group.Extraction))
+            {
+                if (reference.InputRevisionUuid != group.InputRevisionUuid)
+                {
+                    throw new ArgumentException(
+                        "Recording proposals must cite their own input extraction group."
+                    );
+                }
+                document.ValidateEvidence(reference);
+            }
+            var claims = group
+                .Extraction.Credits.Select(credit => (credit.FileOrigin, credit.Mention.Evidence))
+                .Concat(
+                    group.Extraction.UnresolvedCredits.Select(issue =>
+                        (issue.FileOrigin, issue.Evidence)
+                    )
+                )
+                .ToArray();
+            if (claims.Length == 0)
+            {
+                continue;
+            }
+            // A valid pointer alone proves neither file membership nor recording-wide scope.
+            // Decode the original scopes, without rerunning extraction or identity policy.
+            var decoded = new NormalizationProviderDecoder().Decode(input, ct);
+            var files = decoded
+                .Recordings.SelectMany(recording => recording.Files)
+                .ToDictionary(file => file.Origin);
+            var recordingFields = decoded
+                .Recordings.SelectMany(recording => recording.Text)
+                .ToArray();
+            foreach (var claim in claims)
+            {
+                if (claim.FileOrigin is { } origin)
+                {
+                    if (
+                        !files.TryGetValue(origin, out var file)
+                        || !file.Text.Any(field =>
+                            EvidenceWithin(field.Text.Evidence, claim.Evidence)
+                        )
+                    )
+                    {
+                        throw new ArgumentException(
+                            "File credit proposals require an original decoded file origin."
+                        );
+                    }
+                    NormalizationRecordingExtractor.ValidateFileCreditEvidence(
+                        input,
+                        document,
+                        origin,
+                        claim.Evidence
+                    );
+                }
+                else if (
+                    !recordingFields.Any(field =>
+                        EvidenceWithin(field.Text.Evidence, claim.Evidence)
+                    )
+                )
+                {
+                    throw new ArgumentException(
+                        "Recording credits must cite original recording prose without discarding file scope."
+                    );
+                }
+            }
+        }
+    }
+
+    private static bool EvidenceWithin(
+        NormalizedEvidenceReference parent,
+        NormalizedEvidenceReference child
+    )
+    {
+        var sameLocator = parent.JsonPointer == child.JsonPointer;
+        return parent.InputRevisionUuid == child.InputRevisionUuid
+            && (
+                sameLocator
+                || child.JsonPointer.StartsWith(parent.JsonPointer + "/", StringComparison.Ordinal)
+            )
+            && (
+                parent.StartCodePoint == null
+                || sameLocator
+                    && child.StartCodePoint >= parent.StartCodePoint
+                    && child.EndCodePoint <= parent.EndCodePoint
+            );
+    }
+
+    private sealed class ExtractionInputRow
+    {
+        public Guid Uuid { get; init; }
+        public string Provider { get; init; } = null!;
+        public string ResourceType { get; init; } = null!;
+        public string ProviderKey { get; init; } = null!;
+        public byte[] Payload { get; init; } = [];
+        public string MediaType { get; init; } = null!;
+        public string CaptureVersion { get; init; } = null!;
+        public string Sha256 { get; init; } = null!;
+        public DateTime CapturedAt { get; init; }
+
+        public NormalizationInputRevision ToRevision() =>
+            new()
+            {
+                Uuid = Uuid,
+                Resource = new(Provider, ResourceType, ProviderKey),
+                Payload = Payload,
+                MediaType = MediaType,
+                CaptureVersion = CaptureVersion,
+                Sha256 = Sha256,
+                CapturedAt = CapturedAt,
+            };
+    }
+
+    private static IEnumerable<NormalizedEvidenceReference> ExtractionEvidence(
+        NormalizationRecordingExtraction extraction
+    ) =>
+        extraction
+            .Credits.Select(credit => credit.Mention.Evidence)
+            .Concat(extraction.UnresolvedCredits.Select(issue => issue.Evidence))
+            .Concat(extraction.DecodeIssues.Select(issue => issue.Evidence))
+            .Concat(
+                extraction
+                    .Titles.Where(title => title.Title != null)
+                    .Select(title => title.Title!.Evidence)
+            )
+            .Concat(TitleSegmentEvidence(extraction.Titles))
+            .Concat(
+                extraction
+                    .Credits.Where(credit => credit.FileOrigin != null)
+                    .Select(credit => credit.FileOrigin!.Evidence)
+            )
+            .Concat(
+                extraction
+                    .UnresolvedCredits.Where(issue => issue.FileOrigin != null)
+                    .Select(issue => issue.FileOrigin!.Evidence)
+            );
 
     private static IEnumerable<NormalizedEvidenceReference> TitleSegmentEvidence(
         IReadOnlyList<NormalizationRecordingTitleProposal> titles

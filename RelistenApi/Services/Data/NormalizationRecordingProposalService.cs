@@ -18,20 +18,29 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
 {
     private const string AttemptColumns = """
         attempt_uuid AS "AttemptUuid",source_uuid AS "SourceUuid",processing_version AS "ProcessingVersion",
-        preparation::text AS "PreparationJson",disposition AS "Disposition",reason AS "Reason"
+        preparation::text AS "PreparationJson",disposition AS "Disposition",reason AS "Reason",
+        initiating_handoff_uuid AS "InitiatingHandoffUuid"
         """;
 
-    /// <summary>Creates a durable request or returns its exact header replay. Changed source/version conflicts.</summary>
+    /// <summary>Creates a durable request or returns its exact header replay. Changed source, version or initiating handoff conflicts.</summary>
     public Task<NormalizationRecordingAttempt> GetOrCreateAttemptAsync(
         Guid attemptUuid,
         Guid sourceUuid,
         string processingVersion,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        Guid? initiatingHandoffUuid = null
     )
     {
         RequireUuid(attemptUuid, nameof(attemptUuid));
         RequireUuid(sourceUuid, nameof(sourceUuid));
         ArgumentException.ThrowIfNullOrWhiteSpace(processingVersion);
+        if (initiatingHandoffUuid == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "An initiating handoff UUID cannot be empty.",
+                nameof(initiatingHandoffUuid)
+            );
+        }
 
         return InTransaction(
             async (connection, transaction) =>
@@ -39,26 +48,32 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
-                        INSERT INTO normalization.recording_processing_attempts(attempt_uuid,source_uuid,processing_version)
-                        VALUES(@attemptUuid,@sourceUuid,@processingVersion) ON CONFLICT DO NOTHING
+                        INSERT INTO normalization.recording_processing_attempts(attempt_uuid,source_uuid,processing_version,initiating_handoff_uuid)
+                        VALUES(@attemptUuid,@sourceUuid,@processingVersion,@initiatingHandoffUuid) ON CONFLICT DO NOTHING
                         """,
                         new
                         {
                             attemptUuid,
                             sourceUuid,
                             processingVersion,
+                            initiatingHandoffUuid,
                         },
                         transaction,
                         cancellationToken: ct
                     )
                 );
                 var row = await RequireAttempt(connection, transaction, attemptUuid, ct);
-                if (row.SourceUuid != sourceUuid || row.ProcessingVersion != processingVersion)
+                if (
+                    row.SourceUuid != sourceUuid
+                    || row.ProcessingVersion != processingVersion
+                    || row.InitiatingHandoffUuid != initiatingHandoffUuid
+                )
                 {
                     throw new NormalizationConflictException(
                         "Attempt UUID already belongs to another recording or processing version."
                     );
                 }
+                await RequireInitiatingHandoff(connection, transaction, row, null, ct);
                 return row.ToAttempt();
             },
             ct
@@ -97,8 +112,10 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
                     return row.ToAttempt();
                 }
 
+                ValidateCurrentPreparation(row.ProcessingVersion, saved);
                 ValidatePreparation(row.SourceUuid, saved);
                 await RequirePreparationReceipt(connection, transaction, saved, ct);
+                await RequireInitiatingHandoff(connection, transaction, row, saved, ct);
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
@@ -159,6 +176,7 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
                 if (
                     row.SourceUuid != expected.SourceUuid
                     || row.ProcessingVersion != expected.ProcessingVersion
+                    || row.InitiatingHandoffUuid != expected.InitiatingHandoffUuid
                 )
                 {
                     throw new NormalizationConflictException(
@@ -291,6 +309,7 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
         public Guid AttemptUuid { get; init; }
         public Guid SourceUuid { get; init; }
         public string ProcessingVersion { get; init; } = null!;
+        public Guid? InitiatingHandoffUuid { get; init; }
         public string? PreparationJson { get; set; }
         public string? Disposition { get; set; }
         public string? Reason { get; set; }
@@ -312,7 +331,8 @@ public sealed partial class NormalizationRecordingProposalService(DbService db)
                         SourceUuid,
                         Enum.Parse<NormalizationRecordingProcessingDisposition>(Disposition, true),
                         Reason!
-                    )
+                    ),
+                InitiatingHandoffUuid
             );
     }
 }

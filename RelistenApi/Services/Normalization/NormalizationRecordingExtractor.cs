@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -17,15 +18,16 @@ public sealed class NormalizationRecordingExtractor(
 )
 {
     public const string Version =
-        "recording-extraction-v1/"
+        "recording-extraction-v2/"
         + RetainedRecordingCreditExtractor.Version
         + "/"
         + TrackTitleExtractor.Version;
 
     /// <summary>
-    /// Extracts source credits even when playback context is incomplete. Only positively bound
-    /// files receive title proposals. Callers must retain the binding, unresolved credits and
-    /// decoder issues with this result; an unresolved file must not disappear from the batch.
+    /// Extracts recording and file credits even when playback context is incomplete. File
+    /// credits keep their retained file origin, including for unbound files. Only positively
+    /// bound files receive title proposals. Retain the binding, unresolved credits and decoder
+    /// issues with this result; an unresolved file must not disappear from the batch.
     /// </summary>
     /// <remarks>
     /// Proposal UUIDs identify evidenced mentions within this extractor version, not people or
@@ -49,31 +51,126 @@ public sealed class NormalizationRecordingExtractor(
             document.ValidateEvidence(issue.Evidence);
         }
 
-        var extractedCredits = credits.Extract(input, recording.Text, cancellationToken);
-        var creditProposals = extractedCredits
-            .Credits.Select(
-                (mention, ordinal) =>
-                    new NormalizationRecordingCreditProposal(
-                        ProposalUuid(
-                            "credit",
-                            new
-                            {
-                                input.Uuid,
-                                recording.Origin,
-                                owner.SourceUuid,
-                                ordinal,
-                                mention,
-                            }
-                        ),
-                        mention
-                    )
-            )
-            .ToArray();
+        var extractedCredits = ExtractCredits(
+            input,
+            recording,
+            owner.SourceUuid,
+            document,
+            cancellationToken
+        );
         var titleProposals = binding
             .Files.Where(file => file.Binding.Status == NormalizationCatalogBindingStatus.Bound)
             .Select(file => ExtractTitle(input, document, file, owner, cancellationToken))
             .ToArray();
-        return new(creditProposals, extractedCredits.Unresolved, titleProposals, decoded.Issues);
+        return new(
+            extractedCredits.Credits,
+            extractedCredits.Unresolved,
+            titleProposals,
+            decoded.Issues
+        );
+    }
+
+    private (
+        NormalizationRecordingCreditProposal[] Credits,
+        RetainedCreditUnresolved[] Unresolved
+    ) ExtractCredits(
+        NormalizationInputRevision input,
+        ProviderRecordingObservation recording,
+        Guid sourceUuid,
+        NormalizationRetainedDocument document,
+        CancellationToken cancellationToken
+    )
+    {
+        var proposals = new List<NormalizationRecordingCreditProposal>();
+        var unresolved = new List<RetainedCreditUnresolved>();
+        ExtractScope(recording.Text, null);
+        foreach (var file in recording.Files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // The binder supplies catalog associations. Its observation copy must not replace
+            // the original decoded text, particularly for files without a playable binding.
+            document.ValidateEvidence(file.Origin.Evidence);
+            if (
+                file.Origin.Item != input.Resource
+                && !file.Identities.Any(identity => identity.Identity == file.Origin.Item)
+            )
+            {
+                throw new ArgumentException(
+                    "A file credit origin must belong to this retained recording."
+                );
+            }
+
+            foreach (var field in file.Text)
+            {
+                ValidateFileCreditEvidence(input, document, file.Origin, field.Text.Evidence);
+            }
+            ExtractScope(file.Text, file.Origin);
+        }
+        return (proposals.ToArray(), unresolved.ToArray());
+
+        void ExtractScope(
+            IReadOnlyList<ProviderTextObservation> fields,
+            ProviderObservationOrigin? fileOrigin
+        )
+        {
+            var result = credits.Extract(input, fields, cancellationToken);
+            proposals.AddRange(
+                result.Credits.Select(
+                    (mention, ordinal) =>
+                        new NormalizationRecordingCreditProposal(
+                            ProposalUuid(
+                                "credit",
+                                new
+                                {
+                                    input.Uuid,
+                                    recording.Origin,
+                                    sourceUuid,
+                                    fileOrigin,
+                                    ordinal,
+                                    mention,
+                                }
+                            ),
+                            mention,
+                            fileOrigin
+                        )
+                )
+            );
+            unresolved.AddRange(
+                result.Unresolved.Select(issue => issue with { FileOrigin = fileOrigin })
+            );
+        }
+    }
+
+    /// <summary>Checks retained file membership without assigning a catalog file or widening its scope.</summary>
+    internal static void ValidateFileCreditEvidence(
+        NormalizationInputRevision input,
+        NormalizationRetainedDocument document,
+        ProviderObservationOrigin fileOrigin,
+        NormalizedEvidenceReference evidence
+    )
+    {
+        document.ValidateEvidence(fileOrigin.Evidence);
+        document.ValidateEvidence(evidence);
+        var origin = fileOrigin.Evidence;
+        var sameLocator = evidence.JsonPointer == origin.JsonPointer;
+        var insideLocator =
+            sameLocator
+            || evidence.JsonPointer.StartsWith(origin.JsonPointer + "/", StringComparison.Ordinal);
+        var insideSpan =
+            origin.StartCodePoint is not { } originStart
+            || (
+                sameLocator
+                && evidence.StartCodePoint is { } start
+                && evidence.EndCodePoint is { } end
+                && start >= originStart
+                && end <= origin.EndCodePoint!.Value
+            );
+        if (fileOrigin.Evidence.InputRevisionUuid != input.Uuid || !insideLocator || !insideSpan)
+        {
+            throw new ArgumentException(
+                "File credit evidence must remain within its retained file origin."
+            );
+        }
     }
 
     private static ProviderRecordingObservation RequireRecording(

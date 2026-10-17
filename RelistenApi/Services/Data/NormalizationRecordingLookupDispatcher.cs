@@ -1,29 +1,14 @@
 using System;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Data;
 
-/// <summary>Delivery state, independent of whether downstream processing published an extraction.</summary>
-public enum NormalizationRecordingLookupDispatchDisposition
-{
-    /// <summary>A terminal downstream receipt was acknowledged; it may report Stale or Unresolved.</summary>
-    Completed,
-
-    /// <summary>No provider consumer is available; the handoff remains pending.</summary>
-    AwaitingProviderConsumer,
-}
-
-/// <summary>
-/// Completed carries the terminal processing receipt, not accepted normalization.
-/// AwaitingProviderConsumer carries no receipt and does not acknowledge delivery.
-/// </summary>
+/// <summary>Acknowledged delivery carries its terminal processing receipt, not accepted normalization.</summary>
 public sealed record NormalizationRecordingLookupDispatchResult(
     Guid HandoffUuid,
-    NormalizationRecordingLookupDispatchDisposition Disposition,
-    NormalizationRecordingProcessingResult? ProcessingResult = null
+    NormalizationRecordingProcessingResult ProcessingResult
 );
 
 /// <summary>
@@ -32,7 +17,6 @@ public sealed record NormalizationRecordingLookupDispatchResult(
 /// </summary>
 public sealed class NormalizationRecordingLookupDispatcher(
     NormalizationRecordingLookupStore store,
-    NormalizationRecordingProposalService proposals,
     NormalizationRecordingProcessor processor
 )
 {
@@ -40,7 +24,8 @@ public sealed class NormalizationRecordingLookupDispatcher(
     /// Dispatches a committed handoff. Retry the same handoff UUID after cancellation or
     /// failure to resume its saved processing attempt; a completed delivery returns its
     /// terminal receipt with Replayed=true. Inspect ProcessingResult.Disposition separately
-    /// from delivery completion. Retained provider handoffs remain pending for their consumer.
+    /// from delivery completion. Both legacy and retained provider delivery preserve their
+    /// original initiating evidence while processing the complete extraction-owner input set.
     /// </summary>
     public async Task<NormalizationRecordingLookupDispatchResult> DispatchAsync(
         Guid handoffUuid,
@@ -57,22 +42,18 @@ public sealed class NormalizationRecordingLookupDispatcher(
         {
             return Completed(handoff, handoff.CompletedResult with { Replayed = true });
         }
-        if (handoff.Mode == NormalizationRecordingLookupMode.RetainedProvider)
-        {
-            // Provider evidence cannot pass the legacy processor's preparation contract.
-            // Keep the durable handoff pending for its eventual provider consumer.
-            return new(
-                handoffUuid,
-                NormalizationRecordingLookupDispatchDisposition.AwaitingProviderConsumer
-            );
-        }
-
-        await PrepareLegacyAttemptAsync(handoff, cancellationToken);
-        var result = await processor.ProcessAsync(
-            handoff.ProcessingAttemptUuid,
-            handoff.SourceUuid,
-            cancellationToken
-        );
+        var result =
+            handoff.Mode == NormalizationRecordingLookupMode.RetainedProvider
+                ? await processor.ProcessRetainedAsync(
+                    handoff.ProcessingAttemptUuid,
+                    handoffUuid,
+                    cancellationToken
+                )
+                : await processor.ProcessLegacyHandoffAsync(
+                    handoff.ProcessingAttemptUuid,
+                    handoffUuid,
+                    cancellationToken
+                );
 
         // The processing attempt commits first. If delivery stops before this acknowledgement,
         // retrying its stable UUID returns the terminal receipt without another refresh.
@@ -87,38 +68,8 @@ public sealed class NormalizationRecordingLookupDispatcher(
         return Completed(handoff, result);
     }
 
-    private async Task PrepareLegacyAttemptAsync(
-        NormalizationRecordingLookupHandoff handoff,
-        CancellationToken cancellationToken
-    )
-    {
-        await proposals.GetOrCreateAttemptAsync(
-            handoff.ProcessingAttemptUuid,
-            handoff.SourceUuid,
-            handoff.ProcessingVersion!,
-            cancellationToken
-        );
-        var prepared = await proposals.SavePreparationAsync(
-            handoff.ProcessingAttemptUuid,
-            handoff.LegacyPreparation!,
-            cancellationToken
-        );
-        if (
-            !JsonElement.DeepEquals(
-                JsonSerializer.SerializeToElement(prepared.Preparation),
-                JsonSerializer.SerializeToElement(handoff.LegacyPreparation)
-            )
-        )
-        {
-            throw new NormalizationConflictException(
-                "The processing attempt already has another preparation."
-            );
-        }
-    }
-
     private static NormalizationRecordingLookupDispatchResult Completed(
         NormalizationRecordingLookupHandoff handoff,
         NormalizationRecordingProcessingResult result
-    ) =>
-        new(handoff.HandoffUuid, NormalizationRecordingLookupDispatchDisposition.Completed, result);
+    ) => new(handoff.HandoffUuid, result);
 }

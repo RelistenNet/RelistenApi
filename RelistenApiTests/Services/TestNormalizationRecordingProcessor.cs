@@ -33,7 +33,16 @@ public sealed class TestNormalizationRecordingProcessor
         legacy = new(fixture.Db, evidence);
         bindings = new(fixture.Db);
         proposals = new(fixture.Db);
-        processor = new(legacy, evidence, bindings, decoder, extractor, fixture.Work, proposals);
+        processor = new(
+            legacy,
+            evidence,
+            bindings,
+            decoder,
+            extractor,
+            fixture.Work,
+            proposals,
+            new(fixture.Db)
+        );
     }
 
     [OneTimeTearDown]
@@ -89,7 +98,7 @@ public sealed class TestNormalizationRecordingProcessor
         batch
             .Extraction.Credits.Should()
             .Contain(credit => credit.Mention.Name == name && credit.Mention.Role == role);
-        var capture = (await evidence.GetCaptureAsync(batch.Preparation.FetchUuid))!;
+        var capture = (await evidence.GetCaptureAsync(batch.Preparation.FetchUuid!.Value))!;
         using var retained = NormalizationRetainedDocument.Open(capture.Revision);
         foreach (var credit in batch.Extraction.Credits)
         {
@@ -185,6 +194,7 @@ public sealed class TestNormalizationRecordingProcessor
             decoder,
             extractor,
             fixture.Work,
+            new(fixture.Db),
             new(fixture.Db)
         );
 
@@ -434,7 +444,7 @@ public sealed class TestNormalizationRecordingProcessor
     {
         var source = await Source();
         var oldVersion = NormalizationRecordingProcessor.Version.Replace(
-            "processing-v2/",
+            "processing-v3/",
             "processing-v1/"
         );
         var prepared = await Prepare(
@@ -605,21 +615,33 @@ public sealed class TestNormalizationRecordingProcessor
             ]
         );
 
+        var originalOwner = (await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid)))!;
+        var originalObserved = (await fixture.Work.GetSubjectAsync(observed.SubjectUuid))!;
+        var originalContribution = (
+            await fixture.Work.GetInputContributionAsync(Owner(source.SourceUuid), contributor)
+        )!;
+
         var result = await processor.ProcessAsync(Guid.NewGuid(), source.SourceUuid);
 
-        // The recording-only producer has no original candidate snapshot to submit.
-        // Admission must reject the incomplete union instead of capturing fresh owner clocks.
-        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Stale);
-        result.Reason.Should().Be("admission_changed");
+        // Complete preparation recognizes this unsupported peer before admission. Recording
+        // extraction cannot consume candidate facts or renew another owner's observed stamps.
+        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Unresolved);
+        result.Reason.Should().Be("unsupported_owner_inputs");
+        (await proposals.GetAttemptAsync(result.AttemptUuid))!.Preparation.Should().BeNull();
         (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
         (await proposals.GetAttemptBatchAsync(result.AttemptUuid)).Should().BeNull();
         var retained = (
             await fixture.Work.GetInputContributionAsync(Owner(source.SourceUuid), contributor)
         )!;
+        retained.Should().BeEquivalentTo(originalContribution);
         retained.OwnerObservationSubjectUuids.Should().Equal(observed.SubjectUuid);
         retained.Revision.Should().Be(1);
         var owner = (await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid)))!;
+        owner.Should().BeEquivalentTo(originalOwner);
         owner.PublishedWorkUuid.Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(observed.SubjectUuid))
+            .Should()
+            .BeEquivalentTo(originalObserved);
         (await IsPending(owner.SubjectUuid)).Should().BeTrue();
     }
 
@@ -845,7 +867,15 @@ public sealed class TestNormalizationRecordingProcessor
             snapshot.CatalogInputs,
             bound,
             owner?.DesiredGeneration,
-            contribution?.Revision ?? 0
+            contribution?.Revision ?? 0,
+            ExpectedContributions: (
+                await fixture.Work.GetInputContributionsAsync(Owner(sourceUuid))
+            )
+                .Contributions.Select(state => new NormalizationInputContributionRevision(
+                    state.Contributor,
+                    state.Revision
+                ))
+                .ToArray()
         );
         var attempt = await proposals.SavePreparationAsync(attemptUuid, preparation);
         return new(attempt, snapshot, decoded);
@@ -854,22 +884,29 @@ public sealed class TestNormalizationRecordingProcessor
     private Task<NormalizationWorkTicket> Admit(NormalizationRecordingAttempt attempt)
     {
         var saved = attempt.Preparation!;
-        return fixture.Work.BeginContributedWorkAsync(
+        NormalizationPreparedInputContribution[] contributions =
+        [
+            new(
+                new(
+                    Contributor(attempt.SourceUuid),
+                    saved.ExpectedContributionRevision,
+                    saved.Binding.Inputs.Select(input => input.Resource).ToArray(),
+                    []
+                ),
+                saved.Binding.Inputs,
+                saved.Binding.CatalogInputs,
+                saved.Binding.SourceIdentities,
+                saved.Binding.MappingRegistry,
+                SourceUuids: saved.Binding.SourceUuids
+            ),
+        ];
+        return fixture.Work.BeginContributedBatchAsync(
             attempt.AttemptUuid,
             Owner(attempt.SourceUuid),
             attempt.ProcessingVersion,
-            new(
-                Contributor(attempt.SourceUuid),
-                saved.ExpectedContributionRevision,
-                saved.Binding.Inputs.Select(input => input.Resource).ToArray(),
-                []
-            ),
+            contributions,
             saved.ExpectedConfigurationGeneration,
-            catalogInputs: saved.Binding.CatalogInputs,
-            sourceIdentities: saved.Binding.SourceIdentities,
-            mappingRegistry: saved.Binding.MappingRegistry,
-            expectedInputRevisions: saved.Binding.Inputs,
-            sourceUuids: saved.Binding.SourceUuids
+            expectedContributionRevisions: saved.ExpectedContributions
         );
     }
 

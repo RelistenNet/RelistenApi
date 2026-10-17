@@ -45,6 +45,173 @@ public sealed class TestNormalizationRecordingExtractor
     }
 
     [Test]
+    public void ArchiveFileCreditsAndUnresolvedNamesRetainScopeWithoutPlayableBindings()
+    {
+        var context = ArchiveContext("Pat Recorder", "Pat Recorder", "Pat Recorder");
+
+        var result = Extract(context);
+        var replay = Extract(context);
+
+        result.Credits.Should().HaveCount(3);
+        result.Credits.Should().OnlyContain(proposal => proposal.Mention.Name == "Pat Recorder");
+        result.Credits.Select(proposal => proposal.ProposalUuid).Should().OnlyHaveUniqueItems();
+        result.Credits.Should().ContainSingle(proposal => proposal.FileOrigin == null);
+        var files = context.Decoded.Recordings.Single().Files;
+        foreach (var file in files)
+        {
+            result.Credits.Should().ContainSingle(proposal => proposal.FileOrigin == file.Origin);
+            result
+                .UnresolvedCredits.Should()
+                .ContainSingle(issue =>
+                    issue.FileOrigin == file.Origin && issue.Reason == "unknown_credit"
+                );
+        }
+        result
+            .UnresolvedCredits.Should()
+            .ContainSingle(issue => issue.FileOrigin == null && issue.Reason == "unknown_credit");
+        result.Titles.Should().BeEmpty();
+        result.DecodeIssues.Should().Contain(issue => issue.Code == "missing_file_identity");
+        replay.Should().BeEquivalentTo(result);
+        var reorderedBindings = context with
+        {
+            Binding = context.Binding with { Files = context.Binding.Files.Reverse().ToArray() },
+        };
+        Extract(reorderedBindings).Should().BeEquivalentTo(result);
+        using var document = NormalizationRetainedDocument.Open(context.Input);
+        foreach (var proposal in result.Credits.Where(proposal => proposal.FileOrigin != null))
+        {
+            NormalizationRecordingExtractor.ValidateFileCreditEvidence(
+                context.Input,
+                document,
+                proposal.FileOrigin!,
+                proposal.Mention.Evidence
+            );
+        }
+        foreach (var issue in result.UnresolvedCredits.Where(issue => issue.FileOrigin != null))
+        {
+            NormalizationRecordingExtractor.ValidateFileCreditEvidence(
+                context.Input,
+                document,
+                issue.FileOrigin!,
+                issue.Evidence
+            );
+        }
+    }
+
+    [Test]
+    public void BinderTextCannotReplaceTheOriginalDecodedFileCredit()
+    {
+        var context = ArchiveContext("Recording Pat", "File Robin", "File Avery");
+        var recording = context.Decoded.Recordings.Single();
+        context = context with
+        {
+            Binding = context.Binding with
+            {
+                Files = context
+                    .Binding.Files.Select(file =>
+                        file with
+                        {
+                            Observation = file.Observation with { Text = recording.Text },
+                        }
+                    )
+                    .ToArray(),
+            },
+        };
+
+        var result = Extract(context);
+
+        result
+            .Credits.Should()
+            .ContainSingle(proposal =>
+                proposal.FileOrigin == null && proposal.Mention.Name == "Recording Pat"
+            );
+        result
+            .Credits.Should()
+            .ContainSingle(proposal =>
+                proposal.FileOrigin == recording.Files[0].Origin
+                && proposal.Mention.Name == "File Robin"
+            );
+        result
+            .Credits.Should()
+            .ContainSingle(proposal =>
+                proposal.FileOrigin == recording.Files[1].Origin
+                && proposal.Mention.Name == "File Avery"
+            );
+        result
+            .Credits.Should()
+            .NotContain(proposal =>
+                proposal.FileOrigin != null && proposal.Mention.Name == "Recording Pat"
+            );
+    }
+
+    [TestCase("invented_text")]
+    [TestCase("recording_text")]
+    [TestCase("sibling_text")]
+    [TestCase("origin_resource")]
+    [TestCase("origin_revision")]
+    public void FileCreditsCannotBorrowAnotherScopeOrInventRetainedText(string mismatch)
+    {
+        var context = ArchiveContext("Recording Pat", "File Robin", "File Avery");
+        var recording = context.Decoded.Recordings.Single();
+        var file = recording.Files[0];
+        file = mismatch switch
+        {
+            "invented_text" => file with
+            {
+                Text = file
+                    .Text.Select(field =>
+                        field.Field == "taper"
+                            ? field with
+                            {
+                                Text = field.Text with { Value = "Invented Person" },
+                            }
+                            : field
+                    )
+                    .ToArray(),
+            },
+            "recording_text" => file with { Text = recording.Text },
+            "sibling_text" => file with { Text = recording.Files[1].Text },
+            "origin_resource" => file with
+            {
+                Origin = file.Origin with
+                {
+                    Item = file.Origin.Item with { ProviderKey = "another-item" },
+                },
+            },
+            "origin_revision" => file with
+            {
+                Origin = file.Origin with
+                {
+                    Evidence = file.Origin.Evidence with { InputRevisionUuid = Guid.NewGuid() },
+                },
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(mismatch)),
+        };
+        context = context with
+        {
+            Decoded = context.Decoded with
+            {
+                Recordings = [recording with { Files = [file, recording.Files[1]] }],
+            },
+            Binding = context.Binding with
+            {
+                Files =
+                [
+                    context.Binding.Files[0] with
+                    {
+                        Observation = file,
+                    },
+                    context.Binding.Files[1],
+                ],
+            },
+        };
+
+        var extract = () => Extract(context);
+
+        extract.Should().Throw<ArgumentException>();
+    }
+
+    [Test]
     public void CompoundUnicodeTitlesRetainTheFieldAndCodePointOffsetsWithoutAudioClaims()
     {
         const string title = "🎵 Song > Étoile";
@@ -303,6 +470,70 @@ public sealed class TestNormalizationRecordingExtractor
 
     private NormalizationRecordingExtraction Extract(ExtractionContext context) =>
         extractor.Extract(context.Input, context.Decoded, context.Binding);
+
+    private static ExtractionContext ArchiveContext(
+        string recordingTaper,
+        string firstFileTaper,
+        string secondFileTaper
+    )
+    {
+        // A retained Archive metadata response, including an original non-MP3 file and a file
+        // without an identity. Neither file has a synthetic playable catalog assignment.
+        var input = new NormalizationInputRevision
+        {
+            Uuid = Guid.NewGuid(),
+            Resource = new("archive.org", "item_metadata", "file-credit-fixture"),
+            MediaType = "application/json",
+            CaptureVersion = "archive-item-response-v1",
+            Payload = JsonSerializer.SerializeToUtf8Bytes(
+                new
+                {
+                    metadata = new
+                    {
+                        identifier = "file-credit-fixture",
+                        taper = recordingTaper,
+                        transferer = "unknown",
+                    },
+                    files = new object[]
+                    {
+                        new
+                        {
+                            name = "original.flac",
+                            format = "Flac",
+                            taper = firstFileTaper,
+                            transferer = "unknown",
+                        },
+                        new
+                        {
+                            format = "Text",
+                            taper = secondFileTaper,
+                            transferer = "unknown",
+                        },
+                    },
+                }
+            ),
+        };
+        var decoded = new NormalizationProviderDecoder().Decode(input);
+        var recording = decoded.Recordings.Single();
+        var binding = new NormalizationRecordingBindingSnapshot(
+            input.Uuid,
+            input.Resource,
+            new(
+                NormalizationCatalogBindingStatus.Bound,
+                new(Guid.NewGuid(), Guid.NewGuid(), null, null, ["missing_show"]),
+                "bound"
+            ),
+            recording
+                .Files.Select(file => new NormalizationFileBinding(
+                    file,
+                    new(NormalizationCatalogBindingStatus.Missing, null, "unbound_file")
+                ))
+                .ToArray(),
+            [],
+            []
+        );
+        return new(input, decoded, binding);
+    }
 
     private static ExtractionContext Context(Dictionary<string, object?> fields, string?[] titles)
     {

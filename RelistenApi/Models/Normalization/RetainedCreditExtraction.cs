@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -10,7 +11,13 @@ public sealed record RetainedCreditMention(
     string? OriginalRole = null
 );
 
-public sealed record RetainedCreditUnresolved(string Reason, NormalizedEvidenceReference Evidence);
+/// <summary>A file-scoped issue retains its provider origin even when the file has no catalog binding.</summary>
+public sealed record RetainedCreditUnresolved(
+    string Reason,
+    NormalizedEvidenceReference Evidence,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ProviderObservationOrigin? FileOrigin = null
+);
 
 public sealed record RetainedCreditExtraction(
     IReadOnlyList<RetainedCreditMention> Credits,

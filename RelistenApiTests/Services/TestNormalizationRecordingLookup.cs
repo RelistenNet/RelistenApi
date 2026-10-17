@@ -37,11 +37,12 @@ public sealed class TestNormalizationRecordingLookup
             new(),
             new(new(), new()),
             fixture.Work,
-            proposals
+            proposals,
+            new(fixture.Db)
         );
         store = new(fixture.Db);
         lookups = new(store, legacy, evidence, bindings, new(), fixture.Work);
-        dispatcher = new(store, proposals, processor);
+        dispatcher = new(store, processor);
     }
 
     [OneTimeTearDown]
@@ -78,7 +79,7 @@ public sealed class TestNormalizationRecordingLookup
     }
 
     [Test]
-    public async Task LegacyDeliveryResumesAfterPreparationAndAfterPublicationWithoutAnotherRefresh()
+    public async Task LegacyDeliveryResumesAfterRequestRegistrationAndAfterPublicationWithoutAnotherRefresh()
     {
         var source = await fixture.Source();
         var bound = await lookups.LookupLegacyAsync(Guid.NewGuid(), source.SourceUuid);
@@ -87,20 +88,14 @@ public sealed class TestNormalizationRecordingLookup
         var head = (await evidence.GetCurrentInputAsync(LegacyResource(source.SourceUuid)))!;
         var playback = await Playback(source.TrackUuid);
 
-        // Resume the first crash boundary: target created and prepared, delivery not acknowledged.
+        // Resume the first crash boundary: the immutable target request exists before preparation.
         await proposals.GetOrCreateAttemptAsync(
             handoff.ProcessingAttemptUuid,
             handoff.SourceUuid,
-            handoff.ProcessingVersion!
-        );
-        await proposals.SavePreparationAsync(
-            handoff.ProcessingAttemptUuid,
-            handoff.LegacyPreparation!
+            handoff.ProcessingVersion!,
+            initiatingHandoffUuid: handoff.HandoffUuid
         );
         var delivered = await dispatcher.DispatchAsync(handoff.HandoffUuid);
-        delivered
-            .Disposition.Should()
-            .Be(NormalizationRecordingLookupDispatchDisposition.Completed);
         delivered
             .ProcessingResult!.Disposition.Should()
             .Be(NormalizationRecordingProcessingDisposition.Published);
@@ -146,15 +141,12 @@ public sealed class TestNormalizationRecordingLookup
         await proposals.GetOrCreateAttemptAsync(
             interrupted.ProcessingAttemptUuid,
             interrupted.SourceUuid,
-            interrupted.ProcessingVersion!
+            interrupted.ProcessingVersion!,
+            initiatingHandoffUuid: interrupted.HandoffUuid
         );
-        await proposals.SavePreparationAsync(
+        var processed = await processor.ProcessLegacyHandoffAsync(
             interrupted.ProcessingAttemptUuid,
-            interrupted.LegacyPreparation!
-        );
-        var processed = await processor.ProcessAsync(
-            interrupted.ProcessingAttemptUuid,
-            interrupted.SourceUuid
+            interrupted.HandoffUuid
         );
         processed.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Published);
         (await store.GetHandoffAsync(interrupted.HandoffUuid))!.CompletedResult.Should().BeNull();
@@ -174,7 +166,7 @@ public sealed class TestNormalizationRecordingLookup
 
     [TestCase("archive.org")]
     [TestCase("phish.in")]
-    public async Task RetainedNegativeBecomesPendingOnQualifiedArrivalAndBoundHandoffWaitsForProviderConsumer(
+    public async Task RetainedNegativeBecomesPendingOnQualifiedArrivalAndBoundHandoffPublishesProposals(
         string provider
     )
     {
@@ -204,14 +196,15 @@ public sealed class TestNormalizationRecordingLookup
         var handoffUuid = bound.Result.HandoffUuid!.Value;
         var delivery = await dispatcher.DispatchAsync(handoffUuid);
         delivery
-            .Disposition.Should()
-            .Be(NormalizationRecordingLookupDispatchDisposition.AwaitingProviderConsumer);
-        delivery.ProcessingResult.Should().BeNull();
-        (await store.GetHandoffAsync(handoffUuid))!.CompletedResult.Should().BeNull();
+            .ProcessingResult!.Disposition.Should()
+            .Be(NormalizationRecordingProcessingDisposition.Published);
+        (await store.GetHandoffAsync(handoffUuid))!.CompletedResult.Should().NotBeNull();
         (await store.GetPendingHandoffsAsync(1000))
             .Should()
-            .Contain(item => item.HandoffUuid == handoffUuid);
-        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+            .NotContain(item => item.HandoffUuid == handoffUuid);
+        (await proposals.GetAsync(source.SourceUuid))!
+            .Preparation.Binding.InputRevisionUuid.Should()
+            .Be(input.InputRevisionUuid);
     }
 
     [Test]
@@ -514,9 +507,6 @@ public sealed class TestNormalizationRecordingLookup
         (await store.GetHandoffAsync(handoffUuid))!.CompletedResult.Should().BeNull();
 
         var recovered = await dispatcher.DispatchAsync(handoffUuid);
-        recovered
-            .Disposition.Should()
-            .Be(NormalizationRecordingLookupDispatchDisposition.Completed);
         recovered
             .ProcessingResult!.Disposition.Should()
             .Be(NormalizationRecordingProcessingDisposition.Published);

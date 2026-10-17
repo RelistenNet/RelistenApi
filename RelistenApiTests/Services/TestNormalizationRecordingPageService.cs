@@ -35,7 +35,8 @@ public sealed class TestNormalizationRecordingPageService
             new NormalizationProviderDecoder(),
             new(new(), new()),
             fixture.Work,
-            proposals
+            proposals,
+            new(fixture.Db)
         );
         runner = new(pages, processor, proposals);
     }

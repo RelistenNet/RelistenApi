@@ -142,17 +142,12 @@ public sealed partial class NormalizationRecordingLookupStore
         CancellationToken ct
     )
     {
-        if (handoff.Mode != NormalizationRecordingLookupMode.LegacyCatalog)
-        {
-            throw new NormalizationConflictException(
-                "Retained provider delivery has no admitted processing consumer yet."
-            );
-        }
         var processing = await c.QuerySingleOrDefaultAsync<ProcessingCompletionRow>(
             new CommandDefinition(
                 """
                 SELECT source_uuid AS "SourceUuid",processing_version AS "ProcessingVersion",
-                    disposition AS "Disposition",reason AS "Reason",preparation::text AS "PreparationJson"
+                    disposition AS "Disposition",reason AS "Reason",preparation::text AS "PreparationJson",
+                    initiating_handoff_uuid AS "InitiatingHandoffUuid"
                 FROM normalization.recording_processing_attempts WHERE attempt_uuid=@ProcessingAttemptUuid
                 """,
                 handoff,
@@ -164,11 +159,8 @@ public sealed partial class NormalizationRecordingLookupStore
             processing == null
             || processing.Disposition == null
             || processing.SourceUuid != handoff.SourceUuid
-            || processing.ProcessingVersion != handoff.ProcessingVersion
-            || !SameJson(
-                processing.PreparationJson,
-                JsonSerializer.Serialize(handoff.LegacyPreparation)
-            )
+            || handoff.Mode == NormalizationRecordingLookupMode.LegacyCatalog
+                && processing.ProcessingVersion != handoff.ProcessingVersion
             || Enum.Parse<NormalizationRecordingProcessingDisposition>(processing.Disposition, true)
                 != result.Disposition
             || processing.Reason != result.Reason
@@ -177,6 +169,62 @@ public sealed partial class NormalizationRecordingLookupStore
             throw new NormalizationConflictException(
                 "Acknowledgement does not identify the saved terminal processing result."
             );
+        }
+        if (processing.InitiatingHandoffUuid == handoff.HandoffUuid)
+        {
+            var original = await NormalizationRecordingHandoffEvidence.ReadAsync(
+                c,
+                t,
+                handoff.HandoffUuid,
+                ct
+            );
+            var preparation =
+                processing.PreparationJson == null
+                    ? null
+                    : JsonSerializer.Deserialize<NormalizationRecordingPreparation>(
+                        processing.PreparationJson
+                    );
+            if (
+                original == null
+                || !original.MatchesRequest(
+                    result.AttemptUuid,
+                    result.SourceUuid,
+                    processing.ProcessingVersion
+                )
+                || result.Disposition == NormalizationRecordingProcessingDisposition.Published
+                    && preparation == null
+                || preparation != null && !original.MatchesPreparation(preparation)
+            )
+            {
+                throw new NormalizationConflictException(
+                    "Processing completion does not preserve its initiating lookup evidence."
+                );
+            }
+        }
+        else
+        {
+            // The old dispatcher could stop after creating a header but before saving its
+            // preparation. Only its explicit incompatible-version attention receipt may
+            // acknowledge that crash boundary without preparation; it publishes no facts.
+            var historicalUnprepared =
+                processing.PreparationJson == null
+                && processing.ProcessingVersion != NormalizationRecordingProcessor.Version
+                && result.Disposition == NormalizationRecordingProcessingDisposition.Unresolved
+                && result.Reason == "processing_version_changed";
+            if (
+                processing.InitiatingHandoffUuid != null
+                || handoff.Mode != NormalizationRecordingLookupMode.LegacyCatalog
+                || !historicalUnprepared
+                    && !SameJson(
+                        processing.PreparationJson,
+                        JsonSerializer.Serialize(handoff.LegacyPreparation)
+                    )
+            )
+            {
+                throw new NormalizationConflictException(
+                    "Processing completion belongs to another initiating handoff."
+                );
+            }
         }
     }
 
@@ -201,7 +249,8 @@ public sealed partial class NormalizationRecordingLookupStore
         string ProcessingVersion,
         string? Disposition,
         string? Reason,
-        string? PreparationJson
+        string? PreparationJson,
+        Guid? InitiatingHandoffUuid
     );
 
     private sealed class HandoffRow

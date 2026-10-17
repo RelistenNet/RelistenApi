@@ -223,23 +223,18 @@ public sealed class TestNormalizationRecordingLookupStore
             .BeEquivalentTo(valid);
     }
 
-    [Test]
-    public async Task AnotherPreparedProcessingResultCannotAcknowledgeTheOriginalHandoff()
+    [TestCase("capture")]
+    [TestCase("configuration")]
+    [TestCase("contribution")]
+    public async Task InitiatingHandoffCannotBeChangedOrReplacedWithAnotherCapturePreparation(
+        string change
+    )
     {
         var source = await fixture.Source();
         var evidence = new NormalizationEvidenceService(fixture.Db);
         var legacy = new NormalizationLegacyInputService(fixture.Db, evidence);
         var bindings = new NormalizationCatalogBindingService(fixture.Db);
         var proposals = new NormalizationRecordingProposalService(fixture.Db);
-        var processor = new NormalizationRecordingProcessor(
-            legacy,
-            evidence,
-            bindings,
-            new(),
-            new(new(), new()),
-            fixture.Work,
-            proposals
-        );
         var lookups = new NormalizationRecordingLookupService(
             store,
             legacy,
@@ -258,33 +253,64 @@ public sealed class TestNormalizationRecordingLookupStore
             .Decode(snapshot.Capture.Revision)
             .Recordings.Single();
         var binding = await bindings.BindRefreshedRecordingAsync(snapshot, recording);
-        var differentPreparation = handoff.LegacyPreparation! with
+        var original = handoff.LegacyPreparation!;
+        var differentPreparation = change switch
         {
-            FetchUuid = snapshot.Capture.Fetch.FetchUuid,
-            ProducerCatalogInputs = snapshot.CatalogInputs,
-            Binding = binding,
+            "capture" => original with
+            {
+                FetchUuid = snapshot.Capture.Fetch.FetchUuid,
+                ProducerCatalogInputs = snapshot.CatalogInputs,
+                Binding = binding,
+            },
+            "configuration" => original with
+            {
+                ExpectedConfigurationGeneration =
+                    (original.ExpectedConfigurationGeneration ?? 0) + 1,
+            },
+            "contribution" => original with
+            {
+                ExpectedContributionRevision = original.ExpectedContributionRevision + 1,
+            },
+            _ => throw new ArgumentOutOfRangeException(nameof(change)),
         };
-        differentPreparation.FetchUuid.Should().NotBe(handoff.LegacyPreparation!.FetchUuid);
-        await proposals.GetOrCreateAttemptAsync(
+        var attempt = await proposals.GetOrCreateAttemptAsync(
             handoff.ProcessingAttemptUuid,
             source.SourceUuid,
-            handoff.ProcessingVersion!
+            handoff.ProcessingVersion!,
+            initiatingHandoffUuid: handoff.HandoffUuid
         );
-        await proposals.SavePreparationAsync(handoff.ProcessingAttemptUuid, differentPreparation);
-        var processed = await processor.ProcessAsync(
-            handoff.ProcessingAttemptUuid,
-            source.SourceUuid
-        );
-        processed.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Published);
+        var changedInitiator = () =>
+            proposals.GetOrCreateAttemptAsync(
+                handoff.ProcessingAttemptUuid,
+                source.SourceUuid,
+                handoff.ProcessingVersion!
+            );
+        await changedInitiator.Should().ThrowAsync<NormalizationConflictException>();
+        var saveDifferent = () =>
+            proposals.SavePreparationAsync(
+                handoff.ProcessingAttemptUuid,
+                differentPreparation with
+                {
+                    ExpectedContributions = [],
+                }
+            );
+        await saveDifferent.Should().ThrowAsync<NormalizationConflictException>();
+        (await proposals.GetAttemptAsync(attempt.AttemptUuid))!.Preparation.Should().BeNull();
 
-        var acknowledge = () => store.AcknowledgeHandoffAsync(handoff.HandoffUuid, processed);
-        await acknowledge.Should().ThrowAsync<NormalizationConflictException>();
+        // The failed save does not poison recovery. A genuine pre-preparation terminal
+        // result is deliverable because its immutable request still identifies this handoff.
+        var terminal = await proposals.CompleteAsync(
+            attempt,
+            NormalizationRecordingProcessingDisposition.Unresolved,
+            "synthetic_unsupported_peer"
+        );
+        await store.AcknowledgeHandoffAsync(handoff.HandoffUuid, terminal.Result!);
         var unchanged = (await store.GetHandoffAsync(handoff.HandoffUuid))!;
-        unchanged.CompletedResult.Should().BeNull();
+        unchanged.CompletedResult.Should().BeEquivalentTo(terminal.Result);
         unchanged.LegacyPreparation.Should().BeEquivalentTo(handoff.LegacyPreparation);
         (await store.GetPendingHandoffsAsync(mode: NormalizationRecordingLookupMode.LegacyCatalog))
             .Should()
-            .Contain(item => item.HandoffUuid == handoff.HandoffUuid);
+            .NotContain(item => item.HandoffUuid == handoff.HandoffUuid);
     }
 
     [Test]
