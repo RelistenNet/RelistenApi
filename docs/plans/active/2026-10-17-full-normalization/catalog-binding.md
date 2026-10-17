@@ -230,8 +230,10 @@ occurrences nor order. Those require retained provider accounts or file evidence
 Unresolved provider lookups also need durable outcomes, separate from current
 extraction batches. Reuse global source-identifier clocks for Archive/Phish
 absence checks, with generation zero admitted under the same lock protocol.
-Missing legacy sources need a source-UUID lookup clock because their upstream
-identifier is unknown. A processed lookup can consume its watermark and sleep
+Exact source-UUID lookups need a retained clock even when the source is absent.
+This covers missing legacy sources and an Archive retained source UUID that
+later arrives under a different upstream identifier; the requested item's
+identifier clock alone cannot detect that arrival. A processed lookup can consume its watermark and sleep
 until evidence changes; it must not replace a prior successful extraction or an
 accepted relationship. Retry enrollment must preserve other contributors' inputs.
 

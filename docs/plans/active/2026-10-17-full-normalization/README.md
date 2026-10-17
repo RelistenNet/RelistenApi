@@ -23,8 +23,9 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 - [x] Add [setlist-account binding](setlist-binding.md) for Jerry, Setlist.fm, Phantasy Tour and explicitly artist-scoped Phish.net accounts. Independent artist/imported-setlist/performance outcomes preserve passages when playback context is missing. All 80 focused binding/decoder/registry cases and 765 normalization regressions pass, including the importer boundary and controlled race regressions. The full suite above includes this increment.
 - [x] Implement [imported venue and artist-dictionary snapshots](imported-catalog.md), pure decoding and checked binding by stored UUID. Original producer revisions are retained with the facts; independent venue revisions cover artistless records and participate in contributed work. All 169 focused checks and 838 normalization regressions pass, including publication, correction/revert, caller mutation and recovery. The full suite above includes this increment.
 - [x] Add [candidate-universe generations](candidate-universes.md) to admission, contributor ownership, publication and pending work. Typed writers lock complete scope sets before owner mutations; source ownership changes also invalidate people context. All 216 focused cases and 890 normalization regressions pass. The full API suite passes 1,451 tests with 24 existing tour-contract skips and zero failures.
-- [x] Make [unchanged publication](unchanged-publication.md) settle across fresh attempts: matching music facts, credits, venue assignments and identity metadata retain their revisions or exact assertions. New full citations remain evidence; reviewed decisions and UUID ownership stay protected. All 106 focused cases and 983 normalization regressions pass, including existing music tests and a cross-artist file move with preserved playback identities. The full API suite is running for this increment.
-- [ ] Complete negative-lookup retry registration, candidate-facts snapshots and direct provider coordinators.
+- [x] Make [unchanged publication](unchanged-publication.md) settle across fresh attempts: matching music facts, credits, venue assignments and identity metadata retain their revisions or exact assertions. New full citations remain evidence; reviewed decisions and UUID ownership stay protected. All 106 focused cases and 983 normalization regressions pass, including existing music tests and a cross-artist file move with preserved playback identities. The full API suite passes 1,544 tests with 24 existing tour-contract skips and zero failures.
+- [x] Add [atomic candidate-facts snapshots](candidate-facts.md) for people, venues, repertoire and compositions, with [observed-owner read sets](owner-observations.md). Preserve complete dated venue alternatives, exact artist credit totals and original assertion provenance. All 182 focused cases and 1,090 normalization regressions pass, including concurrent review, empty candidate pools and a 513-credit aggregation. The solution builds, formatting and fresh reviews pass. The full API suite is running for this increment; the prior full result above does not include it.
+- [ ] Complete negative-lookup retry registration and direct provider coordinators.
 - [ ] Independently verify and expand held-out labels, then train and compare automatic matching and Luna routing as specified in [evaluation-strategy.md](evaluation-strategy.md). Development labels, extraction throughput and pair comparisons cannot authorize a production policy.
 - [ ] Implement and evaluate multi-candidate automatic resolution; ambiguity and conflicting identity merges enter bulk review.
 - [ ] Backfill every artist, verify public behavior and recovery, select public evidence excerpts, then rehearse and stage rollout.
@@ -55,48 +56,17 @@ Retain original source and lineage prose as evidence for named recording credits
 
 Use one shared evidence and decision system, with domain-specific extractors and matchers. Direct input invalidation uses the durable resource generation plus each subject's published-input watermark; publication compares that read set atomically. This avoids eager per-input fan-out while preserving pending work and stale-result fencing. Catalog binding returns artist and global source-identifier revisions, plus a mapping-registry revision for Local; catalog mutations advance them transactionally. V2 recording refresh carries the original catalog read set, and work admission checks the exact consumed input revision UUIDs. Fresh clocks cannot justify stale facts. Each contributor owns its complete input and dependency sets, and the work service configures their union atomically. Shared canonical-identity edits use dependency revision checks. Configuration changes require an explicit generation compare-and-swap, and work dependencies must be acyclic. Processing follows retained input, structured extraction, candidate retrieval, matching, acceptance or bulk review, then public read projection. Do not require an artist to have a curated repertoire dictionary. Artist context helps interpret titles and credits; people, venues and compositions resolve globally.
 
-`NormalizationCandidateService` now retrieves accepted names, aliases and qualified provider IDs through indexed queries with bounded returned pools. It scopes repertoire by artist and resolves global people, venues and compositions through redirects. Identifier hits survive the name limit; a truncation flag prevents treating an incomplete name pool as exhaustive. Equal-score cutoff ties can vary, and the pool limit does not guarantee bounded database work or catalog throughput. Resolvers must capture candidate-owner freshness observations and reload matching facts before publication. Retrieval is implemented; multi-candidate decisions and measured recall remain work.
+`NormalizationCandidateService` retrieves accepted names, aliases and qualified provider IDs through indexed queries. Repertoire is artist-scoped; people, venues and compositions resolve globally through redirects. Identifier hits survive the name limit. A truncation flag prevents treating an incomplete name pool as exhaustive. Equal-score cutoff ties can vary, and output limits do not guarantee bounded database work or catalog throughput. Multi-candidate decisions and measured recall remain required.
 
-The next candidate-facts reader must retrieve accepted assertions and complete owner
-states in the same primary snapshot as candidate selection. Public display DTOs
-cannot supply this contract. Current storage does not establish provider-handle
-classification, geographic locality keys, exclusive authority identifiers or a
-complete composition-author list. Preserve those facts as unknown. Return all
-supported dated venue assertions rather than choosing an arbitrary location;
-derive person artist context from accepted credits, including recordings that
-are not currently playable.
+Use the four typed [candidate-facts methods](candidate-facts.md) for matching. Each reads selection, accepted assertions, owner observations, catalog clocks and candidate generations in one primary read-only repeatable-read transaction. The older retrieval-only method and public display DTOs do not supply that contract. Current storage does not establish provider-handle classification, geographic locality keys, exclusive identifier authority or a complete composition-author list. Those facts remain unknown.
 
-Candidate context is an observation, not necessarily a causal work dependency.
-A recording's credits depend on its person identity, while matching that person
-can read the same credits for artist context. Registering both directions in
-`work_dependencies` would violate its acyclic contract; recording consumers can
-also observe their own credits. The facts-reader implementation must fence
-these observations without adding dependency cycles. It must also distinguish
-semantic or editorial changes from a fresh unchanged completion: persisting
-each observed owner's new work UUID as a pending trigger can make both sides
-reprocess forever. Verify this case before connecting automatic consumers.
+People facts include exact artist-context totals from accepted credits, including recordings that are not playable. Supporting examples have separate bounds, so hundreds of credits do not become an incomplete artist history merely because only a few witnesses are returned. Venue facts retain every supported dated assertion within explicit limits. The pair matcher preserves alternatives when dates are unknown and distinguishes proven concurrent conflicts from uncertainty. It cannot assemble one address from separate assertions.
 
-The current venue pair matcher accepts one location. Extend that contract to
-retain all dated location assertions before using accepted venue facts for
-automatic matching. Unknown dates preserve the alternatives; overlapping
-conflicts remain visible. Do not assemble one address from separate assertions.
-Composition credits must retain whether their target is a person or an artist.
-Only resolved person credits in author roles contribute to person-author
-comparisons; an artist UUID cannot stand in for a person UUID. An incomplete
-author list remains incomplete.
+Composition facts keep person and catalog artist credit targets distinct, with all supported roles. Only resolved person credits in writer, composer or lyricist roles contribute to person-author comparison. An artist UUID cannot stand in for a person UUID. Individual credits do not establish a complete author list.
 
-Known candidate-owner revisions alone do not fence a new rival or a newly added
-matching alias. The [candidate-universe contract](candidate-universes.md) adds
-durable generations for global people, venues and compositions, and per-artist
-repertoire. Admission and publication check the original generations, including
-an empty result. The forthcoming facts reader must capture them with selection
-and accepted assertions. Changes that add accepted
-relationship context, such as a new credit owner for an existing person, also need
-a consumed membership revision; they cannot be hidden behind the person's
-unchanged identity revision. Start with conservative generations that cover
-these changes and declare affected scopes before domain writes. Measure
-contention before refining their granularity. A stable generation does
-not make a truncated candidate pool exhaustive.
+[Owner observations](owner-observations.md) fence factual context separately from causal dependencies. A recording can depend on its person identity while person matching observes that recording's credits; these reads create no dependency cycle. Admission and publication check original complete owner stamps. Durable pending checks use desired/editorial revisions and candidate generations, so unchanged completions settle instead of repeatedly scheduling each other. Self-observation retains its original audit stamp while the configured primary ticket fences publication.
+
+[Candidate-universe generations](candidate-universes.md) also detect a new rival, alias or credit contributor, including after an empty result. The facts readers capture these generations with their assertions. Source arrival, removal or artist reassignment can change person context without changing the person's identity row. The initial generations cover these changes conservatively; measure contention before refining their granularity. A stable generation does not make a truncated pool exhaustive.
 
 Declare write scopes before locking retained resources or work owners. Taking
 an epoch lock for the first time inside a domain callback reverses publication's
@@ -117,7 +87,7 @@ Reviewed metadata commands cover person aliases/external IDs and venue names/loc
 
 Normalized music routes now expose repertoire, compositions, setlist editions, occurrences, file contents and supported show matches. File contents link to occurrences within the recording's current show. Several songs or sets can share a file without assigning that recording to another performance. Reads preserve existing playback UUIDs. All normalized reads remain disabled by default.
 
-Deterministic parsers handle explicit identifiers and recognizable syntax. Indexed candidate retrieval uses names, aliases and relevant context to avoid all-pairs comparison. Run the [model comparison and fallback-routing experiments](evaluation-strategy.md): train small identity matchers and a credit-extraction model, compare them with rules and Luna on the same inputs, then choose deployment policies from measured results. Evidence of benefit determines deployment, not whether to try training. Similarity scores and a model's stated confidence are not calibrated probabilities. Contradictory relationships must prevent unsafe transitive merges.
+Deterministic parsers handle explicit identifiers and recognizable syntax. Indexed candidate retrieval uses names, aliases and qualified identifiers to avoid all-pairs comparison. Typed facts supply context for matching. Run the [model comparison and fallback-routing experiments](evaluation-strategy.md): train small identity matchers and a credit-extraction model, compare them with rules and Luna on the same inputs, then choose deployment policies from measured results. Evidence of benefit determines deployment, not whether to try training. Similarity scores and a model's stated confidence are not calibrated probabilities. Contradictory relationships must prevent unsafe transitive merges.
 
 Use this Codex session for development analysis and labeling. Use selective GPT-6 Luna API extraction for difficult prose in runtime jobs, with structured proposals and exact supporting text. A name extraction does not establish a person's identity. Cache by the exact relevant input, model, prompt and response-schema version; changing one invalidates reuse. Validate returned evidence spans and references. Limit retries, concurrency and spend per job, retain usage receipts and preserve failed inputs for retry. Reuse durably cached successful responses after downstream publication failures. A crash before that cache commit leaves an uncertain provider outcome; reserve its possible cost and apply a bounded retry policy rather than claiming exactly-once billing.
 
@@ -180,4 +150,4 @@ Provider capture covers all seven configured importers and Archive intake/discov
 
 Automatic matching remains the release requirement. The [catalog-binding contract](catalog-binding.md) covers legacy, Archive, Phish.in and joint Local association, durable invalidation and complete owner input contributions. V2 refresh retains changed catalog wording with its original clocks. The [recording processor and page command](recording-processing.md) save extraction proposals with durable recovery; [candidate generations](candidate-universes.md) now fence competing accepted identities and relationship context.
 
-Next, implement atomic candidate-facts snapshots and negative-lookup retry registration, then connect the direct provider coordinators. Separate factual owner observations from causal dependencies and verify that reciprocal context settles. Then implement multi-candidate resolution, apply the model comparison and routing evaluation strategy, backfill every artist, and rehearse rollout and recovery. No production write or deployment has occurred. The [people brief](../../../design/2026-10-17-people-and-recording-credits.md) and [earlier schema](../../../design/2026-10-16-catalog-normalization-schema.md) are design inputs; this plan supersedes their narrower scope and deferrals.
+Next, complete durable catalog-lookup outcomes and their retry fences, then connect the direct provider coordinators. Empty identity candidate pools already carry generations; missing catalog recordings still need lookup enrollment separate from successful extraction. Exact source-UUID lookups also need clocks that survive absence and later arrival, including an Archive retained UUID that arrives under a different upstream identifier. Then implement multi-candidate resolution, apply the model comparison and routing evaluation strategy, backfill every artist, and rehearse rollout and recovery. No production write or deployment has occurred. The [people brief](../../../design/2026-10-17-people-and-recording-credits.md) and [earlier schema](../../../design/2026-10-16-catalog-normalization-schema.md) are design inputs; this plan supersedes their narrower scope and deferrals.

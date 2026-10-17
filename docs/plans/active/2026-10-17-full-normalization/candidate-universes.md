@@ -8,8 +8,7 @@ Checking only the chosen identity's owner cannot detect these changes.
 Migration 30 adds candidate-universe generations: revisions for the pools from
 which a matcher selects identities. Work admission and publication check these
 generations alongside input, catalog, accepted-owner and editorial revisions.
-The current increment implements those checks and writer invalidation. The
-transactional candidate-facts reader and automatic resolver remain required.
+Typed writers implement transactional invalidation. The [candidate-facts readers](candidate-facts.md) capture these generations with their assertions; automatic resolution remains required.
 
 ## Read the facts and their generation together
 
@@ -28,21 +27,20 @@ exist; an absent repertoire clock reads as zero. Migration seeds clocks for
 existing positive dictionaries, and later clocks survive deletion or withdrawal.
 Generations are opaque revisions, not identity counts.
 
-The forthcoming facts reader must select candidates, load accepted assertions,
-resolve redirects and capture complete owner and universe revisions in one
-primary read-only repeatable-read transaction. `NormalizationCandidateService.FindAsync`
+The four typed facts methods select candidates, load accepted assertions,
+resolve redirects and capture complete owner observations and universe revisions
+in one primary read-only repeatable-read transaction. `NormalizationCandidateService.FindAsync`
 still supplies retrieval only. Reading a fresh generation after an earlier
 `FindAsync` result cannot establish that the earlier result is current.
 
 A stable generation does not make a truncated pool exhaustive. Preserve
 truncation and unknown facts, including unsupported handle classification,
 geographic locality keys, identifier authority and complete composition
-authorship. Return all dated venue assertions rather than selecting one to fit
-the current pair matcher. People context uses accepted credits and current
+authorship. Preserve all dated venue alternatives rather than selecting one that favors a match. People context uses accepted credits and current
 source ownership, including recordings without valid playback joins.
 
 Repertoire facts that include linked works consume both the artist repertoire
-and global compositions generations. The facts reader must use immutable
+and global compositions generations. The music facts readers use immutable
 `music_revisions.evidence` as its authoritative music citation list. Appending
 revision history or its normalized reference index does not change an accepted
 fact until a current row points to that revision. Reviewed exclusions remain
@@ -52,7 +50,7 @@ setlist-use or file-use features without their corresponding invalidation.
 
 ## Admit the original observations
 
-Pass the original dependencies as the optional `candidateUniverses` argument to
+Pass the original generations as the optional `candidateUniverses` argument to
 `BeginWorkAsync` or `BeginContributedWorkAsync`. Admission initializes absent
 repertoire clocks at zero and then compares the caller's observed generation.
 A mismatch raises `NormalizationConflictException` before configuration or
@@ -62,7 +60,7 @@ cannot justify older candidates or assertions.
 The returned ticket's `CandidateUniverses` contains the complete owner's pool
 read set. A contribution owns keys, while supplied generations remain factual
 preconditions. Replacing one contribution cannot remove another contribution's
-keys. Baselines, tombstones, configuration compare-and-swap, exact replay and
+keys. Pass factual owner stamps separately through [owner observations](owner-observations.md), rather than adding reciprocal context to the acyclic dependency graph. Baselines, tombstones, configuration compare-and-swap, exact replay and
 pending queries follow the existing [contributed-input contract](catalog-binding.md).
 An omitted or empty candidate set retains existing serialized ticket and request
 hash shapes. The current single-recording proposal processor rejects additional
