@@ -2,7 +2,7 @@
 
 Relisten normalization connects imported recordings to supported identities for venues, songs, compositions and people. Recording provenance in this release identifies tapers and transferrers across artists. Full capture/transfer ancestry and audio-family reconstruction are outside this release. The same services must work for Grateful Dead, Phish, mixed Archive collections and an artist with only file titles and recording notes.
 
-This document specifies the implementation target. Domain identities and `/api/v3/normalization` routes below remain implementation targets. The shared input/work stores and deterministic credit/title extractors are implemented first; they do not establish accepted identity matches. Read it with the [implementation plan](../plans/active/2026-10-17-full-normalization/README.md), the [provider retention audit](../research/2026-10-17-full-normalization/provider-evidence.md) and the evaluation set linked from that plan. The engineer implements these contracts; the reviewer/operator uses their invariants and failure outcomes to judge a backfill and release.
+This document specifies the complete implementation target. Input/work stores, canonical domain storage, deterministic extraction, cached Luna credit extraction, pair comparison and people/venue read routes are implemented locally. Automatic resolution, music HTTP routes and backfill orchestration remain open. Read it with the [implementation plan](../plans/active/2026-10-17-full-normalization/README.md), the [provider retention audit](../research/2026-10-17-full-normalization/provider-evidence.md) and the evaluation set linked from that plan. The engineer implements these contracts; the reviewer/operator uses their invariants and failure outcomes to judge a backfill and release.
 
 ## Existing contracts to preserve
 
@@ -34,7 +34,7 @@ flowchart LR
 
 PostgreSQL owns retained evidence, domain identities, decisions and checkpoints. Temporal schedules bounded work and retries activities. Redis can cache reads and candidate indexes; it cannot be the only copy of an accepted relationship or a paid extraction. The standalone ingestion worker requires its own configuration and dependencies; API host registration does not configure it.
 
-Adapters retain input before lossy conversion. Extractors identify explicit text, order and provider IDs. Candidate retrieval finds possible identities. Domain resolvers decide which proposals a versioned policy may accept. `NormalizationReviewService` applies operator decisions. `NormalizationReadService` joins accepted relationships to the current playable catalog. These responsibilities may be implemented in cohesive classes per domain; a plugin framework is unnecessary.
+Adapters retain input before lossy conversion. Extractors identify explicit text, order and provider IDs. Candidate retrieval finds possible identities. Domain resolvers decide which proposals a versioned policy may accept. Typed domain services apply operator decisions through `NormalizationWorkService`; `NormalizationReadService` joins accepted relationships to the current playable catalog. These responsibilities belong in cohesive classes per domain; a plugin framework is unnecessary.
 
 New provider data, extractor revisions and match-policy revisions enter the same pipeline as the backfill. An artist-specific adapter can supply stronger evidence without owning a separate identity system.
 
@@ -44,7 +44,9 @@ New provider data, extractor revisions and match-policy revisions enter the same
 
 [`NormalizationWorkService`](../../RelistenApi/Services/Data/NormalizationWorkService.cs) and migration 19 own durable read sets, publication fences and review receipts. `BeginWorkAsync` records the input/dependency state before extraction. Changing an existing policy or binding set requires the current configuration generation; obsolete workers cannot reinstall a prior configuration. Dependency changes reject cycles. `TryPublishAsync` rechecks the complete read set before invoking a typed domain writer in the same transaction. Callbacks must use the supplied connection/transaction, perform no network calls and preserve reviewed domain relationships/exclusions. The common store cannot infer those domain decisions.
 
-The [offline extraction tool](../../tools/RelistenNormalization/README.md) exercises credit and title parsing over retained snapshots without a database or paid model. Its outputs are proposals. Canonical domain tables, candidate indexes, evaluated automatic matching and the public readers below remain required implementation work.
+Migrations 20–21 and `NormalizedPeopleService`, `NormalizedVenueService` and `NormalizedMusicService` own typed identities, assignments and correction history. Their writes enforce the subject scopes below. Global identities publish before relationships that consume them. The initial people/venue readers use one read-only repeatable-read transaction on the primary, so a committed correction is visible without replica or cache lag. `Normalization:Reads:Enabled` defaults to false. Complete public evidence selection before activation: current credit reads return retained original wording and selected quotes verbatim, which may include contact details. No raw input payload is exposed. Dedicated alias/name/location replacement and retraction commands remain required correction work.
+
+The [extraction tool](../../tools/RelistenNormalization/README.md) has separate local `extract` and paid `luna-credits` commands. Migration 22 retains complete-request cache entries, bounded attempts and per-job spend. A two-input [live connectivity receipt](../research/2026-10-17-full-normalization/scale/evidence/luna-connectivity.json) verifies Responses integration and cache replay without a key; it does not measure accuracy. `IdentityCandidateMatcher` supplies typed pair features and explainable rule proposals. No matching policy is active by default. Broad candidate retrieval, the multi-candidate resolver, independent evaluation and the remaining music readers below are still required.
 
 ## Shared evidence and decision contracts
 
@@ -76,6 +78,24 @@ A split creates new identities and explicitly lists the relationships to move. T
 
 Each normalization subject (for example a recording's credits or an imported venue assignment) has a durable desired generation and current editorial revision. Every admitted input fetch atomically advances its resource generation. A subject retains the resource generations last published; a durable pending-work query finds changed resources without an eager fan-out job. Policy, input binding and editorial changes advance the subject generation. Dependencies retain their last consumed generation, editorial revision and published result; shared identity changes are pending wherever those watermarks differ. Never depend on Redis expiry or Temporal history to remember invalidation.
 
+Typed writers also enforce the subject's ownership. The registry UUID identifies the work record; its domain, kind and entity UUID identify what that record may change:
+
+| Domain and subject kind | Entity UUID and responsibility |
+| --- | --- |
+| `people / recording` | Source UUID; that recording's credits. |
+| `people / person` | Person UUID; the identity, aliases, external IDs and explicit corrections. |
+| `venues / imported_venue` | Legacy venue UUID; its canonical assignment. |
+| `venues / show` | Show UUID; its explicit venue assignment. |
+| `venues / venue` | Canonical venue UUID; the identity, names, locations, external IDs and corrections. |
+| `songs / artist_repertoire` | Artist UUID; repertoire, legacy song mappings and composition links. |
+| `songs / setlist` | Edition UUID; that edition and its occurrences. |
+| `songs / recording` | Source UUID; contents of files belonging to that recording. |
+| `compositions / composition` | Composition UUID; the work and its role credits. |
+
+A decision for one owner cannot edit another owner's relationships. Cross-owner ingestion publishes in phases: create people, venues, repertoire and works under their identity owners; retain those dependency revisions; then publish credits, assignments, editions or file contents. This keeps work bounded by recording or edition rather than repeatedly replacing a large artist's complete input set. Referencing another identity does not grant editorial authority over it. A stable file-content UUID cannot move to a different file.
+
+Merge/split review declares all affected identity-owner registry UUIDs before taking locks. The shared review transaction locks that complete set in UUID order, applies the typed changes, records the extra owners in the audit ledger and advances every affected owner's editorial revision and desired generation once. This makes already-running consumers of a survivor stale too. Register a new split target's owner before applying the split; callbacks do not create or lock work subjects late. Typed review also compares both retired and survivor entity revisions. Reversal uses recorded moves and rejects later conflicting corrections.
+
 An automatic run records the desired generation, editorial revision, exact current input revisions, policy version and dependency revisions it consumed. Publication compares that complete read set with the current state under a transaction. If anything changed, retain its extraction/proposals as historical results, do not make them current, and leave newer work pending. An older job cannot replace a newer result or an operator correction merely by finishing later. Checkpoints record a stale result separately from a successful current publication.
 
 Accepted relationships and public queries use the same transactional current-state view initially; no asynchronously copied read model may lag a committed correction. Candidate indexes can lag, but revalidate returned candidates before acceptance. If a derived projection is introduced later, its publication must use the same generation comparison and durable invalidation contract. Relation details expose `evidence_status` as `current`, `changed` or `missing`: changed/missing supporting input does not silently remove the last accepted interpretation or pretend it was revalidated. Live catalog availability is checked independently.
@@ -84,13 +104,15 @@ Public correction submission is not introduced here. Operators use trusted worke
 
 ### Extraction and acceptance
 
-Local parsers handle explicit IDs, recognizable credit grammar and preserved ordering. Candidate retrieval uses aliases, names, locality, artist context and typed identifiers. Lightweight matching models are useful only where independent evaluation improves acceptance or review burden.
+Local parsers handle explicit IDs, recognizable credit grammar and preserved ordering. Candidate retrieval uses aliases, names, locality, artist context and typed identifiers. The [evaluation strategy](../plans/active/2026-10-17-full-normalization/evaluation-strategy.md) requires training and comparing small identity matchers and credit-extraction models with rules and Luna-assisted processing. Deployment depends on measured generalization, accepted-match precision, coverage and cost; running the experiment does not require prior proof of benefit.
 
 The optional LLM extractor defaults to `gpt-6-luna`. Its request contains the necessary retained fields and available candidate IDs. Its response must satisfy a versioned schema with exact evidence references. Unknown candidate IDs, invalid excerpts and unsupported claims are rejected before a proposal can be accepted. Provider prose is untrusted data and cannot change extraction instructions or trigger tools.
 
 A durable extraction cache key hashes the complete rendered request, including the exact relevant input, field/locator, candidate IDs and candidate context when supplied, model, prompt/schema/extractor version and generation settings. A changed candidate pool or corrected candidate description cannot reuse an answer based on the previous pool. Paid retries have a bounded attempt policy; successful cache results are committed before downstream matching and reused after downstream failures. A crash after provider success but before durable cache commit has an uncertain outcome; record that attempt, reserve its possible cost and apply bounded retries. Do not claim exactly-once billing or retry an uncertain attempt indefinitely. Persist token usage, request identifier and estimated cost per attempt. Budget exhaustion leaves work resumable with reason `budget_exhausted`; it does not lower match standards or repeatedly resend failed requests. A reviewed interpretation is durable decision data, not a cache entry.
 
 Automatic acceptance is enabled per domain, evidence type and policy version after independent evaluation. Record candidate recall, accepted precision and review coverage separately. LLM confidence and fuzzy similarity scores are not calibrated probabilities. No numerical acceptance threshold or full-catalog acceptance rate is established by this contract; release policy must name measured targets and its evaluation receipt before enabling a rule. With no validated policy, explicit trustworthy provider assertions and reviewed decisions can publish; uncertain links remain unresolved.
+
+Luna fallback routing is a versioned, evaluated policy. Compare it with local processing on the same inputs, including a stratified sample of apparent local successes, to detect confident local errors. Independently adjudicate sampled agreements and disagreements; Luna cannot supply its own ground truth. New artist/song identities alone do not require a call. Use task-specific evidence gaps and measured incremental gains to choose routing conditions. Missing factual evidence remains missing after a model call. Audit sampled local successes after launch to detect failures the router misses.
 
 ## Domain records and invariants
 
@@ -134,7 +156,7 @@ The release does not create capture/transfer/matrix nodes or reconstruct audio a
 
 ## Additive public read API
 
-Use `/api/v3/normalization` to keep new global identities separate from legacy artist-scoped resources. Do not change existing v2/v3 JSON bodies or errors as part of this addition. New routes use snake_case JSON and UUID path IDs. Artist arguments accept an existing artist UUID or slug; global entities use UUID only. The following types define new response fields; nullable fields are present and serialize as null.
+Use `/api/v3/normalization` to keep new global identities separate from legacy artist-scoped resources. Do not change existing v2/v3 JSON bodies or errors as part of this addition. New routes use snake_case JSON and UUID path IDs. The `/artists/{artist}` path accepts an existing artist UUID or slug. Query filters named `artist_uuid` accept UUIDs only; global entities use UUIDs only. The following types define new response fields; nullable fields are present and serialize as null.
 
 Common `Entity` fields are `uuid`, `revision`, `updated_at`, `requested_uuid`, `redirect_uuid` and `aliases` (accepted strings). Venue/person responses use `display_name`; repertoire/composition responses use `display_title`. Those names follow the domain records, rather than exposing both display fields with potentially different values. Fetching a merged UUID returns HTTP 200 with the survivor's entity, `redirect_uuid` identifying the survivor and `requested_uuid` retaining the requested retired UUID. An unmerged fetch sets both redirect fields to null. A split's retained original remains directly addressable. Domain fields follow the records above; provider IDs, evidence excerpts and decision basis are returned on relation details, not injected into existing playback objects.
 

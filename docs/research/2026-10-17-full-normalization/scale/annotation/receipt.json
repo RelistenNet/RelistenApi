@@ -1,0 +1,185 @@
+{
+  "accuracy_estimated": false,
+  "builder_sha256": "7d08300f6381f1085a9600fb0e4a1b406e5540229bbed1de03e3eef4e90331f8",
+  "builder_version": "blind-annotation-v1",
+  "coverage": {
+    "file_contents": {
+      "artist_partitions": {
+        "development": 2703,
+        "test": 871,
+        "validation": 926
+      },
+      "available_rows": 34861,
+      "eligible_artists": 4362,
+      "family_partitions": {
+        "development": 2728,
+        "test": 892,
+        "validation": 880
+      },
+      "missing_eligible_artists": 0,
+      "requested_rows": 4500,
+      "selected_artists": 4362,
+      "selected_rows": 4500,
+      "strata": {
+        "annotation_syntax": 271,
+        "missing_context": 51,
+        "plain_title": 3792,
+        "separator_syntax": 386
+      }
+    },
+    "people": {
+      "artist_partitions": {
+        "development": 3619,
+        "test": 1157,
+        "validation": 1224
+      },
+      "available_rows": 32593,
+      "eligible_artists": 4358,
+      "family_partitions": {
+        "development": 3623,
+        "test": 1166,
+        "validation": 1211
+      },
+      "missing_eligible_artists": 0,
+      "requested_rows": 6000,
+      "selected_artists": 4358,
+      "selected_rows": 6000,
+      "strata": {
+        "compound_credit_syntax": 604,
+        "description_html": 1802,
+        "empty_credit_fields": 935,
+        "long_credit_fields": 68,
+        "plain_credit_fields": 2591
+      }
+    },
+    "repertoire": {
+      "artist_partitions": {
+        "development": 928,
+        "test": 384,
+        "validation": 384
+      },
+      "available_rows": 1696,
+      "eligible_artists": 53,
+      "family_partitions": {
+        "development": 1034,
+        "test": 354,
+        "validation": 308
+      },
+      "missing_eligible_artists": 0,
+      "requested_rows": null,
+      "selected_artists": 53,
+      "selected_rows": 1696,
+      "strata": {
+        "stored_repertoire": 1696
+      }
+    },
+    "setlists": {
+      "artist_partitions": {
+        "development": 240,
+        "test": 96,
+        "validation": 96
+      },
+      "available_rows": 432,
+      "eligible_artists": 54,
+      "family_partitions": {
+        "development": 248,
+        "test": 102,
+        "validation": 82
+      },
+      "missing_eligible_artists": 0,
+      "requested_rows": null,
+      "selected_artists": 54,
+      "selected_rows": 432,
+      "strata": {
+        "stored_membership": 432
+      }
+    },
+    "venues": {
+      "artist_partitions": {
+        "development": 3591,
+        "test": 1169,
+        "validation": 1240
+      },
+      "available_rows": 17073,
+      "eligible_artists": 4362,
+      "family_partitions": {
+        "development": 3584,
+        "test": 1233,
+        "validation": 1183
+      },
+      "missing_eligible_artists": 0,
+      "requested_rows": 6000,
+      "selected_artists": 4362,
+      "selected_rows": 6000,
+      "strata": {
+        "coordinates": 110,
+        "name_location": 5890
+      }
+    }
+  },
+  "entity_link_partitions": {
+    "cross_partition_review_only": 461,
+    "development": 317,
+    "test": 41,
+    "validation": 47
+  },
+  "entity_link_tasks": {
+    "compositions": 74,
+    "people": 318,
+    "venues": 474
+  },
+  "files": {
+    "evidence.jsonl": {
+      "bytes": 37001675,
+      "rows": 18628,
+      "sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0"
+    },
+    "tasks.jsonl": {
+      "bytes": 7623096,
+      "rows": 19494,
+      "sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426"
+    }
+  },
+  "input_bytes": 176666741,
+  "input_sha256": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4",
+  "labels_completed": 0,
+  "limits": [
+    "Candidate pair reasons are selection features, never identity labels.",
+    "No proposed extractor or model output is included.",
+    "Family partitions group known show families and exact annotation inputs in the entire snapshot.",
+    "Artist partitions are a separate suite: shared global identities and exact inputs may cross artists.",
+    "Cross-partition pair tasks are for adjudication only and cannot enter training or scored holdouts.",
+    "Equal per-artist selection is not a uniform catalog probability sample.",
+    "Hard negatives and unknowns must be adjudicated; candidate counts are not class counts.",
+    "Composition identity generally needs independent writer/work evidence absent from these rows.",
+    "Stored setlist membership does not provide order, repeats, timing or segues."
+  ],
+  "selection": "hash rank; one row per artist, then round-robin syntax strata",
+  "snapshot": {
+    "captured_at": "2026-10-17T17:03:23.650476+00:00",
+    "in_recovery": true,
+    "kind": "snapshot",
+    "migration_versions": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "read_only": "on",
+    "replay_lsn": "780/B000D2D0",
+    "snapshot": "58911584:58911584:"
+  },
+  "snapshot_complete": {
+    "completed_at": "2026-10-17T17:04:06.084678+00:00",
+    "kind": "snapshot_complete"
+  },
+  "state": "complete_unlabeled"
+}
