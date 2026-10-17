@@ -1,0 +1,78 @@
+{
+  "kind": "luna_connectivity_and_cache_receipt",
+  "captured_at": "2026-10-17T17:27:10.806157+00:00",
+  "job_uuid": "94c45374-253e-4539-b552-03e5dcd33c2c",
+  "scope": "Two real retained credit inputs; connectivity, response validation and durable cache only. No identity publication or accuracy claim.",
+  "model": "gpt-6-luna",
+  "service_tier": "default",
+  "max_output_tokens": 2048,
+  "first_run": {
+    "state": "completed",
+    "jobUuid": "94c45374-253e-4539-b552-03e5dcd33c2c",
+    "inputSha256": "b6d250d435197563b6f23477646a18bb1ad3a0e083710f28096acd8830fe7038",
+    "extractorVersion": "luna-recording-credits-v1",
+    "records": 2,
+    "fromCache": 0,
+    "states": {
+      "extracted": 2
+    },
+    "capUsd": 25,
+    "accountedUsd": 0.0001745
+  },
+  "replay_without_api_key": {
+    "state": "completed",
+    "jobUuid": "94c45374-253e-4539-b552-03e5dcd33c2c",
+    "inputSha256": "b6d250d435197563b6f23477646a18bb1ad3a0e083710f28096acd8830fe7038",
+    "extractorVersion": "luna-recording-credits-v1",
+    "records": 2,
+    "fromCache": 2,
+    "states": {
+      "extracted": 2
+    },
+    "capUsd": 25,
+    "accountedUsd": 0.0001745
+  },
+  "durable_attempts": {
+    "count": 2,
+    "input_tokens": 1305,
+    "output_tokens": 88,
+    "actual_usd": "0.0001745",
+    "provider_request_ids_retained": 2
+  },
+  "artifacts": {
+    "first_run": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/luna-connectivity-v1/manifest.json",
+      "sha256": "5922f30aa445f190574e34be2de776916b2f77e7737738e4887023e0eaa6561c"
+    },
+    "cache_replay": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/luna-connectivity-cache-v1/manifest.json",
+      "sha256": "b3bf8bdf4107f2d33d5109b31095cf486aa40a5c2683bee623b04089f2c349b8"
+    },
+    "selection": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/luna-connectivity-v1/selection.json",
+      "sha256": "b8f646718533e106e31b1e2de56df9ffaf0960fd1c00908f7bd69347a5a6583a"
+    },
+    "validated_proposals": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/luna-connectivity-v1/results.jsonl",
+      "sha256": "0c595a79f2015559937762b9f6c6609064d1be8e51657819ecbd43641df3d512"
+    },
+    "extractor_source": {
+      "path": "RelistenApi/Services/Normalization/LunaRecordingCreditExtractor.cs",
+      "sha256": "3ffc9ad257ddbd1a6e09b972405b3d7e939ff50d866f1f28071471c8db99afb3"
+    },
+    "client_source": {
+      "path": "RelistenApi/Services/Normalization/LunaRecordingCreditClient.cs",
+      "sha256": "95f91f5d0ac7fe170b832974b31a26ffcb69ec0a9edde836355d69caae9ca6d8"
+    },
+    "cache_source": {
+      "path": "RelistenApi/Services/Data/NormalizationExtractionCacheService.cs",
+      "sha256": "73caa687959b6e35bff9116e7ffa8d9bcd176cf593b7d98d4b868b0325e8f887"
+    }
+  },
+  "limits": [
+    "No independently judged extraction or identity accuracy.",
+    "No production writes or catalog changes.",
+    "Accounted cost uses verified small-request Standard rates, not an invoice lookup.",
+    "Exact inputs and proposals are retained locally outside Git."
+  ]
+}

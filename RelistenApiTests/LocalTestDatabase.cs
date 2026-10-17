@@ -54,6 +54,10 @@ internal static class LocalTestDatabase
             commandTimeout: 120
         );
         await catalog.ExecuteAsync(Migrations.AddCanonicalMusic.SchemaSql, commandTimeout: 120);
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationExtractionCache.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
