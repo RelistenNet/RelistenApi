@@ -2,8 +2,8 @@
   "artist": "Pavement",
   "local_artist_uuid": "5fea3fa5-64fa-9f69-08e7-27e50730c8a2",
   "inventory_captured_at": "2026-10-17T04:16:44.932643+00:00",
-  "verification_completed_at": "2026-10-17T04:26:06.286696+00:00",
-  "scope": "Clean isolated catalog; complete indexed Tapers Section exact-creator inventory",
+  "verification_completed_at": "2026-10-17T06:19:31.226539+00:00",
+  "scope": "Isolated local catalog; complete captured Tapers Section exact-creator inventory; partial dates and metadata preference with internal notes",
   "local_database": "relisten_tapers_full_verified_20261016",
   "query": "collection:taperssection AND mediatype:audio AND creator:\"Pavement\"",
   "inventory_count": 107,
@@ -20,10 +20,10 @@
     "https://archive.org/advancedsearch.php?q=collection%3Ataperssection+AND+mediatype%3Aaudio+AND+creator%3A%22Pavement%22&fl%5B%5D=identifier&fl%5B%5D=creator&fl%5B%5D=date&fl%5B%5D=collection&fl%5B%5D=mediatype&rows=100&page=2&sort%5B%5D=identifier+asc&output=json",
     "https://archive.org/advancedsearch.php?q=collection%3Ataperssection+AND+mediatype%3Aaudio+AND+creator%3A%22Pavement%22&fl%5B%5D=identifier&fl%5B%5D=creator&fl%5B%5D=date&fl%5B%5D=collection&fl%5B%5D=mediatype&rows=100&page=3&sort%5B%5D=identifier+asc&output=json"
   ],
-  "rules_version": 4,
+  "rules_version": 5,
   "first_full_workflow": {
     "workflow_id": "ingest/artist/5fea3fa5-64fa-9f69-08e7-27e50730c8a2",
-    "first_run_id": "01a1481a-e1e2-7505-b959-911d04e98dc6",
+    "first_run_id": "01a14881-01b9-7772-8192-c986811cea6b",
     "continued_as_new": true
   },
   "first_full_result": {
@@ -38,12 +38,12 @@
       "Failed": 0,
       "Failures": null,
       "Limited": false,
-      "NeedsReview": 2,
+      "NeedsReview": 0,
       "Observed": 107,
       "Paused": 0,
-      "Published": 104,
+      "Published": 107,
       "Unavailable": 0,
-      "Unchanged": 1
+      "Unchanged": 0
     }
   },
   "repeat_result": {
@@ -58,39 +58,29 @@
       "Failed": 0,
       "Failures": null,
       "Limited": false,
-      "NeedsReview": 2,
+      "NeedsReview": 0,
       "Observed": 107,
       "Paused": 0,
       "Published": 0,
       "Unavailable": 0,
-      "Unchanged": 105
+      "Unchanged": 107
     }
   },
   "api_verification": {
     "artist": "Pavement",
     "artist_uuid": "5fea3fa5-64fa-9f69-08e7-27e50730c8a2",
     "inventory_count": 107,
-    "shows": 98,
-    "sources": 105,
-    "tracks": 1954,
+    "shows": 100,
+    "sources": 107,
+    "tracks": 1993,
     "years": 13,
-    "held": [
-      {
-        "item_identifier": "pavement1992-00-00",
-        "reason": "ambiguous_date"
-      },
-      {
-        "item_identifier": "pavement1994-06-06.mtx.flac16",
-        "reason": "conflicting_date"
-      }
-    ],
+    "held": [],
     "date_min": "1989-12-14",
     "date_max": "2026-07-25",
-    "http_gets": 115,
+    "http_gets": 117,
     "all_published_revisions_rebuilt": true
   },
   "repeat_identities_unchanged": true,
-  "held_items_never_published": true,
   "media_samples": [
     {
       "item_identifier": "pavement1989-12-14aud",
@@ -118,6 +108,33 @@
       "content_range": "bytes 0-1023/5908588",
       "bytes_read": 1024,
       "url": "https://archive.org/download/pavement2026-07-25/01%20-%20In%20the%20Mouth%20a%20Desert.mp3"
+    },
+    {
+      "item_identifier": "pavement1992-00-00",
+      "date": "1992-XX-XX",
+      "url": "https://archive.org/download/pavement1992-00-00/pavement1992-00-00.live.in.studio.a.flac16/pavement1992-00-00t01.mp3",
+      "status": 206,
+      "content_type": "audio/mpeg",
+      "content_range": "bytes 0-1023/4502725",
+      "bytes_read": 1024
+    },
+    {
+      "item_identifier": "pavement1992-00-00",
+      "date": "1992-XX-XX",
+      "url": "https://archive.org/download/pavement1992-00-00/pavement1992-00-00.live.in.studio.a.flac16/pavement1992-00-00t02.mp3",
+      "status": 206,
+      "content_type": "audio/mpeg",
+      "content_range": "bytes 0-1023/3573734",
+      "bytes_read": 1024
+    },
+    {
+      "item_identifier": "pavement1994-06-06.mtx.flac16",
+      "date": "1994-03-06",
+      "url": "https://archive.org/download/pavement1994-06-06.mtx.flac16/01-%20%28...strap%20you%20on...Hello%21%29.mp3",
+      "status": 206,
+      "content_type": "audio/mpeg",
+      "content_range": "bytes 0-1023/1516109",
+      "bytes_read": 1024
     }
   ],
   "items": [
@@ -128,7 +145,9 @@
       "show_uuid": "c0f4c207-e150-646c-a275-b565023e3946",
       "display_date": "1992-05-27",
       "track_count": 16,
-      "track_identity_sha256": "9e95e885d7a60c23a1ceca1dc05a9decf79c626871a4f923d78f2d71cbaf422e"
+      "track_identity_sha256": "9e95e885d7a60c23a1ceca1dc05a9decf79c626871a4f923d78f2d71cbaf422e",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "10-stop-breathin",
@@ -137,7 +156,9 @@
       "show_uuid": "58765c74-3b3b-88f5-18c7-4ffe18e12acc",
       "display_date": "1994-03-04",
       "track_count": 21,
-      "track_identity_sha256": "c945a4541258ce8dad4169a6e7e432be9b6cdd1f439a7f62907cadd79a54c098"
+      "track_identity_sha256": "c945a4541258ce8dad4169a6e7e432be9b6cdd1f439a7f62907cadd79a54c098",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_1997-01-23",
@@ -146,7 +167,9 @@
       "show_uuid": "5dbab440-d074-5586-d25b-681d26287569",
       "display_date": "1997-01-23",
       "track_count": 20,
-      "track_identity_sha256": "89bee5a033287c525bab04711e23ae1c35b23c62c5a3fbc6be20e6ea43bbfd2a"
+      "track_identity_sha256": "89bee5a033287c525bab04711e23ae1c35b23c62c5a3fbc6be20e6ea43bbfd2a",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_1997-10-09",
@@ -155,7 +178,9 @@
       "show_uuid": "f85d136d-b3e3-f937-9ec5-a825a0db6d45",
       "display_date": "1997-10-09",
       "track_count": 20,
-      "track_identity_sha256": "abb2a16d4085162c72a9ec7422c3214f07d1211414d4a7490119634423852fbd"
+      "track_identity_sha256": "abb2a16d4085162c72a9ec7422c3214f07d1211414d4a7490119634423852fbd",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2022-10-22",
@@ -164,7 +189,9 @@
       "show_uuid": "23b4c624-09cd-13f7-df8e-87cddb6235c9",
       "display_date": "2022-10-22",
       "track_count": 26,
-      "track_identity_sha256": "d2590397f82f341fd5ecbaefbe0f331a5f2078b2e1be790d0a550a6eafa782fe"
+      "track_identity_sha256": "d2590397f82f341fd5ecbaefbe0f331a5f2078b2e1be790d0a550a6eafa782fe",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2022-10-23",
@@ -173,7 +200,9 @@
       "show_uuid": "7185b1f1-7316-6f92-ebf6-221f81043cdd",
       "display_date": "2022-10-23",
       "track_count": 27,
-      "track_identity_sha256": "f665187490d1d2522d43e2e5ecbfb52d5cde85ba854da85ca1adb0fa7a0b65d5"
+      "track_identity_sha256": "f665187490d1d2522d43e2e5ecbfb52d5cde85ba854da85ca1adb0fa7a0b65d5",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2022-10-24",
@@ -182,7 +211,9 @@
       "show_uuid": "9b338bf5-58a4-794a-ad2c-19efb71dea28",
       "display_date": "2022-10-24",
       "track_count": 26,
-      "track_identity_sha256": "0d9df0adf6787d1e9e8e0b5a3707ca530ca267508439b66129d3434d1fb3697f"
+      "track_identity_sha256": "0d9df0adf6787d1e9e8e0b5a3707ca530ca267508439b66129d3434d1fb3697f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2022-10-25",
@@ -191,7 +222,9 @@
       "show_uuid": "d714c910-3edb-8c75-428b-787b5d1c43e9",
       "display_date": "2022-10-25",
       "track_count": 25,
-      "track_identity_sha256": "62c51e8381066f1b6f31e0861499eb6e395ee4d2ce6b6531e67ae1fc6ff63679"
+      "track_identity_sha256": "62c51e8381066f1b6f31e0861499eb6e395ee4d2ce6b6531e67ae1fc6ff63679",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2023-07-22",
@@ -200,7 +233,9 @@
       "show_uuid": "e114523c-0b0a-3183-d2a6-4574c74e6866",
       "display_date": "2023-07-22",
       "track_count": 26,
-      "track_identity_sha256": "e5311b949bd87a33673433acf7768901e0b0ce6d644d80148d9085d52e5fb450"
+      "track_identity_sha256": "e5311b949bd87a33673433acf7768901e0b0ce6d644d80148d9085d52e5fb450",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2023-09-11",
@@ -209,7 +244,9 @@
       "show_uuid": "7d287734-81f2-296a-1fbd-ac006166478e",
       "display_date": "2023-09-11",
       "track_count": 28,
-      "track_identity_sha256": "b6121908c99726d15bfbbf9615941381fb4ce1ca88c34ed34a2d7a6cca27f7d4"
+      "track_identity_sha256": "b6121908c99726d15bfbbf9615941381fb4ce1ca88c34ed34a2d7a6cca27f7d4",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2023-09-12",
@@ -218,7 +255,9 @@
       "show_uuid": "4e997627-b096-e296-4c27-96a283374f5a",
       "display_date": "2023-09-12",
       "track_count": 26,
-      "track_identity_sha256": "4db95c5e6af0cee97fa4fa314540c0aed2dfa320684ec473cfbacda9670e1782"
+      "track_identity_sha256": "4db95c5e6af0cee97fa4fa314540c0aed2dfa320684ec473cfbacda9670e1782",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2023-09-13",
@@ -227,7 +266,9 @@
       "show_uuid": "02f7c2d9-1e15-d84b-543d-4259477d28b9",
       "display_date": "2023-09-13",
       "track_count": 29,
-      "track_identity_sha256": "47cfdeb97ca9eb1178873fcb20af7afb0f77e4f0f2f5eccce2c103e54660e155"
+      "track_identity_sha256": "47cfdeb97ca9eb1178873fcb20af7afb0f77e4f0f2f5eccce2c103e54660e155",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "Pavement_2023-09-14",
@@ -236,7 +277,9 @@
       "show_uuid": "6c328a28-9f6e-420e-6e67-f1de73f65fca",
       "display_date": "2023-09-14",
       "track_count": 27,
-      "track_identity_sha256": "fd9d93a90d237163d2f12f7659e6b566f89d862d21ca6007da3c5b27ae97458f"
+      "track_identity_sha256": "fd9d93a90d237163d2f12f7659e6b566f89d862d21ca6007da3c5b27ae97458f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-1992-05-29-long-beach-09",
@@ -245,7 +288,9 @@
       "show_uuid": "041412cf-4540-6328-a2d7-357a1453ba29",
       "display_date": "1992-05-29",
       "track_count": 15,
-      "track_identity_sha256": "0772a6bc0cafd2630561c3a7d021debbcaf75fcba03b3d9c3ea7c9a84160868c"
+      "track_identity_sha256": "0772a6bc0cafd2630561c3a7d021debbcaf75fcba03b3d9c3ea7c9a84160868c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-1992-11-21-koln-e-werk-t-05",
@@ -254,7 +299,9 @@
       "show_uuid": "242d967c-2959-da7c-a97a-19930d03243e",
       "display_date": "1992-11-21",
       "track_count": 10,
-      "track_identity_sha256": "54a02e100a63d9f2192ccfb0b708caea06d54bcadecd5ef497ead84ad02c6bdf"
+      "track_identity_sha256": "54a02e100a63d9f2192ccfb0b708caea06d54bcadecd5ef497ead84ad02c6bdf",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-1994-04-15.dsm6s.flac16",
@@ -263,7 +310,9 @@
       "show_uuid": "da8498df-6143-0b6a-c7e8-f8d71a911fb8",
       "display_date": "1994-04-15",
       "track_count": 21,
-      "track_identity_sha256": "251a395cadc4af8c11b5c45879ada9bccd5254e2f45c8e671217367f7f08fb03"
+      "track_identity_sha256": "251a395cadc4af8c11b5c45879ada9bccd5254e2f45c8e671217367f7f08fb03",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-1995-03-15.fm.flac16",
@@ -272,7 +321,9 @@
       "show_uuid": "272fd72b-c816-dde5-8c4e-b4b02f366e85",
       "display_date": "1995-03-15",
       "track_count": 2,
-      "track_identity_sha256": "8c0ec918e2aa5818ecedb60425b62ef5e894bcbcc14a83d4fbf0d47dfb31cba4"
+      "track_identity_sha256": "8c0ec918e2aa5818ecedb60425b62ef5e894bcbcc14a83d4fbf0d47dfb31cba4",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-2022-09-09.ncarchive",
@@ -281,7 +332,9 @@
       "show_uuid": "fae5e35b-3e36-d399-00cb-4880d06b1da0",
       "display_date": "2022-09-09",
       "track_count": 30,
-      "track_identity_sha256": "6e93113d42e78d353a5d0c0469e9598dcb1f5f27f4076d2d27f4b0ddf50e0b79"
+      "track_identity_sha256": "6e93113d42e78d353a5d0c0469e9598dcb1f5f27f4076d2d27f4b0ddf50e0b79",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement-2022-09-10.ncarchive",
@@ -290,7 +343,9 @@
       "show_uuid": "eade27db-365c-7d84-feff-33c3b4c1c9e7",
       "display_date": "2022-09-10",
       "track_count": 30,
-      "track_identity_sha256": "93889e5b77dd27e448e81d6f12c0202d40a2ca54a86ae2e9932ef60df213dea1"
+      "track_identity_sha256": "93889e5b77dd27e448e81d6f12c0202d40a2ca54a86ae2e9932ef60df213dea1",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1989-12-14aud",
@@ -299,7 +354,9 @@
       "show_uuid": "ec86acec-0693-13be-7f3e-01caf45daf6a",
       "display_date": "1989-12-14",
       "track_count": 13,
-      "track_identity_sha256": "977ee594d6d97a2d5d9316487fdc0c08f468dbf229469259af11654e2d621df4"
+      "track_identity_sha256": "977ee594d6d97a2d5d9316487fdc0c08f468dbf229469259af11654e2d621df4",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1990-08-20t12",
@@ -308,7 +365,9 @@
       "show_uuid": "e076c374-4515-9169-61b3-e79fb80cd3be",
       "display_date": "1990-08-20",
       "track_count": 13,
-      "track_identity_sha256": "268f650f89163f85382389bcffbebff4d32e2cfca4420101093d724ff4059c6d"
+      "track_identity_sha256": "268f650f89163f85382389bcffbebff4d32e2cfca4420101093d724ff4059c6d",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1991-08-21",
@@ -317,7 +376,9 @@
       "show_uuid": "c8b8cd87-9340-1ac9-600d-49944375cd9f",
       "display_date": "1991-08-21",
       "track_count": 16,
-      "track_identity_sha256": "990ab480fa69eb9ce1f1f6bfdc5fe7ba1bc08533fc37af60a89c4ff54395592c"
+      "track_identity_sha256": "990ab480fa69eb9ce1f1f6bfdc5fe7ba1bc08533fc37af60a89c4ff54395592c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1991-08-31",
@@ -326,12 +387,23 @@
       "show_uuid": "fd405190-cc2e-df85-dda4-0376b2be2213",
       "display_date": "1991-08-31",
       "track_count": 14,
-      "track_identity_sha256": "c9c2544b2f6a687d5f36243a58139371d6b2d508e0b3a432bd5ed82aebfd6589"
+      "track_identity_sha256": "c9c2544b2f6a687d5f36243a58139371d6b2d508e0b3a432bd5ed82aebfd6589",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-00-00",
-      "status": "needs_review",
-      "reason": "ambiguous_date"
+      "status": "published",
+      "source_uuid": "b135b3cb-9f5a-6699-7e2d-9660b00a2b63",
+      "show_uuid": "d3005107-348b-18b3-7192-f744dc4aa6e9",
+      "display_date": "1992-XX-XX",
+      "track_count": 16,
+      "track_identity_sha256": "fbe7e030e9cea1ef246b4f63167041a948b903b7fd7526ee5b4ea26a7c17aae9",
+      "date_precision": "year",
+      "date_note_codes": [
+        "metadata_date_disagreement",
+        "partial_date"
+      ]
     },
     {
       "identifier": "pavement1992-05-30",
@@ -340,7 +412,9 @@
       "show_uuid": "34ee0503-9818-4ae5-38a8-ed5c985d0a0a",
       "display_date": "1992-05-30",
       "track_count": 17,
-      "track_identity_sha256": "d7b7bc0a5329f1cd1ea0454932cd8d4b5f40ab6a334b54b2c0bf525f5bd602b2"
+      "track_identity_sha256": "d7b7bc0a5329f1cd1ea0454932cd8d4b5f40ab6a334b54b2c0bf525f5bd602b2",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-07.aud.flac16",
@@ -349,7 +423,9 @@
       "show_uuid": "119993c4-0abf-106a-6697-45568de981ac",
       "display_date": "1992-06-07",
       "track_count": 16,
-      "track_identity_sha256": "b08029758be9f9c63b750a6491460ded9be264a137d0a1d7ccba744347ea1c51"
+      "track_identity_sha256": "b08029758be9f9c63b750a6491460ded9be264a137d0a1d7ccba744347ea1c51",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-10.sbd.flac16",
@@ -358,7 +434,9 @@
       "show_uuid": "24d47461-fd36-91b3-a85c-e011153f653c",
       "display_date": "1992-06-10",
       "track_count": 19,
-      "track_identity_sha256": "6315ba9c93d717a97269af305e83a9955895ea12f819e06808aa0130d54ef7fa"
+      "track_identity_sha256": "6315ba9c93d717a97269af305e83a9955895ea12f819e06808aa0130d54ef7fa",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-11.sbd.flac16",
@@ -367,7 +445,9 @@
       "show_uuid": "267b655b-2d3f-570c-41a9-57448664d7e3",
       "display_date": "1992-06-11",
       "track_count": 30,
-      "track_identity_sha256": "5b621bea6c1ec4076d71d5af0f7124246fb74a4967ac2219535d5751a6109f84"
+      "track_identity_sha256": "5b621bea6c1ec4076d71d5af0f7124246fb74a4967ac2219535d5751a6109f84",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-13.aud.flac16",
@@ -376,7 +456,9 @@
       "show_uuid": "99fc4178-1231-6166-3b81-dc6694278054",
       "display_date": "1992-06-13",
       "track_count": 15,
-      "track_identity_sha256": "33ad2b8614af6d43f3fdc01e19b8e673725609e684c47b1b23a8e0a41c535241"
+      "track_identity_sha256": "33ad2b8614af6d43f3fdc01e19b8e673725609e684c47b1b23a8e0a41c535241",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-18.aud.flac16",
@@ -385,7 +467,9 @@
       "show_uuid": "6a81fa9c-26f7-b8c2-e742-49cdec3ff7f8",
       "display_date": "1992-06-18",
       "track_count": 19,
-      "track_identity_sha256": "dde00c42a4ede000c888c0df5aac90d05fed4aa9d8314e8e7a230d9f9906a706"
+      "track_identity_sha256": "dde00c42a4ede000c888c0df5aac90d05fed4aa9d8314e8e7a230d9f9906a706",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-20.fm.flac16",
@@ -394,7 +478,9 @@
       "show_uuid": "1ff865da-ac01-3b5e-8377-0dc3da12bf4e",
       "display_date": "1992-06-20",
       "track_count": 11,
-      "track_identity_sha256": "94f78b1cc95bb69b6846476f503dca9c4ef550d5c40a4cf9f3518a37486dc673"
+      "track_identity_sha256": "94f78b1cc95bb69b6846476f503dca9c4ef550d5c40a4cf9f3518a37486dc673",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-25.aud.flac16",
@@ -403,7 +489,9 @@
       "show_uuid": "9f4c7780-2b87-8950-f38d-a9c0bb32a341",
       "display_date": "1992-06-25",
       "track_count": 18,
-      "track_identity_sha256": "017b1c53fad5e8af608847021b1d8c1c92fde61f68b68ff362bae15725237cb3"
+      "track_identity_sha256": "017b1c53fad5e8af608847021b1d8c1c92fde61f68b68ff362bae15725237cb3",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-06-26.aud.flac16",
@@ -412,7 +500,9 @@
       "show_uuid": "8f4ef724-d7af-473b-dfca-a812b24215c8",
       "display_date": "1992-06-26",
       "track_count": 13,
-      "track_identity_sha256": "8b80b76e94978a439e6b5840a818cba0c169863e8185e3fe74d4256a7c78ad19"
+      "track_identity_sha256": "8b80b76e94978a439e6b5840a818cba0c169863e8185e3fe74d4256a7c78ad19",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-07.aud.flac16",
@@ -421,7 +511,9 @@
       "show_uuid": "0b3a5aa5-4715-fcbd-20db-fcc875aaaaf3",
       "display_date": "1992-07-07",
       "track_count": 19,
-      "track_identity_sha256": "e309f81d0185e2c3d502bec830ab12cbad9370b6affb87efc5d27ad5862060f0"
+      "track_identity_sha256": "e309f81d0185e2c3d502bec830ab12cbad9370b6affb87efc5d27ad5862060f0",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-08.sbd.flac16",
@@ -430,7 +522,9 @@
       "show_uuid": "f407ed46-9752-9b26-a981-124d5148593c",
       "display_date": "1992-07-08",
       "track_count": 19,
-      "track_identity_sha256": "c6c73dddc9513e52c674e517a9ad47fdd71cdc7d64f0e74651a73068c3508cf8"
+      "track_identity_sha256": "c6c73dddc9513e52c674e517a9ad47fdd71cdc7d64f0e74651a73068c3508cf8",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-12.aud.flac16",
@@ -439,7 +533,9 @@
       "show_uuid": "5108b466-1007-8daa-08d8-7e50188b759a",
       "display_date": "1992-07-12",
       "track_count": 14,
-      "track_identity_sha256": "4deb258d1755f9dd45a8c2cf46946910b701315c7aa281a6056279602d2c9c22"
+      "track_identity_sha256": "4deb258d1755f9dd45a8c2cf46946910b701315c7aa281a6056279602d2c9c22",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-19.aud.flac16",
@@ -448,7 +544,9 @@
       "show_uuid": "99544778-615d-ba93-197e-c51273ea4485",
       "display_date": "1992-07-19",
       "track_count": 21,
-      "track_identity_sha256": "e839e1d88e2a97856f41d72d0e72bbf5804ddb23089a9345603dcb9d919e8fef"
+      "track_identity_sha256": "e839e1d88e2a97856f41d72d0e72bbf5804ddb23089a9345603dcb9d919e8fef",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-21.aud.flac16",
@@ -457,7 +555,9 @@
       "show_uuid": "02c8e9fb-0b18-d048-01db-0bedf0639a2d",
       "display_date": "1992-07-21",
       "track_count": 4,
-      "track_identity_sha256": "1e29cbb3b62ddbc6e5ff9c2d101785a763fdd38957eb05ae2cb047f740b1413a"
+      "track_identity_sha256": "1e29cbb3b62ddbc6e5ff9c2d101785a763fdd38957eb05ae2cb047f740b1413a",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-28.m260.flac16",
@@ -466,7 +566,9 @@
       "show_uuid": "0aafff22-f939-25e0-c3e7-4d3b255ebc66",
       "display_date": "1992-07-28",
       "track_count": 18,
-      "track_identity_sha256": "773ad12a8f82c37b17065b15d048d466a919e14827a82429b686adc83372fa7b"
+      "track_identity_sha256": "773ad12a8f82c37b17065b15d048d466a919e14827a82429b686adc83372fa7b",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-29.aud.flac16",
@@ -475,7 +577,9 @@
       "show_uuid": "e6690f51-0425-ea23-b782-f9d20051c11c",
       "display_date": "1992-07-29",
       "track_count": 18,
-      "track_identity_sha256": "5ef01511df32d55df1d784ef2ac24c5da35b4e20d9f88a67f9df741a3ec122e7"
+      "track_identity_sha256": "5ef01511df32d55df1d784ef2ac24c5da35b4e20d9f88a67f9df741a3ec122e7",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-30.aud.flac16",
@@ -484,7 +588,9 @@
       "show_uuid": "619bd975-491f-3ec6-42c1-315e67e65bc7",
       "display_date": "1992-07-30",
       "track_count": 17,
-      "track_identity_sha256": "9809ef5ca63d7abfad571052978985e1251e71b2ae1a146621d9c459aecfb66f"
+      "track_identity_sha256": "9809ef5ca63d7abfad571052978985e1251e71b2ae1a146621d9c459aecfb66f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-07-31.aud.flac16",
@@ -493,7 +599,9 @@
       "show_uuid": "225261de-0b97-13ba-0fd1-5399ae658aca",
       "display_date": "1992-07-31",
       "track_count": 17,
-      "track_identity_sha256": "312dcc9382531d940aa9805c35b9091cb0180b4a29621f967de071cc41389ada"
+      "track_identity_sha256": "312dcc9382531d940aa9805c35b9091cb0180b4a29621f967de071cc41389ada",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-08-25.tcs300.flac16",
@@ -502,7 +610,9 @@
       "show_uuid": "88f15595-c8ab-8de4-9e8a-ad514f8eccf1",
       "display_date": "1992-08-25",
       "track_count": 18,
-      "track_identity_sha256": "f7cd89c6a581b81c08157d1038d2e20201bf187faa9b636b766494f9dbacb27f"
+      "track_identity_sha256": "f7cd89c6a581b81c08157d1038d2e20201bf187faa9b636b766494f9dbacb27f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-08-26.aud.flac16",
@@ -511,7 +621,9 @@
       "show_uuid": "5139bd97-0f28-7391-b390-a5716f8d7b7e",
       "display_date": "1992-08-26",
       "track_count": 19,
-      "track_identity_sha256": "b73b1906efd7d27783d955d18e352fc2be78854340914a16961b1be724e49c5c"
+      "track_identity_sha256": "b73b1906efd7d27783d955d18e352fc2be78854340914a16961b1be724e49c5c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-08-30.flac16",
@@ -520,7 +632,9 @@
       "show_uuid": "26c2ec48-50bc-86c0-2b65-3c356d7a2cc4",
       "display_date": "1992-08-30",
       "track_count": 14,
-      "track_identity_sha256": "fe0face6b63143506bac87e692e9a96de008bbaf153191df7b24b5d06b71a55c"
+      "track_identity_sha256": "fe0face6b63143506bac87e692e9a96de008bbaf153191df7b24b5d06b71a55c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-09-11.sbd.flac16",
@@ -529,7 +643,9 @@
       "show_uuid": "e441d769-a2a6-b963-82de-db479e8a0d75",
       "display_date": "1992-09-11",
       "track_count": 17,
-      "track_identity_sha256": "d189c4396b70330618204beb90a1e5d5a302d608f583f2ae40e8f0e2823c5645"
+      "track_identity_sha256": "d189c4396b70330618204beb90a1e5d5a302d608f583f2ae40e8f0e2823c5645",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-09-12.aud.flac16_",
@@ -538,7 +654,9 @@
       "show_uuid": "14c3985d-0ef9-cfc3-f3a4-66a6b87d1440",
       "display_date": "1992-09-12",
       "track_count": 21,
-      "track_identity_sha256": "c6878415165995bbeac19b374ce05a2813acd13fcd32e3233064509b9775d6ce"
+      "track_identity_sha256": "c6878415165995bbeac19b374ce05a2813acd13fcd32e3233064509b9775d6ce",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-09-16.flac16",
@@ -547,7 +665,9 @@
       "show_uuid": "f4945ff8-f82f-5547-e00e-9116eef613e5",
       "display_date": "1992-09-16",
       "track_count": 7,
-      "track_identity_sha256": "6ceeb3a441004c39f6cf187794836407b1f37201c1f01e9252b00937f1833e83"
+      "track_identity_sha256": "6ceeb3a441004c39f6cf187794836407b1f37201c1f01e9252b00937f1833e83",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-09-19.aud.flac16",
@@ -556,7 +676,9 @@
       "show_uuid": "3302f070-00ad-c6eb-182b-1d57111ba71c",
       "display_date": "1992-09-19",
       "track_count": 16,
-      "track_identity_sha256": "1fcf511b6041db798d1212222fcc737dcd2583b78becee73d64387a827331add"
+      "track_identity_sha256": "1fcf511b6041db798d1212222fcc737dcd2583b78becee73d64387a827331add",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-02.aud.flac16",
@@ -565,7 +687,9 @@
       "show_uuid": "a26e6fff-cb41-d46d-4c26-11357271ae3d",
       "display_date": "1992-11-02",
       "track_count": 12,
-      "track_identity_sha256": "023c0d4507d962e0c505382e84bd2a9bc20b254ca6cadeb46dd24574381de213"
+      "track_identity_sha256": "023c0d4507d962e0c505382e84bd2a9bc20b254ca6cadeb46dd24574381de213",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-07.aud.flac16",
@@ -574,7 +698,9 @@
       "show_uuid": "00601f46-9081-494a-f078-17901789107f",
       "display_date": "1992-11-07",
       "track_count": 15,
-      "track_identity_sha256": "f3de739387543b6d521b2d13d02d0a3a7c99541136ef7f2b0752b46dc77484f2"
+      "track_identity_sha256": "f3de739387543b6d521b2d13d02d0a3a7c99541136ef7f2b0752b46dc77484f2",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-08.aud.flac16",
@@ -583,7 +709,9 @@
       "show_uuid": "730f8d63-28b9-7b18-b807-19f838be2353",
       "display_date": "1992-11-08",
       "track_count": 16,
-      "track_identity_sha256": "53f8121b093e133d08bf0831280a3e5fecce91de76bb0ea8a576fd8d09231c6d"
+      "track_identity_sha256": "53f8121b093e133d08bf0831280a3e5fecce91de76bb0ea8a576fd8d09231c6d",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-17ecm155.flac16",
@@ -592,7 +720,9 @@
       "show_uuid": "9679f5e6-cd9d-92bd-7ca8-8aa9880a0a8a",
       "display_date": "1992-11-17",
       "track_count": 15,
-      "track_identity_sha256": "3b3191efd111e2cffecd86c2b64f755be9b69d852aa9db7c9729bef8d43bb0d1"
+      "track_identity_sha256": "3b3191efd111e2cffecd86c2b64f755be9b69d852aa9db7c9729bef8d43bb0d1",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-24.aud.flac16",
@@ -601,7 +731,9 @@
       "show_uuid": "71d3d9bf-cc3d-7dea-609f-fa2aa5ecd4eb",
       "display_date": "1992-11-24",
       "track_count": 15,
-      "track_identity_sha256": "2c7f5a23a85459bf27ca97660829788c6b6cbfc08f561bc2c26239920ccacb36"
+      "track_identity_sha256": "2c7f5a23a85459bf27ca97660829788c6b6cbfc08f561bc2c26239920ccacb36",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-11-26.fm.flac16",
@@ -610,7 +742,9 @@
       "show_uuid": "04257705-714c-5b53-dea5-1e4a9a453d19",
       "display_date": "1992-11-26",
       "track_count": 16,
-      "track_identity_sha256": "e178cbdae2a48f2e759b2be91c2ce3b5c15904a6824139039a057aa62019add3"
+      "track_identity_sha256": "e178cbdae2a48f2e759b2be91c2ce3b5c15904a6824139039a057aa62019add3",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-02.aud.flac16",
@@ -619,7 +753,9 @@
       "show_uuid": "aa8b18c1-a1eb-967d-ada9-c8e815226ac6",
       "display_date": "1992-12-02",
       "track_count": 17,
-      "track_identity_sha256": "38f6f643bf60d177d77914957d2a3cc7d731de31dffb098f388adcccbba7927e"
+      "track_identity_sha256": "38f6f643bf60d177d77914957d2a3cc7d731de31dffb098f388adcccbba7927e",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-04.fm.flac16",
@@ -628,7 +764,9 @@
       "show_uuid": "3b535fd0-d6c5-8b0d-1689-b0ae6fc259cf",
       "display_date": "1992-12-04",
       "track_count": 7,
-      "track_identity_sha256": "320627b759cff78409cd3debae691c6ac402d90cd6d4ca4d2b255ac64c6d0260"
+      "track_identity_sha256": "320627b759cff78409cd3debae691c6ac402d90cd6d4ca4d2b255ac64c6d0260",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-06.aud.flac16",
@@ -637,7 +775,9 @@
       "show_uuid": "1944bc7c-6e09-d5d3-c585-7ff409999a9b",
       "display_date": "1992-12-06",
       "track_count": 21,
-      "track_identity_sha256": "abd6d3d1896079dff83168109851fc94c51f91c06ee8a2bceee8f2cabfaf5c3b"
+      "track_identity_sha256": "abd6d3d1896079dff83168109851fc94c51f91c06ee8a2bceee8f2cabfaf5c3b",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-08.aud.flac16",
@@ -646,7 +786,9 @@
       "show_uuid": "583aaca1-24e4-3b35-e7dc-c5248479dc18",
       "display_date": "1992-12-08",
       "track_count": 16,
-      "track_identity_sha256": "5f13f873124cf74ff44d9b729998f17f6e48984d7e9105b3c8dfd1fac567cace"
+      "track_identity_sha256": "5f13f873124cf74ff44d9b729998f17f6e48984d7e9105b3c8dfd1fac567cace",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-09.aud.flac16",
@@ -655,7 +797,9 @@
       "show_uuid": "9ef2214f-d212-e390-15fa-025efcdb11a2",
       "display_date": "1992-12-09",
       "track_count": 13,
-      "track_identity_sha256": "39ce30bc9d096ce8f1c5ce386eede1341a8f1d8f35cc071f800a6d937d46d2b4"
+      "track_identity_sha256": "39ce30bc9d096ce8f1c5ce386eede1341a8f1d8f35cc071f800a6d937d46d2b4",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1992-12-13.aud.flac16",
@@ -664,7 +808,9 @@
       "show_uuid": "4c1ab5d8-fba1-e82f-43cb-0715f6596002",
       "display_date": "1992-12-13",
       "track_count": 12,
-      "track_identity_sha256": "4eee3129aabf39a28287e4498889b7900cb4bc681e0676e8616fdb1797b2fe88"
+      "track_identity_sha256": "4eee3129aabf39a28287e4498889b7900cb4bc681e0676e8616fdb1797b2fe88",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1993-05-10.aud.flac16",
@@ -673,7 +819,9 @@
       "show_uuid": "7bf2533c-b2e9-38e2-a3de-ee24d37e2657",
       "display_date": "1993-05-10",
       "track_count": 17,
-      "track_identity_sha256": "723432e8d6d47a5c746c78a973f7057f4bcd62b2078dc1637d523f6cc8b464fb"
+      "track_identity_sha256": "723432e8d6d47a5c746c78a973f7057f4bcd62b2078dc1637d523f6cc8b464fb",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1993-05-22.aud.flac16",
@@ -682,7 +830,9 @@
       "show_uuid": "5708a170-ae17-8c67-2189-54b94bb37d7c",
       "display_date": "1993-05-22",
       "track_count": 20,
-      "track_identity_sha256": "984ac017b1b3b1e9d7871acc90febebc3aa2367a3cc7164605a69f6c1625ea0c"
+      "track_identity_sha256": "984ac017b1b3b1e9d7871acc90febebc3aa2367a3cc7164605a69f6c1625ea0c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1993-06-05.aud.flac16",
@@ -691,7 +841,9 @@
       "show_uuid": "5954eacc-cfb8-8e7e-eac7-093e79c6c1b5",
       "display_date": "1993-06-05",
       "track_count": 24,
-      "track_identity_sha256": "13f0bac4b5b5468d6140670bc9cd773bbf01ee677938f926bf47910a9cc24a1c"
+      "track_identity_sha256": "13f0bac4b5b5468d6140670bc9cd773bbf01ee677938f926bf47910a9cc24a1c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1993-06-20.sbd.flac16",
@@ -700,7 +852,9 @@
       "show_uuid": "f6cbf3dd-ee60-4b45-0cb1-e4b6accd5c3e",
       "display_date": "1993-06-20",
       "track_count": 21,
-      "track_identity_sha256": "90d84d90561a0b0e01007945f3e6799eaa86042a60f73c9da09f637b56213615"
+      "track_identity_sha256": "90d84d90561a0b0e01007945f3e6799eaa86042a60f73c9da09f637b56213615",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-03-02.fm.flac16",
@@ -709,7 +863,9 @@
       "show_uuid": "31600d78-5e3f-31d9-49ea-65b095fe7f16",
       "display_date": "1994-03-02",
       "track_count": 10,
-      "track_identity_sha256": "0301db730e5086c0abd2bc9653ce8761a235ff95433f9e17fbf791164c654237"
+      "track_identity_sha256": "0301db730e5086c0abd2bc9653ce8761a235ff95433f9e17fbf791164c654237",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-03-07.fm.flac16",
@@ -718,7 +874,9 @@
       "show_uuid": "06b5aca8-ee77-39cd-b229-989cf2470ce9",
       "display_date": "1994-03-07",
       "track_count": 19,
-      "track_identity_sha256": "8a26caddc64ee815774cae88bfdd0013fd16aa7ad4e5a6553eae6aa77874f0a0"
+      "track_identity_sha256": "8a26caddc64ee815774cae88bfdd0013fd16aa7ad4e5a6553eae6aa77874f0a0",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-03-15.aud.flac16",
@@ -727,7 +885,9 @@
       "show_uuid": "e663174c-6d34-f0b8-1d25-353ddddb4c44",
       "display_date": "1994-03-15",
       "track_count": 22,
-      "track_identity_sha256": "9abfc48e74f3646106c39fafce328aec6416041c31e30dbfbd741869c051404b"
+      "track_identity_sha256": "9abfc48e74f3646106c39fafce328aec6416041c31e30dbfbd741869c051404b",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-03-19.aud.flac16",
@@ -736,7 +896,9 @@
       "show_uuid": "dd5ed6ef-6e89-b769-b7c3-b1484de0daf3",
       "display_date": "1994-03-19",
       "track_count": 21,
-      "track_identity_sha256": "6647c69c7c116b2ba3dbce85fecd793e698e0146ca75cb6ff319b01db10ddad4"
+      "track_identity_sha256": "6647c69c7c116b2ba3dbce85fecd793e698e0146ca75cb6ff319b01db10ddad4",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-04-06.aud.flac16",
@@ -745,7 +907,9 @@
       "show_uuid": "e540f40d-5b08-33ab-222b-fa828b025f23",
       "display_date": "1994-04-06",
       "track_count": 19,
-      "track_identity_sha256": "6d713872ae57180fc276c1d0c34fcf5caf5dc651c5d97ea9b394504b580186fd"
+      "track_identity_sha256": "6d713872ae57180fc276c1d0c34fcf5caf5dc651c5d97ea9b394504b580186fd",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-04-12.aud.flac16",
@@ -754,7 +918,9 @@
       "show_uuid": "0c333249-e0ae-b08b-5628-77dc2c7a6226",
       "display_date": "1994-04-12",
       "track_count": 19,
-      "track_identity_sha256": "32269cf4627815d1d0e6bfce11423c31437277f447dc66179f048148ac7bd6ea"
+      "track_identity_sha256": "32269cf4627815d1d0e6bfce11423c31437277f447dc66179f048148ac7bd6ea",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-04-17.aud.flac16",
@@ -763,7 +929,9 @@
       "show_uuid": "7bf1441e-d633-2d1b-a70e-d3644e11e72d",
       "display_date": "1994-04-17",
       "track_count": 18,
-      "track_identity_sha256": "b57b05f03a943c23547cac6b8e714dd5e0eb9fb710d12c30ae3627ba7ea8bd59"
+      "track_identity_sha256": "b57b05f03a943c23547cac6b8e714dd5e0eb9fb710d12c30ae3627ba7ea8bd59",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-04-23.early.sbd.flac16",
@@ -772,7 +940,9 @@
       "show_uuid": "4ef2defe-89a2-02d3-a7be-4f9326e33b06",
       "display_date": "1994-04-23",
       "track_count": 17,
-      "track_identity_sha256": "7c1e7faac727aae76f8d4b0913c6baf7b4fe24639d1c00145a1f8c9741062eed"
+      "track_identity_sha256": "7c1e7faac727aae76f8d4b0913c6baf7b4fe24639d1c00145a1f8c9741062eed",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-04-23.late.sbd.flac16",
@@ -781,7 +951,9 @@
       "show_uuid": "4ef2defe-89a2-02d3-a7be-4f9326e33b06",
       "display_date": "1994-04-23",
       "track_count": 17,
-      "track_identity_sha256": "c1b182b8c3c2bce6a3125252447885445b11c184343094f2b688141dfd210a87"
+      "track_identity_sha256": "c1b182b8c3c2bce6a3125252447885445b11c184343094f2b688141dfd210a87",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-05-01.aud.flac16",
@@ -790,7 +962,9 @@
       "show_uuid": "9e699dea-3a1d-915f-613b-b0db7ab87702",
       "display_date": "1994-05-01",
       "track_count": 19,
-      "track_identity_sha256": "70496bd71128f0ac433512fb2854c82198f105766ffccf12a0d5cdf030e0a451"
+      "track_identity_sha256": "70496bd71128f0ac433512fb2854c82198f105766ffccf12a0d5cdf030e0a451",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-05-03.aud.flac16",
@@ -799,7 +973,9 @@
       "show_uuid": "3733f086-c681-891c-97e3-7940f8bf683e",
       "display_date": "1994-05-03",
       "track_count": 20,
-      "track_identity_sha256": "3657f78cb107e72aec6187101da48e094c491f303ebd4e74ece242429b4c034a"
+      "track_identity_sha256": "3657f78cb107e72aec6187101da48e094c491f303ebd4e74ece242429b4c034a",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-05-05.aud.flac16",
@@ -808,7 +984,9 @@
       "show_uuid": "c9211028-c8d2-eda4-cb5a-4b944964f26e",
       "display_date": "1994-05-05",
       "track_count": 18,
-      "track_identity_sha256": "c703f18a66f5fe948f333f011d4cd05d1d256fbddae99083d79b0eda7f8755e8"
+      "track_identity_sha256": "c703f18a66f5fe948f333f011d4cd05d1d256fbddae99083d79b0eda7f8755e8",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-05-10.aud.flac16",
@@ -817,7 +995,9 @@
       "show_uuid": "0be5b2c2-f57e-fd03-e48a-60ab94af2203",
       "display_date": "1994-05-10",
       "track_count": 18,
-      "track_identity_sha256": "9e568875031a4c5eac37f6a071b5f0fdea64abcacf680699ab56ab51927a26e5"
+      "track_identity_sha256": "9e568875031a4c5eac37f6a071b5f0fdea64abcacf680699ab56ab51927a26e5",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-05-14.fm.flac16",
@@ -826,12 +1006,22 @@
       "show_uuid": "93527abe-457d-a92e-b0c3-80c6d26192d1",
       "display_date": "1994-05-14",
       "track_count": 12,
-      "track_identity_sha256": "7861acb973c857f34108bc279b08664813c5a1f377c946feb4bbc9f4f6610827"
+      "track_identity_sha256": "7861acb973c857f34108bc279b08664813c5a1f377c946feb4bbc9f4f6610827",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-06-06.mtx.flac16",
-      "status": "needs_review",
-      "reason": "conflicting_date"
+      "status": "published",
+      "source_uuid": "3b879c4e-d63a-eb0d-a77a-0cd290a16ecf",
+      "show_uuid": "89fb17ff-2605-d744-1a1c-245582586941",
+      "display_date": "1994-03-06",
+      "track_count": 23,
+      "track_identity_sha256": "b4586a55f4fed51046d2151f15738dd45f7a691ff850c52555d30bc021ea14c0",
+      "date_precision": "day",
+      "date_note_codes": [
+        "identifier_date_disagreement"
+      ]
     },
     {
       "identifier": "pavement1994-06-11.aud.flac16",
@@ -840,7 +1030,9 @@
       "show_uuid": "dd37dba6-6d87-19bc-4876-a99d02e9a48a",
       "display_date": "1994-06-11",
       "track_count": 8,
-      "track_identity_sha256": "19b3d0e69d3fd98cfe694ff419b32f24dd5207d975fbc6afde9a8e8794248b16"
+      "track_identity_sha256": "19b3d0e69d3fd98cfe694ff419b32f24dd5207d975fbc6afde9a8e8794248b16",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-08-17.cm30.flac16",
@@ -849,7 +1041,9 @@
       "show_uuid": "0f690cfb-8114-fea1-a248-de4a4ec6b6d8",
       "display_date": "1994-08-17",
       "track_count": 18,
-      "track_identity_sha256": "2aff7b8522f5ab3ad972400ad08c6949caf1b3816cbe358f5829b069b63c0bf0"
+      "track_identity_sha256": "2aff7b8522f5ab3ad972400ad08c6949caf1b3816cbe358f5829b069b63c0bf0",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-08-26.fm.flac16",
@@ -858,7 +1052,9 @@
       "show_uuid": "c150dfd1-2f9f-be9d-eafc-c1c52b1eaf03",
       "display_date": "1994-08-26",
       "track_count": 6,
-      "track_identity_sha256": "748fe024e6ec198dd1c3e92ad95c59b667b625e10a5ee6a5c62c1ab322f49801"
+      "track_identity_sha256": "748fe024e6ec198dd1c3e92ad95c59b667b625e10a5ee6a5c62c1ab322f49801",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-09-16.sbd.flac16",
@@ -867,7 +1063,9 @@
       "show_uuid": "4982ea40-c260-9c74-b0ee-560ea18385e1",
       "display_date": "1994-09-16",
       "track_count": 14,
-      "track_identity_sha256": "65ac8284f9080fb3c373a4cce097f034f02562b7102de276283b79f22cf3451a"
+      "track_identity_sha256": "65ac8284f9080fb3c373a4cce097f034f02562b7102de276283b79f22cf3451a",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-09-24.aud.flac16",
@@ -876,7 +1074,9 @@
       "show_uuid": "46a406e9-1772-6dbf-569d-f53a8e11a386",
       "display_date": "1994-09-24",
       "track_count": 22,
-      "track_identity_sha256": "4894710c09ee01e653f1cc5cce4a52e1ff4da49273681e9f461597c1717696ed"
+      "track_identity_sha256": "4894710c09ee01e653f1cc5cce4a52e1ff4da49273681e9f461597c1717696ed",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-10-01.aud.flac16",
@@ -885,7 +1085,9 @@
       "show_uuid": "fd65c76e-4423-eb48-401e-a676ed585bd4",
       "display_date": "1994-10-01",
       "track_count": 20,
-      "track_identity_sha256": "876760fa4c501cd4093e1624df8fddbe71ada5a32e13adb7406912e558be5f98"
+      "track_identity_sha256": "876760fa4c501cd4093e1624df8fddbe71ada5a32e13adb7406912e558be5f98",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1994-10-16.aud.flac16",
@@ -894,7 +1096,9 @@
       "show_uuid": "0eb3fbc8-69f5-6054-4aee-bdbb183e1a83",
       "display_date": "1994-10-16",
       "track_count": 22,
-      "track_identity_sha256": "7152a999b32c8611698b38dec93bdb272fe110a043fce78fd3efd352894c9d15"
+      "track_identity_sha256": "7152a999b32c8611698b38dec93bdb272fe110a043fce78fd3efd352894c9d15",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-05-23.aud.flac16",
@@ -903,7 +1107,9 @@
       "show_uuid": "dec151c1-2eee-b7bb-cc64-159358e44284",
       "display_date": "1995-05-23",
       "track_count": 20,
-      "track_identity_sha256": "4c80ed8d5b7ed345047f744df48a9dc16b0aa28856fda998dbe2a5b837940750"
+      "track_identity_sha256": "4c80ed8d5b7ed345047f744df48a9dc16b0aa28856fda998dbe2a5b837940750",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-06-12.fm.flac16",
@@ -912,7 +1118,9 @@
       "show_uuid": "27643c23-3dad-57df-88d9-df5efa5af237",
       "display_date": "1995-06-12",
       "track_count": 5,
-      "track_identity_sha256": "bc71bd4c018138561a7d3b32e4fe43b7f0aab273e0562278eef7f1d82643ac49"
+      "track_identity_sha256": "bc71bd4c018138561a7d3b32e4fe43b7f0aab273e0562278eef7f1d82643ac49",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-06-14.aud.flac16",
@@ -921,7 +1129,9 @@
       "show_uuid": "80758eb7-329c-f33d-dae5-445a5486750f",
       "display_date": "1995-06-14",
       "track_count": 15,
-      "track_identity_sha256": "6eab30517570c7165b01df045e286aa0565daa30356670db9cab889001e4bbbc"
+      "track_identity_sha256": "6eab30517570c7165b01df045e286aa0565daa30356670db9cab889001e4bbbc",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-06-22.aud.flac16",
@@ -930,7 +1140,9 @@
       "show_uuid": "8af728bb-c83b-a976-31f5-3ec4bbc7675e",
       "display_date": "1995-06-22",
       "track_count": 17,
-      "track_identity_sha256": "ca03b1756efac7fb6106614641a3d15fc6d63844825f9ed406da5a8c63cd193e"
+      "track_identity_sha256": "ca03b1756efac7fb6106614641a3d15fc6d63844825f9ed406da5a8c63cd193e",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-06-25.sbd.flac16",
@@ -939,7 +1151,9 @@
       "show_uuid": "a9d95726-cfed-7f13-3c80-483c4e5958a7",
       "display_date": "1995-06-25",
       "track_count": 21,
-      "track_identity_sha256": "ad5dd216a4aac016971b105fbd73de4cc85fd19ae3e04615bdd137d7911abc32"
+      "track_identity_sha256": "ad5dd216a4aac016971b105fbd73de4cc85fd19ae3e04615bdd137d7911abc32",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1995-06-27",
@@ -948,7 +1162,9 @@
       "show_uuid": "5041a5fb-b745-d017-6f49-9d520bf8bf6c",
       "display_date": "1995-06-27",
       "track_count": 18,
-      "track_identity_sha256": "4cdb55e2ef4d7cdcd0c1d697b3d0185d5e5449e97daa40d60fa9b8cfea4fca4c"
+      "track_identity_sha256": "4cdb55e2ef4d7cdcd0c1d697b3d0185d5e5449e97daa40d60fa9b8cfea4fca4c",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1999-06-16.csb.flac16",
@@ -957,7 +1173,9 @@
       "show_uuid": "f4f040a2-8617-89f9-499c-6bcea0773ff6",
       "display_date": "1999-06-16",
       "track_count": 19,
-      "track_identity_sha256": "f76e96d56e55a5ed1f771b806102d0793a9d25e827b58bb7ade16b158a76886f"
+      "track_identity_sha256": "f76e96d56e55a5ed1f771b806102d0793a9d25e827b58bb7ade16b158a76886f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1999-06-17.csb.2022remaster.flac16",
@@ -966,7 +1184,9 @@
       "show_uuid": "d8fa6fc2-738f-f9df-c573-844d0797ffb7",
       "display_date": "1999-06-17",
       "track_count": 21,
-      "track_identity_sha256": "97c9c4c7e136bc273076b4c8b4e0a73766a456ba0c6e1793ee5f31be7ef08c54"
+      "track_identity_sha256": "97c9c4c7e136bc273076b4c8b4e0a73766a456ba0c6e1793ee5f31be7ef08c54",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement1999-10-14",
@@ -975,7 +1195,9 @@
       "show_uuid": "ebb0240a-6667-00f4-7a3e-fb314ac616f6",
       "display_date": "1999-10-14",
       "track_count": 19,
-      "track_identity_sha256": "dd23343d8393364b0e9f0d9b7d7fdbb653674ad0369836f3cb4ca4f7be29991d"
+      "track_identity_sha256": "dd23343d8393364b0e9f0d9b7d7fdbb653674ad0369836f3cb4ca4f7be29991d",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2010-07-31",
@@ -984,7 +1206,9 @@
       "show_uuid": "f0846630-f2db-79e5-55e8-5f8104f473c9",
       "display_date": "2010-07-31",
       "track_count": 16,
-      "track_identity_sha256": "a16d369165c9781f111079b42219c96fed4393088d497a32bdf55fb96ca1a2dc"
+      "track_identity_sha256": "a16d369165c9781f111079b42219c96fed4393088d497a32bdf55fb96ca1a2dc",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2022-09-30kings",
@@ -993,7 +1217,9 @@
       "show_uuid": "7d788e0f-196f-1e80-8c0a-eccb1c0c2147",
       "display_date": "2022-09-30",
       "track_count": 26,
-      "track_identity_sha256": "494207b4de0b2843612a66e20bc4e28feb3dae7ab3a0e4ab652a10397537b342"
+      "track_identity_sha256": "494207b4de0b2843612a66e20bc4e28feb3dae7ab3a0e4ab652a10397537b342",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2022-10-01kings",
@@ -1002,7 +1228,9 @@
       "show_uuid": "d506a794-5e96-fb20-26ce-376b8cae220b",
       "display_date": "2022-10-01",
       "track_count": 28,
-      "track_identity_sha256": "164df39cc09818c8b703a3cfdee04a2c343d7a28fed7a2c520e8a44e2275093e"
+      "track_identity_sha256": "164df39cc09818c8b703a3cfdee04a2c343d7a28fed7a2c520e8a44e2275093e",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2022-10-02kings",
@@ -1011,7 +1239,9 @@
       "show_uuid": "a8d34f59-49e9-df0b-f188-bfe3f443c298",
       "display_date": "2022-10-02",
       "track_count": 26,
-      "track_identity_sha256": "c00342abff3634a1e98260b829a5f4e13df1d45a995ee46729ab346f822db34f"
+      "track_identity_sha256": "c00342abff3634a1e98260b829a5f4e13df1d45a995ee46729ab346f822db34f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-07-22",
@@ -1020,7 +1250,9 @@
       "show_uuid": "e114523c-0b0a-3183-d2a6-4574c74e6866",
       "display_date": "2023-07-22",
       "track_count": 26,
-      "track_identity_sha256": "be71649e1a79ee4a2c6e0d51ccc253816cddf93d329e92cd034c0fdc9e0abaa2"
+      "track_identity_sha256": "be71649e1a79ee4a2c6e0d51ccc253816cddf93d329e92cd034c0fdc9e0abaa2",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-09-11flac16",
@@ -1029,7 +1261,9 @@
       "show_uuid": "7d287734-81f2-296a-1fbd-ac006166478e",
       "display_date": "2023-09-11",
       "track_count": 28,
-      "track_identity_sha256": "84c59920a4bd8aee53f8dc9c83e5455a80767848a1292498798a5c0edaca9e27"
+      "track_identity_sha256": "84c59920a4bd8aee53f8dc9c83e5455a80767848a1292498798a5c0edaca9e27",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-09-12flac16",
@@ -1038,7 +1272,9 @@
       "show_uuid": "4e997627-b096-e296-4c27-96a283374f5a",
       "display_date": "2023-09-12",
       "track_count": 26,
-      "track_identity_sha256": "57ebd44e7ef848d164c1194025a097ab2c022b0d970eb802a06a7b5f765f1784"
+      "track_identity_sha256": "57ebd44e7ef848d164c1194025a097ab2c022b0d970eb802a06a7b5f765f1784",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-09-13brooklynsteel",
@@ -1047,7 +1283,9 @@
       "show_uuid": "02f7c2d9-1e15-d84b-543d-4259477d28b9",
       "display_date": "2023-09-13",
       "track_count": 26,
-      "track_identity_sha256": "19c71f28668ec88e472d8d1b167ecc3c9d0cb0913bbbf0f0b81c4abf62e78437"
+      "track_identity_sha256": "19c71f28668ec88e472d8d1b167ecc3c9d0cb0913bbbf0f0b81c4abf62e78437",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-09-13flac16",
@@ -1056,7 +1294,9 @@
       "show_uuid": "02f7c2d9-1e15-d84b-543d-4259477d28b9",
       "display_date": "2023-09-13",
       "track_count": 29,
-      "track_identity_sha256": "817f83a43e163556dde60a8752addd23dc5709139d47b620de912a377bc67175"
+      "track_identity_sha256": "817f83a43e163556dde60a8752addd23dc5709139d47b620de912a377bc67175",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2023-09-14flac16",
@@ -1065,7 +1305,9 @@
       "show_uuid": "6c328a28-9f6e-420e-6e67-f1de73f65fca",
       "display_date": "2023-09-14",
       "track_count": 27,
-      "track_identity_sha256": "d7d91c446a1605a86a320ec72a695b8c13e84bb54597eacef478b627c802a54f"
+      "track_identity_sha256": "d7d91c446a1605a86a320ec72a695b8c13e84bb54597eacef478b627c802a54f",
+      "date_precision": "day",
+      "date_note_codes": []
     },
     {
       "identifier": "pavement2026-07-25",
@@ -1074,12 +1316,105 @@
       "show_uuid": "318cbd65-1c26-37df-fa46-d0b7ec669f6c",
       "display_date": "2026-07-25",
       "track_count": 27,
-      "track_identity_sha256": "b7e87a41fec0c690f4047012f1956237db1395ee33aa506b88a5fe9a1781b5b2"
+      "track_identity_sha256": "b7e87a41fec0c690f4047012f1956237db1395ee33aa506b88a5fe9a1781b5b2",
+      "date_precision": "day",
+      "date_note_codes": []
     }
   ],
   "regression_verification": {
-    "command": "./test-local.sh --no-restore --filter 'FullyQualifiedName~TapersSection'",
-    "passed": 93,
+    "command": "./test-local.sh --no-build --no-restore --filter 'FullyQualifiedName~TapersSection|FullyQualifiedName~TestCatalogRebuildDates|FullyQualifiedName~TestArchiveOrgFixDisplayDate'",
+    "passed": 133,
     "failed": 0
-  }
+  },
+  "previous_105_recording_identities_unchanged": true,
+  "listener_json_field_sets_unchanged": true,
+  "operator_status_with_temporal_unavailable": true,
+  "initial_transient_media_error": {
+    "item_identifier": "pavement1992-00-00",
+    "status": 500,
+    "subsequent_range_requests_succeeded": true
+  },
+  "operator_date_examples": [
+    {
+      "item_identifier": "pavement1992-00-00",
+      "status": "published",
+      "reason": null,
+      "selected_display_date": "1992-XX-XX",
+      "published_display_date": "1992-XX-XX",
+      "date_details": {
+        "Notes": [
+          {
+            "Code": "metadata_date_disagreement",
+            "Evidence": [
+              {
+                "Rule": "complete_structured_date",
+                "Start": null,
+                "Value": "1992-01-01",
+                "Length": null,
+                "Locator": "metadata.date"
+              },
+              {
+                "Rule": "full_year_title_date",
+                "Start": 10,
+                "Value": "1992-00-00",
+                "Length": 10,
+                "Locator": "metadata.title"
+              }
+            ]
+          },
+          {
+            "Code": "partial_date",
+            "Evidence": [
+              {
+                "Rule": "full_year_title_date",
+                "Start": 10,
+                "Value": "1992-00-00",
+                "Length": 10,
+                "Locator": "metadata.title"
+              }
+            ]
+          }
+        ],
+        "Precision": "year",
+        "SelectedEvidence": {
+          "Rule": "full_year_title_date",
+          "Start": 10,
+          "Value": "1992-00-00",
+          "Length": 10,
+          "Locator": "metadata.title"
+        }
+      }
+    },
+    {
+      "item_identifier": "pavement1994-06-06.mtx.flac16",
+      "status": "published",
+      "reason": null,
+      "selected_display_date": "1994-03-06",
+      "published_display_date": "1994-03-06",
+      "date_details": {
+        "Notes": [
+          {
+            "Code": "identifier_date_disagreement",
+            "Evidence": [
+              {
+                "Rule": "identifier_iso_date",
+                "Start": 8,
+                "Value": "1994-06-06",
+                "Length": 10,
+                "Locator": "item_identifier"
+              }
+            ]
+          }
+        ],
+        "Precision": "day",
+        "SelectedEvidence": {
+          "Rule": "complete_structured_date",
+          "Start": null,
+          "Value": "1994-03-06",
+          "Length": null,
+          "Locator": "metadata.date"
+        }
+      }
+    }
+  ]
 }

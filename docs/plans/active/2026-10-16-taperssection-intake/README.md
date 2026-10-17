@@ -26,9 +26,9 @@ Song search, physical venue identity, canonical setlists, recording-family match
 
 Artist review happens once through a database flag. Every subsequent item must still pass deterministic performer, date, item-kind and playback checks. The system does not treat an approved artist name as approval of compilations or a tribute mislabeled with that name. Operators can pause an artist’s further imports by clearing its flag.
 
-An upstream artist or date conflict on a published recording holds the update and keeps the last published assignment. The record remains playable. Record the conflict for review; do not add a broad hiding or reassignment system for this uncommon case. An operator can pause intake while arranging a specific catalog correction. Automatic processing never changes the artist or performance date of an already published item.
+An upstream artist conflict or unresolved disagreement among current metadata fields holds the update and keeps the last published assignment playable. Supported partial dates publish with `XX`, and current metadata may correct a date despite an older identifier. Date precision, selection evidence and disagreements remain in nonblocking intake notes. Date corrections rebuild show/year associations while preserving recording and track identities; automatic processing never changes the reviewed artist.
 
-Source venue text and recording credits can be displayed through existing fields. Missing venue identity does not block playback. Files remain files: an introduction, split track or medley does not require a normalized song identity. Multi-performer items, compilations, ambiguous dates and ambiguous early/late attribution wait for review.
+Source venue text and recording credits can be displayed through existing fields. Missing venue identity does not block playback. Files remain files: an introduction, split track or medley does not require a normalized song identity. Multi-performer items, compilations, unusable or internally conflicting dates and ambiguous early/late attribution wait for review. A supported partial date or metadata/identifier mismatch alone does not.
 
 ## What the current code changes about the design
 
@@ -49,7 +49,7 @@ flowchart TD
     D --> E[Per-artist workflow with existing artist lock]
     E --> F[Fetch current metadata and check eligibility]
     F -->|Eligible| G[Commit recording and item state together]
-    F -->|Uncertain or conflicting| H[Keep pending status or last published assignment]
+    F -->|Blocking reason| H[Keep pending status or last published assignment]
     G --> I[Rebuild shows, years and caches]
     I --> J[Existing listener APIs and playback]
     I --> K[Record rebuild completion and reveal first artist]
@@ -83,7 +83,7 @@ Extract the shared Archive recording writer from collection selection. Add the c
 
 ### 4. Add discovery, refresh and recovery
 
-Add the cohort batch, named operator commands and paused schedule registration. Reobserve assigned items regardless of performance date or current collection. Reevaluate unpublished items after approval or rule changes. Keep ordinary Archive writes and deletion accounting from changing intake-owned sources. Preserve the last assignment on conflicting updates.
+Add the cohort batch, named operator commands and paused schedule registration. Reobserve assigned items regardless of performance date or current collection. Reevaluate unpublished items after approval or rule changes. Keep ordinary Archive writes and deletion accounting from changing intake-owned sources. Preserve the reviewed artist on conflicting updates and apply supported metadata date corrections.
 
 **Outcome:** a third recording imports without another approval. Restarting from PostgreSQL after losing execution state converges without duplicate rows. Status identifies pending observations, held updates and incomplete rebuilds.
 

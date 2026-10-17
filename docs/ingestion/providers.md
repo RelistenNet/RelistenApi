@@ -199,7 +199,11 @@ its item activities, captures dirty revisions, rebuilds shows and years, invalid
 cache, then records completed revisions and promotes approved artists to visibility.
 A paused artist can finish a required rebuild without publishing new items.
 
-Unavailable items and conflicting new metadata retain their last catalog assignment.
+Unavailable items, artist conflicts and unresolved current-metadata date conflicts retain
+their last catalog assignment. Supported partial dates publish with `XX`; current metadata
+can correct an identifier date or move an existing recording to another show/year.
+Precision and date disagreements are retained as nonblocking intake notes and exposed
+through operator status only. Listener API response fields remain unchanged.
 Intake does not infer deletion from collection absence. Ordinary Archive imports
 skip intake-owned items and exclude their sources from collection deletion checks.
 
