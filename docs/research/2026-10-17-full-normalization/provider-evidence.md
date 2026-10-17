@@ -26,7 +26,7 @@ Phish-specific identifiers can strengthen matching and evaluation. The generic r
 
 The [Setlist.fm DTO](../../../RelistenApi/Vendor/SetlistFm.cs) models artist MusicBrainz IDs, which identify artists rather than musical works. Song `cover`, `with` and `info` fields are commented out. The [importer](../../../RelistenApi/Services/Importers/SetlistFmImporter.cs) also flattens sets and repeated song entries by slug. Refresh must preserve the available ordered entries and credits. A cover attribution does not independently establish a composer or work identity.
 
-The [JerryGarcia.com parser](../../../RelistenApi/Services/Importers/JerryGarciaComImporter.cs) removes trailing segue/annotation markers, discards song links and deduplicates repeated names. The [PhantasyTour DTO](../../../RelistenApi/Vendor/PhantasyTour.cs) contains identifiers, segue flags, footnotes and show credits that the [importer](../../../RelistenApi/Services/Importers/PhantasyTourImporter.cs) reduces to unique name/slug membership. These boundaries need lossless input preservation before ordered occurrence reconciliation.
+The [JerryGarcia.com parser](../../../RelistenApi/Services/Importers/JerryGarciaComImporter.cs) removes trailing segue/annotation markers and discards song links during `ProcessPage`. Repeated titles can receive separate numbered slugs, but explicit set and occurrence relationships are lost. The [PhantasyTour DTO](../../../RelistenApi/Vendor/PhantasyTour.cs) contains identifiers, segue flags, footnotes and show credits that the [importer](../../../RelistenApi/Services/Importers/PhantasyTourImporter.cs) reduces to unique name/slug membership. These boundaries need lossless input preservation before ordered occurrence reconciliation.
 
 ## Local recordings
 
