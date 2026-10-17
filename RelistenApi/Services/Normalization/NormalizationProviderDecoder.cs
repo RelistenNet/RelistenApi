@@ -44,6 +44,9 @@ public sealed partial class NormalizationProviderDecoder
                 DecodeLegacyRecording,
             ("legacy_catalog", "recording", "legacy-recording-snapshot-v2") =>
                 DecodeLegacyRecording,
+            ("legacy_catalog", "imported_venue", "legacy-imported-venue-v1") => DecodeImportedVenue,
+            ("legacy_catalog", "artist_repertoire", "legacy-artist-repertoire-v1") =>
+                DecodeImportedRepertoire,
             _ => throw new NotSupportedException(
                 "The retained provider representation is not supported by this decoder."
             ),

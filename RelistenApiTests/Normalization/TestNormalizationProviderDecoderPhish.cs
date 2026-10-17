@@ -29,7 +29,7 @@ public sealed class TestNormalizationProviderDecoderPhish
 
         result.Issues.Should().BeEmpty();
         result
-            .Repertoire.Select(song => song.Title.Value)
+            .Repertoire.Select(song => song.Title!.Value)
             .Should()
             .Equal("Run Like an Antelope", "Antelope");
         var original = result.Repertoire[0];
@@ -248,7 +248,7 @@ public sealed class TestNormalizationProviderDecoderPhish
 
         var result = decoder.Decode(input);
 
-        result.Repertoire.Select(song => song.Title.Value).Should().Equal("Title A", "Title B");
+        result.Repertoire.Select(song => song.Title!.Value).Should().Equal("Title A", "Title B");
         result.Issues.Single().Code.Should().Be("duplicate_provider_identity");
         ValidateEveryCitation(input, result);
     }

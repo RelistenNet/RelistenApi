@@ -29,6 +29,7 @@ public static class IngestionServiceRegistration
         services.AddScoped<CatalogImportTransaction>();
         services.AddScoped<NormalizationEvidenceService>();
         services.AddScoped<NormalizationLegacyInputService>();
+        services.AddScoped<NormalizationImportedCatalogService>();
         services.AddScoped<NormalizationCatalogBindingService>();
         services.AddScoped<NormalizationRecordingProposalService>();
         services.AddScoped<NormalizationRecordingProcessor>();

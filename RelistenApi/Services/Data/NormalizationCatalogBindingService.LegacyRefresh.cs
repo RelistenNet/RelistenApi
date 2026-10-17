@@ -180,6 +180,6 @@ public sealed partial class NormalizationCatalogBindingService
 
     private static NormalizationConflictException RefreshConflict() =>
         new(
-            "Legacy recording facts or their catalog context changed. Refresh and decode the recording again before binding."
+            "Retained catalog facts or their catalog context changed. Refresh and decode the complete catalog resource again before binding."
         );
 }

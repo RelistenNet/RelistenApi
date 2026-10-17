@@ -86,13 +86,18 @@ public sealed record ProviderWorkCreditObservation
 public sealed record ProviderRepertoireObservation
 {
     public ProviderObservationOrigin Origin { get; init; } = null!;
-    public ObservedValue<string> Title { get; init; } = null!;
+
+    /// <summary>A stored identity can exist before its title is known; slugs are not substitute titles.</summary>
+    public ObservedValue<string>? Title { get; init; }
     public IReadOnlyList<ObservedProviderIdentity> Identities { get; init; } = [];
     public IReadOnlyList<ObservedValue<string>> Aliases { get; init; } = [];
     public ObservedProviderIdentity? AliasOf { get; init; }
     public IReadOnlyList<ObservedProviderIdentity> WorkIdentities { get; init; } = [];
     public IReadOnlyList<ProviderWorkCreditObservation> WorkCredits { get; init; } = [];
     public bool CompleteAuthorship { get; init; }
+
+    /// <summary>Original catalog prose that does not establish aliases or provider identities.</summary>
+    public IReadOnlyList<ProviderTextObservation> Text { get; init; } = [];
 }
 
 /// <summary>
