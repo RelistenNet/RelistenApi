@@ -12,6 +12,10 @@ Keep `display_date` as a date or supported partial date, such as `1975-03-07` or
 
 Preserve show UUIDs through date, type and label corrections. A human-readable date-and-performance label can combine these values for display. Metadata continues to take precedence over identifiers; ambiguity notes stay internal. Equal partial dates do not establish that recordings cover the same performance.
 
+An ordinary one-show date keeps its existing show row and UUID. When evidence supports splitting an existing show, retain that row and UUID for one performance, create new rows and UUIDs for the additional performances, and move their assigned sources. Record which performance retains the original UUID once; retries, label changes and sort order must not select a different one. Choose that assignment from supported evidence or review. An old show UUID continues to resolve to the retained performance after the split, whose source list can therefore shrink. Date browsing provides access to the other performances.
+
+Moving a source changes its show association, including the `show_uuid` returned on source and track reads. It preserves the source, set and track UUIDs and media URLs. A split moves existing recordings; it does not import duplicate recordings. Sources whose performance remains uncertain retain their last accepted association while reviewed assignments are resolved; that association is not evidence for performance-specific enrichment.
+
 Retain explicit recording-to-show and provider-setlist-to-show assignments with their supporting evidence. Do not infer the assignment from a date-only join. A recording covering several performances must retain its original playback identity; do not invent track boundaries or choose a primary performance without a supported contract. Unresolved new combined recordings can remain held.
 
 ## Progress
@@ -29,9 +33,9 @@ Update the relevant design and ingestion contracts before schema changes. The [c
 
 Specify the enum values, wire format, defaults, ordering and label behavior. Distinguish a performance's billed date from a known start time; a late show does not establish a timestamp or imply a date correction.
 
-Two compatibility decisions need concrete contracts before implementation:
+The split identity rule is settled. Its migration and the remaining combined-recording behavior need concrete contracts before implementation:
 
-- **Old show references after a split.** Existing UUIDs may identify a whole day's recordings. Preserve that saved destination and its playable recordings without silently assigning the old UUID to a guessed early or late show. Define how this compatibility destination resolves through `GET /api/v3/shows/{showUuid}`, while new performance UUIDs identify individual shows. Unsplit existing shows should retain their UUIDs.
+- **Old show references after a split.** Keep the existing UUID on one supported performance and allocate new UUIDs to the others. `GET /api/v3/shows/{showUuid}` continues to return the show bearing that UUID, with its current assigned sources. Define the durable split record, reviewed survivor choice and atomic source moves. An old show link remains valid but does not promise the former whole-day source list. Source and track references remain valid after moving.
 - **Recordings spanning performances.** `Source.show_id` and the public `show_uuid` currently name one show. Define the relationship and compatible response for already-published combined recordings. Holding new combined items does not solve migration of existing ones. Define how date pages and collection counts avoid duplicating recordings.
 
 Document the existing date route, UUID route, year/artist listings, random-show selection, collection recording references, counts, cache invalidation and client expectations. Date pages must remain usable. Any additive route or response field must have a precise schema and error behavior before coding. These decisions may require a focused product review; the implementer must not improvise them during a rebuild.
@@ -44,11 +48,11 @@ Define durable assignment ownership and correction behavior. PostgreSQL must own
 
 Use additive migrations and backfill existing identities before enabling split publication. Change `RelistenApi/Models/Show.cs`, source/assignment models, and `RelistenApi/Services/Data/CatalogRebuildService.cs` together. The rebuild currently derives UUIDs from artist/date, joins provider setlists by date, and assigns sources by date. All three behaviors need replacement.
 
-Update `ShowService.cs` and `ShowsController.cs`, including random selection, to retrieve the intended performance or compatibility destination. Update collection queries and references in `CollectionService.Reads.cs`. Keep source, set and track UUIDs and media URLs stable. A collection continues to select canonical recordings and never takes ownership of their import.
+Update `ShowService.cs` and `ShowsController.cs`, including random selection, to retrieve the intended performance. Update collection queries and references in `CollectionService.Reads.cs`. Keep source, set and track UUIDs and media URLs stable; their returned show association must reflect a reviewed move. A collection continues to select canonical recordings and never takes ownership of their import.
 
 Update provider adapters and their retained contracts, not only the final SQL. Phish.in currently keys recordings by upstream show ID but setlists by date. Phish.net chooses show metadata by date and fetches reviews/ratings by date. Preserve upstream identifiers and attach enrichment only when the provider evidence supports the target performance.
 
-Add meaningful PostgreSQL/service and HTTP tests: two performances on one date; multiple recordings of one performance; ordinary multi-set concerts; unknown dates; corrected metadata; a migrated old date reference; combined recordings under the chosen compatibility contract; and ambiguous provider enrichment. Repeat import and rebuild, interrupt between durable writes and rebuild, then recover. Verify IDs, associations, playback, counts and ordering through public service/API contracts.
+Add meaningful PostgreSQL/service and HTTP tests: unchanged UUIDs on ordinary dates; a split retaining one existing UUID and allocating another; moved sources with unchanged source/set/track UUIDs and updated show associations; multiple recordings of one performance; ordinary multi-set concerts; unknown dates; corrected metadata; a migrated old date reference; combined recordings under the chosen compatibility contract; and ambiguous provider enrichment. Repeat import and rebuild, interrupt between durable writes and rebuild, then recover. Verify IDs, associations, playback, counts and ordering through public service/API contracts.
 
 **Outcome:** the new identity and migration behavior works on controlled fixtures, including partial failure and recovery. Do this before real provider samples.
 
@@ -105,6 +109,7 @@ Before production rollout, verify backfill and backup/restore against a represen
 ## Decision log
 
 - 2026-10-17, Alec: make `Show` the performance and allow several shows per date. Preserve date browsing and saved references.
+- 2026-10-17, Alec: an existing show keeps its UUID through a split; additional performances receive new UUIDs and their sources move over. The old UUID resolves to the retained performance, with its current source list.
 - 2026-10-17: separate stable identity from performance type and presentation. Retain unresolved evidence and internal ambiguity notes.
 - 2026-10-17: verify Phish before the larger Jerry and Aadam runs. Treat existing-artist publication as an explicit dependency.
 
