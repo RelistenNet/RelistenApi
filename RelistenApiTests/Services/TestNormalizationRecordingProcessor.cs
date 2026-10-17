@@ -395,6 +395,113 @@ public sealed class TestNormalizationRecordingProcessor
     }
 
     [Test]
+    public async Task SourceUuidOnlyContributorCannotBeAcknowledgedWithoutReadingItsFacts()
+    {
+        var source = await Source();
+        var contributor = new NormalizationResourceKey(
+            "test",
+            "other-source-uuid",
+            Guid.NewGuid().ToString("D")
+        );
+        var peer = new NormalizationSourceUuidDependency(Guid.NewGuid(), 0);
+        await fixture.Work.BeginContributedWorkAsync(
+            Guid.NewGuid(),
+            Owner(source.SourceUuid),
+            NormalizationRecordingProcessor.Version,
+            new(contributor, 0, [], []),
+            sourceUuids: [peer]
+        );
+
+        var result = await processor.ProcessAsync(Guid.NewGuid(), source.SourceUuid);
+
+        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Unresolved);
+        result.Reason.Should().Be("unsupported_owner_inputs");
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await proposals.GetAttemptBatchAsync(result.AttemptUuid)).Should().BeNull();
+        (await fixture.Work.GetInputContributionAsync(Owner(source.SourceUuid), contributor))!
+            .SourceUuids.Should()
+            .Equal(peer.SourceUuid);
+        (await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid)))!
+            .PublishedWorkUuid.Should()
+            .BeNull();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task OlderUnfinishedAttemptsEndExplicitlyWithoutAdmittingTheirUnfencedPreparation(
+        bool admitted
+    )
+    {
+        var source = await Source();
+        var oldVersion = NormalizationRecordingProcessor.Version.Replace(
+            "processing-v2/",
+            "processing-v1/"
+        );
+        var prepared = await Prepare(
+            Guid.NewGuid(),
+            source.SourceUuid,
+            binding => binding with { SourceUuids = null },
+            oldVersion
+        );
+        NormalizationWorkTicket? ticket = null;
+        if (admitted)
+        {
+            ticket = await Admit(prepared.Attempt);
+        }
+        var fetches = await Fetches(source.SourceUuid);
+
+        var result = await processor.ProcessAsync(prepared.Attempt.AttemptUuid, source.SourceUuid);
+
+        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Unresolved);
+        result.Reason.Should().Be("processing_version_changed");
+        result.Replayed.Should().BeFalse();
+        (await Fetches(source.SourceUuid)).Should().Equal(fetches);
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        var owner = await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid));
+        owner?.PublishedWorkUuid.Should().BeNull();
+        if (ticket != null)
+        {
+            var run = await fixture.Db.WithWriteConnection(c =>
+                c.QuerySingleAsync<string>(
+                    "SELECT state FROM normalization.work_runs WHERE uuid=@WorkUuid",
+                    ticket
+                )
+            );
+            run.Should()
+                .Be("running", "the obsolete attempt must not publish its old extraction work");
+        }
+        (await processor.ProcessAsync(prepared.Attempt.AttemptUuid, source.SourceUuid))
+            .Should()
+            .Be(result with { Replayed = true });
+        (await processor.ProcessAsync(Guid.NewGuid(), source.SourceUuid))
+            .Disposition.Should()
+            .Be(NormalizationRecordingProcessingDisposition.Published);
+    }
+
+    [Test]
+    public async Task OlderTerminalAttemptKeepsItsExactReplayAcrossTheVersionChange()
+    {
+        var sourceUuid = Guid.NewGuid();
+        var attempt = await proposals.GetOrCreateAttemptAsync(
+            Guid.NewGuid(),
+            sourceUuid,
+            "catalog-recording-processing-v1/old"
+        );
+        var completed = await proposals.CompleteAsync(
+            attempt,
+            NormalizationRecordingProcessingDisposition.Missing,
+            "original_missing_reason"
+        );
+
+        var result = await processor.ProcessAsync(attempt.AttemptUuid, sourceUuid);
+
+        result.Should().Be(completed.Result! with { Replayed = true });
+        var wrongSource = () => processor.ProcessAsync(attempt.AttemptUuid, Guid.NewGuid());
+        await wrongSource.Should().ThrowAsync<NormalizationConflictException>();
+        (await Fetches(sourceUuid)).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task VenueOnlyContributorCannotBeAcknowledgedWithoutReadingItsFacts()
     {
         var source = await Source();
@@ -712,13 +819,14 @@ public sealed class TestNormalizationRecordingProcessor
         Func<
             NormalizationRecordingBindingSnapshot,
             NormalizationRecordingBindingSnapshot
-        >? transform = null
+        >? transform = null,
+        string? processingVersion = null
     )
     {
         await proposals.GetOrCreateAttemptAsync(
             attemptUuid,
             sourceUuid,
-            NormalizationRecordingProcessor.Version
+            processingVersion ?? NormalizationRecordingProcessor.Version
         );
         var snapshot = (await legacy.RefreshRecordingAsync(sourceUuid))!;
         var decoded = decoder.Decode(snapshot.Capture.Revision);
@@ -760,7 +868,8 @@ public sealed class TestNormalizationRecordingProcessor
             catalogInputs: saved.Binding.CatalogInputs,
             sourceIdentities: saved.Binding.SourceIdentities,
             mappingRegistry: saved.Binding.MappingRegistry,
-            expectedInputRevisions: saved.Binding.Inputs
+            expectedInputRevisions: saved.Binding.Inputs,
+            sourceUuids: saved.Binding.SourceUuids
         );
     }
 

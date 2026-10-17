@@ -405,7 +405,8 @@ public sealed class TestNormalizationCatalogPublication
             [context.Resource],
             [],
             catalogInputs: context.Snapshot.CatalogInputs,
-            sourceIdentities: context.Snapshot.SourceIdentities
+            sourceIdentities: context.Snapshot.SourceIdentities,
+            sourceUuids: context.Snapshot.SourceUuids
         );
 
     private Task UpdateTaper(int sourceId, string taper) =>

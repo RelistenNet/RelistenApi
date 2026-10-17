@@ -24,7 +24,7 @@ public sealed class NormalizationRecordingProcessor(
 )
 {
     public const string Version =
-        "catalog-recording-processing-v1/"
+        "catalog-recording-processing-v2/"
         + NormalizationLegacyInputService.RefreshCaptureVersion
         + "/"
         + NormalizationProviderDecoder.Version
@@ -43,12 +43,32 @@ public sealed class NormalizationRecordingProcessor(
         CancellationToken cancellationToken = default
     )
     {
-        var attempt = await proposals.GetOrCreateAttemptAsync(
-            attemptUuid,
-            sourceUuid,
-            Version,
-            cancellationToken
-        );
+        var existing = await proposals.GetAttemptAsync(attemptUuid, cancellationToken);
+        if (existing != null)
+        {
+            if (existing.SourceUuid != sourceUuid)
+            {
+                throw new NormalizationConflictException(
+                    "Attempt UUID already belongs to another recording."
+                );
+            }
+            if (existing.Result != null)
+            {
+                return existing.Result with { Replayed = true };
+            }
+            if (existing.ProcessingVersion != Version)
+            {
+                return await FinishUnsupportedVersionAsync(existing, cancellationToken);
+            }
+        }
+        var attempt =
+            existing
+            ?? await proposals.GetOrCreateAttemptAsync(
+                attemptUuid,
+                sourceUuid,
+                Version,
+                cancellationToken
+            );
         if (attempt.Result != null)
         {
             return attempt.Result with { Replayed = true };
@@ -61,6 +81,33 @@ public sealed class NormalizationRecordingProcessor(
         }
 
         return await ProcessPreparedAsync(attempt, cancellationToken);
+    }
+
+    private async Task<NormalizationRecordingProcessingResult> FinishUnsupportedVersionAsync(
+        NormalizationRecordingAttempt attempt,
+        CancellationToken ct
+    )
+    {
+        // Older preparations did not consume source UUID clocks. Never admit or publish them
+        // with a new fence. Drain old workers before changing binaries; a fresh attempt UUID
+        // starts the current protocol, while terminal receipts keep their exact replay behavior.
+        while (attempt.Result == null)
+        {
+            attempt = await proposals.CompleteAsync(
+                attempt,
+                NormalizationRecordingProcessingDisposition.Unresolved,
+                "processing_version_changed",
+                ct
+            );
+            // Preparation is write-once. If its concurrent winner changed after our read,
+            // CompleteAsync returns that winner; the next pass terminalizes that exact receipt.
+        }
+        return attempt.Result with
+        {
+            Replayed =
+                attempt.Result.Disposition != NormalizationRecordingProcessingDisposition.Unresolved
+                || attempt.Result.Reason != "processing_version_changed",
+        };
     }
 
     private async Task<NormalizationRecordingAttempt> PrepareAsync(
@@ -176,7 +223,8 @@ public sealed class NormalizationRecordingProcessor(
                 catalogInputs: preparation.Binding.CatalogInputs,
                 sourceIdentities: preparation.Binding.SourceIdentities,
                 mappingRegistry: preparation.Binding.MappingRegistry,
-                expectedInputRevisions: preparation.Binding.Inputs
+                expectedInputRevisions: preparation.Binding.Inputs,
+                sourceUuids: preparation.Binding.SourceUuids
             );
         }
         catch (NormalizationConflictException)
@@ -194,7 +242,7 @@ public sealed class NormalizationRecordingProcessor(
         // This producer handles one legacy recording input. Another contributor's evidence
         // must remain owned and pending until a coordinator can consume its complete read set.
         // Publishing only this producer's subset would incorrectly consume that watermark.
-        if (!HasCompletePreparedReadSet(ticket, preparation))
+        if (!NormalizationRecordingReadSet.IsComplete(ticket, preparation))
         {
             return (
                 await proposals.CompleteAsync(
@@ -317,32 +365,6 @@ public sealed class NormalizationRecordingProcessor(
             Replayed = publication.Replayed,
         };
     }
-
-    private static bool HasCompletePreparedReadSet(
-        NormalizationWorkTicket ticket,
-        NormalizationRecordingPreparation preparation
-    ) =>
-        preparation.Binding.Inputs.Count == 1
-        && ticket.Inputs.Count == 1
-        && ticket.Inputs[0].RevisionUuid == preparation.Binding.InputRevisionUuid
-        && ticket.Dependencies.Count == 0
-        // The current producer consumes one legacy recording snapshot. A venue-only
-        // contributor still adds facts this producer cannot read or acknowledge.
-        && (ticket.ImportedVenues?.Count ?? 0) == 0
-        && (ticket.CandidateUniverses?.Count ?? 0) == 0
-        && (ticket.OwnerObservations?.Count ?? 0) == 0
-        && (ticket.CatalogInputs ?? [])
-            .OrderBy(input => input.ArtistUuid)
-            .SequenceEqual(preparation.Binding.CatalogInputs.OrderBy(input => input.ArtistUuid))
-        && (ticket.SourceIdentities ?? [])
-            .OrderBy(input => input.UpstreamIdentifier, StringComparer.Ordinal)
-            .SequenceEqual(
-                preparation.Binding.SourceIdentities.OrderBy(
-                    input => input.UpstreamIdentifier,
-                    StringComparer.Ordinal
-                )
-            )
-        && ticket.MappingRegistry == preparation.Binding.MappingRegistry;
 
     private static NormalizationSubjectKey Owner(Guid sourceUuid) =>
         new("extractions", "recording", sourceUuid);

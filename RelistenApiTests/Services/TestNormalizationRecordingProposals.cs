@@ -355,6 +355,46 @@ public sealed class TestNormalizationRecordingProposals
         saved.Extraction.Titles.Should().BeEquivalentTo(batch.Extraction.Titles);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RecordingBatchesRequireExactlyTheCheckedSourceUuidReadSet(bool extraPeer)
+    {
+        var source = await fixture.Source();
+        var batch = extraPeer
+            ? await Batch(source, extraSourceUuids: [new(Guid.NewGuid(), 0)])
+            : await Batch(source, consumeSourceUuids: false);
+
+        var save = () => proposals.SaveExtractionAsync(batch);
+
+        await save.Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("*complete saved binding read set*");
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(Owner(source)))!.PublishedWorkUuid.Should().BeNull();
+    }
+
+    [TestCase("resource")]
+    [TestCase("artist")]
+    [TestCase("identifier")]
+    [TestCase("owner")]
+    public async Task RecordingBatchesCannotAcknowledgeUnconsumedPeerContributionFacts(
+        string peerKind
+    )
+    {
+        var source = await fixture.Source();
+        var batch = await Batch(source, peerKind: peerKind);
+
+        var save = () => proposals.SaveExtractionAsync(batch);
+
+        await save.Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("*complete saved binding read set*");
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(Owner(source)))!.PublishedWorkUuid.Should().BeNull();
+    }
+
     [Test]
     public async Task VenueClockOutsideCurrentBatchFormatCannotBeSavedOrPublished()
     {
@@ -674,6 +714,71 @@ public sealed class TestNormalizationRecordingProposals
         );
     }
 
+    private async Task AddPeerContribution(CatalogSource source, string kind)
+    {
+        NormalizationResourceKey[] resources = [];
+        Guid[] dependencies = [];
+        NormalizationCatalogDependency[] artists = [];
+        NormalizationSourceIdentityDependency[] identifiers = [];
+        switch (kind)
+        {
+            case "resource":
+                var resource = new NormalizationResourceKey(
+                    "fixture",
+                    "peer",
+                    Guid.NewGuid().ToString("D")
+                );
+                await new NormalizationEvidenceService(fixture.Db).CaptureInputAsync(
+                    new(
+                        Guid.NewGuid(),
+                        resource,
+                        "{}"u8.ToArray(),
+                        "application/json",
+                        "peer-fixture-v1",
+                        0,
+                        DateTimeOffset.UtcNow
+                    )
+                );
+                resources = [resource];
+                break;
+            case "artist":
+                var peer = await fixture.Source();
+                artists =
+                [
+                    await fixture.Db.WithWriteConnection(c =>
+                        c.QuerySingleAsync<NormalizationCatalogDependency>(
+                            "SELECT a.uuid AS \"ArtistUuid\",r.generation AS \"Generation\" FROM artists a JOIN normalization.catalog_artist_revisions r ON r.artist_uuid=a.uuid WHERE a.id=@ArtistId",
+                            peer
+                        )
+                    ),
+                ];
+                break;
+            case "identifier":
+                identifiers = [new("peer-" + Guid.NewGuid().ToString("N"), 0)];
+                break;
+            case "owner":
+                var owner = await fixture.Work.BeginWorkAsync(
+                    Guid.NewGuid(),
+                    new("people", "person", Guid.NewGuid()),
+                    ProcessingVersion,
+                    [],
+                    []
+                );
+                dependencies = [owner.SubjectUuid];
+                break;
+            default:
+                throw new AssertionException("Unknown peer fixture kind.");
+        }
+        await fixture.Work.BeginContributedWorkAsync(
+            Guid.NewGuid(),
+            Owner(source),
+            ProcessingVersion,
+            new(new("fixture", "peer", Guid.NewGuid().ToString("D")), 0, resources, dependencies),
+            catalogInputs: artists,
+            sourceIdentities: identifiers
+        );
+    }
+
     private async Task<NormalizationRecordingProposalBatch> Batch(
         CatalogSource source,
         Func<
@@ -682,7 +787,10 @@ public sealed class TestNormalizationRecordingProposals
         >? changePreparation = null,
         IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
         IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null,
-        IReadOnlyList<NormalizationSubjectObservation>? ownerObservations = null
+        IReadOnlyList<NormalizationSubjectObservation>? ownerObservations = null,
+        IReadOnlyList<NormalizationSourceUuidDependency>? extraSourceUuids = null,
+        bool consumeSourceUuids = true,
+        string? peerKind = null
     )
     {
         await fixture.Db.WithWriteConnection(c =>
@@ -693,6 +801,10 @@ public sealed class TestNormalizationRecordingProposals
             source.SourceUuid,
             ProcessingVersion
         );
+        if (peerKind != null)
+        {
+            await AddPeerContribution(source, peerKind);
+        }
         var proposed = await Prepare(source);
         var saved = await proposals.SavePreparationAsync(
             attempt.AttemptUuid,
@@ -719,7 +831,10 @@ public sealed class TestNormalizationRecordingProposals
             expectedInputRevisions: preparation.Binding.Inputs,
             importedVenues: importedVenues,
             candidateUniverses: candidateUniverses,
-            expectedOwnerObservations: ownerObservations
+            expectedOwnerObservations: ownerObservations,
+            sourceUuids: consumeSourceUuids
+                ? (preparation.Binding.SourceUuids ?? []).Concat(extraSourceUuids ?? []).ToArray()
+                : []
         );
         var input = (
             await new NormalizationEvidenceService(fixture.Db).GetCaptureAsync(

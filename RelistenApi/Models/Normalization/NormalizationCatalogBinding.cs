@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -50,7 +51,8 @@ public sealed record NormalizationFileBinding(
 /// <summary>
 /// One primary repeatable-read snapshot. Supply Inputs as expectedInputRevisions when admitting
 /// work, and include every returned catalog dependency in its publication read set. The snapshot
-/// itself does not accept provider claims.
+/// itself does not accept provider claims. UUID and provider-identifier clocks also fence missing
+/// associations: unresolved results must retain those dependencies rather than a fresh later clock.
 /// </summary>
 public sealed record NormalizationRecordingBindingSnapshot(
     Guid InputRevisionUuid,
@@ -60,7 +62,9 @@ public sealed record NormalizationRecordingBindingSnapshot(
     IReadOnlyList<NormalizationCatalogDependency> CatalogInputs,
     IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities,
     IReadOnlyList<NormalizationBindingInputReference>? SupportingInputs = null,
-    NormalizationMappingRegistryDependency? MappingRegistry = null
+    NormalizationMappingRegistryDependency? MappingRegistry = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationSourceUuidDependency>? SourceUuids = null
 )
 {
     /// <summary>Complete required evidence set; supporting inputs are required, including Local's root map.</summary>

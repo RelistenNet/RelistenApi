@@ -50,6 +50,9 @@ public sealed partial class NormalizationCatalogBindingService
                     ct
                 );
                 await RequireProducerClocksAsync(connection, transaction, producerClocks, ct);
+                // The original artist clocks prove the retained facts are unchanged. UUID
+                // clocks read in this same snapshot fence the checked associations; they do
+                // not upgrade the producer's older facts or replace its original clocks.
                 var bound = await BindRecordingSnapshotAsync(
                     connection,
                     transaction,

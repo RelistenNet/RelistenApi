@@ -68,6 +68,7 @@ public sealed class TestNormalizationLegacyBinding
         bound.Recording.Value!.SourceUuid.Should().Be(source.SourceUuid);
         bound.Files.Single().Binding.Value!.TrackUuid.Should().Be(source.TrackUuid);
         bound.CatalogInputs.Should().BeEquivalentTo(current.Snapshot.CatalogInputs);
+        bound.SourceUuids.Should().ContainSingle().Which.SourceUuid.Should().Be(source.SourceUuid);
     }
 
     [Test]
@@ -397,7 +398,8 @@ public sealed class TestNormalizationLegacyBinding
             [],
             catalogInputs: bound.CatalogInputs,
             sourceIdentities: bound.SourceIdentities,
-            expectedInputRevisions: bound.Inputs
+            expectedInputRevisions: bound.Inputs,
+            sourceUuids: bound.SourceUuids
         );
 
     private Task<NormalizationPublicationResult> PublishCredit(

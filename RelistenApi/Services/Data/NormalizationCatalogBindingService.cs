@@ -25,9 +25,10 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
     /// usable; invalid or absent file relationships remain explicit unresolved outcomes.
     /// </summary>
     /// <remarks>
-    /// Call outside catalog transactions. Include both returned CatalogInputs and SourceIdentities
-    /// in the publication ticket. Artist clocks fence current row ownership; source identity clocks
-    /// also fence another artist acquiring the same provider item after the global lookup.
+    /// Call outside catalog transactions. Include returned CatalogInputs, SourceIdentities and
+    /// SourceUuids in the publication ticket, including unresolved outcomes. Artist clocks fence
+    /// current row ownership; identifier clocks fence another artist acquiring the same provider
+    /// item after the global lookup. UUID clocks also retain missing exact-source observations.
     /// Input citations are decoder output and remain subject to publication evidence validation.
     /// Rebinding refreshes associations only. It does not refresh retained wording: processing a
     /// changed legacy credit or title also requires a new catalog snapshot and fresh decoding.
@@ -152,7 +153,7 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
             connection,
             transaction,
             recording.Origin.Item,
-            source.Binding.Value,
+            source,
             cancellationToken
         );
         return new NormalizationRecordingBindingSnapshot(
@@ -161,7 +162,8 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
             source.Binding,
             files,
             fences.Artists,
-            fences.SourceIdentities
+            fences.SourceIdentities,
+            SourceUuids: fences.SourceUuids.Count == 0 ? null : fences.SourceUuids
         );
     }
 
@@ -169,49 +171,71 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
         NpgsqlConnection c,
         NpgsqlTransaction t,
         NormalizationResourceKey resource,
-        NormalizationCatalogRecordingReference? recording,
+        SourceResolution resolution,
         CancellationToken ct
     )
     {
-        if (recording == null)
+        IReadOnlyList<NormalizationCatalogDependency> artists = [];
+        if (resolution.Binding.Value is { } recording)
         {
-            return new([], []);
-        }
-        var artistUuid = recording.ArtistUuid;
-        var generation = await c.QuerySingleOrDefaultAsync<long?>(
-            new CommandDefinition(
-                "SELECT generation FROM normalization.catalog_artist_revisions WHERE artist_uuid=@artistUuid",
-                new { artistUuid },
-                t,
-                cancellationToken: ct
-            )
-        );
-        if (generation == null)
-        {
-            throw new InvalidOperationException("The bound artist has no catalog revision fence.");
-        }
-        IReadOnlyList<NormalizationSourceIdentityDependency> sourceIdentities = [];
-        if (resource.Provider is "archive.org" or "phish.in")
-        {
-            // A different artist can acquire this provider identifier after our global lookup.
-            // Its identity clock fences that absence check as well as the selected artist rows.
-            var identityGeneration = await c.QuerySingleOrDefaultAsync<long?>(
+            var generation = await c.QuerySingleOrDefaultAsync<long?>(
                 new CommandDefinition(
-                    "SELECT generation FROM normalization.catalog_source_identity_revisions WHERE upstream_identifier=@item",
-                    new { item = resource.ProviderKey },
+                    "SELECT generation FROM normalization.catalog_artist_revisions WHERE artist_uuid=@ArtistUuid",
+                    recording,
                     t,
                     cancellationToken: ct
                 )
             );
-            if (identityGeneration == null)
+            if (generation == null)
+            {
+                throw new InvalidOperationException(
+                    "The bound artist has no catalog revision fence."
+                );
+            }
+            artists = [new(recording.ArtistUuid, generation.Value)];
+        }
+        IReadOnlyList<NormalizationSourceIdentityDependency> sourceIdentities = [];
+        if (resource.Provider is "archive.org" or "phish.in")
+        {
+            // A missing item still consumes the global lookup. Zero is the original absence
+            // observation; admission creates its retained clock before comparing that value.
+            var generation = await c.QuerySingleOrDefaultAsync<long?>(
+                new CommandDefinition(
+                    "SELECT generation FROM normalization.catalog_source_identity_revisions WHERE upstream_identifier=@ProviderKey",
+                    resource,
+                    t,
+                    cancellationToken: ct
+                )
+            );
+            if (generation == null && resolution.Binding.Value != null)
             {
                 throw new InvalidOperationException(
                     "The bound provider item has no source identity revision fence."
                 );
             }
-            sourceIdentities = [new(resource.ProviderKey, identityGeneration.Value)];
+
+            sourceIdentities = [new(resource.ProviderKey, generation ?? 0)];
         }
-        return new([new(artistUuid, generation.Value)], sourceIdentities);
+        var sourceUuids = (resolution.SourceUuidLookups ?? []).Distinct().Order().ToArray();
+        NormalizationSourceUuidDependency[] uuidClocks =
+            sourceUuids.Length == 0
+                ? []
+                : (
+                    await c.QueryAsync<NormalizationSourceUuidDependency>(
+                        new CommandDefinition(
+                            """
+                            SELECT requested.uuid AS "SourceUuid",COALESCE(revision.generation,0) AS "Generation"
+                            FROM unnest(@sourceUuids::uuid[]) requested(uuid)
+                            LEFT JOIN normalization.catalog_source_uuid_revisions revision ON revision.source_uuid=requested.uuid
+                            ORDER BY requested.uuid
+                            """,
+                            new { sourceUuids },
+                            t,
+                            cancellationToken: ct
+                        )
+                    )
+                ).ToArray();
+        return new(artists, sourceIdentities, uuidClocks);
     }
 
     private static Task<SourceResolution> ResolveRecordingAsync(
@@ -294,8 +318,9 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
 
     private static SourceResolution UnresolvedSource(
         NormalizationCatalogBindingStatus status,
-        string reason
-    ) => new(new(status, null, reason), null);
+        string reason,
+        IReadOnlyList<Guid>? sourceUuidLookups = null
+    ) => new(new(status, null, reason), null, sourceUuidLookups);
 
     private static async Task<NormalizationFileBinding[]> BindFilesAsync(
         NpgsqlConnection c,
@@ -455,12 +480,14 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
 
     private sealed record CatalogFences(
         IReadOnlyList<NormalizationCatalogDependency> Artists,
-        IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities
+        IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities,
+        IReadOnlyList<NormalizationSourceUuidDependency> SourceUuids
     );
 
     private sealed record SourceResolution(
         NormalizationCatalogBinding<NormalizationCatalogRecordingReference> Binding,
-        SourceRow? Row
+        SourceRow? Row,
+        IReadOnlyList<Guid>? SourceUuidLookups = null
     );
 
     private sealed record SourceRow(

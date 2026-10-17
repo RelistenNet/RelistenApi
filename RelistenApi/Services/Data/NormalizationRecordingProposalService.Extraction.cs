@@ -204,6 +204,17 @@ public sealed partial class NormalizationRecordingProposalService
                 "Recording proposals do not yet consume candidate pool facts."
             );
         }
+        var sourceUuids = batch.Preparation.Binding.SourceUuids ?? [];
+        if (
+            sourceUuids.Count != 1
+            || sourceUuids[0].SourceUuid != batch.SourceUuid
+            || sourceUuids[0].Generation < 0
+        )
+        {
+            throw new ArgumentException(
+                "Recording proposals require the checked recording's source UUID fence."
+            );
+        }
         var recording = batch.Preparation.Binding.Recording;
         if (
             recording.Status != NormalizationCatalogBindingStatus.Bound
@@ -216,20 +227,7 @@ public sealed partial class NormalizationRecordingProposalService
                 "Published recording proposals require their positively bound artist and source."
             );
         }
-        if (
-            batch.Preparation.Binding.Inputs.Any(input =>
-                !batch.Ticket.Inputs.Any(consumed =>
-                    consumed.RevisionUuid == input.InputRevisionUuid
-                )
-            )
-            || batch.Preparation.Binding.CatalogInputs.Any(input =>
-                !(batch.Ticket.CatalogInputs ?? []).Contains(input)
-            )
-            || batch.Preparation.Binding.SourceIdentities.Any(input =>
-                !(batch.Ticket.SourceIdentities ?? []).Contains(input)
-            )
-            || batch.Preparation.Binding.MappingRegistry != batch.Ticket.MappingRegistry
-        )
+        if (!NormalizationRecordingReadSet.IsComplete(batch.Ticket, batch.Preparation))
         {
             throw new ArgumentException(
                 "Published proposals must consume the complete saved binding read set."

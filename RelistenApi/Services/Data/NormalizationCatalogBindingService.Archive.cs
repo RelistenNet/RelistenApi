@@ -72,11 +72,21 @@ public sealed partial class NormalizationCatalogBindingService
             .Select(row => row.ArtistUuid!.Value)
             .Distinct()
             .ToArray();
+        var uuidLookups = sourceUuids.Where(uuid => uuid != Guid.Empty).ToArray();
+        if (retained.Any(row => row.SourceUuid == Guid.Empty || row.ArtistUuid == Guid.Empty))
+        {
+            return UnresolvedSource(
+                NormalizationCatalogBindingStatus.ProviderConflict,
+                "invalid_retained_assignment",
+                uuidLookups
+            );
+        }
         if (retained.Any(row => row.Conflict) || sourceUuids.Length > 1 || artistUuids.Length > 1)
         {
             return UnresolvedSource(
                 NormalizationCatalogBindingStatus.ProviderConflict,
-                "retained_assignment_conflict"
+                "retained_assignment_conflict",
+                uuidLookups
             );
         }
 
@@ -87,7 +97,8 @@ public sealed partial class NormalizationCatalogBindingService
             {
                 return UnresolvedSource(
                     NormalizationCatalogBindingStatus.ProviderConflict,
-                    "retained_recording_changed"
+                    "retained_recording_changed",
+                    uuidLookups
                 );
             }
             var accepted = await ReadSourceAsync(c, t, sourceUuids[0], ct);
@@ -95,14 +106,16 @@ public sealed partial class NormalizationCatalogBindingService
             {
                 return UnresolvedSource(
                     NormalizationCatalogBindingStatus.Missing,
-                    "missing_retained_recording"
+                    "missing_retained_recording",
+                    uuidLookups
                 );
             }
             if (accepted.UpstreamIdentifier != resource.ProviderKey || source == null)
             {
                 return UnresolvedSource(
                     NormalizationCatalogBindingStatus.ProviderConflict,
-                    "retained_provider_identity_changed"
+                    "retained_provider_identity_changed",
+                    uuidLookups
                 );
             }
         }
@@ -110,14 +123,18 @@ public sealed partial class NormalizationCatalogBindingService
         {
             return UnresolvedSource(
                 NormalizationCatalogBindingStatus.ProviderConflict,
-                "retained_artist_changed"
+                "retained_artist_changed",
+                uuidLookups
             );
         }
         return ResolveSource(
             source,
             expectedArtist,
             sourceUuids.Length == 1 ? "retained_archive_assignment" : "qualified_archive_item"
-        );
+        ) with
+        {
+            SourceUuidLookups = uuidLookups,
+        };
     }
 
     private static NormalizationCatalogBinding<NormalizationCatalogFileReference> BindArchiveFile(

@@ -26,7 +26,10 @@ public sealed partial class NormalizationCatalogBindingService
             );
         }
         var source = await ReadSourceAsync(c, t, uuid, ct);
-        return ResolveSource(source, expectedArtist, "exact_catalog_uuid");
+        return ResolveSource(source, expectedArtist, "exact_catalog_uuid") with
+        {
+            SourceUuidLookups = [uuid],
+        };
     }
 
     private static Task<SourceRow?> ReadSourceAsync(
