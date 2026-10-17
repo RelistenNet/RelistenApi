@@ -96,5 +96,9 @@ baselines, unchanged runs, reviewed fields, distinct spans, invalid same-input
 citations, file withdrawal, unbound scope, older extraction versions, stale input,
 rollback and replay. Use actual published extractions and inspect accepted credit
 reads and retained support. Apply migration 37 before deploying this binary:
-append publication also uses the new support tables. Stop the writer on rollback
-while retaining support episodes, credits and history.
+append publication also uses the new support tables. Retain support episodes,
+credits and history on rollback. Pause all accepted people publishers before
+rolling back to a binary that does not record contributor and append support.
+Do not resume that older append writer against managed credits; it cannot
+preserve the new support contract. Read rollback can disable normalized routes
+independently.
