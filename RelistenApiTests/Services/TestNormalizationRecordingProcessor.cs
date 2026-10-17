@@ -463,6 +463,60 @@ public sealed class TestNormalizationRecordingProcessor
     }
 
     [Test]
+    public async Task ObservedOwnerContributorCannotBeFreshenedByRecordingExtraction()
+    {
+        var source = await Source();
+        var observed = await fixture.Work.BeginWorkAsync(
+            Guid.NewGuid(),
+            new("people", "person", Guid.NewGuid()),
+            "observed-owner-fixture-v1",
+            [],
+            []
+        );
+        var contributor = new NormalizationResourceKey(
+            "test",
+            "other-observed-owner",
+            Guid.NewGuid().ToString("D")
+        );
+        await fixture.Work.BeginContributedWorkAsync(
+            Guid.NewGuid(),
+            Owner(source.SourceUuid),
+            NormalizationRecordingProcessor.Version,
+            new(contributor, 0, [], [], OwnerObservationSubjectUuids: [observed.SubjectUuid]),
+            candidateUniverses:
+            [
+                new(NormalizationCandidateUniverseKey.ForRepertoire(Guid.NewGuid()), 0),
+            ],
+            expectedOwnerObservations:
+            [
+                new(
+                    observed.SubjectUuid,
+                    observed.DesiredGeneration,
+                    observed.EditorialRevision,
+                    observed.PreviousPublishedWorkUuid
+                ),
+            ]
+        );
+
+        var result = await processor.ProcessAsync(Guid.NewGuid(), source.SourceUuid);
+
+        // The recording-only producer has no original candidate snapshot to submit.
+        // Admission must reject the incomplete union instead of capturing fresh owner clocks.
+        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Stale);
+        result.Reason.Should().Be("admission_changed");
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await proposals.GetAttemptBatchAsync(result.AttemptUuid)).Should().BeNull();
+        var retained = (
+            await fixture.Work.GetInputContributionAsync(Owner(source.SourceUuid), contributor)
+        )!;
+        retained.OwnerObservationSubjectUuids.Should().Equal(observed.SubjectUuid);
+        retained.Revision.Should().Be(1);
+        var owner = (await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid)))!;
+        owner.PublishedWorkUuid.Should().BeNull();
+        (await IsPending(owner.SubjectUuid)).Should().BeTrue();
+    }
+
+    [Test]
     public async Task UnknownCreditsAndEmptyTitlesDoNotWithdrawExistingAcceptedAssignments()
     {
         var source = await Source();

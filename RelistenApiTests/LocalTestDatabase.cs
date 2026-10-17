@@ -90,6 +90,14 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationCandidateUniverses.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationOwnerObservations.SchemaSql,
+            commandTimeout: 120
+        );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationCandidateFactIndexes.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

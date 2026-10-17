@@ -396,6 +396,42 @@ public sealed class TestNormalizationRecordingProposals
         (await Publish(supported)).Status.Should().Be(NormalizationPublicationStatus.Published);
     }
 
+    [Test]
+    public async Task ObservedOwnerOutsideCurrentBatchFormatCannotBeAcknowledged()
+    {
+        var source = await fixture.Source();
+        var observed = await fixture.Work.BeginWorkAsync(
+            Guid.NewGuid(),
+            new("people", "person", Guid.NewGuid()),
+            ProcessingVersion,
+            [],
+            []
+        );
+        var observation = new NormalizationSubjectObservation(
+            observed.SubjectUuid,
+            observed.DesiredGeneration,
+            observed.EditorialRevision,
+            observed.PreviousPublishedWorkUuid
+        );
+        var batch = await Batch(
+            source,
+            candidateUniverses:
+            [
+                new(NormalizationCandidateUniverseKey.ForRepertoire(Guid.NewGuid()), 0),
+            ],
+            ownerObservations: [observation]
+        );
+
+        Func<Task> save = () => proposals.SaveExtractionAsync(batch);
+        await save.Should().ThrowAsync<ArgumentException>().WithMessage("*owner observations*");
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(Owner(source)))!.PublishedWorkUuid.Should().BeNull();
+
+        var supported = await Batch(source);
+        (await Publish(supported)).Status.Should().Be(NormalizationPublicationStatus.Published);
+    }
+
     [TestCase("source")]
     [TestCase("version")]
     public async Task TerminalExtractionRejectsChangedHeadersButKeepsItsFirstOutcome(string field)
@@ -645,7 +681,8 @@ public sealed class TestNormalizationRecordingProposals
             NormalizationRecordingPreparation
         >? changePreparation = null,
         IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
-        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null,
+        IReadOnlyList<NormalizationSubjectObservation>? ownerObservations = null
     )
     {
         await fixture.Db.WithWriteConnection(c =>
@@ -670,7 +707,10 @@ public sealed class TestNormalizationRecordingProposals
                 Contributor(source),
                 preparation.ExpectedContributionRevision,
                 preparation.Binding.Inputs.Select(input => input.Resource).ToArray(),
-                []
+                [],
+                OwnerObservationSubjectUuids: ownerObservations
+                    ?.Select(observation => observation.SubjectUuid)
+                    .ToArray()
             ),
             preparation.ExpectedConfigurationGeneration,
             catalogInputs: preparation.Binding.CatalogInputs,
@@ -678,7 +718,8 @@ public sealed class TestNormalizationRecordingProposals
             mappingRegistry: preparation.Binding.MappingRegistry,
             expectedInputRevisions: preparation.Binding.Inputs,
             importedVenues: importedVenues,
-            candidateUniverses: candidateUniverses
+            candidateUniverses: candidateUniverses,
+            expectedOwnerObservations: ownerObservations
         );
         var input = (
             await new NormalizationEvidenceService(fixture.Db).GetCaptureAsync(

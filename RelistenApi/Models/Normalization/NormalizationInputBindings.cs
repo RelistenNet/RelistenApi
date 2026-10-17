@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -7,12 +8,15 @@ namespace Relisten.Api.Models.Normalization;
 /// Replaces one contributor's complete inputs and identity dependencies. A recording uses
 /// a stable contributor key; another recording cannot remove its bindings. Revision zero
 /// means absent. An empty replacement retains the contributor's revision as a tombstone.
+/// OwnerObservationSubjectUuids owns factual read keys without creating causal graph edges.
 /// </summary>
 public sealed record NormalizationInputContribution(
     NormalizationResourceKey Contributor,
     long ExpectedRevision,
     IReadOnlyList<NormalizationResourceKey> Resources,
-    IReadOnlyList<Guid> DependencySubjectUuids
+    IReadOnlyList<Guid> DependencySubjectUuids,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<Guid>? OwnerObservationSubjectUuids = null
 );
 
 /// <summary>
@@ -29,5 +33,7 @@ public sealed record NormalizationInputContributionState(
     IReadOnlyList<string> SourceIdentifiers,
     bool UsesMappingRegistry = false,
     IReadOnlyList<Guid>? ImportedVenueUuids = null,
-    IReadOnlyList<NormalizationCandidateUniverseKey>? CandidateUniverses = null
+    IReadOnlyList<NormalizationCandidateUniverseKey>? CandidateUniverses = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<Guid>? OwnerObservationSubjectUuids = null
 );

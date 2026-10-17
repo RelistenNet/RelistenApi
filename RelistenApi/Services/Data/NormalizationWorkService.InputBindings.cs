@@ -27,6 +27,9 @@ public sealed partial class NormalizationWorkService
     /// Supplied catalog and candidate generations remain caller preconditions, never freshened values.
     /// Omitting mappingRegistry removes only this contributor's registry dependency; the owner retains
     /// the dependency while any contributor still requires it.
+    /// OwnerObservationSubjectUuids replaces this contributor's observation keys. The separate
+    /// expectedOwnerObservations must contain original stamps for the complete resulting union,
+    /// including other contributors' keys; admission never refreshes their observations.
     /// expectedInputRevisions pins only this contributor's resources to the revisions consumed
     /// before admission. Changed heads reject the request without committing a replacement.
     /// An unchanged policy uses the serialized owner's current configuration revision; changing
@@ -44,7 +47,8 @@ public sealed partial class NormalizationWorkService
         NormalizationMappingRegistryDependency? mappingRegistry = null,
         IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null,
         IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
-        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null,
+        IReadOnlyList<NormalizationSubjectObservation>? expectedOwnerObservations = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -54,6 +58,7 @@ public sealed partial class NormalizationWorkService
         var expectedSources = NormalizeSourceInputs(sourceIdentities);
         var expectedVenues = NormalizeImportedVenues(importedVenues);
         var expectedCandidates = NormalizeCandidateUniverses(candidateUniverses);
+        var observations = NormalizeOwnerObservations(expectedOwnerObservations);
         var replacement = new ContributionReplacement(
             contribution.Contributor,
             contribution.ExpectedRevision,
@@ -64,7 +69,8 @@ public sealed partial class NormalizationWorkService
                 expectedSources.Select(input => input.UpstreamIdentifier),
                 mappingRegistry != null,
                 expectedVenues.Select(input => input.VenueUuid),
-                expectedCandidates.Select(input => input.Universe)
+                expectedCandidates.Select(input => input.Universe),
+                contribution.OwnerObservationSubjectUuids
             )
         );
         var expectedInputs = NormalizeExpectedInputRevisions(
@@ -87,7 +93,8 @@ public sealed partial class NormalizationWorkService
             mappingRegistry,
             expectedInputs,
             expectedVenues,
-            expectedCandidates
+            expectedCandidates,
+            observations
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -124,6 +131,7 @@ public sealed partial class NormalizationWorkService
                     expectedInputs,
                     expectedVenues,
                     expectedCandidates,
+                    observations,
                     change
                 );
                 return await StartConfiguredWork(
@@ -169,6 +177,7 @@ public sealed partial class NormalizationWorkService
                     + previous.SourceIdentifiers.Length
                     + (previous.ImportedVenueUuids?.Length ?? 0)
                     + (previous.CandidateUniverses?.Length ?? 0)
+                    + (previous.ObservedSubjects?.Length ?? 0)
                     > 0
                 || previous.UsesMappingRegistry
             )
@@ -211,7 +220,10 @@ public sealed partial class NormalizationWorkService
                 .Concat(replacement.Bindings.ImportedVenueUuids ?? []),
             retained
                 .SelectMany(state => state.CandidateUniverses ?? [])
-                .Concat(replacement.Bindings.CandidateUniverses ?? [])
+                .Concat(replacement.Bindings.CandidateUniverses ?? []),
+            retained
+                .SelectMany(state => state.OwnerObservationSubjectUuids ?? [])
+                .Concat(replacement.Bindings.ObservedSubjects ?? [])
         );
         return (union, new(replacement, baseline));
     }
@@ -335,6 +347,7 @@ public sealed partial class NormalizationWorkService
                 DELETE FROM normalization.work_contribution_mapping_registry_inputs WHERE contribution_uuid=@contributionUuid;
                 DELETE FROM normalization.work_contribution_venue_inputs WHERE contribution_uuid=@contributionUuid;
                 DELETE FROM normalization.work_contribution_candidate_inputs WHERE contribution_uuid=@contributionUuid;
+                DELETE FROM normalization.work_contribution_owner_observations WHERE contribution_uuid=@contributionUuid;
                 INSERT INTO normalization.work_contribution_inputs(contribution_uuid,resource_uuid)
                     SELECT @contributionUuid,r.uuid FROM normalization.input_resources r
                     JOIN jsonb_to_recordset(@resources::jsonb) AS k("Provider" text,"ResourceType" text,"ProviderKey" text)
@@ -349,6 +362,8 @@ public sealed partial class NormalizationWorkService
                     SELECT @contributionUuid,unnest(@venues::uuid[]);
                 INSERT INTO normalization.work_contribution_candidate_inputs(contribution_uuid,domain,scope_uuid)
                     SELECT @contributionUuid,domain,scope_uuid FROM unnest(@candidateDomains::text[],@candidateScopes::uuid[]) u(domain,scope_uuid);
+                INSERT INTO normalization.work_contribution_owner_observations(contribution_uuid,observed_subject_uuid)
+                    SELECT @contributionUuid,unnest(@observedSubjects::uuid[]);
                 INSERT INTO normalization.work_contribution_mapping_registry_inputs(contribution_uuid)
                     SELECT @contributionUuid WHERE @usesMappingRegistry
                 """,
@@ -367,6 +382,7 @@ public sealed partial class NormalizationWorkService
                         .Select(key => key.ScopeUuid)
                         .ToArray(),
                     usesMappingRegistry = replacement.Bindings.UsesMappingRegistry,
+                    observedSubjects = replacement.Bindings.ObservedSubjects ?? [],
                 },
                 transaction,
                 cancellationToken: ct
@@ -394,7 +410,8 @@ public sealed partial class NormalizationWorkService
             states.SelectMany(state => state.SourceIdentifiers),
             states.Any(state => state.UsesMappingRegistry),
             states.SelectMany(state => state.ImportedVenueUuids ?? []),
-            states.SelectMany(state => state.CandidateUniverses ?? [])
+            states.SelectMany(state => state.CandidateUniverses ?? []),
+            states.SelectMany(state => state.OwnerObservationSubjectUuids ?? [])
         );
         if (
             !union.Resources.SequenceEqual(requested.Resources)
@@ -404,6 +421,7 @@ public sealed partial class NormalizationWorkService
             || union.UsesMappingRegistry != requested.UsesMappingRegistry
             || !(union.ImportedVenueUuids ?? []).SequenceEqual(requested.ImportedVenueUuids ?? [])
             || !(union.CandidateUniverses ?? []).SequenceEqual(requested.CandidateUniverses ?? [])
+            || !(union.ObservedSubjects ?? []).SequenceEqual(requested.ObservedSubjects ?? [])
         )
         {
             throw new NormalizationConflictException(
@@ -441,6 +459,8 @@ public sealed partial class NormalizationWorkService
                 SELECT i.contribution_uuid AS Uuid,i.venue_uuid AS Value FROM normalization.work_contribution_venue_inputs i
                     JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter};
                 SELECT i.contribution_uuid AS Uuid,i.domain AS Domain,i.scope_uuid AS ScopeUuid FROM normalization.work_contribution_candidate_inputs i
+                    JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter};
+                SELECT i.contribution_uuid AS Uuid,i.observed_subject_uuid AS Value FROM normalization.work_contribution_owner_observations i
                     JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter}
                 """,
                 new
@@ -462,6 +482,7 @@ public sealed partial class NormalizationWorkService
         var registry = (await rows.ReadAsync<Guid>()).ToHashSet();
         var venues = (await rows.ReadAsync<ContributionGuid>()).ToLookup(row => row.Uuid);
         var candidates = (await rows.ReadAsync<ContributionCandidate>()).ToLookup(row => row.Uuid);
+        var observations = (await rows.ReadAsync<ContributionGuid>()).ToLookup(row => row.Uuid);
         return headers
             .Select(header =>
             {
@@ -481,7 +502,8 @@ public sealed partial class NormalizationWorkService
                         .Select(row => new NormalizationCandidateUniverseKey(
                             row.Domain,
                             row.ScopeUuid
-                        ))
+                        )),
+                    observations[header.Uuid].Select(row => row.Value)
                 );
                 return ToContributionState(
                     subjectUuid,
@@ -509,7 +531,8 @@ public sealed partial class NormalizationWorkService
                 SELECT upstream_identifier FROM normalization.work_source_identity_inputs WHERE subject_uuid=@subjectUuid;
                 SELECT EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs WHERE subject_uuid=@subjectUuid);
                 SELECT venue_uuid FROM normalization.work_venue_inputs WHERE subject_uuid=@subjectUuid;
-                SELECT domain AS Domain,scope_uuid AS ScopeUuid FROM normalization.work_candidate_inputs WHERE subject_uuid=@subjectUuid
+                SELECT domain AS Domain,scope_uuid AS ScopeUuid FROM normalization.work_candidate_inputs WHERE subject_uuid=@subjectUuid;
+                SELECT observed_subject_uuid FROM normalization.work_owner_observations WHERE subject_uuid=@subjectUuid
                 """,
                 new { subjectUuid },
                 transaction,
@@ -523,6 +546,7 @@ public sealed partial class NormalizationWorkService
         var usesMappingRegistry = await rows.ReadSingleAsync<bool>();
         var venues = (await rows.ReadAsync<Guid>()).ToArray();
         var candidates = (await rows.ReadAsync<NormalizationCandidateUniverseKey>()).ToArray();
+        var observations = (await rows.ReadAsync<Guid>()).ToArray();
         return WorkBindingSet.Create(
             resources,
             dependencies,
@@ -530,7 +554,8 @@ public sealed partial class NormalizationWorkService
             identifiers,
             usesMappingRegistry,
             venues,
-            candidates
+            candidates,
+            observations
         );
     }
 
@@ -549,7 +574,8 @@ public sealed partial class NormalizationWorkService
             replacement.Bindings.SourceIdentifiers,
             replacement.Bindings.UsesMappingRegistry,
             replacement.Bindings.ImportedVenueUuids,
-            replacement.Bindings.CandidateUniverses
+            replacement.Bindings.CandidateUniverses,
+            replacement.Bindings.ObservedSubjects
         );
 
     private sealed record ContributionReplacement(

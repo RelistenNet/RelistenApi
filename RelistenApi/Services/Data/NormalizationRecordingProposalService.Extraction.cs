@@ -191,6 +191,13 @@ public sealed partial class NormalizationRecordingProposalService
             );
         }
 
+        if ((batch.Ticket.OwnerObservations?.Count ?? 0) > 0)
+        {
+            throw new ArgumentException(
+                "Recording proposals do not yet consume candidate owner observations."
+            );
+        }
+
         if ((batch.Ticket.CandidateUniverses?.Count ?? 0) > 0)
         {
             throw new ArgumentException(

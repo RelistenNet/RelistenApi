@@ -330,6 +330,7 @@ public sealed class NormalizationRecordingProcessor(
         // contributor still adds facts this producer cannot read or acknowledge.
         && (ticket.ImportedVenues?.Count ?? 0) == 0
         && (ticket.CandidateUniverses?.Count ?? 0) == 0
+        && (ticket.OwnerObservations?.Count ?? 0) == 0
         && (ticket.CatalogInputs ?? [])
             .OrderBy(input => input.ArtistUuid)
             .SequenceEqual(preparation.Binding.CatalogInputs.OrderBy(input => input.ArtistUuid))

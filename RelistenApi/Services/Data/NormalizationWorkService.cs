@@ -44,6 +44,10 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// removing venue keys changes configuration; a new generation for the same keys does not.
     /// candidateUniverses pins the candidate facts snapshot, including an empty pool. Its
     /// generations must come from the same snapshot as the matching facts, never a later refresh.
+    /// expectedOwnerObservations preserves complete stamps read with those facts. Observations
+    /// require candidate scopes and do not form causal dependency edges, so self and reciprocal
+    /// fact reads are valid. Publication checks receipts; pending checks configuration, editorial
+    /// revisions and candidate scopes instead of receipt-only changes.
     /// Changing input bytes needs no fan-out write:
     /// pending queries and publication compare the durable resource generations directly.
     /// </summary>
@@ -60,7 +64,8 @@ public sealed partial class NormalizationWorkService(DbService db)
         NormalizationMappingRegistryDependency? mappingRegistry = null,
         IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null,
         IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null,
-        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null
+        IReadOnlyList<NormalizationCandidateUniverseDependency>? candidateUniverses = null,
+        IReadOnlyList<NormalizationSubjectObservation>? expectedOwnerObservations = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -68,6 +73,7 @@ public sealed partial class NormalizationWorkService(DbService db)
         var expectedSources = NormalizeSourceInputs(sourceIdentities);
         var expectedVenues = NormalizeImportedVenues(importedVenues);
         var expectedCandidates = NormalizeCandidateUniverses(candidateUniverses);
+        var observations = NormalizeOwnerObservations(expectedOwnerObservations);
         var bindings = WorkBindingSet.Create(
             resourceKeys,
             dependencySubjectUuids,
@@ -75,7 +81,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             expectedSources.Select(input => input.UpstreamIdentifier),
             mappingRegistry != null,
             expectedVenues.Select(input => input.VenueUuid),
-            expectedCandidates.Select(input => input.Universe)
+            expectedCandidates.Select(input => input.Universe),
+            observations.Select(input => input.SubjectUuid)
         );
         var configurationHash = bindings.ConfigurationHash(policyVersion);
         var expectedInputs = NormalizeExpectedInputRevisions(
@@ -108,7 +115,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             mappingRegistry,
             expectedInputs,
             expectedVenues,
-            expectedCandidates
+            expectedCandidates,
+            observations
         );
         var request = new WorkStartRequest(
             workUuid,
@@ -122,7 +130,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             mappingRegistry,
             expectedInputs,
             expectedVenues,
-            expectedCandidates
+            expectedCandidates,
+            observations
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -257,10 +266,11 @@ public sealed partial class NormalizationWorkService(DbService db)
         var subjects = await LockSubjects(
             connection,
             transaction,
-            bindings.Dependencies.Append(subjectUuid),
+            bindings.Dependencies.Append(subjectUuid).Concat(bindings.ObservedSubjects ?? []),
             ct
         );
         var owner = subjects.Single(subject => subject.Uuid == subjectUuid);
+        RequireOwnerObservations(request.OwnerObservations, bindings, subjects);
         var expectedGeneration = request.ExpectedConfigurationGeneration;
         if (request.Contribution != null)
         {
@@ -290,6 +300,13 @@ public sealed partial class NormalizationWorkService(DbService db)
         );
         await ConfigureCatalogBindings(connection, transaction, owner.Uuid, catalog, ct);
         await ConfigureCandidateBindings(connection, transaction, owner.Uuid, candidates, ct);
+        await ConfigureOwnerObservations(
+            connection,
+            transaction,
+            owner.Uuid,
+            bindings.ObservedSubjects ?? [],
+            ct
+        );
         var ticket = new NormalizationWorkTicket(
             request.WorkUuid,
             subjectUuid,
@@ -299,7 +316,7 @@ public sealed partial class NormalizationWorkService(DbService db)
             owner.PublishedWorkUuid,
             inputs,
             subjects
-                .Where(subject => subject.Uuid != subjectUuid)
+                .Where(subject => bindings.Dependencies.Contains(subject.Uuid))
                 .Select(subject => new NormalizationSubjectDependency(
                     subject.Uuid,
                     subject.DesiredGeneration,
@@ -311,7 +328,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities,
             catalog.MappingRegistry,
             catalog.ImportedVenues.Count == 0 ? null : catalog.ImportedVenues,
-            candidates.Length == 0 ? null : candidates
+            candidates.Length == 0 ? null : candidates,
+            request.OwnerObservations.Length == 0 ? null : request.OwnerObservations
         );
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -343,6 +361,7 @@ public sealed partial class NormalizationWorkService(DbService db)
         NormalizationBindingInputReference[] ExpectedInputRevisions,
         NormalizationImportedVenueDependency[] ImportedVenues,
         NormalizationCandidateUniverseDependency[] CandidateUniverses,
+        NormalizationSubjectObservation[] OwnerObservations,
         ContributionChange? Contribution = null
     );
 
@@ -360,7 +379,9 @@ public sealed partial class NormalizationWorkService(DbService db)
             Condition = JsonIgnoreCondition.WhenWritingNull
         )] Guid[]? ImportedVenueUuids = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-            NormalizationCandidateUniverseKey[]? CandidateUniverses = null
+            NormalizationCandidateUniverseKey[]? CandidateUniverses = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+            Guid[]? ObservedSubjects = null
     )
     {
         public static WorkBindingSet Create(
@@ -370,7 +391,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             IEnumerable<string> sourceIdentifiers,
             bool usesMappingRegistry = false,
             IEnumerable<Guid>? importedVenueUuids = null,
-            IEnumerable<NormalizationCandidateUniverseKey>? candidateUniverses = null
+            IEnumerable<NormalizationCandidateUniverseKey>? candidateUniverses = null,
+            IEnumerable<Guid>? observedSubjects = null
         ) =>
             new(
                 resources
@@ -387,7 +409,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                     .ToArray(),
                 usesMappingRegistry,
                 NormalizeVenueKeys(importedVenueUuids),
-                NormalizeCandidateBindingKeys(candidateUniverses)
+                NormalizeCandidateBindingKeys(candidateUniverses),
+                NormalizeObservationKeys(observedSubjects)
             );
 
         public string ConfigurationHash(string policyVersion)
@@ -424,7 +447,11 @@ public sealed partial class NormalizationWorkService(DbService db)
                         sourceIdentifiers = SourceIdentifiers,
                     }
                 );
-            if (ImportedVenueUuids == null && CandidateUniverses == null)
+            if (
+                ImportedVenueUuids == null
+                && CandidateUniverses == null
+                && ObservedSubjects == null
+            )
             {
                 return Hash(configuration);
             }
@@ -440,6 +467,13 @@ public sealed partial class NormalizationWorkService(DbService db)
                 fields.Add(
                     "candidateUniverses",
                     JsonSerializer.SerializeToElement(CandidateUniverses)
+                );
+            }
+            if (ObservedSubjects != null)
+            {
+                fields.Add(
+                    "ownerObservations",
+                    JsonSerializer.SerializeToElement(ObservedSubjects)
                 );
             }
             return Hash(JsonSerializer.SerializeToElement(fields));
@@ -584,19 +618,31 @@ public sealed partial class NormalizationWorkService(DbService db)
                 var subjects = await LockSubjects(
                     connection,
                     transaction,
-                    ticket.Dependencies.Select(d => d.SubjectUuid).Append(ticket.SubjectUuid),
+                    ticket
+                        .Dependencies.Select(d => d.SubjectUuid)
+                        .Append(ticket.SubjectUuid)
+                        .Concat(
+                            (ticket.OwnerObservations ?? []).Select(input => input.SubjectUuid)
+                        ),
                     cancellationToken
                 );
                 var owner = subjects.Single(s => s.Uuid == ticket.SubjectUuid);
                 var current =
                     CatalogIsCurrent(ticket, catalog)
                     && (ticket.CandidateUniverses ?? []).SequenceEqual(candidates)
-                    && IsCurrent(ticket, inputs, subjects, owner);
+                    && IsCurrent(ticket, inputs, subjects, owner)
+                    && OwnerObservationsAreCurrent(ticket, subjects);
                 if (current)
                 {
                     await publish(connection, transaction, cancellationToken);
                     cancellationToken.ThrowIfCancellationRequested();
                     await RecordPublication(connection, transaction, ticket, cancellationToken);
+                    await RecordOwnerObservationPublication(
+                        connection,
+                        transaction,
+                        ticket.SubjectUuid,
+                        cancellationToken
+                    );
                     // Exclusive write scopes remain locked through this read. A publication
                     // acknowledges its own accepted changes without rewriting its audit ticket.
                     await RecordCandidatePublication(
@@ -772,6 +818,9 @@ public sealed partial class NormalizationWorkService(DbService db)
                                 WHERE d.subject_uuid=s.uuid AND (d.published_generation IS DISTINCT FROM ds.desired_generation
                                     OR d.published_editorial_revision IS DISTINCT FROM ds.editorial_revision
                                     OR d.published_work_uuid IS DISTINCT FROM ds.published_work_uuid))
+                            OR EXISTS(SELECT 1 FROM normalization.work_owner_observations i JOIN normalization.work_subjects observed ON observed.uuid=i.observed_subject_uuid
+                                WHERE i.subject_uuid=s.uuid AND (i.published_desired_generation IS DISTINCT FROM observed.desired_generation
+                                    OR i.published_editorial_revision IS DISTINCT FROM observed.editorial_revision))
                             OR EXISTS(SELECT 1 FROM normalization.work_catalog_inputs i JOIN normalization.catalog_artist_revisions r ON r.artist_uuid=i.artist_uuid
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_source_identity_inputs i JOIN normalization.catalog_source_identity_revisions r ON r.upstream_identifier=i.upstream_identifier
