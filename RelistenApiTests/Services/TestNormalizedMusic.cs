@@ -23,75 +23,58 @@ public sealed class TestNormalizedMusic
     public void Stop() => fixture?.Dispose();
 
     [Test]
-    public async Task RepeatedPassagesKeepIdsAfterReorderAndFilesCanSpanShowsWithoutOffsets()
+    public async Task RepeatedPassagesKeepIdsAfterReorderAndFilesCanSpanPassagesWithoutOffsets()
     {
-        var input = await fixture.Capture("Song > Song; combined shows", "songs");
+        var input = await fixture.Capture("Song > Song; one performance", "songs");
         var source = await fixture.Source();
         var artist = await Artist(source.ArtistId);
+        var performance = await Show(source.ArtistId, "early");
+        await fixture.Db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE sources SET show_id=(SELECT id FROM shows WHERE uuid=@performance) WHERE uuid=@SourceUuid",
+                new { performance, source.SourceUuid }
+            )
+        );
         var song = Song(artist, input.Reference);
         var repertoire = await Ticket(input, "songs", "artist_repertoire", artist);
         var songs = new MusicPublication { RepertoireSongs = [song] };
         await music.PublishAsync(repertoire.WorkUuid, songs);
         (await music.PublishAsync(repertoire.WorkUuid, songs)).Replayed.Should().BeTrue();
-        var first = Edition(artist, input.Reference) with
+        var edition = Edition(artist, input.Reference) with
         {
-            ShowUuid = await Show(source.ArtistId, "early"),
+            ShowUuid = performance,
             Ordered = true,
         };
-        var second = Edition(artist, input.Reference) with
-        {
-            ShowUuid = await Show(source.ArtistId, "late"),
-            Ordered = true,
-        };
-        var one = Occurrence(first.Uuid, song.Uuid, input.Reference) with
+        var one = Occurrence(edition.Uuid, song.Uuid, input.Reference) with
         {
             Position = 1,
             ProviderItemKey = "one",
             TransitionAfter = "segue",
         };
-        var reprise = Occurrence(first.Uuid, song.Uuid, input.Reference) with
+        var reprise = Occurrence(edition.Uuid, song.Uuid, input.Reference) with
         {
             Position = 2,
             ProviderItemKey = "reprise",
         };
-        var late = Occurrence(second.Uuid, song.Uuid, input.Reference) with { Position = 1 };
-        var earlyTicket = await Ticket(
-            input,
-            "songs",
-            "setlist",
-            first.Uuid,
-            repertoire.SubjectUuid
-        );
+        var setlist = await Ticket(input, "songs", "setlist", edition.Uuid, repertoire.SubjectUuid);
         await music.PublishAsync(
-            earlyTicket.WorkUuid,
-            new MusicPublication { Editions = [first], Occurrences = [one, reprise] }
-        );
-        var lateTicket = await Ticket(
-            input,
-            "songs",
-            "setlist",
-            second.Uuid,
-            repertoire.SubjectUuid
-        );
-        await music.PublishAsync(
-            lateTicket.WorkUuid,
-            new MusicPublication { Editions = [second], Occurrences = [late] }
+            setlist.WorkUuid,
+            new MusicPublication { Editions = [edition], Occurrences = [one, reprise] }
         );
         var content = Content(source.TrackUuid, song.Uuid, input.Reference) with
         {
             OccurrenceUuid = one.Uuid,
         };
-        var fileTicket = await Ticket(
+        var file = await Ticket(
             input,
             "songs",
             "recording",
             source.SourceUuid,
             repertoire.SubjectUuid,
-            earlyTicket.SubjectUuid,
-            lateTicket.SubjectUuid
+            setlist.SubjectUuid
         );
         await music.PublishAsync(
-            fileTicket.WorkUuid,
+            file.WorkUuid,
             new MusicPublication
             {
                 TrackContents =
@@ -101,12 +84,12 @@ public sealed class TestNormalizedMusic
                     {
                         Uuid = Guid.NewGuid(),
                         Position = 2,
-                        OccurrenceUuid = late.Uuid,
+                        OccurrenceUuid = reprise.Uuid,
                     },
                 ],
             }
         );
-        var reorder = await Ticket(input, "songs", "setlist", first.Uuid, repertoire.SubjectUuid);
+        var reorder = await Ticket(input, "songs", "setlist", edition.Uuid, repertoire.SubjectUuid);
         await music.PublishAsync(
             reorder.WorkUuid,
             new MusicPublication
@@ -126,16 +109,132 @@ public sealed class TestNormalizedMusic
                 ],
             }
         );
-        (await music.GetOccurrencesAsync(first.Uuid))
+        (await music.GetOccurrencesAsync(edition.Uuid))
             .Select(x => x.Value.Uuid)
             .Should()
             .Equal(reprise.Uuid, one.Uuid);
         var contents = await music.GetTrackContentsAsync(source.TrackUuid);
-        contents.Select(x => x.Value.OccurrenceUuid).Should().Equal(one.Uuid, late.Uuid);
+        contents.Select(x => x.Value.OccurrenceUuid).Should().Equal(one.Uuid, reprise.Uuid);
         contents.Should().OnlyContain(x => x.Value.StartMs == null && x.Value.EndMs == null);
         (await music.SearchRepertoireAsync(artist))
             .Should()
             .Contain(x => x.Value.Uuid == song.Uuid && x.Value.Basis == "title_derived");
+    }
+
+    [Test]
+    public async Task FileAlignmentCannotCrossPerformancesAndUnresolvedSongMatchingRemainsAccepted()
+    {
+        var input = await fixture.Capture("Song; early and late accounts", "songs");
+        var source = await fixture.Source();
+        var artist = await Artist(source.ArtistId);
+        var early = await Show(source.ArtistId, "early");
+        var late = await Show(source.ArtistId, "late");
+        await fixture.Db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE sources SET show_id=(SELECT id FROM shows WHERE uuid=@early) WHERE uuid=@SourceUuid",
+                new { early, source.SourceUuid }
+            )
+        );
+        var song = Song(artist, input.Reference);
+        var repertoire = await Ticket(input, "songs", "artist_repertoire", artist);
+        await music.PublishAsync(
+            repertoire.WorkUuid,
+            new MusicPublication { RepertoireSongs = [song] }
+        );
+        var edition = Edition(artist, input.Reference) with { ShowUuid = late, Ordered = true };
+        var occurrence = Occurrence(edition.Uuid, song.Uuid, input.Reference) with { Position = 1 };
+        var setlist = await Ticket(input, "songs", "setlist", edition.Uuid, repertoire.SubjectUuid);
+        await music.PublishAsync(
+            setlist.WorkUuid,
+            new MusicPublication { Editions = [edition], Occurrences = [occurrence] }
+        );
+        var content = Content(source.TrackUuid, song.Uuid, input.Reference) with
+        {
+            OccurrenceUuid = occurrence.Uuid,
+        };
+        var file = await Ticket(
+            input,
+            "songs",
+            "recording",
+            source.SourceUuid,
+            repertoire.SubjectUuid,
+            setlist.SubjectUuid
+        );
+        var crossPerformance = () =>
+            music.PublishAsync(file.WorkUuid, new MusicPublication { TrackContents = [content] });
+        await crossPerformance.Should().ThrowAsync<ArgumentException>();
+        (await music.GetTrackContentsAsync(source.TrackUuid)).Should().BeEmpty();
+        await music.PublishAsync(
+            file.WorkUuid,
+            new MusicPublication { TrackContents = [content with { OccurrenceUuid = null }] }
+        );
+        (await music.GetTrackContentsAsync(source.TrackUuid))
+            .Single()
+            .Value.RepertoireSongUuid.Should()
+            .Be(song.Uuid);
+        var unassigned = await Ticket(
+            input,
+            "songs",
+            "setlist",
+            edition.Uuid,
+            repertoire.SubjectUuid
+        );
+        await music.PublishAsync(
+            unassigned.WorkUuid,
+            new MusicPublication
+            {
+                Editions = [edition with { ExpectedRevision = 1, ShowUuid = null }],
+            }
+        );
+        var align = await Ticket(
+            input,
+            "songs",
+            "recording",
+            source.SourceUuid,
+            repertoire.SubjectUuid,
+            setlist.SubjectUuid
+        );
+        await music.PublishAsync(
+            align.WorkUuid,
+            new MusicPublication { TrackContents = [content with { ExpectedRevision = 1 }] }
+        );
+        (await music.GetTrackContentsAsync(source.TrackUuid))
+            .Single()
+            .Value.OccurrenceUuid.Should()
+            .Be(occurrence.Uuid);
+        await fixture.Db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE sources SET show_id=(SELECT id FROM shows WHERE uuid=@late) WHERE uuid=@SourceUuid",
+                new { late, source.SourceUuid }
+            )
+        );
+        var assigned = await Ticket(
+            input,
+            "songs",
+            "setlist",
+            edition.Uuid,
+            repertoire.SubjectUuid
+        );
+        await music.PublishAsync(
+            assigned.WorkUuid,
+            new MusicPublication { Editions = [edition with { ExpectedRevision = 2 }] }
+        );
+        var matching = await Ticket(
+            input,
+            "songs",
+            "recording",
+            source.SourceUuid,
+            repertoire.SubjectUuid,
+            setlist.SubjectUuid
+        );
+        await music.PublishAsync(
+            matching.WorkUuid,
+            new MusicPublication { TrackContents = [content with { ExpectedRevision = 2 }] }
+        );
+        (await music.GetTrackContentsAsync(source.TrackUuid))
+            .Single()
+            .Value.OccurrenceUuid.Should()
+            .Be(occurrence.Uuid);
     }
 
     [Test]

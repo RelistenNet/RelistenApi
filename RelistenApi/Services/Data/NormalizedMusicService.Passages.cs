@@ -184,10 +184,11 @@ public sealed partial class NormalizedMusicService
         var track = await c.QuerySingleOrDefaultAsync<TrackScope>(
             new CommandDefinition(
                 """
-                SELECT a.uuid AS ArtistUuid,t.duration::double precision AS Duration,s.uuid AS SourceUuid
+                SELECT a.uuid AS ArtistUuid,t.duration::double precision AS Duration,s.uuid AS SourceUuid,sh.uuid AS ShowUuid
                 FROM source_tracks t JOIN sources s ON s.id=t.source_id
                 JOIN source_sets sets ON sets.id=t.source_set_id AND sets.source_id=s.id
-                JOIN artists a ON a.id=s.artist_id AND a.id=t.artist_id WHERE t.uuid=@SourceTrackUuid
+                JOIN artists a ON a.id=s.artist_id AND a.id=t.artist_id
+                LEFT JOIN shows sh ON sh.id=s.show_id AND sh.artist_id=s.artist_id WHERE t.uuid=@SourceTrackUuid
                 """,
                 content,
                 t,
@@ -256,7 +257,7 @@ public sealed partial class NormalizedMusicService
                 await c.QuerySingleOrDefaultAsync<OccurrenceScope>(
                     new CommandDefinition(
                         """
-                        SELECT e.artist_uuid AS ArtistUuid,o.repertoire_song_uuid AS RepertoireSongUuid
+                        SELECT e.artist_uuid AS ArtistUuid,o.repertoire_song_uuid AS RepertoireSongUuid,e.show_uuid AS ShowUuid
                         FROM normalization.song_occurrences o JOIN normalization.setlist_editions e ON e.uuid=o.edition_uuid
                         WHERE o.uuid=@occurrence AND NOT o.retracted AND NOT e.retracted
                         """,
@@ -269,6 +270,12 @@ public sealed partial class NormalizedMusicService
             {
                 throw new ArgumentException(
                     "A file and its occurrence must belong to the same artist."
+                );
+            }
+            if (track != null && scope.ShowUuid.HasValue && scope.ShowUuid != track.ShowUuid)
+            {
+                throw new ArgumentException(
+                    "A file occurrence must belong to the recording's current performance; retain song matching without occurrence alignment when that performance is unresolved."
                 );
             }
             if (
@@ -286,7 +293,7 @@ public sealed partial class NormalizedMusicService
             track
             ?? await c.QuerySingleAsync<TrackScope>(
                 new CommandDefinition(
-                    "SELECT artist_uuid AS ArtistUuid,NULL::double precision AS Duration,source_uuid AS SourceUuid FROM normalization.track_contents WHERE uuid=@Uuid",
+                    "SELECT artist_uuid AS ArtistUuid,NULL::double precision AS Duration,source_uuid AS SourceUuid,NULL::uuid AS ShowUuid FROM normalization.track_contents WHERE uuid=@Uuid",
                     content,
                     t,
                     cancellationToken: ct
@@ -354,7 +361,16 @@ public sealed partial class NormalizedMusicService
 
     private sealed record EditionScope(Guid ArtistUuid, bool Ordered);
 
-    private sealed record TrackScope(Guid ArtistUuid, double? Duration, Guid SourceUuid);
+    private sealed record TrackScope(
+        Guid ArtistUuid,
+        double? Duration,
+        Guid SourceUuid,
+        Guid? ShowUuid
+    );
 
-    private sealed record OccurrenceScope(Guid ArtistUuid, Guid? RepertoireSongUuid);
+    private sealed record OccurrenceScope(
+        Guid ArtistUuid,
+        Guid? RepertoireSongUuid,
+        Guid? ShowUuid
+    );
 }
