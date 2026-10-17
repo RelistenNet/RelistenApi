@@ -2,6 +2,8 @@
 
 The target is the complete normalization layer for Grateful Dead, Phish, Taper's Section and all current and future artists. People, venues, artist repertoires, cross-artist compositions, ordered occurrences, recording-file contents and capture/transfer/matrix lineage are required domains. The [execution plan](../../plans/active/2026-10-17-full-normalization/README.md) owns that delivery. This analysis establishes the real inputs and constraints; it does not claim that a census has resolved their identities.
 
+The [real-data evaluation corpus](evaluation/README.md) adds 132 evidence records and 102 labeled cases across 25 artists. It separates extraction, identity matches and relationship claims, including unsupported decisions. The [domain contracts](../../design/2026-10-17-normalization-contracts.md) define the proposed implementation and additive APIs. Neither artifact claims measured normalization accuracy.
+
 ## What was queried
 
 The census reads the production replica directly in one repeatable-read, read-only transaction. It profiles every artist and every row in the named catalog relations. It does not select a few artists or extrapolate global counts from a sample. The [SQL](sql/catalog-census.sql) and [summary generator](scripts/summarize_census.py) retain the input snapshot, executed-query hash, exact totals and independently reconciled artist profiles.
@@ -54,4 +56,4 @@ The census has a per-statement timeout and advances no database state. A new cap
 
 ## Status
 
-The all-artist census and initial importer-retention audit are complete. Global identity candidates, independently reviewed evaluation, domain schemas, API contracts and implementation remain work in the full plan. The older [19-artist research](../2026-10-16-catalog-enrichment/README.md) is historical evidence; its statements that Collections or Aadam support were unimplemented are superseded by the [completed import/performance work](../../plans/active/2026-10-17-show-performances/README.md).
+The all-artist census, initial importer-retention audit, proposed domain/API contracts and first development-labeled corpus are complete. Global candidate indexes, independently verified evaluation, provider evidence recovery, migrations, normalization services and public reader implementation remain work in the full plan. Prioritize taper and transferrer credits; targeted audio work answers specific lineage questions instead of blocking the initial backfill. The older [19-artist research](../2026-10-16-catalog-enrichment/README.md) is historical evidence; its statements that Collections or Aadam support were unimplemented are superseded by the [completed import/performance work](../../plans/active/2026-10-17-show-performances/README.md).
