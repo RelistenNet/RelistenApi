@@ -76,6 +76,35 @@ These local checks do not complete the production pilot, collection-wide termina
 pagination or production backup checks. Leave new production schedules paused until
 those checks pass.
 
+## Normalization input capture
+
+`Normalization:Capture:Enabled` defaults to false. It does not enable normalized
+reads (`Normalization:Reads:Enabled`) or automatic matching; the resolver and
+backfill workers remain to be implemented. With capture enabled,
+the seven configured importers and Archive intake/discovery retain provider inputs
+before legacy conversion. The API and standalone worker use their own host
+configuration; set the option on each host that owns imports.
+
+Capture requires migration 18 in addition to the catalog migrations used by that
+host. Validate the current migration sequence and representative imports before
+enabling it. Enablement does not backfill old records or completed workflow
+selections. Keep normalized reads and automatic matching disabled until their
+separate verification and rollout are complete.
+
+A capture failure prevents the current activity from acknowledging its input.
+Stale responses remain historical evidence and cause the whole fetch to retry;
+partial Phish.in pages retain successful object captures without advancing the
+page checkpoint. Existing accepted recordings remain available. Catalog rollback
+does not roll back retained evidence.
+
+To stop new capture, disable the setting and restart the importing host. Shared
+malformed-response validation remains in place; disabling capture does not restore
+older error-page handling in Jerry, Setlist.fm or Phantasy Tour. Retain
+the input, fetch-history and decision tables. No workflow payload or schedule
+change is introduced by these adapters. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md)
+describes resource keys, response representations, paging limits and remaining
+backfill work.
+
 ## Configuration
 
 | Setting | Use |

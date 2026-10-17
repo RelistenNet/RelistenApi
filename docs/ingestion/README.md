@@ -62,6 +62,13 @@ compound writes, and conservative deletion checks matter more than an exact
 snapshot or exact first-attempt mutation counts. Frequent refreshes are preferable
 to a separate progress journal or commit-receipt system.
 
+Normalization input capture is a separate, disabled-by-default option. When
+enabled, importers retain complete provider evidence before legacy DTO conversion
+and catalog writes. Retention survives a later catalog rollback; extraction and
+identity decisions run separately. See [capture operations](operations.md#normalization-input-capture)
+and the [provider contract](../plans/active/2026-10-17-full-normalization/provider-capture.md)
+for representations, failure handling and backfill requirements.
+
 ## Responsibilities and code map
 
 | Component | Responsibility and entry points |
