@@ -33,6 +33,8 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationCatalogBindingService>();
         services.AddScoped<NormalizationRecordingProposalService>();
         services.AddScoped<NormalizationRecordingProcessor>();
+        services.AddScoped<NormalizationSetlistProposalService>();
+        services.AddScoped<NormalizationSetlistProcessor>();
         services.AddScoped<NormalizationRecordingLookupStore>();
         services.AddScoped<NormalizationRecordingLookupService>();
         services.AddScoped<NormalizationRecordingLookupDispatcher>();
@@ -43,6 +45,7 @@ public static class IngestionServiceRegistration
         services.AddSingleton<NormalizationProviderDecoder>();
         services.AddSingleton<RetainedRecordingCreditExtractor>();
         services.AddSingleton<NormalizationRecordingExtractor>();
+        services.AddSingleton<NormalizationSetlistExtractor>();
         services
             .AddOptions<NormalizationProviderCaptureOptions>()
             .BindConfiguration("Normalization:Capture");
