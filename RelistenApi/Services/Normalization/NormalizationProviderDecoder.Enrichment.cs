@@ -271,7 +271,25 @@ public sealed partial class NormalizationProviderDecoder
                 ProviderObservationScope.ResourceItem,
                 true
             ) ?? throw new InvalidDataException("Phantasy Tour retained show has no identity.");
-        if (decoded.Origin.Item.ProviderKey != reader.Input.Resource.ProviderKey)
+        // The importer deserializes IDs as positive ints. Compare those typed identities while
+        // retaining the original string-form ID and citation in the account observation.
+        if (
+            !int.TryParse(
+                decoded.Origin.Item.ProviderKey,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var observedId
+            )
+            || !int.TryParse(
+                reader.Input.Resource.ProviderKey,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var requestedId
+            )
+            || observedId <= 0
+            || requestedId <= 0
+            || observedId != requestedId
+        )
         {
             throw new InvalidDataException(
                 "Phantasy Tour retained show does not match its resource identity."

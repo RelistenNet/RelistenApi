@@ -136,6 +136,37 @@ public sealed class TestNormalizationProviderDecoderEnrichment
         decode.Should().Throw<InvalidDataException>();
     }
 
+    [TestCase("0004")]
+    [TestCase("+4")]
+    [TestCase(" 4 ")]
+    public void PhantasyStringFormIdsMatchTheWritersTypedIdentityAndRetainTheirWording(
+        string providerId
+    )
+    {
+        var original = PhantasyShow("4");
+        var json = Encoding
+            .UTF8.GetString(original.Payload)
+            .Replace(
+                "\"id\":4,",
+                "\"id\":" + JsonSerializer.Serialize(providerId) + ",",
+                StringComparison.Ordinal
+            );
+        var input = Input("phantasytour.com", "show", "4", "phantasy-tour-http-v1", json);
+        Newtonsoft
+            .Json.JsonConvert.DeserializeObject<Relisten.Vendor.PhantasyTour.PhantasyTourEnvelope>(
+                json
+            )!
+            .data.id.Should()
+            .Be(4);
+
+        var result = decoder.Decode(input);
+
+        result.Setlists.Single().Origin.Item.ProviderKey.Should().Be(providerId);
+        using var document = NormalizationRetainedDocument.Open(input);
+        document.Resolve("/data/id").GetString().Should().Be(providerId);
+        AssertEvidence(input, result);
+    }
+
     [Test]
     public void MissingPhantasyBandPreservesTitleWithoutInventingSongIdentity()
     {
