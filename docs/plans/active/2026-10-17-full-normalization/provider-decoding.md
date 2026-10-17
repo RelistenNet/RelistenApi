@@ -108,10 +108,13 @@ recording belongs to one performance; files can span songs or sets within it.
 Unclear early/late assignments remain on the default/current show.
 
 The [Local binder](local-binding.md) consumes its retained root map and directory
-account together. Jerry, enrichment setlists and imported repertoire/venue associations still need
-provider-specific ownership checks. Legacy song upserts can replace an upstream
-identifier when titles share a slug while keeping the winning UUID. Neither a
-computed UUID nor a title fallback repairs that ambiguity.
+account together. The [setlist binder](setlist-binding.md) checks Jerry and
+enrichment accounts against their stored provider associations. The
+[imported-catalog path](imported-catalog.md) retains venue rows and complete
+artist dictionaries, then verifies their original facts and ownership before
+binding stored UUIDs. Legacy song upserts can replace an upstream identifier
+when titles share a slug while keeping the winning UUID. Neither a computed
+UUID nor a title fallback repairs that ambiguity.
 
 Binding refreshes associations, not original wording. The legacy seed remains
 seed-only. The separate [v2 refresh path](catalog-refresh.md) retains current
