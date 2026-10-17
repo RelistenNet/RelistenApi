@@ -94,7 +94,9 @@ After a successful rebuild with at least one published playable recording, clear
 
 ## Discovery and refresh protocol
 
-Add a Taper’s Section search client using `/services/search/v1/scrape` with fixed query `collection:taperssection AND mediatype:audio`. Request only fields needed for identifier discovery and candidate hints. Search hints never substitute for the metadata observation used at publication.
+Add a Taper’s Section search client using `/services/search/v1/scrape` with fixed query `collection:taperssection AND mediatype:audio`. Request `identifier,collection,mediatype`. Reject the whole page if any row lacks the `taperssection` collection or the `audio` media type. Discard those validation fields after checking them; persist identifiers as before. Search hints never substitute for the metadata observation used at publication.
+
+The [live local smoke](live-smoke.md) found that Archive returned an unrelated collection for identifier-only field selection. The membership field selection returned matching recordings on both the first page and a continuation. The internal upstream cause is unknown. Keep membership validation even if identifier-only requests later recover.
 
 The bounded October 16 check found that including `count` with a continuation cursor repeats the first page. Omitting `count` advanced the cursor and returned 5,000 items. The returned total decreased from 30,180 to 30,080 after the first 100 items; it was not a frozen traversal total.
 

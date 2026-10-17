@@ -121,7 +121,12 @@ public class TestTapersSectionPersistence
                     new
                     {
                         total = recordings.Count,
-                        items = recordings.Keys.Select(identifier => new { identifier }),
+                        items = recordings.Keys.Select(identifier => new
+                        {
+                            identifier,
+                            collection = new[] { "taperssection", "audio_music" },
+                            mediatype = "audio",
+                        }),
                     }
                 );
     }

@@ -23,6 +23,7 @@ public class TestTapersSectionSearchClient
         var firstQuery = QueryHelpers.ParseQuery(handler.Requests[0].Query);
         firstQuery["q"].ToString().Should().Be("collection:taperssection AND mediatype:audio");
         firstQuery["count"].ToString().Should().Be("100");
+        firstQuery["fields"].ToString().Should().Be("identifier,collection,mediatype");
         var nextQuery = QueryHelpers.ParseQuery(handler.Requests[1].Query);
         nextQuery["cursor"].ToString().Should().Be("A");
         nextQuery.Should().NotContainKey("count");
@@ -34,7 +35,14 @@ public class TestTapersSectionSearchClient
         using var handler = new SearchHandler(
             Page(0, 20, "A"),
             """
-            {"items":[{"identifier":"one"},{"identifier":"one"},{"identifier":"two"}],"total":3}
+            {
+              "items": [
+                {"identifier":"one","collection":"taperssection","mediatype":"audio"},
+                {"identifier":"one","collection":["taperssection"],"mediatype":"audio"},
+                {"identifier":"two","collection":["audio_music","taperssection"],"mediatype":"audio"}
+              ],
+              "total": 3
+            }
             """
         );
         using var http = new HttpClient(handler);
@@ -47,8 +55,12 @@ public class TestTapersSectionSearchClient
         terminal.Cursor.Should().BeNull();
     }
 
-    [TestCase("{\"items\":[{\"identifier\":\"one\"}],\"total\":5,\"cursor\":\"A\"}")]
-    [TestCase("{\"items\":[{\"identifier\":\"one\"}],\"total\":5}")]
+    [TestCase(
+        "{\"items\":[{\"identifier\":\"one\",\"collection\":\"taperssection\",\"mediatype\":\"audio\"}],\"total\":5,\"cursor\":\"A\"}"
+    )]
+    [TestCase(
+        "{\"items\":[{\"identifier\":\"one\",\"collection\":\"taperssection\",\"mediatype\":\"audio\"}],\"total\":5}"
+    )]
     [TestCase("{\"items\":[{\"identifier\":\"\"}],\"total\":1}")]
     [TestCase("{\"error\":\"expired cursor\"}")]
     [TestCase("{\"items\":[],\"total\":0,\"cursor\":23}")]
@@ -57,6 +69,23 @@ public class TestTapersSectionSearchClient
         using var handler = new SearchHandler(body);
         using var http = new HttpClient(handler);
         var act = () => new TapersSectionSearchClient(http).FetchPageAsync("A");
+        await act.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [TestCase("{\"identifier\":\"unrelated\",\"collection\":\"texts\",\"mediatype\":\"audio\"}")]
+    [TestCase(
+        "{\"identifier\":\"unrelated\",\"collection\":[\"taperssection\"],\"mediatype\":\"collection\"}"
+    )]
+    [TestCase("{\"identifier\":\"unrelated\"}")]
+    [TestCase(
+        "{\"identifier\":\"unrelated\",\"collection\":\"taperssection\",\"mediatype\":[\"audio\"]}"
+    )]
+    public async Task RejectsSuccessfulResponsesThatDoNotMatchTheDiscoveryQuery(string item)
+    {
+        using var handler = new SearchHandler("{\"items\":[" + item + "],\"total\":1}");
+        using var http = new HttpClient(handler);
+        var act = () => new TapersSectionSearchClient(http).FetchPageAsync();
+
         await act.Should().ThrowAsync<InvalidDataException>();
     }
 
@@ -87,7 +116,12 @@ public class TestTapersSectionSearchClient
             {
                 items = Enumerable
                     .Range(0, count)
-                    .Select(index => new { identifier = $"recording-{index}" }),
+                    .Select(index => new
+                    {
+                        identifier = $"recording-{index}",
+                        collection = new[] { "taperssection", "audio_music" },
+                        mediatype = "audio",
+                    }),
                 total,
                 cursor,
             }

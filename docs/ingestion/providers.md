@@ -186,6 +186,9 @@ change the catalog contract.
 
 `TapersSectionDiscoveryWorkflow` records each search page before observing item
 metadata. It continues after settled batches and retains the cursor and pending page.
+Discovery requests identifier, collection and media type, and rejects a page containing
+a row outside Taper’s Section audio. Archive has returned unrelated results for
+identifier-only field selection; the extra fields make that failure detectable.
 Search continuation requests omit `count`; repeated cursors and pages containing no
 new identifiers fail discovery. Empty advancing pages continue the traversal.
 

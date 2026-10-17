@@ -26,7 +26,9 @@ public sealed class TapersSectionSearchClient(HttpClient http)
             "https://archive.org/services/search/v1/scrape?"
             + "q="
             + Uri.EscapeDataString("collection:taperssection AND mediatype:audio")
-            + "&fields=identifier";
+            + "&fields=identifier,collection,mediatype";
+        // Identifier-only field selection has returned unrelated results from Archive.
+        // Request membership fields and validate each row before retaining its identifier.
         // Archive repeats the first page if count is retained on continuation requests.
         url += cursor == null ? "&count=100" : "&cursor=" + Uri.EscapeDataString(cursor);
         using var response = await http.GetAsync(
@@ -85,6 +87,13 @@ public sealed class TapersSectionSearchClient(HttpClient http)
             );
         }
 
+        if (items.Any(item => !MatchesCollectionQuery((JObject)item)))
+        {
+            throw new InvalidDataException(
+                "Archive item discovery returned a row outside Taper's Section audio."
+            );
+        }
+
         if (next == null && (int)root["total"]! > items.Count)
         {
             throw new InvalidDataException("Archive item discovery ended with unreturned items.");
@@ -100,4 +109,16 @@ public sealed class TapersSectionSearchClient(HttpClient http)
             (int)root["total"]!
         );
     }
+
+    private static bool MatchesCollectionQuery(JObject item) =>
+        item["mediatype"]?.Type == JTokenType.String
+        && (string?)item["mediatype"] == "audio"
+        && (
+            item["collection"] is JArray collections
+                ? collections.Any(value =>
+                    value.Type == JTokenType.String && (string?)value == "taperssection"
+                )
+                : item["collection"]?.Type == JTokenType.String
+                    && (string?)item["collection"] == "taperssection"
+        );
 }

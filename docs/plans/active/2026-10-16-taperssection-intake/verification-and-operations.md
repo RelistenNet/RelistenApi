@@ -49,7 +49,7 @@ dotnet build RelistenApi.sln
 dotnet csharpier check .
 ```
 
-The new fixtures should use names containing `TapersSection` so the first filter is useful. Run focused cases as their behavior is implemented; broaden once after shared writer/registry changes. The local bootstrap preserves existing data. Tests use disposable databases, isolated Redis prefixes and `WorkflowEnvironment.StartLocalAsync()`. Do not import real provider catalogs to prove local behavior.
+The new fixtures should use names containing `TapersSection` so the first filter is useful. Run focused cases as their behavior is implemented; broaden once after shared writer/registry changes. The local bootstrap preserves existing data. Tests use disposable databases, isolated Redis prefixes and `WorkflowEnvironment.StartLocalAsync()`. Automated tests use fixture provider responses. A manually requested live smoke must use a separate catalog, Redis instance and Temporal server, with bounded discovery and no schedules. See the [live smoke record](live-smoke.md).
 
 Before broad approval, freeze a fresh bounded set of real items for reviewed candidate artists and include attribution/date negatives. Record the reviewer’s expected performer/date and the system’s outcome. Report wrong automatic assignments and eligible coverage separately. Synthetic regression fixtures do not establish accuracy across the live collection. A confirmed wrong assignment blocks widening the affected rule until corrected and covered by a regression case; this is an operational release check, not a claimed statistical threshold.
 
@@ -93,7 +93,7 @@ Local verification covers metadata and pagination rules, authenticated registry 
 
 A fresh disposable database was migrated through the worker's actual `--migrate` entry point. A full PostgreSQL dump and restore preserved approval, evidence, published references and dirty revisions. The status command read the restored state with Temporal pointed at an unavailable endpoint. These checks establish the application's restore contract; production backup configuration must still be checked by the operator.
 
-The production pilot, complete live pagination terminal behavior and production backup coverage remain operational release checks. No production artist has been approved, no real catalog has been imported, and no production schedule has been enabled by this implementation task.
+The production pilot, complete live pagination terminal behavior and production backup coverage remain operational release checks. No production artist has been approved and no production schedule has been enabled. A later [live smoke](live-smoke.md) imported two real recordings into a separate local catalog and verified them through actual v3 HTTP requests.
 
 Verification completed October 16, 2026:
 
@@ -103,4 +103,4 @@ Verification completed October 16, 2026:
 - `dotnet csharpier check .`: 401 files checked; whitespace and local documentation links passed.
 - Actual worker migration, bulk review aggregates, status with Temporal unavailable, invalid CLI combinations and full PostgreSQL dump/restore checks passed on disposable databases.
 
-The status counter definition and unconditional ancillary metadata refresh are the implementation refinements described in the [decision record](README.md#implementation-decisions). Fresh correctness and readability reviews found no remaining catalog ownership or publication issue after the corrections. Production checks in the pilot sequence remain pending.
+The status counter definition and unconditional ancillary metadata refresh are the implementation refinements described in the [decision record](README.md#implementation-decisions). Fresh correctness and readability reviews found no remaining catalog ownership or publication issue after the corrections. Production checks in the pilot sequence remain pending. The live smoke also found and corrected identifier-only discovery returning unrelated upstream results; its evidence and repeat-import checks are recorded separately.
