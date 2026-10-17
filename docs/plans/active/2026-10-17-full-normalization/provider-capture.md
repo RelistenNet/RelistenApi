@@ -128,21 +128,27 @@ needs an explicit reconciliation or targeted-refresh rule before treating such
 observations as current entity facts. A cover credit alone does not establish a
 composer or global work identity.
 
+## Decoding and catalog seeds
+
+The [decoding contract](provider-decoding.md) defines typed observations for all
+retained provider representations and legacy recording snapshots. It also defines
+exact credit extraction and zero-generation seeding from the current catalog.
+Neither operation accepts an identity or binds a provider file to playback.
+
 ## Backfill and domain processing still required
 
-1. Seed existing selected observations and bounded catalog snapshots, labeled by
-   representation. JSONB projections are not original HTTP bytes. Seed a provider
-   resource only with expected generation zero; retain additional historical
-   observations without promoting them over a current input.
+1. Run the legacy recording seed over the catalog, and seed selected provider
+   observations with explicit representation versions. JSONB projections are not
+   original HTTP bytes. Seed a provider resource only with expected generation
+   zero; retain additional historical observations without promoting them over
+   a current input.
 2. Refresh missing provider evidence per recording, show or page, with bounded
    concurrency, retries and checkpoints. Capture enablement does not backfill
    previously imported records or completed workflow selections.
-3. Decode retained JSON/HTML into typed proposals with exact support. The shared
-   `NormalizationRetainedDocument` already reads supported representations and
-   validates exact locators and quotes; provider-specific observation decoders
-   and catalog binding remain work. Add durable dirty markers for catalog edits
-   outside imports and use content/version caches and work watermarks for
-   incremental processing.
+3. Bind decoded observations to current catalog UUIDs and implement evaluated
+   resolution. Add durable dirty markers for catalog edits outside imports, fence
+   catalog binding changes at publication, and use content/version caches and
+   work watermarks for incremental processing.
 4. Reconcile upstream periodically. Timestamps and existing Archive selection rules
    do not guarantee discovery of every metadata correction.
 

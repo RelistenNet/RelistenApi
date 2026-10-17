@@ -97,6 +97,12 @@ partial Phish.in pages retain successful object captures without advancing the
 page checkpoint. Existing accepted recordings remain available. Catalog rollback
 does not roll back retained evidence.
 
+Provider decoding and the legacy recording seed service are registered on both
+hosts. Registration starts no jobs. The capture option controls import-response
+retention; it does not run or configure a seed/backfill. See the [decoding and
+seed contract](../plans/active/2026-10-17-full-normalization/provider-decoding.md)
+for zero-generation admission, size limits and catalog-binding requirements.
+
 To stop new capture, disable the setting and restart the importing host. Shared
 malformed-response validation remains in place; disabling capture does not restore
 older error-page handling in Jerry, Setlist.fm or Phantasy Tour. Retain
