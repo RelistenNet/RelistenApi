@@ -54,7 +54,9 @@ Migrations 24–25 add catalog revision clocks, mapping-registry invalidation an
 
 Migration 26 adds immutable recording attempts and extraction checkpoints. `NormalizationRecordingProcessor.ProcessAsync` refreshes one stored recording, checks its complete evidence and catalog read set, and saves credit/title proposals under a separate extraction owner. It makes no accepted identity writes. The [recording-processing guide](../plans/active/2026-10-17-full-normalization/recording-processing.md) specifies replay, stale audit retention and failure behavior.
 
-Remaining provider bindings, bounded page jobs and direct provider coordinators, negative-lookup retry registration, the multi-candidate resolver, independent evaluation and full backfill remain required.
+Migration 27 retains bounded recording page selections and classified failure receipts. `NormalizationRecordingPageService` runs stable attempts sequentially; the standalone worker exposes `--normalize-recordings=PAGE_UUID` without requiring Redis or Temporal. Exact replay preserves completed items, and only a settled page supplies a continuation. UUID paging requires later enrollment or reconciliation to establish complete catalog coverage.
+
+Remaining provider bindings and direct provider coordinators, negative-lookup retry registration, the multi-candidate resolver, independent evaluation and full backfill remain required.
 
 [`NormalizationProviderInputService`](../../RelistenApi/Services/Data/NormalizationProviderInputService.cs) captures validated provider responses before legacy conversion and catalog transactions. `Normalization:Capture:Enabled` defaults to false independently of reads. All seven configured importers and Archive intake/discovery use this lifecycle; Phish.in adds a pre-request generation snapshot for stable per-show resources across changing pages. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md) defines representation versions, keys, partial-page recovery and remaining refresh work. Capture fences admission, while later domain publication still requires the work-service read-set comparison.
 

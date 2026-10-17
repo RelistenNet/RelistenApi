@@ -7,7 +7,7 @@ a repertoire dictionary. It does not accept person, song or composition matches,
 change playback, call Luna or enable public normalization reads.
 
 This is the catalog-recording producer. Direct processing of richer retained
-provider accounts, bounded page jobs and automatic resolution remain required by
+provider accounts and automatic resolution remain required by
 the [main plan](README.md). A stored snapshot cannot recover upstream information
 that an older importer discarded.
 
@@ -98,28 +98,83 @@ It does not consume those publication watermarks. A later provider coordinator
 must process the complete input set and check each producer's original read set;
 capturing newer union clocks cannot make older catalog facts current.
 
-## Next: bounded operator jobs
+## Run a bounded recording page
 
-Add a page runner that saves its selected source UUIDs before processing starts.
-Its request must fix a page UUID, optional artist UUID and source cursor, item
-limit and processor version. Use a default of 25 items and allow 1–100. Reject
-an unknown artist explicitly. Replay uses that selection and the same per-item
-attempt UUIDs. Keep item outcomes in the attempt store; retain retryable failure
-receipts separately. Cancellation must preserve the selection and completed items.
-Return a continuation cursor only after every selected attempt has settled, while
-reporting missing, unresolved and stale items as attention outcomes.
+`NormalizationRecordingPageService.ProcessPageAsync(pageUuid, artistUuid?,
+afterSourceUuid?, limit, cancellationToken)` saves its selection before processing
+recordings sequentially. Migration 27 retains the page, ordered source UUIDs,
+stable per-item attempt UUIDs and separate failure receipts. Selection defaults
+to 25 recordings and permits 1–100. A new request rejects an unknown artist;
+a known artist with no recordings produces a valid empty page.
+
+Reuse the page UUID and all selectors to resume after cancellation or a retryable
+failure. Exact replay processes the saved items; it never selects replacement
+recordings. A changed selector or processor version conflicts. Terminal attempts
+return their saved outcome without fetching evidence again. Completed items
+survive a failure in a later item, and processing holds no page lock while it
+refreshes or extracts recording evidence.
+
+After correcting a terminal `Missing`, `Unresolved` or `Stale` outcome, create a
+new page UUID covering that recording's range, or invoke the single-recording
+processor with a new attempt UUID. Replaying the old page does not refresh it.
+
+The worker command requires the catalog's `DATABASE_URL` and migrations through
+27. Build the worker first; keep build output separate from command receipts:
+
+```sh
+dotnet build RelistenIngestionWorker/RelistenIngestionWorker.csproj
+```
+
+Set `normalization_artist_uuid` to the desired catalog artist UUID, then run the
+built executable:
+
+```sh
+normalization_page_uuid=$(uuidgen)
+dotnet RelistenIngestionWorker/bin/Debug/net10.0/RelistenIngestionWorker.dll \
+  --normalize-recordings "$normalization_page_uuid" \
+  --artist "$normalization_artist_uuid" --limit 25
+```
+
+Omit `--artist` for a global selection. Save the page UUID and request arguments
+before starting. After a settled receipt supplies `continuation_cursor`, use
+that UUID as `--after` on a **new** page UUID with the same artist and limit.
+A null continuation means this selection saw no further recordings, or the
+current page is unfinished; inspect `settled` to distinguish them.
+
+On exits 0 and 2, the command writes one JSON receipt to stdout and diagnostics
+to stderr. Exits 1 and 130 can have only stderr output. Its
+receipt contains selection/attempt UUIDs, terminal outcomes and safe failure
+codes; it excludes provider prose and exception details. Exit codes are:
+
+- `0`: every selected attempt settled. Inspect `published`, `missing`,
+  `unresolved` and `stale`; settled does not mean every recording was normalized.
+- `2`: retryable unfinished items remain. Retry the same request. No continuation
+  is supplied, even when other items published.
+- `1`: invalid or conflicting request, or an unexpected failure. Inspect retained
+  page, attempt and failure records before retrying.
+- `130`: operator cancellation. Retry the same request to resume.
+
+`NormalizationRecordingPageStore.GetAsync` reads the immutable selection;
+`GetFailuresAsync(pageUuid, afterSequence?, limit)` reads append-only classified
+failures. Codes are `preparation_conflict`, `database_failed`,
+`processing_timeout` and `processing_failed` in command JSON. Transient failures
+continue with later items. An unexpected item error records a nonretryable
+failure and stops the invocation. If page creation or receipt persistence itself
+fails, no failure receipt is guaranteed. Previously committed progress remains
+resumable. Failure receipts do not terminalize attempts;
+after correcting the cause, an operator can explicitly retry the page.
 
 Artist filtering means membership when the page was selected. A later source
-move is processed from current checked facts. Global UUID paging has an existing
-index; artist-filtered paging needs an `(artist_id, uuid)` index. A keyset page
+move is processed from current checked facts. Global UUID paging uses an existing
+index; migration 27 adds `(artist_id, uuid)` for artist filtering. A keyset page
 is not a catalog snapshot: late arrivals and moves can land behind a cursor.
 Full backfill therefore also needs enrollment or reconciliation.
 
-Expose the runner through a dedicated operator adapter in
-`RelistenIngestionWorker`, before resolving the existing Temporal-dependent
-`IngestionOperatorCommands`. Reuse the worker's database configuration and catalog
-services. Do not start Temporal workers, schedules or a matching policy for a
-local page command. Keep the separate evaluation tool's database restrictions.
+The dedicated operator adapter runs before resolving Temporal-dependent
+`IngestionOperatorCommands`. It uses the worker's catalog services without starting
+hosted workers or schedules. It needs no Redis or Temporal connection and makes
+no provider or Luna calls. Normalized reads and automatic acceptance remain
+disabled. The separate evaluation tool keeps its own database restrictions.
 
 ## Verification and rollout
 
@@ -131,12 +186,17 @@ Run `dotnet build RelistenApi.sln`, then:
 
 Verify exact replay, preparation and admission recovery, concurrent publication,
 changed inputs, partial playback context, preserved contributor unions, callback
-rollback and unchanged accepted data. Pure extraction cases include retained
+rollback and unchanged accepted data. Page tests also exercise selection replay,
+partial failure, cancellation, moved/deleted catalog rows and the actual worker
+executable under Test and Development environments. Pure extraction cases include retained
 wording from several artists; they verify reproducibility and evidence handling,
 not identity-matching accuracy. The [main plan](README.md#progress) records results.
 
-Install migration 26 before invoking the processor. Registration in the shared
+Install migration 26 before invoking the single-recording processor, and migration
+27 before running pages. Migration 27 builds a regular `(artist_id, uuid)` index
+on `sources`; measure the build on a representative database and allow for blocked
+source writes during production migration. Registration in the shared
 catalog container starts no work. On rollback, stop processors and retain attempts,
-proposals, evidence and work history. Bounded jobs, pending-owner reconciliation,
+proposals, evidence and work history. Pending-owner reconciliation,
 evaluated matching, full-catalog backfill and production rollout remain separate
 implementation requirements.

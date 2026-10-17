@@ -79,8 +79,8 @@ those checks pass.
 ## Normalization input capture
 
 `Normalization:Capture:Enabled` defaults to false. It does not enable normalized
-reads (`Normalization:Reads:Enabled`) or automatic matching; the resolver and
-backfill workers remain to be implemented. With capture enabled,
+reads (`Normalization:Reads:Enabled`) or automatic matching; resolution and
+full-catalog backfill remain to be implemented. With capture enabled,
 the seven configured importers and Archive intake/discovery retain provider inputs
 before legacy conversion. The API and standalone worker use their own host
 configuration; set the option on each host that owns imports.
@@ -110,6 +110,25 @@ the input, fetch-history and decision tables. No workflow payload or schedule
 change is introduced by these adapters. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md)
 describes resource keys, response representations, paging limits and remaining
 backfill work.
+
+### Recording extraction commands
+
+The standalone worker can now extract credit and title proposals from a saved
+page of catalog recordings with `--normalize-recordings=PAGE_UUID`. Optional
+`--artist=ARTIST_UUID`, `--after=SOURCE_UUID` and `--limit=25` select up to 100
+recordings. The command requires a writable catalog with migrations through 27;
+it does not start imports, hosted workers or schedules, or call Luna. It needs
+no Redis or Temporal connection. It does not accept identities or change playback.
+
+Save the page UUID and selectors, then reuse them after interruption. The command
+writes JSON to stdout on exits 0 and 2, with diagnostics on stderr. Exits 1 and
+130 can have only stderr output. Exit 0 means all attempts settled,
+including missing/unresolved/stale outcomes; exit 2 means retryable items remain.
+Advance with a new page UUID only when the receipt is settled and supplies a
+continuation cursor. UUID paging alone does not establish full backfill coverage.
+See [recording processing](../plans/active/2026-10-17-full-normalization/recording-processing.md#run-a-bounded-recording-page)
+for examples, receipt fields, failures and rollback. Keep production execution
+disabled until the normalization rollout is verified.
 
 ## Configuration
 

@@ -116,9 +116,9 @@ computed UUID nor a title fallback repairs that ambiguity.
 Binding refreshes associations, not original wording. The legacy seed remains
 seed-only. The separate [v2 refresh path](catalog-refresh.md) retains current
 catalog fields and checks their original producer revisions before binding.
-The [recording processor](recording-processing.md) saves local extraction
-proposals from a checked v2 snapshot with durable recovery. Negative binding
-outcomes still need retry registration. Bounded page jobs, direct provider
+The [recording processor and page command](recording-processing.md) save local
+extraction proposals from checked v2 snapshots with durable recovery. Negative
+binding outcomes still need retry registration. Direct provider
 coordinators, the remaining bindings and the evaluated resolver remain required
 before automatic normalization.
 
