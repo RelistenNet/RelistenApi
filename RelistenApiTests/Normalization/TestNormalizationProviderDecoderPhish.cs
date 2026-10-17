@@ -199,6 +199,9 @@ public sealed class TestNormalizationProviderDecoderPhish
         var file = result.Recordings.Single().Files.Single();
         file.Origin.Item.Should().Be(input.Resource);
         file.Identities.Single().Identity.ProviderKey.Should().Be("201");
+        file.RecordingIdentity!.Identity.Should()
+            .Be(new NormalizationResourceKey("phish.in", "show", "43"));
+        file.RecordingIdentity.Evidence.JsonPointer.Should().Be("/tracks/0/show_id");
         file.Title!.Value.Should().Be("A song");
         result.Issues.Single().Code.Should().Be("track_show_identity_mismatch");
         result.Issues.Single().Evidence.JsonPointer.Should().Be("/tracks/0/show_id");

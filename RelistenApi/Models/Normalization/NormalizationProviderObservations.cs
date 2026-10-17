@@ -103,6 +103,9 @@ public sealed record ProviderFileObservation
 {
     public ProviderObservationOrigin Origin { get; init; } = null!;
     public IReadOnlyList<ObservedProviderIdentity> Identities { get; init; } = [];
+
+    /// <summary>An explicit provider recording owner, retained separately from the enclosing response.</summary>
+    public ObservedProviderIdentity? RecordingIdentity { get; init; }
     public ObservedValue<string>? Filename { get; init; }
     public ObservedValue<string>? OriginalFilename { get; init; }
     public ObservedValue<string>? Title { get; init; }

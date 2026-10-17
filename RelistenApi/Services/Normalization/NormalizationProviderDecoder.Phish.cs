@@ -284,6 +284,7 @@ public sealed partial class NormalizationProviderDecoder
                         ProviderObservationScope.ResourceItem
                     ),
                     Identities = identity == null ? [] : [identity],
+                    RecordingIdentity = owner,
                     Title = reader.String(track, "title", pointer),
                     PlaybackLocator = reader.String(track, "mp3", pointer),
                     Position = track.TryGetProperty("position", out var position)
