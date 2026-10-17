@@ -84,6 +84,7 @@ public class TestTapersSectionPersistence
         builder.Services.AddSingleton<Hangfire.IBackgroundJobClient, IgnoredPopularityJobs>();
         builder
             .Services.AddRelistenCatalogServices()
+            .AddRelistenPopularityServices()
             .AddTemporalIngestionWorkers(builder.Configuration);
         builder
             .Services.AddHttpClient(nameof(IngestionHttpClientFactory))

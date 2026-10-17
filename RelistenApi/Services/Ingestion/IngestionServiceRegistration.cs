@@ -32,6 +32,8 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationCatalogBindingService>();
         services.AddScoped<NormalizationRecordingProposalService>();
         services.AddScoped<NormalizationRecordingProcessor>();
+        services.AddScoped<NormalizationRecordingPageStore>();
+        services.AddScoped<NormalizationRecordingPageService>();
         services.AddScoped<NormalizationProviderInputService>();
         services.AddScoped<NormalizationPhishInInputService>();
         services.AddSingleton<NormalizationProviderDecoder>();
@@ -87,12 +89,11 @@ public static class IngestionServiceRegistration
         services.AddScoped<IArchiveOrgCollectionIndexClient, ArchiveOrgCollectionIndexClient>();
         services.AddScoped<IArchiveOrgArtistIndexRepository, ArchiveOrgArtistIndexRepository>();
         services.AddScoped<ArchiveOrgArtistIndexer, ArchiveOrgArtistIndexer>();
-        services.AddScoped<PopularityCacheService, PopularityCacheService>();
-        services.AddScoped<PopularityService, PopularityService>();
+        // Catalog writers construct ShowService without the API's popularity/Hangfire stack.
+        // Its read methods resolve this accessor only in a host that registers popularity services.
         services.AddScoped(sp => new Lazy<PopularityService>(
             sp.GetRequiredService<PopularityService>
         ));
-        services.AddScoped<PopularityJobs, PopularityJobs>();
         services.AddScoped<ScheduledService, ScheduledService>();
         services.AddScoped<SearchService, SearchService>();
         services.AddScoped<CatalogReferenceResolver, CatalogReferenceResolver>();
@@ -103,6 +104,18 @@ public static class IngestionServiceRegistration
                 client.Timeout = TimeSpan.FromSeconds(10)
             )
             .RemoveAllLoggers();
+        return services;
+    }
+
+    /// <summary>
+    /// Registers API popularity reads and their background jobs. The host must supply Hangfire's
+    /// background job client and Redis; standalone ingestion and normalization do not use these services.
+    /// </summary>
+    public static IServiceCollection AddRelistenPopularityServices(this IServiceCollection services)
+    {
+        services.AddScoped<PopularityCacheService>();
+        services.AddScoped<PopularityService>();
+        services.AddScoped<PopularityJobs>();
         return services;
     }
 }

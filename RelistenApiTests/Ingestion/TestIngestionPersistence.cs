@@ -83,6 +83,7 @@ public partial class TestIngestionPersistence
         ));
         builder
             .Services.AddRelistenCatalogServices()
+            .AddRelistenPopularityServices()
             .AddTemporalIngestionWorkers(builder.Configuration);
         builder
             .Services.AddHttpClient(nameof(IngestionHttpClientFactory))

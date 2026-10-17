@@ -47,7 +47,7 @@ public sealed class TestArchivePerformancePublication
         builder.Services.AddSingleton(_ => new RedisService(
             RedisService.BuildConfiguration("redis://127.0.0.1:16379")
         ));
-        builder.Services.AddRelistenCatalogServices();
+        builder.Services.AddRelistenCatalogServices().AddRelistenPopularityServices();
         builder.Services.AddSingleton<Hangfire.IBackgroundJobClient, IgnoredPopularityJobs>();
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
         SqlMapper.AddTypeHandler(new DateTimeHandler());

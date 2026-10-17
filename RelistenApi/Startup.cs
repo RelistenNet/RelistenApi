@@ -334,6 +334,7 @@ namespace Relisten
                 .SetApplicationName("RelistenApi");
 
             services.AddRelistenCatalogServices();
+            services.AddRelistenPopularityServices();
             services.AddTemporalIngestionClient(Configuration);
         }
 
