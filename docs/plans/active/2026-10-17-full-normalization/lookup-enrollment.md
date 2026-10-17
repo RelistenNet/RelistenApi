@@ -124,6 +124,8 @@ Apply migrations through 34 for lookup registration and through 35 for current
 processing and dispatch. Stop incompatible
 normalization workers before changing processing versions. Do not drop retained
 lookup history on binary rollback: stop enrollment and dispatch, retain the
-tables, evidence and clocks, and keep existing playback operational. Local and
-setlist coordinators, automatic resolution, evaluation,
-full backfill and deployment rehearsal remain required by the [main plan](README.md).
+tables, evidence and clocks, and keep existing playback operational.
+[Local lookup and processing](local-processing.md) extends this protocol with
+root/directory pairs. [Setlist processing](setlist-processing.md) has separate
+account owners. Automatic resolution, evaluation, full backfill and deployment
+rehearsal remain required by the [main plan](README.md).

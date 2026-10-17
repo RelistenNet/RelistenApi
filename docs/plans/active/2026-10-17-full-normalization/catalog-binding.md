@@ -102,9 +102,11 @@ request; replay returns its saved result.
 Legacy, Archive, Phish and Local recording lookups return the catalog fences
 their resolvers consumed, including unresolved outcomes. The
 [recording lookup coordinator](lookup-enrollment.md) retains legacy and supported
-Archive/Phish outcomes independently from extraction. The
+Archive/Phish/Local outcomes independently from extraction. The
 [recording processor](provider-processing.md) consumes those supported inputs
-together. Local enrollment and setlist processing remain required. Preserve unresolved results
+together, including [joint Local inputs](local-processing.md).
+[Setlist processing](setlist-processing.md) keeps independent binding outcomes in
+complete account proposals. Preserve unresolved results
 for reconciliation; absence from the pending-owner query does not establish
 completion.
 
@@ -217,9 +219,9 @@ Binding refreshes associations and clocks, **not retained wording**. The
 its producer clocks before binding. Historical seed and association-only APIs
 retain their original behavior.
 
-Legacy and supported Archive/Phish recording lookups now have durable enrollment.
-Remaining work includes Local/setlist enrollment and processing, multi-candidate
-resolution and evaluated automatic acceptance. A recording read
+Legacy and supported Archive/Phish/Local recording lookups have durable enrollment.
+Complete recording and setlist processing retain extraction proposals. Remaining
+work includes multi-candidate resolution and evaluated automatic acceptance. A recording read
 set does not authorize unrelated unbound context facts; each new domain binder
 must define their ownership and freshness. Model comparison, backfill and rollout
 rehearsal remain requirements of the [main plan](README.md). This increment does

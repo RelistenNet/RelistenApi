@@ -74,7 +74,11 @@ Migration 34 adds [durable recording lookup outcomes and processing handoffs](..
 
 Migration 35 adds [complete-input recording processing](../plans/active/2026-10-17-full-normalization/provider-processing.md) for legacy, Archive and Phish accounts. The immutable processing header names its initiating handoff. Preparation retains every supported contributor's original input and revisions; batch admission also compares complete contributor membership. Per-input extraction groups preserve conflicting titles for the same track. File credit mentions and unresolved passages retain their original file scope, including when playback binding is unavailable. A raw provider input requires no invented legacy capture receipt. This publishes proposals, not accepted identities.
 
-Local and setlist coordinators, the multi-candidate resolver, independent evaluation and full backfill remain required. Retry enrollment alone cannot establish completed extraction or matching.
+[Local processing](../plans/active/2026-10-17-full-normalization/local-processing.md) extends the recording protocol with exact root/directory pairs and selected root-account credits. The root remains supporting evidence for its directory contributor. Recording processing version 4 retains both inputs and mapping clocks.
+
+Migration 36 adds [setlist proposal processing](../plans/active/2026-10-17-full-normalization/setlist-processing.md). Each account/scope registration has its own extraction owner; actual retained pages contribute complete account observations, independent binding outcomes and cited passages. Passage proposal UUIDs are distinct from accepted occurrence identities. Missing playback context does not discard passages.
+
+The multi-candidate resolver, independent evaluation and full backfill remain required. Completed extraction stores proposals; it does not establish accepted matching.
 
 [`NormalizationProviderInputService`](../../RelistenApi/Services/Data/NormalizationProviderInputService.cs) captures validated provider responses before legacy conversion and catalog transactions. `Normalization:Capture:Enabled` defaults to false independently of reads. All seven configured importers and Archive intake/discovery use this lifecycle; Phish.in adds a pre-request generation snapshot for stable per-show resources across changing pages. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md) defines representation versions, keys, partial-page recovery and remaining refresh work. Capture fences admission, while later domain publication still requires the work-service read-set comparison.
 
@@ -130,6 +134,7 @@ Typed writers also enforce the subject's ownership. The registry UUID identifies
 | --- | --- |
 | `lookups / recording` | Lookup registration UUID; positive or negative catalog association and atomic processing handoffs. Completing a lookup does not acknowledge extraction or accepted relationships. |
 | `extractions / recording` | Source UUID; prepared evidence and local credit/title proposals. Completing extraction does not publish accepted relationships. |
+| `extractions / setlist` | Qualified account/scope registration UUID; complete provider accounts, binding outcomes and passage proposals. Separate from the accepted edition owner. |
 | `people / recording` | Source UUID; that recording's credits. |
 | `people / person` | Person UUID; the identity, aliases, external IDs and explicit corrections. |
 | `venues / imported_venue` | Legacy venue UUID; its canonical assignment. |

@@ -35,8 +35,8 @@ Admission rejects replaced current input or changed catalog revisions. Publicati
 rechecks them before a domain callback can write accepted data.
 
 Binding a historical page member does not establish the latest edition of an
-account that can appear on other pages. A future provider coordinator must retain
-that distinction when selecting or comparing editions. A dependency on the
+account that can appear on other pages. The [setlist processor](setlist-processing.md) retains observations together;
+a later resolution policy must keep that distinction when selecting editions. A dependency on the
 binding owner's published head alone cannot replace the original read set.
 
 ## Artist and performance qualification
@@ -96,7 +96,7 @@ the earlier code, or inspect their retained progress and select new page/attempt
 UUIDs with the new version. Do not reuse an old UUID to silently reinterpret a
 saved preparation. Published batches remain available for audit.
 
-Registration starts no
-processing and enables no normalized reads. Durable unresolved-lookup enrollment,
-complete-input provider coordinators and evaluated automatic matching remain
-requirements of the [main plan](README.md).
+Service registration starts no processing and enables no normalized reads. The
+[setlist processor](setlist-processing.md) stores complete account proposals with
+independent binding outcomes. Evaluated automatic matching, supported edition
+selection and full backfill remain requirements of the [main plan](README.md).

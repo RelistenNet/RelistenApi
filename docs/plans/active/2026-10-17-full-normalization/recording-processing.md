@@ -51,9 +51,9 @@ for another source raises `NormalizationConflictException`. The proposal store
 also rejects a changed processing version; processor compatibility behavior is
 specified below.
 
-The processor preparation contract is version 3. It carries complete per-input
+The processor preparation contract is version 4, including joint Local inputs. It carries complete per-input
 preparations and original contributor membership alongside producer, catalog,
-identifier and UUID read sets. The processor
+identifier, UUID and Local mapping-registry read sets. The processor
 returns a saved same-source terminal result before applying the current version.
 An unfinished older-version attempt ends as `Unresolved` with
 `processing_version_changed`; use a new attempt UUID to prepare current evidence.

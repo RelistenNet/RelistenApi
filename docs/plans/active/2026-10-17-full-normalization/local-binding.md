@@ -70,7 +70,7 @@ when rolling back reader or worker enablement.
 
 The service can supply positive associations and retry dependencies to a producer.
 It does not register or schedule that producer, allocate identities, accept a
-match or withdraw playback. A coordinator must still persist unresolved work,
-consume the complete ticket, apply the evaluated policy and preserve reviewed
-decisions. See [catalog refresh](catalog-refresh.md) for current legacy wording
+match or withdraw playback. The [Local coordinator](local-processing.md) retains lookup outcomes and consumes
+the complete extraction ticket. Automatic matching must still apply an evaluated
+policy and preserve reviewed decisions. See [catalog refresh](catalog-refresh.md) for current legacy wording
 and [catalog binding](catalog-binding.md) for shared publication contracts.

@@ -1,6 +1,6 @@
 # Process every retained account for a recording
 
-A recording can have legacy catalog fields and richer Archive or Phish evidence.
+A recording can have legacy catalog fields and richer Archive, Phish or Local evidence.
 Process those accounts together without choosing one as the truth. The extraction
 batch retains each input's claims and citations separately. Identity resolution
 follows extraction; this processor accepts no person, song or composition match
@@ -78,6 +78,11 @@ Preserve unknown contributors. If the returned owner ticket contains unsupported
 or unconsumed evidence, leave it unpublished and report the explicit attention
 outcome. Never clear that evidence's watermark with a partial extraction.
 
+Membership is compared when admitting the preparation. After admission, the
+ticket's complete input and dependency union controls publication freshness.
+Changing ownership of already-consumed facts can leave that union current;
+adding an input or dependency invalidates the earlier ticket.
+
 ## Claims and file-specific credits
 
 Extract each retained input separately. The batch's initiating `Extraction` and
@@ -138,8 +143,8 @@ checkpoint and publication tables remain authoritative. Apply migrations through
 registration itself still requires migrations through 34.
 
 Drain incompatible unfinished processing and legacy deliveries before changing
-binaries. Processing version 3 uses complete owner preparations and membership
-receipts. Older terminal results remain readable and replayable; an older pending
+binaries. Processing version 4 uses complete owner preparations and membership
+receipts, including joint Local input pairs. Older terminal results remain readable and replayable; an older pending
 request cannot acquire the new contract by replacing its saved preparation.
 Use a new lookup or processing attempt after resolving that incompatibility.
 Rollback stops processing and dispatch while retaining attempts, handoffs,
@@ -155,5 +160,6 @@ delivery.
 
 Keep matching and public reads subject to the [main plan's](README.md) independent
 evaluation and rollout requirements. These extraction checks cannot establish
-identity-matching accuracy. Local and setlist coordinators still need their own
-complete-input processing contracts.
+identity-matching accuracy. [Local processing](local-processing.md) adds selected
+root-account context. [Setlist processing](setlist-processing.md) retains complete
+provider accounts under separate extraction owners.

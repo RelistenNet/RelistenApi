@@ -120,11 +120,16 @@ recordings. The command requires a writable catalog with migrations through 35;
 it does not start imports, hosted workers or schedules, or call Luna. It needs
 no Redis or Temporal connection. It does not accept identities or change playback.
 
-Each recording run consumes its complete supported legacy/Archive/Phish input
+Each recording run consumes its complete supported legacy/Archive/Phish/Local input
 set. Retained provider accounts must already be enrolled with that extraction
 owner; this command does not discover or fetch them. See the
 [complete-input contract](../plans/active/2026-10-17-full-normalization/provider-processing.md)
 for contributor ownership, file-credit scope and delivery recovery.
+[Local processing](../plans/active/2026-10-17-full-normalization/local-processing.md)
+consumes retained root and directory metadata together.
+[Setlist proposal processing](../plans/active/2026-10-17-full-normalization/setlist-processing.md)
+is a separate service requiring migration 36; this recording command does not
+select or process setlist accounts. Neither service registration starts a schedule.
 
 Save the page UUID and selectors, then reuse them after interruption. The command
 writes JSON to stdout on exits 0 and 2, with diagnostics on stderr. Exits 1 and
