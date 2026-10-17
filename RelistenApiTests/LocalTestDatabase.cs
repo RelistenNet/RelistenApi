@@ -102,6 +102,10 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationSourceUuidBindings.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationRecordingLookups.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

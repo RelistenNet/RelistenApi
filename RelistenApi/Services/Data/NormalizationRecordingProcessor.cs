@@ -366,9 +366,10 @@ public sealed class NormalizationRecordingProcessor(
         };
     }
 
-    private static NormalizationSubjectKey Owner(Guid sourceUuid) =>
+    // Lookup handoffs must capture these exact ownership and contributor contracts.
+    internal static NormalizationSubjectKey Owner(Guid sourceUuid) =>
         new("extractions", "recording", sourceUuid);
 
-    private static NormalizationResourceKey Contributor(Guid sourceUuid) =>
+    internal static NormalizationResourceKey Contributor(Guid sourceUuid) =>
         new("relisten", "recording", sourceUuid.ToString("D"));
 }
