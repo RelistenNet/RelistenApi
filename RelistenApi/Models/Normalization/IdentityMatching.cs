@@ -61,7 +61,7 @@ public sealed record MatchingExternalIdentity(
 
 public sealed record PersonMatchRecord(
     Guid? Uuid,
-    string Kind,
+    string? Kind,
     IReadOnlyList<IdentityMatchingName> Names,
     IReadOnlyList<MatchingExternalIdentity> ExternalIdentities,
     IReadOnlySet<Guid> ArtistUuids
