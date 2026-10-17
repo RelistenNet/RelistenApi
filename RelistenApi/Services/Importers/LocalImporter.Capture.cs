@@ -46,11 +46,7 @@ public partial class LocalImporter
     ) =>
         FetchLocalResponse<LocalShowObject>(
             // A tuple keeps root/directory boundaries distinct even when either contains '/'.
-            new(
-                "local",
-                "directory_metadata",
-                JsonConvert.SerializeObject(new[] { metadataRoot, directory })
-            ),
+            NormalizationProviderResources.LocalDirectory(metadataRoot, directory),
             $"{metadataRoot}/{directory}/metadata",
             context,
             IsValidDirectory,

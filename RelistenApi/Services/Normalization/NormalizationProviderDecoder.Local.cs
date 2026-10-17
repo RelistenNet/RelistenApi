@@ -48,12 +48,9 @@ public sealed partial class NormalizationProviderDecoder
                     continue;
                 }
 
-                var resource = new NormalizationResourceKey(
-                    "local",
-                    "directory_metadata",
-                    JsonSerializer.Serialize(
-                        new[] { reader.Input.Resource.ProviderKey, directory.Value }
-                    )
+                var resource = NormalizationProviderResources.LocalDirectory(
+                    reader.Input.Resource.ProviderKey,
+                    directory.Value
                 );
                 var origin = reader.Origin(
                     resource,

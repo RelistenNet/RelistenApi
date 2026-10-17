@@ -15,6 +15,7 @@ using Relisten.Data;
 using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Local;
+using Relisten.Normalization;
 using RelistenApiTests.Ingestion;
 
 namespace RelistenApiTests.Importers.Local;
@@ -303,6 +304,76 @@ public sealed class TestLocalNormalizationCapture
         firstInput.Revision.Payload.Should().Equal(secondInput.Revision.Payload);
         firstInput.Generation.Should().Be(1);
         secondInput.Generation.Should().Be(1);
+    }
+
+    [Test]
+    public async Task DecodedRootFindsCapturedDirectoryWithUnicodeAndPunctuationInItsIdentity()
+    {
+        var context = await Context();
+        context.Source.upstream_identifier = "café & \"root\"/branch-" + context.Artist.uuid;
+        const string directory = "disc/Zoë & \"Pat\"";
+        var rootJson = JsonConvert.SerializeObject(
+            new
+            {
+                data = new Dictionary<string, object>
+                {
+                    ["2000-01-01"] = new[]
+                    {
+                        new
+                        {
+                            dir = directory,
+                            date = "2000-01-01",
+                            venue = "A Hall",
+                            city = "A City",
+                            state = "CA",
+                            updated_at = new DateTime(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                        },
+                    },
+                },
+            }
+        );
+        var directoryJson = JsonConvert.SerializeObject(
+            new
+            {
+                txts = new[] { "Taped by Zoë" },
+                tracks = new[]
+                {
+                    new
+                    {
+                        mp3 = "one.mp3",
+                        tags = new
+                        {
+                            title = "A song",
+                            duration = 120,
+                            track = new { no = 1 },
+                        },
+                    },
+                },
+            }
+        );
+        var requests = 0;
+        using var scope = host.Services.CreateScope();
+        var importer = Importer(scope, _ => requests++ == 0 ? rootJson : directoryJson);
+        var root = await importer.FetchRootAndPrepareVenuesAsync(context);
+        await importer.ImportDateAsync(
+            context,
+            (await importer.SelectChangedDatesAsync(context, root)).Items.Single()
+        );
+
+        var rootInput = (await evidence.GetCurrentInputAsync(RootKey(context)))!;
+        var decodedRoot = new NormalizationProviderDecoder().Decode(rootInput.Revision);
+        var directoryResource = decodedRoot.Recordings.Single().Origin.Item;
+        directoryResource.Should().Be(DirectoryKey(context, directory));
+        var retained = await evidence.GetCurrentInputAsync(directoryResource);
+        retained.Should().NotBeNull();
+        retained!.Revision.Payload.Should().Equal(Encoding.UTF8.GetBytes(directoryJson));
+        new NormalizationProviderDecoder()
+            .Decode(retained.Revision)
+            .Recordings.Single()
+            .Text.Single()
+            .Text.Value.Should()
+            .Be("Taped by Zoë");
+        requests.Should().Be(2);
     }
 
     [Test]
