@@ -8,7 +8,9 @@ changing a recording's UUID or asking the provider for the same response again.
 Read the [capture contract](provider-capture.md) for resource keys and formats,
 and the [domain contracts](../../../design/2026-10-17-normalization-contracts.md)
 for accepted identities, corrections and public reads. This document describes
-the decoding and legacy-seed contracts used by the implementation.
+the decoding and legacy-seed contracts used by the implementation. The
+[catalog-binding guide](catalog-binding.md) specifies current associations,
+catalog invalidation and complete contributor-owned input sets.
 
 ## Typed assertions and exact evidence
 
@@ -40,7 +42,9 @@ Origins distinguish an individual retained resource, a catalog member, a page
 member and a legacy snapshot. A page member establishes that a response contained
 an assertion. It does not establish the latest revision of an item that can move
 between pages. Nested files retain their recording-resource origin and their
-own qualified file identities separately.
+own qualified file identities separately. An explicit file recording owner also
+remains a cited assertion. If it names another recording, catalog binding rejects
+that association even when the media URL matches.
 
 Setlist passages preserve provider order and repeated songs. An observed ordinal
 is a coordinate in that account, not a stable occurrence UUID. Set descriptors
@@ -89,32 +93,31 @@ These services are registered for the API and standalone worker. Registration do
 not start a seed, decoder, resolver or backfill job. Production writes remain a
 separate rollout step.
 
-## Catalog binding and invalidation still required
+## Bind observations before matching
 
-Provider assertions must bind to current catalog rows before publication. Use
-actual UUIDs and explicit provider-qualified evidence. Source, setlist and song
-tables do not uniformly retain provider ownership. Legacy song upserts can replace
-an upstream identifier when titles share a slug while keeping the winning UUID.
-Neither a computed UUID nor a title or slug fallback repairs that ambiguity.
+[`NormalizationCatalogBindingService`](../../../../RelistenApi/Services/Data/NormalizationCatalogBindingService.cs)
+now binds legacy, Archive and Phish.in recording/file observations to current
+catalog UUIDs. It reports missing, ambiguous and conflicting associations without
+changing playback. Pass its artist and global source-identifier revisions into
+work admission and publication. Migration 24 makes relevant catalog mutations
+invalidate registered work even when provider bytes have not changed.
 
-Bind files through the exact media URL and valid source, artist and set joins.
-Follow a source's current show or an explicit setlist assignment; a date alone
-cannot select a performance. A Local directory needs its retained root map to
-establish its recording. Creator text and collection membership do not establish
-an accepted artist or taper identity.
+The [binding contract](catalog-binding.md) defines exact provider/file mappings,
+lock order, retry behavior and atomic contributor-owned input unions. Each
+recording belongs to one performance; files can span songs or sets within it.
+Unclear early/late assignments remain on the default/current show.
 
-The binding service must report missing, ambiguous or conflicting associations.
-Capture can finish before an import commits, and catalog changes can occur without
-new provider input. Publication therefore needs durable catalog-change revisions
-or atomic revalidation under the catalog's mutation lock, with an explicit lock
-order. Add durable dirty registration and complete owner input-set updates before
-automatic publication. The existing work-service resource and owner fences do not
-by themselves detect a source move, changed media URL or artist mapping.
+Local still needs its retained root map and directory account bound together.
+Jerry, enrichment setlists and imported repertoire/venue associations also need
+provider-specific ownership checks. Legacy song upserts can replace an upstream
+identifier when titles share a slug while keeping the winning UUID. Neither a
+computed UUID nor a title fallback repairs that ambiguity.
 
-The artist repertoire's input set must accumulate all relevant recording inputs
-atomically. Replacing that set with the current recording's inputs would lose
-other songs' invalidation dependencies. These binding, invalidation and resolver
-steps remain required for the full normalization outcome.
+Binding refreshes associations, not original wording. The legacy seed is still
+seed-only. A refresh producer must retain and decode changed catalog fields before
+publishing fresh credit/title interpretations. Negative binding outcomes also need
+durable retry registration. These producers, remaining bindings and the evaluated
+resolver remain required before automatic normalization.
 
 ## Verification
 
