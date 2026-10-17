@@ -1,0 +1,77 @@
+{
+  "state": "completed",
+  "input_sha256": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4",
+  "run_identity_sha256": "3e51dbe37ceeb89f77f4e67886af1b840804a137b26d7566200a883ace4af61d",
+  "output_sha256": "b6d250d435197563b6f23477646a18bb1ad3a0e083710f28096acd8830fe7038",
+  "input_snapshot": "local-dev/normalization-data/2026-10-17-cross-artist/snapshot.jsonl",
+  "output_directory": "local-dev/normalization-data/2026-10-17-cross-artist/extraction-v1",
+  "output_records": 67454,
+  "error_count": 0,
+  "artist_count": 4362,
+  "source_records": 32593,
+  "track_records": 34861,
+  "title_segments": 33547,
+  "unresolved_titles": 3055,
+  "credit_mentions_by_role": {
+    "taper": 34025,
+    "transferrer": 26685,
+    "mastering_engineer": 1143,
+    "uploader": 689,
+    "matrix_builder": 62,
+    "musician": 136,
+    "recording_engineer": 6,
+    "other": 2,
+    "collector": 9
+  },
+  "missing_track_context": {
+    "source_context": 128,
+    "set_context": 128,
+    "show_context": 128
+  },
+  "unsupported_sample_kinds": {
+    "venue_sample": 17073,
+    "song_sample": 1696,
+    "setlist_sample": 432
+  },
+  "extractor_versions": {
+    "recording_credits": "recording-credits-v1",
+    "track_title": "track-title-v1"
+  },
+  "implementation_files": [
+    {
+      "path": "RelistenApi/Services/Normalization/RecordingCreditExtractor.cs",
+      "sha256": "4128d7ae724093f1cacecb4955053430a24bf426bfb708535143c15b21f8347a"
+    },
+    {
+      "path": "RelistenApi/Services/Normalization/TrackTitleExtractor.cs",
+      "sha256": "5e0888afb1535d733e5889029ea8b87c047e0337d74074c14efe89ba3e09a437"
+    },
+    {
+      "path": "RelistenApi/Models/Normalization/RecordingExtraction.cs",
+      "sha256": "6b5451abf04c3c3eec8528ac096d7b3b13d1cc3cf1b798036c0d0be372c5fd7d"
+    },
+    {
+      "path": "RelistenApi/Models/Normalization/TrackTitleExtraction.cs",
+      "sha256": "a6a3637f7488ac20344ba473c0db4f5248e1d31db798c597109e5a0f612af350"
+    },
+    {
+      "path": "tools/RelistenNormalization/NormalizationExtractionBatch.cs",
+      "sha256": "4b64e9a0971179625208dd9a3034a8870504b4835408ef3df218a6e373f97182"
+    },
+    {
+      "path": "tools/RelistenNormalization/NormalizationExtractionBatchReport.cs",
+      "sha256": "dd4cca4beea3e7896b31abab671d00eba78e884d8b8b21d62e4a5c02b7e448d4"
+    }
+  ],
+  "accuracy": "Not measured. Outputs are metadata extraction proposals, not accepted identity matches. Repeated role mentions are counted separately.",
+  "tests": {
+    "postgres_service_tests": 26,
+    "extraction_and_offline_tests": 98,
+    "total": 124,
+    "failed": 0,
+    "skipped": 0,
+    "compatibility_tests": 48
+  },
+  "paid_requests": 0,
+  "production_writes": false
+}

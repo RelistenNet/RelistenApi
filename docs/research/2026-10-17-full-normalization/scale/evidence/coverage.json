@@ -1,0 +1,493 @@
+{
+  "completed_at": "2026-10-17T17:04:06.084678+00:00",
+  "coverage": {
+    "setlist": {
+      "artists_without_eligible_rows": 4325,
+      "configured_provider_coverage": {
+        "archive.org": {
+          "configured_artists": 4377,
+          "eligible_artists": 52,
+          "sampled_artists": 52
+        },
+        "jerrygarcia.com": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "local": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phantasytour.com": {
+          "configured_artists": 2,
+          "eligible_artists": 2,
+          "sampled_artists": 2
+        },
+        "phish.in": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phish.net": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "setlist.fm": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        }
+      },
+      "eligible_artists": 54,
+      "eligible_rows": 38475,
+      "missing_eligible_artists": 0,
+      "per_artist_cap": 8,
+      "population_rows": 38475,
+      "relation": "setlist_shows",
+      "sampled_artists": 54,
+      "sampled_rows": 432,
+      "size_strata": {
+        "1001+": {
+          "artists": 12,
+          "sampled_artists": 12,
+          "sampled_rows": 96
+        },
+        "101-1000": {
+          "artists": 37,
+          "sampled_artists": 37,
+          "sampled_rows": 296
+        },
+        "11-100": {
+          "artists": 5,
+          "sampled_artists": 5,
+          "sampled_rows": 40
+        },
+        "none": {
+          "artists": 4325,
+          "sampled_artists": 0,
+          "sampled_rows": 0
+        }
+      }
+    },
+    "song": {
+      "artists_without_eligible_rows": 4326,
+      "configured_provider_coverage": {
+        "archive.org": {
+          "configured_artists": 4377,
+          "eligible_artists": 52,
+          "sampled_artists": 52
+        },
+        "jerrygarcia.com": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "local": {
+          "configured_artists": 1,
+          "eligible_artists": 0,
+          "sampled_artists": 0
+        },
+        "phantasytour.com": {
+          "configured_artists": 2,
+          "eligible_artists": 2,
+          "sampled_artists": 2
+        },
+        "phish.in": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phish.net": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "setlist.fm": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        }
+      },
+      "eligible_artists": 53,
+      "eligible_rows": 16605,
+      "missing_eligible_artists": 0,
+      "per_artist_cap": 32,
+      "population_rows": 16605,
+      "relation": "songs",
+      "sampled_artists": 53,
+      "sampled_rows": 1696,
+      "size_strata": {
+        "1001+": {
+          "artists": 1,
+          "sampled_artists": 1,
+          "sampled_rows": 32
+        },
+        "101-1000": {
+          "artists": 46,
+          "sampled_artists": 46,
+          "sampled_rows": 1472
+        },
+        "11-100": {
+          "artists": 6,
+          "sampled_artists": 6,
+          "sampled_rows": 192
+        },
+        "none": {
+          "artists": 4326,
+          "sampled_artists": 0,
+          "sampled_rows": 0
+        }
+      }
+    },
+    "source": {
+      "artists_without_eligible_rows": 21,
+      "configured_provider_coverage": {
+        "archive.org": {
+          "configured_artists": 4377,
+          "eligible_artists": 4356,
+          "sampled_artists": 4356
+        },
+        "jerrygarcia.com": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "local": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phantasytour.com": {
+          "configured_artists": 2,
+          "eligible_artists": 2,
+          "sampled_artists": 2
+        },
+        "phish.in": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phish.net": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "setlist.fm": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        }
+      },
+      "eligible_artists": 4358,
+      "eligible_rows": 292476,
+      "missing_eligible_artists": 0,
+      "per_artist_cap": 8,
+      "population_rows": 292476,
+      "relation": "sources",
+      "sampled_artists": 4358,
+      "sampled_rows": 32593,
+      "size_strata": {
+        "1": {
+          "artists": 14,
+          "sampled_artists": 14,
+          "sampled_rows": 14
+        },
+        "1001+": {
+          "artists": 39,
+          "sampled_artists": 39,
+          "sampled_rows": 312
+        },
+        "101-1000": {
+          "artists": 462,
+          "sampled_artists": 462,
+          "sampled_rows": 3696
+        },
+        "11-100": {
+          "artists": 2351,
+          "sampled_artists": 2351,
+          "sampled_rows": 18808
+        },
+        "2-10": {
+          "artists": 1492,
+          "sampled_artists": 1492,
+          "sampled_rows": 9763
+        },
+        "none": {
+          "artists": 21,
+          "sampled_artists": 0,
+          "sampled_rows": 0
+        }
+      }
+    },
+    "track": {
+      "artists_without_eligible_rows": 17,
+      "configured_provider_coverage": {
+        "archive.org": {
+          "configured_artists": 4377,
+          "eligible_artists": 4360,
+          "sampled_artists": 4360
+        },
+        "jerrygarcia.com": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "local": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phantasytour.com": {
+          "configured_artists": 2,
+          "eligible_artists": 2,
+          "sampled_artists": 2
+        },
+        "phish.in": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phish.net": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "setlist.fm": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        }
+      },
+      "eligible_artists": 4362,
+      "eligible_rows": 5010402,
+      "missing_eligible_artists": 0,
+      "per_artist_cap": 8,
+      "population_rows": 5063161,
+      "relation": "tracks",
+      "sampled_artists": 4362,
+      "sampled_rows": 34861,
+      "size_strata": {
+        "1": {
+          "artists": 1,
+          "sampled_artists": 1,
+          "sampled_rows": 1
+        },
+        "1001+": {
+          "artists": 743,
+          "sampled_artists": 743,
+          "sampled_rows": 5944
+        },
+        "101-1000": {
+          "artists": 2604,
+          "sampled_artists": 2604,
+          "sampled_rows": 20832
+        },
+        "11-100": {
+          "artists": 998,
+          "sampled_artists": 998,
+          "sampled_rows": 7984
+        },
+        "2-10": {
+          "artists": 16,
+          "sampled_artists": 16,
+          "sampled_rows": 100
+        },
+        "none": {
+          "artists": 17,
+          "sampled_artists": 0,
+          "sampled_rows": 0
+        }
+      }
+    },
+    "venue": {
+      "artists_without_eligible_rows": 17,
+      "configured_provider_coverage": {
+        "archive.org": {
+          "configured_artists": 4377,
+          "eligible_artists": 4360,
+          "sampled_artists": 4360
+        },
+        "jerrygarcia.com": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "local": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phantasytour.com": {
+          "configured_artists": 2,
+          "eligible_artists": 2,
+          "sampled_artists": 2
+        },
+        "phish.in": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "phish.net": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        },
+        "setlist.fm": {
+          "configured_artists": 1,
+          "eligible_artists": 1,
+          "sampled_artists": 1
+        }
+      },
+      "eligible_artists": 4362,
+      "eligible_rows": 216304,
+      "missing_eligible_artists": 0,
+      "per_artist_cap": 4,
+      "population_rows": 216304,
+      "relation": "venues",
+      "sampled_artists": 4362,
+      "sampled_rows": 17073,
+      "size_strata": {
+        "1": {
+          "artists": 41,
+          "sampled_artists": 41,
+          "sampled_rows": 41
+        },
+        "1001+": {
+          "artists": 33,
+          "sampled_artists": 33,
+          "sampled_rows": 132
+        },
+        "101-1000": {
+          "artists": 303,
+          "sampled_artists": 303,
+          "sampled_rows": 1212
+        },
+        "11-100": {
+          "artists": 2044,
+          "sampled_artists": 2044,
+          "sampled_rows": 8176
+        },
+        "2-10": {
+          "artists": 1941,
+          "sampled_artists": 1941,
+          "sampled_rows": 7512
+        },
+        "none": {
+          "artists": 17,
+          "sampled_artists": 0,
+          "sampled_rows": 0
+        }
+      }
+    }
+  },
+  "full_population_source_format_counts": {
+    "compound_credit_candidate": 17656,
+    "html_description": 123495,
+    "lineage_present": 229568,
+    "lineage_separator": 216902,
+    "long_credit": 199,
+    "notes_present": 132514,
+    "partial_date": 222,
+    "taper_present": 246849,
+    "transferrer_present": 227655
+  },
+  "full_population_track_format_counts": {
+    "active": 5010402,
+    "active_annotation_or_compound_candidate": 176913,
+    "active_bracketed_text": 180148,
+    "active_empty_title": 27,
+    "active_segue_candidate": 649474,
+    "orphaned": 52759,
+    "unknown_orphan_state": 0
+  },
+  "limits": [
+    "Raw inputs are unlabeled. Counts do not establish extraction accuracy or identity.",
+    "Equal per-artist caps deliberately oversample sparse artists; unweighted estimates do not describe a random recording.",
+    "Configured provider mappings describe artist configuration, not ownership of individual recordings.",
+    "Track samples include active rows with missing source/set context; active is not proof of playable catalog data.",
+    "Setlist memberships have no stored ordering; song-ID ordering in JSON is only stable serialization.",
+    "Exact string repetition and artist/show family keys are review aids, not exhaustive identity or leakage detection.",
+    "This production snapshot does not include newer local Jerry and Aadam imports already retained in evaluation evidence."
+  ],
+  "raw_bytes": 176666741,
+  "raw_file": "/private/tmp/relisten-normalization-scale-20261017/capture-v1/snapshot.jsonl",
+  "raw_sha256": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4",
+  "record_kinds": {
+    "artist": 4379,
+    "indexes": 1,
+    "schema": 1,
+    "setlist_profile": 54,
+    "setlist_sample": 432,
+    "snapshot": 1,
+    "snapshot_complete": 1,
+    "song_profile": 53,
+    "song_sample": 1696,
+    "source_profile": 4358,
+    "source_sample": 32593,
+    "totals": 1,
+    "track_profile": 4362,
+    "track_sample": 34861,
+    "venue_profile": 4362,
+    "venue_sample": 17073
+  },
+  "sampled_setlist_memberships": 6347,
+  "sampled_track_context": {
+    "missing_set_context": 128,
+    "missing_show_context": 128,
+    "missing_source_context": 128
+  },
+  "selected_evidence_repetition": {
+    "song_name_exact_keys": 1623,
+    "source_and_track_family_repeated_rows": 22669,
+    "source_and_track_show_families": 44657,
+    "source_fields": {
+      "lineage": {
+        "distinct_exact_strings": 13842,
+        "populated_rows": 24323
+      },
+      "taper": {
+        "distinct_exact_strings": 5912,
+        "populated_rows": 28130
+      },
+      "transferrer": {
+        "distinct_exact_strings": 4099,
+        "populated_rows": 24259
+      }
+    },
+    "venue_name_location_exact_keys": 12880
+  },
+  "snapshot": {
+    "captured_at": "2026-10-17T17:03:23.650476+00:00",
+    "in_recovery": true,
+    "kind": "snapshot",
+    "migration_versions": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "read_only": "on",
+    "replay_lsn": "780/B000D2D0",
+    "snapshot": "58911584:58911584:"
+  },
+  "sql_sha256": "a4fb5925c8210e4754635bb332fff314c52c5a841ea34f5d8729f4a6fc13ff95",
+  "totals": {
+    "artists": 4379,
+    "setlist_memberships": 575103,
+    "setlist_shows": 38475,
+    "songs": 16605,
+    "sources": 292476,
+    "tracks": 5063161,
+    "venues": 216304
+  }
+}

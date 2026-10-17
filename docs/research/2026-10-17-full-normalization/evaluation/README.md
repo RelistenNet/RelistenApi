@@ -4,6 +4,8 @@ Start with [cases.jsonl](cases.jsonl) to see the decisions the normalization lay
 
 The cases cover all five domains: people (44), songs and setlists (28), lineage (15), compositions (8), and venues (7). There are 77 supported expectations, two evidenced distinctions, and 23 unresolved decisions. A supported extraction means the input makes that assertion; it does not independently certify the upstream assertion as historical fact.
 
+The release now requires automatic matching at catalog scale and limits recording provenance to identifying tapers/transferrers. The [scale audit](../scale/README.md) supplies the larger sampling frame. These 102 cases are a frozen version-1 regression corpus; its 15 ancestry cases remain historical challenges outside release acceptance. Expand and independently verify labels before calibrating automatic policies.
+
 ## Read a case
 
 Each case names its task and expected result, cites exact fields or text, and explains the decision. [evidence.jsonl](evidence.jsonl) preserves those inputs. [format.md](format.md) defines the machine-readable format and validator command. [CAPTURE.md](CAPTURE.md) explains cohort selection, capture commands and database provenance.
@@ -36,4 +38,4 @@ The saved [validation report](validation.json) confirms evidence/case hashes and
 
 ## Next implementation checks
 
-Use [assertions.md](assertions.md) to implement domain-specific evaluators for the documented assertion fields before scoring extraction or matching output. Count missing predictions and invalid evidence separately from wrong identities. Expand real examples for historical venue names/rooms, namesakes with distinguishing evidence, positive repertoire-to-work links, provider-qualified person identities and supported multi-recording ancestry. Retain the current unresolved cases when richer evidence is added: a narrow input must still produce a narrow conclusion.
+Use [assertions.md](assertions.md) to implement domain-specific evaluators for the documented assertion fields before scoring extraction or matching output. Count missing predictions and invalid evidence separately from wrong identities. Expand real examples for historical venue names/rooms, namesakes with distinguishing evidence, positive repertoire-to-work links, provider-qualified person identities and explicit taper/transferrer identity links. Retain the current unresolved cases when richer evidence is added: a narrow input must still produce a narrow conclusion.
