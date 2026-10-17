@@ -98,7 +98,8 @@ public sealed partial class NormalizedMusicService
                 },
                 decision,
                 true,
-                ct
+                ct,
+                forceRevision: true
             );
         }
         else
@@ -134,7 +135,8 @@ public sealed partial class NormalizedMusicService
                 },
                 decision,
                 true,
-                ct
+                ct,
+                forceRevision: true
             );
         }
         await c.ExecuteAsync(

@@ -16,7 +16,8 @@ public sealed partial class NormalizedMusicService
         CompositionChange composition,
         Guid decisionUuid,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        bool forceRevision = false
     ) =>
         Persist(
             c,
@@ -27,7 +28,8 @@ public sealed partial class NormalizedMusicService
             "@DisplayTitle,@Aliases",
             decisionUuid,
             reviewed,
-            ct
+            ct,
+            forceRevision: forceRevision
         );
 
     private static async Task SaveWorkCredit(

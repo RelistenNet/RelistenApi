@@ -111,11 +111,14 @@ public sealed partial class NormalizedMusicService
             EnsureOnly(publication, allowContents: true);
             foreach (var content in publication.TrackContents)
             {
+                // Current catalog ownership wins after a file moves. Retained ownership
+                // only permits historical correction when the catalog reference is absent.
                 var source = await c.QuerySingleOrDefaultAsync<Guid?>(
                     new CommandDefinition(
                         """
-                        SELECT s.uuid FROM source_tracks tr JOIN sources s ON s.id=tr.source_id WHERE tr.uuid=@SourceTrackUuid
-                        UNION SELECT source_uuid FROM normalization.track_contents WHERE uuid=@Uuid AND source_track_uuid=@SourceTrackUuid LIMIT 1
+                        SELECT COALESCE(
+                            (SELECT s.uuid FROM source_tracks tr JOIN sources s ON s.id=tr.source_id WHERE tr.uuid=@SourceTrackUuid),
+                            (SELECT source_uuid FROM normalization.track_contents WHERE uuid=@Uuid AND source_track_uuid=@SourceTrackUuid))
                         """,
                         content,
                         t,

@@ -155,11 +155,27 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         await RestoreSplitIdentities(c, t, publication, reviewed, ct);
         foreach (var song in publication.RepertoireSongs)
         {
-            await SaveRepertoire(c, t, song, decisionUuid, reviewed, ct);
+            await SaveRepertoire(
+                c,
+                t,
+                song,
+                decisionUuid,
+                reviewed,
+                ct,
+                forceRevision: publication.Splits.Any(x => x.RetainedUuid == song.Uuid)
+            );
         }
         foreach (var composition in publication.Compositions)
         {
-            await SaveComposition(c, t, composition, decisionUuid, reviewed, ct);
+            await SaveComposition(
+                c,
+                t,
+                composition,
+                decisionUuid,
+                reviewed,
+                ct,
+                forceRevision: publication.Splits.Any(x => x.RetainedUuid == composition.Uuid)
+            );
         }
         foreach (var identity in publication.ExternalIdentities.OrderByDescending(x => x.Retracted))
         {
@@ -408,7 +424,8 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         RepertoireSongChange song,
         Guid decision,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        bool forceRevision = false
     )
     {
         var artist = await c.QuerySingleOrDefaultAsync<Guid?>(
@@ -451,7 +468,8 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
             "@ArtistUuid,@DisplayTitle,@Aliases",
             decision,
             reviewed,
-            ct
+            ct,
+            forceRevision: forceRevision
         );
     }
 
@@ -568,17 +586,22 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         Guid decision,
         bool reviewed,
         CancellationToken ct,
-        object? extra = null
+        object? extra = null,
+        bool forceRevision = false
     )
         where T : MusicChange
     {
+        var basis = reviewed ? "reviewed" : change.Basis;
+        var effective = reviewed ? change with { Basis = "reviewed" } : change;
+        var payload = JsonSerializer.Serialize(effective, effective.GetType());
         var current = await c.QuerySingleOrDefaultAsync<CurrentRevision>(
             new CommandDefinition(
                 $"""
-                SELECT r.revision AS Revision,r.basis AS Basis,x.revision_uuid AS RevisionUuid
+                SELECT r.revision AS Revision,r.basis AS Basis,
+                    (r.payload-'ExpectedRevision')=(@payload::jsonb-'ExpectedRevision') AS SamePayload
                 FROM normalization.{table} x JOIN normalization.music_revisions r ON r.uuid=x.revision_uuid WHERE x.uuid=@Uuid FOR UPDATE OF x
                 """,
-                change,
+                new { change.Uuid, payload },
                 t,
                 cancellationToken: ct
             )
@@ -595,10 +618,29 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                 "An automatic publication cannot replace a reviewed music assertion."
             );
         }
+        // A new work attempt still acknowledges its read set, but unchanged matching facts
+        // must not invalidate every other candidate consumer. Usage records retain their write
+        // behavior: some durable catalog scope columns are derived outside their payload.
+        // Redirect topology is stored outside the payload. Explicit merges/splits must still
+        // version that identity so an older entity snapshot cannot authorize a later edit.
+        if (
+            !forceRevision
+            && current?.SamePayload == true
+            && table
+                is (
+                    "repertoire_songs"
+                    or "compositions"
+                    or "work_credits"
+                    or "imported_song_assignments"
+                    or "repertoire_compositions"
+                    or "music_external_identities"
+                )
+        )
+        {
+            return;
+        }
         var revisionUuid = Guid.NewGuid();
         var revision = (current?.Revision ?? 0) + 1;
-        var basis = reviewed ? "reviewed" : change.Basis;
-        var effective = reviewed ? change with { Basis = "reviewed" } : change;
         await c.ExecuteAsync(
             new CommandDefinition(
                 """
@@ -613,7 +655,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                     revision,
                     decision,
                     basis,
-                    payload = JsonSerializer.Serialize(effective, effective.GetType()),
+                    payload,
                     evidence = JsonSerializer.Serialize(change.Evidence),
                 },
                 t,
@@ -668,7 +710,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         );
     }
 
-    private sealed record CurrentRevision(long Revision, string Basis, Guid RevisionUuid);
+    private sealed record CurrentRevision(long Revision, string Basis, bool SamePayload);
 
     private static Task RequireUnredirected(
         NpgsqlConnection c,
