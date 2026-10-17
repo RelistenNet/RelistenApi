@@ -63,9 +63,7 @@ public sealed class TestNormalizationWork
     {
         var capture = await Capture();
         var ticket = await Begin(capture.Resource);
-        (await work.GetPendingSubjectsAsync())
-            .Should()
-            .Contain(s => s.SubjectUuid == ticket.SubjectUuid);
+        (await ReadAllPendingSubjects()).Should().Contain(s => s.SubjectUuid == ticket.SubjectUuid);
         var calls = 0;
         async Task Write(NpgsqlConnection c, NpgsqlTransaction t, CancellationToken ct)
         {
@@ -80,7 +78,7 @@ public sealed class TestNormalizationWork
         results.Count(r => r.Replayed).Should().Be(1);
         calls.Should().Be(1);
         (await ReadValue(ticket.WorkUuid)).Should().Be("accepted");
-        (await work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .NotContain(s => s.SubjectUuid == ticket.SubjectUuid);
     }
@@ -155,9 +153,7 @@ public sealed class TestNormalizationWork
         await change;
         result.Status.Should().Be(NormalizationPublicationStatus.Published);
         (await ReadValue(ticket.WorkUuid)).Should().Be("published before input change");
-        (await work.GetPendingSubjectsAsync())
-            .Should()
-            .Contain(s => s.SubjectUuid == ticket.SubjectUuid);
+        (await ReadAllPendingSubjects()).Should().Contain(s => s.SubjectUuid == ticket.SubjectUuid);
     }
 
     [Test]
@@ -170,9 +166,7 @@ public sealed class TestNormalizationWork
         var old = await Begin(capture.Resource, subject);
         await Change(capture, "B", 1);
         await Change(capture, "A", 2);
-        (await work.GetPendingSubjectsAsync())
-            .Should()
-            .Contain(s => s.SubjectUuid == first.SubjectUuid);
+        (await ReadAllPendingSubjects()).Should().Contain(s => s.SubjectUuid == first.SubjectUuid);
         (await work.TryPublishAsync(old.WorkUuid, NeverWrite))
             .Status.Should()
             .Be(NormalizationPublicationStatus.Stale);
@@ -182,7 +176,7 @@ public sealed class TestNormalizationWork
         (await work.TryPublishAsync(fresh.WorkUuid, NoWrite))
             .Status.Should()
             .Be(NormalizationPublicationStatus.Published);
-        (await work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .NotContain(s => s.SubjectUuid == first.SubjectUuid);
     }
@@ -210,7 +204,7 @@ public sealed class TestNormalizationWork
             .Status.Should()
             .Be(NormalizationPublicationStatus.Published);
         await Change(firstInput, "old binding changed", 1);
-        (await work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .NotContain(s => s.SubjectUuid == first.SubjectUuid);
     }
@@ -388,7 +382,7 @@ public sealed class TestNormalizationWork
             (await work.GetSubjectAsync(dependency.SubjectUuid))!.Subject
         );
         await work.TryPublishAsync(nextDependency.WorkUuid, NoWrite);
-        (await work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .Contain(s => s.SubjectUuid == consumer.SubjectUuid);
         (await work.TryPublishAsync(stale.WorkUuid, NeverWrite))
@@ -403,7 +397,7 @@ public sealed class TestNormalizationWork
         );
         await work.TryPublishAsync(afterPublication.WorkUuid, NoWrite);
         await work.ApplyReviewAsync(Review(dependency.SubjectUuid), NoWrite);
-        (await work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .Contain(s => s.SubjectUuid == consumer.SubjectUuid);
     }
@@ -474,7 +468,7 @@ public sealed class TestNormalizationWork
             NoWrite
         );
 
-        var pending = await work.GetPendingSubjectsAsync(limit: 1000);
+        var pending = await ReadAllPendingSubjects();
         pending.Should().Contain(subject => subject.SubjectUuid == identity.SubjectUuid);
         pending.Should().Contain(subject => subject.SubjectUuid == consumer.SubjectUuid);
         (await work.GetSubjectAsync(identity.SubjectUuid))!.EditorialRevision.Should().Be(1);
@@ -593,7 +587,7 @@ public sealed class TestNormalizationWork
             state!.EditorialRevision.Should().Be(0);
             state.DesiredGeneration.Should().Be(1);
         }
-        var pending = await work.GetPendingSubjectsAsync(limit: 1000);
+        var pending = await ReadAllPendingSubjects();
         pending
             .Should()
             .NotContain(subject =>
@@ -694,6 +688,26 @@ public sealed class TestNormalizationWork
         )
             .Replayed.Should()
             .BeFalse();
+    }
+
+    private async Task<IReadOnlyList<NormalizationSubjectState>> ReadAllPendingSubjects()
+    {
+        // Other fixtures leave pending owners in this disposable database. Membership checks
+        // must traverse the public cursor, including negative assertions after publication.
+        const int pageSize = 100;
+        var pending = new List<NormalizationSubjectState>();
+        Guid? afterUuid = null;
+        while (true)
+        {
+            var page = await work.GetPendingSubjectsAsync(afterUuid, pageSize);
+            pending.AddRange(page);
+            if (page.Count < pageSize)
+            {
+                return pending;
+            }
+
+            afterUuid = page[^1].SubjectUuid;
+        }
     }
 
     private Task<NormalizationWorkTicket> RegisterIdentity() =>

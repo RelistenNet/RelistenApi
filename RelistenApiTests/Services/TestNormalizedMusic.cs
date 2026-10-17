@@ -811,7 +811,7 @@ public sealed class TestNormalizedMusic
         )
             .Replayed.Should()
             .BeTrue();
-        (await fixture.Work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .Contain(x => x.SubjectUuid == initial.SubjectUuid);
         (
@@ -864,7 +864,7 @@ public sealed class TestNormalizedMusic
             "test-operator"
         );
         (await fixture.Work.GetSubjectAsync(ownerB.SubjectUuid))!.EditorialRevision.Should().Be(2);
-        (await fixture.Work.GetPendingSubjectsAsync())
+        (await ReadAllPendingSubjects())
             .Should()
             .Contain(x => x.SubjectUuid == initial.SubjectUuid);
         (await music.PublishAsync(beforeSplit.WorkUuid, new MusicPublication()))
@@ -968,6 +968,26 @@ public sealed class TestNormalizedMusic
             .Single()
             .Value.PersonUuid.Should()
             .Be(person.Uuid);
+    }
+
+    private async Task<IReadOnlyList<NormalizationSubjectState>> ReadAllPendingSubjects()
+    {
+        // Other fixtures leave pending owners in this disposable database. Membership checks
+        // must traverse the public cursor, including negative assertions after publication.
+        const int pageSize = 100;
+        var pending = new List<NormalizationSubjectState>();
+        Guid? afterUuid = null;
+        while (true)
+        {
+            var page = await fixture.Work.GetPendingSubjectsAsync(afterUuid, pageSize);
+            pending.AddRange(page);
+            if (page.Count < pageSize)
+            {
+                return pending;
+            }
+
+            afterUuid = page[^1].SubjectUuid;
+        }
     }
 
     private async Task<NormalizationWorkTicket> Ticket(

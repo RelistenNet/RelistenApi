@@ -64,14 +64,10 @@ public sealed class TestNormalizationRecordingProcessor
                 ? value.GetString()
                 : null;
         var source = await fixture.Source();
-        // These catalog identities are synthetic. Only the retained artist name and credit
-        // wording are replayed; this test does not reconstruct an original provider response.
+        // These catalog artists and identities are synthetic. Credit wording is replayed
+        // exactly; this test does not reconstruct an original provider response.
         await fixture.Db.WithWriteConnection(async connection =>
         {
-            await connection.ExecuteAsync(
-                "UPDATE artists SET name=@name WHERE id=@id",
-                new { name = row.GetProperty("artist_name").GetString(), id = source.ArtistId }
-            );
             await connection.ExecuteAsync(
                 "UPDATE sources SET taper=@taper,transferrer=@transferrer,lineage=@lineage,source=@source,description=@description WHERE id=@id",
                 new
