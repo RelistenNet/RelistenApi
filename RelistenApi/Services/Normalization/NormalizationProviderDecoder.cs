@@ -42,6 +42,8 @@ public sealed partial class NormalizationProviderDecoder
             ("phish.net", "ratings", "phish-net-http-v1") => DecodePhishNetHtml,
             ("legacy_catalog", "recording", "legacy-recording-snapshot-v1") =>
                 DecodeLegacyRecording,
+            ("legacy_catalog", "recording", "legacy-recording-snapshot-v2") =>
+                DecodeLegacyRecording,
             _ => throw new NotSupportedException(
                 "The retained provider representation is not supported by this decoder."
             ),
