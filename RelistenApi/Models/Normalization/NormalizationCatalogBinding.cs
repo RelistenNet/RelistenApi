@@ -48,8 +48,9 @@ public sealed record NormalizationFileBinding(
 );
 
 /// <summary>
-/// One primary repeatable-read snapshot. Both CatalogInputs and SourceIdentities must join the
-/// publication read set. The snapshot itself does not fence later changes or accept provider claims.
+/// One primary repeatable-read snapshot. Supply Inputs as expectedInputRevisions when admitting
+/// work, and include every returned catalog dependency in its publication read set. The snapshot
+/// itself does not accept provider claims.
 /// </summary>
 public sealed record NormalizationRecordingBindingSnapshot(
     Guid InputRevisionUuid,
@@ -57,5 +58,12 @@ public sealed record NormalizationRecordingBindingSnapshot(
     NormalizationCatalogBinding<NormalizationCatalogRecordingReference> Recording,
     IReadOnlyList<NormalizationFileBinding> Files,
     IReadOnlyList<NormalizationCatalogDependency> CatalogInputs,
-    IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities
-);
+    IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities,
+    IReadOnlyList<NormalizationBindingInputReference>? SupportingInputs = null,
+    NormalizationMappingRegistryDependency? MappingRegistry = null
+)
+{
+    /// <summary>Complete required evidence set; supporting inputs are required, including Local's root map.</summary>
+    public IReadOnlyList<NormalizationBindingInputReference> Inputs =>
+        [new(InputRevisionUuid, Resource), .. SupportingInputs ?? []];
+}

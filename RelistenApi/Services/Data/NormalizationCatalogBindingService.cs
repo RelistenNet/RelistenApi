@@ -38,6 +38,58 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
         CancellationToken cancellationToken = default
     )
     {
+        ValidateRecordingRequest(recording, expectedArtistUuid, cancellationToken);
+        return WithCatalogSnapshotAsync(
+            (connection, transaction, ct) =>
+                BindRecordingSnapshotAsync(
+                    connection,
+                    transaction,
+                    recording,
+                    expectedArtistUuid,
+                    ct
+                ),
+            cancellationToken
+        );
+    }
+
+    private Task<T> WithCatalogSnapshotAsync<T>(
+        Func<NpgsqlConnection, NpgsqlTransaction, CancellationToken, Task<T>> read,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (Transaction.Current != null)
+        {
+            throw new InvalidOperationException(
+                "Read catalog bindings outside a catalog transaction."
+            );
+        }
+        return db.WithWriteConnection(async connection =>
+        {
+            var primary = (NpgsqlConnection)connection;
+            await using var transaction = await primary.BeginTransactionAsync(
+                System.Data.IsolationLevel.RepeatableRead,
+                cancellationToken
+            );
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "SET TRANSACTION READ ONLY",
+                    transaction: transaction,
+                    cancellationToken: cancellationToken
+                )
+            );
+            var result = await read(primary, transaction, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
+    }
+
+    private static void ValidateRecordingRequest(
+        ProviderRecordingObservation recording,
+        Guid? expectedArtistUuid,
+        CancellationToken cancellationToken
+    )
+    {
         cancellationToken.ThrowIfCancellationRequested();
         if (expectedArtistUuid == Guid.Empty)
         {
@@ -72,58 +124,45 @@ public sealed partial class NormalizationCatalogBindingService(DbService db)
                 nameof(recording)
             );
         }
-        if (Transaction.Current != null)
-        {
-            throw new InvalidOperationException(
-                "Read catalog bindings outside a catalog transaction."
-            );
-        }
+    }
 
-        return db.WithWriteConnection(async connection =>
-        {
-            await using var transaction = await (
-                (NpgsqlConnection)connection
-            ).BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead, cancellationToken);
-            await connection.ExecuteAsync(
-                new CommandDefinition(
-                    "SET TRANSACTION READ ONLY",
-                    transaction: transaction,
-                    cancellationToken: cancellationToken
-                )
-            );
-
-            var source = await ResolveRecordingAsync(
-                (NpgsqlConnection)connection,
-                transaction,
-                recording.Origin.Item,
-                expectedArtistUuid,
-                cancellationToken
-            );
-            var files = await BindFilesAsync(
-                (NpgsqlConnection)connection,
-                transaction,
-                recording,
-                source,
-                cancellationToken
-            );
-            var fences = await ReadCatalogFencesAsync(
-                (NpgsqlConnection)connection,
-                transaction,
-                recording.Origin.Item,
-                source.Binding.Value,
-                cancellationToken
-            );
-
-            await transaction.CommitAsync(cancellationToken);
-            return new NormalizationRecordingBindingSnapshot(
-                recording.Origin.Evidence.InputRevisionUuid,
-                recording.Origin.Item,
-                source.Binding,
-                files,
-                fences.Artists,
-                fences.SourceIdentities
-            );
-        });
+    private static async Task<NormalizationRecordingBindingSnapshot> BindRecordingSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        ProviderRecordingObservation recording,
+        Guid? expectedArtistUuid,
+        CancellationToken cancellationToken
+    )
+    {
+        var source = await ResolveRecordingAsync(
+            connection,
+            transaction,
+            recording.Origin.Item,
+            expectedArtistUuid,
+            cancellationToken
+        );
+        var files = await BindFilesAsync(
+            connection,
+            transaction,
+            recording,
+            source,
+            cancellationToken
+        );
+        var fences = await ReadCatalogFencesAsync(
+            connection,
+            transaction,
+            recording.Origin.Item,
+            source.Binding.Value,
+            cancellationToken
+        );
+        return new NormalizationRecordingBindingSnapshot(
+            recording.Origin.Evidence.InputRevisionUuid,
+            recording.Origin.Item,
+            source.Binding,
+            files,
+            fences.Artists,
+            fences.SourceIdentities
+        );
     }
 
     private static async Task<CatalogFences> ReadCatalogFencesAsync(
