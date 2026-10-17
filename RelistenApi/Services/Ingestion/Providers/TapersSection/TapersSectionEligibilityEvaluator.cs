@@ -89,7 +89,8 @@ public sealed record TapersSectionInterpretation(
     Guid? CandidateId,
     string? DisplayDate,
     TapersSectionEvidence[] Evidence,
-    TapersSectionReason[] Reasons
+    TapersSectionReason[] Reasons,
+    TapersSectionDateDetails? DateDetails = null
 )
 {
     public bool IsEligible => Reasons.Length == 0;
@@ -104,20 +105,7 @@ public sealed record TapersSectionInterpretation(
 /// </summary>
 public sealed class TapersSectionEligibilityEvaluator
 {
-    public const int RulesVersion = 4;
-
-    private static readonly Regex IsoDate = new(
-        @"(?<!\d)(?<date>\d{4}-\d{2}-\d{2})(?!\d)",
-        RegexOptions.CultureInvariant
-    );
-    private static readonly Regex IsoDateWithUnknownParts = new(
-        @"(?<!\d)\d{4}-(?<month>\d{2}|XX|\?\?)-(?<day>\d{2}|XX|\?\?)(?!\d)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-    );
-    private static readonly Regex WrittenDate = new(
-        @"\b(?<date>(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}|\d{1,2}[ -](?:January|February|March|April|May|June|July|August|September|October|November|December)[ -]\d{4})\b",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-    );
+    public const int RulesVersion = 5;
 
     // Event wording can hold attribution. A venue's "Memorial" name alone cannot.
     private static readonly Regex Tribute = new(
@@ -165,7 +153,12 @@ public sealed class TapersSectionEligibilityEvaluator
 
         CheckContext(metadata, reasons, evidence);
         CheckTitlePerformer(metadata, candidate, reasons, evidence);
-        var selectedDate = SelectDate(metadata, observation.Item, reasons, evidence);
+        var date = new TapersSectionDateResolver().Resolve(
+            metadata,
+            observation.Item,
+            reasons,
+            evidence
+        );
         if (observation.IsAvailabilityOnly)
         {
             reasons.Add(TapersSectionReason.UpstreamUnavailable);
@@ -177,13 +170,7 @@ public sealed class TapersSectionEligibilityEvaluator
 
         CheckPlayableFiles(root, reasons);
 
-        if (
-            published != null
-            && (
-                candidate?.ArtistUuid != published.ArtistUuid
-                || selectedDate != published.DisplayDate
-            )
-        )
+        if (published != null && candidate?.ArtistUuid != published.ArtistUuid)
         {
             reasons.Add(TapersSectionReason.PublishedAssignmentConflict);
         }
@@ -192,9 +179,10 @@ public sealed class TapersSectionEligibilityEvaluator
             RulesVersion,
             creators,
             candidate?.CandidateId,
-            selectedDate,
+            date.DisplayDate,
             evidence.ToArray(),
-            reasons.Distinct().ToArray()
+            reasons.Distinct().ToArray(),
+            date.Details
         );
     }
 
@@ -413,266 +401,6 @@ public sealed class TapersSectionEligibilityEvaluator
         }
     }
 
-    private static string? SelectDate(
-        JObject metadata,
-        ArchiveItemId item,
-        List<TapersSectionReason> reasons,
-        List<TapersSectionEvidence> evidence
-    )
-    {
-        var dates = new List<string>();
-        var structured = Strings(metadata["date"]).ToArray();
-        if (HasSuppliedValue(metadata["date"]) && !HasOnlyStrings(metadata["date"]))
-        {
-            reasons.Add(TapersSectionReason.AmbiguousDate);
-        }
-        for (var index = 0; index < structured.Length; index++)
-        {
-            // Archive's structured date may carry a midnight timestamp. Require the complete
-            // calendar date; no current-year or two-digit-year inference is allowed.
-            var value = structured[index];
-            if (
-                Regex.IsMatch(
-                    value,
-                    @"^\d{4}-\d{2}-\d{2}(?:T00:00:00(?:\.000)?Z)?$",
-                    RegexOptions.CultureInvariant
-                ) && TryDate(value[..10], out var date)
-            )
-            {
-                var locator = Locator(metadata["date"], "date", index);
-                dates.Add(date);
-                evidence.Add(new TapersSectionEvidence(locator, value, "complete_structured_date"));
-            }
-            else
-            {
-                reasons.Add(TapersSectionReason.AmbiguousDate);
-            }
-        }
-
-        var titleDates = new List<string>();
-        var titles = Strings(metadata["title"]).ToArray();
-        for (var index = 0; index < titles.Length; index++)
-        {
-            CheckUnknownDateParts(
-                titles[index],
-                Locator(metadata["title"], "title", index),
-                reasons,
-                evidence
-            );
-            foreach (var date in ExplicitDates(titles[index]))
-            {
-                titleDates.Add(date.Date);
-                evidence.Add(
-                    new TapersSectionEvidence(
-                        Locator(metadata["title"], "title", index),
-                        date.Raw,
-                        "full_year_title_date"
-                    )
-                );
-            }
-        }
-
-        CheckUnknownDateParts(item.Value, "item_identifier", reasons, evidence);
-
-        var identifierDates = ExplicitDates(item.Value)
-            .Select(date => date.Date)
-            .Distinct()
-            .ToArray();
-        foreach (var date in identifierDates)
-        {
-            evidence.Add(new TapersSectionEvidence("item_identifier", date, "identifier_iso_date"));
-        }
-
-        var descriptionDates = new List<string>();
-        var descriptions = Strings(metadata["description"]).ToArray();
-        for (var index = 0; index < descriptions.Length; index++)
-        {
-            var labels = Regex.Matches(
-                descriptions[index],
-                @"(?:^|[\r\n]|<br\s*/?>|<div>|<p>)\s*(?:performance date|show date|date)\s*:\s*(?<value>[^<\r\n]+)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-            );
-            foreach (Match label in labels)
-            {
-                foreach (var date in ExplicitDates(label.Groups["value"].Value))
-                {
-                    descriptionDates.Add(date.Date);
-                    evidence.Add(
-                        new TapersSectionEvidence(
-                            Locator(metadata["description"], "description", index),
-                            date.Raw,
-                            "explicit_description_date"
-                        )
-                    );
-                }
-            }
-        }
-
-        var allDates = dates
-            .Concat(titleDates)
-            .Concat(identifierDates)
-            .Concat(descriptionDates)
-            .Distinct()
-            .ToArray();
-        if (allDates.Length > 1)
-        {
-            reasons.Add(TapersSectionReason.ConflictingDate);
-        }
-
-        if (
-            allDates.Length == 1
-            && Strings(metadata["year"])
-                .Any(year =>
-                    Regex.IsMatch(year, @"^\d{4}$", RegexOptions.CultureInvariant)
-                    && !allDates[0].StartsWith(year + "-", StringComparison.Ordinal)
-                )
-        )
-        {
-            reasons.Add(TapersSectionReason.ConflictingDate);
-            evidence.Add(
-                new TapersSectionEvidence(
-                    "metadata.year",
-                    metadata["year"]!.ToString(),
-                    "structured_year_conflict"
-                )
-            );
-        }
-
-        if (dates.Count > 0)
-        {
-            return dates[0];
-        }
-
-        if (
-            structured.Length == 0
-            && !HasSuppliedValue(metadata["date"])
-            && titleDates.Distinct().Count() == 1
-            && titles.Any(title => IsPerformanceTitle(title, metadata["creator"]))
-            && titles.All(title =>
-                !Regex.IsMatch(
-                    title,
-                    @"\b(?:upload(?:ed)?|remaster(?:ed)?|published|release date)\b",
-                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-                )
-            )
-        )
-        {
-            return titleDates[0];
-        }
-
-        reasons.Add(TapersSectionReason.MissingDate);
-        return null;
-    }
-
-    private static void CheckUnknownDateParts(
-        string text,
-        string locator,
-        List<TapersSectionReason> reasons,
-        List<TapersSectionEvidence> evidence
-    )
-    {
-        foreach (Match match in IsoDateWithUnknownParts.Matches(text))
-        {
-            var month = match.Groups["month"].Value;
-            var day = match.Groups["day"].Value;
-            if (IsUnknownDatePart(month) || IsUnknownDatePart(day))
-            {
-                // A complete structured date does not resolve an explicit unknown
-                // month/day in the recording title or identifier.
-                reasons.Add(TapersSectionReason.AmbiguousDate);
-                evidence.Add(
-                    new(
-                        locator,
-                        match.Value,
-                        "unknown_performance_date_parts",
-                        match.Index,
-                        match.Length
-                    )
-                );
-            }
-        }
-    }
-
-    private static bool IsUnknownDatePart(string value) =>
-        value == "00" || value.Equals("XX", StringComparison.OrdinalIgnoreCase) || value == "??";
-
-    private static bool IsPerformanceTitle(string title, JToken? creator)
-    {
-        if (
-            Regex.IsMatch(
-                title,
-                @"\blive at\b",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
-            )
-        )
-        {
-            return true;
-        }
-
-        // Without "Live at", accept only a reviewed artist/date heading. An arbitrary
-        // date elsewhere in an album, upload or descriptive title is not a performance date.
-        var date = ExplicitDates(title).FirstOrDefault();
-        if (date.Raw == null)
-        {
-            return false;
-        }
-
-        var offset = title.IndexOf(date.Raw, StringComparison.Ordinal);
-        var prefix = title[..offset].Trim().TrimEnd('-', ':').Trim();
-        var identity =
-            prefix.Length > 0
-                ? prefix
-                : title[(offset + date.Raw.Length)..].Trim().TrimStart('-', ':').Trim();
-        var key = ArtistRegistryService.NormalizeIdentityKey(identity);
-        return Strings(creator)
-            .Any(label => ArtistRegistryService.NormalizeIdentityKey(label) == key);
-    }
-
-    private static IEnumerable<(string Date, string Raw)> ExplicitDates(string text)
-    {
-        foreach (
-            var match in IsoDate
-                .Matches(text)
-                .Cast<Match>()
-                .Concat(WrittenDate.Matches(text).Cast<Match>())
-        )
-        {
-            if (TryDate(match.Groups["date"].Value, out var date))
-            {
-                yield return (date, match.Value);
-            }
-        }
-    }
-
-    private static bool TryDate(string value, out string date)
-    {
-        var formats = new[]
-        {
-            "yyyy-MM-dd",
-            "MMMM d yyyy",
-            "MMMM d, yyyy",
-            "d MMMM yyyy",
-            "d-MMMM-yyyy",
-        };
-        if (
-            DateOnly.TryParseExact(
-                value,
-                formats,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AllowWhiteSpaces,
-                out var parsed
-            )
-            && parsed.Year >= 1000
-        )
-        {
-            date = parsed.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            return true;
-        }
-
-        date = "";
-        return false;
-    }
-
     private static IEnumerable<string> Strings(JToken? token) =>
         token switch
         {
@@ -686,12 +414,6 @@ public sealed class TapersSectionEligibilityEvaluator
     private static bool HasOnlyStrings(JToken? token) =>
         token?.Type == JTokenType.String
         || token is JArray array && array.All(value => value.Type == JTokenType.String);
-
-    private static bool HasSuppliedValue(JToken? token) =>
-        token != null
-        && token.Type != JTokenType.Null
-        && (token is not JArray array || array.Count != 0)
-        && (token.Type != JTokenType.String || !string.IsNullOrWhiteSpace(token.Value<string>()));
 
     private static string Locator(JToken? token, string field, int index) =>
         token is JArray ? $"metadata.{field}[{index}]" : $"metadata.{field}";

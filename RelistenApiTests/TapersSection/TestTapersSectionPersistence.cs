@@ -239,14 +239,16 @@ public class TestTapersSectionPersistence
 
     [TestCase(false)]
     [TestCase(true)]
-    public async Task ConflictingAssignmentRetainsPublishedPlaybackAndCanResumeTheSameAssignment(
+    public async Task ConflictingCurrentMetadataOrArtistRetainsPublishedPlaybackAndCanResume(
         bool changeCreator
     )
     {
         var item = AddRecording("conflict", "2000-01-01");
         await Discover();
         await Approve();
-        await Refresh();
+        var initial = await Refresh();
+        initial.Published.Should().Be(1);
+        initial.Failed.Should().Be(0);
         var artist = (await ArtistsNamedPerformer()).Single();
         var before = await ListenerCatalog(artist, ["2000-01-01"]);
 
@@ -268,6 +270,7 @@ public class TestTapersSectionPersistence
         else
         {
             recordings[item]["metadata"]!["date"] = "2000-01-02";
+            recordings[item]["metadata"]!["title"] = performer + " - 2000-01-01";
         }
         var held = await Refresh();
         held.NeedsReview.Should().Be(1);
@@ -282,7 +285,7 @@ public class TestTapersSectionPersistence
         status["items"]!.Single()["reason"]!
             .Value<string>()
             .Should()
-            .Be("published_assignment_conflict");
+            .Be(changeCreator ? "published_assignment_conflict" : "conflicting_date");
         (await ListenerCatalog(artist, ["2000-01-01"])).Should().BeEquivalentTo(before);
         (
             await host
@@ -297,12 +300,131 @@ public class TestTapersSectionPersistence
 
         recordings[item]["metadata"]!["date"] = "2000-01-01";
         recordings[item]["metadata"]!["creator"] = performer;
+        recordings[item]["metadata"]!["title"] = performer + " - 2000-01-01";
         recordings[item]["metadata"]!["description"] = "Corrected recording notes";
         var resumed = await Refresh();
         resumed.Published.Should().Be(1);
         var after = await ListenerCatalog(artist, ["2000-01-01"]);
         after.Select(row => row.Source).Should().Equal(before.Select(row => row.Source));
         after.SelectMany(row => row.Tracks).Should().Equal(before.SelectMany(row => row.Tracks));
+    }
+
+    [TestCase("2022-XX-XX", "year", "2022-01-01")]
+    [TestCase("2022-07-XX", "month", "2022-07-01")]
+    public async Task PartialFirstPublicationPreservesUnknownPartsAndUsesASeparateSortDate(
+        string displayDate,
+        string precision,
+        string sortDate
+    )
+    {
+        var item = AddRecording("partial", sortDate);
+        recordings[item]["metadata"]!["title"] = performer + " - " + displayDate;
+        await Discover();
+        await Approve();
+
+        var published = await Refresh();
+
+        published.Published.Should().Be(1);
+        published.NeedsReview.Should().Be(0);
+        var artist = (await ArtistsNamedPerformer()).Single();
+        await AssertDateCatalog(artist, displayDate, sortDate);
+        var status = await ItemStatus(item);
+        status["selected_display_date"]!.Value<string>().Should().Be(displayDate);
+        status["published_display_date"]!.Value<string>().Should().Be(displayDate);
+        status["status"]!.Value<string>().Should().Be("published");
+        status["reason"]!.Type.Should().Be(JTokenType.Null);
+        var details = (JObject)status["date_details"]!;
+        details["Precision"]!.Value<string>().Should().Be(precision);
+        details["SelectedEvidence"]!["Locator"]!.Value<string>().Should().Be("metadata.title");
+        details["Notes"]!
+            .Select(note => note["Code"]!.Value<string>())
+            .Should()
+            .Contain("partial_date");
+    }
+
+    [Test]
+    public async Task CurrentDateCorrectionsMoveCatalogDatesAndKeepRecordingIdentities()
+    {
+        // Archive identifiers cannot change when the uploader corrects performance metadata.
+        // Keep the original identifier date through every correction below.
+        var item = AddRecording("1999-12-31", "1999-12-31");
+        await Discover();
+        await Approve();
+        await Refresh();
+        var artist = (await ArtistsNamedPerformer()).Single();
+        var original = await AssertDateCatalog(artist, "1999-12-31", "1999-12-31");
+        var initialState = await Publication(item);
+
+        recordings[item]["metadata"]!["date"] = "2000-01-01";
+        recordings[item]["metadata"]!["title"] = performer + " - 2000-XX-XX";
+        var partial = await Refresh();
+
+        partial.Published.Should().Be(1);
+        partial.NeedsReview.Should().Be(0);
+        var uncertain = await AssertDateCatalog(artist, "2000-XX-XX", "2000-01-01");
+        AssertRecordingIdentity(uncertain, original);
+        uncertain.Show.Should().NotBe(original.Show);
+        var partialStatus = await ItemStatus(item);
+        partialStatus["selected_display_date"]!.Value<string>().Should().Be("2000-XX-XX");
+        partialStatus["status"]!.Value<string>().Should().Be("published");
+        var partialDetails = (JObject)partialStatus["date_details"]!;
+        partialDetails["Precision"]!.Value<string>().Should().Be("year");
+        partialDetails["Notes"]!
+            .Select(note => note["Code"]!.Value<string>())
+            .Should()
+            .Contain(["partial_date", "identifier_date_disagreement"]);
+        var partialState = await Publication(item);
+        partialState.PublishedDisplayDate.Should().Be("2000-XX-XX");
+        partialState.PublishedObservationId.Should().NotBe(initialState.PublishedObservationId);
+        partialState.CatalogRevision.Should().BeGreaterThan(initialState.CatalogRevision);
+        partialState.RebuiltRevision.Should().Be(partialState.CatalogRevision);
+
+        recordings[item]["metadata"]!["date"] = "2001-04-05";
+        recordings[item]["metadata"]!["title"] = performer + " - 2001-04-05";
+        var corrected = await Refresh();
+
+        corrected.Published.Should().Be(1);
+        corrected.NeedsReview.Should().Be(0);
+        var current = await AssertDateCatalog(artist, "2001-04-05", "2001-04-05");
+        AssertRecordingIdentity(current, original);
+        current.Show.Should().NotBe(uncertain.Show);
+        var correctedStatus = await ItemStatus(item);
+        correctedStatus["selected_display_date"]!.Value<string>().Should().Be("2001-04-05");
+        correctedStatus["published_display_date"]!.Value<string>().Should().Be("2001-04-05");
+        correctedStatus["status"]!.Value<string>().Should().Be("published");
+        var details = (JObject)correctedStatus["date_details"]!;
+        details["Precision"]!.Value<string>().Should().Be("day");
+        details["SelectedEvidence"]!["Locator"]!.Value<string>().Should().Be("metadata.date");
+        details["Notes"]!
+            .Select(note => note["Code"]!.Value<string>())
+            .Should()
+            .Contain("identifier_date_disagreement");
+        details["Notes"]!
+            .SelectMany(note => note["Evidence"]!)
+            .Should()
+            .Contain(evidence =>
+                evidence["Locator"]!.Value<string>() == "item_identifier"
+                && evidence["Value"]!.Value<string>()!.Contains("1999-12-31")
+            );
+
+        (await Refresh()).Unchanged.Should().Be(1);
+        var repeatedStatus = await ItemStatus(item);
+        JToken.DeepEquals(repeatedStatus["date_details"], details).Should().BeTrue();
+        var repeated = await AssertDateCatalog(artist, "2001-04-05", "2001-04-05");
+        AssertRecordingIdentity(repeated, original);
+        var finalState = await Publication(item);
+        finalState.PublishedDisplayDate.Should().Be("2001-04-05");
+        finalState.RebuiltRevision.Should().Be(finalState.CatalogRevision);
+        (
+            await db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<int>(
+                    "SELECT count(*) FROM normalization.archive_item_observations WHERE item_identifier=@item",
+                    new { item }
+                )
+            )
+        )
+            .Should()
+            .Be(3, "each distinct date observation is retained after subsequent corrections");
     }
 
     [Test]
@@ -917,6 +1039,82 @@ public class TestTapersSectionPersistence
         );
     }
 
+    private async Task<JToken> ItemStatus(string item)
+    {
+        // Operator commands serialize with System.Text.Json. Use that wire format so
+        // retained date details must be a JSON object, rather than an escaped JSON string.
+        var status = JObject.Parse(
+            System.Text.Json.JsonSerializer.Serialize(
+                await host.Services.GetRequiredService<ArchiveIntakeService>().StatusAsync(item)
+            )
+        );
+        return status["items"]!.Should().ContainSingle().Which;
+    }
+
+    private async Task<RecordingIdentity> AssertDateCatalog(
+        Artist artist,
+        string displayDate,
+        string sortDate
+    )
+    {
+        var recording = (await ListenerCatalog(artist, [displayDate])).Single();
+        var shows = (
+            await host
+                .Services.GetRequiredService<ShowService>()
+                .ShowsForCriteria(artist, "s.artist_id=@artistId", new { artistId = artist.id })
+        ).ToArray();
+        var show = shows.Should().ContainSingle().Which;
+        show.display_date.Should().Be(displayDate);
+        show.date.Date.Should()
+            .Be(DateTime.Parse(sortDate, System.Globalization.CultureInfo.InvariantCulture));
+        var year = (await host.Services.GetRequiredService<YearService>().AllForArtist(artist))
+            .Should()
+            .ContainSingle()
+            .Which;
+        year.year.Should().Be(displayDate[..4]);
+        year.show_count.Should().Be(1);
+        year.source_count.Should().Be(1);
+        var listed = (await DefaultArtistList()).Single(row => row.uuid == artist.uuid);
+        listed.show_count.Should().Be(1);
+        listed.source_count.Should().Be(1);
+        (await host.Services.GetRequiredService<SourceService>().AllForArtistFromPrimary(artist))
+            .Should()
+            .ContainSingle()
+            .Which.uuid.Should()
+            .Be(recording.Source);
+
+        var normalized = await NormalizedArtist(artist.uuid);
+        normalized["shows"]!.Should().ContainSingle().Which["display_date"]!
+            .Value<string>()
+            .Should()
+            .Be(displayDate);
+        normalized["years"]!.Should().ContainSingle().Which["year"]!
+            .Value<string>()
+            .Should()
+            .Be(displayDate[..4]);
+        (
+            await db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<int>(
+                    "SELECT count(*) FROM source_tracks WHERE artist_id=@id AND is_orphaned",
+                    new { artist.id }
+                )
+            )
+        )
+            .Should()
+            .Be(0, "date corrections must keep the same active tracks");
+        return recording;
+    }
+
+    private static void AssertRecordingIdentity(
+        RecordingIdentity current,
+        RecordingIdentity original
+    )
+    {
+        current.Source.Should().Be(original.Source);
+        current.Sets.Should().Equal(original.Sets);
+        current.Tracks.Should().Equal(original.Tracks);
+    }
+
     private async Task<RecordingIdentity[]> ListenerCatalog(Artist artist, string[] dates)
     {
         var result = new List<RecordingIdentity>();
@@ -961,6 +1159,10 @@ public class TestTapersSectionPersistence
                 .entities.source_tracks.Select(track => track.uuid)
                 .Should()
                 .BeEquivalentTo(tracks.Select(track => track.uuid));
+            resolved
+                .entities.source_tracks.Select(track => track.show_uuid)
+                .Should()
+                .OnlyContain(uuid => uuid == show.uuid);
             result.Add(
                 new RecordingIdentity(
                     source.uuid,

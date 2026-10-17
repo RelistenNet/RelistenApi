@@ -260,7 +260,9 @@ public sealed partial class ArchiveIntakeService
         }
 
         // An unexplained source for this identifier cannot be adopted or reparented.
-        // Once published, both its catalog identity and original assignment must survive.
+        // Check the catalog against the last committed ownership record before
+        // applying current metadata. The new date may change in the same transaction;
+        // artist/source identity and out-of-band catalog edits remain protected.
         var sources = (
             await db.WithWriteConnection(connection =>
                 connection.QueryAsync<SourceIdentity>(

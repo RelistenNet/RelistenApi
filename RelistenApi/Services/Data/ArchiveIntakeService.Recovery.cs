@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -221,7 +223,7 @@ public sealed partial class ArchiveIntakeService
         return promoted;
     }
 
-    /// <summary>Returns bounded operational state from primary PostgreSQL without requiring Temporal.</summary>
+    /// <summary>Returns bounded publication state and nonblocking date evidence from PostgreSQL without Temporal.</summary>
     public async Task<object> StatusAsync(string? item = null, CancellationToken token = default)
     {
         token.ThrowIfCancellationRequested();
@@ -244,6 +246,8 @@ public sealed partial class ArchiveIntakeService
                     i.published_rules_version,i.published_artist_uuid,i.published_artist_id,
                     i.published_display_date,i.published_source_uuid,i.published_at,
                     i.catalog_revision,i.rebuilt_revision,
+                    i.interpretation->>'DisplayDate' AS selected_display_date,
+                    i.interpretation->'DateDetails' AS date_details,
                     c.approved,c.identity_status,c.proposed_name,c.artist_uuid,
                     o.content_hash AS latest_content_hash,o.projection_version
                 FROM normalization.archive_item_intake i
@@ -255,6 +259,17 @@ public sealed partial class ArchiveIntakeService
                 new { item }
             )
         );
+
+        // Npgsql returns JSONB as text. Keep date details as structured JSON in
+        // operator output so notes remain readable alongside publication status.
+        foreach (IDictionary<string, object> row in items)
+        {
+            if (row["date_details"] is string json)
+            {
+                row["date_details"] = JsonSerializer.Deserialize<JsonElement>(json);
+            }
+        }
+
         var candidates = await db.WithWriteConnection(connection =>
             connection.QueryAsync(
                 """

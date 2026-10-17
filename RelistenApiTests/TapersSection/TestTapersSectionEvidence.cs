@@ -202,70 +202,249 @@ public class TestTapersSectionEvidence
     }
 
     [Test]
-    public void StructuredAndTitleMarch6StillConflictWithJune6Identifier()
+    public void CurrentMetadataMarch6WinsOverImmutableJune6Identifier()
     {
         const string identifier = "pavement1994-06-06";
         var raw = JObject.Parse(Raw("1994-03-06", "Performer Live at Venue on 1994-03-06"));
         raw["metadata"]!["identifier"] = identifier;
 
         var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
-        result.Reasons.Should().Contain(TapersSectionReason.ConflictingDate);
+        result.IsEligible.Should().BeTrue();
         result.DisplayDate.Should().Be("1994-03-06");
+        result
+            .DateDetails!.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.IdentifierDateDisagreement);
     }
 
-    [TestCase("1992-00-00")]
-    [TestCase("1992-03-00")]
-    [TestCase("1992-00-06")]
-    [TestCase("1992-XX-14")]
-    [TestCase("1992-05-XX")]
-    [TestCase("1992-xx-xx")]
-    [TestCase("1992-??-??")]
-    public void StructuredJanuary1CannotResolveUnknownTitleAndIdentifierDateParts(
-        string uncertainDate
+    [Test]
+    public void AHyphenBeforeTheIdentifierDateRetainsItsNonblockingDisagreement()
+    {
+        const string identifier = "pavement-1999-12-31";
+        var raw = JObject.Parse(Raw("2001-04-05", "Performer Live at Venue on 2001-04-05"));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2001-04-05");
+        result
+            .Evidence.Should()
+            .Contain(value => value.Locator == "item_identifier" && value.Value == "1999-12-31");
+        result
+            .DateDetails!.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.IdentifierDateDisagreement);
+    }
+
+    [TestCase("1992-00-00", "1992-01-01", "1992-XX-XX", TapersSectionDatePrecision.Year)]
+    [TestCase("1992-03-00", "1992-03-01", "1992-03-XX", TapersSectionDatePrecision.Month)]
+    [TestCase("1992-00-06", "1992-01-06", "1992-XX-06", TapersSectionDatePrecision.Partial)]
+    [TestCase("1992-XX-XX", "1992-01-01", "1992-XX-XX", TapersSectionDatePrecision.Year)]
+    [TestCase("1992-??-??", "1992-01-01", "1992-XX-XX", TapersSectionDatePrecision.Year)]
+    public void PartialPerformanceTitleExplainsStructuredFirstDayPlaceholder(
+        string partial,
+        string structured,
+        string expected,
+        TapersSectionDatePrecision precision
     )
     {
-        var identifier = "pavement" + uncertainDate;
+        var identifier = "pavement" + partial;
         var raw = JObject.Parse(
-            Raw("1992-01-01", "Performer: " + uncertainDate + " KSSU Radio?, Sacremento, CA")
+            Raw(structured, "Performer: " + partial + " KSSU Radio?, Sacremento, CA")
         );
         raw["metadata"]!["identifier"] = identifier;
 
         var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
 
-        result.IsEligible.Should().BeFalse();
-        result.Reasons.Should().Contain(TapersSectionReason.AmbiguousDate);
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be(expected);
+        result.DateDetails!.Precision.Should().Be(precision);
+        result.DateDetails.SelectedEvidence.Locator.Should().Be("metadata.title");
+        result
+            .DateDetails.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.PartialDate);
+        result
+            .DateDetails.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.MetadataDateDisagreement);
         result
             .Evidence.Should()
-            .Contain(value => value.Locator == "metadata.title" && value.Value == uncertainDate);
+            .Contain(value => value.Locator == "metadata.title" && value.Value == partial);
         result
             .Evidence.Should()
-            .Contain(value => value.Locator == "item_identifier" && value.Value == uncertainDate);
+            .Contain(value => value.Locator == "item_identifier" && value.Value == partial);
     }
 
-    [TestCase("metadata.title")]
-    [TestCase("item_identifier")]
-    public void EitherUnknownTitleOrUnknownIdentifierDateIndependentlyHoldsJanuary1(
-        string uncertainField
+    [TestCase("1992", "1992-XX-XX", TapersSectionDatePrecision.Year)]
+    [TestCase("1992-03", "1992-03-XX", TapersSectionDatePrecision.Month)]
+    [TestCase("1992-03-00", "1992-03-XX", TapersSectionDatePrecision.Month)]
+    [TestCase("1992-xx-14", "1992-XX-14", TapersSectionDatePrecision.Partial)]
+    public void StructuredKnownYearPartialDatesPreserveTheirPrecision(
+        string supplied,
+        string expected,
+        TapersSectionDatePrecision precision
     )
     {
-        var identifier =
-            uncertainField == "item_identifier" ? "performer1992-00-00" : "performer1992-01-01";
-        var title =
-            uncertainField == "metadata.title"
-                ? "Performer - 1992-00-00"
-                : "Performer - 1992-01-01";
-        var raw = JObject.Parse(Raw("1992-01-01", title));
+        var result = Evaluate(Project(Raw(supplied, "Performer")));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be(expected);
+        result.DateDetails!.Precision.Should().Be(precision);
+        result.DateDetails.SelectedEvidence.Value.Should().Be(supplied);
+        result
+            .DateDetails.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.PartialDate);
+    }
+
+    [Test]
+    public void ImmutablePartialIdentifierCannotDowngradeConfirmedJanuary1()
+    {
+        const string identifier = "performer1992-00-00";
+        var raw = JObject.Parse(Raw("1992-01-01", "Performer Live at Venue on 1992-01-01"));
         raw["metadata"]!["identifier"] = identifier;
 
         var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
 
-        result.IsEligible.Should().BeFalse();
-        result.Reasons.Should().Contain(TapersSectionReason.AmbiguousDate);
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("1992-01-01");
+        result.DateDetails!.Precision.Should().Be(TapersSectionDatePrecision.Day);
+    }
+
+    [Test]
+    public void CompatibleSupportedTitleCanRefineStructuredPartialDate()
+    {
+        var result = Evaluate(Project(Raw("2025-XX-XX", "Performer Live at Venue on 2025-07-20")));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2025-07-20");
+        result.DateDetails!.SelectedEvidence.Locator.Should().Be("metadata.title");
+    }
+
+    [Test]
+    public void CompatibleIdentifierCannotRefineStructuredPartialDate()
+    {
+        const string identifier = "performer1992-03-06";
+        var raw = JObject.Parse(Raw("1992-XX-XX", "Performer"));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("1992-XX-XX");
+    }
+
+    [TestCase("Performer abc7316def live")]
+    [TestCase("Performer abcd1234abcd live")]
+    public void FourDigitSequencesInsideNamesAreNotPerformanceYears(string title)
+    {
+        var result = Evaluate(Project(Raw("2000-01-01", title)));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2000-01-01");
+        result.Evidence.Should().NotContain(value => value.Locator == "metadata.title");
+    }
+
+    [TestCase("Band 1999 live")]
+    [TestCase("Band 1999 Live at Venue on 2000-01-01")]
+    public void AYearInTheReviewedPerformerNameDoesNotConflictWithItsPerformanceDate(string title)
+    {
+        var raw = JObject.Parse(Raw("2000-01-01", title));
+        raw["metadata"]!["creator"] = "Band 1999";
+
+        var result = new TapersSectionEligibilityEvaluator().Evaluate(
+            Project(raw.ToString()),
+            [new(CandidateId, true, ["Band 1999"], ArtistUuid)]
+        );
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2000-01-01");
         result
             .Evidence.Should()
-            .Contain(value =>
-                value.Locator == uncertainField && value.Rule == "unknown_performance_date_parts"
-            );
+            .NotContain(value => value.Locator == "metadata.title" && value.Value == "1999");
+    }
+
+    [Test]
+    public void AReviewedArtistAndYearHeadingUsesSyntaxRatherThanAFutureYearCutoff()
+    {
+        var result = Evaluate(Project(Raw(null, "Performer - 7316")));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("7316-XX-XX");
+        result.DateDetails!.Precision.Should().Be(TapersSectionDatePrecision.Year);
+    }
+
+    [Test]
+    public void IdentifierAloneCannotSupplyMissingMetadataDate()
+    {
+        const string identifier = "performer1992-03-06";
+        var raw = JObject.Parse(Raw(null, "Performer"));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.Reasons.Should().Contain(TapersSectionReason.MissingDate);
+        result.DisplayDate.Should().BeNull();
+        result.Evidence.Should().Contain(value => value.Locator == "item_identifier");
+    }
+
+    [TestCase("Performer - 1992", "1992-XX-XX")]
+    [TestCase("Performer - 1992-07", "1992-07-XX")]
+    [TestCase("Performer Live at Venue on 1992-00-00", "1992-XX-XX")]
+    public void SupportedPartialTitleCanSupplyMissingStructuredDate(string title, string expected)
+    {
+        var result = Evaluate(Project(Raw(null, title)));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be(expected);
+        result.DateDetails!.SelectedEvidence.Locator.Should().Be("metadata.title");
+    }
+
+    [Test]
+    public void PartialTitleCannotHideConflictingCurrentStructuredDates()
+    {
+        var raw = JObject.Parse(Raw("1992-01-01", "Performer - 1992-XX-XX"));
+        raw["metadata"]!["date"] = new JArray("1992-01-01", "1992-07-20");
+
+        var result = Evaluate(Project(raw.ToString()));
+
+        result.IsEligible.Should().BeFalse();
+        result.Reasons.Should().Contain(TapersSectionReason.ConflictingDate);
+    }
+
+    [Test]
+    public void NonblockingPartialDateDetailsRoundTripWithStableWireValues()
+    {
+        var result = Evaluate(Project(Raw("1992-03-XX", "Performer")));
+
+        var json = JsonSerializer.Serialize(result);
+        var restored = JsonSerializer.Deserialize<TapersSectionInterpretation>(json)!;
+
+        restored.Should().BeEquivalentTo(result);
+        restored.IsEligible.Should().BeTrue();
+        using var parsed = JsonDocument.Parse(json);
+        parsed
+            .RootElement.GetProperty("DateDetails")
+            .GetProperty("Precision")
+            .GetString()
+            .Should()
+            .Be("month");
+        parsed
+            .RootElement.GetProperty("DateDetails")
+            .GetProperty("Notes")[0]
+            .GetProperty("Code")
+            .GetString()
+            .Should()
+            .Be("partial_date");
+    }
+
+    [TestCase("XXXX-XX-XX")]
+    [TestCase("0000-00-00")]
+    [TestCase("2025-13-01")]
+    public void UnknownYearAndUnusableCalendarDatesRemainHeld(string supplied)
+    {
+        var result = Evaluate(Project(Raw(supplied, "Performer")));
+
+        result.IsEligible.Should().BeFalse();
+        result.Reasons.Should().Contain(TapersSectionReason.MissingDate);
+        result.DateDetails.Should().BeNull();
     }
 
     [Test]
@@ -306,7 +485,6 @@ public class TestTapersSectionEvidence
         result.Evidence.Should().Contain(value => value.Rule == "full_year_title_date");
     }
 
-    [TestCase("2025-XX-XX", "Performer Live at Venue on 2025-01-02")]
     [TestCase(null, "Performer on 01/02/25")]
     [TestCase(null, "Performer uploaded 2025-01-02")]
     [TestCase(null, "Performer album released on 2025-01-02")]
@@ -367,13 +545,26 @@ public class TestTapersSectionEvidence
     }
 
     [Test]
-    public void PublishedAssignmentConflictHoldsAnOtherwiseClearUpdate()
+    public void CorrectedMetadataDateCanUpdateTheSamePublishedArtist()
     {
         var result = new TapersSectionEligibilityEvaluator().Evaluate(
             Project(Raw("2025-01-02", "Performer")),
             [new(CandidateId, true, ["Performer"], ArtistUuid)],
             new(ArtistUuid, "2025-01-01")
         );
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2025-01-02");
+    }
+
+    [Test]
+    public void PublishedArtistOwnershipStillHoldsAChangedPerformer()
+    {
+        var result = new TapersSectionEligibilityEvaluator().Evaluate(
+            Project(Raw("2025-01-02", "Performer")),
+            [new(CandidateId, true, ["Performer"], ArtistUuid)],
+            new(Guid.NewGuid(), "2025-01-02")
+        );
+
         result.Reasons.Should().Contain(TapersSectionReason.PublishedAssignmentConflict);
     }
 
@@ -422,6 +613,7 @@ public class TestTapersSectionEvidence
         interpretation.DisplayDate.Should().Be("2024-07-20");
         interpretation.Reasons.Should().Equal(TapersSectionReason.PublishedAssignmentConflict);
         interpretation.IsEligible.Should().BeFalse();
+        interpretation.DateDetails.Should().BeNull();
         var restored = JsonSerializer.Deserialize<TapersSectionInterpretation>(
             JsonSerializer.Serialize(interpretation)
         )!;
