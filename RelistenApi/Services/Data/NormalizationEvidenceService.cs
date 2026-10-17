@@ -16,7 +16,7 @@ namespace Relisten.Data;
 /// Current input changes use a caller-supplied generation read before the upstream request,
 /// so a slow older response cannot overwrite a committed newer response.
 /// </summary>
-public sealed class NormalizationEvidenceService(DbService db)
+public sealed partial class NormalizationEvidenceService(DbService db)
 {
     private const string RevisionColumns = """
         r.uuid AS "Uuid",p.provider AS "Provider",p.resource_type AS "ResourceType",

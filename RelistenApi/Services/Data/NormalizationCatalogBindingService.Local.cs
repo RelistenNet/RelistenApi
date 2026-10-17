@@ -27,6 +27,31 @@ public sealed partial class NormalizationCatalogBindingService
         CancellationToken cancellationToken = default
     )
     {
+        ValidateLocalRepresentations(rootInput, directoryInput);
+        var rootDecoded = NormalizationLocalRecordingSelection.DecodeRoot(
+            rootInput,
+            new NormalizationProviderDecoder(),
+            cancellationToken: cancellationToken
+        );
+        return BindLocalDirectoryWithRootAsync(
+            rootInput,
+            directoryInput,
+            rootDecoded,
+            expectedArtistUuid,
+            cancellationToken
+        );
+    }
+
+    // An attempt shares one bounded root decode across all of its directories. Catalog lookup
+    // still runs for each directory, preserving its original mapping and ownership fences.
+    internal Task<NormalizationRecordingBindingSnapshot> BindLocalDirectoryWithRootAsync(
+        NormalizationInputRevision rootInput,
+        NormalizationInputRevision directoryInput,
+        ProviderDecodeResult rootDecoded,
+        Guid? expectedArtistUuid = null,
+        CancellationToken cancellationToken = default
+    )
+    {
         cancellationToken.ThrowIfCancellationRequested();
         if (expectedArtistUuid == Guid.Empty)
         {
@@ -39,22 +64,21 @@ public sealed partial class NormalizationCatalogBindingService
         {
             throw new ArgumentException("Both retained input revision UUIDs are required.");
         }
-        if (
-            rootInput.Resource.Provider != "local"
-            || rootInput.Resource.ResourceType != "metadata_root"
-            || directoryInput.Resource.Provider != "local"
-            || directoryInput.Resource.ResourceType != "directory_metadata"
-        )
-        {
-            throw new NotSupportedException(
-                "Local directory binding requires its root and directory representations."
-            );
-        }
+        ValidateLocalRepresentations(rootInput, directoryInput);
 
         var directory = LocalDirectoryParts(directoryInput.Resource);
         var decoder = new NormalizationProviderDecoder();
-        var accounts = decoder
-            .Decode(rootInput, cancellationToken)
+        if (
+            rootDecoded.InputRevisionUuid != rootInput.Uuid
+            || rootDecoded.Resource != rootInput.Resource
+        )
+        {
+            throw new ArgumentException(
+                "The decoded Local root must retain its exact input revision.",
+                nameof(rootDecoded)
+            );
+        }
+        var accounts = rootDecoded
             .Recordings.Where(account => account.Origin.Item == directoryInput.Resource)
             .ToArray();
         var recording = decoder.Decode(directoryInput, cancellationToken).Recordings.Single();
@@ -115,6 +139,24 @@ public sealed partial class NormalizationCatalogBindingService
             },
             cancellationToken
         );
+    }
+
+    private static void ValidateLocalRepresentations(
+        NormalizationInputRevision rootInput,
+        NormalizationInputRevision directoryInput
+    )
+    {
+        if (
+            rootInput.Resource.Provider != "local"
+            || rootInput.Resource.ResourceType != "metadata_root"
+            || directoryInput.Resource.Provider != "local"
+            || directoryInput.Resource.ResourceType != "directory_metadata"
+        )
+        {
+            throw new NotSupportedException(
+                "Local directory binding requires its root and directory representations."
+            );
+        }
     }
 
     private static LocalDirectoryIdentity LocalDirectoryParts(NormalizationResourceKey resource)

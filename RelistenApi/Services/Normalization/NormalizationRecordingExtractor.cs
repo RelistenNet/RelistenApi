@@ -12,16 +12,18 @@ namespace Relisten.Normalization;
 /// Builds local recording proposals from retained assertions and their checked catalog associations.
 /// It does not search candidates, allocate canonical identities or accept inferred matches.
 /// </summary>
-public sealed class NormalizationRecordingExtractor(
+public sealed partial class NormalizationRecordingExtractor(
     RetainedRecordingCreditExtractor credits,
     TrackTitleExtractor titles
 )
 {
     public const string Version =
-        "recording-extraction-v2/"
+        "recording-extraction-v3/"
         + RetainedRecordingCreditExtractor.Version
         + "/"
-        + TrackTitleExtractor.Version;
+        + TrackTitleExtractor.Version
+        + "/"
+        + NormalizationLocalRecordingSelection.Version;
 
     /// <summary>
     /// Extracts recording and file credits even when playback context is incomplete. File
