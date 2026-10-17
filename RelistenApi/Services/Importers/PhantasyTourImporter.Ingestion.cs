@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.PhantasyTour;
 using Relisten.Vendor;
@@ -22,15 +21,7 @@ public partial class PhantasyTourImporter
     )
     {
         var page = cursor?.Number ?? 1u;
-        using var response = await http.GetAsync(
-            UrlForArtist(context.Source, page),
-            context.CancellationToken
-        );
-        response.EnsureSuccessStatusCode();
-        var shows =
-            JsonConvert.DeserializeObject<PhantasyTourShowListing[]>(
-                await response.Content.ReadAsStringAsync(context.CancellationToken)
-            ) ?? throw new InvalidDataException("Phantasy Tour returned an invalid listing.");
+        var shows = await FetchShowPageAsync(context.Source, page, context.CancellationToken);
 
         var dates = new Dictionary<PhantasyTourShowId, DateTime>();
         var selected = new List<DiscoveredItem<PhantasyTourShowId, PhantasyTourShowListing>>();
@@ -38,13 +29,6 @@ public partial class PhantasyTourImporter
 
         foreach (var show in shows)
         {
-            if (show.id <= 0 || show.dateTime == default)
-            {
-                throw new InvalidDataException(
-                    "Phantasy Tour returned a show without an ID or local date."
-                );
-            }
-
             if (show.dateTime > DateTimeOffset.UtcNow)
             {
                 continue;
@@ -91,12 +75,7 @@ public partial class PhantasyTourImporter
             return new(item.Id, new(existing.id), ItemDisposition.Unchanged);
         }
 
-        using var response = await http.GetAsync(
-            UrlForShow(item.Id.Value),
-            context.CancellationToken
-        );
-        response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync(context.CancellationToken);
+        var show = await FetchShowAsync(item.Id.Value, context.CancellationToken);
 
         return await context.CommitAsync(async () =>
         {
@@ -112,7 +91,7 @@ public partial class PhantasyTourImporter
                 );
             }
 
-            await ApplyShowBody(context.Artist, new ImportStats(), null, item.Id.Value, body);
+            await ApplyShow(context.Artist, new ImportStats(), null, show);
 
             return new PhantasyTourItemResult(
                 item.Id,

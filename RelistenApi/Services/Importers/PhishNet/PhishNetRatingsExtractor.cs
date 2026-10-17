@@ -1,27 +1,50 @@
 using System;
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
+using Relisten.Api.Models.Normalization;
+using Relisten.Data;
 
 namespace Relisten.Import.PhishNet;
 
-public class PhishNetRatingsScraper(HttpClient httpClient, string displayDate)
+public class PhishNetRatingsScraper(
+    HttpClient httpClient,
+    string displayDate,
+    NormalizationProviderInputService? normalizationInputs = null
+)
 {
     public static string PhishNetUrlForSource(string displayDate)
     {
         return "https://phish.net/setlists/?d=" + displayDate;
     }
 
-    public async Task<PhishNetScrapeResults> ScrapeRatings()
+    public async Task<PhishNetScrapeResults> ScrapeRatings(
+        CancellationToken cancellationToken = default
+    )
     {
-        var url = PhishNetUrlForSource(displayDate);
-        using var resp = await httpClient.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        var page = await resp.Content.ReadAsStringAsync();
+        async Task<NormalizationProviderResponse<PhishNetScrapeResults>> Fetch(CancellationToken ct)
+        {
+            using var response = await httpClient.GetAsync(PhishNetUrlForSource(displayDate), ct);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsByteArrayAsync(ct);
+            var page = await response.Content.ReadAsStringAsync(ct);
+            return new(
+                new PhishNetRatingsExtractor(page).ExtractRatings(),
+                payload,
+                response.Content.Headers.ContentType?.ToString() ?? "text/html",
+                response.Headers.ETag?.ToString()
+            );
+        }
 
-        var extractor = new PhishNetRatingsExtractor(page);
-
-        return extractor.ExtractRatings();
+        return normalizationInputs == null
+            ? (await Fetch(cancellationToken)).Value
+            : await normalizationInputs.FetchAsync(
+                new("phish.net", "ratings", displayDate),
+                "phish-net-http-v1",
+                Fetch,
+                cancellationToken
+            );
     }
 }
 

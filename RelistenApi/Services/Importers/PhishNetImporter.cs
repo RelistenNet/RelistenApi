@@ -17,6 +17,7 @@ namespace Relisten.Import
         readonly LinkService linkService;
         readonly ShowPerformanceService performances;
         readonly CatalogImportTransaction transactions;
+        readonly NormalizationProviderInputService normalizationInputs;
         PhishNetApiClient phishNetApiClient;
 
         public PhishNetImporter(
@@ -26,18 +27,20 @@ namespace Relisten.Import
             LinkService linkService,
             ILogger<PhishNetImporter> log,
             ShowPerformanceService performances,
-            CatalogImportTransaction transactions
+            CatalogImportTransaction transactions,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
             this.performances = performances;
             this.transactions = transactions;
+            this.normalizationInputs = normalizationInputs;
             _sourceService = sourceService;
             _log = log;
             _sourceReviewService = sourceReviewService;
             http = new PhishNetHttpClientFactory().HttpClient;
-            phishNetApiClient = new PhishNetApiClient(http);
+            phishNetApiClient = new PhishNetApiClient(http, normalizationInputs);
         }
 
         protected SourceService _sourceService { get; set; }

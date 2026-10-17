@@ -15,7 +15,7 @@ public partial class PhishNetImporter
     public override void UseIngestionHttpClient(HttpClient client)
     {
         base.UseIngestionHttpClient(client);
-        phishNetApiClient = new PhishNetApiClient(client);
+        phishNetApiClient = new PhishNetApiClient(client, normalizationInputs);
     }
 
     /// <summary>Selects current recordings and their matching Phish.net show metadata.</summary>
@@ -24,7 +24,7 @@ public partial class PhishNetImporter
         int? year
     )
     {
-        var shows = await phishNetApiClient.Shows(null);
+        var shows = await phishNetApiClient.Shows(null, context.CancellationToken);
         var sources = (await _sourceService.AllForArtistFromPrimary(context.Artist)).ToArray();
         var showDates = shows.ToLookup(show => show.showdate);
         var catalogDates = sources.ToLookup(source => source.display_date);
@@ -111,11 +111,21 @@ public partial class PhishNetImporter
             );
         }
 
-        var ratings = await new PhishNetRatingsScraper(http, before.display_date).ScrapeRatings();
+        var ratings = await new PhishNetRatingsScraper(
+            http,
+            before.display_date,
+            normalizationInputs
+        ).ScrapeRatings(context.CancellationToken);
         PhishNetApiReview[]? reviews = null;
         if (ratings.RatingMatched && before.num_reviews != ratings.NumberOfReviewsWritten)
         {
-            reviews = (await phishNetApiClient.Reviews(before.display_date, null)).ToArray();
+            reviews = (
+                await phishNetApiClient.Reviews(
+                    before.display_date,
+                    null,
+                    context.CancellationToken
+                )
+            ).ToArray();
         }
 
         return await context.CommitAsync(async () =>

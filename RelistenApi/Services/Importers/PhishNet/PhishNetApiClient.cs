@@ -3,16 +3,22 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Server;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
+using Relisten.Data;
 
 namespace Relisten.Import.PhishNet;
 
-public class PhishNetApiClient(HttpClient httpClient)
+public class PhishNetApiClient(
+    HttpClient httpClient,
+    NormalizationProviderInputService? normalizationInputs = null
+)
 {
     static string CleanPhishNetString(string str)
     {
@@ -22,24 +28,20 @@ public class PhishNetApiClient(HttpClient httpClient)
             .Replace("â\u0080\u009c", string.Empty);
     }
 
-    public async Task<IList<PhishNetApiShow>> Shows(PerformContext? ctx)
+    public async Task<IList<PhishNetApiShow>> Shows(
+        PerformContext? ctx,
+        CancellationToken cancellationToken = default
+    )
     {
         const string url = "https://api.phish.net/v5/shows?apikey=C60F490D1358FBBE31DA";
-        ctx?.WriteLine($"Requesting {url}");
-
-        using var resp = await httpClient.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        var page = await resp.Content.ReadAsStringAsync();
-
-        var shows = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiShow>>(
-            CleanPhishNetString(page)
+        // Stable evidence keys and logs identify the route, never its authentication query.
+        ctx?.WriteLine("Requesting Phish.net shows");
+        var shows = await FetchAsync<PhishNetApiShow>(
+            url,
+            new("phish.net", "shows", "v5"),
+            cancellationToken
         );
-
-        if (shows == null || shows.error || shows.data == null)
-            throw new System.IO.InvalidDataException(
-                "Phish.net returned an invalid show response."
-            );
-        return shows.data.Where(show => show.artist_name == "Phish").ToList();
+        return shows.Where(show => show.artist_name == "Phish").ToList();
     }
 
     string PhishNetApiReviewsUrlForDate(string displayDate)
@@ -49,24 +51,56 @@ public class PhishNetApiClient(HttpClient httpClient)
 
     public async Task<IEnumerable<PhishNetApiReview>> Reviews(
         string displayDate,
-        PerformContext? ctx
+        PerformContext? ctx,
+        CancellationToken cancellationToken = default
     )
     {
-        var url = PhishNetApiReviewsUrlForDate(displayDate);
-        ctx?.WriteLine($"Requesting {url}");
-        using var resp = await httpClient.GetAsync(url);
-        resp.EnsureSuccessStatusCode();
-        var page = await resp.Content.ReadAsStringAsync();
-
-        var reviews = JsonConvert.DeserializeObject<PhishNetApiResponse<PhishNetApiReview>>(
-            CleanPhishNetString(page)
+        ctx?.WriteLine($"Requesting Phish.net reviews for {displayDate}");
+        return await FetchAsync<PhishNetApiReview>(
+            PhishNetApiReviewsUrlForDate(displayDate),
+            new("phish.net", "reviews", displayDate),
+            cancellationToken
         );
+    }
 
-        if (reviews == null || reviews.error || reviews.data == null)
-            throw new System.IO.InvalidDataException(
-                "Phish.net returned an invalid review response."
+    private async Task<IList<T>> FetchAsync<T>(
+        string url,
+        NormalizationResourceKey resource,
+        CancellationToken cancellationToken
+    )
+        where T : class
+    {
+        async Task<NormalizationProviderResponse<IList<T>>> Fetch(CancellationToken ct)
+        {
+            using var response = await httpClient.GetAsync(url, ct);
+            response.EnsureSuccessStatusCode();
+            var payload = await response.Content.ReadAsByteArrayAsync(ct);
+            var envelope = JsonConvert.DeserializeObject<PhishNetApiResponse<T>>(
+                CleanPhishNetString(await response.Content.ReadAsStringAsync(ct))
             );
-        return reviews.data;
+            if (envelope == null || envelope.error || envelope.data == null)
+            {
+                throw new System.IO.InvalidDataException("Phish.net returned an invalid response.");
+            }
+
+            return new(
+                envelope.data,
+                payload,
+                response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                response.Headers.ETag?.ToString()
+            );
+        }
+
+        // Standalone parser callers retain their existing constructor. Importers
+        // always supply capture, which retains bytes before string repair and filtering.
+        return normalizationInputs == null
+            ? (await Fetch(cancellationToken)).Value
+            : await normalizationInputs.FetchAsync(
+                resource,
+                "phish-net-http-v1",
+                Fetch,
+                cancellationToken
+            );
     }
 }
 

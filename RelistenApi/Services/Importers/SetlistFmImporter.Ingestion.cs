@@ -1,10 +1,8 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.SetlistFm;
-using Relisten.Vendor;
 using Relisten.Vendor.SetlistFm;
 
 namespace Relisten.Import;
@@ -19,27 +17,7 @@ public partial class SetlistFmImporter
     > ReadSetlistPageAsync(ProviderContext context, SetlistFmPage? cursor)
     {
         var page = cursor?.Number ?? 1;
-        using var response = await http.GetAsync(
-            SetlistUrlForArtist(context.Artist, page),
-            context.CancellationToken
-        );
-        response.EnsureSuccessStatusCode();
-
-        var root =
-            JsonConvert.DeserializeObject<SetlistsRootObject>(
-                await response.Content.ReadAsStringAsync(context.CancellationToken),
-                new TolerantListConverter<Song>(),
-                new TolerantListConverter<Set>(),
-                new TolerantListConverter<Setlist>(),
-                new TolerantSetsConverter()
-            ) ?? throw new System.IO.InvalidDataException("Setlist.fm returned an empty page.");
-
-        if (root.setlist == null || root.itemsPerPage <= 0 || root.page != page || root.total < 0)
-        {
-            throw new System.IO.InvalidDataException(
-                "Setlist.fm returned invalid pagination metadata."
-            );
-        }
+        var root = await FetchSetlistPageAsync(context.Artist, page, context.CancellationToken);
 
         var next =
             root.page < Math.Ceiling((double)root.total / root.itemsPerPage)

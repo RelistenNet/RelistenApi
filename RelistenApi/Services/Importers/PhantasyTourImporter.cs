@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Server;
 using Newtonsoft.Json;
 using Polly;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Vendor;
@@ -19,6 +21,7 @@ namespace Relisten.Import
     public partial class PhantasyTourImporter : ImporterBase
     {
         private const uint ITEMS_PER_PAGE = 100;
+        private readonly NormalizationProviderInputService normalizationInputs;
         private IDictionary<string, SetlistShow?> existingSetlistShows =
             new Dictionary<string, SetlistShow?>();
         private IDictionary<string, SetlistSong?> existingSetlistSongs =
@@ -35,11 +38,13 @@ namespace Relisten.Import
             VenueService venueService,
             TourService tourService,
             SetlistShowService setlistShowService,
-            SetlistSongService setlistSongService
+            SetlistSongService setlistSongService,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
             _setlistSongService = setlistSongService;
+            this.normalizationInputs = normalizationInputs;
             _setlistShowService = setlistShowService;
             _venueService = venueService;
             _tourService = tourService;
@@ -114,7 +119,12 @@ namespace Relisten.Import
             ImportProgress.WriteLine(log, ctx, $"Requesting page #{page}");
 
             while (
-                await ImportPage(artist, stats, ctx, await http.GetAsync(UrlForArtist(src, page)))
+                await ImportPage(
+                    artist,
+                    stats,
+                    ctx,
+                    await FetchShowPageAsync(src, page, CancellationToken.None)
+                )
             )
             {
                 page++;
@@ -156,63 +166,98 @@ namespace Relisten.Import
             return Task.FromResult(new ImportStats());
         }
 
+        // Listing currency belongs to the band/page request. Current show detail
+        // uses its own show-ID resource and can be normalized independently.
+        private Task<PhantasyTourShowListing[]> FetchShowPageAsync(
+            ArtistUpstreamSource source,
+            uint page,
+            CancellationToken cancellationToken
+        ) =>
+            normalizationInputs.FetchAsync(
+                new(
+                    "phantasytour.com",
+                    "show-list",
+                    $"{uint.Parse(source.upstream_identifier!)}:page={page}:page_size={ITEMS_PER_PAGE}"
+                ),
+                "phantasy-tour-http-v1",
+                async ct =>
+                {
+                    using var response = await http.GetAsync(UrlForArtist(source, page), ct);
+                    response.EnsureSuccessStatusCode();
+                    var payload = await response.Content.ReadAsByteArrayAsync(ct);
+                    var shows =
+                        JsonConvert.DeserializeObject<PhantasyTourShowListing[]>(
+                            await response.Content.ReadAsStringAsync(ct)
+                        )
+                        ?? throw new InvalidDataException(
+                            "Phantasy Tour returned an invalid listing."
+                        );
+                    if (shows.Any(show => show.id <= 0 || show.dateTime == default))
+                    {
+                        throw new InvalidDataException(
+                            "Phantasy Tour returned a show without an ID or local date."
+                        );
+                    }
+
+                    return new NormalizationProviderResponse<PhantasyTourShowListing[]>(
+                        shows,
+                        payload,
+                        response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                        response.Headers.ETag?.ToString()
+                    );
+                },
+                cancellationToken
+            );
+
+        private Task<PhantasyTourShow> FetchShowAsync(
+            int showId,
+            CancellationToken cancellationToken
+        ) =>
+            normalizationInputs.FetchAsync(
+                new(
+                    "phantasytour.com",
+                    "show",
+                    showId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                ),
+                "phantasy-tour-http-v1",
+                async ct =>
+                {
+                    using var response = await http.GetAsync(UrlForShow(showId), ct);
+                    response.EnsureSuccessStatusCode();
+                    var payload = await response.Content.ReadAsByteArrayAsync(ct);
+                    var show = JsonConvert
+                        .DeserializeObject<PhantasyTourEnvelope>(
+                            await response.Content.ReadAsStringAsync(ct)
+                        )
+                        ?.data;
+                    if (show == null || show.id != showId || show.dateTime == default)
+                    {
+                        throw new InvalidDataException(
+                            $"Phantasy Tour returned invalid details for show {showId}."
+                        );
+                    }
+
+                    return new NormalizationProviderResponse<PhantasyTourShow>(
+                        show,
+                        payload,
+                        response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                        response.Headers.ETag?.ToString()
+                    );
+                },
+                cancellationToken
+            );
+
         private async Task<bool> ImportPage(
             Artist artist,
             ImportStats stats,
             PerformContext? ctx,
-            HttpResponseMessage res
+            PhantasyTourShowListing[] json
         )
         {
-            var body = await res.Content.ReadAsStringAsync();
-            IList<PhantasyTourShowListing> json;
-            try
-            {
-                res.EnsureSuccessStatusCode();
-                json =
-                    JsonConvert.DeserializeObject<IList<PhantasyTourShowListing>>(body)
-                    ?? throw new InvalidDataException(
-                        "Phantasy Tour returned an empty show listing."
-                    );
-            }
-            catch
-            {
-                ImportProgress.WriteLine(
-                    log,
-                    ctx,
-                    "Improper response from phantasytour.com: " + body
-                );
-                ImportProgress.WriteLine(
-                    log,
-                    ctx,
-                    $"Status code: {res.StatusCode}. Headers: {string.Join("\n", res.Headers.Select(h => h.Key + ": " + string.Join(" || ", h.Value)))}"
-                );
-                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
-                var requestHeaders =
-                    res.RequestMessage?.Headers != null
-                        ? string.Join(
-                            "\n",
-                            res.RequestMessage.Headers.Select(h =>
-                                h.Key + ": " + string.Join(" || ", h.Value)
-                            )
-                        )
-                        : "<unknown>";
-                ImportProgress.WriteLine(
-                    log,
-                    ctx,
-                    $"Request url: {requestUri}. Headers: {requestHeaders}"
-                );
-                throw;
-            }
-
             var prog = ctx?.WriteProgressBar();
 
             Func<PhantasyTourShowListing, Task> processShow = async show =>
             {
-                if (show.id <= 0 || show.dateTime == default)
-                    throw new InvalidDataException(
-                        "Phantasy Tour returned a show without an ID or local date."
-                    );
-
                 if (show.dateTime > DateTimeOffset.UtcNow)
                 {
                     // future shows can't have recordings
@@ -250,7 +295,7 @@ namespace Relisten.Import
             }
 
             // once we aren't at the full items per page this is the last page and we should stop
-            var shouldContinue = json.Count == ITEMS_PER_PAGE;
+            var shouldContinue = json.Length == ITEMS_PER_PAGE;
 
             return shouldContinue;
         }
@@ -281,39 +326,18 @@ namespace Relisten.Import
         {
             ImportProgress.WriteLine(log, ctx, $"Requesting page for show id {showId}");
 
-            var res = await http.GetAsync(UrlForShow(showId));
-
-            var body = await res.Content.ReadAsStringAsync();
-
-            ImportProgress.WriteLine(log, ctx, $"Result: [{res.StatusCode}]: {body.Length}");
-            res.EnsureSuccessStatusCode();
-
-            await ApplyShowBody(artist, stats, ctx, showId, body);
+            var show = await FetchShowAsync(showId, CancellationToken.None);
+            await ApplyShow(artist, stats, ctx, show);
         }
 
-        private async Task ApplyShowBody(
+        private async Task ApplyShow(
             Artist artist,
             ImportStats stats,
             PerformContext? ctx,
-            int showId,
-            string body
+            PhantasyTourShow json
         )
         {
-            var json = JsonConvert.DeserializeObject<PhantasyTourEnvelope>(body)?.data;
-
             var now = DateTime.UtcNow;
-
-            if (json == null || json.id != showId || json.dateTime == default)
-            {
-                ImportProgress.WriteLine(
-                    log,
-                    ctx,
-                    $"Improper response for show id {showId}: {body}"
-                );
-                throw new InvalidDataException(
-                    $"Phantasy Tour returned invalid details for show {showId}."
-                );
-            }
 
             Venue? dbVenue = existingVenues.GetValue(
                 UpstreamIdentifierForPhantasyTourId(json.venue.id)
@@ -341,7 +365,7 @@ namespace Relisten.Import
                 stats.Created++;
             }
 
-            ImportProgress.WriteLine(log, ctx, $"Importing show id {showId}");
+            ImportProgress.WriteLine(log, ctx, $"Importing show id {json.id}");
 
             // tour
             Tour? dbTour = null;

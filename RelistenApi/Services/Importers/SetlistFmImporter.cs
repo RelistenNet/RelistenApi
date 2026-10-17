@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Threading;
 using System.Threading.Tasks;
 using Hangfire.Console;
 using Hangfire.Console.Progress;
@@ -13,6 +15,7 @@ using Newtonsoft.Json;
 using Polly;
 using Polly.Retry;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Ingestion;
 using Relisten.Vendor;
@@ -26,6 +29,7 @@ namespace Relisten.Import
     public partial class SetlistFmImporter : ImporterBase
     {
         private readonly LinkService _linkService;
+        private readonly NormalizationProviderInputService normalizationInputs;
 
         private readonly AsyncRetryPolicy<Tuple<bool, ImportStats>> retryPolicy = Policy
             .Handle<JsonReaderException>()
@@ -55,11 +59,13 @@ namespace Relisten.Import
             TourService tourService,
             SetlistSongService setlistSongService,
             ILogger<SetlistFmImporter> log,
-            LinkService linkService
+            LinkService linkService,
+            NormalizationProviderInputService normalizationInputs
         )
             : base(catalog, log)
         {
             _linkService = linkService;
+            this.normalizationInputs = normalizationInputs;
             _setlistShowService = setlistShowService;
             _venueService = venueService;
             _tourService = tourService;
@@ -107,8 +113,8 @@ namespace Relisten.Import
             {
                 result = await retryPolicy.ExecuteAsync(async () =>
                 {
-                    var httpRes = await http.GetAsync(SetlistUrlForArtist(artist, page));
-                    return await ProcessSetlistPage(artist, httpRes, ctx, prog);
+                    var root = await FetchSetlistPageAsync(artist, page, CancellationToken.None);
+                    return await ProcessSetlistPage(artist, root, ctx, prog);
                 });
 
                 // max 10 per second
@@ -356,32 +362,60 @@ namespace Relisten.Import
             return stats;
         }
 
+        // Retain the page before tolerant parsing drops cover, with, info, and other
+        // provider fields. The same fetch serves legacy and Temporal ingestion.
+        // A page is the current response for this request, not the latest revision
+        // of each setlist: an updated item can move between pages during refresh.
+        private Task<SetlistsRootObject> FetchSetlistPageAsync(
+            Artist artist,
+            int page,
+            CancellationToken cancellationToken
+        ) =>
+            normalizationInputs.FetchAsync(
+                new("setlist.fm", "setlist-page", $"{artist.musicbrainz_id}:page={page}"),
+                "setlist-fm-http-v1",
+                async ct =>
+                {
+                    using var response = await http.GetAsync(SetlistUrlForArtist(artist, page), ct);
+                    response.EnsureSuccessStatusCode();
+                    var payload = await response.Content.ReadAsByteArrayAsync(ct);
+                    var root =
+                        JsonConvert.DeserializeObject<SetlistsRootObject>(
+                            await response.Content.ReadAsStringAsync(ct),
+                            new TolerantListConverter<Song>(),
+                            new TolerantListConverter<Set>(),
+                            new TolerantListConverter<Setlist>(),
+                            new TolerantSetsConverter()
+                        ) ?? throw new InvalidDataException("Setlist.fm returned an empty page.");
+                    if (
+                        root.setlist == null
+                        || root.itemsPerPage <= 0
+                        || root.page != page
+                        || root.total < 0
+                    )
+                    {
+                        throw new InvalidDataException(
+                            "Setlist.fm returned invalid pagination metadata."
+                        );
+                    }
+
+                    return new NormalizationProviderResponse<SetlistsRootObject>(
+                        root,
+                        payload,
+                        response.Content.Headers.ContentType?.ToString() ?? "application/json",
+                        response.Headers.ETag?.ToString()
+                    );
+                },
+                cancellationToken
+            );
+
         private async Task<Tuple<bool, ImportStats>> ProcessSetlistPage(
             Artist artist,
-            HttpResponseMessage res,
+            SetlistsRootObject root,
             PerformContext? ctx,
             IProgressBar? prog
         )
         {
-            var body = await res.Content.ReadAsStringAsync();
-            SetlistsRootObject? root = null;
-            try
-            {
-                root = JsonConvert.DeserializeObject<SetlistsRootObject>(
-                    body,
-                    new TolerantListConverter<Song>(),
-                    new TolerantListConverter<Set>(),
-                    new TolerantListConverter<Setlist>(),
-                    new TolerantSetsConverter()
-                );
-            }
-            catch (JsonReaderException)
-            {
-                var requestUri = res.RequestMessage?.RequestUri?.ToString() ?? "<unknown>";
-                ImportProgress.WriteLine(log, ctx, "Failed to parse {0}:\n{1}", requestUri, body);
-                throw;
-            }
-
             var stats = new ImportStats();
 
             var count = 1;
