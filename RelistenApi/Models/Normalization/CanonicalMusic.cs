@@ -90,6 +90,9 @@ public sealed record SongOccurrenceChange : MusicChange
     public Guid EditionUuid { get; init; }
     public int? Position { get; init; }
     public string? SetLabel { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? SetUuid { get; init; }
     public string Kind { get; init; } = "song";
     public Guid? RepertoireSongUuid { get; init; }
     public string OriginalText { get; init; } = "";
@@ -156,6 +159,9 @@ public sealed record MusicPublication
     public IReadOnlyList<SongOccurrenceChange> Occurrences { get; init; } = [];
     public IReadOnlyList<TrackContentChange> TrackContents { get; init; } = [];
     public IReadOnlyList<MusicExternalIdentityChange> ExternalIdentities { get; init; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SetlistStructureChange? SetlistStructure { get; init; }
     public IReadOnlyList<MusicMerge> Merges { get; init; } = [];
     public IReadOnlyList<MusicSplit> Splits { get; init; } = [];
 }

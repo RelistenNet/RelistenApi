@@ -79,6 +79,7 @@ public sealed class NormalizedSongOccurrence : NormalizedMusicRelationship
     public NormalizedSetlistEdition edition { get; set; } = null!;
     public int? position { get; set; }
     public string? set_label { get; set; }
+    public Guid? set_uuid { get; set; }
     public string kind { get; set; } = "";
     public Guid? repertoire_song_uuid { get; set; }
     public string original_text { get; set; } = "";

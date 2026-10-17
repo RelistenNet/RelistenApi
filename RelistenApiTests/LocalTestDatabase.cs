@@ -130,6 +130,10 @@ internal static class LocalTestDatabase
             Migrations.AddImportedVenueResolutionIndexes.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddAcceptedSetlistStructures.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

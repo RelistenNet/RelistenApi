@@ -19,6 +19,7 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     )
     {
+        edition = await PreserveEditionSelectionAsync(c, t, edition, ct);
         await RequireCatalogBinding(
             c,
             t,
@@ -88,7 +89,7 @@ public sealed partial class NormalizedMusicService
         var edition =
             await c.QuerySingleOrDefaultAsync<EditionScope>(
                 new CommandDefinition(
-                    "SELECT artist_uuid AS ArtistUuid,ordered AS Ordered FROM normalization.setlist_editions WHERE uuid=@EditionUuid AND NOT retracted",
+                    "SELECT artist_uuid AS ArtistUuid,ordered AS Ordered FROM normalization.setlist_editions WHERE uuid=@EditionUuid AND (@Retracted OR NOT retracted)",
                     occurrence,
                     t,
                     cancellationToken: ct
@@ -102,9 +103,40 @@ public sealed partial class NormalizedMusicService
             "An occurrence identity cannot move to another edition.",
             ct
         );
+        if (occurrence.SetUuid is { } set)
+        {
+            await Require(
+                c,
+                t,
+                "SELECT EXISTS(SELECT 1 FROM normalization.setlist_sets WHERE uuid=@set AND edition_uuid=@EditionUuid AND (@Retracted OR NOT retracted))",
+                new
+                {
+                    set,
+                    occurrence.EditionUuid,
+                    occurrence.Retracted,
+                },
+                "The occurrence set must belong to its edition and remain active.",
+                ct
+            );
+        }
         if (occurrence.RepertoireSongUuid is { } song)
         {
-            await RequireArtistSong(c, t, song, edition.ArtistUuid, ct);
+            // Withdrawal retains the accepted historical binding even if the song has since
+            // been retracted or redirected. New or changed bindings still need a live song.
+            var retainsHistoricalBinding =
+                occurrence.Retracted
+                && await c.ExecuteScalarAsync<bool>(
+                    new CommandDefinition(
+                        "SELECT EXISTS(SELECT 1 FROM normalization.song_occurrences WHERE uuid=@Uuid AND repertoire_song_uuid=@song)",
+                        new { occurrence.Uuid, song },
+                        t,
+                        cancellationToken: ct
+                    )
+                );
+            if (!retainsHistoricalBinding)
+            {
+                await RequireArtistSong(c, t, song, edition.ArtistUuid, ct);
+            }
         }
         if (occurrence.ParentOccurrenceUuid is { } parent)
         {
@@ -113,9 +145,16 @@ public sealed partial class NormalizedMusicService
                 t,
                 """
                 SELECT EXISTS(SELECT 1 FROM normalization.song_occurrences WHERE uuid=@parent AND edition_uuid=@EditionUuid
-                    AND parent_occurrence_uuid IS NULL AND NOT retracted)
+                    AND (@Retracted OR (parent_occurrence_uuid IS NULL AND NOT retracted
+                        AND (@SetUuid::uuid IS NULL OR set_uuid IS NULL OR set_uuid=@SetUuid))))
                 """,
-                new { parent, occurrence.EditionUuid },
+                new
+                {
+                    parent,
+                    occurrence.EditionUuid,
+                    occurrence.SetUuid,
+                    occurrence.Retracted,
+                },
                 "A component passage needs a root occurrence in the same edition.",
                 ct
             );
@@ -154,8 +193,8 @@ public sealed partial class NormalizedMusicService
             t,
             "song_occurrences",
             occurrence,
-            "edition_uuid,position,set_label,kind,repertoire_song_uuid,original_text,transition_after,parent_occurrence_uuid,component_position,supersedes_occurrence_uuid,provider_item_key",
-            "@EditionUuid,@Position,@SetLabel,@Kind,@RepertoireSongUuid,@OriginalText,@TransitionAfter,@ParentOccurrenceUuid,@ComponentPosition,@SupersedesOccurrenceUuid,@ProviderItemKey",
+            "edition_uuid,position,set_label,set_uuid,kind,repertoire_song_uuid,original_text,transition_after,parent_occurrence_uuid,component_position,supersedes_occurrence_uuid,provider_item_key",
+            "@EditionUuid,@Position,@SetLabel,@SetUuid,@Kind,@RepertoireSongUuid,@OriginalText,@TransitionAfter,@ParentOccurrenceUuid,@ComponentPosition,@SupersedesOccurrenceUuid,@ProviderItemKey",
             decision,
             reviewed,
             ct
@@ -355,6 +394,21 @@ public sealed partial class NormalizedMusicService
             """,
             new { editions },
             "An edition ordering change must update every affected occurrence in the same decision.",
+            ct
+        );
+        await Require(
+            c,
+            t,
+            """
+            SELECT NOT EXISTS(SELECT 1 FROM normalization.song_occurrences child
+                LEFT JOIN normalization.song_occurrences parent ON parent.uuid=child.parent_occurrence_uuid
+                WHERE child.edition_uuid=ANY(@editions) AND NOT child.retracted AND child.parent_occurrence_uuid IS NOT NULL
+                AND (parent.uuid IS NULL OR parent.retracted OR parent.parent_occurrence_uuid IS NOT NULL
+                    OR parent.edition_uuid<>child.edition_uuid
+                    OR (parent.set_uuid IS NOT NULL AND child.set_uuid IS NOT NULL AND parent.set_uuid<>child.set_uuid)))
+            """,
+            new { editions },
+            "An active component requires an active root parent in the same edition with compatible set membership.",
             ct
         );
     }

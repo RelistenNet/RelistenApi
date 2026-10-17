@@ -41,6 +41,7 @@ public sealed partial class NormalizedMusicService
                     + publication.Editions.Count
                     + publication.Occurrences.Count
                     + publication.TrackContents.Count
+                    + (publication.SetlistStructure == null ? 0 : 1)
                 > 0
             )
             {
@@ -101,6 +102,10 @@ public sealed partial class NormalizedMusicService
             {
                 EnsureOwner(edition.Uuid, owner);
             }
+            if (publication.SetlistStructure is { } structure)
+            {
+                EnsureOwner(structure.Edition.Uuid, owner);
+            }
             foreach (var occurrence in publication.Occurrences)
             {
                 EnsureOwner(occurrence.EditionUuid, owner);
@@ -139,6 +144,7 @@ public sealed partial class NormalizedMusicService
                     + publication.Editions.Count
                     + publication.Occurrences.Count
                     + publication.TrackContents.Count
+                    + (publication.SetlistStructure == null ? 0 : 1)
                     > 0
                 || publication.ExternalIdentities.Any(x => x.RepertoireSongUuid.HasValue)
             )
@@ -215,6 +221,7 @@ public sealed partial class NormalizedMusicService
             || (!allowEditions && p.Editions.Count > 0)
             || (!allowOccurrences && p.Occurrences.Count > 0)
             || (!allowContents && p.TrackContents.Count > 0)
+            || (!allowEditions && p.SetlistStructure != null)
         )
         {
             throw new ArgumentException(
@@ -260,6 +267,10 @@ public sealed partial class NormalizedMusicService
     )
     {
         var required = new HashSet<(string Domain, string Kind, Guid Uuid)>();
+        if (publication.SetlistStructure is { } structure)
+        {
+            await ValidateStructureReadSet(c, t, ticket, structure, ct);
+        }
         foreach (var link in publication.CompositionLinks)
         {
             required.Add(("compositions", "composition", link.CompositionUuid));
@@ -366,6 +377,7 @@ public sealed partial class NormalizedMusicService
             .Concat(p.WorkCredits.Select(x => x.CompositionUuid))
             .Concat((p.AuthorshipAssertions ?? []).Select(x => x.CompositionUuid))
             .Concat(p.Splits.SelectMany(x => x.Targets ?? []).Select(x => x.Uuid))
+            .Concat(p.SetlistStructure?.Sets.Select(set => set.Uuid) ?? [])
             .Concat(
                 p.Occurrences.SelectMany(x =>
                         new Guid?[]

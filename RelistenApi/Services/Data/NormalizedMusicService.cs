@@ -23,8 +23,10 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         Guid workUuid,
         MusicPublication publication,
         CancellationToken cancellationToken = default
-    ) =>
-        await work.TryPublishAsync(
+    )
+    {
+        publication = FreezeStructurePublication(publication);
+        return await work.TryPublishAsync(
             workUuid,
             async (c, t, ct) =>
             {
@@ -67,6 +69,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                 cancellationToken
             )
         );
+    }
 
     public async Task<NormalizationReviewResult> ApplyDecisionAsync(
         Guid operationUuid,
@@ -79,6 +82,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         CancellationToken cancellationToken = default
     )
     {
+        publication = FreezeStructurePublication(publication);
         if (action is not ("accept" or "reject" or "replace" or "retract" or "merge" or "split"))
         {
             throw new ArgumentException(
@@ -152,6 +156,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
     )
     {
         await LockAndValidateChanges(c, t, publication, reviewed, ct);
+        await ValidateStructureRoute(c, t, publication, reviewed, ct);
         await RestoreSplitIdentities(c, t, publication, reviewed, ct);
         foreach (var song in publication.RepertoireSongs)
         {
@@ -197,13 +202,20 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         {
             await SaveCompositionLink(c, t, link, decisionUuid, reviewed, ct);
         }
-        foreach (var edition in publication.Editions.OrderBy(x => x.Selected))
+        if (publication.SetlistStructure is { } structure)
         {
-            await SaveEdition(c, t, edition, decisionUuid, reviewed, ct);
+            await ApplyStructure(c, t, structure, decisionUuid, reviewed, ct);
         }
-        foreach (var occurrence in publication.Occurrences)
+        else
         {
-            await SaveOccurrence(c, t, occurrence, decisionUuid, reviewed, ct);
+            foreach (var edition in publication.Editions.OrderBy(x => x.Selected))
+            {
+                await SaveEdition(c, t, edition, decisionUuid, reviewed, ct);
+            }
+            foreach (var occurrence in publication.Occurrences)
+            {
+                await SaveOccurrence(c, t, occurrence, decisionUuid, reviewed, ct);
+            }
         }
         foreach (var content in publication.TrackContents)
         {
@@ -394,10 +406,30 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                 .EnumerateObject()
         )
         {
-            if (property.Name is not ("Uuid" or "ExpectedRevision" or "Basis"))
+            if (
+                property.Name is "Uuid" or "ExpectedRevision" or "Basis"
+                || (change is SetlistEditionChange && property.Name == "Selected")
+            )
             {
-                properties.Add(property.Name, property.Value);
+                continue;
             }
+            // Selection is display state with its own authority, not a new source claim.
+            var value = property.Value;
+            if (change is SetlistStructureChange && property.Name is "Edition" or "Occurrences")
+            {
+                var node = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText())!;
+                var children = node is System.Text.Json.Nodes.JsonArray array
+                    ? array.OfType<System.Text.Json.Nodes.JsonObject>()
+                    : new[] { (System.Text.Json.Nodes.JsonObject)node };
+                foreach (var child in children)
+                {
+                    child.Remove("ExpectedRevision");
+                    child.Remove("Basis");
+                    child.Remove("Selected");
+                }
+                value = JsonSerializer.SerializeToElement(node);
+            }
+            properties.Add(property.Name, value);
         }
         return Convert
             .ToHexString(
@@ -421,7 +453,10 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
             .Concat(publication.CompositionLinks)
             .Concat(publication.Editions)
             .Concat(publication.Occurrences)
-            .Concat(publication.TrackContents);
+            .Concat(publication.TrackContents)
+            .Concat(
+                publication.SetlistStructure is { } structure ? new MusicChange[] { structure } : []
+            );
 
     private static async Task SaveRepertoire(
         NpgsqlConnection c,

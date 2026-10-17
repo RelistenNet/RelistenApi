@@ -284,7 +284,7 @@ public sealed partial class NormalizedMusicService
                     new CommandDefinition(
                         $"""
                         SELECT x.uuid AS Uuid,r.payload::text AS Payload,r.revision AS Revision,r.created_at AS UpdatedAt,
-                            r.decision_uuid AS DecisionUuid,x.redirect_uuid AS RedirectUuid
+                            r.decision_uuid AS DecisionUuid,x.redirect_uuid AS RedirectUuid,false AS Selected
                         FROM normalization.{table} x JOIN normalization.music_revisions r ON r.uuid=x.revision_uuid
                         WHERE x.uuid=@uuid AND NOT x.retracted
                         """,
@@ -326,12 +326,15 @@ public sealed partial class NormalizedMusicService
         object parameters,
         CancellationToken ct
     )
-        where T : MusicChange => db.WithWriteConnection<IReadOnlyList<MusicRecord<T>>>(async c => (
+        where T : MusicChange
+    {
+        var selectedProjection = SelectedProjection(table);
+        return db.WithWriteConnection<IReadOnlyList<MusicRecord<T>>>(async c => (
                 await c.QueryAsync<MusicReadRow>(
                     new CommandDefinition(
                         $"""
                         SELECT x.uuid AS Uuid,r.payload::text AS Payload,r.revision AS Revision,r.created_at AS UpdatedAt,
-                            r.decision_uuid AS DecisionUuid,NULL::uuid AS RedirectUuid
+                            r.decision_uuid AS DecisionUuid,NULL::uuid AS RedirectUuid,{selectedProjection} AS Selected
                         FROM normalization.{table} x JOIN normalization.music_revisions r ON r.uuid=x.revision_uuid
                         WHERE NOT x.retracted AND ({predicate}) ORDER BY {ordering} LIMIT @limit
                         """,
@@ -340,15 +343,46 @@ public sealed partial class NormalizedMusicService
                     )
                 )
             ).Select(ToRecord<T>).ToArray());
+    }
+
+    private async Task<MusicRecord<SetlistStructureChange>?> GetStructureRecord(
+        Guid editionUuid,
+        CancellationToken ct
+    ) =>
+        (
+            await ReadMany<SetlistStructureChange>(
+                "setlist_structures",
+                "x.edition_uuid=@editionUuid",
+                "x.uuid",
+                new { editionUuid, limit = 1 },
+                ct
+            )
+        ).SingleOrDefault();
+
+    private static string SelectedProjection(string table) =>
+        table switch
+        {
+            "setlist_editions" => "x.selected",
+            "setlist_structures" =>
+                "(SELECT selected FROM normalization.setlist_editions WHERE uuid=x.edition_uuid)",
+            _ => "false",
+        };
 
     private static MusicRecord<T> ToRecord<T>(MusicReadRow row)
-        where T : MusicChange =>
-        new(
-            JsonSerializer.Deserialize<T>(row.Payload)!,
-            row.Revision,
-            row.UpdatedAt,
-            row.DecisionUuid
-        );
+        where T : MusicChange
+    {
+        MusicChange value = JsonSerializer.Deserialize<T>(row.Payload)!;
+        value = value switch
+        {
+            SetlistEditionChange edition => edition with { Selected = row.Selected },
+            SetlistStructureChange structure => structure with
+            {
+                Edition = structure.Edition with { Selected = row.Selected },
+            },
+            _ => value,
+        };
+        return new((T)value, row.Revision, row.UpdatedAt, row.DecisionUuid);
+    }
 
     private sealed record MusicReadRow(
         Guid Uuid,
@@ -356,7 +390,8 @@ public sealed partial class NormalizedMusicService
         long Revision,
         DateTime UpdatedAt,
         Guid DecisionUuid,
-        Guid? RedirectUuid
+        Guid? RedirectUuid,
+        bool Selected
     );
 
     private static int ValidateLimit(int limit) =>
