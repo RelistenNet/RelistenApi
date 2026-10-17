@@ -96,10 +96,10 @@ separate rollout step.
 ## Bind observations before matching
 
 [`NormalizationCatalogBindingService`](../../../../RelistenApi/Services/Data/NormalizationCatalogBindingService.cs)
-now binds legacy, Archive and Phish.in recording/file observations to current
+now binds legacy, Archive, Phish.in and joint Local recording/file observations to current
 catalog UUIDs. It reports missing, ambiguous and conflicting associations without
-changing playback. Pass its artist and global source-identifier revisions into
-work admission and publication. Migration 24 makes relevant catalog mutations
+changing playback. Pass all returned catalog dependencies and exact input
+revision expectations into work admission and publication. Migrations 24–25 make relevant catalog mutations
 invalidate registered work even when provider bytes have not changed.
 
 The [binding contract](catalog-binding.md) defines exact provider/file mappings,
@@ -107,17 +107,18 @@ lock order, retry behavior and atomic contributor-owned input unions. Each
 recording belongs to one performance; files can span songs or sets within it.
 Unclear early/late assignments remain on the default/current show.
 
-Local still needs its retained root map and directory account bound together.
-Jerry, enrichment setlists and imported repertoire/venue associations also need
+The [Local binder](local-binding.md) consumes its retained root map and directory
+account together. Jerry, enrichment setlists and imported repertoire/venue associations still need
 provider-specific ownership checks. Legacy song upserts can replace an upstream
 identifier when titles share a slug while keeping the winning UUID. Neither a
 computed UUID nor a title fallback repairs that ambiguity.
 
-Binding refreshes associations, not original wording. The legacy seed is still
-seed-only. A refresh producer must retain and decode changed catalog fields before
-publishing fresh credit/title interpretations. Negative binding outcomes also need
-durable retry registration. These producers, remaining bindings and the evaluated
-resolver remain required before automatic normalization.
+Binding refreshes associations, not original wording. The legacy seed remains
+seed-only. The separate [v2 refresh path](catalog-refresh.md) retains current
+catalog fields and checks their original producer revisions before binding.
+Negative binding outcomes still need durable retry registration. Bounded
+coordinators, the remaining bindings and the evaluated resolver remain required
+before automatic normalization.
 
 ## Verification
 
@@ -127,14 +128,14 @@ From the repository root, run the affected normalization and playback contracts:
 ./test-local.sh --filter 'FullyQualifiedName~Normaliz|FullyQualifiedName~Collection|FullyQualifiedName~Performance|FullyQualifiedName~TestPhishInPagination|FullyQualifiedName~TestPhishNetApiClient|FullyQualifiedName~TestPhishNetRatings|FullyQualifiedName~TestPhantasyTourDates'
 ```
 
-This increment passes all 611 checks without skips. After the final fixture
-cleanup, the following 26 seed, Local-decoder and artist-registry checks also pass:
+For a smaller seed and decoder check, run:
 
 ```sh
 ./test-local.sh --filter 'FullyQualifiedName~TestNormalizationLegacyInput|FullyQualifiedName~TestNormalizationProviderDecoderLocal|FullyQualifiedName~TestTapersSectionArtistRegistry'
 ```
 
-`dotnet build RelistenApi.sln --no-restore` succeeds with the existing 24 package
+See the [main plan](README.md#progress) for current verification results.
+`dotnet build RelistenApi.sln` succeeds with existing package
 advisory warnings and no compiler errors. `dotnet csharpier check .` passes.
 Fresh correctness and readability reviews cover each provider decoder, exact
 citation handling, legacy seeding and recovery. These checks verify extraction

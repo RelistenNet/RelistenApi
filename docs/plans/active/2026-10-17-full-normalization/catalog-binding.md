@@ -8,8 +8,10 @@ identifier. It does not accept a person, venue, song or composition match.
 Read [provider decoding](provider-decoding.md) for retained assertions and exact
 citations, and the [domain contracts](../../../design/2026-10-17-normalization-contracts.md)
 for accepted data and review. This guide covers the binding, catalog invalidation
-and shared-owner input contracts. Automatic resolution and several provider
-bindings remain to be implemented.
+and shared-owner input contracts. Local binds its root and directory together under the
+[joint-input contract](local-binding.md). Use [catalog refresh](catalog-refresh.md)
+for changed legacy wording. Automatic resolution and the remaining provider
+bindings still need implementation.
 
 ## Resolve a recording and its files
 
@@ -21,8 +23,8 @@ revisions. A request can contain at most 10,000 files. It expects decoder output
 domain publication still validates the original citations.
 
 The returned `NormalizationRecordingBindingSnapshot` contains the original input
-revision, the recording result, one result for each file, and two catalog revision
-lists. A result is `Bound`, `Missing`, `Ambiguous` or `ProviderConflict`, with a
+revision, the recording result, one result for each file, catalog revision
+lists and any supporting input or mapping-registry dependencies. A result is `Bound`, `Missing`, `Ambiguous` or `ProviderConflict`, with a
 reason. Only `Bound` supplies catalog identities. Original file observations remain
 available alongside unresolved results.
 
@@ -39,6 +41,11 @@ computed UUIDs, URL redirects and general URI canonicalization are not substitut
 for these associations. Duplicate file identities or multiple active rows for the
 same media remain ambiguous. An explicitly conflicting file recording owner
 produces `ProviderConflict` before URL matching.
+
+Local has no recording-qualified source link. Its joint binder uses the retained
+root mapping and exact valid media ownership, carrying both input revisions.
+The [Local contract](local-binding.md) specifies unresolved and shared-directory
+behavior.
 
 An active file binding requires the source, artist and source set to agree, a
 non-orphaned track and a nonempty MP3 URL. Missing or conflicting show and source
@@ -60,20 +67,28 @@ revision also detects a new rival recording arriving under another artist after
 the lookup. Its key is the stored identifier string, so unrelated providers can
 cause conservative invalidation when their identifiers coincide.
 
-Pass **both lists** to `BeginWorkAsync` or `BeginContributedWorkAsync`. The caller's
-observed generations are preconditions; reading fresh clocks cannot make older
-binding facts current. A changed revision raises `NormalizationConflictException`
+Local additionally returns `MappingRegistry`, a singleton revision that detects
+a root acquiring another artist before that artist has any recordings. It
+returns this dependency and known-artist revisions even for unresolved bindings.
+An unrelated mapping change can conservatively invalidate Local work.
+
+Pass **every returned catalog dependency** to `BeginWorkAsync` or
+`BeginContributedWorkAsync`, plus `Inputs` as `expectedInputRevisions`. Admission
+checks the exact consumed revision UUIDs under resource locks; a pre-bound root
+cannot acquire a ticket for a newer root revision. The caller's observed catalog
+generations are preconditions; reading fresh clocks cannot make older binding
+facts current. A changed revision raises `NormalizationConflictException`
 at work admission. After admission, `TryPublishAsync` checks the captured catalog,
 input and accepted-identity revisions atomically. Stale work does not invoke the
 domain write callback. A new attempt must reload the affected evidence and
 bindings and use a new work UUID. An exact retry reuses its original UUID and
 request; replay returns its saved result.
 
-Only positive recording bindings currently supply catalog revisions. Missing,
-ambiguous and conflicting recording outcomes do not yet register a durable
-negative lookup that becomes pending when a future import resolves it. Preserve
-those outcomes for explicit retry or reconciliation. Do not treat their absence
-from the pending-owner query as completion.
+Legacy, Archive and Phish recording lookups supply revisions for positive
+bindings. Local also supplies lookup dependencies for unresolved outcomes. A
+coordinator must still register durable owners and retries for those outcomes.
+Preserve unresolved results for reconciliation; absence from the pending-owner
+query does not establish completion.
 
 ## Preserve every contributor's inputs
 
@@ -98,6 +113,13 @@ the ticket's revision UUIDs and load the accepted and catalog facts needed by th
 whole owner before extraction or matching. A result computed only from the newly
 updated recording cannot replace the full repertoire.
 
+Contribution rows retain catalog keys, not each producer's original generations.
+An aggregator must also check the producer read sets saved with its extraction
+batches. Capturing today's union clocks cannot make another contributor's old
+catalog snapshot current. A dependency on an extraction owner alone is
+insufficient: catalog changes can make that owner pending before its published
+state changes.
+
 Contribution replacement and union configuration commit together. When adopting
 an existing unmanaged owner, the service retains its bindings in an explicit
 `relisten / preexisting_owner_bindings` baseline contribution. Reconciliation can
@@ -114,6 +136,11 @@ advance the affected clocks in the catalog transaction. Updates limited to
 ignored timestamps or source rating counters do not. Rollback restores the clocks;
 delete and recreate operations retain their history.
 
+[`Migration 25`](../../../../RelistenApi/Migrations/25_AddNormalizationMappingRegistry.cs)
+adds the retained mapping-registry revision and its owner and contributor
+memberships. Provider and artist-mapping changes advance that clock even when
+no source exists yet. The registry row cannot be deleted or truncated.
+
 Generations are opaque counters. They are not counts of recordings, edits or
 transactions. Triggers update clocks rather than writing one dirty message for
 every dependent owner. `GetPendingSubjectsAsync` compares each registered owner's
@@ -125,8 +152,9 @@ Work admission and publication acquire locks in this order:
 
 1. Shared locks on artist revision rows, ordered by UUID.
 2. Shared locks on source-identifier revision rows, ordered with PostgreSQL's `C` collation.
-3. Exclusive locks on retained input resource rows.
-4. Exclusive locks on work owners and their accepted-identity dependencies.
+3. A shared lock on the mapping-registry revision, when required.
+4. Exclusive locks on retained input resource rows.
+5. Exclusive locks on work owners and their accepted-identity dependencies.
 
 Admission takes its configuration and dependency-graph locks before this sequence.
 Each catalog trigger callback updates artist clocks before source-identifier clocks. Publication
@@ -137,9 +165,14 @@ while waiting for a clock; a publication callback that takes those row locks wou
 reverse the order. Callback failure or cancellation rolls back its domain writes
 and publication receipt together.
 
+Bulk provider or mapping maintenance must prelock all affected clocks in this
+order or retry its whole transaction after a PostgreSQL deadlock. A later
+statement can need an artist clock after an earlier statement acquired the
+registry lock; retrying only that statement does not recover the transaction.
+
 ## Rollout requirements and remaining work
 
-Before enabling publication, install the revision migration and triggers with
+Before enabling publication, install migrations 24–25 and their triggers with
 catalog writers and normalization publishers stopped. Drain or explicitly
 recreate older work tickets that lack catalog fences; adding the migration does
 not repair those tickets. Validate trigger coverage and writer overhead against
@@ -152,25 +185,26 @@ and normalization publishers stopped. Truncation triggers preserve and advance
 retained clocks, but their relation locks are acquired before the callback. They
 are not an online substitute for the row-write protocol.
 
-Binding refreshes associations and clocks, **not retained wording**. Legacy
-`SeedRecordingAsync` only fills an absent input; it never refreshes changed credits
-or titles. A current catalog snapshot producer must retain and decode changed
-wording before a resolver can publish it as current. Rebinding an old snapshot to
-a new catalog clock does not perform that refresh.
+Binding refreshes associations and clocks, **not retained wording**. The
+[legacy refresh path](catalog-refresh.md) now retains changed fields and checks
+its producer clocks before binding. Historical seed and association-only APIs
+retain their original behavior.
 
-Other remaining work includes Local's joint root/directory binding, Jerry and
-enrichment account binding, negative-lookup retry registration, multi-candidate
-resolution and evaluated automatic acceptance. Repertoire contributors still need
-a coordinator that consumes the complete ticket. Catalog-scale model comparison,
-backfill and rollout rehearsal remain requirements of the [main plan](README.md).
-This increment does not enable a production resolver or establish matching accuracy.
+Remaining work includes Jerry and enrichment account binding, imported venue and
+repertoire binding, unresolved-lookup registration, complete-ticket coordinators,
+multi-candidate resolution and evaluated automatic acceptance. A recording read
+set does not authorize unrelated unbound context facts; each new domain binder
+must define their ownership and freshness. Model comparison, backfill and rollout
+rehearsal remain requirements of the [main plan](README.md). This increment does
+not enable a production resolver or establish matching accuracy.
 
 ## Verify the contracts
 
-Run focused PostgreSQL checks first:
+Build the solution, then run focused PostgreSQL checks:
 
 ```sh
 ./test-local.sh --no-build --filter 'FullyQualifiedName~TestNormalizationCatalog|FullyQualifiedName~TestNormalizationInputBindings|FullyQualifiedName~TestNormalizationPhishBinding|FullyQualifiedName~TestNormalizationProviderDecoderPhish|FullyQualifiedName~TestLocalNormalizationCapture'
+./test-local.sh --no-build --filter 'FullyQualifiedName~TestNormalizationLegacyRefresh|FullyQualifiedName~TestNormalizationLegacyBinding|FullyQualifiedName~TestNormalizationLocalBinding|FullyQualifiedName~TestNormalizationMappingRegistry|FullyQualifiedName~TestNormalizationWork|FullyQualifiedName~TestNormalizationInput'
 ```
 
 The relevant cases cover exact current ownership, global ambiguity, retained
@@ -178,8 +212,7 @@ Archive conflicts, stale publication, rolled-back DML, cross-artist identifier
 arrival, source moves, contributed-input replacement and retry. Broaden to the
 normalization, collection and performance contracts before committing changes.
 
-The latest focused run passes 95 checks without skips. The full local API suite
-passes 1,105 tests with 24 existing tour-contract skips and zero failures. The
+The [main plan](README.md#progress) records current test results. The
 solution builds with existing package advisory warnings; repository formatting
 passes. Fresh correctness and readability reviews cover success, stale work,
 rollback and cancellation. These checks verify binding and publication behavior;
