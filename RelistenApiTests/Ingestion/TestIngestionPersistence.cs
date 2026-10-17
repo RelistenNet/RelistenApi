@@ -27,7 +27,7 @@ namespace RelistenApiTests.Ingestion;
 
 /// <summary>Opt-in tests use a disposable catalog database and a Temporal server owned by this fixture.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public class TestIngestionPersistence
+public partial class TestIngestionPersistence
 {
     private readonly IngestionLogCapture logs = new();
     private readonly RecordingNotifier notifications = new();
@@ -1142,8 +1142,8 @@ public class TestIngestionPersistence
         upstream.Respond = uri =>
             uri.AbsolutePath.StartsWith("/metadata/") ? metadata.ToString() : Listing;
 
-        // Run the item without its coordinator's final rebuild. Listener reads must
-        // retain an unchanged-date recording, but must not attach a moved one to the old show.
+        // Run the item without its coordinator's final rebuild. Playback keeps the
+        // accepted show association while the date correction awaits catalog refresh.
         var activities = host.Services.GetRequiredService<ArchiveActivities>();
         var environment = new ActivityEnvironment();
         var context = new ProviderWorkflowContext(
@@ -1157,21 +1157,15 @@ public class TestIngestionPersistence
             )
         );
         var visibleSources = await sources.FullSourcesForShow(artist, oldShow);
-        if (changeDate)
-        {
-            visibleSources.Should().BeEmpty();
-        }
-        else
-        {
-            var visible = visibleSources.Should().ContainSingle().Subject;
-            visible.uuid.Should().Be(existing.uuid);
-            visible
-                .sets.SelectMany(set => set.tracks)
-                .Should()
-                .ContainSingle()
-                .Which.title.Should()
-                .Be("Updated title");
-        }
+        var visible = visibleSources.Should().ContainSingle().Subject;
+        visible.uuid.Should().Be(existing.uuid);
+        visible.show_uuid.Should().Be(before[0].show_uuid);
+        visible
+            .sets.SelectMany(set => set.tracks)
+            .Should()
+            .ContainSingle()
+            .Which.title.Should()
+            .Be("Updated title");
 
         var client = host.Services.GetRequiredService<TemporalIngestionClient>();
         var rebuild = await client.RebuildArtistCatalogAsync(
@@ -1182,14 +1176,11 @@ public class TestIngestionPersistence
         after.Should().ContainSingle();
         after[0].source_uuid.Should().Be(before[0].source_uuid);
         after[0].track_uuid.Should().Be(before[0].track_uuid);
-        if (changeDate)
-        {
-            after[0].show_uuid.Should().NotBe(before[0].show_uuid);
-        }
-        else
-        {
-            after[0].show_uuid.Should().Be(before[0].show_uuid);
-        }
+        after[0].show_uuid.Should().Be(before[0].show_uuid);
+        var correctedShow = await host
+            .Services.GetRequiredService<ShowService>()
+            .ShowWithSourcesForUuid(artist, before[0].show_uuid);
+        correctedShow!.display_date.Should().Be(updatedDate);
         var current = (
             await sources.ForUpstreamIdentifierFromPrimary(artist, existing.upstream_identifier)
         )!;
@@ -1268,7 +1259,16 @@ public class TestIngestionPersistence
 
         var result = await Import();
         result.FailedItems.Should().Be(0);
-        (await Snapshot()).Should().BeEquivalentTo(expected);
+        var actual = await Snapshot();
+        // This destructive reset creates new performances. Compare their dates here;
+        // repeated-item and correction tests verify UUIDs on retained performances.
+        actual["shows"]
+            .Select(row => JArray.Parse(row)[1]!.Value<string>())
+            .Should()
+            .BeEquivalentTo(expected["shows"].Select(row => JArray.Parse(row)[1]!.Value<string>()));
+        actual.Remove("shows");
+        expected.Remove("shows");
+        actual.Should().BeEquivalentTo(expected);
     }
 
     [TestCase("phish.in", 2)]
@@ -1511,6 +1511,22 @@ public class TestIngestionPersistence
         var beforeRetry = await Snapshot();
         beforeRetry["reviews"].Should().BeEmpty("the stale enrichment must roll back");
         upstream.BeforeResponse = null;
+        if (changeDate)
+        {
+            // A recording date correction must settle its performance assignment
+            // before date-based enrichment can apply to that recording again.
+            await RebuildPhish();
+            upstream.Respond = uri =>
+                ProviderFixtures.Response("phish.net", uri).Replace("2000-01-01", "2000-01-02");
+            items = await environment.RunAsync(() =>
+                activities.SelectSourcesAsync(
+                    new ProviderRequest<RefreshPhishNetArtist>(
+                        new(context.Artist),
+                        context.Execution
+                    )
+                )
+            );
+        }
 
         var result = await environment.RunAsync(() =>
             activities.EnrichSourceAsync(context, items.Single())
@@ -1535,6 +1551,11 @@ public class TestIngestionPersistence
                 DELETE FROM setlist_songs_plays WHERE played_setlist_show_id IN
                     (SELECT id FROM setlist_shows WHERE artist_id=@artistId);
                 DELETE FROM source_tracks WHERE artist_id=@artistId;
+                DELETE FROM source_show_assignments WHERE source_id IN
+                    (SELECT id FROM sources WHERE artist_id=@artistId);
+                DELETE FROM setlist_show_assignments WHERE setlist_show_id IN
+                    (SELECT id FROM setlist_shows WHERE artist_id=@artistId);
+                DELETE FROM show_performance_keys WHERE artist_id=@artistId;
                 DELETE FROM sources WHERE artist_id=@artistId;
                 DELETE FROM shows WHERE artist_id=@artistId;
                 DELETE FROM setlist_shows WHERE artist_id=@artistId;

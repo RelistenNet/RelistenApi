@@ -46,6 +46,20 @@ namespace Relisten.Api.Models
         [Required]
         public string display_date { get; set; } = null!;
 
+        /// <summary>Performance category: unknown, afternoon, early, late, or other.</summary>
+        public string performance_type { get; set; } = "unknown";
+
+        /// <summary>Optional provider or reviewed wording; never part of show identity.</summary>
+        public string? performance_label { get; set; }
+
+        /// <summary>Date and optional performance wording for listener display.</summary>
+        public string display_label =>
+            string.IsNullOrWhiteSpace(performance_label)
+                ? performance_type == "unknown"
+                    ? display_date
+                    : $"{display_date} · {performance_type}"
+                : $"{display_date} · {performance_label}";
+
         /// <summary>
         ///     This can be used to determine the age of the source most recently added. `updated_at`
         ///     for a source comes from the upstream source and won't be suffer recently imported biases.

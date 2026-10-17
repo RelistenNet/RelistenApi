@@ -22,6 +22,7 @@ namespace Relisten.Import
     public partial class PhishinImporter : ImporterBase
     {
         private readonly LinkService linkService;
+        private readonly ShowPerformanceService performances;
 
         private readonly IDictionary<string, Era?> yearToEraMapping =
             new Dictionary<string, Era?>();
@@ -49,11 +50,13 @@ namespace Relisten.Import
             SetlistShowService setlistShowService,
             EraService eraService,
             ILogger<PhishinImporter> log,
-            IConfiguration configuration
+            IConfiguration configuration,
+            ShowPerformanceService performances
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
+            this.performances = performances;
             _setlistSongService = setlistSongService;
             _setlistShowService = setlistShowService;
             _sourceService = sourceService;
@@ -454,13 +457,11 @@ namespace Relisten.Import
             ImportStats stats,
             PhishinShow show,
             Artist artist,
-            ArtistUpstreamSource src,
-            Source dbSource,
-            IDictionary<string, SourceSet?> sets
+            Source dbSource
         )
         {
-            SetlistShow? dbShow = existingSetlistShows.GetValue(show.date);
-
+            var identifier = show.id.ToString(CultureInfo.InvariantCulture);
+            SetlistShow? dbShow = existingSetlistShows.GetValue(identifier);
             var addSongs = false;
 
             if (dbShow == null)
@@ -469,7 +470,7 @@ namespace Relisten.Import
                     new SetlistShow
                     {
                         artist_id = artist.id,
-                        upstream_identifier = show.date,
+                        upstream_identifier = identifier,
                         date = DateTime.Parse(show.date),
                         venue_id = existingVenues[show.venue.id.ToString()]!.id,
                         tour_id = existingTours[show.tour_id.ToString()]!.id,
@@ -501,7 +502,7 @@ namespace Relisten.Import
                 addSongs = true;
             }
 
-            existingSetlistShows[show.date] = dbShow;
+            existingSetlistShows[identifier] = dbShow;
 
             if (addSongs)
             {
@@ -519,6 +520,37 @@ namespace Relisten.Import
 
                 stats += await _setlistShowService.UpdateSongPlays(dbShow!, dbSongs);
             }
+        }
+
+        private async Task UpgradeLegacySetlistKey(
+            ImportStats stats,
+            Source? source,
+            int providerShowId
+        )
+        {
+            var identifier = providerShowId.ToString(CultureInfo.InvariantCulture);
+            if (source == null || existingSetlistShows.ContainsKey(identifier))
+            {
+                return;
+            }
+
+            var legacyRecordings = existingSources
+                .Values.Where(recording => recording?.display_date == source.display_date)
+                .ToArray();
+            if (
+                legacyRecordings.Length != 1
+                || legacyRecordings[0]!.id != source.id
+                || !existingSetlistShows.Remove(source.display_date, out var legacy)
+            )
+            {
+                return;
+            }
+
+            // Match the old recording date before applying corrections. A unique recording
+            // supports retaining the legacy setlist identity; collapsed dates need review.
+            legacy!.upstream_identifier = identifier;
+            existingSetlistShows[identifier] = await _setlistShowService.Save(legacy);
+            stats.Updated++;
         }
 
         private async Task<Source> ProcessShow(
@@ -606,7 +638,7 @@ namespace Relisten.Import
                 )
             ).Count();
 
-            await ProcessSetlistShow(stats, fullShow, artist, src, dbSource, sets);
+            await ProcessSetlistShow(stats, fullShow, artist, dbSource);
 
             ResetTrackSlugCounts();
 
@@ -742,7 +774,10 @@ namespace Relisten.Import
                 TransactionScopeAsyncFlowOption.Enabled
             );
 
+            await performances.LockArtistAsync(artist);
             Source? dbSource = existingSources.GetValue(show.id.ToString());
+            var creating = dbSource == null;
+            await UpgradeLegacySetlistKey(stats, dbSource, show.id);
 
             if (dbSource == null)
             {
@@ -769,25 +804,6 @@ namespace Relisten.Import
                 existingSources[dbSource.upstream_identifier] = dbSource!;
 
                 stats.Created++;
-
-                stats.Created += (
-                    await linkService.AddLinksForSource(
-                        dbSource,
-                        new[]
-                        {
-                            new Link
-                            {
-                                source_id = dbSource.id,
-                                for_ratings = false,
-                                for_source = true,
-                                for_reviews = false,
-                                upstream_source_id = src.upstream_source_id,
-                                url = $"https://phish.in/{dbSource.display_date}",
-                                label = "View on phish.in",
-                            },
-                        }
-                    )
-                ).Count();
             }
             else if (show.updated_at > dbSource.updated_at)
             {
@@ -806,19 +822,53 @@ namespace Relisten.Import
 
                 stats.Updated++;
             }
-            else if (!existingSetlistShows.ContainsKey(show.date))
+            else if (
+                !existingSetlistShows.ContainsKey(show.id.ToString(CultureInfo.InvariantCulture))
+            )
             {
                 // A recording can outlive its setlist row. Restore that identity without
                 // overwriting newer recording metadata with this listing's older fields.
-                await ProcessSetlistShow(
-                    stats,
-                    show,
-                    artist,
-                    src,
-                    dbSource,
-                    new Dictionary<string, SourceSet?>()
-                );
+                await ProcessSetlistShow(stats, show, artist, dbSource);
             }
+
+            // Metadata can correct the billed date; refresh the existing provider link too.
+            var links = await linkService.AddLinksForSource(
+                dbSource,
+                new[]
+                {
+                    new Link
+                    {
+                        source_id = dbSource.id,
+                        for_ratings = false,
+                        for_source = true,
+                        for_reviews = false,
+                        upstream_source_id = src.upstream_source_id,
+                        url = $"https://phish.in/{dbSource.display_date}",
+                        label = "View on phish.in",
+                    },
+                }
+            );
+            if (creating)
+            {
+                stats.Created += links.Count();
+            }
+
+            // Provider show identity distinguishes concerts; source sets remain subdivisions.
+            var performance = await performances.AssignSourceAsync(
+                artist,
+                dbSource!.id,
+                "phish.in:" + show.id.ToString(CultureInfo.InvariantCulture),
+                dbSource.display_date,
+                evidence: JsonConvert.SerializeObject(
+                    new { provider = "phish.in", show_id = show.id }
+                )
+            );
+            await performances.AssignSetlistAsync(
+                artist,
+                existingSetlistShows[show.id.ToString(CultureInfo.InvariantCulture)]!.id,
+                performance.uuid,
+                JsonConvert.SerializeObject(new { provider = "phish.in", show_id = show.id })
+            );
 
             scope.Complete();
         }

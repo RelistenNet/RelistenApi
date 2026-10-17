@@ -29,6 +29,7 @@ namespace Relisten.Import
 
         private readonly LinkService linkService;
         private readonly IDiscordWebhookNotifier discordWebhookNotifier;
+        private readonly ArchivePerformanceAssignmentService performanceAssignments;
 
         private IDictionary<string, SourceReviewInformation?> existingSourceReviewInformation =
             new Dictionary<string, SourceReviewInformation?>();
@@ -45,12 +46,14 @@ namespace Relisten.Import
             SourceReviewService sourceReviewService,
             LinkService linkService,
             SourceTrackService sourceTrackService,
-            IDiscordWebhookNotifier discordWebhookNotifier
+            IDiscordWebhookNotifier discordWebhookNotifier,
+            ArchivePerformanceAssignmentService performanceAssignments
         )
             : base(catalog, log)
         {
             this.linkService = linkService;
             this.discordWebhookNotifier = discordWebhookNotifier;
+            this.performanceAssignments = performanceAssignments;
             _sourceService = sourceService;
             _venueService = venueService;
             _tourService = tourService;
@@ -185,7 +188,6 @@ namespace Relisten.Import
                     {
                         stats += await WriteRecordingAsync(
                             artist,
-                            source,
                             doc,
                             metadata.Details,
                             src.upstream_source_id,
@@ -196,6 +198,19 @@ namespace Relisten.Import
                     catch (NoVBRMp3FilesException)
                     {
                         identifiersWithoutMP3s.Add(doc.identifier);
+                    }
+                    catch (ArchivePerformanceHeldException held)
+                    {
+                        ImportProgress.WriteLine(
+                            log,
+                            ctx,
+                            "Holding {0}: {1}",
+                            doc.identifier,
+                            held.Message
+                        );
+                        // Existing coverage now has unresolved evidence. Rebuild removes
+                        // enrichment that no longer has an accepted performance basis.
+                        stats.Updated += source == null ? 0 : 1;
                     }
 
                     scope.Complete();

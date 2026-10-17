@@ -16,6 +16,7 @@ public static class IngestionServiceRegistration
     public static IServiceCollection AddRelistenCatalogServices(this IServiceCollection services)
     {
         services.AddScoped<CatalogRebuildService>();
+        services.AddScoped<ShowPerformanceService>();
         services.AddScoped<CollectionService>();
         services.AddScoped<CollectionDiscoveryService>();
         services.AddScoped<ArchiveItemResolutionService>();
@@ -30,6 +31,7 @@ public static class IngestionServiceRegistration
         services.AddScoped<PhishinImporter, PhishinImporter>();
         services.AddScoped<ShowService, ShowService>();
         services.AddScoped<ArchiveOrgImporter, ArchiveOrgImporter>();
+        services.AddScoped<ArchivePerformanceAssignmentService>();
         services.AddScoped<SourceService, SourceService>();
         services.AddScoped<SourceReviewService, SourceReviewService>();
         services.AddScoped<SourceSetService, SourceSetService>();

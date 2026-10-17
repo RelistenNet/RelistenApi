@@ -56,7 +56,8 @@ namespace Relisten.Data
 
         /// <summary>
         /// Locks the intake item while an ordinary Archive import checks ownership.
-        /// Cohort assignment owns the item before first publication; retained published
+        /// An intake-created cohort owns the item before first publication. Existing artist
+        /// mappings do not claim native sources; retained published
         /// references keep that ownership after approval pauses or upstream metadata changes.
         /// Call inside the catalog transaction before changing any recording rows.
         /// </summary>
@@ -75,6 +76,7 @@ namespace Relisten.Data
                         AND (i.published_source_uuid IS NOT NULL OR EXISTS (
                             SELECT 1 FROM normalization.archive_artist_candidates c
                             WHERE c.candidate_id=i.candidate_id AND c.artist_uuid IS NOT NULL
+                                AND NOT c.is_existing_artist
                         ))
                     )
                     """,
@@ -91,6 +93,7 @@ namespace Relisten.Data
                 AND (i.published_source_uuid IS NOT NULL OR EXISTS (
                     SELECT 1 FROM normalization.archive_artist_candidates c
                     WHERE c.candidate_id=i.candidate_id AND c.artist_uuid IS NOT NULL
+                                AND NOT c.is_existing_artist
                 ))
             )
             """;

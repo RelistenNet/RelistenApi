@@ -290,7 +290,7 @@ public class TestReviewedPerformers
         current.Source.Should().Be(before.Source);
         current.Sets.Should().Equal(before.Sets);
         current.Tracks.Should().Equal(before.Tracks);
-        current.Show.Should().NotBe(before.Show);
+        current.Show.Should().Be(before.Show);
         var decision = (await Reviews.FindPerformerDecisionAsync(item))!;
         decision.SupportingObservationId.Should().Be(accepted.SupportingObservationId);
         decision.CandidateId.Should().Be(accepted.CandidateId);
@@ -300,6 +300,7 @@ public class TestReviewedPerformers
                 .Services.GetRequiredService<SourceService>()
                 .AllForArtistFromPrimary(project.Artist)
         ).Single();
+        source.display_date.Should().Be("1975-10-18");
         (await host.Services.GetRequiredService<SourceReviewService>().AllForSources([source.id]))
             .Should()
             .ContainSingle()
@@ -567,6 +568,443 @@ public class TestReviewedPerformers
         var accepted = await Reviews.ReviewAsync(valid);
         accepted.Evidence.Should().BeEquivalentTo(valid.Evidence);
         (await Reviews.ReviewAsync(valid)).Revision.Should().Be(accepted.Revision);
+    }
+
+    [Test]
+    public async Task ExistingArtistApprovalPublishesOnlyMissingItemsAndKeepsNativeOwnershipAndFlags()
+    {
+        var project = await ExistingProject();
+        var native = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
+        var missing = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-18");
+        recordings[native]["metadata"]!["creator"] = project.Name;
+        recordings[missing]["metadata"]!["creator"] = project.Name;
+        var nativeSource = await WriteNativeRecording(project, native, "1975-10-17");
+        var nativeBefore = await ListenerRecording(project.Artist, "1975-10-17");
+        await Discover();
+        (await Refresh())
+            .Published.Should()
+            .Be(0, "bulk approval alone cannot adopt an existing artist");
+
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed exact existing artist"
+        );
+        var result = await Refresh();
+        result.Failed.Should().Be(0);
+        result.Published.Should().Be(1);
+        result.Unchanged.Should().Be(1);
+        (await ListenerRecording(project.Artist, "1975-10-17"))
+            .Should()
+            .BeEquivalentTo(nativeBefore);
+        var published = await ListenerRecording(project.Artist, "1975-10-18");
+        var sourceService = host.Services.GetRequiredService<SourceService>();
+        var transaction = host.Services.GetRequiredService<CatalogImportTransaction>();
+        (
+            await transaction.RunAsync(
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                CancellationToken.None,
+                () => sourceService.IsArchiveItemIntakeOwnedForUpdate(native)
+            )
+        )
+            .Should()
+            .BeFalse();
+        (
+            await transaction.RunAsync(
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                CancellationToken.None,
+                () => sourceService.IsArchiveItemIntakeOwnedForUpdate(missing)
+            )
+        )
+            .Should()
+            .BeTrue();
+        (await sourceService.ArchiveDeletionCandidatesFromPrimary(project.Artist))
+            .Select(source => source.uuid)
+            .Should()
+            .Contain(nativeSource.uuid)
+            .And.NotContain(published.Source);
+        var after = (await Artists.FindArtistForImport(project.Artist.uuid.ToString()))!;
+        after
+            .featured.Should()
+            .Be(project.Artist.featured, "intake must not reveal or reclassify a native artist");
+        after.upstream_sources.Should().BeEmpty();
+        var registry = new ArtistRegistryService(db);
+        (await registry.HasCohortIdentityConflictAsync(project.Name)).Should().BeFalse();
+        await registry.EnsureArtistWriteAllowedAsync(
+            new SlimArtist
+            {
+                id = after.id,
+                name = after.name + " renamed",
+                slug = after.slug,
+            }
+        );
+        var accepted = (await new ArchiveItemResolutionService(db).FindAsync(missing))!;
+        accepted.canonical_source_uuid.Should().Be(published.Source);
+
+        var collections = host.Services.GetRequiredService<CollectionService>();
+        var collection = Guid.NewGuid();
+        await collections.SaveCollectionAsync(
+            new(collection, "existing-artist-" + collection, "Existing artist", "", true)
+        );
+        await collections.SetArtistMembershipAsync(
+            collection,
+            project.Artist.uuid,
+            true,
+            "Reviewed artist selection"
+        );
+        (await collections.RecordingsAsync(collection))!
+            .items.Select(item => item.source_uuid)
+            .Should()
+            .BeEquivalentTo(new[] { nativeSource.uuid, published.Source });
+
+        (await Refresh()).Failed.Should().Be(0);
+        (await ListenerRecording(project.Artist, "1975-10-18")).Should().BeEquivalentTo(published);
+        recordings[missing]["metadata"]!["creator"] = "Conflicting performer";
+        (await Refresh()).NeedsReview.Should().Be(1);
+        (await ListenerRecording(project.Artist, "1975-10-18")).Should().BeEquivalentTo(published);
+    }
+
+    [Test]
+    public async Task ConcurrentNativeFirstWriteIsReusedWithoutTakingItsRecordingOwnership()
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing performer"
+        );
+        var item = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
+        recordings[item]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        var raw = recordings[item].ToString();
+        var metadata = JsonConvert.DeserializeObject<RootObject>(
+            raw,
+            new TolerantStringConverter()
+        )!;
+        var nativeHasItemLock = new TaskCompletionSource<int>(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var releaseNative = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
+        var nativeWrite = Task.Run(async () =>
+        {
+            using var services = host.Services.CreateScope();
+            var transaction =
+                services.ServiceProvider.GetRequiredService<CatalogImportTransaction>();
+            var sources = services.ServiceProvider.GetRequiredService<SourceService>();
+            var writer = services.ServiceProvider.GetRequiredService<ArchiveOrgImporter>();
+            return await transaction.RunAsync(
+                DateTimeOffset.UtcNow.AddSeconds(30),
+                CancellationToken.None,
+                async () =>
+                {
+                    (await sources.IsArchiveItemIntakeOwnedForUpdate(item)).Should().BeFalse();
+                    var pid = await db.WithWriteConnection(connection =>
+                        connection.QuerySingleAsync<int>("SELECT pg_backend_pid()")
+                    );
+                    nativeHasItemLock.SetResult(pid);
+                    await releaseNative.Task.WaitAsync(TimeSpan.FromSeconds(20));
+                    return await writer.WriteResolvedRecordingAsync(
+                        project.Artist,
+                        1,
+                        new SearchDoc { identifier = item, addeddate = DateTime.UtcNow },
+                        metadata,
+                        "1975-10-17"
+                    );
+                }
+            );
+        });
+        var nativePid = await nativeHasItemLock.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var intakeWrite = Task.Run(async () =>
+        {
+            using var services = host.Services.CreateScope();
+            return await services
+                .ServiceProvider.GetRequiredService<ArchiveIntakeService>()
+                .ApplyObservationAsync(
+                    new(new(item), project.Candidate),
+                    ArchiveObservationProjector.Project(new(item), raw),
+                    raw
+                );
+        });
+        try
+        {
+            // Observe the actual PostgreSQL waiter instead of relying on thread timing.
+            var blocked = false;
+            var stop = DateTimeOffset.UtcNow.AddSeconds(10);
+            while (!blocked && DateTimeOffset.UtcNow < stop)
+            {
+                blocked = await db.WithWriteConnection(connection =>
+                    connection.QuerySingleAsync<bool>(
+                        "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND @nativePid=ANY(pg_blocking_pids(pid)))",
+                        new { nativePid }
+                    )
+                );
+                if (!blocked)
+                {
+                    await Task.Delay(20);
+                }
+            }
+            blocked.Should().BeTrue("intake must wait for the native writer's retained item lock");
+        }
+        finally
+        {
+            releaseNative.SetResult();
+        }
+        var native = await nativeWrite;
+        var reused = await intakeWrite;
+        reused.Outcome.Should().Be(TapersSectionItemOutcome.Unchanged);
+        reused.SourceUuid.Should().Be(native.uuid);
+        using var verification = host.Services.CreateScope();
+        var sourceService = verification.ServiceProvider.GetRequiredService<SourceService>();
+        (await sourceService.AllForArtistFromPrimary(project.Artist))
+            .Should()
+            .ContainSingle()
+            .Which.uuid.Should()
+            .Be(native.uuid);
+        (
+            await verification
+                .ServiceProvider.GetRequiredService<CatalogImportTransaction>()
+                .RunAsync(
+                    DateTimeOffset.UtcNow.AddMinutes(1),
+                    CancellationToken.None,
+                    () => sourceService.IsArchiveItemIntakeOwnedForUpdate(item)
+                )
+        )
+            .Should()
+            .BeFalse();
+    }
+
+    [Test]
+    public async Task ReviewedBroadCreatorCanPublishAMissingRecordingForAnExistingProject()
+    {
+        var project = await ExistingProject();
+        var item = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
+        await Reviews.ReviewAsync(await MakeReview(item, project, "metadata.title"));
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing project identity"
+        );
+        var result = await Refresh();
+        result.Published.Should().Be(1);
+        result.Failed.Should().Be(0);
+        var before = await ListenerRecording(project.Artist, "1975-10-17");
+        (await Reviews.FindPerformerDecisionAsync(item))!
+            .SelectedArtistUuid.Should()
+            .Be(project.Artist.uuid);
+        await Reviews.SetApprovalAsync(item, false, "Pause this recording for review");
+        recordings[item]["files"]![0]!["title"] = "Must remain held";
+        (await Refresh()).Published.Should().Be(0);
+        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+        (await Artists.All()).Count(artist => artist.name == project.Name).Should().Be(1);
+    }
+
+    [Test]
+    public async Task ExistingArtistBindingRejectsAnUnrelatedTargetOrAnIntakeCreatedArtist()
+    {
+        var existing = await ExistingProject();
+        var cohort = await ProposeProject();
+        Func<Task> unrelated = () =>
+            Intake.BindExistingArtistAsync(
+                existing.Candidate,
+                new(cohort.Artist.uuid),
+                "Wrong match"
+            );
+        Func<Task> created = () =>
+            Intake.BindExistingArtistAsync(
+                cohort.Candidate,
+                new(cohort.Artist.uuid),
+                "Cannot change ownership"
+            );
+        await unrelated.Should().ThrowAsync<ArgumentException>();
+        await created.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task ConflictingPerformanceBillingKeepsOwnedSourceAndAcceptedPublicationDate()
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing identity"
+        );
+        var item = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
+        recordings[item]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        (await Refresh()).Published.Should().Be(1);
+        var before = await ListenerRecording(project.Artist, "1975-10-17");
+        var accepted = await ItemStatus(item);
+
+        recordings[item]["metadata"]!["title"] = project.Name + " Live at Fixture Hall Late Show";
+        recordings[item]["metadata"]!["date"] = "1975-10-18";
+        var result = await Refresh();
+        result.Failed.Should().Be(0);
+        result.NeedsReview.Should().Be(1);
+        result.Published.Should().Be(0);
+        var held = await ItemStatus(item);
+        held["published_display_date"]!.Value<string>().Should().Be("1975-10-17");
+        held["published_observation_id"]!
+            .Should()
+            .BeEquivalentTo(accepted["published_observation_id"]);
+        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+    }
+
+    [Test]
+    public async Task ExistingArtistRenameHoldsPublicationUntilItsSameIdentityIsReviewedAgain()
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed initial identity"
+        );
+        var item = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
+        recordings[item]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        (await Refresh()).Published.Should().Be(1);
+        var before = await ListenerRecording(project.Artist, "1975-10-17");
+        var renamed = (await Artists.FindArtistForImport(project.Artist.uuid.ToString()))!;
+        renamed.name += " renamed";
+        renamed.slug += "-renamed";
+        var saved = await Artists.Save(renamed);
+        saved.uuid.Should().Be(project.Artist.uuid);
+        recordings[item]["files"]![0]!["title"] = "Reviewed metadata update";
+        var held = await Refresh();
+        held.Published.Should().Be(0);
+        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed catalog rename; same performer UUID"
+        );
+        (await Refresh()).Failed.Should().Be(0);
+        (await ListenerRecording(renamed, "1975-10-17", "Reviewed metadata update"))
+            .Should()
+            .BeEquivalentTo(before);
+        (await Artists.FindArtistForImport(renamed.uuid.ToString()))!
+            .name.Should()
+            .Be(renamed.name);
+    }
+
+    [Test]
+    public async Task PausedArtistRecoversAnOwnedPerformanceHoldCommittedBeforeTheWorkflowRebuild()
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing identity"
+        );
+        var item = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
+        recordings[item]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        (await Refresh()).Published.Should().Be(1);
+        var before = await ListenerRecording(project.Artist, "1975-10-17");
+        recordings[item]["metadata"]!["title"] = project.Name + " Live at Fixture Hall Late Show";
+        var raw = recordings[item].ToString();
+        var held = await Intake.ApplyObservationAsync(
+            new(new(item), project.Candidate),
+            ArchiveObservationProjector.Project(new(item), raw),
+            raw
+        );
+        held.Outcome.Should().Be(TapersSectionItemOutcome.NeedsReview);
+        var artist = new ArtistId(project.Artist.uuid);
+        (await Intake.CaptureDirtyRevisionsAsync(artist)).Should().ContainSingle();
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                "UPDATE normalization.archive_artist_candidates SET approved=false WHERE candidate_id=@id",
+                new { id = project.Candidate }
+            )
+        );
+        (await Intake.PrepareCohortAsync()).Should().Contain(artist);
+        var requests = upstream.Requests;
+        (await Refresh()).Failed.Should().Be(0);
+        upstream
+            .Requests.Should()
+            .Be(requests, "paused repair must rebuild without fetching metadata");
+        (await Intake.CaptureDirtyRevisionsAsync(artist)).Should().BeEmpty();
+        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+    }
+
+    [Test]
+    public async Task UnlabeledRecordingOnAnExistingSplitDateRemainsHeld()
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing identity"
+        );
+        var early = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
+        var late = AddRecording(project.Name + " Live at Fixture Hall Late Show", "1975-10-17");
+        recordings[early]["metadata"]!["creator"] = project.Name;
+        recordings[late]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        (await Refresh()).Published.Should().Be(2);
+        var unlabeled = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
+        recordings[unlabeled]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        var result = await Refresh();
+        result.NeedsReview.Should().Be(1);
+        result.Failed.Should().Be(0);
+        result.Published.Should().Be(0);
+        (
+            await host
+                .Services.GetRequiredService<SourceService>()
+                .AllForArtistFromPrimary(project.Artist)
+        )
+            .Should()
+            .HaveCount(2);
+        (await ItemStatus(unlabeled))["reason"]!.Value<string>().Should().Be("ambiguous_date");
+    }
+
+    [TestCase("Early Show & Late Show")]
+    [TestCase("Maybe Early Show")]
+    public async Task UnresolvedPerformanceBillingIsHeldWithoutFailingTheArtistWorkflow(
+        string billing
+    )
+    {
+        var project = await ExistingProject();
+        await Intake.BindExistingArtistAsync(
+            project.Candidate,
+            new(project.Artist.uuid),
+            "Reviewed existing identity"
+        );
+        var item = AddRecording(project.Name + " Live at Fixture Hall " + billing, "1975-10-17");
+        recordings[item]["metadata"]!["creator"] = project.Name;
+        await Discover();
+        var result = await Refresh();
+        result.NeedsReview.Should().Be(1);
+        result.Failed.Should().Be(0);
+        result.Published.Should().Be(0);
+        (await ItemStatus(item))["reason"]!.Value<string>().Should().Be("ambiguous_date");
+        (
+            await host
+                .Services.GetRequiredService<SourceService>()
+                .AllForArtistFromPrimary(project.Artist)
+        )
+            .Should()
+            .BeEmpty();
+    }
+
+    private async Task<Project> ExistingProject()
+    {
+        var name = "Existing project " + Guid.NewGuid().ToString("N");
+        var artist = await Artists.Save(
+            new SlimArtistWithFeatures
+            {
+                name = name,
+                slug = "existing-project-" + Guid.NewGuid().ToString("N"),
+                featured = (int)ArtistFeaturedFlags.AutoCreated,
+                features =
+                    Relisten.Services.Indexing.ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
+            }
+        );
+        var candidate = await Intake.ProposeProjectAsync(name, artist.slug, [name], true);
+        return new(candidate, name, (await Artists.FindArtistForImport(artist.uuid.ToString()))!);
     }
 
     private async Task<Source> WriteNativeRecording(Project project, string item, string date)

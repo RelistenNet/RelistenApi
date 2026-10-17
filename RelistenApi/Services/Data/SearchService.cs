@@ -32,7 +32,9 @@ namespace Relisten.Data
 						FROM
 							artists
 							LEFT JOIN (
-								SELECT artist_id, COUNT(*) as show_count FROM shows GROUP BY artist_id
+								SELECT artist_id, COUNT(*) as show_count FROM shows sh
+                                WHERE EXISTS(SELECT 1 FROM sources src WHERE src.show_id=sh.id)
+                                GROUP BY artist_id
 							) show_counts ON show_counts.artist_id = artists.id
 							WHERE
 								name ILIKE '%' || @searchTerm || '%'
@@ -61,7 +63,7 @@ namespace Relisten.Data
 							FROM
 								shows s
 								JOIN artists a ON s.artist_id = a.id
-								LEFT JOIN show_source_information cnt ON cnt.show_id = s.id
+								JOIN show_source_information cnt ON cnt.show_id = s.id
 								LEFT JOIN venues v ON s.venue_id = v.id
 								LEFT JOIN tours t ON s.tour_id = t.id
 								LEFT JOIN years y ON s.year_id = y.id
@@ -69,7 +71,7 @@ namespace Relisten.Data
 							s.display_date ILIKE '%' || @searchTerm || '%'
 							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
 						ORDER BY
-							COALESCE(cnt.source_count, 0) DESC, s.display_date DESC
+							COALESCE(cnt.source_count, 0) DESC, s.display_date DESC, s.uuid
 						LIMIT 20;
 					",
                             (s, a) =>
@@ -90,13 +92,15 @@ namespace Relisten.Data
 		                SELECT
 			                    s.*,
 			                    a.uuid as artist_uuid,
-			                    COUNT(shows.id) as shows_played_at,
+			                    COUNT(DISTINCT shows.id) as shows_played_at,
 			                    a.*
 		                FROM
 		                    setlist_songs s
 		                    LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
 		                    LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-		                    JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = s.artist_id
+		                    JOIN setlist_show_assignments assignment ON assignment.setlist_show_id=set_shows.id
+                            JOIN shows shows ON shows.id=assignment.show_id AND shows.artist_id=s.artist_id
+                            JOIN show_source_information info ON info.show_id=shows.id
 							JOIN artists a ON s.artist_id = a.id
 							WHERE
 								s.name ILIKE '%' || @searchTerm || '%'
@@ -164,6 +168,7 @@ namespace Relisten.Data
 							tours t
 							JOIN artists a ON t.artist_id = a.id
 							LEFT JOIN shows sh ON sh.tour_id = t.id
+                                AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=sh.id)
 						WHERE
 							t.name ILIKE '%' || @searchTerm || '%'
 							{(artistUuid.HasValue ? "AND a.uuid = @artistUuid" : "")}
@@ -196,6 +201,7 @@ namespace Relisten.Data
 							venues v
 							JOIN artists a ON v.artist_id = a.id
 							LEFT JOIN shows sh ON sh.venue_id = v.id
+                                AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=sh.id)
 						WHERE
 							(v.name ILIKE '%' || @searchTerm || '%'
 							OR v.location ILIKE '%' || @searchTerm || '%'

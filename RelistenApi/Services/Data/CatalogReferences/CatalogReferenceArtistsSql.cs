@@ -45,6 +45,7 @@ candidate_artist_ids AS (
     SELECT show_entity.artist_id, COUNT(*)::integer AS show_count
     FROM shows show_entity
     JOIN candidate_artist_ids candidate ON candidate.id = show_entity.artist_id
+    WHERE EXISTS(SELECT 1 FROM sources source WHERE source.show_id=show_entity.id)
     GROUP BY show_entity.artist_id
 ), source_counts AS (
     SELECT info.artist_id, SUM(info.source_count)::integer AS source_count

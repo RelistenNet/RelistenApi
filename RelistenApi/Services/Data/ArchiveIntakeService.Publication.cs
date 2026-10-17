@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Newtonsoft.Json;
 using Relisten.Api.Models;
+using Relisten.Import;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Services.Indexing;
@@ -120,6 +121,104 @@ public sealed partial class ArchiveIntakeService
             }
         );
 
+    /// <summary>
+    /// Approves a retained candidate for an existing catalog artist after reviewing the exact
+    /// registry match. Native recordings keep their importer; only missing items published by
+    /// intake acquire item ownership. This never creates provider mappings or changes artist flags.
+    /// </summary>
+    public Task<ArtistId> BindExistingArtistAsync(
+        Guid candidateId,
+        ArtistId artist,
+        string reviewBasis,
+        CancellationToken token = default,
+        DateTimeOffset? deadline = null
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reviewBasis);
+        return transactions.RunArtistRegistryAsync(
+            deadline ?? DateTimeOffset.UtcNow.AddMinutes(5),
+            token,
+            async () =>
+            {
+                var candidate =
+                    await LockCandidateAsync(candidateId)
+                    ?? throw new ArgumentException(
+                        "The artist candidate does not exist.",
+                        nameof(candidateId)
+                    );
+                var target =
+                    await artists.FindArtistForImport(artist.ToString())
+                    ?? throw new ArgumentException(
+                        "The catalog artist does not exist.",
+                        nameof(artist)
+                    );
+                if (candidate.artist_uuid != null)
+                {
+                    if (
+                        !candidate.is_existing_artist
+                        || candidate.artist_uuid != target.uuid
+                        || candidate.artist_id != target.id
+                    )
+                    {
+                        throw new InvalidOperationException(
+                            "A mapped candidate cannot change its catalog identity."
+                        );
+                    }
+                }
+                var matches = await FindRegistryMatchesAsync(candidate);
+                if (candidate.artist_uuid != null)
+                {
+                    if (matches.Any(match => match != artist.Value))
+                    {
+                        throw new InvalidOperationException(
+                            "The retained artist labels now match another catalog artist; review the labels before rebinding."
+                        );
+                    }
+                }
+                else
+                {
+                    if (matches.Length != 1 || matches[0] != artist.Value)
+                    {
+                        throw new ArgumentException(
+                            "The candidate must have exactly this one current registry match."
+                        );
+                    }
+                }
+
+                // Candidate mapping is artist approval, not recording ownership. Existing
+                // sources remain with the native importer until an intake item actually commits.
+                await db.WithWriteConnection(connection =>
+                    connection.ExecuteAsync(
+                        """
+                        UPDATE normalization.archive_artist_candidates
+                        SET artist_uuid=@uuid,artist_id=@id,creation_slug=@slug,
+                            proposed_name=@name,proposed_slug=@slug,reviewed_creator_keys=@keys,approved=true,
+                            is_existing_artist=true,identity_status='existing_match',matched_artist_uuids=ARRAY[@uuid]::uuid[],
+                            reason=@reviewBasis,updated_at=now()
+                        WHERE candidate_id=@candidateId
+                        """,
+                        new
+                        {
+                            candidateId,
+                            target.uuid,
+                            target.id,
+                            target.slug,
+                            target.name,
+                            keys = candidate
+                                .Keys.Append(
+                                    ArtistRegistryService.NormalizeIdentityKey(target.name)
+                                )
+                                .Distinct()
+                                .ToArray(),
+                            reviewBasis,
+                        }
+                    )
+                );
+                return artist;
+            }
+        );
+    }
+
     private static bool IdentityMatches(CandidateRow candidate, Artist? artist) =>
         artist != null
         && artist.uuid == candidate.artist_uuid
@@ -157,7 +256,7 @@ public sealed partial class ArchiveIntakeService
             );
         }
 
-        var nativeResolution = await ResolveReviewedNativeAsync(observation, token, deadline);
+        var nativeResolution = await ResolveNativeAsync(observation, token, deadline);
         if (nativeResolution != null)
         {
             return nativeResolution;
@@ -172,6 +271,13 @@ public sealed partial class ArchiveIntakeService
                 // between whole recording commits, and never leave half an assignment.
                 var candidate = await LockCandidateAsync(input.CandidateId);
                 var item = await LockItemAsync(input.Item);
+                // Recheck after the item lock: a native writer may have committed after
+                // the observation check. Reuse its source rather than acquiring it.
+                var linkedNative = await ResolveNativeAsync(observation, token, deadline);
+                if (linkedNative != null)
+                {
+                    return linkedNative;
+                }
                 if (candidate == null || !candidate.approved)
                 {
                     await SetItemStateAsync(input.Item, "paused", "unapproved_artist");
@@ -233,32 +339,42 @@ public sealed partial class ArchiveIntakeService
                     && item.published_rules_version == interpretation.RulesVersion;
                 // Reviews are deliberately outside the decision projection. Refresh the writer
                 // even when assignment evidence is unchanged, so review-only changes still apply.
-                var source = await CommitRecordingAsync(
-                    artist,
-                    item,
-                    capturedId,
-                    interpretation,
+                var recording =
                     JsonConvert.DeserializeObject<RootObject>(
                         metadataJson,
                         new TolerantStringConverter()
-                    ) ?? throw new System.IO.InvalidDataException("Archive metadata was empty.")
-                );
-                var performerDecision = await performerReviews.FindPerformerDecisionForUpdateAsync(
-                    input.Item.Value
-                );
-                if (performerDecision != null)
+                    ) ?? throw new System.IO.InvalidDataException("Archive metadata was empty.");
+                Source source;
+                try
                 {
-                    // Accept current metadata with the owned source in the same transaction.
-                    // Native source linking uses the separate conservative resolution policy.
-                    await new ArchiveItemResolutionService(db).BindPublishedAsync(
-                        input.Item.Value,
+                    source = await CommitRecordingAsync(
+                        artist,
+                        item,
                         capturedId,
-                        artist.uuid,
-                        source.uuid,
-                        token,
-                        deadline
+                        interpretation,
+                        recording
                     );
                 }
+                catch (ArchivePerformanceHeldException held)
+                {
+                    return await RetainPerformanceHoldAsync(
+                        item,
+                        capturedId,
+                        observation,
+                        interpretation,
+                        held.Message
+                    );
+                }
+                // Accept current metadata with the owned source in the same transaction.
+                // Native source linking uses the separate conservative resolution policy.
+                await new ArchiveItemResolutionService(db).BindPublishedAsync(
+                    input.Item.Value,
+                    capturedId,
+                    artist.uuid,
+                    source.uuid,
+                    token,
+                    deadline
+                );
                 return new(
                     input.Item,
                     sameEvidence
@@ -269,6 +385,46 @@ public sealed partial class ArchiveIntakeService
             },
             deadline
         );
+    }
+
+    private async Task<TapersSectionItemResult> RetainPerformanceHoldAsync(
+        ItemRow item,
+        Guid observationId,
+        ArchiveObservationProjection observation,
+        TapersSectionInterpretation interpretation,
+        string reason
+    )
+    {
+        // The writer retained unresolved coverage without changing playback. Preserve
+        // accepted publication references while retaining why current metadata is held.
+        var title =
+            ArchiveObservationProjector
+                .ParseObject(observation.PayloadJson)["metadata"]
+                ?["title"]?.ToString()
+            ?? "";
+        var held = interpretation with
+        {
+            Reasons = interpretation
+                .Reasons.Append(TapersSectionReason.AmbiguousDate)
+                .Distinct()
+                .ToArray(),
+            Evidence = interpretation
+                .Evidence.Append(new TapersSectionEvidence("metadata.title", title, reason))
+                .ToArray(),
+        };
+        await SaveInterpretationAsync(item, observationId, observation, held);
+        if (item.published_source_uuid != null)
+        {
+            // Coverage changes derived enrichment even when playback stays accepted.
+            // Durable dirty work lets a paused artist recover after workflow loss.
+            await db.WithWriteConnection(connection =>
+                connection.ExecuteAsync(
+                    "UPDATE normalization.archive_item_intake SET catalog_revision=catalog_revision+1 WHERE item_identifier=@item",
+                    new { item = item.item_identifier }
+                )
+            );
+        }
+        return Result(item, held);
     }
 
     private async Task<Artist?> ResolvePublicationArtistAsync(CandidateRow candidate, ItemRow item)

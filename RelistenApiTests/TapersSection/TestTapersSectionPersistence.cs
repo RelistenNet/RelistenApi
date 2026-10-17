@@ -363,7 +363,7 @@ public class TestTapersSectionPersistence
         partial.NeedsReview.Should().Be(0);
         var uncertain = await AssertDateCatalog(artist, "2000-XX-XX", "2000-01-01");
         AssertRecordingIdentity(uncertain, original);
-        uncertain.Show.Should().NotBe(original.Show);
+        uncertain.Show.Should().Be(original.Show);
         var partialStatus = await ItemStatus(item);
         partialStatus["selected_display_date"]!.Value<string>().Should().Be("2000-XX-XX");
         partialStatus["status"]!.Value<string>().Should().Be("published");
@@ -387,7 +387,7 @@ public class TestTapersSectionPersistence
         corrected.NeedsReview.Should().Be(0);
         var current = await AssertDateCatalog(artist, "2001-04-05", "2001-04-05");
         AssertRecordingIdentity(current, original);
-        current.Show.Should().NotBe(uncertain.Show);
+        current.Show.Should().Be(uncertain.Show);
         var correctedStatus = await ItemStatus(item);
         correctedStatus["selected_display_date"]!.Value<string>().Should().Be("2001-04-05");
         correctedStatus["published_display_date"]!.Value<string>().Should().Be("2001-04-05");
@@ -550,12 +550,26 @@ public class TestTapersSectionPersistence
             .Be("deferred_existing_artist");
     }
 
-    [Test]
-    public async Task PausedArtistRecoversCommittedCatalogWithoutImportingOrBecomingVisible()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task PausedArtistRecoversCommittedCatalogWithoutImportingOrBecomingVisible(
+        bool existingArtist
+    )
     {
         var item = AddRecording("recovery", "2000-01-01");
+        var nativeArtist = existingArtist ? await CreateExistingArtistAsync() : null;
         await Discover();
         var candidate = await Approve();
+        if (nativeArtist != null)
+        {
+            await host
+                .Services.GetRequiredService<ArchiveIntakeService>()
+                .BindExistingArtistAsync(
+                    candidate,
+                    new(nativeArtist.uuid),
+                    "Reviewed exact native artist"
+                );
+        }
         using var scope = host.Services.CreateScope();
         var intake = scope.ServiceProvider.GetRequiredService<ArchiveIntakeService>();
         await intake.PrepareCohortAsync(CancellationToken.None);
@@ -610,12 +624,26 @@ public class TestTapersSectionPersistence
         artists.Should().NotContain(row => row.uuid == artist.uuid);
     }
 
-    [Test]
-    public async Task NativeArchiveImportsCannotUpdateOrDeletePausedIntakeRecordings()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task NativeArchiveImportsCannotUpdateOrDeletePausedIntakeRecordings(
+        bool existingArtist
+    )
     {
         var item = AddRecording("owned", "2000-01-01");
+        var nativeArtist = existingArtist ? await CreateExistingArtistAsync() : null;
         await Discover();
         var candidate = await Approve();
+        if (nativeArtist != null)
+        {
+            await host
+                .Services.GetRequiredService<ArchiveIntakeService>()
+                .BindExistingArtistAsync(
+                    candidate,
+                    new(nativeArtist.uuid),
+                    "Reviewed exact native artist"
+                );
+        }
         await Refresh();
         var artist = (await ArtistsNamedPerformer()).Single();
         var before = await ListenerCatalog(artist, ["2000-01-01"]);
@@ -691,12 +719,26 @@ public class TestTapersSectionPersistence
         (await ListenerCatalog(artist, ["2000-01-01"])).Should().BeEquivalentTo(before);
     }
 
-    [Test]
-    public async Task FailedPublicationRollsBackTheRecordingAndCanRetryRetainedEvidence()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FailedPublicationRollsBackTheRecordingAndCanRetryRetainedEvidence(
+        bool existingArtist
+    )
     {
         var item = AddRecording("rollback", "2000-01-01");
+        var nativeArtist = existingArtist ? await CreateExistingArtistAsync() : null;
         await Discover();
-        await Approve();
+        var candidate = await Approve();
+        if (nativeArtist != null)
+        {
+            await host
+                .Services.GetRequiredService<ArchiveIntakeService>()
+                .BindExistingArtistAsync(
+                    candidate,
+                    new(nativeArtist.uuid),
+                    "Reviewed exact native artist"
+                );
+        }
         using var scope = host.Services.CreateScope();
         var intake = scope.ServiceProvider.GetRequiredService<ArchiveIntakeService>();
         var artist = (await intake.PrepareCohortAsync(CancellationToken.None)).Single();
@@ -842,7 +884,15 @@ public class TestTapersSectionPersistence
         await Refresh();
         var artist = (await ArtistsNamedPerformer()).Single();
         await db.WithWriteConnection(connection =>
-            connection.ExecuteAsync("DELETE FROM artists WHERE uuid=@uuid", new { artist.uuid })
+            connection.ExecuteAsync(
+                """
+                DELETE FROM source_show_assignments WHERE show_id IN (SELECT id FROM shows WHERE artist_id=@id);
+                DELETE FROM setlist_show_assignments WHERE show_id IN (SELECT id FROM shows WHERE artist_id=@id);
+                DELETE FROM show_performance_keys WHERE artist_id=@id;
+                DELETE FROM artists WHERE uuid=@uuid;
+                """,
+                new { artist.id, artist.uuid }
+            )
         );
 
         var result = await Refresh();
@@ -989,6 +1039,27 @@ public class TestTapersSectionPersistence
                 .Services.GetRequiredService<TemporalIngestionClient>()
                 .RefreshTapersSectionAsync(new RefreshTapersSection())
         ).GetResultAsync();
+
+    private async Task<Artist> CreateExistingArtistAsync()
+    {
+        var artist = await host
+            .Services.GetRequiredService<ArtistService>()
+            .Save(
+                new SlimArtistWithFeatures
+                {
+                    name = performer,
+                    slug = "native-" + Guid.NewGuid().ToString("N"),
+                    featured = (int)ArtistFeaturedFlags.AutoCreated,
+                    features =
+                        Relisten.Services.Indexing.ArchiveOrgArtistDefaults.ArchiveOrgDefaultFeatures(),
+                }
+            );
+        return (
+            await host
+                .Services.GetRequiredService<ArtistService>()
+                .FindArtistForImport(artist.uuid.ToString())
+        )!;
+    }
 
     private Task<Guid> Approve() =>
         db.WithWriteConnection(connection =>

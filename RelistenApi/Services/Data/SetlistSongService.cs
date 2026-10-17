@@ -73,7 +73,7 @@ namespace Relisten.Data
                     SetlistSongWithShows
                 >(
                     @"
-                SELECT
+                SELECT DISTINCT
                     s.*
                     , a.uuid as artist_uuid
                     , shows.*
@@ -86,7 +86,8 @@ namespace Relisten.Data
                     setlist_songs s
                     LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s.id
                     LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                    JOIN shows ON shows.date = set_shows.date AND shows.artist_id = s.artist_id
+                    JOIN setlist_show_assignments assignment ON assignment.setlist_show_id=set_shows.id
+                    JOIN shows ON shows.id=assignment.show_id AND shows.artist_id=s.artist_id
                     LEFT JOIN venues v ON shows.venue_id = v.id
                     LEFT JOIN tours t ON shows.tour_id = t.id
                     LEFT JOIN eras e ON shows.era_id = e.id
@@ -164,12 +165,14 @@ namespace Relisten.Data
                     LEFT JOIN (
                         SELECT
                             s_inner.id as setlist_song_id
-                            , COUNT(shows.id) as shows_played_at
+                            , COUNT(DISTINCT shows.id) as shows_played_at
                         FROM
                             setlist_songs s_inner
                             LEFT JOIN setlist_songs_plays p ON p.played_setlist_song_id = s_inner.id
                             LEFT JOIN setlist_shows set_shows ON set_shows.id = p.played_setlist_show_id
-                            LEFT JOIN shows shows ON shows.date = set_shows.date AND shows.artist_id = s_inner.artist_id
+                            LEFT JOIN setlist_show_assignments assignment ON assignment.setlist_show_id=set_shows.id
+                            LEFT JOIN shows shows ON shows.id=assignment.show_id AND shows.artist_id=s_inner.artist_id
+                                AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=shows.id)
                         WHERE
                             s_inner.artist_id = @id
                         GROUP BY

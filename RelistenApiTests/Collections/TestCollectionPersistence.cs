@@ -1,5 +1,7 @@
 using Dapper;
 using FluentAssertions;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,6 +9,8 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Relisten;
 using Relisten.Api.Models;
+using Relisten.Api.Models.Api;
+using Relisten.Controllers;
 using Relisten.Data;
 using Relisten.Import;
 using Relisten.Ingestion;
@@ -57,6 +61,7 @@ public class TestCollectionPersistence
             RedisService.BuildConfiguration("redis://127.0.0.1:16379")
         ));
         builder.Services.AddRelistenCatalogServices();
+        builder.Services.AddSingleton<Hangfire.IBackgroundJobClient, IgnoredPopularityJobs>();
         SqlMapper.AddTypeHandler(new PersistentIdentifierHandler());
         SqlMapper.AddTypeHandler(new DateTimeHandler());
         host = builder.Build();
@@ -126,6 +131,294 @@ public class TestCollectionPersistence
         overview.source_count.Should().Be(1);
         overview.artist_count.Should().Be(1);
         overview.show_count.Should().Be(1);
+    }
+
+    [Test]
+    public async Task SplitPerformanceKeepsLegacyLookupAndCollectionPlaybackIdentities()
+    {
+        const string displayDate = "2000-01-01";
+        var artist = await CreateArtist("Two performances");
+        var first = await PublishRecording(artist, NewItem(), displayDate);
+        var second = await PublishRecording(artist, NewItem(), displayDate);
+        var originalShow = (
+            await scope
+                .ServiceProvider.GetRequiredService<ShowService>()
+                .ShowWithSourcesForArtistOnDate(artist, displayDate)
+        )!.uuid;
+        var originalPlayback = await ReadPlayback(artist, second);
+        var collection = await CreateCollection();
+        await Collections.SetArtistMembershipAsync(
+            collection.Uuid,
+            artist.uuid,
+            true,
+            "Reviewed performer"
+        );
+        await Collections.SetEditorialRecordingMembershipAsync(
+            collection.Uuid,
+            second.uuid,
+            true,
+            "Selected recording"
+        );
+
+        var assignments = scope.ServiceProvider.GetRequiredService<ShowPerformanceService>();
+        var retained = await assignments.AssignSourceAsync(
+            artist,
+            first.id,
+            "provider:first",
+            displayDate,
+            PerformanceType.Late,
+            "Late show"
+        );
+        var additional = await assignments.AssignSourceAsync(
+            artist,
+            second.id,
+            "provider:second",
+            displayDate,
+            PerformanceType.Early,
+            "Early show"
+        );
+        var rebuild = scope.ServiceProvider.GetRequiredService<CatalogRebuildService>();
+        await rebuild.RebuildShows(artist);
+        await rebuild.RebuildYears(artist);
+        retained.uuid.Should().Be(originalShow);
+        additional.uuid.Should().NotBe(originalShow);
+
+        using var controller = CreateShowsController();
+        var grouped = (JsonResult)await controller.PerformancesOnDate(artist.slug, displayDate);
+        var performances = ((IEnumerable<ShowWithSources>)grouped.Value!).ToList();
+        performances.Select(show => show.uuid).Should().Equal(additional.uuid, retained.uuid);
+        performances
+            .Select(show => show.display_date)
+            .Should()
+            .OnlyContain(date => date == displayDate);
+        performances[0].sources.Select(source => source.uuid).Should().Equal(second.uuid);
+        performances[1].sources.Select(source => source.uuid).Should().Equal(first.uuid);
+
+        var legacy = (JsonResult)await controller.ShowsOnSpecificDate(artist.slug, displayDate);
+        ((ShowWithSources)legacy.Value!).uuid.Should().Be(originalShow);
+        var direct = (JsonResult)await controller.ShowsOnSpecificDate(additional.uuid);
+        ((ShowWithSources)direct.Value!)
+            .sources.Select(source => source.uuid)
+            .Should()
+            .Equal(second.uuid);
+        (await controller.PerformancesOnDate(artist.slug, "1900-01-01"))
+            .Should()
+            .BeOfType<NotFoundObjectResult>();
+        (await controller.PerformancesOnDate("missing-" + Guid.NewGuid(), displayDate))
+            .Should()
+            .BeOfType<NotFoundObjectResult>();
+
+        var recordings = (await Collections.RecordingsAsync(collection.Uuid))!.items;
+        recordings
+            .Should()
+            .HaveCount(2, "overlapping membership must still deduplicate each recording");
+        recordings
+            .Single(item => item.source_uuid == second.uuid)
+            .show_uuid.Should()
+            .Be(additional.uuid);
+        var overview = (await Collections.FindAsync(collection.Slug))!;
+        overview.source_count.Should().Be(2);
+        overview.show_count.Should().Be(2);
+        (await ReadPlayback(artist, second)).Should().BeEquivalentTo(originalPlayback);
+
+        await rebuild.RebuildShows(artist);
+        var repeated = (JsonResult)await controller.PerformancesOnDate(artist.slug, displayDate);
+        ((IEnumerable<ShowWithSources>)repeated.Value!)
+            .Select(show => show.uuid)
+            .Should()
+            .Equal(additional.uuid, retained.uuid);
+    }
+
+    [Test]
+    public async Task PartialDateListsSeparateUnresolvedPerformancesAndKeepsLegacyDateReadable()
+    {
+        var artist = await CreateArtist("Unknown day performer");
+        var first = await PublishRecording(artist, NewItem(), "2000-XX-XX");
+        var second = await PublishRecording(artist, NewItem(), "2000-XX-XX");
+        using var controller = CreateShowsController();
+
+        var grouped = (JsonResult)await controller.PerformancesOnDate(artist.slug, "2000-XX-XX");
+        var shows = ((IEnumerable<ShowWithSources>)grouped.Value!).ToList();
+        shows.Should().HaveCount(2, "matching unknown dates do not establish a shared performance");
+        shows.Should().OnlyContain(show => show.display_date == "2000-XX-XX");
+        shows
+            .SelectMany(show => show.sources)
+            .Select(source => source.uuid)
+            .Should()
+            .BeEquivalentTo(new[] { first.uuid, second.uuid });
+        var legacy = (JsonResult)await controller.ShowsOnSpecificDate(artist.slug, "2000-XX-XX");
+        ((ShowWithSources)legacy.Value!)
+            .sources.Select(source => source.uuid)
+            .Should()
+            .Equal(first.uuid);
+        (await controller.PerformancesOnDate(artist.slug, "2000-01-01"))
+            .Should()
+            .BeOfType<NotFoundObjectResult>();
+    }
+
+    [Test]
+    public async Task RemovingLastRecordingHidesEmptyCatalogRowsAndReappearanceRetainsShowUuid()
+    {
+        var artist = await CreateArtist("Temporarily empty performer");
+        var item = NewItem();
+        var source = await PublishRecording(artist, item, "2000-01-01");
+        var assignments = scope.ServiceProvider.GetRequiredService<ShowPerformanceService>();
+        var show = await assignments.AssignSourceAsync(
+            artist,
+            source.id,
+            "provider:retained",
+            "2000-01-01"
+        );
+        var rebuild = scope.ServiceProvider.GetRequiredService<CatalogRebuildService>();
+        await scope
+            .ServiceProvider.GetRequiredService<SourceService>()
+            .RemoveSourcesWithUpstreamIdentifiers(artist.id, [item]);
+        await rebuild.RebuildShows(artist);
+        await rebuild.RebuildYears(artist);
+
+        var shows = scope.ServiceProvider.GetRequiredService<ShowService>();
+        (await shows.ShowWithSourcesForUuid(artist, show.uuid)).Should().BeNull();
+        (await shows.PerformancesForArtistOnDate(artist, "2000-01-01")).Should().BeEmpty();
+        using var controller = CreateShowsController();
+        (await controller.RandomByArtist(artist.slug)).Should().BeOfType<NotFoundObjectResult>();
+        (await scope.ServiceProvider.GetRequiredService<YearService>().AllForArtist(artist))
+            .Should()
+            .BeEmpty();
+        var artists = scope.ServiceProvider.GetRequiredService<ArtistService>();
+        (await artists.AllWithCounts<ArtistWithCounts>())
+            .Should()
+            .NotContain(listed => listed.uuid == artist.uuid);
+        var search = await scope
+            .ServiceProvider.GetRequiredService<SearchService>()
+            .Search("2000-01-01", artist.uuid);
+        search.Shows.Should().BeEmpty();
+        var references = await scope
+            .ServiceProvider.GetRequiredService<CatalogReferenceResolver>()
+            .Resolve([new("artist", artist.uuid), new("show", show.uuid)]);
+        references.entities.shows.Should().BeEmpty();
+        references.entities.artists.Single().show_count.Should().Be(0);
+
+        var returned = await PublishRecording(artist, item, "2000-01-01");
+        var restored = await assignments.AssignSourceAsync(
+            artist,
+            returned.id,
+            "provider:retained",
+            "2000-01-01"
+        );
+        await rebuild.RebuildShows(artist);
+        await rebuild.RebuildYears(artist);
+        restored.uuid.Should().Be(show.uuid);
+        (await shows.ShowWithSourcesForUuid(artist, show.uuid))!
+            .sources.Select(recording => recording.uuid)
+            .Should()
+            .Equal(returned.uuid);
+        (await artists.AllWithCounts<ArtistWithCounts>())
+            .Single(listed => listed.uuid == artist.uuid)
+            .show_count.Should()
+            .Be(1);
+    }
+
+    [Test]
+    public async Task SongReadsCountOnlyAssignedPerformancesAndDeduplicateProviderSetlists()
+    {
+        var artist = await CreateArtist("Song assignment performer");
+        var first = await PublishRecording(artist, NewItem(), "2000-01-01");
+        var second = await PublishRecording(artist, NewItem(), "2000-01-01");
+        var assignments = scope.ServiceProvider.GetRequiredService<ShowPerformanceService>();
+        var early = await assignments.AssignSourceAsync(
+            artist,
+            first.id,
+            "provider:early",
+            "2000-01-01"
+        );
+        await assignments.AssignSourceAsync(artist, second.id, "provider:late", "2000-01-01");
+        var songUuid = Guid.NewGuid();
+        var unassignedSongUuid = Guid.NewGuid();
+        var songId = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<int>(
+                """
+                INSERT INTO setlist_songs(artist_id,name,slug,updated_at,upstream_identifier,uuid)
+                VALUES(@artistId,'Assigned fixture song','assigned-fixture',now(),'assigned',@songUuid)
+                RETURNING id
+                """,
+                new { artistId = artist.id, songUuid }
+            )
+        );
+        var unassignedSongId = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<int>(
+                """
+                INSERT INTO setlist_songs(artist_id,name,slug,updated_at,upstream_identifier,uuid)
+                VALUES(@artistId,'Unassigned fixture song','unassigned-fixture',now(),'unassigned',@unassignedSongUuid)
+                RETURNING id
+                """,
+                new { artistId = artist.id, unassignedSongUuid }
+            )
+        );
+        var venueId = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<long>(
+                """
+                INSERT INTO venues(artist_id,name,location,slug,upstream_identifier,uuid,updated_at)
+                VALUES(@artistId,'Fixture Hall','Test City','fixture-hall','fixture-hall',@uuid,now())
+                RETURNING id
+                """,
+                new { artistId = artist.id, uuid = Guid.NewGuid() }
+            )
+        );
+        foreach (var provider in new[] { "provider-one", "provider-two", "unresolved" })
+        {
+            var setlist = await db.WithWriteConnection(connection =>
+                connection.QuerySingleAsync<long>(
+                    """
+                    INSERT INTO setlist_shows(artist_id,venue_id,upstream_identifier,date,updated_at,uuid)
+                    VALUES(@artistId,@venueId,@provider,'2000-01-01',now(),@uuid)
+                    RETURNING id
+                    """,
+                    new
+                    {
+                        artistId = artist.id,
+                        provider,
+                        uuid = Guid.NewGuid(),
+                        venueId,
+                    }
+                )
+            );
+            var playedSong = provider == "unresolved" ? unassignedSongId : songId;
+            await db.WithWriteConnection(connection =>
+                connection.ExecuteAsync(
+                    "INSERT INTO setlist_songs_plays(played_setlist_song_id,played_setlist_show_id) VALUES(@playedSong,@setlist)",
+                    new { playedSong, setlist }
+                )
+            );
+            if (provider != "unresolved")
+            {
+                await assignments.AssignSetlistAsync(artist, setlist, early.uuid);
+            }
+        }
+        await scope
+            .ServiceProvider.GetRequiredService<CatalogRebuildService>()
+            .RebuildShows(artist);
+
+        var search = await scope
+            .ServiceProvider.GetRequiredService<SearchService>()
+            .Search("fixture song", artist.uuid);
+        var result = search.Songs.Should().ContainSingle().Subject;
+        result.uuid.Should().Be(songUuid);
+        result.shows_played_at.Should().Be(1);
+        var references = await scope
+            .ServiceProvider.GetRequiredService<CatalogReferenceResolver>()
+            .Resolve([new("song", songUuid), new("song", unassignedSongUuid)]);
+        references
+            .entities.songs.Single(song => song.uuid == songUuid)
+            .shows_played_at.Should()
+            .Be(1);
+        references
+            .entities.songs.Single(song => song.uuid == unassignedSongUuid)
+            .shows_played_at.Should()
+            .Be(0);
+        var details = await scope
+            .ServiceProvider.GetRequiredService<SetlistSongService>()
+            .ForIdWithShows(artist, songId);
+        details!.shows.Select(show => show.uuid).Should().Equal(early.uuid);
     }
 
     [Test]
@@ -1094,10 +1387,32 @@ public class TestCollectionPersistence
 
     private static string NewItem() => "collection-item-" + Guid.NewGuid().ToString("N");
 
+    private ShowsController CreateShowsController() =>
+        new(
+            host.Services.GetRequiredService<RedisService>(),
+            db,
+            scope.ServiceProvider.GetRequiredService<ArtistService>(),
+            scope.ServiceProvider.GetRequiredService<ShowService>(),
+            scope.ServiceProvider.GetRequiredService<SourceService>()
+        )
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
+        };
+
     private sealed record PlaybackIdentity(
         Guid SourceUuid,
         Guid[] SetUuids,
         Guid[] TrackUuids,
         string[] Mp3Urls
     );
+
+    // API reads may refresh popularity. This fixture has no background worker.
+    private sealed class IgnoredPopularityJobs : Hangfire.IBackgroundJobClient
+    {
+        public string Create(Hangfire.Common.Job job, Hangfire.States.IState state) =>
+            "fixture-popularity";
+
+        public bool ChangeState(string jobId, Hangfire.States.IState state, string expectedState) =>
+            true;
+    }
 }

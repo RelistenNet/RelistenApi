@@ -95,7 +95,7 @@ public sealed class ArtistRegistryService(DbService db)
             connection.QueryAsync<CohortIdentity>(
                 """
                 SELECT artist_id, artist_uuid, proposed_name, creation_slug, reviewed_creator_keys
-                FROM normalization.archive_artist_candidates WHERE artist_uuid IS NOT NULL
+                FROM normalization.archive_artist_candidates WHERE artist_uuid IS NOT NULL AND NOT is_existing_artist
                 """
             )
         );

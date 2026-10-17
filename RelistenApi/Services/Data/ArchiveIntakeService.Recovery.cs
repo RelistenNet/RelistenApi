@@ -198,7 +198,11 @@ public sealed partial class ArchiveIntakeService
                     );
                 }
                 var current = await artists.FindArtistForImport(artist.ToString());
-                if (!candidate.approved || !IdentityMatches(candidate, current))
+                if (
+                    candidate.is_existing_artist
+                    || !candidate.approved
+                    || !IdentityMatches(candidate, current)
+                )
                 {
                     return false;
                 }

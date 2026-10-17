@@ -22,6 +22,11 @@ public partial class ArchiveOrgImporter
     /// inside CatalogImportTransaction so catalog rows and intake ownership commit together.
     /// Source, set, and track identities retain the ordinary Archive import formulas.
     /// </summary>
+    /// <exception cref="ArchivePerformanceHeldException">
+    /// Performance billing needs review. Existing playback rows remain unchanged, while
+    /// assignment evidence is retained in the caller's transaction. Handle the exception
+    /// before completing that transaction if the evidence should commit.
+    /// </exception>
     public async Task<Source> WriteResolvedRecordingAsync(
         Artist artist,
         int archiveProviderId,
@@ -30,26 +35,13 @@ public partial class ArchiveOrgImporter
         string displayDate
     )
     {
-        var source = await _sourceService.ForUpstreamIdentifierFromPrimary(
-            artist,
-            document.identifier
-        );
-        await WriteRecordingAsync(
-            artist,
-            source,
-            document,
-            metadata,
-            archiveProviderId,
-            displayDate,
-            null
-        );
+        await WriteRecordingAsync(artist, document, metadata, archiveProviderId, displayDate, null);
         return await _sourceService.ForUpstreamIdentifierFromPrimary(artist, document.identifier)
             ?? throw new InvalidOperationException("Archive import did not produce a source.");
     }
 
     private async Task<ImportStats> WriteRecordingAsync(
         Artist artist,
-        Source? dbSource,
         SearchDoc searchDoc,
         RootObject detailsRoot,
         int archiveProviderId,
@@ -59,9 +51,26 @@ public partial class ArchiveOrgImporter
     {
         var stats = new ImportStats();
 
-        var isUpdate = dbSource != null;
-
         var meta = detailsRoot.metadata!;
+        var dbSource = await performanceAssignments.LockAndReadSourceAsync(
+            artist,
+            searchDoc.identifier
+        );
+        var isUpdate = dbSource != null;
+        var performance = await performanceAssignments.AssessAsync(
+            artist,
+            dbSource,
+            meta,
+            properDisplayDate
+        );
+        if (performance.HoldReason != null)
+        {
+            if (dbSource != null)
+            {
+                await performanceAssignments.ApplyAsync(artist, dbSource, performance);
+            }
+            throw new ArchivePerformanceHeldException(performance.HoldReason);
+        }
 
         var mp3Files =
             detailsRoot.files?.Where(file => file?.format == "VBR MP3") ?? Enumerable.Empty<File>();
@@ -137,12 +146,9 @@ public partial class ArchiveOrgImporter
             src.id = dbSource!.id;
             src.venue_id = dbVenue?.id;
 
-            // Rebuild owns reassociation after a date change. Keep an already
-            // correct association so ordinary metadata updates remain playable.
-            if (src.display_date == dbSource.display_date)
-            {
-                src.show_id = dbSource.show_id;
-            }
+            // Durable assignments own reassociation. Preserve the current primary until
+            // the assignment/rebuild applies a supported correction, including date edits.
+            src.show_id = dbSource.show_id;
 
             dbSource = await _sourceService.Save(src);
             if (dbVenue != null)
@@ -161,6 +167,8 @@ public partial class ArchiveOrgImporter
 
             existingSources[dbSource.upstream_identifier] = dbSource;
         }
+
+        await performanceAssignments.ApplyAsync(artist, dbSource, performance);
 
         stats.Created += (await ReplaceSourceReviews(dbSource, dbReviews)).Count();
 

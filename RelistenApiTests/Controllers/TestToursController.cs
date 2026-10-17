@@ -74,7 +74,7 @@ public class TestToursController
                 name text, start_date timestamp);
             CREATE TABLE setlist_shows (id int, tour_id int);
             CREATE TABLE shows (id int, artist_id int, uuid uuid, tour_id int, venue_id int,
-                era_id int, year_id int, display_date text);
+                era_id int, year_id int, display_date text, performance_type text);
             CREATE TABLE venues (id int, uuid uuid);
             CREATE TABLE eras (id int);
             CREATE TABLE years (id int, uuid uuid);

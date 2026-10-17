@@ -73,8 +73,8 @@ WITH source_shows AS (
 	SELECT
 		venue_id,
 		count(*) AS show_count
-	FROM shows
-	WHERE artist_id = @id
+	FROM shows sh
+	WHERE artist_id = @id AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=sh.id)
 	GROUP BY venue_id
 )
 INSERT INTO venue_show_counts
@@ -210,7 +210,11 @@ WHERE
 	AND s.year_id IS DISTINCT FROM y.id
 ;
 
--- remove years that no longer have shows (e.g., deleted/removed sources)
+-- Retained identities without recordings are not visible years or counted performances.
+UPDATE shows sh SET year_id=NULL WHERE sh.artist_id=@id
+    AND NOT EXISTS(SELECT 1 FROM sources src WHERE src.show_id=sh.id);
+
+-- remove years that no longer have recorded shows
 DELETE FROM years y
 WHERE
 	y.artist_id = @id
@@ -219,6 +223,7 @@ WHERE
 		FROM shows s
 		WHERE s.artist_id = @id
 			AND s.year_id = y.id
+            AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=s.id)
 	);
 COMMIT;
 
@@ -238,6 +243,7 @@ COMMIT;
         var sql =
             @"
 BEGIN;
+SELECT pg_advisory_xact_lock(1381191750,@id);
 
 -- Update durations
 WITH durs AS (
@@ -264,103 +270,32 @@ WHERE
 	AND s.duration IS DISTINCT FROM d.duration
 ;
 
--- Archive dates can contain XX (in either case) for an unknown month or day.
--- Preserve that display label and identity, using the first known year/month day
--- only for sorting. Invalid dates stay on their sources until an upstream fix;
--- they must not prevent the other recordings from rebuilding.
-WITH source_dates AS (
-    SELECT source.*,
-        CASE
-            WHEN UPPER(display_date) LIKE '____-XX-%' THEN LEFT(display_date, 4) || '-01-01'
-            WHEN UPPER(display_date) LIKE '____-__-XX%' THEN LEFT(display_date, 7) || '-01'
-            WHEN UPPER(display_date) LIKE '%X%' THEN LEFT(display_date, 4) || '-01-01'
-            ELSE LEFT(display_date, 10)
-        END AS sortable_date
-    FROM sources source
-    WHERE source.artist_id = @id
-), dated_sources AS (
-    SELECT source_dates.*,
-        CASE
-            WHEN sortable_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-                AND pg_input_is_valid(sortable_date, 'date') THEN sortable_date::date
-        END AS catalog_date
-    FROM source_dates
-)
-INSERT INTO
-	shows
+-- Resolve durable assignments before deriving aggregates. Assignment SQL shares the
+-- artist mutation lock with reviewed/provider writes and never regenerates accepted IDs.
 
-	(artist_id, date, display_date, updated_at, tour_id, era_id, venue_id, avg_duration, uuid)
-
-	SELECT
-		source.artist_id,
-		COALESCE(setlist_show.date, source.catalog_date) as date,
-		MIN(source.display_date) as display_date,
-		-- Show.updated_at is catalog freshness. Upstream source freshness is retained
-		-- separately in show_source_information.max_updated_at.
-		statement_timestamp() as updated_at,
-		MAX(setlist_show.tour_id) as tour_id,
-		MAX(setlist_show.era_id) as era_id,
-		COALESCE(MAX(setlist_show.venue_id), MAX(source.venue_id)) as venue_id,
-		MAX(source.duration) as avg_duration,
-		md5(source.artist_id || '::show::' || source.display_date)::uuid
-	FROM
-		dated_sources source
-		LEFT JOIN setlist_shows setlist_show ON to_char(setlist_show.date, 'YYYY-MM-DD') = source.display_date AND setlist_show.artist_id = @id
-	WHERE
-		(setlist_show.artist_id = @id OR setlist_show.artist_id IS NULL)
-		AND source.catalog_date IS NOT NULL
-	GROUP BY
-		setlist_show.date, source.catalog_date, source.display_date, source.artist_id
-	ORDER BY
-		setlist_show.date
-ON CONFLICT ON CONSTRAINT shows_uuid_key
-DO
-	UPDATE SET -- don't update artist_id or display_date since uuid is based on those
-		date = EXCLUDED.date,
-		updated_at = GREATEST(shows.updated_at, statement_timestamp()),
-		tour_id = EXCLUDED.tour_id,
-		era_id = EXCLUDED.era_id,
-		venue_id = EXCLUDED.venue_id,
-		avg_duration = EXCLUDED.avg_duration
-WHERE
-	(
-		shows.date,
-		shows.tour_id,
-		shows.era_id,
-		shows.venue_id,
-		shows.avg_duration
-	) IS DISTINCT FROM (
-		EXCLUDED.date,
-		EXCLUDED.tour_id,
-		EXCLUDED.era_id,
-		EXCLUDED.venue_id,
-		EXCLUDED.avg_duration
-	)
-;
-
--- Associate sources with show
-WITH show_assoc AS (
-	SELECT
-		src.id as source_id,
-		sh.id as show_id
-	FROM
-		sources src
-		JOIN shows sh ON src.display_date = sh.display_date AND sh.artist_id = @id
-	WHERE
-		src.artist_id = @id
-)
-UPDATE
-	sources s
-SET
-	show_id = a.show_id
-FROM
-	show_assoc a
-WHERE
-	a.source_id = s.id
-	AND s.artist_id = @id
-	AND s.show_id IS DISTINCT FROM a.show_id
-;
 			";
+
+        sql +=
+            ShowPerformanceService.SynchronizeSql
+            + """
+                UPDATE shows sh SET
+                    venue_id=aggregate.venue_id,tour_id=aggregate.tour_id,era_id=aggregate.era_id,
+                    avg_duration=aggregate.duration,updated_at=statement_timestamp()
+                FROM (
+                    SELECT src.show_id,
+                        COALESCE(max(sl.venue_id),max(src.venue_id) FILTER(
+                            WHERE a.assignment_kind='accepted' OR (a.assignment_kind='legacy' AND
+                                (SELECT count(*) FROM shows other WHERE other.artist_id=@id AND other.display_date=src.display_date)=1))) AS venue_id,
+                        max(sl.tour_id) AS tour_id,max(sl.era_id) AS era_id,max(src.duration) AS duration
+                    FROM sources src JOIN source_show_assignments a ON a.source_id=src.id
+                    LEFT JOIN setlist_show_assignments sa ON sa.show_id=src.show_id
+                    LEFT JOIN setlist_shows sl ON sl.id=sa.setlist_show_id
+                    WHERE src.artist_id=@id GROUP BY src.show_id
+                ) aggregate
+                WHERE sh.id=aggregate.show_id AND
+                    (sh.venue_id,sh.tour_id,sh.era_id,sh.avg_duration) IS DISTINCT FROM
+                    (aggregate.venue_id,aggregate.tour_id,aggregate.era_id,aggregate.duration);
+                """;
 
         if (artist.features.reviews_have_ratings)
         {
@@ -547,34 +482,10 @@ WHERE
 	AND s.avg_rating IS DISTINCT FROM r.avg_rating
     ;
 
--- delete shows without
-WITH shows_with_zero_sources AS (
-    SELECT
-        s.id as show_id
-        , sum(case when src.id is not null then 1 else 0 end) as source_count
-    FROM
-        shows s
-        LEFT JOIN sources src ON s.id = src.show_id
-    WHERE
-        s.artist_id = @id
-    GROUP BY
-        1
-    HAVING
-        sum(case when src.id is not null then 1 else 0 end) = 0
-)
-DELETE FROM shows
-USING shows_with_zero_sources
-WHERE shows.id = shows_with_zero_sources.show_id;
-
--- remove show_source_information rows for deleted shows
-DELETE FROM show_source_information ssi
-WHERE
-	ssi.artist_id = @id
-	AND NOT EXISTS (
-		SELECT 1
-		FROM shows s
-		WHERE s.id = ssi.show_id
-	);
+-- Keep accepted show rows even when an upstream deletion temporarily removes every
+-- recording. Their UUIDs and provider keys must remain usable if that recording returns.
+DELETE FROM show_source_information info WHERE info.artist_id=@id
+    AND NOT EXISTS(SELECT 1 FROM sources src WHERE src.show_id=info.show_id);
 
 COMMIT;
 ";

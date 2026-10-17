@@ -157,8 +157,7 @@ namespace Relisten.Data
                         date = @date,
                         tour_id = @tour_id,
                         upstream_identifier = @upstream_identifier,
-                        updated_at = @updated_at,
-                        uuid = md5(@artist_id || '::setlist_show::' || @upstream_identifier)::uuid
+                        updated_at = @updated_at
                     WHERE
                         id = @id
                     RETURNING *

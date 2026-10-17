@@ -79,6 +79,7 @@ public partial class PhishinImporter
     ) =>
         context.CommitAsync(async () =>
         {
+            await performances.LockArtistAsync(context.Artist);
             await PreloadData(context.Artist);
             RestoreCatalogMappings(catalogs);
 
@@ -87,7 +88,7 @@ public partial class PhishinImporter
             var unchanged =
                 existing != null
                 && existing.updated_at >= input.UpdatedAt
-                && existingSetlistShows.ContainsKey(input.Date);
+                && existingSetlistShows.ContainsKey(item.Id.Value.ToString());
             var show = ToProviderShow(item);
 
             await ProcessOneShow(new ImportStats(), context.Artist, context.Source, show, null);
@@ -96,7 +97,7 @@ public partial class PhishinImporter
                 item.Id,
                 unchanged ? ItemDisposition.Unchanged : ItemDisposition.Applied,
                 new(existingSources[item.Id.Value.ToString()]!.id),
-                new(existingSetlistShows[input.Date]!.id)
+                new(existingSetlistShows[item.Id.Value.ToString()]!.id)
             );
         });
 

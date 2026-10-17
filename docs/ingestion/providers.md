@@ -94,12 +94,19 @@ operation.
 Full Phish.in imports read forward through 20-show pages. A lower-year-bound
 import probes the first page, then walks backward from the last page until it
 passes that bound. Each imported show provides both recording and setlist
-identities.
+identities keyed by its numeric upstream show ID. An unambiguous legacy date-keyed
+setlist is upgraded in place. Source and setlist assignments retain the canonical
+performance UUID; ordinary concert sets remain subdivisions of one performance.
 
 Phish.net selects existing recordings and matching show metadata, then fetches
 ratings and reviews when required. HTTP finishes before the write transaction.
-The activity locks and reloads only the source being enriched before replacing
-its reviews or changing metadata. Different sources remain concurrent.
+The activity acquires the artist performance lock, then locks and reloads the
+source before replacing its reviews or metadata. Different sources can fetch
+concurrently; their writes are serialized for that artist. The legacy importer
+uses the same guarded fetch/apply code. A missing, ambiguous, stale or unsupported
+performance match returns a skipped outcome without overwriting accepted data.
+Supported selections retain provider show ID and official permalink. Drain old
+Phish.net histories before rollout because their selections lack this evidence.
 
 Reviews not fetched and a fetched empty list are different inputs. If the source
 date changed, or current ratings now require reviews that were not fetched,
@@ -213,8 +220,10 @@ reuse and read-only v3 routes. Membership does not identify a performer or trans
 source ownership. The [performer contract](../plans/active/2026-10-17-archive-collections/performer-contract.md)
 adds explicit per-item project reviews through the existing artist workflow. Ordinary
 intake still matches reviewed structured creator keys; description evidence requires
-an explicit item review. Missing-recording publication for existing artists and a full
-Aadam import remain deferred. The [current roadmap](../plans/active/2026-10-17-archive-collections/README.md)
+an explicit item review. The [existing-artist contract](../plans/active/2026-10-17-archive-collections/existing-artist-publication.md)
+adds reviewed bindings and missing-recording publication without taking native
+source ownership. The [show contract](../plans/active/2026-10-17-show-performances/contracts.md)
+defines distinct performances, source moves and date browsing. The [current roadmap](../plans/active/2026-10-17-archive-collections/README.md)
 links local verification, including the [bounded Jerry proof](../plans/active/2026-10-17-archive-collections/jerry-projects-smoke.md),
 and remaining release checks.
 

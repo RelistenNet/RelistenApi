@@ -28,7 +28,7 @@ namespace Relisten.Data
                     """
                     SELECT a.uuid::text FROM artists a
                     WHERE @thin = false OR EXISTS (
-                        SELECT 1 FROM shows s
+                        SELECT 1 FROM shows s JOIN sources src ON src.show_id=s.id
                         WHERE s.artist_id = a.id AND s.date > CURRENT_DATE - INTERVAL '7 days'
                     )
                     ORDER BY a.id
@@ -90,7 +90,9 @@ namespace Relisten.Data
                         artist_id,
                         COUNT(*) as show_count
                     FROM
-                        shows
+                        shows s
+                    WHERE
+                        EXISTS(SELECT 1 FROM sources src WHERE src.show_id=s.id)
                     GROUP BY
                         artist_id
                 )
@@ -139,6 +141,9 @@ namespace Relisten.Data
                 con.ExecuteAsync(
                     @"
 				delete from setlist_songs where artist_id = @ArtistId;
+				delete from setlist_show_assignments where show_id in (select id from shows where artist_id = @ArtistId);
+				delete from source_show_assignments where show_id in (select id from shows where artist_id = @ArtistId);
+				delete from show_performance_keys where artist_id = @ArtistId;
 				delete from setlist_shows where artist_id = @ArtistId;
 				delete from source_sets where source_id in (select id from sources where artist_id = @ArtistId);
 				delete from source_reviews where source_id in (select id from sources where artist_id = @ArtistId);
@@ -530,6 +535,7 @@ namespace Relisten.Data
 
         /// <summary>
         /// Saves the artist and features atomically after rechecking retained intake identities.
+        /// Existing artist UUIDs survive name and slug changes so saved catalog references remain valid.
         /// Callers that also change provider mappings must use an outer artist-registry transaction.
         /// </summary>
         public Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist) =>
@@ -561,8 +567,7 @@ namespace Relisten.Data
 	                        featured = @featured,
 	                        slug = @slug,
 	                        updated_at = timezone('utc'::text, now()),
-							sort_name = @sort_name,
-							uuid = md5('root::artist::' || @slug)::uuid
+							sort_name = @sort_name
 	                    WHERE
 	                        id = @id
 	                    RETURNING *

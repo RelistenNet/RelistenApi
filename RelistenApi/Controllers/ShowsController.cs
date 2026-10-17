@@ -209,7 +209,7 @@ namespace Relisten.Controllers
                 async art =>
                 {
                     var randShow = await db.WithConnection(con =>
-                        con.QuerySingleAsync<Show>(
+                        con.QuerySingleOrDefaultAsync<Show>(
                             @"
                     SELECT
                         *
@@ -217,6 +217,7 @@ namespace Relisten.Controllers
                         shows
                     WHERE
                         artist_id = @id
+                        AND EXISTS(SELECT 1 FROM sources src WHERE src.show_id=shows.id)
                     ORDER BY
                         RANDOM()
                     LIMIT 1
@@ -224,10 +225,9 @@ namespace Relisten.Controllers
                             art
                         )
                     );
-                    return await _showService.ShowWithSourcesForArtistOnDate(
-                        art,
-                        randShow.display_date
-                    );
+                    return randShow == null
+                        ? null
+                        : await _showService.ShowWithSourcesForUuid(art, randShow.uuid);
                 }
             );
         }
@@ -257,6 +257,28 @@ namespace Relisten.Controllers
                 {
                     var show = await _showService.ShowWithSourcesForUuid(art, showUuid);
                     return show;
+                }
+            );
+        }
+
+        /// <summary>
+        /// Lists distinct performances on a literal date, including partial dates such as 1975-XX-XX.
+        /// The v2 date route continues to resolve the retained original show UUID.
+        /// </summary>
+        [HttpGet("v3/artists/{artistIdOrSlug}/shows/{showDate}/performances")]
+        [ProducesResponseType(typeof(IEnumerable<ShowWithSources>), 200)]
+        [ProducesResponseType(typeof(ResponseEnvelope<bool>), 404)]
+        public async Task<IActionResult> PerformancesOnDate(
+            [FromRoute] string artistIdOrSlug,
+            [FromRoute] string showDate
+        )
+        {
+            return await ApiRequest(
+                artistIdOrSlug,
+                async art =>
+                {
+                    var shows = await _showService.PerformancesForArtistOnDate(art, showDate);
+                    return shows.Count == 0 ? null : shows;
                 }
             );
         }

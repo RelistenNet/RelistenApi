@@ -131,8 +131,11 @@ and each provider's contracts linked in [providers](providers.md).
 
 Item activities fetch HTTP inputs before entering a ReadCommitted catalog
 transaction, then reload mutable state and call data services sequentially.
-Different items can write concurrently. Existing unique constraints and conflict
-handling preserve identities; there is no artist-wide item lock. Do not use
+Different items can fetch concurrently. Performance-aware Archive and Phish
+writes acquire an artist lock before changing recording rows; their fetched-input
+transactions are serialized for that artist with performance assignment and rebuild.
+Other provider writes retain their existing locking. Unique constraints and conflict
+handling preserve identities. Do not use
 `Task.WhenAll` or concurrent SQL connections inside one ambient transaction:
 sequential connection wrappers reuse the enlisted Npgsql connection.
 
@@ -145,7 +148,8 @@ rules, not workflows or ad hoc activity SQL.
 
 Deadlocks and serialization failures retry the whole activity with fresh HTTP
 inputs, importer state, and a new transaction. Retrying only SQL against stale
-importer dictionaries is unsafe. Phish.net locks only the source being enriched.
+importer dictionaries is unsafe. Phish.net reloads the source under the artist
+performance lock and rechecks that its assignment supports the selected enrichment.
 Archive collection indexing has a separate global lock for artist/slug allocation;
 it is not a show-write lock. Archive discovery records a validated collection
 page before applying it in a separate transaction. Applying that fixed page

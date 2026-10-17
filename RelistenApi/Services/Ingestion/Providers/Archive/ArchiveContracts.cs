@@ -27,6 +27,7 @@ public enum ArchiveSkipReason
     DarkItem,
     UnrepairedDate,
     NoVbrMp3,
+    UnresolvedPerformance,
 
     [JsonStringEnumMemberName("owned_by_taperssection")]
     OwnedByTapersSection,

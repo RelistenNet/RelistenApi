@@ -158,7 +158,7 @@ public sealed class ProviderActivityRunner(
             PhishNetItemResult value => (
                 value.Source.Value.ToString(CultureInfo.InvariantCulture),
                 value.Disposition,
-                null
+                value.SkipReason
             ),
             SetlistFmItemResult value => (value.Id.Value, value.Disposition, null),
             PhantasyTourItemResult value => (

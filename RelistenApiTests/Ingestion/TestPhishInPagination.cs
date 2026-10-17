@@ -68,7 +68,8 @@ public class TestPhishInPagination
             null!,
             null!,
             NullLogger<PhishinImporter>.Instance,
-            new ConfigurationBuilder().AddInMemoryCollection().Build()
+            new ConfigurationBuilder().AddInMemoryCollection().Build(),
+            null!
         );
 
     private sealed class PhishInListing : HttpMessageHandler

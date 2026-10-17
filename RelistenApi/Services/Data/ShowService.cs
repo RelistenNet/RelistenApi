@@ -10,6 +10,11 @@ namespace Relisten.Data
 {
     public class ShowService : RelistenDataServiceBase
     {
+        // These labels provide a repeatable presentation order, not a claim about start times.
+        private const string PerformanceOrder =
+            "CASE s.performance_type WHEN 'early' THEN 1 WHEN 'afternoon' THEN 2 "
+            + "WHEN 'late' THEN 3 WHEN 'other' THEN 4 ELSE 5 END, s.uuid";
+
         public ShowService(
             DbService db,
             SourceService sourceService,
@@ -36,7 +41,7 @@ namespace Relisten.Data
         )
             where T : Show
         {
-            orderBy ??= "display_date ASC";
+            orderBy = (orderBy ?? "s.display_date ASC") + ", " + PerformanceOrder;
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
             var shows = (
@@ -146,7 +151,7 @@ namespace Relisten.Data
             string? orderBy = null
         )
         {
-            orderBy = orderBy == null ? "display_date ASC" : orderBy;
+            orderBy = (orderBy ?? "s.display_date ASC") + ", " + PerformanceOrder;
             var limitClause = limit == null ? "" : "LIMIT " + limit;
 
             var shows = (
@@ -372,6 +377,10 @@ namespace Relisten.Data
             );
         }
 
+        /// <summary>
+        /// Preserves the original date-route destination after a split. Dates created with
+        /// separate unresolved recordings use their oldest show as a stable fallback.
+        /// </summary>
         public Task<ShowWithSources?> ShowWithSourcesForArtistOnDate(
             Artist artist,
             string displayDate
@@ -380,8 +389,34 @@ namespace Relisten.Data
             return ShowWithSourcesForGeneric(
                 artist,
                 "s.artist_id = @artistId AND s.display_date = @showDate",
-                new { artistId = artist.id, showDate = displayDate }
+                new { artistId = artist.id, showDate = displayDate },
+                "s.is_legacy_survivor DESC, s.id ASC"
             );
+        }
+
+        /// <summary>
+        /// Returns the separate recorded performances on an artist's literal display date.
+        /// Partial dates stay literal; matching an unknown date does not merge performances.
+        /// </summary>
+        public async Task<IReadOnlyList<ShowWithSources>> PerformancesForArtistOnDate(
+            Artist artist,
+            string displayDate
+        )
+        {
+            var shows = (
+                await ShowsForCriteriaGeneric<ShowWithSources>(
+                    artist,
+                    "s.artist_id = @artistId AND s.display_date = @showDate",
+                    new { artistId = artist.id, showDate = displayDate }
+                )
+            ).ToList();
+
+            foreach (var show in shows)
+            {
+                show.sources = await _sourceService.FullSourcesForShow(artist, show);
+            }
+
+            return shows;
         }
 
         public Task<ShowWithSources?> ShowWithSourcesForUuid(Artist artist, Guid uuid)
@@ -396,10 +431,17 @@ namespace Relisten.Data
         public async Task<ShowWithSources?> ShowWithSourcesForGeneric(
             Artist artist,
             string where,
-            object param
+            object param,
+            string? orderBy = null
         )
         {
-            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(artist, where, param);
+            var shows = await ShowsForCriteriaGeneric<ShowWithSources>(
+                artist,
+                where,
+                param,
+                limit: 1,
+                orderBy: orderBy
+            );
             var show = shows.FirstOrDefault();
 
             if (show == null)

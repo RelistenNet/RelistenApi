@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Relisten.Api.Models;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.Archive;
 using Relisten.Vendor;
@@ -101,13 +102,31 @@ public partial class ArchiveOrgImporter
                 );
             }
 
-            var current = await WriteResolvedRecordingAsync(
-                context.Artist,
-                context.Source.upstream_source_id,
-                item.Input.Document,
-                metadata.Details,
-                metadata.DisplayDate
-            );
+            Source current;
+            try
+            {
+                current = await WriteResolvedRecordingAsync(
+                    context.Artist,
+                    context.Source.upstream_source_id,
+                    item.Input.Document,
+                    metadata.Details,
+                    metadata.DisplayDate
+                );
+            }
+            catch (ArchivePerformanceHeldException held)
+            {
+                var existing = await _sourceService.ForUpstreamIdentifierFromPrimary(
+                    context.Artist,
+                    item.Id.Value
+                );
+                return new ArchiveItemResult(
+                    item.Id,
+                    ItemDisposition.Skipped,
+                    existing == null ? null : new CatalogSourceId(existing.id),
+                    ArchiveSkipReason.UnresolvedPerformance,
+                    held.Message
+                );
+            }
 
             return new ArchiveItemResult(
                 item.Id,

@@ -166,8 +166,8 @@ public sealed class ArchiveItemResolutionService(DbService db)
 
     /// <summary>
     /// Acknowledges an owned publication and advances its accepted metadata. Unlike native source
-    /// reuse, this requires matching intake publication references and an approved, applicable item
-    /// review. It cannot acquire ownership or replace an accepted canonical artist/source.
+    /// reuse, this requires matching intake publication references and an approved artist. A retained
+    /// item review must also remain approved and applicable. It cannot acquire ownership or replace an accepted canonical artist/source.
     /// </summary>
     public Task<ArchiveItemResolution> BindPublishedAsync(
         string itemIdentifier,
@@ -185,7 +185,7 @@ public sealed class ArchiveItemResolutionService(DbService db)
                 var publication = await db.WithWriteConnection(connection =>
                     connection.QuerySingleOrDefaultAsync<OwnedPublication>(
                         """
-                        SELECT i.published_observation_id,i.published_artist_uuid,i.published_source_uuid,c.artist_uuid AS cohort_artist_uuid
+                        SELECT i.published_observation_id,i.published_artist_uuid,i.published_source_uuid,c.artist_uuid AS cohort_artist_uuid,c.approved
                         FROM normalization.archive_item_intake i
                         JOIN normalization.archive_artist_candidates c ON c.candidate_id=i.candidate_id
                         WHERE i.item_identifier=@itemIdentifier FOR UPDATE OF i
@@ -195,6 +195,7 @@ public sealed class ArchiveItemResolutionService(DbService db)
                 );
                 if (
                     publication == null
+                    || !publication.approved
                     || publication.published_observation_id != observationId
                     || publication.published_artist_uuid != artistUuid
                     || publication.cohort_artist_uuid != artistUuid
@@ -229,23 +230,24 @@ public sealed class ArchiveItemResolutionService(DbService db)
                         "The owned publication must be the unique exact Archive source for this item."
                     );
                 }
-                var performer =
-                    await new ArchivePerformerReviewService(db).FindPerformerDecisionAsync(
-                        itemIdentifier
-                    )
-                    ?? throw new InvalidOperationException(
-                        "The owned item requires a retained performer review."
-                    );
+                var performer = await new ArchivePerformerReviewService(
+                    db
+                ).FindPerformerDecisionAsync(itemIdentifier);
                 var request = new ArchiveItemResolutionRequest(itemIdentifier)
                 {
                     observation_id = observationId,
                     expected_artist_uuid = artistUuid,
-                    decision_basis = performer.ReviewBasis,
+                    decision_basis =
+                        performer?.ReviewBasis
+                        ?? "Approved intake artist and committed recording ownership.",
                 };
-                var conflict = await PerformerReviewConflictAsync(performer, prior, request);
-                if (conflict != null)
+                if (performer != null)
                 {
-                    throw new InvalidOperationException(conflict);
+                    var conflict = await PerformerReviewConflictAsync(performer, prior, request);
+                    if (conflict != null)
+                    {
+                        throw new InvalidOperationException(conflict);
+                    }
                 }
                 return await db.WithWriteConnection(connection =>
                     connection.QuerySingleAsync<ArchiveItemResolution>(
@@ -263,7 +265,7 @@ public sealed class ArchiveItemResolutionService(DbService db)
                             sourceUuid,
                             basis = prior.canonical_source_uuid != null
                                 ? prior.decision_basis
-                                : performer.ReviewBasis,
+                                : request.decision_basis,
                         }
                     )
                 );
@@ -473,6 +475,7 @@ public sealed class ArchiveItemResolutionService(DbService db)
         public Guid? published_artist_uuid { get; set; }
         public Guid? published_source_uuid { get; set; }
         public Guid? cohort_artist_uuid { get; set; }
+        public bool approved { get; set; }
     }
 
     private sealed class CanonicalMatch

@@ -106,7 +106,7 @@ public sealed partial class ArchiveIntakeService(
         DateTimeOffset? deadline = null
     )
     {
-        var nativeResolution = await ResolveReviewedNativeAsync(observation, token, deadline);
+        var nativeResolution = await ResolveNativeAsync(observation, token, deadline);
         if (nativeResolution != null)
         {
             return nativeResolution;
@@ -476,6 +476,7 @@ public sealed partial class ArchiveIntakeService(
         public string proposed_slug { get; set; } = "";
         public string[] reviewed_creator_keys { get; set; } = [];
         public bool approved { get; set; }
+        public bool is_existing_artist { get; set; }
         public string identity_status { get; set; } = "";
         public Guid[] matched_artist_uuids { get; set; } = [];
         public Guid? artist_uuid { get; set; }
