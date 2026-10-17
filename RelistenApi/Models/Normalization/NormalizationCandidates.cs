@@ -18,7 +18,8 @@ public sealed record NormalizationCandidateQuery(
 
 /// <summary>
 /// A current identity found through a supported name or provider key. Retrieval similarity is
-/// not a probability. Load matching facts after BeginWorkAsync captures this owner's revision.
+/// not a probability. Matching consumers use the typed facts methods to capture assertions,
+/// owner observations and candidate generations in the same database snapshot.
 /// </summary>
 public sealed record NormalizationCandidateHit(
     Guid Uuid,

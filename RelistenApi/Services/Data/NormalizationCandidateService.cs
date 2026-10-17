@@ -15,10 +15,11 @@ namespace Relisten.Data;
 
 /// <summary>
 /// Finds plausible identities through indexed accepted names and qualified identifiers.
-/// It never accepts a match or writes a work subject. Resolve returned identities again after
-/// BeginWorkAsync captures dependencies; a candidate score is not identity evidence.
+/// It never accepts a match or writes a work subject. Matching consumers use the typed facts
+/// methods to retain selection, assertions and freshness from one primary snapshot.
+/// A candidate score is not identity evidence.
 /// </summary>
-public sealed class NormalizationCandidateService(DbService db)
+public sealed partial class NormalizationCandidateService(DbService db)
 {
     public async Task<NormalizationCandidateSet> FindAsync(
         NormalizationCandidateQuery query,
@@ -26,8 +27,6 @@ public sealed class NormalizationCandidateService(DbService db)
     )
     {
         var names = ValidateQuery(query);
-        var domain = DomainTables.For(query.Domain);
-
         // One primary snapshot keeps names, redirects and current revisions consistent. The
         // transaction-local threshold cannot leak through a pooled connection to another job.
         await using var connection = db.CreateConnection(false, false);
@@ -38,7 +37,35 @@ public sealed class NormalizationCandidateService(DbService db)
         );
         await connection.ExecuteAsync(
             new CommandDefinition(
-                "SET TRANSACTION READ ONLY; SELECT set_config('pg_trgm.strict_word_similarity_threshold',@threshold,true)",
+                "SET TRANSACTION READ ONLY",
+                transaction: transaction,
+                cancellationToken: cancellationToken
+            )
+        );
+        var result = await FindInSnapshotAsync(
+            connection,
+            transaction,
+            query,
+            names,
+            cancellationToken
+        );
+
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    private static async Task<NormalizationCandidateSet> FindInSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        NormalizationCandidateQuery query,
+        string[] names,
+        CancellationToken cancellationToken
+    )
+    {
+        var domain = DomainTables.For(query.Domain);
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT set_config('pg_trgm.strict_word_similarity_threshold',@threshold,true)",
                 new
                 {
                     threshold = query.MinimumNameSimilarity.ToString(CultureInfo.InvariantCulture),
@@ -75,10 +102,7 @@ public sealed class NormalizationCandidateService(DbService db)
         );
         var raw = nameHits.Concat(identifierHits).ToArray();
         var current = await ResolveTargets(connection, transaction, domain, raw, cancellationToken);
-        var result = BuildResult(query, raw, current);
-
-        await transaction.CommitAsync(cancellationToken);
-        return result;
+        return BuildResult(query, raw, current);
     }
 
     private static string[] ValidateQuery(NormalizationCandidateQuery query)
