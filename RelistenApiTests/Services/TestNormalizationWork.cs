@@ -444,6 +444,200 @@ public sealed class TestNormalizationWork
     }
 
     [Test]
+    public async Task ReviewFencesAdditionalIdentityOwnerAndItsConsumers()
+    {
+        var input = await Capture();
+        var recording = await Begin(input.Resource);
+        var identity = await RegisterIdentity();
+        await work.TryPublishAsync(identity.WorkUuid, NoWrite);
+        var consumerSubject = Subject();
+        var consumer = await work.BeginWorkAsync(
+            Guid.NewGuid(),
+            consumerSubject,
+            "policy-1",
+            [],
+            [identity.SubjectUuid]
+        );
+        await work.TryPublishAsync(consumer.WorkUuid, NoWrite);
+        var oldConsumer = await work.BeginWorkAsync(
+            Guid.NewGuid(),
+            consumerSubject,
+            "policy-1",
+            [],
+            [identity.SubjectUuid]
+        );
+        await work.ApplyReviewAsync(
+            Review(recording.SubjectUuid) with
+            {
+                AdditionalSubjectUuids = [identity.SubjectUuid],
+            },
+            NoWrite
+        );
+
+        var pending = await work.GetPendingSubjectsAsync(limit: 1000);
+        pending.Should().Contain(subject => subject.SubjectUuid == identity.SubjectUuid);
+        pending.Should().Contain(subject => subject.SubjectUuid == consumer.SubjectUuid);
+        (await work.GetSubjectAsync(identity.SubjectUuid))!.EditorialRevision.Should().Be(1);
+        (await work.TryPublishAsync(oldConsumer.WorkUuid, NeverWrite))
+            .Status.Should()
+            .Be(NormalizationPublicationStatus.Stale);
+        (await work.TryPublishAsync(recording.WorkUuid, NeverWrite))
+            .Status.Should()
+            .Be(NormalizationPublicationStatus.Stale);
+    }
+
+    [Test]
+    public async Task AdditionalOwnersAreCanonicalAuditDataAndReplayDoesNotBumpAgain()
+    {
+        var input = await Capture();
+        var recording = await Begin(input.Resource);
+        var a = await RegisterIdentity();
+        var b = await RegisterIdentity();
+        var command = Review(recording.SubjectUuid) with
+        {
+            AdditionalSubjectUuids =
+            [
+                b.SubjectUuid,
+                a.SubjectUuid,
+                b.SubjectUuid,
+                recording.SubjectUuid,
+            ],
+        };
+        await work.ApplyReviewAsync(command, NoWrite);
+        var replay = await work.ApplyReviewAsync(
+            command with
+            {
+                AdditionalSubjectUuids = [a.SubjectUuid, b.SubjectUuid],
+            },
+            NeverWrite
+        );
+        replay.Replayed.Should().BeTrue();
+        foreach (var owner in new[] { recording.SubjectUuid, a.SubjectUuid, b.SubjectUuid })
+        {
+            var state = await work.GetSubjectAsync(owner);
+            state!.EditorialRevision.Should().Be(1);
+            state.DesiredGeneration.Should().Be(2);
+        }
+        var recorded = await db.WithWriteConnection(connection =>
+            connection.ExecuteScalarAsync<Guid[]>(
+                "SELECT additional_subject_uuids FROM normalization.review_operations WHERE uuid=@OperationUuid",
+                command
+            )
+        );
+        recorded.Should().Equal(new[] { a.SubjectUuid, b.SubjectUuid }.Order());
+        var changedSet = () =>
+            work.ApplyReviewAsync(
+                command with
+                {
+                    AdditionalSubjectUuids = [a.SubjectUuid],
+                },
+                NeverWrite
+            );
+        await changedSet.Should().ThrowAsync<NormalizationConflictException>();
+    }
+
+    [Test]
+    public async Task UnknownAdditionalOwnerFailsBeforeDomainWrites()
+    {
+        var identity = await RegisterIdentity();
+        var command = Review(identity.SubjectUuid) with
+        {
+            AdditionalSubjectUuids = [Guid.NewGuid()],
+        };
+        var unknown = () => work.ApplyReviewAsync(command, NeverWrite);
+        await unknown
+            .Should()
+            .ThrowAsync<ArgumentException>()
+            .WithMessage("*Unknown work subject*");
+        (await work.GetSubjectAsync(identity.SubjectUuid))!.EditorialRevision.Should().Be(0);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task FailedMultiOwnerReviewDoesNotInvalidateAnyOwner(bool cancel)
+    {
+        var primary = await RegisterIdentity();
+        var additional = await RegisterIdentity();
+        await work.TryPublishAsync(primary.WorkUuid, NoWrite);
+        await work.TryPublishAsync(additional.WorkUuid, NoWrite);
+        var command = Review(primary.SubjectUuid) with
+        {
+            AdditionalSubjectUuids = [additional.SubjectUuid],
+        };
+        using var cancellation = new CancellationTokenSource();
+        async Task Fail(NpgsqlConnection c, NpgsqlTransaction t, CancellationToken ct)
+        {
+            await WriteValue(c, t, command.OperationUuid, "failed review", ct);
+            if (cancel)
+            {
+                cancellation.Cancel();
+            }
+            else
+            {
+                throw new InvalidOperationException("typed review failed");
+            }
+        }
+        var operation = () => work.ApplyReviewAsync(command, Fail, cancellation.Token);
+        if (cancel)
+        {
+            await operation.Should().ThrowAsync<OperationCanceledException>();
+        }
+        else
+        {
+            await operation.Should().ThrowAsync<InvalidOperationException>();
+        }
+        (await ReadValue(command.OperationUuid)).Should().BeNull();
+        foreach (var owner in new[] { primary.SubjectUuid, additional.SubjectUuid })
+        {
+            var state = await work.GetSubjectAsync(owner);
+            state!.EditorialRevision.Should().Be(0);
+            state.DesiredGeneration.Should().Be(1);
+        }
+        var pending = await work.GetPendingSubjectsAsync(limit: 1000);
+        pending
+            .Should()
+            .NotContain(subject =>
+                subject.SubjectUuid == primary.SubjectUuid
+                || subject.SubjectUuid == additional.SubjectUuid
+            );
+        (await work.ApplyReviewAsync(command, NoWrite)).Replayed.Should().BeFalse();
+        (await work.GetSubjectAsync(additional.SubjectUuid))!.EditorialRevision.Should().Be(1);
+    }
+
+    [Test]
+    public async Task ConcurrentMultiOwnerReviewsUseOneLockOrderAndBothCommit()
+    {
+        var primaryA = await RegisterIdentity();
+        var primaryB = await RegisterIdentity();
+        var extraA = await RegisterIdentity();
+        var extraB = await RegisterIdentity();
+        var a = Review(primaryA.SubjectUuid) with
+        {
+            AdditionalSubjectUuids = [extraA.SubjectUuid, extraB.SubjectUuid],
+        };
+        var b = Review(primaryB.SubjectUuid) with
+        {
+            AdditionalSubjectUuids = [extraB.SubjectUuid, extraA.SubjectUuid],
+        };
+        var results = await Task.WhenAll(
+                work.ApplyReviewAsync(a, (c, t, ct) => WriteValue(c, t, a.OperationUuid, "A", ct)),
+                work.ApplyReviewAsync(b, (c, t, ct) => WriteValue(c, t, b.OperationUuid, "B", ct))
+            )
+            .WaitAsync(TimeSpan.FromSeconds(15));
+        results.Should().OnlyContain(result => !result.Replayed);
+        (await ReadValue(a.OperationUuid)).Should().Be("A");
+        (await ReadValue(b.OperationUuid)).Should().Be("B");
+        foreach (var primary in new[] { primaryA.SubjectUuid, primaryB.SubjectUuid })
+        {
+            (await work.GetSubjectAsync(primary))!.EditorialRevision.Should().Be(1);
+        }
+        foreach (var extra in new[] { extraA.SubjectUuid, extraB.SubjectUuid })
+        {
+            (await work.GetSubjectAsync(extra))!.EditorialRevision.Should().Be(2);
+        }
+    }
+
+    [Test]
     public async Task PublicationFailureAndCancellationRollBackTypedWritesAndRemainRetryable()
     {
         var capture = await Capture();
@@ -501,6 +695,15 @@ public sealed class TestNormalizationWork
             .Replayed.Should()
             .BeFalse();
     }
+
+    private Task<NormalizationWorkTicket> RegisterIdentity() =>
+        work.BeginWorkAsync(
+            Guid.NewGuid(),
+            new("people", "person", Guid.NewGuid()),
+            "identity-1",
+            [],
+            []
+        );
 
     private Task<NormalizationWorkTicket> Begin(
         NormalizationResourceKey input,

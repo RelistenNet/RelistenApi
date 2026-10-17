@@ -53,6 +53,8 @@ public sealed record NormalizationPublicationResult(
 /// <summary>
 /// Audit metadata for a trusted domain command. The domain service owns the typed payload and
 /// action semantics; this shared store owns idempotency, editorial revision and atomic commit.
+/// AdditionalSubjectUuids names pre-registered identity owners whose accepted meaning also changes.
+/// All named owners are locked before the domain callback and invalidated in the same transaction.
 /// </summary>
 public sealed record NormalizationReviewCommand(
     Guid OperationUuid,
@@ -61,7 +63,8 @@ public sealed record NormalizationReviewCommand(
     string Action,
     JsonElement Payload,
     string Reason,
-    string Operator
+    string Operator,
+    IReadOnlyList<Guid>? AdditionalSubjectUuids = null
 );
 
 public sealed record NormalizationReviewResult(

@@ -53,6 +53,7 @@ public sealed class AddNormalizationWork : Migration
             uuid uuid PRIMARY KEY,
             subject_uuid uuid NOT NULL REFERENCES normalization.work_subjects(uuid),
             command_hash text NOT NULL,
+            additional_subject_uuids uuid[] NOT NULL DEFAULT '{}',
             action text NOT NULL CHECK (action IN ('accept','reject','replace','retract','merge','split')),
             payload jsonb NOT NULL,
             reason text NOT NULL CHECK (length(trim(reason))>0),

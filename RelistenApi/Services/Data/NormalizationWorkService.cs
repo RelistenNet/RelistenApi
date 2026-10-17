@@ -249,6 +249,8 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// Applies a trusted domain correction and immutable audit receipt in one transaction. Operator
     /// must come from the authenticated command context. Payload is audit data, never a generic
     /// accepted graph; the callback must validate and write the domain's typed records.
+    /// Declare all additional identity owners before calling: the store locks and increments each
+    /// owner once. Callbacks must not acquire additional subject locks after domain writes begin.
     /// </summary>
     public Task<NormalizationReviewResult> ApplyReviewAsync(
         NormalizationReviewCommand command,
@@ -259,7 +261,13 @@ public sealed partial class NormalizationWorkService(DbService db)
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Reason);
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Operator);
         var payload = command.Payload.Clone();
-        command = command with { Payload = payload };
+        var additionalSubjects = (command.AdditionalSubjectUuids ?? [])
+            .Where(uuid => uuid != command.SubjectUuid)
+            .Distinct()
+            .Order()
+            .ToArray();
+        command = command with { Payload = payload, AdditionalSubjectUuids = additionalSubjects };
+        var affectedSubjects = additionalSubjects.Append(command.SubjectUuid).ToArray();
         var hash = Hash(JsonSerializer.SerializeToElement(command));
         return InTransaction(
             async (connection, transaction) =>
@@ -296,14 +304,13 @@ public sealed partial class NormalizationWorkService(DbService db)
                         true
                     );
                 }
-                var owner = (
-                    await LockSubjects(
-                        connection,
-                        transaction,
-                        [command.SubjectUuid],
-                        cancellationToken
-                    )
-                ).Single();
+                var affectedOwners = await LockSubjects(
+                    connection,
+                    transaction,
+                    affectedSubjects,
+                    cancellationToken
+                );
+                var owner = affectedOwners.Single(subject => subject.Uuid == command.SubjectUuid);
                 if (owner.EditorialRevision != command.ExpectedEditorialRevision)
                 {
                     throw new NormalizationConflictException(
@@ -316,10 +323,10 @@ public sealed partial class NormalizationWorkService(DbService db)
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
-                        INSERT INTO normalization.review_operations(uuid,subject_uuid,command_hash,action,payload,reason,operator_name,editorial_revision)
-                        VALUES(@OperationUuid,@SubjectUuid,@hash,@Action,@payload::jsonb,@Reason,@Operator,@revision);
-                        UPDATE normalization.work_subjects SET editorial_revision=@revision,desired_generation=desired_generation+1,
-                            updated_at=clock_timestamp() WHERE uuid=@SubjectUuid
+                        INSERT INTO normalization.review_operations(uuid,subject_uuid,command_hash,additional_subject_uuids,action,payload,reason,operator_name,editorial_revision)
+                        VALUES(@OperationUuid,@SubjectUuid,@hash,@additionalSubjects,@Action,@payload::jsonb,@Reason,@Operator,@revision);
+                        UPDATE normalization.work_subjects SET editorial_revision=editorial_revision+1,desired_generation=desired_generation+1,
+                            updated_at=clock_timestamp() WHERE uuid=ANY(@affectedSubjects)
                         """,
                         new
                         {
@@ -330,6 +337,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                             payload = payload.GetRawText(),
                             command.Reason,
                             command.Operator,
+                            additionalSubjects,
+                            affectedSubjects,
                             revision,
                         },
                         transaction,
