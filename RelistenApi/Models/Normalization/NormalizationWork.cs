@@ -38,6 +38,9 @@ public sealed record NormalizationSourceIdentityDependency(
     long Generation
 );
 
+/// <summary>Fences an exact source UUID lookup, including absence and delete/recreate history.</summary>
+public sealed record NormalizationSourceUuidDependency(Guid SourceUuid, long Generation);
+
 /// <summary>
 /// Fences provider-mapping searches, including an artist mapping that did not exist in the
 /// caller's snapshot. Generation zero is valid; null on a ticket means no registry dependency.
@@ -71,7 +74,9 @@ public sealed record NormalizationWorkTicket(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         IReadOnlyList<NormalizationCandidateUniverseDependency>? CandidateUniverses = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<NormalizationSubjectObservation>? OwnerObservations = null
+        IReadOnlyList<NormalizationSubjectObservation>? OwnerObservations = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationSourceUuidDependency>? SourceUuids = null
 );
 
 public enum NormalizationPublicationStatus

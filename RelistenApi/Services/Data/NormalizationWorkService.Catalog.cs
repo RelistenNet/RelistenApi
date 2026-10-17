@@ -14,12 +14,13 @@ public sealed partial class NormalizationWorkService
     private sealed record CatalogReadSet(
         IReadOnlyList<NormalizationCatalogDependency> Artists,
         IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities,
+        IReadOnlyList<NormalizationSourceUuidDependency> SourceUuids,
         IReadOnlyList<NormalizationImportedVenueDependency> ImportedVenues,
         NormalizationMappingRegistryDependency? MappingRegistry
     );
 
     /// <summary>
-    /// Take artist, source-identity, imported-venue and mapping-registry clocks in that order, then resources and owners.
+    /// Take artist, source-identifier, source-UUID, venue and mapping-registry clocks in that order, then resources and owners.
     /// Shared locks let independent publications proceed together while catalog writers wait.
     /// A publication callback must never acquire catalog row locks or mutate catalog tables.
     /// </summary>
@@ -28,9 +29,10 @@ public sealed partial class NormalizationWorkService
         NpgsqlTransaction transaction,
         Guid[] artistUuids,
         string[] sourceIdentifiers,
+        Guid[] sourceUuids,
         Guid[] importedVenueUuids,
         bool usesMappingRegistry,
-        bool initializeVenueClocks,
+        bool initializeMissingClocks,
         CancellationToken ct
     )
     {
@@ -57,6 +59,21 @@ public sealed partial class NormalizationWorkService
         IReadOnlyList<NormalizationSourceIdentityDependency> identityRows = [];
         if (identifiers.Length > 0)
         {
+            if (initializeMissingClocks)
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        INSERT INTO normalization.catalog_source_identity_revisions(upstream_identifier,generation)
+                        SELECT identifier,0 FROM unnest(@identifiers::text[]) s(identifier)
+                        ORDER BY identifier COLLATE "C" ON CONFLICT DO NOTHING
+                        """,
+                        new { identifiers },
+                        transaction,
+                        cancellationToken: ct
+                    )
+                );
+            }
             identityRows = (
                 await connection.QueryAsync<NormalizationSourceIdentityDependency>(
                     new CommandDefinition(
@@ -79,11 +96,18 @@ public sealed partial class NormalizationWorkService
                 "Catalog binding revisions are missing; reload the catalog binding."
             );
         }
+        var sourceUuidRows = await LockSourceUuidClocks(
+            connection,
+            transaction,
+            sourceUuids,
+            initializeMissingClocks,
+            ct
+        );
         var venues = await LockImportedVenueClocks(
             connection,
             transaction,
             importedVenueUuids,
-            initializeVenueClocks,
+            initializeMissingClocks,
             ct
         );
         NormalizationMappingRegistryDependency? mappingRegistry = null;
@@ -98,7 +122,7 @@ public sealed partial class NormalizationWorkService
                     )
                 );
         }
-        return new(artistRows, identityRows, venues, mappingRegistry);
+        return new(artistRows, identityRows, sourceUuidRows, venues, mappingRegistry);
     }
 
     private static async Task<
@@ -159,6 +183,7 @@ public sealed partial class NormalizationWorkService
         CatalogReadSet current,
         IReadOnlyList<NormalizationCatalogDependency> expectedArtists,
         IReadOnlyList<NormalizationSourceIdentityDependency> expectedSources,
+        IReadOnlyList<NormalizationSourceUuidDependency> expectedSourceUuids,
         IReadOnlyList<NormalizationImportedVenueDependency> expectedVenues,
         NormalizationMappingRegistryDependency? expectedMappingRegistry
     )
@@ -166,6 +191,7 @@ public sealed partial class NormalizationWorkService
         if (
             expectedArtists.Any(expected => !current.Artists.Contains(expected))
             || expectedSources.Any(expected => !current.SourceIdentities.Contains(expected))
+            || expectedSourceUuids.Any(expected => !current.SourceUuids.Contains(expected))
             || expectedVenues.Any(expected => !current.ImportedVenues.Contains(expected))
             || (
                 expectedMappingRegistry != null
@@ -191,6 +217,9 @@ public sealed partial class NormalizationWorkService
                     StringComparer.Ordinal
                 )
             )
+        && (ticket.SourceUuids ?? [])
+            .OrderBy(value => value.SourceUuid)
+            .SequenceEqual(current.SourceUuids.OrderBy(value => value.SourceUuid))
         && (ticket.ImportedVenues ?? [])
             .OrderBy(value => value.VenueUuid)
             .SequenceEqual(current.ImportedVenues.OrderBy(value => value.VenueUuid))
@@ -209,6 +238,7 @@ public sealed partial class NormalizationWorkService
             .SourceIdentities.Select(value => value.UpstreamIdentifier)
             .ToArray();
         var venues = readSet.ImportedVenues.Select(value => value.VenueUuid).ToArray();
+        var sourceUuids = readSet.SourceUuids.Select(value => value.SourceUuid).ToArray();
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
@@ -216,6 +246,10 @@ public sealed partial class NormalizationWorkService
                 WHERE subject_uuid=@subjectUuid AND NOT (artist_uuid=ANY(@artists));
                 DELETE FROM normalization.work_source_identity_inputs
                 WHERE subject_uuid=@subjectUuid AND NOT (upstream_identifier=ANY(@identifiers));
+                DELETE FROM normalization.work_source_uuid_inputs
+                WHERE subject_uuid=@subjectUuid AND NOT (source_uuid=ANY(@sourceUuids));
+                INSERT INTO normalization.work_source_uuid_inputs(subject_uuid,source_uuid)
+                SELECT @subjectUuid,unnest(@sourceUuids::uuid[]) ON CONFLICT DO NOTHING;
                 DELETE FROM normalization.work_venue_inputs
                 WHERE subject_uuid=@subjectUuid AND NOT (venue_uuid=ANY(@venues));
                 INSERT INTO normalization.work_venue_inputs(subject_uuid,venue_uuid)
@@ -234,6 +268,7 @@ public sealed partial class NormalizationWorkService
                     artists,
                     identifiers,
                     venues,
+                    sourceUuids,
                     usesMappingRegistry = readSet.MappingRegistry != null,
                 },
                 transaction,
@@ -257,6 +292,9 @@ public sealed partial class NormalizationWorkService
                 UPDATE normalization.work_source_identity_inputs i SET published_generation=c.generation
                 FROM unnest(@identifiers::text[],@identityGenerations::bigint[]) AS c(identifier,generation)
                 WHERE i.subject_uuid=@SubjectUuid AND i.upstream_identifier=c.identifier;
+                UPDATE normalization.work_source_uuid_inputs i SET published_generation=c.generation
+                FROM unnest(@sourceUuids::uuid[],@sourceUuidGenerations::bigint[]) AS c(source_uuid,generation)
+                WHERE i.subject_uuid=@SubjectUuid AND i.source_uuid=c.source_uuid;
                 UPDATE normalization.work_venue_inputs i SET published_generation=c.generation
                 FROM unnest(@venues::uuid[],@venueGenerations::bigint[]) AS c(venue_uuid,generation)
                 WHERE i.subject_uuid=@SubjectUuid AND i.venue_uuid=c.venue_uuid;
@@ -266,6 +304,12 @@ public sealed partial class NormalizationWorkService
                 new
                 {
                     ticket.SubjectUuid,
+                    sourceUuids = (ticket.SourceUuids ?? [])
+                        .Select(value => value.SourceUuid)
+                        .ToArray(),
+                    sourceUuidGenerations = (ticket.SourceUuids ?? [])
+                        .Select(value => value.Generation)
+                        .ToArray(),
                     venues = (ticket.ImportedVenues ?? [])
                         .Select(value => value.VenueUuid)
                         .ToArray(),

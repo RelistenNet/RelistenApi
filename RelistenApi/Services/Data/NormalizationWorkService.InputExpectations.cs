@@ -55,7 +55,8 @@ public sealed partial class NormalizationWorkService
         NormalizationBindingInputReference[] expectedInputs,
         NormalizationImportedVenueDependency[] importedVenues,
         NormalizationCandidateUniverseDependency[] candidateUniverses,
-        NormalizationSubjectObservation[] ownerObservations
+        NormalizationSubjectObservation[] ownerObservations,
+        NormalizationSourceUuidDependency[] sourceUuids
     )
     {
         if (
@@ -64,6 +65,7 @@ public sealed partial class NormalizationWorkService
             && importedVenues.Length == 0
             && candidateUniverses.Length == 0
             && ownerObservations.Length == 0
+            && sourceUuids.Length == 0
         )
         {
             return Hash(request);
@@ -93,6 +95,10 @@ public sealed partial class NormalizationWorkService
                 "expectedOwnerObservations",
                 JsonSerializer.SerializeToElement(ownerObservations)
             );
+        }
+        if (sourceUuids.Length > 0)
+        {
+            fields.Add("sourceUuids", JsonSerializer.SerializeToElement(sourceUuids));
         }
         return Hash(JsonSerializer.SerializeToElement(fields));
     }

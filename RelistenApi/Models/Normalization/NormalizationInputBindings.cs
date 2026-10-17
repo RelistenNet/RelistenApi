@@ -35,5 +35,7 @@ public sealed record NormalizationInputContributionState(
     IReadOnlyList<Guid>? ImportedVenueUuids = null,
     IReadOnlyList<NormalizationCandidateUniverseKey>? CandidateUniverses = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        IReadOnlyList<Guid>? OwnerObservationSubjectUuids = null
+        IReadOnlyList<Guid>? OwnerObservationSubjectUuids = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<Guid>? SourceUuids = null
 );
