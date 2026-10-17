@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -109,20 +111,35 @@ public sealed partial class NormalizationRecordingLookupService(
             await store.GetRegistrationAsync(lookupUuid, cancellationToken)
             ?? throw new ArgumentException("The recording lookup is unknown.", nameof(lookupUuid));
         NormalizationBindingInputReference? input = null;
+        IReadOnlyList<NormalizationBindingInputReference>? supportingInputs = null;
         if (registration.Mode == NormalizationRecordingLookupMode.RetainedProvider)
         {
-            var current =
-                await evidence.GetCurrentInputAsync(registration.Resource, cancellationToken)
-                ?? throw new ArgumentException(
-                    "The recording lookup has no current retained input."
-                );
-            input = new(current.Revision.Uuid, current.Resource);
+            var resources =
+                registration.Resource.Provider == "local"
+                    ? new[]
+                    {
+                        registration.Resource,
+                        NormalizationProviderResources.LocalRootForDirectory(registration.Resource),
+                    }
+                    : new[] { registration.Resource };
+            var references = await evidence.GetCurrentInputReferencesAsync(
+                resources,
+                cancellationToken
+            );
+            input = references.Single(reference => reference.Resource == registration.Resource);
+            supportingInputs =
+                resources.Length == 1
+                    ? null
+                    : references
+                        .Where(reference => reference.Resource != registration.Resource)
+                        .ToArray();
         }
         var request = new NormalizationRecordingLookupRequest(
             registration.Mode,
             registration.Resource,
             registration.ExpectedArtistUuid,
-            input
+            input,
+            supportingInputs
         );
         try
         {

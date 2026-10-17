@@ -11,7 +11,8 @@ namespace Relisten.Data;
 /// <summary>
 /// The initiating lookup's immutable evidence is a subset of a complete processing preparation.
 /// Added peer inputs may extend that preparation; they cannot refresh the initiating facts,
-/// legacy capture receipt or its original CAS revisions.
+/// legacy capture receipt or its original CAS revisions. Exact binding equality also retains
+/// every supporting input, including a Local directory's original root revision.
 /// </summary>
 internal sealed record NormalizationRecordingHandoffEvidence(
     Guid HandoffUuid,

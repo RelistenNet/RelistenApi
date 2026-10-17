@@ -77,14 +77,33 @@ public sealed partial class NormalizationRecordingProposalService
         ArgumentException.ThrowIfNullOrWhiteSpace(input.Contributor.Provider);
         ArgumentException.ThrowIfNullOrWhiteSpace(input.Contributor.ResourceType);
         ArgumentException.ThrowIfNullOrWhiteSpace(input.Contributor.ProviderKey);
-        if (
-            input.ExpectedContributionRevision < 0
-            || binding.InputRevisionUuid == Guid.Empty
-            || binding.Inputs.Count != 1
-        )
+        if (input.ExpectedContributionRevision < 0 || binding.InputRevisionUuid == Guid.Empty)
         {
             throw new ArgumentException(
-                "Each recording contributor requires its exact single input and admission revision."
+                "Each recording contributor requires its exact input and admission revision."
+            );
+        }
+        var local =
+            binding.Resource.Provider == "local"
+            && binding.Resource.ResourceType == "directory_metadata";
+        if (local)
+        {
+            var root = NormalizationProviderResources.LocalRootForDirectory(binding.Resource);
+            if (
+                binding.SupportingInputs is not { Count: 1 }
+                || binding.SupportingInputs[0].Resource != root
+                || binding.SupportingInputs[0].InputRevisionUuid == Guid.Empty
+            )
+            {
+                throw new ArgumentException(
+                    "Local recording inputs require their exact retained metadata root."
+                );
+            }
+        }
+        else if (binding.Inputs.Count != 1)
+        {
+            throw new ArgumentException(
+                "This recording provider has no supporting input contract."
             );
         }
         if (binding.Resource.Provider == "legacy_catalog")
@@ -103,7 +122,8 @@ public sealed partial class NormalizationRecordingProposalService
         else
         {
             var supported =
-                binding.Resource.Provider == "archive.org"
+                local
+                || binding.Resource.Provider == "archive.org"
                     && binding.Resource.ResourceType == "item_metadata"
                 || binding.Resource.Provider == "phish.in"
                     && binding.Resource.ResourceType == "show";
@@ -172,35 +192,38 @@ public sealed partial class NormalizationRecordingProposalService
         foreach (var input in NormalizationRecordingReadSet.Inputs(preparation))
         {
             var binding = input.Binding;
-            var valid = await connection.ExecuteScalarAsync<bool>(
-                new CommandDefinition(
-                    """
-                    SELECT EXISTS(SELECT 1 FROM normalization.input_revisions r
-                        JOIN normalization.input_resources p ON p.uuid=r.resource_uuid
-                        WHERE r.uuid=@InputRevisionUuid AND p.provider=@Provider AND p.resource_type=@ResourceType AND p.provider_key=@ProviderKey
-                            AND (@legacy=false OR (r.capture_version=@version AND EXISTS(
-                                SELECT 1 FROM normalization.input_fetches f WHERE f.fetch_uuid=@FetchUuid AND f.accepted_as_current
-                                    AND f.resource_uuid=p.uuid AND f.input_revision_uuid=r.uuid))))
-                    """,
-                    new
-                    {
-                        binding.InputRevisionUuid,
-                        binding.Resource.Provider,
-                        binding.Resource.ResourceType,
-                        binding.Resource.ProviderKey,
-                        legacy = binding.Resource.Provider == "legacy_catalog",
-                        version = NormalizationLegacyInputService.RefreshCaptureVersion,
-                        input.FetchUuid,
-                    },
-                    transaction,
-                    cancellationToken: ct
-                )
-            );
-            if (!valid)
+            foreach (var reference in binding.Inputs)
             {
-                throw new NormalizationConflictException(
-                    "Recording preparation does not identify its original retained input and genuine catalog receipt."
+                var valid = await connection.ExecuteScalarAsync<bool>(
+                    new CommandDefinition(
+                        """
+                        SELECT EXISTS(SELECT 1 FROM normalization.input_revisions r
+                            JOIN normalization.input_resources p ON p.uuid=r.resource_uuid
+                            WHERE r.uuid=@InputRevisionUuid AND p.provider=@Provider AND p.resource_type=@ResourceType AND p.provider_key=@ProviderKey
+                                AND (@legacy=false OR (r.capture_version=@version AND EXISTS(
+                                    SELECT 1 FROM normalization.input_fetches f WHERE f.fetch_uuid=@FetchUuid AND f.accepted_as_current
+                                        AND f.resource_uuid=p.uuid AND f.input_revision_uuid=r.uuid))))
+                        """,
+                        new
+                        {
+                            reference.InputRevisionUuid,
+                            reference.Resource.Provider,
+                            reference.Resource.ResourceType,
+                            reference.Resource.ProviderKey,
+                            legacy = binding.Resource.Provider == "legacy_catalog",
+                            version = NormalizationLegacyInputService.RefreshCaptureVersion,
+                            input.FetchUuid,
+                        },
+                        transaction,
+                        cancellationToken: ct
+                    )
                 );
+                if (!valid)
+                {
+                    throw new NormalizationConflictException(
+                        "Recording preparation does not identify its original retained input and genuine catalog receipt."
+                    );
+                }
             }
         }
     }

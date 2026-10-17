@@ -118,13 +118,7 @@ public sealed partial class NormalizationRecordingLookupService
         }
         else
         {
-            var input = await RequireInputAsync(attempt.Request.Input!, ct);
-            var observation = DecodeRecording(input, attempt.Request.Resource, ct);
-            checkedBinding = await bindings.BindRecordingAsync(
-                observation,
-                attempt.Request.ExpectedArtistUuid,
-                ct
-            );
+            checkedBinding = await BindRetainedAsync(attempt.Request, ct);
         }
         if (
             !JsonElement.DeepEquals(

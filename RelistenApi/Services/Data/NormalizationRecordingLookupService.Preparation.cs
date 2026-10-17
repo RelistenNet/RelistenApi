@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -170,10 +172,40 @@ public sealed partial class NormalizationRecordingLookupService
         CancellationToken ct
     )
     {
-        var input = await RequireInputAsync(request.Input!, ct);
-        var recording = DecodeRecording(input, request.Resource, ct);
-        var bound = await bindings.BindRecordingAsync(recording, request.ExpectedArtistUuid, ct);
+        var bound = await BindRetainedAsync(request, ct);
         return Preparation(bound, expectedConfigurationGeneration);
+    }
+
+    private async Task<NormalizationRecordingBindingSnapshot> BindRetainedAsync(
+        NormalizationRecordingLookupRequest request,
+        CancellationToken ct
+    )
+    {
+        var references = new[] { request.Input! }.Concat(request.SupportingInputs ?? []).ToArray();
+        var retained = await evidence.GetInputsAsync(references, cancellationToken: ct);
+        var input = retained.Single(value => value.Uuid == request.Input!.InputRevisionUuid);
+        if (request.Resource.Provider == "local")
+        {
+            var root = retained.Single(value =>
+                value.Uuid == request.SupportingInputs!.Single().InputRevisionUuid
+            );
+            // Bound parsing before the binder materializes all root accounts. The original
+            // input remains unchanged; this read does not construct a replacement root map.
+            var decodedRoot = NormalizationLocalRecordingSelection.DecodeRoot(
+                root,
+                decoder,
+                cancellationToken: ct
+            );
+            return await bindings.BindLocalDirectoryWithRootAsync(
+                root,
+                input,
+                decodedRoot,
+                request.ExpectedArtistUuid,
+                ct
+            );
+        }
+        var recording = DecodeRecording(input, request.Resource, ct);
+        return await bindings.BindRecordingAsync(recording, request.ExpectedArtistUuid, ct);
     }
 
     private static NormalizationRecordingLookupPreparation Preparation(
@@ -195,25 +227,6 @@ public sealed partial class NormalizationRecordingLookupService
             bound ? Guid.NewGuid() : null,
             legacyPreparation == null ? null : NormalizationRecordingProcessor.Version
         );
-    }
-
-    private async Task<NormalizationInputRevision> RequireInputAsync(
-        NormalizationBindingInputReference reference,
-        CancellationToken ct
-    )
-    {
-        var input =
-            await evidence.GetInputAsync(reference.InputRevisionUuid, ct)
-            ?? throw new ArgumentException(
-                "The requested retained recording input does not exist."
-            );
-        if (input.Resource != reference.Resource)
-        {
-            throw new ArgumentException(
-                "The retained recording input belongs to another resource."
-            );
-        }
-        return input;
     }
 
     private ProviderRecordingObservation DecodeRecording(

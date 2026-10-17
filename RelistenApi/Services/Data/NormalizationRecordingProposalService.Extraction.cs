@@ -293,87 +293,138 @@ public sealed partial class NormalizationRecordingProposalService
         CancellationToken ct
     )
     {
+        // Check size and resource identities for the complete immutable read set before
+        // allocating payloads. Supporting roots may be shared by several directory groups.
+        var prepared = NormalizationRecordingReadSet.Inputs(batch.Preparation);
+        var retained = await NormalizationEvidenceService.GetInputsAsync(
+            c,
+            t,
+            prepared.SelectMany(input => input.Binding.Inputs).Distinct().ToArray(),
+            cancellationToken: ct
+        );
+        var inputs = retained.ToDictionary(input => input.Uuid);
+        var decoder = new NormalizationProviderDecoder();
+        var roots = new Dictionary<Guid, ProviderDecodeResult>();
         foreach (var group in ExtractionGroups(batch))
         {
-            var inputRow =
-                await c.QuerySingleOrDefaultAsync<ExtractionInputRow>(
-                    new CommandDefinition(
-                        """
-                        SELECT r.uuid AS "Uuid",p.provider AS "Provider",p.resource_type AS "ResourceType",p.provider_key AS "ProviderKey",
-                            r.payload AS "Payload",r.media_type AS "MediaType",r.capture_version AS "CaptureVersion",r.sha256 AS "Sha256",r.captured_at AS "CapturedAt"
-                        FROM normalization.input_revisions r JOIN normalization.input_resources p ON p.uuid=r.resource_uuid
-                        WHERE r.uuid=@InputRevisionUuid
-                        """,
-                        group,
-                        t,
+            var binding = prepared
+                .First(input => input.Binding.InputRevisionUuid == group.InputRevisionUuid)
+                .Binding;
+            var input = inputs[group.InputRevisionUuid];
+            var decoded = decoder.Decode(input, ct);
+            NormalizationInputRevision? root = null;
+            NormalizationLocalRecordingContext? selection = null;
+            if (input.Resource.Provider == "local")
+            {
+                root = inputs[binding.SupportingInputs!.Single().InputRevisionUuid];
+                if (!roots.TryGetValue(root.Uuid, out var rootDecoded))
+                {
+                    rootDecoded = NormalizationLocalRecordingSelection.DecodeRoot(
+                        root,
+                        decoder,
                         cancellationToken: ct
-                    )
-                ) ?? throw new ArgumentException("Recording extraction input does not exist.");
-            var input = inputRow.ToRevision();
+                    );
+                    roots.Add(root.Uuid, rootDecoded);
+                }
+                selection = NormalizationLocalRecordingSelection.Select(
+                    input,
+                    decoded,
+                    binding,
+                    root,
+                    rootDecoded,
+                    ct
+                );
+            }
             using var document = NormalizationRetainedDocument.Open(input, ct);
+            using var rootDocument =
+                root == null ? null : NormalizationRetainedDocument.Open(root, ct);
             foreach (var reference in ExtractionEvidence(group.Extraction))
             {
-                if (reference.InputRevisionUuid != group.InputRevisionUuid)
+                if (reference.InputRevisionUuid == input.Uuid)
+                {
+                    document.ValidateEvidence(reference);
+                }
+                else if (reference.InputRevisionUuid == root?.Uuid)
+                {
+                    rootDocument!.ValidateEvidence(reference);
+                }
+                else
                 {
                     throw new ArgumentException(
-                        "Recording proposals must cite their own input extraction group."
+                        "Recording proposals must cite their own input or its explicit selected Local root account."
                     );
                 }
-                document.ValidateEvidence(reference);
             }
-            var claims = group
-                .Extraction.Credits.Select(credit => (credit.FileOrigin, credit.Mention.Evidence))
-                .Concat(
-                    group.Extraction.UnresolvedCredits.Select(issue =>
-                        (issue.FileOrigin, issue.Evidence)
-                    )
+            if (
+                selection != null
+                && group.Extraction.DecodeIssues.Any(issue =>
+                    issue.Evidence.InputRevisionUuid == root!.Uuid
+                    && !selection.RootIssues.Contains(issue)
                 )
-                .ToArray();
-            if (claims.Length == 0)
+            )
             {
-                continue;
+                throw new ArgumentException(
+                    "Local root issues must belong to the selected directory account."
+                );
             }
-            // A valid pointer alone proves neither file membership nor recording-wide scope.
-            // Decode the original scopes, without rerunning extraction or identity policy.
-            var decoded = new NormalizationProviderDecoder().Decode(input, ct);
-            var files = decoded
-                .Recordings.SelectMany(recording => recording.Files)
-                .ToDictionary(file => file.Origin);
-            var recordingFields = decoded
-                .Recordings.SelectMany(recording => recording.Text)
-                .ToArray();
-            foreach (var claim in claims)
+            ValidateCreditScopes(
+                input,
+                document,
+                decoded,
+                selection?.RootAccount,
+                group.Extraction
+            );
+        }
+    }
+
+    private static void ValidateCreditScopes(
+        NormalizationInputRevision input,
+        NormalizationRetainedDocument document,
+        ProviderDecodeResult decoded,
+        ProviderRecordingObservation? selectedRoot,
+        NormalizationRecordingExtraction extraction
+    )
+    {
+        var claims = extraction
+            .Credits.Select(credit => (credit.FileOrigin, credit.Mention.Evidence))
+            .Concat(
+                extraction.UnresolvedCredits.Select(issue => (issue.FileOrigin, issue.Evidence))
+            )
+            .ToArray();
+        var files = decoded
+            .Recordings.SelectMany(recording => recording.Files)
+            .ToDictionary(file => file.Origin);
+        var recordingFields = decoded
+            .Recordings.SelectMany(recording => recording.Text)
+            .Concat(selectedRoot?.Text ?? [])
+            .ToArray();
+        foreach (var claim in claims)
+        {
+            if (claim.FileOrigin is { } origin)
             {
-                if (claim.FileOrigin is { } origin)
-                {
-                    if (
-                        !files.TryGetValue(origin, out var file)
-                        || !file.Text.Any(field =>
-                            EvidenceWithin(field.Text.Evidence, claim.Evidence)
-                        )
-                    )
-                    {
-                        throw new ArgumentException(
-                            "File credit proposals require an original decoded file origin."
-                        );
-                    }
-                    NormalizationRecordingExtractor.ValidateFileCreditEvidence(
-                        input,
-                        document,
-                        origin,
-                        claim.Evidence
-                    );
-                }
-                else if (
-                    !recordingFields.Any(field =>
-                        EvidenceWithin(field.Text.Evidence, claim.Evidence)
-                    )
+                if (
+                    !files.TryGetValue(origin, out var file)
+                    || !file.Text.Any(field => EvidenceWithin(field.Text.Evidence, claim.Evidence))
                 )
                 {
                     throw new ArgumentException(
-                        "Recording credits must cite original recording prose without discarding file scope."
+                        "File credit proposals require an original decoded file origin."
                     );
                 }
+                NormalizationRecordingExtractor.ValidateFileCreditEvidence(
+                    input,
+                    document,
+                    origin,
+                    claim.Evidence
+                );
+            }
+            else if (
+                !recordingFields.Any(field => EvidenceWithin(field.Text.Evidence, claim.Evidence))
+            )
+            {
+                throw new ArgumentException(
+                    "Recording credits must cite original selected recording prose without discarding file scope."
+                );
             }
         }
     }
@@ -395,31 +446,6 @@ public sealed partial class NormalizationRecordingProposalService
                     && child.StartCodePoint >= parent.StartCodePoint
                     && child.EndCodePoint <= parent.EndCodePoint
             );
-    }
-
-    private sealed class ExtractionInputRow
-    {
-        public Guid Uuid { get; init; }
-        public string Provider { get; init; } = null!;
-        public string ResourceType { get; init; } = null!;
-        public string ProviderKey { get; init; } = null!;
-        public byte[] Payload { get; init; } = [];
-        public string MediaType { get; init; } = null!;
-        public string CaptureVersion { get; init; } = null!;
-        public string Sha256 { get; init; } = null!;
-        public DateTime CapturedAt { get; init; }
-
-        public NormalizationInputRevision ToRevision() =>
-            new()
-            {
-                Uuid = Uuid,
-                Resource = new(Provider, ResourceType, ProviderKey),
-                Payload = Payload,
-                MediaType = MediaType,
-                CaptureVersion = CaptureVersion,
-                Sha256 = Sha256,
-                CapturedAt = CapturedAt,
-            };
     }
 
     private static IEnumerable<NormalizedEvidenceReference> ExtractionEvidence(

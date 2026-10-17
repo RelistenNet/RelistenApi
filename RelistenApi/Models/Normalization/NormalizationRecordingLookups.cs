@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -14,12 +15,16 @@ public enum NormalizationRecordingLookupMode
 /// has no input. A retained provider request pins an actual immutable input revision; its
 /// recording identity must equal that input resource. Input revisions belong to attempts,
 /// while mode, recording identity and expected artist identify the durable registration.
+/// Local directory requests retain their actual root reference in SupportingInputs; the
+/// root is contextual evidence for that directory account, not another recording to process.
 /// </summary>
 public sealed record NormalizationRecordingLookupRequest(
     NormalizationRecordingLookupMode Mode,
     NormalizationResourceKey Resource,
     Guid? ExpectedArtistUuid = null,
-    NormalizationBindingInputReference? Input = null
+    NormalizationBindingInputReference? Input = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationBindingInputReference>? SupportingInputs = null
 );
 
 public sealed record NormalizationRecordingLookupRegistration(
@@ -31,10 +36,11 @@ public sealed record NormalizationRecordingLookupRegistration(
 
 /// <summary>
 /// The first complete preparation wins. Binding and AbsenceProbe are mutually exclusive.
-/// Legacy bindings retain the original capture receipt and producer clocks; only a bound
-/// legacy lookup carries a prepared extraction handoff. Lookup configuration CAS is separate
-/// from the extraction owner's CAS inside LegacyPreparation. Downstream IDs and the legacy processing version
-/// are fixed before admission so recovery cannot create another processing attempt.
+/// Bound lookups retain a stable downstream handoff ID. Legacy bindings also retain their
+/// original capture receipt, producer clocks and extraction-owner CAS in LegacyPreparation.
+/// Lookup configuration CAS is separate from that downstream CAS. The downstream ID and
+/// legacy processing version are fixed before admission so recovery cannot create another
+/// processing attempt; retained providers freeze their consumer version when delivery starts.
 /// </summary>
 public sealed record NormalizationRecordingLookupPreparation(
     NormalizationRecordingBindingSnapshot? Binding,
@@ -76,8 +82,8 @@ public sealed record NormalizationRecordingLookupAttempt(
 /// <summary>
 /// Durable delivery references the lookup's immutable preparation rather than storing another
 /// copy. LegacyPreparation is populated on read from that preparation. For retained providers,
-/// ProcessingVersion stays null until a provider consumer has an admitted version. Retained provider
-/// handoffs remain pending until a provider consumer exists; no legacy refresh is substituted.
+/// ProcessingVersion is null: the consumer freezes its version in the processing attempt header.
+/// Retained input and supporting context are consumed unchanged; no legacy refresh is substituted.
 /// </summary>
 public sealed record NormalizationRecordingLookupHandoff(
     Guid HandoffUuid,

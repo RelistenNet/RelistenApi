@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -12,6 +13,7 @@ public sealed partial class NormalizationRecordingProcessor
     private async Task<NormalizationRecordingAttempt> PrepareAsync(
         NormalizationRecordingAttempt attempt,
         NormalizationRecordingLookupHandoff? handoff,
+        RecordingInputSet inputSet,
         CancellationToken ct
     )
     {
@@ -41,18 +43,20 @@ public sealed partial class NormalizationRecordingProcessor
                 handoff?.Mode == NormalizationRecordingLookupMode.RetainedProvider
                     ? (await RequireLookupAttemptAsync(handoff, ct)).Request.Resource
                     : Contributor(attempt.SourceUuid);
-            var primaryState = memberships.Contributions.SingleOrDefault(state =>
-                state.Contributor == primaryKey
-            );
+            var primaryRevision =
+                memberships
+                    .Contributions.SingleOrDefault(state => state.Contributor == primaryKey)
+                    ?.Revision
+                ?? 0;
             var primary =
                 handoff == null
                     ? await PrepareLegacyInputAsync(
                         attempt.SourceUuid,
-                        primaryState?.Revision ?? 0,
+                        primaryRevision,
                         previousInputs,
                         ct
                     )
-                    : await PrepareHandoffInputAsync(handoff, primaryState?.Revision ?? 0, ct);
+                    : await PrepareHandoffInputAsync(handoff, primaryRevision, ct);
             if (primary == null)
             {
                 return await proposals.CompleteAsync(
@@ -66,73 +70,30 @@ public sealed partial class NormalizationRecordingProcessor
             {
                 return await AttentionAsync(attempt, primary.Binding.Recording.Reason, ct);
             }
-            var additional = new List<NormalizationRecordingPreparedInput>();
-            foreach (
-                var state in memberships.Contributions.Where(state =>
-                    HasFacts(state) && state.Contributor != primaryKey
-                )
-            )
+            var peers = await PreparePeerAccountsAsync(
+                attempt.SourceUuid,
+                primary,
+                memberships.Contributions,
+                previousInputs,
+                inputSet,
+                ct
+            );
+            if (peers == null)
             {
-                var peer =
-                    state.Contributor == Contributor(attempt.SourceUuid)
-                        ? await PrepareLegacyInputAsync(
-                            attempt.SourceUuid,
-                            state.Revision,
-                            previousInputs,
-                            ct
-                        )
-                        : await PrepareProviderInputAsync(
-                            state,
-                            primary.Binding.Recording.Value!.ArtistUuid,
-                            ct
-                        );
-                if (
-                    peer?.Binding.Recording.Value is not { } recording
-                    || peer.Binding.Recording.Status != NormalizationCatalogBindingStatus.Bound
-                    || recording.SourceUuid != attempt.SourceUuid
-                    || recording.ArtistUuid != primary.Binding.Recording.Value!.ArtistUuid
-                )
-                {
-                    return await AttentionAsync(attempt, "peer_recording_unresolved", ct);
-                }
-                additional.Add(peer);
+                return await AttentionAsync(attempt, "peer_recording_unresolved", ct);
             }
             var originalLegacy =
                 handoff?.Mode == NormalizationRecordingLookupMode.LegacyCatalog
-                    ? handoff.LegacyPreparation!
+                    ? handoff.LegacyPreparation
                     : null;
-            var preparation = new NormalizationRecordingPreparation(
-                primary.FetchUuid,
-                primary.ProducerCatalogInputs ?? [],
-                primary.Binding,
-                originalLegacy == null
-                    ? memberships.Owner?.DesiredGeneration
-                    : originalLegacy.ExpectedConfigurationGeneration,
-                primary.ExpectedContributionRevision,
-                handoff?.Mode == NormalizationRecordingLookupMode.RetainedProvider
-                    ? primary.Contributor
-                    : null,
-                additional.Count == 0
-                    ? null
-                    : additional
-                        .OrderBy(input => input.Contributor.Provider, StringComparer.Ordinal)
-                        .ThenBy(input => input.Contributor.ResourceType, StringComparer.Ordinal)
-                        .ThenBy(input => input.Contributor.ProviderKey, StringComparer.Ordinal)
-                        .ToArray(),
-                memberships
-                    .Contributions.Select(state => new NormalizationInputContributionRevision(
-                        state.Contributor,
-                        state.Revision
-                    ))
-                    .ToArray()
-            );
+            var preparation = CompletePreparation(primary, peers, memberships, originalLegacy);
             return await proposals.SavePreparationAsync(attempt.AttemptUuid, preparation, ct);
         }
         catch (Exception error)
             when (error is NormalizationStaleInputException or NormalizationConflictException)
         {
-            // Preparation is first-wins. A caller that loses refresh admission must resume a
-            // concurrent saved winner, never terminate it using the discarded candidate facts.
+            // A refresh loser resumes a concurrent saved winner. Its discarded candidate
+            // facts cannot terminate another caller's immutable preparation.
             var current = await proposals.GetAttemptAsync(attempt.AttemptUuid, ct);
             if (current!.Preparation != null || current.Result != null)
             {
@@ -141,6 +102,104 @@ public sealed partial class NormalizationRecordingProcessor
             throw;
         }
     }
+
+    private async Task<NormalizationRecordingPreparedInput[]?> PreparePeerAccountsAsync(
+        Guid sourceUuid,
+        NormalizationRecordingPreparedInput primary,
+        IReadOnlyList<NormalizationInputContributionState> memberships,
+        IReadOnlyList<NormalizationRecordingPreparedInput> previous,
+        RecordingInputSet inputSet,
+        CancellationToken ct
+    )
+    {
+        var peers = memberships
+            .Where(state => HasFacts(state) && state.Contributor != primary.Contributor)
+            .ToArray();
+        var additional = new List<NormalizationRecordingPreparedInput>();
+        var legacyState = peers.SingleOrDefault(state =>
+            state.Contributor == Contributor(sourceUuid)
+        );
+        if (legacyState != null)
+        {
+            var legacyPeer = await PrepareLegacyInputAsync(
+                sourceUuid,
+                legacyState.Revision,
+                previous,
+                ct
+            );
+            if (!SameRecording(primary, legacyPeer))
+            {
+                return null;
+            }
+            additional.Add(legacyPeer!);
+        }
+        var providerStates = peers.Where(state => state != legacyState).ToArray();
+        var resources = providerStates.SelectMany(state => state.Resources).Distinct().ToArray();
+        IReadOnlyList<NormalizationBindingInputReference> references =
+            resources.Length == 0
+                ? []
+                : await evidence.GetCurrentInputReferencesAsync(resources, ct);
+        var completeReferences = primary
+            .Binding.Inputs.Concat(additional.SelectMany(input => input.Binding.Inputs))
+            .Concat(references)
+            .Distinct()
+            .ToArray();
+        var retained = await ReadInputsAsync(completeReferences, inputSet, ct);
+        foreach (var state in providerStates)
+        {
+            var peer = await PrepareProviderInputAsync(
+                state,
+                primary.Binding.Recording.Value!.ArtistUuid,
+                references,
+                retained,
+                inputSet.Roots,
+                ct
+            );
+            if (!SameRecording(primary, peer))
+            {
+                return null;
+            }
+            additional.Add(peer);
+        }
+        return additional
+            .OrderBy(input => input.Contributor.Provider, StringComparer.Ordinal)
+            .ThenBy(input => input.Contributor.ResourceType, StringComparer.Ordinal)
+            .ThenBy(input => input.Contributor.ProviderKey, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static bool SameRecording(
+        NormalizationRecordingPreparedInput primary,
+        NormalizationRecordingPreparedInput? peer
+    ) =>
+        peer?.Binding.Recording.Value is { } recording
+        && peer.Binding.Recording.Status == NormalizationCatalogBindingStatus.Bound
+        && recording.SourceUuid == primary.Binding.Recording.Value!.SourceUuid
+        && recording.ArtistUuid == primary.Binding.Recording.Value.ArtistUuid;
+
+    private static NormalizationRecordingPreparation CompletePreparation(
+        NormalizationRecordingPreparedInput primary,
+        IReadOnlyList<NormalizationRecordingPreparedInput> peers,
+        NormalizationInputContributionsSnapshot memberships,
+        NormalizationRecordingPreparation? originalLegacy
+    ) =>
+        new(
+            primary.FetchUuid,
+            primary.ProducerCatalogInputs ?? [],
+            primary.Binding,
+            originalLegacy == null
+                ? memberships.Owner?.DesiredGeneration
+                : originalLegacy.ExpectedConfigurationGeneration,
+            primary.ExpectedContributionRevision,
+            primary.FetchUuid == null ? primary.Contributor : null,
+            peers.Count == 0 ? null : peers,
+            memberships
+                .Contributions.Select(state => new NormalizationInputContributionRevision(
+                    state.Contributor,
+                    state.Revision
+                ))
+                .ToArray()
+        );
 
     private async Task<NormalizationRecordingPreparedInput> PrepareHandoffInputAsync(
         NormalizationRecordingLookupHandoff handoff,
@@ -247,16 +306,36 @@ public sealed partial class NormalizationRecordingProcessor
     private async Task<NormalizationRecordingPreparedInput> PrepareProviderInputAsync(
         NormalizationInputContributionState state,
         Guid artistUuid,
+        IReadOnlyList<NormalizationBindingInputReference> references,
+        IReadOnlyDictionary<Guid, NormalizationInputRevision> retained,
+        Dictionary<Guid, ProviderDecodeResult> roots,
         CancellationToken ct
     )
     {
-        var current =
-            await evidence.GetCurrentInputAsync(state.Resources.Single(), ct)
-            ?? throw new NormalizationConflictException(
-                "A contributed provider recording has no current input."
+        var reference = references.Single(input => input.Resource == state.Contributor);
+        var input = retained[reference.InputRevisionUuid];
+        if (input.Resource.Provider == "local")
+        {
+            var rootReference = references.Single(value =>
+                value.Resource
+                == NormalizationProviderResources.LocalRootForDirectory(input.Resource)
             );
-        var decoded = decoder.Decode(current.Revision, ct);
-        if (decoded.Recordings.Count != 1 || decoded.Recordings[0].Origin.Item != current.Resource)
+            var root = retained[rootReference.InputRevisionUuid];
+            var decodedRoot = DecodeRoot(root, roots, ct);
+            return new(
+                state.Contributor,
+                state.Revision,
+                await bindings.BindLocalDirectoryWithRootAsync(
+                    root,
+                    input,
+                    decodedRoot,
+                    artistUuid,
+                    ct
+                )
+            );
+        }
+        var decoded = decoder.Decode(input, ct);
+        if (decoded.Recordings.Count != 1 || decoded.Recordings[0].Origin.Item != input.Resource)
         {
             throw new ArgumentException(
                 "A provider input must contain its exact single recording account."
@@ -284,13 +363,31 @@ public sealed partial class NormalizationRecordingProcessor
     private static bool IsSupported(NormalizationInputContributionState state, Guid sourceUuid)
     {
         if (
-            state.Resources.Count != 1
-            || state.DependencySubjectUuids.Count != 0
-            || state.UsesMappingRegistry
+            state.DependencySubjectUuids.Count != 0
             || (state.ImportedVenueUuids?.Count ?? 0) != 0
             || (state.CandidateUniverses?.Count ?? 0) != 0
             || (state.OwnerObservationSubjectUuids?.Count ?? 0) != 0
         )
+        {
+            return false;
+        }
+        if (state.Contributor.Provider == "local")
+        {
+            NormalizationResourceKey root;
+            try
+            {
+                root = NormalizationProviderResources.LocalRootForDirectory(state.Contributor);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+            return state.UsesMappingRegistry
+                && state.Resources.Count == 2
+                && state.Resources.Contains(state.Contributor)
+                && state.Resources.Contains(root);
+        }
+        if (state.Resources.Count != 1 || state.UsesMappingRegistry)
         {
             return false;
         }

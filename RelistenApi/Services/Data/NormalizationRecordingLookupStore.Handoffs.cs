@@ -33,8 +33,8 @@ public sealed partial class NormalizationRecordingLookupStore
         );
 
     /// <summary>
-    /// Bounded stable UUID page of unacknowledged delivery. Filter by mode when dispatching
-    /// legacy recordings so retained inputs awaiting a provider consumer cannot starve them.
+    /// Bounded stable UUID page of unacknowledged delivery. Filter by mode to inspect one
+    /// producer queue, and use afterUuid to advance through its pending handoffs.
     /// </summary>
     public Task<IReadOnlyList<NormalizationRecordingLookupHandoff>> GetPendingHandoffsAsync(
         int limit = 100,

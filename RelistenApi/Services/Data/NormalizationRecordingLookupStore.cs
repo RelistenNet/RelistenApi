@@ -39,14 +39,19 @@ public sealed partial class NormalizationRecordingLookupStore(DbService db)
     {
         RequireUuid(attemptUuid, nameof(attemptUuid));
         ArgumentException.ThrowIfNullOrWhiteSpace(processingVersion);
-        ValidateRequest(request);
         var requestJson = JsonSerializer.Serialize(request);
+        request = JsonSerializer.Deserialize<NormalizationRecordingLookupRequest>(requestJson)!;
+        ValidateRequest(request);
         return InTransaction(
             async (c, t) =>
             {
                 if (request.Input != null)
                 {
                     await RequireInputReference(c, t, request.Input, ct);
+                }
+                foreach (var support in request.SupportingInputs ?? [])
+                {
+                    await RequireInputReference(c, t, support, ct);
                 }
                 await c.ExecuteAsync(
                     new CommandDefinition(

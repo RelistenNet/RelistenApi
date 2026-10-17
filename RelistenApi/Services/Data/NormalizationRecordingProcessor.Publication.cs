@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -11,6 +13,7 @@ public sealed partial class NormalizationRecordingProcessor
 {
     private async Task<NormalizationRecordingProcessingResult> ProcessPreparedAsync(
         NormalizationRecordingAttempt attempt,
+        RecordingInputSet inputSet,
         CancellationToken ct
     )
     {
@@ -65,11 +68,17 @@ public sealed partial class NormalizationRecordingProcessor
         {
             return (await AttentionAsync(attempt, "unsupported_owner_inputs", ct)).Result!;
         }
+        var retained = await ReadInputsAsync(
+            inputs.SelectMany(input => input.Binding.Inputs).Distinct().ToArray(),
+            inputSet,
+            ct
+        );
+        var roots = inputSet.Roots;
         try
         {
             foreach (var input in inputs)
             {
-                await RevalidateAsync(input, ct);
+                await RevalidateAsync(input, retained, roots, ct);
             }
         }
         catch (NormalizationConflictException)
@@ -83,11 +92,14 @@ public sealed partial class NormalizationRecordingProcessor
         var extracted = new NormalizationRecordingInputExtraction[accounts.Length];
         for (var index = 0; index < accounts.Length; index++)
         {
-            var input = await RequireInputAsync(accounts[index].Binding, ct);
-            extracted[index] = new(
-                input.Uuid,
-                extractor.Extract(input, decoder.Decode(input, ct), accounts[index].Binding, ct)
-            );
+            var binding = accounts[index].Binding;
+            var input = retained[binding.InputRevisionUuid];
+            var decoded = decoder.Decode(input, ct);
+            var extraction =
+                binding.Resource.Provider == "local"
+                    ? ExtractLocal(input, decoded, binding, retained, roots, ct)
+                    : extractor.Extract(input, decoded, binding, ct);
+            extracted[index] = new(input.Uuid, extraction);
         }
         var batch = new NormalizationRecordingProposalBatch(
             attempt.AttemptUuid,
@@ -130,17 +142,31 @@ public sealed partial class NormalizationRecordingProcessor
 
     private async Task RevalidateAsync(
         NormalizationRecordingPreparedInput preparation,
+        IReadOnlyDictionary<Guid, NormalizationInputRevision> retained,
+        Dictionary<Guid, ProviderDecodeResult> roots,
         CancellationToken ct
     )
     {
-        var input = await RequireInputAsync(preparation.Binding, ct);
+        var input = retained[preparation.Binding.InputRevisionUuid];
         var decoded = decoder.Decode(input, ct);
         if (decoded.Recordings.Count != 1)
         {
             throw new ArgumentException("A prepared input must contain one recording account.");
         }
         NormalizationRecordingBindingSnapshot current;
-        if (preparation.FetchUuid is { } fetchUuid)
+        if (input.Resource.Provider == "local")
+        {
+            var root = retained[preparation.Binding.SupportingInputs!.Single().InputRevisionUuid];
+            var decodedRoot = DecodeRoot(root, roots, ct);
+            current = await bindings.BindLocalDirectoryWithRootAsync(
+                root,
+                input,
+                decodedRoot,
+                preparation.Binding.Recording.Value!.ArtistUuid,
+                ct
+            );
+        }
+        else if (preparation.FetchUuid is { } fetchUuid)
         {
             var capture =
                 await evidence.GetCaptureAsync(fetchUuid, ct)
@@ -170,22 +196,5 @@ public sealed partial class NormalizationRecordingProcessor
                 "Saved recording associations do not match their checked evidence."
             );
         }
-    }
-
-    private async Task<NormalizationInputRevision> RequireInputAsync(
-        NormalizationRecordingBindingSnapshot binding,
-        CancellationToken ct
-    )
-    {
-        var input =
-            await evidence.GetInputAsync(binding.InputRevisionUuid, ct)
-            ?? throw new InvalidOperationException("Prepared recording evidence is missing.");
-        if (input.Resource != binding.Resource)
-        {
-            throw new NormalizationConflictException(
-                "Prepared evidence belongs to another recording resource."
-            );
-        }
-        return input;
     }
 }

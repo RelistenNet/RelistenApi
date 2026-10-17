@@ -444,7 +444,7 @@ public sealed class TestNormalizationRecordingProcessor
     {
         var source = await Source();
         var oldVersion = NormalizationRecordingProcessor.Version.Replace(
-            "processing-v3/",
+            "processing-v4/",
             "processing-v1/"
         );
         var prepared = await Prepare(

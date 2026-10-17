@@ -30,6 +30,7 @@ public sealed partial class NormalizationRecordingLookupStore
                 || uuid == Guid.Empty
                 || request.Resource.ProviderKey != uuid.ToString("D")
                 || request.Input != null
+                || (request.SupportingInputs?.Count ?? 0) != 0
             )
             {
                 throw new ArgumentException(
@@ -38,8 +39,32 @@ public sealed partial class NormalizationRecordingLookupStore
             }
             return;
         }
+        var local =
+            request.Resource.Provider == "local"
+            && request.Resource.ResourceType == "directory_metadata";
+        if (local)
+        {
+            var root = NormalizationProviderResources.LocalRootForDirectory(request.Resource);
+            if (
+                request.SupportingInputs is not { Count: 1 }
+                || request.SupportingInputs[0].Resource != root
+                || request.SupportingInputs[0].InputRevisionUuid == Guid.Empty
+            )
+            {
+                throw new ArgumentException(
+                    "A Local lookup requires its exact retained metadata root."
+                );
+            }
+        }
+        else if ((request.SupportingInputs?.Count ?? 0) != 0)
+        {
+            throw new ArgumentException(
+                "This recording provider has no supporting input contract."
+            );
+        }
         var supported =
-            request.Resource.Provider == "archive.org"
+            local
+            || request.Resource.Provider == "archive.org"
                 && request.Resource.ResourceType == "item_metadata"
             || request.Resource.Provider == "phish.in"
                 && request.Resource.ResourceType == "show"
@@ -161,8 +186,9 @@ public sealed partial class NormalizationRecordingLookupStore
             || preparation.ProducerCatalogInputs != null
             || preparation.LegacyPreparation != null
             || preparation.ProcessingVersion != null
-            || binding.Inputs.Count != 1
-            || binding.Inputs[0] != attempt.Request.Input
+            || !binding.Inputs.SequenceEqual(
+                new[] { attempt.Request.Input! }.Concat(attempt.Request.SupportingInputs ?? [])
+            )
         )
         {
             throw new ArgumentException(

@@ -23,7 +23,7 @@ public sealed partial class NormalizationRecordingProcessor(
 )
 {
     public const string Version =
-        "catalog-recording-processing-v3/"
+        "catalog-recording-processing-v4/"
         + NormalizationLegacyInputService.RefreshCaptureVersion
         + "/"
         + NormalizationProviderDecoder.Version
@@ -151,12 +151,13 @@ public sealed partial class NormalizationRecordingProcessor(
         {
             return await FinishUnsupportedVersionAsync(attempt, ct);
         }
-        attempt = await PrepareAsync(attempt, handoff, ct);
+        var inputSet = new RecordingInputSet();
+        attempt = await PrepareAsync(attempt, handoff, inputSet, ct);
         if (attempt.Result != null)
         {
             return attempt.Result;
         }
-        return await ProcessPreparedAsync(attempt, ct);
+        return await ProcessPreparedAsync(attempt, inputSet, ct);
     }
 
     private async Task<NormalizationRecordingProcessingResult> FinishUnsupportedVersionAsync(
