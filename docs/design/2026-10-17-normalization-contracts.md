@@ -50,7 +50,11 @@ The [extraction tool](../../tools/RelistenNormalization/README.md) has separate 
 
 Migration 23 and `NormalizationCandidateService` add indexed candidate retrieval from accepted names, aliases and qualified provider IDs. Typed provider decoding and legacy recording seeds are implemented.
 
-Migrations 24–25 add catalog revision clocks, mapping-registry invalidation and contributor-owned input sets. Recording/file binding covers legacy, Archive, Phish.in and joint Local inputs. V2 recording refresh and exact input-revision admission prevent older wording from acquiring newer publication fences. Remaining provider bindings, durable extraction proposals and bounded coordinators, negative-lookup retry registration, the multi-candidate resolver, independent evaluation and full backfill remain required.
+Migrations 24–25 add catalog revision clocks, mapping-registry invalidation and contributor-owned input sets. Recording/file binding covers legacy, Archive, Phish.in and joint Local inputs. V2 recording refresh and exact input-revision admission prevent older wording from acquiring newer publication fences.
+
+Migration 26 adds immutable recording attempts and extraction checkpoints. `NormalizationRecordingProcessor.ProcessAsync` refreshes one stored recording, checks its complete evidence and catalog read set, and saves credit/title proposals under a separate extraction owner. It makes no accepted identity writes. The [recording-processing guide](../plans/active/2026-10-17-full-normalization/recording-processing.md) specifies replay, stale audit retention and failure behavior.
+
+Remaining provider bindings, bounded page jobs and direct provider coordinators, negative-lookup retry registration, the multi-candidate resolver, independent evaluation and full backfill remain required.
 
 [`NormalizationProviderInputService`](../../RelistenApi/Services/Data/NormalizationProviderInputService.cs) captures validated provider responses before legacy conversion and catalog transactions. `Normalization:Capture:Enabled` defaults to false independently of reads. All seven configured importers and Archive intake/discovery use this lifecycle; Phish.in adds a pre-request generation snapshot for stable per-show resources across changing pages. The [provider capture contract](../plans/active/2026-10-17-full-normalization/provider-capture.md) defines representation versions, keys, partial-page recovery and remaining refresh work. Capture fences admission, while later domain publication still requires the work-service read-set comparison.
 
@@ -104,6 +108,7 @@ Typed writers also enforce the subject's ownership. The registry UUID identifies
 
 | Domain and subject kind | Entity UUID and responsibility |
 | --- | --- |
+| `extractions / recording` | Source UUID; prepared evidence and local credit/title proposals. Completing extraction does not publish accepted relationships. |
 | `people / recording` | Source UUID; that recording's credits. |
 | `people / person` | Person UUID; the identity, aliases, external IDs and explicit corrections. |
 | `venues / imported_venue` | Legacy venue UUID; its canonical assignment. |

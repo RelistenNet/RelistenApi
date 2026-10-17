@@ -75,6 +75,8 @@ contributor's consumed inputs. The returned ticket can contain other contributor
 ticket before extraction and matching; do not replace an artist's repertoire
 with proposals computed from only the incoming recording. Bounded producer jobs,
 dependency reconciliation and the automatic resolver still need implementation.
+The [recording processor](recording-processing.md) implements this lifecycle for
+one stored recording and retains completed extractions separately from acceptance.
 
 ## Failure and recovery
 
