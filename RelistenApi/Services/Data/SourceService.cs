@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Transactions;
 using Dapper;
 using Relisten.Api.Models;
 
@@ -52,6 +53,107 @@ namespace Relisten.Data
                     new { artistId = artist.id, identifier }
                 )
             );
+
+        /// <summary>
+        /// Locks the intake item while an ordinary Archive import checks ownership.
+        /// Cohort assignment owns the item before first publication; retained published
+        /// references keep that ownership after approval pauses or upstream metadata changes.
+        /// Call inside the catalog transaction before changing any recording rows.
+        /// </summary>
+        public Task<bool> IsArchiveItemIntakeOwnedForUpdate(string identifier) =>
+            db.WithWriteConnection(async connection =>
+            {
+                await connection.QueryAsync<string>(
+                    "SELECT item_identifier FROM normalization.archive_item_intake WHERE item_identifier=@identifier FOR UPDATE",
+                    new { identifier }
+                );
+                return await connection.QuerySingleAsync<bool>(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1 FROM normalization.archive_item_intake i
+                        WHERE i.item_identifier=@identifier
+                        AND (i.published_source_uuid IS NOT NULL OR EXISTS (
+                            SELECT 1 FROM normalization.archive_artist_candidates c
+                            WHERE c.candidate_id=i.candidate_id AND c.artist_uuid IS NOT NULL
+                        ))
+                    )
+                    """,
+                    new { identifier }
+                );
+            });
+
+        // Use the same ownership predicate for candidate selection and final deletion.
+        // Source UUIDs survive administrative changes to the item's current candidate.
+        private const string WithoutArchiveIntakeOwnership = """
+            NOT EXISTS (
+                SELECT 1 FROM normalization.archive_item_intake i
+                WHERE (i.item_identifier=s.upstream_identifier OR i.published_source_uuid=s.uuid)
+                AND (i.published_source_uuid IS NOT NULL OR EXISTS (
+                    SELECT 1 FROM normalization.archive_artist_candidates c
+                    WHERE c.candidate_id=i.candidate_id AND c.artist_uuid IS NOT NULL
+                ))
+            )
+            """;
+
+        /// <summary>
+        /// Reads ordinary Archive deletion candidates, excluding recordings owned by intake
+        /// before applying the five-recording deletion guard or fetching deletion evidence.
+        /// </summary>
+        public Task<IEnumerable<Source>> ArchiveDeletionCandidatesFromPrimary(Artist artist) =>
+            db.WithWriteConnection(connection =>
+                connection.QueryAsync<Source>(
+                    $"SELECT s.* FROM sources s WHERE s.artist_id=@id AND {WithoutArchiveIntakeOwnership}",
+                    new { artist.id }
+                )
+            );
+
+        /// <summary>
+        /// Deletes only fixed Archive decisions that intake still does not own. Recheck at
+        /// the mutation boundary because ownership can change after upstream verification.
+        /// Other providers retain their existing removal contract.
+        /// </summary>
+        public async Task<int> RemoveUnownedArchiveSourcesWithUpstreamIdentifiers(
+            int artistId,
+            IEnumerable<string> upstreamIdentifiers
+        )
+        {
+            var identifiers = upstreamIdentifiers.ToArray();
+            using var scope = new TransactionScope(
+                TransactionScopeOption.Required,
+                new TransactionOptions { IsolationLevel = IsolationLevel.ReadCommitted },
+                TransactionScopeAsyncFlowOption.Enabled
+            );
+            var removed = await db.WithWriteConnection(async connection =>
+            {
+                // Intake publication locks this same item row before touching sources.
+                // Recheck ownership after any concurrent publication has committed.
+                await connection.QueryAsync<string>(
+                    """
+                    SELECT i.item_identifier FROM normalization.archive_item_intake i
+                    WHERE i.item_identifier=ANY(@identifiers) OR i.published_source_uuid IN (
+                        SELECT uuid FROM sources WHERE artist_id=@artistId AND upstream_identifier=ANY(@identifiers)
+                    )
+                    ORDER BY i.item_identifier FOR UPDATE
+                    """,
+                    new { identifiers, artistId }
+                );
+                return await connection.ExecuteAsync(
+                    $"""
+                    WITH source_ids AS MATERIALIZED (
+                        SELECT s.id FROM sources s
+                        WHERE s.artist_id=@artistId AND s.upstream_identifier=ANY(@identifiers)
+                        AND {WithoutArchiveIntakeOwnership}
+                    ), deleted_review_counts AS (
+                        DELETE FROM source_review_counts WHERE source_id IN (SELECT id FROM source_ids)
+                    )
+                    DELETE FROM sources WHERE id IN (SELECT id FROM source_ids)
+                    """,
+                    new { artistId, identifiers }
+                );
+            });
+            scope.Complete();
+            return removed;
+        }
 
         /// <summary>Loads the selected recording from the primary, scoped to its artist.</summary>
         public Task<Source> ForArtistFromPrimary(Artist artist, long sourceId) =>

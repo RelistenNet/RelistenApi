@@ -21,10 +21,18 @@ public class ArchiveOrgArtistIndexResult
     public int SkippedExisting { get; set; }
     public int SkippedMissingIdentifier { get; set; }
     public int SkippedInvalidSlug { get; set; }
+
+    /// <summary>Collections whose labels identify an intake artist and require explicit attachment.</summary>
+    public int SkippedIntakeIdentity { get; set; }
 }
 
 public interface IArchiveOrgArtistIndexRepository
 {
+    /// <summary>Applies current registry reads and writes in one serialized transaction.</summary>
+    Task<T> RunArtistRegistryAsync<T>(CancellationToken token, Func<Task<T>> apply);
+
+    /// <summary>Checks current retained cohort labels before discovery allocates a new slug.</summary>
+    Task<bool> HasIntakeIdentityConflictAsync(string name, string slug, string identifier);
     Task<Artist?> FindArtistByUpstreamIdentifier(int upstreamSourceId, string upstreamIdentifier);
     Task<IReadOnlyList<Artist>> LoadExistingArtists();
     Task<SlimArtistWithFeatures> SaveArtist(SlimArtistWithFeatures artist);
@@ -39,15 +47,28 @@ public class ArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
 {
     private readonly ArtistService artistService;
     private readonly UpstreamSourceService upstreamSourceService;
+    private readonly DbService db;
 
     public ArchiveOrgArtistIndexRepository(
         ArtistService artistService,
-        UpstreamSourceService upstreamSourceService
+        UpstreamSourceService upstreamSourceService,
+        DbService db
     )
     {
         this.artistService = artistService;
         this.upstreamSourceService = upstreamSourceService;
+        this.db = db;
     }
+
+    public Task<T> RunArtistRegistryAsync<T>(CancellationToken token, Func<Task<T>> apply) =>
+        new CatalogImportTransaction(db).RunArtistRegistryAsync(
+            DateTimeOffset.UtcNow.AddMinutes(5),
+            token,
+            apply
+        );
+
+    public Task<bool> HasIntakeIdentityConflictAsync(string name, string slug, string identifier) =>
+        new ArtistRegistryService(db).HasCohortIdentityConflictAsync(name, slug, identifier);
 
     public Task<Artist?> FindArtistByUpstreamIdentifier(
         int upstreamSourceId,
@@ -145,11 +166,28 @@ public class ArchiveOrgArtistIndexer
     }
 
     /// <summary>Applies an already fetched collection page, preserving the existing artist defaults and matching rules.</summary>
-    public async Task<ArchiveOrgArtistIndexResult> ApplyCollectionsAsync(
+    public Task<ArchiveOrgArtistIndexResult> ApplyCollectionsAsync(
         IReadOnlyList<ArchiveOrgCollectionIndexItem> items,
         PerformContext? context = null,
         int minItemCount = DefaultItemCountThreshold,
         CancellationToken cancellationToken = default
+    ) =>
+        repository.RunArtistRegistryAsync(
+            cancellationToken,
+            () =>
+                ApplyCollectionsUnderRegistryLockAsync(
+                    items,
+                    context,
+                    minItemCount,
+                    cancellationToken
+                )
+        );
+
+    private async Task<ArchiveOrgArtistIndexResult> ApplyCollectionsUnderRegistryLockAsync(
+        IReadOnlyList<ArchiveOrgCollectionIndexItem> items,
+        PerformContext? context,
+        int minItemCount,
+        CancellationToken cancellationToken
     )
     {
         var upstreamSource =
@@ -166,6 +204,8 @@ public class ArchiveOrgArtistIndexer
 
         foreach (var item in items)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (item.item_count < minItemCount)
             {
                 result.Skipped++;
@@ -188,6 +228,22 @@ public class ArchiveOrgArtistIndexer
             {
                 result.Skipped++;
                 result.SkippedExisting++;
+                continue;
+            }
+
+            // Do this before allocating a suffixed slug. A collection title or label
+            // may already identify a cohort artist whose dedicated collection needs
+            // an explicit operator attachment.
+            if (
+                await repository.HasIntakeIdentityConflictAsync(
+                    item.title,
+                    SlugUtils.Slugify(item.title),
+                    item.identifier
+                )
+            )
+            {
+                result.Skipped++;
+                result.SkippedIntakeIdentity++;
                 continue;
             }
 
@@ -228,7 +284,7 @@ public class ArchiveOrgArtistIndexer
             $"archive.org artist index: created={result.Created}, linked={result.Linked}, skipped={result.Skipped}"
         );
         context?.WriteLine(
-            $"archive.org artist index skip reasons: below_threshold={result.SkippedBelowThreshold}, existing={result.SkippedExisting}, missing_identifier={result.SkippedMissingIdentifier}, invalid_slug={result.SkippedInvalidSlug}"
+            $"archive.org artist index skip reasons: below_threshold={result.SkippedBelowThreshold}, existing={result.SkippedExisting}, missing_identifier={result.SkippedMissingIdentifier}, invalid_slug={result.SkippedInvalidSlug}, intake_identity={result.SkippedIntakeIdentity}"
         );
 
         return result;

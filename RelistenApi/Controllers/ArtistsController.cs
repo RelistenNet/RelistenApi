@@ -180,13 +180,7 @@ namespace Relisten.Controllers
         {
             artist.SlimArtist.id = 0;
 
-            var art = await _artistService.Save(artist.SlimArtist);
-            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(
-                art,
-                artist.SlimUpstreamSources
-            );
-
-            return JsonSuccess(await _artistService.FindArtistById(art.id));
+            return await SaveArtist(artist);
         }
 
         [ApiExplorerSettings(IgnoreApi = true)]
@@ -194,13 +188,43 @@ namespace Relisten.Controllers
         [Authorize]
         public async Task<IActionResult> UpdateArtist([FromBody] CreateUpdateArtistDto artist)
         {
-            var art = await _artistService.Save(artist.SlimArtist);
-            await upstreamSourceService.ReplaceUpstreamSourcesForArtist(
-                art,
-                artist.SlimUpstreamSources
-            );
+            return await SaveArtist(artist);
+        }
 
-            return JsonSuccess(await _artistService.FindArtistById(art.id));
+        private async Task<IActionResult> SaveArtist(CreateUpdateArtistDto artist)
+        {
+            try
+            {
+                var art = await new CatalogImportTransaction(db).RunArtistRegistryAsync(
+                    DateTimeOffset.UtcNow.AddMinutes(5),
+                    HttpContext.RequestAborted,
+                    async () =>
+                    {
+                        await new ArtistRegistryService(db).EnsureMappingsAllowedAsync(
+                            artist.SlimArtist.id,
+                            artist.SlimUpstreamSources
+                        );
+                        var saved = await _artistService.Save(artist.SlimArtist);
+                        await upstreamSourceService.ReplaceUpstreamSourcesForArtist(
+                            saved,
+                            artist.SlimUpstreamSources
+                        );
+                        return await _artistService.FindArtistById(saved.id);
+                    }
+                );
+                return JsonSuccess(art);
+            }
+            catch (ArtistIntakeIdentityConflictException conflict)
+            {
+                return Conflict(
+                    new
+                    {
+                        code = "intake_identity_conflict",
+                        artist_uuid = conflict.ArtistUuid,
+                        message = conflict.Message,
+                    }
+                );
+            }
         }
     }
 

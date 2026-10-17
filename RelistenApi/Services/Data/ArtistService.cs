@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Relisten.Api.Models;
@@ -385,20 +386,13 @@ namespace Relisten.Data
                 FlexiblyParseArtistIdentifier(idOrSlug, ids, uuids, slugs);
             }
 
-            return await db.WithConnection(
-                async con =>
-                {
-                    string where;
-                    if (idsOrSlugs.Count == 0)
-                    {
-                        where = "1=1";
-                    }
-                    else
-                    {
-                        where = " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
-                    }
-
-                    var artists = await con.QueryAsync(
+            var where =
+                idsOrSlugs.Count == 0
+                    ? "1=1"
+                    : " a.id = ANY(@ids) OR a.slug = ANY(@slugs) OR a.uuid = ANY(@uuids)";
+            var artists = await db.WithConnection(
+                con =>
+                    con.QueryAsync(
                         baseSql + where,
                         joiner,
                         new
@@ -407,12 +401,13 @@ namespace Relisten.Data
                             slugs,
                             uuids,
                         }
-                    );
-
-                    return await FillInUpstreamSources(artists, readOnly);
-                },
+                    ),
                 readOnly: readOnly
             );
+
+            // Release the wrapper before loading mappings. An ambient catalog transaction
+            // must reuse one enlisted connection rather than promote to a distributed one.
+            return await FillInUpstreamSources(artists, readOnly);
         }
 
         private static void FlexiblyParseArtistIdentifier(
@@ -533,7 +528,24 @@ namespace Relisten.Data
             return sb.ToString();
         }
 
-        public async Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist)
+        /// <summary>
+        /// Saves the artist and features atomically after rechecking retained intake identities.
+        /// Callers that also change provider mappings must use an outer artist-registry transaction.
+        /// </summary>
+        public Task<SlimArtistWithFeatures> Save(SlimArtistWithFeatures artist) =>
+            new CatalogImportTransaction(db).RunArtistRegistryAsync(
+                DateTimeOffset.UtcNow.AddMinutes(5),
+                CancellationToken.None,
+                async () =>
+                {
+                    await new ArtistRegistryService(db).EnsureArtistWriteAllowedAsync(artist);
+                    return await SaveArtistAndFeatures(artist);
+                }
+            );
+
+        private async Task<SlimArtistWithFeatures> SaveArtistAndFeatures(
+            SlimArtistWithFeatures artist
+        )
         {
             if (artist.id != 0)
             {

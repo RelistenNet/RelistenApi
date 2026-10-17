@@ -13,7 +13,7 @@ namespace Relisten.Data;
 /// </summary>
 public sealed class CatalogImportTransaction(DbService db)
 {
-    private const int CollectionLockNamespace = 0x524C434F;
+    private const int ArtistRegistryLockNamespace = 0x524C434F;
 
     /// <summary>
     /// Applies one catalog change. The callback must use sequential DbService calls,
@@ -66,10 +66,11 @@ public sealed class CatalogImportTransaction(DbService db)
     }
 
     /// <summary>
-    /// Applies a fetched Archive collection page. A global lock protects artist creation
-    /// and slug allocation, which happen before artist IDs exist. Show imports do not use it.
+    /// Serializes artist identity and provider-mapping changes before an artist ID exists.
+    /// Every cooperating registry writer must recheck identities inside this callback.
+    /// Recording imports use their own artist lock and do not acquire this registry lock.
     /// </summary>
-    public Task<T> RunCollectionPageAsync<T>(
+    public Task<T> RunArtistRegistryAsync<T>(
         DateTimeOffset deadline,
         CancellationToken token,
         Func<Task<T>> apply
@@ -83,7 +84,7 @@ public sealed class CatalogImportTransaction(DbService db)
                     connection.ExecuteAsync(
                         new CommandDefinition(
                             "SELECT pg_advisory_xact_lock(@lockNamespace, 0)",
-                            new { lockNamespace = CollectionLockNamespace },
+                            new { lockNamespace = ArtistRegistryLockNamespace },
                             commandTimeout: 300,
                             cancellationToken: token
                         )
@@ -94,6 +95,13 @@ public sealed class CatalogImportTransaction(DbService db)
                 return await apply();
             }
         );
+
+    /// <summary>Applies a fetched collection page under the shared artist-registry lock.</summary>
+    public Task<T> RunCollectionPageAsync<T>(
+        DateTimeOffset deadline,
+        CancellationToken token,
+        Func<Task<T>> apply
+    ) => RunArtistRegistryAsync(deadline, token, apply);
 
     private static void RequireActive(DateTimeOffset deadline, CancellationToken token)
     {

@@ -155,6 +155,177 @@ public class TestIngestionPersistence
     }
 
     [Test]
+    public async Task ResolvedArchiveWriterUsesExplicitAssignmentWithoutCollectionMappingAndJoinsTransaction()
+    {
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "DELETE FROM artists_upstream_sources WHERE artist_id=@artistId",
+                new { artistId }
+            )
+        );
+        var artist = (
+            await host
+                .Services.GetRequiredService<ArtistService>()
+                .FindArtistForImport(artistUuid.ToString())
+        )!;
+        artist.upstream_sources.Should().BeEmpty();
+        var identifier = "resolved-" + Guid.NewGuid().ToString("N");
+        var metadata =
+            JsonConvert.DeserializeObject<Relisten.Vendor.ArchiveOrg.Metadata.RootObject>(
+                Metadata("Explicit assignment").Replace("fixture-2000-01-01", identifier),
+                new Relisten.Vendor.ArchiveOrg.TolerantStringConverter()
+            )!;
+        // The tolerant provider DTO permits an absent date despite its legacy annotation.
+        metadata.metadata.date = null!;
+        var document = new Relisten.Vendor.ArchiveOrg.SearchDoc
+        {
+            identifier = identifier,
+            addeddate = DateTime.UtcNow,
+        };
+        var transaction = host.Services.GetRequiredService<CatalogImportTransaction>();
+        using var services = host.Services.CreateScope();
+        var importer = services.ServiceProvider.GetRequiredService<ArchiveOrgImporter>();
+        Task<Source> Write(string date) =>
+            transaction.RunAsync(
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                CancellationToken.None,
+                () => importer.WriteResolvedRecordingAsync(artist, 1, document, metadata, date)
+            );
+
+        var first = await Write("2001-02-03");
+        first.display_date.Should().Be("2001-02-03");
+        var before = await SourceBeforeRebuild();
+        before.SourceUuid.Should().Be(first.uuid);
+        (await Write("2001-02-03")).uuid.Should().Be(first.uuid);
+        (await SourceBeforeRebuild()).Should().BeEquivalentTo(before);
+
+        metadata.files.Single(file => file.format == "VBR MP3").title = "Must roll back";
+        Func<Task> rejectedWrite = () =>
+            transaction.RunAsync<int>(
+                DateTimeOffset.UtcNow.AddMinutes(1),
+                CancellationToken.None,
+                async () =>
+                {
+                    await importer.WriteResolvedRecordingAsync(
+                        artist,
+                        1,
+                        document,
+                        metadata,
+                        "2001-02-03"
+                    );
+                    throw new InvalidOperationException("Intake reference update failed");
+                }
+            );
+        await rejectedWrite.Should().ThrowAsync<InvalidOperationException>();
+        (await SourceBeforeRebuild()).Should().BeEquivalentTo(before);
+    }
+
+    [TestCase(false, false)]
+    [TestCase(false, true)]
+    [TestCase(true, false)]
+    [TestCase(true, true)]
+    public async Task NativeArchiveRefreshSkipsPausedCohortOwnershipAndRechecksStaleDeletionPlans(
+        bool temporal,
+        bool published
+    )
+    {
+        var identifier = "intake-owned-" + Guid.NewGuid().ToString("N");
+        upstream.Respond = uri =>
+            (
+                uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("Owned recording") : Listing
+            ).Replace("fixture-2000-01-01", identifier);
+        (await Import(item: identifier)).FailedItems.Should().Be(0);
+        var before = await SourceBeforeRebuild();
+        var candidateId = Guid.NewGuid();
+        var observationId = Guid.NewGuid();
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                """
+                INSERT INTO normalization.archive_artist_candidates(
+                    candidate_id,creator_key,proposed_name,proposed_slug,reviewed_creator_keys,
+                    artist_uuid,artist_id,creation_slug,identity_status)
+                SELECT @candidateId,@identifier,a.name,a.slug,ARRAY[@identifier],a.uuid,a.id,a.slug,'cohort'
+                FROM artists a WHERE a.id=@artistId;
+                INSERT INTO normalization.archive_item_observations(
+                    observation_id,item_identifier,projection_version,content_hash,provider_url,payload)
+                VALUES(@observationId,@identifier,1,'fixture','https://archive.org','{}');
+                INSERT INTO normalization.archive_item_intake(
+                    item_identifier,candidate_id,published_observation_id,published_artist_uuid,
+                    published_artist_id,published_display_date,published_source_uuid,status)
+                VALUES(@identifier,CASE WHEN @published THEN NULL ELSE @candidateId END,
+                    CASE WHEN @published THEN @observationId ELSE NULL END,
+                    CASE WHEN @published THEN @artistUuid ELSE NULL END,
+                    CASE WHEN @published THEN @artistId ELSE NULL END,
+                    CASE WHEN @published THEN '2000-01-01' ELSE NULL END,
+                    CASE WHEN @published THEN @sourceUuid ELSE NULL END,'paused');
+                """,
+                new
+                {
+                    candidateId,
+                    observationId,
+                    identifier,
+                    artistId,
+                    artistUuid,
+                    sourceUuid = before.SourceUuid,
+                    published,
+                }
+            )
+        );
+        // A cleared approval must preserve ownership before and after publication.
+        upstream.Respond = uri =>
+            (uri.AbsolutePath.StartsWith("/metadata/") ? Metadata("Native overwrite") : Listing)
+                .Replace("fixture-2000-01-01", identifier)
+                .Replace("2000-01-01", "2000-01-02");
+        var context = new ProviderWorkflowContext(
+            new ArtistId(artistUuid),
+            new IngestionExecution(Guid.NewGuid().ToString(), DateTimeOffset.UtcNow.AddHours(1))
+        );
+        var activities = host.Services.GetRequiredService<ArchiveActivities>();
+        var environment = new ActivityEnvironment();
+        var skipped = await environment.RunAsync(() =>
+            activities.ImportItem(context, new RequestedArchiveItem(new ArchiveItemId(identifier)))
+        );
+        skipped.Disposition.Should().Be(ItemDisposition.Skipped);
+        skipped.SkipReason.Should().Be(ArchiveSkipReason.OwnedByTapersSection);
+        if (temporal)
+        {
+            var filtered = await Import(year: 2000);
+            filtered.SkippedItems.Should().Be(1);
+            filtered.FailedItems.Should().Be(0);
+        }
+        await RunArchive(temporal);
+        (await SourceBeforeRebuild()).Should().BeEquivalentTo(before);
+
+        var metadataRequests = 0;
+        upstream.Respond = uri =>
+        {
+            if (uri.AbsolutePath.StartsWith("/metadata/"))
+            {
+                Interlocked.Increment(ref metadataRequests);
+            }
+            return uri.AbsolutePath.StartsWith("/metadata/") ? "{\"errcode\":104}" : EmptyListing;
+        };
+        await RunArchive(temporal);
+        metadataRequests.Should().Be(0, "intake recordings must not become deletion candidates");
+        var stalePlan = new ArchiveDeletionPlan(
+            ArchiveDeletionDisposition.Allowed,
+            [
+                new(
+                    new ArchiveItemId(identifier),
+                    ArchiveDeletionEvidence.Deleted,
+                    ArchiveDeletionAction.Delete,
+                    "Verified before intake took ownership"
+                ),
+            ]
+        );
+        var deletion = await environment.RunAsync(() =>
+            activities.ApplyVerifiedDeletions(context, stalePlan)
+        );
+        deletion.AbsentIdentifiers.Should().BeEmpty();
+        (await SourceBeforeRebuild()).Should().BeEquivalentTo(before);
+    }
+
+    [Test]
     public async Task ArchiveDuplicateReviewsKeepTheLastBodyAndPreserveIdentityOnReimport()
     {
         var metadata = JObject.Parse(Metadata("Fixture track"));

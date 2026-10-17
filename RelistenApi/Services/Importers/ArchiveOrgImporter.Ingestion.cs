@@ -75,12 +75,23 @@ public partial class ArchiveOrgImporter
         // transaction; the source upsert preserves identity if another attempt committed.
         return await context.CommitAsync(async () =>
         {
-            var source = await _sourceService.ForUpstreamIdentifierFromPrimary(
-                context.Artist,
-                item.Id.Value
-            );
+            if (await _sourceService.IsArchiveItemIntakeOwnedForUpdate(item.Id.Value))
+            {
+                return new ArchiveItemResult(
+                    item.Id,
+                    ItemDisposition.Skipped,
+                    null,
+                    ArchiveSkipReason.OwnedByTapersSection,
+                    "owned_by_taperssection"
+                );
+            }
+
             if (HasNoVbrMp3Files(metadata.Details))
             {
+                var source = await _sourceService.ForUpstreamIdentifierFromPrimary(
+                    context.Artist,
+                    item.Id.Value
+                );
                 return new ArchiveItemResult(
                     item.Id,
                     ItemDisposition.Skipped,
@@ -90,19 +101,13 @@ public partial class ArchiveOrgImporter
                 );
             }
 
-            await ImportSingleIdentifier(
+            var current = await WriteResolvedRecordingAsync(
                 context.Artist,
-                source,
+                context.Source.upstream_source_id,
                 item.Input.Document,
                 metadata.Details,
-                context.Source,
-                metadata.DisplayDate,
-                null
+                metadata.DisplayDate
             );
-
-            var current =
-                await _sourceService.ForUpstreamIdentifierFromPrimary(context.Artist, item.Id.Value)
-                ?? throw new InvalidOperationException("Archive import did not produce a source.");
 
             return new ArchiveItemResult(
                 item.Id,
@@ -119,7 +124,7 @@ public partial class ArchiveOrgImporter
         ArchiveItemId[] noMp3
     )
     {
-        var existing = await _sourceService.AllForArtistFromPrimary(context.Artist);
+        var existing = await _sourceService.ArchiveDeletionCandidatesFromPrimary(context.Artist);
         var observed = selection.ObservedIdentifiers.Select(id => id.Value);
         var ineligible = noMp3.Select(id => id.Value).ToHashSet();
         var candidates = existing
@@ -177,7 +182,7 @@ public partial class ArchiveOrgImporter
                 .ToList();
             if (approved.Count > 0)
             {
-                await _sourceService.RemoveSourcesWithUpstreamIdentifiers(
+                await _sourceService.RemoveUnownedArchiveSourcesWithUpstreamIdentifiers(
                     context.Artist.id,
                     approved
                 );

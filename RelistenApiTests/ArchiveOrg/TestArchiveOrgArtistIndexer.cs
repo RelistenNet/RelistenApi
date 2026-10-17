@@ -124,6 +124,32 @@ public class TestArchiveOrgArtistIndexer
         repository.ArtistsBySlug.Should().ContainKey("new-band-2");
     }
 
+    [Test]
+    public async Task IndexArtists_DefersReviewedIntakeLabelsBeforeAllocatingAnotherSlug()
+    {
+        var repository = new FakeArchiveOrgArtistIndexRepository();
+        repository.IntakeLabels.Add("Reviewed Live Band");
+        var indexer = new ArchiveOrgArtistIndexer(
+            new FakeArchiveOrgCollectionIndexClient([
+                new()
+                {
+                    identifier = "ACollection",
+                    title = "Reviewed Live Band",
+                    item_count = 8,
+                },
+            ]),
+            repository,
+            new FakeUpstreamSourceLookup(new UpstreamSource { id = 1, name = "archive.org" })
+        );
+
+        var result = await indexer.IndexArtists();
+
+        result.Created.Should().Be(0);
+        result.SkippedIntakeIdentity.Should().Be(1);
+        repository.ArtistsBySlug.Should().BeEmpty();
+        repository.UpstreamMappings.Should().BeEmpty();
+    }
+
     private sealed class FakeArchiveOrgCollectionIndexClient : IArchiveOrgCollectionIndexClient
     {
         private readonly IReadOnlyList<ArchiveOrgCollectionIndexItem> items;
@@ -162,6 +188,17 @@ public class TestArchiveOrgArtistIndexer
     private sealed class FakeArchiveOrgArtistIndexRepository : IArchiveOrgArtistIndexRepository
     {
         private int nextId = 1000;
+        public HashSet<string> IntakeLabels { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<T> RunArtistRegistryAsync<T>(CancellationToken token, Func<Task<T>> apply) =>
+            apply();
+
+        public Task<bool> HasIntakeIdentityConflictAsync(
+            string name,
+            string slug,
+            string identifier
+        ) => Task.FromResult(new[] { name, slug, identifier }.Any(IntakeLabels.Contains));
+
         public Dictionary<string, Artist> ArtistsBySlug { get; } =
             new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<
