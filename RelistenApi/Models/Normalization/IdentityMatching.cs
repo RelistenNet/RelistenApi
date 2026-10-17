@@ -80,9 +80,27 @@ public sealed record MatchingVenueLocation(
 public sealed record MatchingVenueName(
     string Wording,
     DateOnly? ValidFrom = null,
+    DateOnly? ValidTo = null,
+    string? Language = null
+);
+
+/// <summary>
+/// One supported location account. Unknown date bounds stay unknown; they do not assert that
+/// the location applied forever. Known bounds must be ordered, as accepted venue assertions are
+/// in storage. Provenance and original geography labels belong to the facts snapshot.
+/// </summary>
+public sealed record MatchingVenueLocationAssertion(
+    MatchingVenueLocation Location,
+    DateOnly? ValidFrom = null,
     DateOnly? ValidTo = null
 );
 
+/// <summary>
+/// LocationAssertions is the complete supported collection when supplied, including an empty
+/// collection. Only null uses the legacy single Location. ObservedDate filters a collection;
+/// it does not assert that each historical member applied on that date. Never select a convenient
+/// assertion or combine fields from separate location accounts before comparison.
+/// </summary>
 public sealed record VenueMatchRecord(
     Guid? Uuid,
     string Kind,
@@ -90,7 +108,8 @@ public sealed record VenueMatchRecord(
     IReadOnlyList<MatchingVenueName> Names,
     IReadOnlyList<MatchingExternalIdentity> ExternalIdentities,
     MatchingVenueLocation? Location,
-    DateOnly? ObservedDate = null
+    DateOnly? ObservedDate = null,
+    IReadOnlyList<MatchingVenueLocationAssertion>? LocationAssertions = null
 );
 
 public sealed record RepertoireMatchRecord(

@@ -72,33 +72,12 @@ public sealed class IdentityCandidateMatcher
             candidate.ParentVenueUuid,
             contradiction: true
         );
-        pair.CompareValue(
-            "country",
-            claim.Location?.CountryCode,
-            candidate.Location?.CountryCode,
-            contradiction: true
-        );
-        var locality = pair.CompareValue(
-            "locality",
-            claim.Location?.LocalityKey,
-            candidate.Location?.LocalityKey,
-            contradiction: true
-        );
-        var address = pair.CompareValue(
-            "address",
-            claim.Location?.Address,
-            candidate.Location?.Address,
-            wording: true
-        );
+        var locationAgrees = CompareVenueLocations(pair, claim, candidate);
 
         CompareVenueHistory(pair, claim, candidate);
         CompareVenueHistory(pair, candidate, claim);
 
-        if (
-            pair.ExactName
-            && locality == IdentityFeatureAgreement.Agrees
-            && address == IdentityFeatureAgreement.Agrees
-        )
+        if (pair.ExactName && locationAgrees)
         {
             pair.Propose(IdentityMatchRule.VenueNameAndAddress);
         }
@@ -200,6 +179,192 @@ public sealed class IdentityCandidateMatcher
             ? IdentityFeatureAgreement.Agrees
             : IdentityFeatureAgreement.Differs;
     }
+
+    private static bool CompareVenueLocations(
+        Comparison pair,
+        VenueMatchRecord claim,
+        VenueMatchRecord candidate
+    )
+    {
+        if (claim.LocationAssertions == null && candidate.LocationAssertions == null)
+        {
+            // Existing callers assert one location rather than a dated history. Keep that
+            // comparison contract while facts readers adopt the complete collection.
+            pair.CompareValue(
+                "country",
+                claim.Location?.CountryCode,
+                candidate.Location?.CountryCode,
+                contradiction: true
+            );
+            var locality = pair.CompareValue(
+                "locality",
+                claim.Location?.LocalityKey,
+                candidate.Location?.LocalityKey,
+                contradiction: true
+            );
+            var address = pair.CompareValue(
+                "address",
+                VenueAddressKey(claim.Location?.Address),
+                VenueAddressKey(candidate.Location?.Address)
+            );
+            return locality == IdentityFeatureAgreement.Agrees
+                && address == IdentityFeatureAgreement.Agrees;
+        }
+
+        // Two observations on different days do not supply one date for filtering a history.
+        var date =
+            claim.ObservedDate != null
+            && candidate.ObservedDate != null
+            && claim.ObservedDate != candidate.ObservedDate
+                ? null
+                : claim.ObservedDate ?? candidate.ObservedDate;
+        var left = RelevantVenueLocations(claim, date);
+        var right = RelevantVenueLocations(candidate, date);
+        var countryAgreement = CompareVenueLocationField(
+            pair,
+            "country",
+            left,
+            right,
+            location => location.CountryCode,
+            contradiction: true
+        );
+        var localityAgreement = CompareVenueLocationField(
+            pair,
+            "locality",
+            left,
+            right,
+            location => location.LocalityKey,
+            contradiction: true
+        );
+        var addressAgreement = CompareVenueLocationField(
+            pair,
+            "address",
+            left,
+            right,
+            location => VenueAddressKey(location.Address)
+        );
+        // A resolved locality does not erase conflicting country evidence. Missing country
+        // information remains allowed because the location rule requires locality and address.
+        var agrees =
+            countryAgreement
+                is not (IdentityFeatureAgreement.Differs or IdentityFeatureAgreement.Conflicts)
+            && localityAgreement == IdentityFeatureAgreement.Agrees
+            && addressAgreement == IdentityFeatureAgreement.Agrees;
+        pair.Add(
+            "location_history",
+            agrees ? IdentityFeatureAgreement.Agrees : IdentityFeatureAgreement.Missing,
+            agrees
+                ? "Every possible location account supplies the same locality and address."
+                : "Known country differences, location alternatives or missing fields prevent the location rule."
+        );
+        return agrees;
+    }
+
+    private static MatchingVenueLocationAssertion[] RelevantVenueLocations(
+        VenueMatchRecord record,
+        DateOnly? date
+    )
+    {
+        // The record date filters a complete history; it does not date every undated member.
+        // A legacy single location is an observation, so its known date supplies a point interval.
+        var assertions =
+            record.LocationAssertions
+            ?? (
+                record.Location == null
+                    ? []
+                    : new[]
+                    {
+                        new MatchingVenueLocationAssertion(
+                            record.Location,
+                            record.ObservedDate,
+                            record.ObservedDate
+                        ),
+                    }
+            );
+        return assertions
+            .Where(assertion =>
+                date == null || !OutsideVenueLocationInterval(assertion, date.Value)
+            )
+            .ToArray();
+    }
+
+    private static IdentityFeatureAgreement CompareVenueLocationField(
+        Comparison pair,
+        string name,
+        IReadOnlyList<MatchingVenueLocationAssertion> left,
+        IReadOnlyList<MatchingVenueLocationAssertion> right,
+        Func<MatchingVenueLocation, string?> select,
+        bool contradiction = false
+    )
+    {
+        var locations = left.Concat(right).ToArray();
+        string? Key(MatchingVenueLocationAssertion assertion)
+        {
+            var value = select(assertion.Location);
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        var known = locations
+            .Select(location => (Location: location, Key: Key(location)))
+            .Where(value => value.Key != null)
+            .ToArray();
+        var distinct = known
+            .Select(value => value.Key)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var conflict =
+            contradiction
+            && distinct > 1
+            && known.Any(first =>
+                known.Any(second =>
+                    !StringComparer.OrdinalIgnoreCase.Equals(first.Key, second.Key)
+                    && VenueLocationsProvenConcurrent(first.Location, second.Location)
+                )
+            );
+        var missing = left.Count == 0 || right.Count == 0 || known.Length != locations.Length;
+        var agreement =
+            conflict ? IdentityFeatureAgreement.Conflicts
+            : distinct > 1 ? IdentityFeatureAgreement.Differs
+            : missing ? IdentityFeatureAgreement.Missing
+            : IdentityFeatureAgreement.Agrees;
+        pair.Add(
+            name,
+            agreement,
+            conflict ? "Supported concurrent locations assert incompatible resolved geography."
+                : agreement == IdentityFeatureAgreement.Missing
+                    ? "One or more possible location accounts lack this fact."
+                : agreement == IdentityFeatureAgreement.Agrees
+                    ? "Every possible location account agrees."
+                : "Possible locations differ; unknown dates or unequal address wording do not prove different physical sites."
+        );
+        return agreement;
+    }
+
+    private static string? VenueAddressKey(string? address)
+    {
+        if (address == null)
+        {
+            return null;
+        }
+        var key = NameKey(address);
+        return key.Length == 0 ? null : key;
+    }
+
+    private static bool VenueLocationsProvenConcurrent(
+        MatchingVenueLocationAssertion first,
+        MatchingVenueLocationAssertion second
+    ) =>
+        first.ValidFrom.HasValue
+        && first.ValidTo.HasValue
+        && second.ValidFrom.HasValue
+        && second.ValidTo.HasValue
+        && first.ValidFrom.Value <= second.ValidTo.Value
+        && second.ValidFrom.Value <= first.ValidTo.Value;
+
+    private static bool OutsideVenueLocationInterval(
+        MatchingVenueLocationAssertion assertion,
+        DateOnly date
+    ) => assertion.ValidFrom is { } from && date < from || assertion.ValidTo is { } to && date > to;
 
     private static void CompareVenueHistory(
         Comparison pair,
@@ -303,8 +468,7 @@ public sealed class IdentityCandidateMatcher
             string name,
             T? left,
             T? right,
-            bool contradiction = false,
-            bool wording = false
+            bool contradiction = false
         )
         {
             if (
@@ -320,9 +484,7 @@ public sealed class IdentityCandidateMatcher
 
             var equal =
                 left is string first && right is string second
-                    ? wording
-                        ? NameKey(first) == NameKey(second)
-                        : StringComparer.OrdinalIgnoreCase.Equals(first, second)
+                    ? StringComparer.OrdinalIgnoreCase.Equals(first, second)
                     : EqualityComparer<T>.Default.Equals(left, right);
             var agreement =
                 equal ? IdentityFeatureAgreement.Agrees
