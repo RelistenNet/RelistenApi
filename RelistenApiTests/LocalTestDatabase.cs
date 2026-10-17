@@ -44,6 +44,11 @@ internal static class LocalTestDatabase
             Migrations.AddExistingArchiveArtistPublication.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationEvidence.SchemaSql,
+            commandTimeout: 120
+        );
+        await catalog.ExecuteAsync(Migrations.AddNormalizationWork.SchemaSql, commandTimeout: 120);
     }
 
     public static async Task DropAsync()
