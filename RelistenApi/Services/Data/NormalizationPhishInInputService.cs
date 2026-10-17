@@ -3,14 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Transactions;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -63,12 +62,17 @@ public sealed class NormalizationPhishInInputService(
         var response = await fetch(ct);
         ct.ThrowIfCancellationRequested();
 
-        // Match HttpContent's charset and BOM handling used by the legacy DTO parser. Selected
-        // objects retain their original JSON text, re-encoded as UTF-8 for this capture version.
-        using var content = new ByteArrayContent(response.Payload.ToArray());
-        content.Headers.ContentType = MediaTypeHeaderValue.Parse(response.MediaType);
-        using var document = JsonDocument.Parse(await content.ReadAsStringAsync(ct));
-        var shows = ValidateShows(document.RootElement);
+        // Decode strictly before selecting objects: replacement characters would turn malformed
+        // upstream bytes into new evidence. Preserve JSON text, re-encoded as UTF-8 for this version.
+        using var document = NormalizationRetainedDocument.Open(
+            new NormalizationInputRevision
+            {
+                Payload = response.Payload.ToArray(),
+                MediaType = response.MediaType,
+            },
+            ct
+        );
+        var shows = ValidateShows(document.Resolve(""));
         var observedAt = DateTimeOffset.UtcNow;
 
         foreach (var show in shows)

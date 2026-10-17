@@ -87,6 +87,43 @@ public sealed class TestNormalizationPhishInInput
         current.Revision.CaptureVersion.Should().Be("phishin-show-object-v1");
     }
 
+    [Test]
+    public async Task InvalidUtf8CannotBecomeSelectedShowEvidence()
+    {
+        var first = Interlocked.Increment(ref nextId);
+        var second = Interlocked.Increment(ref nextId);
+        var page = Page(Show(first, "valid") + "," + Show(second, "invalid*"), 1);
+        var malformed = Encoding.UTF8.GetBytes(page);
+        malformed[Array.IndexOf(malformed, (byte)'*')] = 0xFF;
+        var calls = 0;
+        var fetch = () =>
+            inputs.FetchShowsAsync(_ =>
+            {
+                calls++;
+                // A tolerant legacy decoder can already have produced its DTO. Capture must still
+                // validate the original bytes before publishing even the first valid show object.
+                return Task.FromResult(
+                    new NormalizationProviderResponse<string>(
+                        "legacy DTO",
+                        malformed,
+                        "application/json; charset=utf-8"
+                    )
+                );
+            });
+
+        await fetch.Should().ThrowAsync<ArgumentException>().WithMessage("*invalid encoded text*");
+        calls.Should().Be(1);
+        foreach (var id in new[] { first, second })
+        {
+            (await evidence.GetCurrentInputAsync(Resource(id))).Should().BeNull();
+            (await evidence.GetFetchHistoryAsync(Resource(id))).Should().BeEmpty();
+        }
+
+        await inputs.FetchShowsAsync(_ => Task.FromResult(Response(page)));
+        (await evidence.GetCurrentInputAsync(Resource(first)))!.Generation.Should().Be(1);
+        (await evidence.GetCurrentInputAsync(Resource(second)))!.Generation.Should().Be(1);
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task OverlappingPagesCannotReplaceNewerShowEvidence(bool alreadyKnown)
