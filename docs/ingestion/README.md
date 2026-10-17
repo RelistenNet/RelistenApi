@@ -44,6 +44,14 @@ ID to exclude overlapping ordinary imports. It does not fabricate an Archive art
 collection mapping. See [intake operations](operations.md#tapers-section-intake) and
 the [intake contracts](../plans/active/2026-10-16-taperssection-intake/contracts.md).
 
+The [Relisten collections design](../design/2026-10-17-relisten-collections.md)
+proposes catalog groups with artist and recording membership, separate from performer
+identity and Archive artist-collection mappings. It also describes the shared Archive
+intake extensions needed for Aadam and Jerry Garcia performer resolution. Collection
+APIs, commands and migrations are future work. Current Taper’s Section intake admits
+approved new artists through reviewed creator keys; it has no Aadam discovery or
+existing-artist import/linking support.
+
 An artist workflow runs enabled provider mappings in catalog order. Phish.in must
 precede Phish.net because Phish.net enriches its recordings. Providers select or
 page through their own items, process them, and perform their own finalization.

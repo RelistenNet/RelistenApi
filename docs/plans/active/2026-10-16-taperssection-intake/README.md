@@ -107,6 +107,20 @@ The current decision record is: new artists first; bulk artist approval in Postg
 
 If new evidence makes an eligibility rule unsafe or a legacy contract incompatible, stop the affected publication path, explain the evidence, and revisit that decision with Alec. Continue independent implementation work. Routine method names, page sizes and internal factoring can be chosen during implementation within the stated contracts.
 
+## Related design and next work
+
+The [Relisten collections design](../../../design/2026-10-17-relisten-collections.md)
+builds on retained Archive evidence to separate collection membership from artist
+identity. It describes future artist/recording membership, Aadam reuse and gaps, and
+Jerry Garcia per-item performer resolution. Collection commands, APIs and migrations
+are not implemented. Full Aadam support requires existing-artist import/linking and
+an Aadam extension of the shared Archive intake. This release keeps its new-artist
+admission, reviewed creator keys and bulk database approval.
+
+The [next-work roadmap](../2026-10-17-archive-collections/README.md) starts with a full
+isolated local Gov’t Mule catalog smoke. The production pilot, collection-wide
+terminal pagination and production backup coverage remain separate release checks.
+
 ## Implementation decisions
 
 The service retains the selected observation before parsing the legacy recording DTO. Unavailable and uncertain items therefore keep their evidence without requiring a playable recording parse. The publication transaction names its approval/freshness checks, catalog identity validation and recording commit separately. Artist lookup releases its first database connection before loading provider mappings, so these operations use one enlisted PostgreSQL connection.

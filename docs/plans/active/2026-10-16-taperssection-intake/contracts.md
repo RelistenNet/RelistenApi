@@ -2,6 +2,21 @@
 
 These contracts implement the [release plan](README.md). The names below refer to the implemented additions or identify existing contracts. Preserve the behavior and ownership described here; private helper names and class layout can follow the surrounding code.
 
+## Planned extensions
+
+The [Relisten collections design](../../../design/2026-10-17-relisten-collections.md)
+describes future artist/recording membership, Aadam reuse and gaps, and Jerry Garcia
+per-item performer resolution. It separates a collection’s contents from each
+recording’s artist assignment. This contract adds no collection command, API or
+migration.
+
+Current Taper’s Section publication remains limited to approved new artists and their
+reviewed creator keys. A collection membership must not be treated as performer
+identity or approval under this contract. Full Aadam support requires existing-artist
+import/linking and an Aadam extension of the shared Archive intake. Aadam discovery
+and those extensions are not implemented. Partial dates remain `XX`, current metadata
+takes precedence over identifiers, and date details remain operator-only output.
+
 ## State and ownership
 
 Add three relations in a `normalization` schema in the application PostgreSQL database. Include them in the same backup/restore boundary as the catalog. Use typed columns for selection and publication state; use versioned JSON only for retained provider fields and interpretation detail. No general rules engine, decision ledger, feedback service or dependency graph is required.

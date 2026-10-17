@@ -207,6 +207,14 @@ through operator status only. Listener API response fields remain unchanged.
 Intake does not infer deletion from collection absence. Ordinary Archive imports
 skip intake-owned items and exclude their sources from collection deletion checks.
 
+The [Relisten collections design](../design/2026-10-17-relisten-collections.md)
+separates collection membership from the performer assigned to each recording.
+A Jerry Garcia collection therefore needs per-item performer resolution; a collection
+label alone cannot supply that assignment. Full Aadam support needs existing-artist
+import/linking and an Aadam extension of the shared Archive intake. Those extensions
+are future work. Current Taper’s Section intake still requires reviewed creator keys
+and approval of new artists, defers existing-artist matches and has no Aadam discovery.
+
 ## Provider verification
 
 Verify behavior through workflow results and catalog services: selection,

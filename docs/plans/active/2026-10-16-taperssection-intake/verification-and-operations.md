@@ -2,6 +2,25 @@
 
 Use this guide with the [release plan](README.md) and [contracts](contracts.md). The commands below are implemented. New schedules start paused; deployment and approval of live artists remain operator work.
 
+## Next local sequence
+
+Run the full isolated local Gov’t Mule catalog smoke next. Use a separate catalog,
+Redis instance and Temporal server, retain the selected inventory and typed outcomes,
+and verify listener responses and stable identities after a repeat import. Use the
+current provider route appropriate to the artist; Taper’s Section intake still defers
+existing-artist matches.
+
+The [next-work roadmap](../2026-10-17-archive-collections/README.md) owns the work
+that follows this smoke. The [collections design](../../../design/2026-10-17-relisten-collections.md)
+defines future membership, Aadam support gaps and Jerry Garcia performer resolution.
+There are no implemented collection commands, APIs or migrations. Full Aadam support
+requires existing-artist import/linking and an Aadam extension of the shared Archive
+intake.
+
+These local checks do not replace the production pilot, collection-wide terminal
+pagination or production backup checks below. Current bulk database approval,
+reviewed creator keys, `XX` partial dates and operator-only date notes remain unchanged.
+
 ## Review artists in PostgreSQL
 
 Use the read-only `normalization.archive_artist_review` view over the three intake tables. Return candidate ID, proposed name/slug, approval, mapped identity, current identity status, matched existing artists, item count, representative item IDs/provider URLs, observed creator labels, date range and counts by eligibility reason. Include enough retained title/description context to recognize a tribute or mixed bill. Render no provider HTML as executable content.

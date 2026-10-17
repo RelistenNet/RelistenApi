@@ -52,6 +52,25 @@ image, or keep Archive discovery, full/thin schedules and manual Archive starts 
 including Hangfire. Older images can change intake-owned sources after a dedicated
 collection is attached. Rollback does not retract imported recordings.
 
+## Next local verification
+
+Run the full Gov’t Mule catalog smoke next in an isolated local catalog, Redis
+instance and Temporal server. Verify the inventory, listener responses and repeat
+identities. The [Archive collections roadmap](../plans/active/2026-10-17-archive-collections/README.md)
+owns the implementation order after that smoke.
+
+The [collections design](../design/2026-10-17-relisten-collections.md) describes future
+membership and performer-resolution behavior. There are no implemented collection
+commands, APIs or migrations. The commands above retain their current scope: Taper’s
+Section imports approved new artists through reviewed creator keys and bulk database
+approval. They do not admit existing artists or discover Aadam items. Full Aadam
+support needs existing-artist import/linking and an Aadam extension of the shared
+Archive intake.
+
+This local sequence does not complete the production pilot, collection-wide terminal
+pagination or production backup checks. Keep those release checks separate and leave
+new production schedules paused until they pass.
+
 ## Configuration
 
 | Setting | Use |
