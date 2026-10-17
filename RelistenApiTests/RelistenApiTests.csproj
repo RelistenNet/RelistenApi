@@ -23,9 +23,20 @@
   <ItemGroup>
     <ProjectReference Include="..\RelistenApi\RelistenApi.csproj" />
     <ProjectReference Include="../RelistenIngestionWorker/RelistenIngestionWorker.csproj" />
+    <ProjectReference Include="../tools/RelistenNormalization/RelistenNormalization.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content
+      Include="../docs/research/2026-10-17-full-normalization/evaluation/cases.jsonl"
+      Link="Fixtures/normalization/cases.jsonl"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
+      Include="../docs/research/2026-10-17-full-normalization/evaluation/evidence.jsonl"
+      Link="Fixtures/normalization/evidence.jsonl"
+      CopyToOutputDirectory="PreserveNewest"
+    />
     <Content
       Include="../local-dev/seed/schema.sql"
       Link="Fixtures/catalog-schema.sql"

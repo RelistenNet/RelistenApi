@@ -2,6 +2,7 @@ using System;
 using Microsoft.Extensions.DependencyInjection;
 using Relisten.Data;
 using Relisten.Import;
+using Relisten.Normalization;
 using Relisten.Services.Indexing;
 using Relisten.Services.Notifications;
 using Relisten.Services.Popularity;
@@ -23,6 +24,10 @@ public static class IngestionServiceRegistration
         services.AddScoped<ArchivePerformerReviewService>();
         services.AddScoped<ArchiveIntakeService>();
         services.AddScoped<CatalogImportTransaction>();
+        services.AddScoped<NormalizationEvidenceService>();
+        services.AddScoped<NormalizationWorkService>();
+        services.AddSingleton<RecordingCreditExtractor>();
+        services.AddSingleton<TrackTitleExtractor>();
         services.AddScoped<SetlistShowService, SetlistShowService>();
         services.AddScoped<VenueService, VenueService>();
         services.AddScoped<TourService, TourService>();
