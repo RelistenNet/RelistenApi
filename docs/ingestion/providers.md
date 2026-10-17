@@ -207,13 +207,16 @@ through operator status only. Listener API response fields remain unchanged.
 Intake does not infer deletion from collection absence. Ordinary Archive imports
 skip intake-owned items and exclude their sources from collection deletion checks.
 
-The [Relisten collections design](../design/2026-10-17-relisten-collections.md)
-separates collection membership from the performer assigned to each recording.
-A Jerry Garcia collection therefore needs per-item performer resolution; a collection
-label alone cannot supply that assignment. Full Aadam support needs existing-artist
-import/linking and an Aadam extension of the shared Archive intake. Those extensions
-are future work. Current Taper’s Section intake still requires reviewed creator keys
-and approval of new artists, defers existing-artist matches and has no Aadam discovery.
+The [collection contract](../plans/active/2026-10-17-archive-collections/contracts.md)
+adds configured Archive collection discovery, both membership rules, exact native-source
+reuse and read-only v3 routes. Membership does not identify a performer or transfer
+source ownership. The [performer contract](../plans/active/2026-10-17-archive-collections/performer-contract.md)
+adds explicit per-item project reviews through the existing artist workflow. Ordinary
+intake still matches reviewed structured creator keys; description evidence requires
+an explicit item review. Missing-recording publication for existing artists and a full
+Aadam import remain deferred. The [current roadmap](../plans/active/2026-10-17-archive-collections/README.md)
+links local verification, including the [bounded Jerry proof](../plans/active/2026-10-17-archive-collections/jerry-projects-smoke.md),
+and remaining release checks.
 
 ## Provider verification
 

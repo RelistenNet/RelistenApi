@@ -1,0 +1,1542 @@
+{
+  "checked_at_utc": "2026-10-17T08:18:07.476423+00:00",
+  "commit": "7a65d460b63983ca128743a8a90183ed27a4e72c",
+  "api_dll_sha256": "9bc59b753f8d37bf382c70f4c799e11c0d3626b80d9bba5b7a6a42a7f5552813",
+  "apis": {
+    "mule": {
+      "base_url": "http://127.0.0.1:13824"
+    },
+    "jerry": {
+      "base_url": "http://127.0.0.1:13825"
+    }
+  },
+  "mule_final_read": {
+    "artists": 1,
+    "shows": 285,
+    "sources": 359,
+    "sets": 359,
+    "tracks": 6533,
+    "playback_reference_sha256": "e932fd07e3470c522911f82a6618b55dc10aa910bbfa4a0a1dca3b8b88ade642"
+  },
+  "jerry_final_read": {
+    "artists": 3,
+    "shows": 3,
+    "sources": 3,
+    "sets": 3,
+    "tracks": 31,
+    "collection_counts": {
+      "artists": 3,
+      "shows": 3,
+      "sources": 3
+    },
+    "original_first_manifest_unchanged": true,
+    "playback_reference_sha256": "53dd1560def9f75ba862f360a0938cc417371dbdfaae11d703dfc56a167d7ab1"
+  },
+  "requests": [
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/artists/2d1d7746-1e91-94e9-e86b-1cbb37a56a8a/normalized",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/artists/govt-mule",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/000a97b1-fade-2195-01bb-677638ada3ba",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/01b96d59-b811-8fb2-dc31-5850b160defd",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/02553566-3ce5-cb72-26d1-562025f4584d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/030c0a35-cb68-8b75-5136-c78a997ae670",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0381fdd2-db02-3b65-2a8b-3b6de6ce11c8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0492e963-e04d-ed72-ca59-10ae55a7822c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/05595019-13ed-3736-1b73-0ab590f89abc",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/06760b02-b08b-0cda-48c4-67478e478f28",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/07bb1d7d-82d6-aacc-f771-56dff993f701",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/09a526a6-70c1-d910-e9d8-ca9e549b16fa",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/09cd0aef-3b5c-1713-76d3-4549b2a0af84",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0a8cd5d3-8078-dd6f-8ed8-d2a21835d6cc",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0b6f4a2b-1e9b-a147-f0ec-b24cdac6fe71",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0bcbfbe7-efe4-1bb8-5025-23d15850f609",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0d5d014a-8ac1-f663-4dc6-6d73fea0954e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0d8ea7c7-967d-205d-0d4b-9d136aaeb13a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0dc40089-5ea7-bf20-f36b-3263b419872d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/0f60adde-f6e0-7ff7-1f41-93621ea66ff8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/10e0b788-1144-dc05-dd3f-bed61643b8d2",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/13cfe8d6-864e-6fd0-b336-1835346a5761",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1450fd22-24db-a2dc-6aee-70243bdf52df",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1509fb61-bf4d-2241-ca62-10d88027f990",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/160ffff3-18d5-bf4d-3e2f-4e3213bb303a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/16867375-c63d-400d-682c-6ff85086c8bc",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1789e344-756c-fd7e-d20e-ef869e21e3bf",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/17a504b9-d4e2-0b47-de68-400c561592f4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/199387ba-9e2e-c58c-e24f-3f44167e4fae",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1ad6824a-380c-714b-f13c-33fa18e07c7b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1af65241-0828-a809-29ce-384ba9361de4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1bfb0b4d-9f06-a1a8-f257-f5c4b44101b5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1c6bfb06-ac3d-f700-8e01-4aaceed06245",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1cd70eb3-e83a-fbed-d108-ca69d23d3019",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1e2879a8-5b55-9067-d2a9-d2c95b260502",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/1ea7273e-6a02-ab60-c2d0-b057b1537642",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/20ee41a6-7dae-ec91-68dc-844986e06fc0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2238b075-ce01-326a-aae2-312421d60568",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/22e27319-eacf-2a33-fd7b-ccdd9d3941ff",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/232ea7d5-f75d-85b3-5cb4-c77d23f67cc5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/23533c2a-a9a6-e3e5-91b1-34d8bcd4f533",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/23b27d70-70b8-977f-3c6e-eedb76315750",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/247c9e4a-3e75-fd71-e6ff-d62a2163e618",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/248b5489-451c-4dc1-c534-000eb79e9a89",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/25731ef3-6264-da58-ab8e-9faf6fafb53a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/25bd64c3-6777-1f0b-d4b2-f07c8bfccd10",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/27989874-e00a-907c-02ab-24c0659bfe6e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/279c9864-f0fd-b515-481e-532e8a91d874",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/27cb20d2-521b-a9a0-5de3-7506452c048b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2845ffb8-f5e7-5e43-82eb-c922ea2a4cce",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2977f842-f342-a18b-2c6f-6d9791b3b926",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2c487202-cbfc-8f5f-43f0-f7182eeb43b4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2c574822-aa7b-8989-f741-1f080a7d1501",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2e1a1d8a-7861-97b4-19a7-aec523368d7b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/2e6554cf-f208-3d25-42be-70bb486b4320",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/30d2961d-5604-3810-56e8-212627d6f9db",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/313d7050-ef20-cdb0-cf9f-8798928701bf",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/314691b6-f8ea-7ab2-34b2-2bb5fccee6a2",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/318cbd65-1c26-37df-fa46-d0b7ec669f6c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3239bd2b-ab58-9319-8909-137ba779ed53",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/33cac796-0659-98ea-4f07-0b6be84c0893",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/35356b87-13ad-f2bd-7126-12364fbc9d59",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/36d70a04-5847-2434-b369-a3da5a1d5937",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3779b091-f93a-65fa-79ed-1529a4b820eb",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/37d713d4-fb2c-68a6-fdfd-012aeb60dc15",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3d12037e-7e1f-b345-f3a7-40f428c56100",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3d3a78bc-f99f-f6f3-d6fd-2cfee86d9cf4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3d49bfa1-6b55-2a78-ee4e-0dcd33bf13db",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3dc0f35d-8ed8-d9db-2053-c824547c3385",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3f02ba24-e670-6960-a118-c6bb54873ecf",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/3f99a61a-ef87-395c-32c9-5ffb035d23a8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/40757db3-7fbc-ca34-7b42-2bb74bd49ee6",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/40fbbf3d-7121-8030-4e96-35a8e23ea907",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4124de49-b9d1-9511-3876-d79a5acee873",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4174a5a5-0a62-3781-d6a4-014f062cdad9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/42d6fc26-7988-65d1-8f8c-387b96d14e0d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/43f43f4c-08cb-b2c4-cb00-067308885ec0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4458d9aa-a1be-6d61-c4b6-4cd0c7307691",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/448164da-4b8c-d8ca-254e-37fac3524d35",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/44c052ba-7f03-6a82-af5a-cd7d624d45ce",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/485503e0-afa9-4609-836e-e8ee1a3444b9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4918383e-82ea-b32c-1ca9-aae0a82c19f9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/498321a9-91a1-4050-64c2-c524fae03115",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/49b9c6ff-74c5-f556-0e74-3f5929da067a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4ba933ee-1e09-2f5a-6cf2-a41f6bca72f8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4df35187-a3e5-da09-ec82-982bab9ca5ae",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4df7b66e-cfdc-3c63-06c9-519b23736ebd",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4df9e8e0-8e91-cf93-b5bd-33df7b43ee1f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4e5d7a7c-8afb-021c-9951-395f16867e8c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4efa4a45-1086-c9ca-6b69-3b6b6d5b1e41",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4eff1262-0b29-3e2b-6e15-d1ac0ec73521",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4f1a80fb-dc15-8600-5345-a6e7ed335753",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/4f780265-6cee-4afb-cf16-b9ebef001151",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5028f081-986b-193b-8bc4-bad6ebfc57d4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/50b896e5-e38b-3a59-14f2-edd7e3587f17",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/50c4daa6-8cbf-f4a0-8342-3baad266f115",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/50f879ed-7906-e717-df8c-982cf4e4b0be",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/523c0405-0e87-301d-5c28-efc14827ad59",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/546d21d3-d9e1-cf33-ef73-5ded2182e877",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/550fded2-06af-69d7-dc20-b7d8a97a0ab4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/55cddeb7-5466-eb2d-845f-cef07f1d1a81",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/55f2fba3-dcba-559e-02ad-4c72a04c79db",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/562c7cb0-5ea4-bc9a-f078-49115a01e9cd",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/569e3eb2-19f1-cf45-9638-312911fd2289",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/57f8eb00-3015-0c5c-cace-0cc43463f084",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5a6fe7e2-550c-57b6-f79c-44efa51a96a4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5c2853a2-16ff-1825-bf74-a2d9ebeed108",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5c537a63-5c74-439b-eb67-e4ecd8022e8a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5de94ef7-0d68-b340-43fc-586a05632a5d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5f81dcf3-ae19-a233-426d-275aeba72590",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/5fb79d3f-7709-05dd-46b5-75671b67c995",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/606339cc-6d09-51d2-50af-0958d0a3793e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/60b1bd47-6b9d-917b-3482-190987db3fce",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/60ee173f-e659-d5fc-e8b2-3a6f75877ada",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/62d1de70-6e4e-ff66-1988-19451f11a866",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/63031485-570e-9f1f-28f2-70b68144722b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/63725f8d-df51-f8e5-6b40-541dbc6f7706",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/63c12c17-d8be-9e70-36c6-0ab93cd7643f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/64a4e6da-9efb-1aae-5bbd-751620278d79",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/64c7e60d-fa11-8fd2-9a6b-55b6fc94f363",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/661779c5-1c31-1edd-3166-6aa48602a885",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/664b6f5c-b6d1-47c6-2871-bde5dc6f30b5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/66cb27be-8799-cfac-d957-a5b7c5e1e505",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6703dff1-a35e-c6e9-5ef8-85182e6c79da",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/670e2f02-a1a0-5446-8ae3-ffac1915a03f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6715dc1c-ef2a-b63a-d914-bc3c3945c1fe",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/671d94f3-fd11-4526-05b0-9e3a10f7e8cc",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/68b145cb-2880-a36e-d81e-dfec6e457ff3",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6bf3a442-1b5b-4590-d736-11fd69ee3e3e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6c301e87-7f9a-16a8-7ef1-c613bae93d7f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6d343ad9-3007-74ad-dd3c-f2bc2b18eb84",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6d52f85a-bcf2-0f54-924f-d53daa0135c0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6e0ba3bb-09bf-50ed-33d4-41f4c1cc3e06",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6e85f473-88d3-0608-55dd-7530f8c5becb",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/6f924885-09b5-49f3-a62b-3c4a95e74522",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/706aa9fb-b79e-378f-3dd5-fb8cfaa58b35",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/70e15f51-1a7f-f637-1a88-dcabdb07d40f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/71b75801-3da1-8b90-91e8-5c4ed39e0877",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/71c0cd1b-8205-0e1e-cca1-b310feb4a452",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/738cddca-ee9f-6678-9663-d6737a618c03",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7563c57b-fe84-9bd4-3462-4bc3e9fb545c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/76635f9d-f275-521f-4cdc-402e039484e3",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/77df0702-dba5-1d78-4c3c-e5f93d61fc5a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/78c21972-fad7-5618-b1c4-175f2195ae6e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7931a409-7887-d21d-c68b-ae490efef35f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7980303f-7984-b97d-fca3-fa67020ae2ec",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/79b125ae-3053-f5c9-a30f-7bf3f0c826cb",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7a9b9337-408a-6f5e-5d37-e2d461875a57",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7aaf754c-a017-eb29-5fdb-2ac281e56469",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7ae58de8-0003-b418-933d-d88e8dba2406",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7b54c4f2-44ac-63e0-d78e-e24ee9c7f5b4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7b869723-33ea-595e-c730-eb1e6983b527",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7c7895b4-edc0-2474-1182-48a5e1f1795e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7d2bbb4c-2d1d-2721-9904-ee45718515cd",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7e7c1d93-2140-d002-5fe9-1640e5b87185",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/7e7cf86c-4aea-59f6-0cfc-02b5cdde4469",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/80bb9e83-de5d-6bf9-6494-df1babea1d63",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/828b03d1-d7ce-bafd-d371-47b6c47bc7d0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/8331bab1-6ecb-82ba-c9d5-05b084a19c5e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/83aaaea9-b38e-797d-0c8c-efce4e5b3efd",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/84024710-cdc6-5f87-87ef-28e8800063df",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/84326dca-46c2-f0cd-0af9-0362c7451ab4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/851bf7ba-0318-d7c6-d9f3-1733ef1a16d4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/855bf4ff-a346-dd23-440a-e1faf3fd76f9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/86896705-b445-1bc6-322a-18983973bf4b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/8a05e641-ca49-5e3b-590a-f3e13019d23c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/8ca7853a-a983-3ccb-12fb-ed7342c62b19",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/8cec8f7a-2160-542c-f039-8190c849fc62",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/8f54fa91-fa76-6b41-59e6-fd36537f8095",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/90917700-0e9c-f6db-7798-9860f0e0ec56",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/929bd98e-36d7-fffa-6c2f-1bee3333c6b9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/937f8498-0795-8e02-5ed7-855d831e0ad9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/940676c7-26f1-592f-9f70-b0fadf89d583",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/94cefe03-d6f2-1b7f-42b1-e5a59bd29436",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9509f334-e994-ec67-7782-1730fad1ed47",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/954eaee0-23eb-30ab-45ba-4fe3ced381a0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/95baf436-a1df-0ffd-870c-919372374a11",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/96089432-78be-a5c5-7f00-59005b05e252",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/96a2a874-9296-233c-7e7b-7a4fd697b29e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/96a7ebd4-f523-9b91-1872-ee6e6c508c55",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/98d74703-2d15-be43-76b5-6fc765038dd4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/995913af-b7ba-0fa1-1061-5c141bdb80c4",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/998c7b36-7808-d50e-0200-17daffb8562e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9bf9a3d8-864f-0bfc-3fe3-babb70695b87",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9ce94dea-d0d0-18cb-3446-3ffcd6c0f7eb",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9cf60690-5fd1-3792-babf-8a82108d89a0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9dcba3da-32d5-a77b-389f-7c47d13fcb2a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9e2244cb-5b8e-6aa6-9163-63fa6ba8e573",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9e4dc540-1b7b-60ca-8b54-b9d97308018b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9f141517-3274-235b-fecd-722c5693c110",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/9f5bf4ba-3dc1-73e4-abfc-8c494731e3c7",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a065343d-5b15-f6bf-39d2-29c82057739b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a0ee96cc-72dd-a43e-93b9-96cacd56f3d2",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a2758774-8c8b-e32c-eb94-af7cf640451e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a369bf8b-4ef9-ff59-5f70-4183cadaa023",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a45ce101-15f8-2ac7-59e1-6f96369095ac",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a54f9e63-db2e-47c3-df41-64c45dbff508",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a7c9ac1b-b02b-ccca-dd54-a684632ad624",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/a85e4baa-9f68-46e1-bb5e-692afac56054",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/aa0d2db7-d2cb-dac4-f522-6917c9b6bb7c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/aaaeb9d5-35de-df47-6d5a-4b090ff82ee3",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/aab909ac-5507-35c9-bd89-321b687ade3d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/aaefc55d-c625-3957-a532-bfd5ddfd0f7d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/abcd9237-0284-a5eb-0f50-1206b904d3b3",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/abed3fc4-0f6b-4d68-03b4-e0ff2c69357f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ac25404a-f76d-7cf1-978f-6dfcd2140bd1",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ad67894c-8fbb-d2c4-4797-70c3c82de6ca",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ad96da69-7194-178f-049a-d00ac97d0b99",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ae73486f-db09-7824-0ff4-424772e11b47",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b01449ef-ab22-29a0-2f43-306e9f1924b9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b0e5cd09-016f-2009-d99f-ba7ee029e2ac",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b266a368-876a-f27c-4e81-95bf5ead7889",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b281b250-da04-c741-f741-649c811d2969",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b3cbbad6-ea1a-88f4-2a0d-4adcd1dcbf72",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b3fdae09-655a-a0d2-2ffb-c7d6ec014aee",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b4480efb-9b9d-a47a-eb70-036f2be432a5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b54b2e90-f49b-99c0-1d6e-65795c2aac2f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b5bf0e0c-f8a3-fb1f-4f9a-790cc2153b34",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b614ab18-2a89-ffe4-cb59-6f2ca189aed6",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b65948dd-e8e2-7d3f-2fd6-7343652ff509",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b86bec68-aa18-539b-b63a-9b22ce7f7cd2",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b87d4ebb-b809-2b30-b035-ce2475bf3ebb",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/b9981466-ca88-bdbb-fa94-4765ed22792c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ba33be0a-d1e7-f910-c25a-ad4a5bd8a62b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ba7a8b78-9457-a2b4-6ec9-7c827ba10c26",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/bc4c7baf-2de0-020d-0c99-5cef8f736a6c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/be21ba20-6442-5537-b89f-a92456ec26be",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/be622bf0-5e3e-aa44-39d3-be6d8a5d2144",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/bfbf62f2-5189-4b99-32ba-2abf6c8502ce",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/c22cea1d-16f1-65ef-1abc-a64451fd7dad",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/c3b6e9de-fd91-20a8-7f6a-b734f93a6ef7",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/c422b13c-a308-c946-64ed-a3affa41d65e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/c553b6b2-216d-9ad4-a162-82486f635278",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/c9439860-fcdd-3cad-5eaa-8eb05453ca94",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ca3ab60b-d799-eb2e-f4e9-5a1d4d3b9199",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/cb9fc9f1-1441-0ed6-b8dd-5f77b2bc24f0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/cd74a741-6280-5762-041a-bece7dc277b9",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/cd77d3be-140d-65aa-e69c-3cffc90c879d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/cf360670-150d-0179-22fb-efd088e2b958",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d0f4cbec-48cd-8c7b-06a1-0bf2c9c2ff3e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d3ee07b3-ba02-e1c5-5768-f0cfaa7ae40a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d5ad7db0-822a-9a3f-eb16-1e8160ea52f1",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d5fca6a1-c34f-4e30-6b7c-4186c6ae0b6a",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d87a7a81-9dc4-af4b-16fb-7c8d6d9f8e3f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/d9330b92-bf00-91a8-1f8d-f3b425b69381",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/db12ecc1-7010-b873-abfc-4dab0b39b29c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/dc91cd50-252f-2c32-55bf-c46c772e69d5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/dd04ea30-7a12-1cc4-a741-60be5db26219",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/dd0d224e-0dbc-04be-35ee-6fecafc3f2e8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/dd30e486-b229-84f7-f33c-acee8c419fd6",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/dda5ff42-3b16-19d0-3831-b4b0d4a0661d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e055c15b-036d-834b-c5f0-cc28d822e126",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e11e312e-89d4-a6d8-289a-eeb8fbaf93e5",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e16f886d-4428-d60a-af77-4fdaac763e64",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e371ed2b-6821-5dd6-d087-abcbb8e8953b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e3919d67-f6a1-fa09-e88a-afef56628f44",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e5708f5f-af4f-2eb4-e250-f53269ebf3b0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e6a1bb7b-d174-911b-24e0-d042e3525953",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e8382203-880d-553c-6753-2b6fc1e722a8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e8403082-b023-f9e0-4aeb-dc2bf58b82e8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e8d9a88d-d965-418b-00b5-70b430c43c03",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/e9b6b1ad-199e-57f9-2c4e-3e240376d816",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ea1749f9-bd27-79c5-59bf-4bac4f8f4c37",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/eafa35db-62b9-5e9a-a541-b2663dca72a3",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/eb3a3fda-6970-575b-184f-988894a7ca7f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ec68c045-5951-3075-cdd1-decd580d5ba0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ed2f1519-4e58-d074-a91a-a117c6058a28",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ee029c11-eeb9-d83b-d206-ca835ce0249e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/ef1d4a58-d0d6-964c-ceab-f2525b50d253",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f098dbf0-5b4d-6b75-eea9-dd12f72921f8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f122d8b2-9ecb-f1f3-4058-958c00c44d1d",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f1898f4e-e4f0-2164-d50d-f1145b3377a0",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f3fea41c-9d83-59b0-7a1f-2967c9fe5138",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f453a8b2-b8af-738c-6f98-b9932114b088",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f461abfe-0a8a-30c6-1591-184fcce067b1",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f4e88122-1b4a-3889-0e08-2adea9cf2975",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f57fe716-2e22-6cac-b377-3e0943d15b48",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f580f738-680f-f091-5240-9e121d3e9853",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f64e92ea-1b88-ab3e-7817-7505528b73f8",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f7aba55d-1e64-9046-001e-4018498ce2fc",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/f848bdc0-8357-fd8b-6ab2-92e7f775f43b",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fa964486-a772-e10e-1c78-3fbaf6c7d531",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fae82b0d-d150-4f4e-174b-69ca882aa701",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fb1b67e9-1c5d-0e2a-17d2-1c87c82c2de2",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fc3070ec-5aed-0579-9794-9e27892f514f",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fcb44856-afa1-9474-c319-04bcf58e9958",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13824",
+      "path": "/api/v3/shows/fed3a3f2-761b-c39c-67d3-79189f87759c",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715/normalized",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295/normalized",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1/normalized",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/collections/jerry-projects-smoke",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/collections/jerry-projects-smoke/artists",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/collections/jerry-projects-smoke/recordings",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/shows/2d5ebde2-a904-40d3-0565-f0c4d5875281",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/shows/a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+      "status": 200
+    },
+    {
+      "base": "http://127.0.0.1:13825",
+      "path": "/api/v3/shows/d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+      "status": 200
+    }
+  ],
+  "request_count": 300,
+  "verified_at_utc": "2026-10-17T08:18:36.815183+00:00",
+  "workers_restarted": false,
+  "imports_or_builds_run": false,
+  "other_local_api_preserved": true
+}

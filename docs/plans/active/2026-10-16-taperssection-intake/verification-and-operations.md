@@ -2,24 +2,26 @@
 
 Use this guide with the [release plan](README.md) and [contracts](contracts.md). The commands below are implemented. New schedules start paused; deployment and approval of live artists remain operator work.
 
-## Next local sequence
+## Current local evidence and extensions
 
-Run the full isolated local Gov’t Mule catalog smoke next. Use a separate catalog,
-Redis instance and Temporal server, retain the selected inventory and typed outcomes,
-and verify listener responses and stable identities after a repeat import. Use the
-current provider route appropriate to the artist; Taper’s Section intake still defers
-existing-artist matches.
+The [Gov’t Mule verification](../2026-10-17-archive-collections/govt-mule-smoke.md)
+records a complete isolated artist import, running v3 responses and repeat identities
+under the original and current interpretation versions.
+The [current roadmap](../2026-10-17-archive-collections/README.md) links collection
+service/workflow and actual HTTP checks, plus the completed
+[bounded Jerry proof](../2026-10-17-archive-collections/jerry-projects-smoke.md).
+These checks preserve the earlier Pavement release evidence.
 
-The [next-work roadmap](../2026-10-17-archive-collections/README.md) owns the work
-that follows this smoke. The [collections design](../../../design/2026-10-17-relisten-collections.md)
-defines future membership, Aadam support gaps and Jerry Garcia performer resolution.
-There are no implemented collection commands, APIs or migrations. Full Aadam support
-requires existing-artist import/linking and an Aadam extension of the shared Archive
-intake.
+The [collection contract](../2026-10-17-archive-collections/contracts.md) defines
+implemented membership, exact native-source reuse, configured discovery and read APIs.
+The [performer contract](../2026-10-17-archive-collections/performer-contract.md) defines
+explicit item-level reviews through the existing artist writer. Ordinary reviewed
+creator matching and bulk artist approval remain the default. Full Aadam publication
+and missing-recording writes for existing artists remain deferred.
 
-These local checks do not replace the production pilot, collection-wide terminal
-pagination or production backup checks below. Current bulk database approval,
-reviewed creator keys, `XX` partial dates and operator-only date notes remain unchanged.
+Local evidence does not replace the production pilot, collection-wide terminal
+pagination or production backup checks below. `XX` partial dates and operator-only
+date notes retain their existing contracts.
 
 ## Review artists in PostgreSQL
 

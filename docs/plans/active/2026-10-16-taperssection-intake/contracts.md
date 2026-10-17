@@ -2,20 +2,21 @@
 
 These contracts implement the [release plan](README.md). The names below refer to the implemented additions or identify existing contracts. Preserve the behavior and ownership described here; private helper names and class layout can follow the surrounding code.
 
-## Planned extensions
+## Implemented extensions
 
-The [Relisten collections design](../../../design/2026-10-17-relisten-collections.md)
-describes future artist/recording membership, Aadam reuse and gaps, and Jerry Garcia
-per-item performer resolution. It separates a collection’s contents from each
-recording’s artist assignment. This contract adds no collection command, API or
-migration.
+The [collection contract](../2026-10-17-archive-collections/contracts.md) adds migration
+14, collection membership, exact existing-source reuse, configured discovery and
+read-only v3 routes. The separate [performer contract](../2026-10-17-archive-collections/performer-contract.md)
+adds migration 15 and explicit per-item reviews targeting project candidates. Those
+reviews are a documented exception to structured creator matching, not automatic
+inference from descriptions or approval of a collection’s contents.
 
-Current Taper’s Section publication remains limited to approved new artists and their
-reviewed creator keys. A collection membership must not be treated as performer
-identity or approval under this contract. Full Aadam support requires existing-artist
-import/linking and an Aadam extension of the shared Archive intake. Aadam discovery
-and those extensions are not implemented. Partial dates remain `XX`, current metadata
-takes precedence over identifiers, and date details remain operator-only output.
+This release’s three intake relations and ordinary publication rules remain the
+baseline below. Full Aadam publication still needs a missing-recording write contract
+for existing artists. Exact native-source reuse does not claim their ownership.
+Partial dates remain `XX`, current metadata takes precedence over identifiers, and
+date details remain operator-only output. See the [current roadmap](../2026-10-17-archive-collections/README.md)
+for verified extensions and remaining release work.
 
 ## State and ownership
 
@@ -68,7 +69,7 @@ Foreign keys between these three intake relations may restrict deletion. Catalog
 
 Evaluate each current observation independently. Approval of a candidate enables the following rule; it does not bypass it.
 
-1. There is exactly one nonempty structured creator value after deduplicating equal lookup keys. It matches exactly one approved candidate’s reviewed keys. Missing creators and unreviewed spelling variants remain pending. No automatic artist inference from a free-form description in this release.
+1. There is exactly one nonempty structured creator value after deduplicating equal lookup keys. It matches exactly one approved candidate’s reviewed keys. Missing creators and unreviewed spelling variants remain pending. No automatic artist inference from a free-form description. An explicit retained [per-item performer review](../2026-10-17-archive-collections/performer-contract.md) can instead target one reviewed project candidate; ordinary artist approval and item eligibility still apply.
 2. The candidate either has no catalog match and can be materialized safely, or already belongs to this intake cohort. A match to a pre-existing artist is deferred. Check current names, slugs, Archive collection labels and retained intake labels. A shared name or conflicting candidate is a review case.
 3. The item is an audio recording for one performer and a supported full or partial performance date. Hold explicit compilation/remaster-only, tribute/memorial, multi-act billing and ambiguous early/late evidence. Use named, tested parsing rules with evidence spans. Do not equate several named guests with several headline performers without supporting context. Unresolved performer or item-kind uncertainty yields `needs_review`, never a guessed single performer.
 4. Accept known-year full or partial performance dates under the [date selection contract](#date-selection-and-nonblocking-notes). Current metadata takes precedence over the immutable identifier. Preserve unknown components as `XX`; do not turn a year-only recording into a precise January 1 performance. An identifier disagreement or supported partial date creates a nonblocking note, not a publication hold. Actual conflicting current metadata, an unusable date, an unknown year and ambiguous early/late attribution still require review.

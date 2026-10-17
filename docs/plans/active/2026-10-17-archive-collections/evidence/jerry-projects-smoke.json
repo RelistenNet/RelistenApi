@@ -1,0 +1,1401 @@
+{
+  "verified_at_utc": "2026-10-17T08:14:14.419353+00:00",
+  "implementation_checkout_head": "0159afdb41bfbbc1c4dafd4d1a9a2c79c9ed85a2",
+  "uncommitted_implementation": true,
+  "scope": "Four bounded fresh Archive item metadata responses; three specific reviewed performing projects publish locally, one mixed acoustic/electric item stays held. Not a creator-wide import, physical identity benchmark or production deployment.",
+  "environment": {
+    "database": "relisten_jerry_20261017",
+    "postgres_port": 15432,
+    "redis_port": 16383,
+    "temporal_port": 17236,
+    "api_base": "http://127.0.0.1:13825",
+    "migrations_applied_through": 15,
+    "worker_stopped_after_proof": true,
+    "api_retained": true,
+    "schedules_registered": false,
+    "other_local_environments_preserved": true
+  },
+  "projects": {
+    "Jerry Garcia Band": {
+      "candidate_id": "59d62bf3-874d-42a4-9c9c-cadf8e2ccf0e",
+      "artist": {
+        "Value": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+      }
+    },
+    "Legion of Mary": {
+      "candidate_id": "43b89f4e-5145-42fb-9662-983a38c1986a",
+      "artist": {
+        "Value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+      }
+    },
+    "Garcia/Saunders": {
+      "candidate_id": "edc4e7fc-d084-4af4-abe6-06fa1e11f84d",
+      "artist": {
+        "Value": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+      }
+    }
+  },
+  "reviewed_metadata": [
+    {
+      "item_identifier": "jgb1993-11-01",
+      "metadata_url": "https://archive.org/metadata/jgb1993-11-01",
+      "raw_response_sha256": "0f1f6f893a7ab10a91e2fd234b9e9926ccdc8bf91df5b8317db5a3c7956cdbb8",
+      "fetched_at_utc": "2026-10-17T08:11:42.233478+00:00",
+      "creator": "Jerry Garcia",
+      "structured_date": "1993-11-01",
+      "vbr_mp3_count": 13,
+      "project": "Jerry Garcia Band",
+      "expected_outcome": "publish",
+      "observation": {
+        "item_identifier": "jgb1993-11-01",
+        "observation_id": "6952245e-9f56-4ecd-9f62-0e14ee4def65",
+        "content_hash": "6f0f299f6129acff08d380a2a4d4b40fdbda37221a86c11d5755193812c8c457"
+      },
+      "review": {
+        "ItemIdentifier": "jgb1993-11-01",
+        "CandidateId": "59d62bf3-874d-42a4-9c9c-cadf8e2ccf0e",
+        "SupportingObservationId": "6952245e-9f56-4ecd-9f62-0e14ee4def65",
+        "Evidence": [
+          {
+            "Locator": "metadata.title",
+            "Value": "Jerry Garcia Band",
+            "Rule": "reviewed_explicit_project_billing",
+            "Start": 0,
+            "Length": 17
+          }
+        ],
+        "ReviewBasis": "Reviewed exact project billing in current Archive metadata for bounded isolated local proof.",
+        "Approved": true,
+        "Alternatives": []
+      }
+    },
+    {
+      "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "metadata_url": "https://archive.org/metadata/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "raw_response_sha256": "b0646d00b446ef1fbf2a559bdc2c37d39a3ebc5570fa305c86c1e78098ae454e",
+      "fetched_at_utc": "2026-10-17T08:11:43.143164+00:00",
+      "creator": "Jerry Garcia",
+      "structured_date": "1975-03-07",
+      "vbr_mp3_count": 7,
+      "project": "Legion of Mary",
+      "expected_outcome": "publish",
+      "observation": {
+        "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+        "observation_id": "d8e4ed94-3765-4f0d-8f57-2cc0a63cfca5",
+        "content_hash": "8ce30b2b157d22195d0ab909dd0626f690d4f41417f3465bc0803dd587c2ea48"
+      },
+      "review": {
+        "ItemIdentifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+        "CandidateId": "43b89f4e-5145-42fb-9662-983a38c1986a",
+        "SupportingObservationId": "d8e4ed94-3765-4f0d-8f57-2cc0a63cfca5",
+        "Evidence": [
+          {
+            "Locator": "metadata.description",
+            "Value": "Legion Of Mary",
+            "Rule": "reviewed_explicit_project_billing",
+            "Start": 58,
+            "Length": 14
+          }
+        ],
+        "ReviewBasis": "Reviewed exact project billing in current Archive metadata for bounded isolated local proof.",
+        "Approved": true,
+        "Alternatives": []
+      }
+    },
+    {
+      "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+      "metadata_url": "https://archive.org/metadata/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+      "raw_response_sha256": "975e64a668c5355ddd7604a653266f8c98d42c8f2b139a012a7c6f30ab5729fd",
+      "fetched_at_utc": "2026-10-17T08:11:44.726413+00:00",
+      "creator": "Jerry Garcia",
+      "structured_date": "1973-07-08",
+      "vbr_mp3_count": 11,
+      "project": "Garcia/Saunders",
+      "expected_outcome": "publish",
+      "observation": {
+        "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+        "observation_id": "65ab1b90-6bb3-4fdd-a91c-ae2f9b148122",
+        "content_hash": "9c7d50cafbc9bb51db2bc3a775ba03171e21d30423811b0fae3240a946f15d70"
+      },
+      "review": {
+        "ItemIdentifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+        "CandidateId": "edc4e7fc-d084-4af4-abe6-06fa1e11f84d",
+        "SupportingObservationId": "65ab1b90-6bb3-4fdd-a91c-ae2f9b148122",
+        "Evidence": [
+          {
+            "Locator": "metadata.description",
+            "Value": "Garcia & Saunders",
+            "Rule": "reviewed_explicit_project_billing",
+            "Start": 55,
+            "Length": 17
+          }
+        ],
+        "ReviewBasis": "Reviewed exact project billing in current Archive metadata for bounded isolated local proof.",
+        "Approved": true,
+        "Alternatives": []
+      }
+    },
+    {
+      "item_identifier": "jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+      "metadata_url": "https://archive.org/metadata/jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+      "raw_response_sha256": "0124e529d8d49a78be344b881303b680fa99018eab9f52857481a8901cbe867f",
+      "fetched_at_utc": "2026-10-17T08:11:46.148887+00:00",
+      "creator": "Jerry Garcia",
+      "structured_date": "1987-08-29",
+      "vbr_mp3_count": 28,
+      "project": "Jerry Garcia Band",
+      "expected_outcome": "hold",
+      "observation": {
+        "item_identifier": "jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+        "observation_id": "3e640fc5-5ed5-4926-9dc8-b3844da912b3",
+        "content_hash": "d9c3d4d8435a1c3b2c993febe471d8925b60b9392e077f5d5e3d4c2fcf5f1909"
+      },
+      "review": {
+        "ItemIdentifier": "jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+        "CandidateId": "59d62bf3-874d-42a4-9c9c-cadf8e2ccf0e",
+        "SupportingObservationId": "3e640fc5-5ed5-4926-9dc8-b3844da912b3",
+        "Evidence": [
+          {
+            "Locator": "metadata.description",
+            "Value": "Jerry Garcia Band",
+            "Rule": "reviewed_explicit_project_billing",
+            "Start": 42,
+            "Length": 17
+          }
+        ],
+        "ReviewBasis": "Reviewed exact project billing in current Archive metadata for bounded isolated local proof.",
+        "Approved": true,
+        "Alternatives": [
+          "Jerry Garcia Band",
+          "Jerry Garcia Acoustic Band"
+        ]
+      }
+    }
+  ],
+  "phases": {
+    "first": {
+      "http_verification": {
+        "checked_at_utc": "2026-10-17T08:12:51.884997+00:00",
+        "requests": 20,
+        "published_projects": 3,
+        "published_recordings": 3,
+        "shows": 3,
+        "sets": 3,
+        "tracks": 31,
+        "held_items": 1,
+        "held_reason": "retained performer alternatives (workflow NeedsReview; no intake ownership claimed)",
+        "default_list_visible": true,
+        "collection_fixture_only": true
+      },
+      "http_requests": [
+        {
+          "path": "/api/v3/artists",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/2d5ebde2-a904-40d3-0565-f0c4d5875281",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiYXJ0aXN0cyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiNTAxOGM2ZTYtMzMzYy00YTEzLThkNDUtMjk4YWM1NmIyMjk1IiwiU29ydCI6IkdhcmNpYS9TYXVuZGVycyIsIkFydGlzdCI6bnVsbH0",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiYXJ0aXN0cyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiMjhmZDFlNGUtYTUyZS0wYTkxLTFkNTEtNjI5YWIwNGMyNzE1IiwiU29ydCI6IkplcnJ5IEdhcmNpYSBCYW5kIiwiQXJ0aXN0IjpudWxsfQ",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiZTRkMWY5ZGEtOWVhZC04MGQwLTdiYmUtOGI3MjUyNmRiODcwIiwiU29ydCI6IjE5OTMtMTEtMDEiLCJBcnRpc3QiOm51bGx9",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiMmFmZGNhYzgtY2EwYy03NWE4LTZkNmYtOTllMTAzNzhkYzRiIiwiU29ydCI6IjE5NzUtMDMtMDciLCJBcnRpc3QiOm51bGx9",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=5018c6e6-333c-4a13-8d45-298ac56b2295",
+          "status": 200
+        }
+      ],
+      "workflow_runs": [
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "first_execution_run_id": "01a148ea-c34c-7a16-a9ce-33f2815dd1a8",
+            "result_run_id": "01a148ea-c34c-7a16-a9ce-33f2815dd1a8"
+          },
+          "result": {
+            "Artist": {
+              "Value": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 2,
+              "Published": 1,
+              "Unchanged": 0,
+              "Deferred": 0,
+              "NeedsReview": 1,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        },
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "first_execution_run_id": "01a148ea-c4b4-7b9c-9311-659be1ea1125",
+            "result_run_id": "01a148ea-c4b4-7b9c-9311-659be1ea1125"
+          },
+          "result": {
+            "Artist": {
+              "Value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 1,
+              "Published": 1,
+              "Unchanged": 0,
+              "Deferred": 0,
+              "NeedsReview": 0,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        },
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "first_execution_run_id": "01a148ea-c603-7d42-bb04-f2910bec9b55",
+            "result_run_id": "01a148ea-c603-7d42-bb04-f2910bec9b55"
+          },
+          "result": {
+            "Artist": {
+              "Value": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 1,
+              "Published": 1,
+              "Unchanged": 0,
+              "Deferred": 0,
+              "NeedsReview": 0,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        }
+      ],
+      "catalog_and_review_state": {
+        "items": [
+          {
+            "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "published_display_date": "1973-07-08",
+            "published_source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b",
+            "catalog_revision": 1,
+            "rebuilt_revision": 1,
+            "last_error": null,
+            "content_hash": "9c7d50cafbc9bb51db2bc3a775ba03171e21d30423811b0fae3240a946f15d70",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b"
+          },
+          {
+            "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "published_display_date": "1975-03-07",
+            "published_source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b",
+            "catalog_revision": 1,
+            "rebuilt_revision": 1,
+            "last_error": null,
+            "content_hash": "8ce30b2b157d22195d0ab909dd0626f690d4f41417f3465bc0803dd587c2ea48",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b"
+          },
+          {
+            "item_identifier": "jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+            "status": null,
+            "reason": null,
+            "published_artist_uuid": null,
+            "published_display_date": null,
+            "published_source_uuid": null,
+            "catalog_revision": null,
+            "rebuilt_revision": null,
+            "last_error": null,
+            "content_hash": "d9c3d4d8435a1c3b2c993febe471d8925b60b9392e077f5d5e3d4c2fcf5f1909",
+            "performer_approved": true,
+            "performer_alternatives": [
+              "Jerry Garcia Band",
+              "Jerry Garcia Acoustic Band"
+            ],
+            "performer_revision": 1,
+            "resolution_status": "conflict",
+            "canonical_source_uuid": null
+          },
+          {
+            "item_identifier": "jgb1993-11-01",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "published_display_date": "1993-11-01",
+            "published_source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870",
+            "catalog_revision": 1,
+            "rebuilt_revision": 1,
+            "last_error": null,
+            "content_hash": "6f0f299f6129acff08d380a2a4d4b40fdbda37221a86c11d5755193812c8c457",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870"
+          }
+        ],
+        "projects": [
+          {
+            "candidate_id": "edc4e7fc-d084-4af4-abe6-06fa1e11f84d",
+            "proposed_name": "Garcia/Saunders",
+            "proposed_slug": "garcia-saunders",
+            "reviewed_creator_keys": [
+              "GARCIA/SAUNDERS",
+              "GARCIA & SAUNDERS"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "artist_id": 295
+          },
+          {
+            "candidate_id": "59d62bf3-874d-42a4-9c9c-cadf8e2ccf0e",
+            "proposed_name": "Jerry Garcia Band",
+            "proposed_slug": "jerry-garcia-band",
+            "reviewed_creator_keys": [
+              "JERRY GARCIA BAND"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "artist_id": 293
+          },
+          {
+            "candidate_id": "43b89f4e-5145-42fb-9662-983a38c1986a",
+            "proposed_name": "Legion of Mary",
+            "proposed_slug": "legion-of-mary",
+            "reviewed_creator_keys": [
+              "LEGION OF MARY"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "artist_id": 294
+          }
+        ]
+      }
+    },
+    "repeat": {
+      "http_verification": {
+        "checked_at_utc": "2026-10-17T08:12:57.025065+00:00",
+        "requests": 20,
+        "published_projects": 3,
+        "published_recordings": 3,
+        "shows": 3,
+        "sets": 3,
+        "tracks": 31,
+        "held_items": 1,
+        "held_reason": "retained performer alternatives (workflow NeedsReview; no intake ownership claimed)",
+        "default_list_visible": true,
+        "collection_fixture_only": true
+      },
+      "http_requests": [
+        {
+          "path": "/api/v3/artists",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/28fd1e4e-a52e-0a91-1d51-629ab04c2715/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/2d5ebde2-a904-40d3-0565-f0c4d5875281",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/artists/5018c6e6-333c-4a13-8d45-298ac56b2295/normalized",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/shows/d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiYXJ0aXN0cyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiNTAxOGM2ZTYtMzMzYy00YTEzLThkNDUtMjk4YWM1NmIyMjk1IiwiU29ydCI6IkdhcmNpYS9TYXVuZGVycyIsIkFydGlzdCI6bnVsbH0",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/artists?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiYXJ0aXN0cyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiMjhmZDFlNGUtYTUyZS0wYTkxLTFkNTEtNjI5YWIwNGMyNzE1IiwiU29ydCI6IkplcnJ5IEdhcmNpYSBCYW5kIiwiQXJ0aXN0IjpudWxsfQ",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiZTRkMWY5ZGEtOWVhZC04MGQwLTdiYmUtOGI3MjUyNmRiODcwIiwiU29ydCI6IjE5OTMtMTEtMDEiLCJBcnRpc3QiOm51bGx9",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiMmZjNGIyMi1iNDUyLTRkYTctODRhNi1mOGVmNmRiOTA5NmYiLCJVdWlkIjoiMmFmZGNhYzgtY2EwYy03NWE4LTZkNmYtOTllMTAzNzhkYzRiIiwiU29ydCI6IjE5NzUtMDMtMDciLCJBcnRpc3QiOm51bGx9",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+          "status": 200
+        },
+        {
+          "path": "/api/v3/collections/jerry-projects-smoke/recordings?artist_uuid=5018c6e6-333c-4a13-8d45-298ac56b2295",
+          "status": 200
+        }
+      ],
+      "workflow_runs": [
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "first_execution_run_id": "01a148eb-c0dd-7000-af29-1edce5c8d6b1",
+            "result_run_id": "01a148eb-c0dd-7000-af29-1edce5c8d6b1"
+          },
+          "result": {
+            "Artist": {
+              "Value": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 2,
+              "Published": 0,
+              "Unchanged": 1,
+              "Deferred": 0,
+              "NeedsReview": 1,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        },
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "first_execution_run_id": "01a148eb-cbc8-7509-8735-06c9ec36cc3f",
+            "result_run_id": "01a148eb-cbc8-7509-8735-06c9ec36cc3f"
+          },
+          "result": {
+            "Artist": {
+              "Value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 1,
+              "Published": 0,
+              "Unchanged": 1,
+              "Deferred": 0,
+              "NeedsReview": 0,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        },
+        {
+          "admission": {
+            "workflow_id": "ingest/artist/5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "first_execution_run_id": "01a148eb-ce34-70f6-b5e4-fbbc4241c3a8",
+            "result_run_id": "01a148eb-ce34-70f6-b5e4-fbbc4241c3a8"
+          },
+          "result": {
+            "Artist": {
+              "Value": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+            },
+            "Summary": {
+              "Discovered": 0,
+              "Observed": 1,
+              "Published": 0,
+              "Unchanged": 1,
+              "Deferred": 0,
+              "NeedsReview": 0,
+              "Paused": 0,
+              "Unavailable": 0,
+              "Failed": 0,
+              "Conflicts": 0,
+              "Limited": false,
+              "Failures": null
+            },
+            "RebuildCompleted": true
+          }
+        }
+      ],
+      "catalog_and_review_state": {
+        "items": [
+          {
+            "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "published_display_date": "1973-07-08",
+            "published_source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b",
+            "catalog_revision": 2,
+            "rebuilt_revision": 2,
+            "last_error": null,
+            "content_hash": "9c7d50cafbc9bb51db2bc3a775ba03171e21d30423811b0fae3240a946f15d70",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b"
+          },
+          {
+            "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "published_display_date": "1975-03-07",
+            "published_source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b",
+            "catalog_revision": 2,
+            "rebuilt_revision": 2,
+            "last_error": null,
+            "content_hash": "8ce30b2b157d22195d0ab909dd0626f690d4f41417f3465bc0803dd587c2ea48",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b"
+          },
+          {
+            "item_identifier": "jg87-08-29.030876.jgab.jgb.fob-schoeps.webber-small.minches.t-flac16",
+            "status": null,
+            "reason": null,
+            "published_artist_uuid": null,
+            "published_display_date": null,
+            "published_source_uuid": null,
+            "catalog_revision": null,
+            "rebuilt_revision": null,
+            "last_error": null,
+            "content_hash": "d9c3d4d8435a1c3b2c993febe471d8925b60b9392e077f5d5e3d4c2fcf5f1909",
+            "performer_approved": true,
+            "performer_alternatives": [
+              "Jerry Garcia Band",
+              "Jerry Garcia Acoustic Band"
+            ],
+            "performer_revision": 1,
+            "resolution_status": "conflict",
+            "canonical_source_uuid": null
+          },
+          {
+            "item_identifier": "jgb1993-11-01",
+            "status": "published",
+            "reason": null,
+            "published_artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "published_display_date": "1993-11-01",
+            "published_source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870",
+            "catalog_revision": 2,
+            "rebuilt_revision": 2,
+            "last_error": null,
+            "content_hash": "6f0f299f6129acff08d380a2a4d4b40fdbda37221a86c11d5755193812c8c457",
+            "performer_approved": true,
+            "performer_alternatives": [],
+            "performer_revision": 1,
+            "resolution_status": "resolved",
+            "canonical_source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870"
+          }
+        ],
+        "projects": [
+          {
+            "candidate_id": "edc4e7fc-d084-4af4-abe6-06fa1e11f84d",
+            "proposed_name": "Garcia/Saunders",
+            "proposed_slug": "garcia-saunders",
+            "reviewed_creator_keys": [
+              "GARCIA/SAUNDERS",
+              "GARCIA & SAUNDERS"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "artist_id": 295
+          },
+          {
+            "candidate_id": "59d62bf3-874d-42a4-9c9c-cadf8e2ccf0e",
+            "proposed_name": "Jerry Garcia Band",
+            "proposed_slug": "jerry-garcia-band",
+            "reviewed_creator_keys": [
+              "JERRY GARCIA BAND"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "artist_id": 293
+          },
+          {
+            "candidate_id": "43b89f4e-5145-42fb-9662-983a38c1986a",
+            "proposed_name": "Legion of Mary",
+            "proposed_slug": "legion-of-mary",
+            "reviewed_creator_keys": [
+              "LEGION OF MARY"
+            ],
+            "approved": true,
+            "identity_status": "cohort",
+            "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "artist_id": 294
+          }
+        ]
+      }
+    }
+  },
+  "playback_identities_first": {
+    "28fd1e4e-a52e-0a91-1d51-629ab04c2715": {
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "artist_name": "Jerry Garcia Band",
+      "artist_slug": "jerry-garcia-band",
+      "show_uuid": "2d5ebde2-a904-40d3-0565-f0c4d5875281",
+      "display_date": "1993-11-01",
+      "source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870",
+      "item_identifier": "jgb1993-11-01",
+      "sets": [
+        {
+          "uuid": "040bfbfa-aab2-c175-6d9b-6e7c2896d86d",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "f1761a1b-7331-5360-d5ec-746bfc816e70",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t01.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t01.flac",
+              "track_position": 1,
+              "duration": 337,
+              "title": "Stop That Train (partial)"
+            },
+            {
+              "uuid": "725691a3-f85c-fc78-8b50-c8f5d053b037",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t02.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t02.flac",
+              "track_position": 2,
+              "duration": 643,
+              "title": "Let It Rock"
+            },
+            {
+              "uuid": "3316f3b9-d27b-f0d4-0215-02bd33676e69",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t03.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t03.flac",
+              "track_position": 3,
+              "duration": 834,
+              "title": "Simple Twist of Fate"
+            },
+            {
+              "uuid": "90b91bf7-d05c-1526-ff43-23be72a6fd88",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t04.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t04.flac",
+              "track_position": 4,
+              "duration": 624,
+              "title": "Ain't No Bread in the Breadbox"
+            },
+            {
+              "uuid": "51b527f5-079d-9f48-9e3b-f2fdc2c053c1",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t05.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t05.flac",
+              "track_position": 5,
+              "duration": 451,
+              "title": "Struggling Man"
+            },
+            {
+              "uuid": "38df2e01-016d-ec6a-14ca-328eb62a5fb3",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t06.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t06.flac",
+              "track_position": 6,
+              "duration": 258,
+              "title": "My Sisters and Brothers"
+            },
+            {
+              "uuid": "293195bf-54c5-dd0e-eedb-97bb9c609e20",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t07.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t07.flac",
+              "track_position": 7,
+              "duration": 674,
+              "title": "Deal"
+            },
+            {
+              "uuid": "1c4de213-f6ba-c145-b3d5-7b16dd5231fd",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t01.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t01.flac",
+              "track_position": 8,
+              "duration": 843,
+              "title": "The Way You Do The Things You Do"
+            },
+            {
+              "uuid": "be00006e-56b7-557e-7f4c-d6e7027ac853",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t02.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t02.flac",
+              "track_position": 9,
+              "duration": 665,
+              "title": "And it Stoned Me"
+            },
+            {
+              "uuid": "81e4911a-07c0-d0bf-2961-7abf9903b8b6",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t03.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t03.flac",
+              "track_position": 10,
+              "duration": 376,
+              "title": "Think"
+            },
+            {
+              "uuid": "8770c89c-3620-9d3a-a4e7-afaa94cae583",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t04.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t04.flac",
+              "track_position": 11,
+              "duration": 539,
+              "title": "Rubin and Cherise"
+            },
+            {
+              "uuid": "dcf03ef3-ca64-a8ca-a5b4-2d830549a474",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t05.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t05.flac",
+              "track_position": 12,
+              "duration": 788,
+              "title": "Don't Let Go"
+            },
+            {
+              "uuid": "4ca3f6e2-39d7-a018-523d-861eb89d3fbb",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t06.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t06.flac",
+              "track_position": 13,
+              "duration": 815,
+              "title": "Tangled Up in Blue"
+            }
+          ]
+        }
+      ]
+    },
+    "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1": {
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "artist_name": "Legion of Mary",
+      "artist_slug": "legion-of-mary",
+      "show_uuid": "a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+      "display_date": "1975-03-07",
+      "source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b",
+      "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "sets": [
+        {
+          "uuid": "7f696e5a-54f8-a7d2-084d-99f0be6bbf8b",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "285cbd26-67e2-047c-0c00-6ffb8cfc229c",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t01.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t01.flac",
+              "track_position": 1,
+              "duration": 729,
+              "title": "That's The Touch I Like"
+            },
+            {
+              "uuid": "457b319f-6d32-d63e-2b42-57158196b613",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t02.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t02.flac",
+              "track_position": 2,
+              "duration": 1033,
+              "title": "Favela"
+            },
+            {
+              "uuid": "7929f701-4c2d-11a1-6682-156039e64ac1",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t03.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t03.flac",
+              "track_position": 3,
+              "duration": 536,
+              "title": "Last Train From Poor Valley"
+            },
+            {
+              "uuid": "32f5ef72-346a-4e45-fc16-38b0a65da76d",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t04.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t04.flac",
+              "track_position": 4,
+              "duration": 853,
+              "title": "Mystery Train"
+            },
+            {
+              "uuid": "d034351d-87a3-181f-8f8b-f263090d70ac",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t05.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t05.flac",
+              "track_position": 5,
+              "duration": 959,
+              "title": "You Can Leave Your Hat On"
+            },
+            {
+              "uuid": "8f67ce31-479f-6c9a-8793-fec215a0ffd9",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t01.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t01.flac",
+              "track_position": 6,
+              "duration": 688,
+              "title": "When The Hunter Gets Captured By The Game"
+            },
+            {
+              "uuid": "7fbe1bc6-e53c-41b0-d968-e3dfc78f41e3",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t02.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t02.flac",
+              "track_position": 7,
+              "duration": 654,
+              "title": "Let It Rock"
+            }
+          ]
+        }
+      ]
+    },
+    "5018c6e6-333c-4a13-8d45-298ac56b2295": {
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "artist_name": "Garcia/Saunders",
+      "artist_slug": "garcia-saunders",
+      "show_uuid": "d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+      "display_date": "1973-07-08",
+      "source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b",
+      "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+      "sets": [
+        {
+          "uuid": "e67cf1f8-4951-21f2-9521-b8376ae392a5",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "301928a5-f52d-4dc2-d570-315ca8e3c581",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t01.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t01.flac",
+              "track_position": 1,
+              "duration": 50,
+              "title": "DJ Talk"
+            },
+            {
+              "uuid": "67258c83-a6f9-6209-6623-55655e5cd7d1",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t02.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t02.flac",
+              "track_position": 2,
+              "duration": 386,
+              "title": "Someday Baby"
+            },
+            {
+              "uuid": "7bb4dceb-72bc-a05d-6952-55356684ee30",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t03.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t03.flac",
+              "track_position": 3,
+              "duration": 666,
+              "title": "My Funny Valentine"
+            },
+            {
+              "uuid": "a2c753f0-b951-b702-b019-0f5b0530f65a",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t04.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t04.flac",
+              "track_position": 4,
+              "duration": 515,
+              "title": "That's All Right"
+            },
+            {
+              "uuid": "8b674039-1589-e380-c7c1-f2759716888b",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t05.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t05.flac",
+              "track_position": 5,
+              "duration": 731,
+              "title": "It's Too Late"
+            },
+            {
+              "uuid": "e1056383-c3b2-b245-2039-b9df026b711d",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t06.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t06.flac",
+              "track_position": 6,
+              "duration": 390,
+              "title": "Finders Keepers"
+            },
+            {
+              "uuid": "6faeb26a-0360-815a-fcaa-9fe4b2e7ee73",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t01.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t01.flac",
+              "track_position": 7,
+              "duration": 82,
+              "title": "DJ Talk"
+            },
+            {
+              "uuid": "773e5eb8-2d35-077c-4e72-964d2f99e35b",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t02.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t02.flac",
+              "track_position": 8,
+              "duration": 704,
+              "title": "I Second That Emotion"
+            },
+            {
+              "uuid": "89f7a4db-a858-f2e0-b631-958aeb34dce6",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t03.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t03.flac",
+              "track_position": 9,
+              "duration": 727,
+              "title": "Georgia on My Mind"
+            },
+            {
+              "uuid": "20e3f197-ba42-9a62-e16a-5ab1a11406ed",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t04.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t04.flac",
+              "track_position": 10,
+              "duration": 520,
+              "title": "Positively 4th Street"
+            },
+            {
+              "uuid": "fdbdb66f-accb-6d85-35e6-25b3d1c389c7",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t05.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t05.flac",
+              "track_position": 11,
+              "duration": 480,
+              "title": "How Sweet It Is"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "playback_identities_repeat": {
+    "28fd1e4e-a52e-0a91-1d51-629ab04c2715": {
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "artist_name": "Jerry Garcia Band",
+      "artist_slug": "jerry-garcia-band",
+      "show_uuid": "2d5ebde2-a904-40d3-0565-f0c4d5875281",
+      "display_date": "1993-11-01",
+      "source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870",
+      "item_identifier": "jgb1993-11-01",
+      "sets": [
+        {
+          "uuid": "040bfbfa-aab2-c175-6d9b-6e7c2896d86d",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "f1761a1b-7331-5360-d5ec-746bfc816e70",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t01.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t01.flac",
+              "track_position": 1,
+              "duration": 337,
+              "title": "Stop That Train (partial)"
+            },
+            {
+              "uuid": "725691a3-f85c-fc78-8b50-c8f5d053b037",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t02.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t02.flac",
+              "track_position": 2,
+              "duration": 643,
+              "title": "Let It Rock"
+            },
+            {
+              "uuid": "3316f3b9-d27b-f0d4-0215-02bd33676e69",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t03.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t03.flac",
+              "track_position": 3,
+              "duration": 834,
+              "title": "Simple Twist of Fate"
+            },
+            {
+              "uuid": "90b91bf7-d05c-1526-ff43-23be72a6fd88",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t04.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t04.flac",
+              "track_position": 4,
+              "duration": 624,
+              "title": "Ain't No Bread in the Breadbox"
+            },
+            {
+              "uuid": "51b527f5-079d-9f48-9e3b-f2fdc2c053c1",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t05.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t05.flac",
+              "track_position": 5,
+              "duration": 451,
+              "title": "Struggling Man"
+            },
+            {
+              "uuid": "38df2e01-016d-ec6a-14ca-328eb62a5fb3",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t06.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t06.flac",
+              "track_position": 6,
+              "duration": 258,
+              "title": "My Sisters and Brothers"
+            },
+            {
+              "uuid": "293195bf-54c5-dd0e-eedb-97bb9c609e20",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t07.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t07.flac",
+              "track_position": 7,
+              "duration": 674,
+              "title": "Deal"
+            },
+            {
+              "uuid": "1c4de213-f6ba-c145-b3d5-7b16dd5231fd",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t01.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t01.flac",
+              "track_position": 8,
+              "duration": 843,
+              "title": "The Way You Do The Things You Do"
+            },
+            {
+              "uuid": "be00006e-56b7-557e-7f4c-d6e7027ac853",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t02.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t02.flac",
+              "track_position": 9,
+              "duration": 665,
+              "title": "And it Stoned Me"
+            },
+            {
+              "uuid": "81e4911a-07c0-d0bf-2961-7abf9903b8b6",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t03.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t03.flac",
+              "track_position": 10,
+              "duration": 376,
+              "title": "Think"
+            },
+            {
+              "uuid": "8770c89c-3620-9d3a-a4e7-afaa94cae583",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t04.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t04.flac",
+              "track_position": 11,
+              "duration": 539,
+              "title": "Rubin and Cherise"
+            },
+            {
+              "uuid": "dcf03ef3-ca64-a8ca-a5b4-2d830549a474",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t05.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t05.flac",
+              "track_position": 12,
+              "duration": 788,
+              "title": "Don't Let Go"
+            },
+            {
+              "uuid": "4ca3f6e2-39d7-a018-523d-861eb89d3fbb",
+              "mp3_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t06.mp3",
+              "flac_url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s2t06.flac",
+              "track_position": 13,
+              "duration": 815,
+              "title": "Tangled Up in Blue"
+            }
+          ]
+        }
+      ]
+    },
+    "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1": {
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "artist_name": "Legion of Mary",
+      "artist_slug": "legion-of-mary",
+      "show_uuid": "a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+      "display_date": "1975-03-07",
+      "source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b",
+      "item_identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "sets": [
+        {
+          "uuid": "7f696e5a-54f8-a7d2-084d-99f0be6bbf8b",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "285cbd26-67e2-047c-0c00-6ffb8cfc229c",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t01.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t01.flac",
+              "track_position": 1,
+              "duration": 729,
+              "title": "That's The Touch I Like"
+            },
+            {
+              "uuid": "457b319f-6d32-d63e-2b42-57158196b613",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t02.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t02.flac",
+              "track_position": 2,
+              "duration": 1033,
+              "title": "Favela"
+            },
+            {
+              "uuid": "7929f701-4c2d-11a1-6682-156039e64ac1",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t03.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t03.flac",
+              "track_position": 3,
+              "duration": 536,
+              "title": "Last Train From Poor Valley"
+            },
+            {
+              "uuid": "32f5ef72-346a-4e45-fc16-38b0a65da76d",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t04.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t04.flac",
+              "track_position": 4,
+              "duration": 853,
+              "title": "Mystery Train"
+            },
+            {
+              "uuid": "d034351d-87a3-181f-8f8b-f263090d70ac",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t05.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d1t05.flac",
+              "track_position": 5,
+              "duration": 959,
+              "title": "You Can Leave Your Hat On"
+            },
+            {
+              "uuid": "8f67ce31-479f-6c9a-8793-fec215a0ffd9",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t01.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t01.flac",
+              "track_position": 6,
+              "duration": 688,
+              "title": "When The Hunter Gets Captured By The Game"
+            },
+            {
+              "uuid": "7fbe1bc6-e53c-41b0-d968-e3dfc78f41e3",
+              "mp3_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t02.mp3",
+              "flac_url": "https://archive.org/download/jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16/jg75-03-07.23338.d2t02.flac",
+              "track_position": 7,
+              "duration": 654,
+              "title": "Let It Rock"
+            }
+          ]
+        }
+      ]
+    },
+    "5018c6e6-333c-4a13-8d45-298ac56b2295": {
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "artist_name": "Garcia/Saunders",
+      "artist_slug": "garcia-saunders",
+      "show_uuid": "d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+      "display_date": "1973-07-08",
+      "source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b",
+      "item_identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+      "sets": [
+        {
+          "uuid": "e67cf1f8-4951-21f2-9521-b8376ae392a5",
+          "index": 0,
+          "tracks": [
+            {
+              "uuid": "301928a5-f52d-4dc2-d570-315ca8e3c581",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t01.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t01.flac",
+              "track_position": 1,
+              "duration": 50,
+              "title": "DJ Talk"
+            },
+            {
+              "uuid": "67258c83-a6f9-6209-6623-55655e5cd7d1",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t02.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t02.flac",
+              "track_position": 2,
+              "duration": 386,
+              "title": "Someday Baby"
+            },
+            {
+              "uuid": "7bb4dceb-72bc-a05d-6952-55356684ee30",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t03.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t03.flac",
+              "track_position": 3,
+              "duration": 666,
+              "title": "My Funny Valentine"
+            },
+            {
+              "uuid": "a2c753f0-b951-b702-b019-0f5b0530f65a",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t04.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t04.flac",
+              "track_position": 4,
+              "duration": 515,
+              "title": "That's All Right"
+            },
+            {
+              "uuid": "8b674039-1589-e380-c7c1-f2759716888b",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t05.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t05.flac",
+              "track_position": 5,
+              "duration": 731,
+              "title": "It's Too Late"
+            },
+            {
+              "uuid": "e1056383-c3b2-b245-2039-b9df026b711d",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t06.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d1t06.flac",
+              "track_position": 6,
+              "duration": 390,
+              "title": "Finders Keepers"
+            },
+            {
+              "uuid": "6faeb26a-0360-815a-fcaa-9fe4b2e7ee73",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t01.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t01.flac",
+              "track_position": 7,
+              "duration": 82,
+              "title": "DJ Talk"
+            },
+            {
+              "uuid": "773e5eb8-2d35-077c-4e72-964d2f99e35b",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t02.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t02.flac",
+              "track_position": 8,
+              "duration": 704,
+              "title": "I Second That Emotion"
+            },
+            {
+              "uuid": "89f7a4db-a858-f2e0-b631-958aeb34dce6",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t03.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t03.flac",
+              "track_position": 9,
+              "duration": 727,
+              "title": "Georgia on My Mind"
+            },
+            {
+              "uuid": "20e3f197-ba42-9a62-e16a-5ab1a11406ed",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t04.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t04.flac",
+              "track_position": 10,
+              "duration": 520,
+              "title": "Positively 4th Street"
+            },
+            {
+              "uuid": "fdbdb66f-accb-6d85-35e6-25b3d1c389c7",
+              "mp3_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t05.mp3",
+              "flac_url": "https://archive.org/download/jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16/jg+ms1973-07-08d2t05.flac",
+              "track_position": 11,
+              "duration": 480,
+              "title": "How Sweet It Is"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "comparisons": {
+    "artist_show_source_set_track_ids_and_media_urls_equal": true,
+    "published_sources_each_pass": 3,
+    "held_items_each_pass": 1,
+    "total_http_gets": 40
+  },
+  "local_collection_fixture": {
+    "uuid": "b2fc4b22-b452-4da7-84a6-f8ef6db9096f",
+    "slug": "jerry-projects-smoke",
+    "artist_uuids": [
+      "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    ],
+    "published_locally": true,
+    "grateful_dead_included": false,
+    "final_product_editorial_membership_decided": false
+  },
+  "sampled_media_access": {
+    "checked_at_utc": "2026-10-17T08:13:28.942009+00:00",
+    "url": "https://archive.org/download/jgb1993-11-01/jgb1993-11-01s1t01.mp3",
+    "requested_range": "bytes=0-4095",
+    "status": 206,
+    "content_type": "audio/mpeg",
+    "content_range": "bytes 0-4095/8188707",
+    "bytes_read": 4096
+  },
+  "limits": [
+    "Performer assignment is supported by retained explicit metadata billing, not an audio or historical identity audit.",
+    "The three published recordings do not establish complete-show coverage or canonical occurrence alignment.",
+    "The mixed item is retained as an approved review with alternatives and conflict resolution; it owns no intake row and has no canonical source.",
+    "The sampled 4096-byte MP3 range does not validate every media URL or complete recording.",
+    "The sample proves bounded local publication/retry/API behavior, not automatic assignment accuracy for 1657 creator-query items."
+  ]
+}

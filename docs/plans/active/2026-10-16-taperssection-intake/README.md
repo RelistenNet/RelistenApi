@@ -107,19 +107,21 @@ The current decision record is: new artists first; bulk artist approval in Postg
 
 If new evidence makes an eligibility rule unsafe or a legacy contract incompatible, stop the affected publication path, explain the evidence, and revisit that decision with Alec. Continue independent implementation work. Routine method names, page sizes and internal factoring can be chosen during implementation within the stated contracts.
 
-## Related design and next work
+## Implemented extensions and next work
 
-The [Relisten collections design](../../../design/2026-10-17-relisten-collections.md)
-builds on retained Archive evidence to separate collection membership from artist
-identity. It describes future artist/recording membership, Aadam reuse and gaps, and
-Jerry Garcia per-item performer resolution. Collection commands, APIs and migrations
-are not implemented. Full Aadam support requires existing-artist import/linking and
-an Aadam extension of the shared Archive intake. This release keeps its new-artist
-admission, reviewed creator keys and bulk database approval.
+The [collection contract](../2026-10-17-archive-collections/contracts.md) adds collection
+identity, both inclusion rules, exact existing-source reuse, configured discovery and
+read-only v3 routes. The [performer contract](../2026-10-17-archive-collections/performer-contract.md)
+adds explicit item-level project reviews without a broad creator alias. Ordinary
+publication still uses reviewed structured creator keys; descriptions never assign a
+performer automatically. Artist approval, registry checks and publication ownership
+remain required.
 
-The [next-work roadmap](../2026-10-17-archive-collections/README.md) starts with a full
-isolated local Gov’t Mule catalog smoke. The production pilot, collection-wide
-terminal pagination and production backup coverage remain separate release checks.
+The [current roadmap](../2026-10-17-archive-collections/README.md) links completed
+Gov’t Mule, collection and [bounded Jerry verification](../2026-10-17-archive-collections/jerry-projects-smoke.md).
+Missing-recording publication for existing artists and a full Aadam import remain
+deferred. Production rollout, collection-wide terminal pagination and backup coverage
+remain separate release checks.
 
 ## Implementation decisions
 

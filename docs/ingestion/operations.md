@@ -15,6 +15,8 @@ that entered Relisten through this intake. Existing artists remain deferred. The
 [implementation contracts](../plans/active/2026-10-16-taperssection-intake/contracts.md)
 describe the retained evidence and artist identity rules.
 
+Apply the current schema with the explicit `--migrate` operation before starting this checkout’s API or worker. Both ordinary intake and collection resolution require migrations 14 and 15 as well as the original migration 13.
+
 Run these one-shot commands in the same configured worker environment:
 
 ```sh
@@ -52,24 +54,27 @@ image, or keep Archive discovery, full/thin schedules and manual Archive starts 
 including Hangfire. Older images can change intake-owned sources after a dedicated
 collection is attached. Rollback does not retract imported recordings.
 
-## Next local verification
+## Local verification and implemented extensions
 
-Run the full Gov’t Mule catalog smoke next in an isolated local catalog, Redis
-instance and Temporal server. Verify the inventory, listener responses and repeat
-identities. The [Archive collections roadmap](../plans/active/2026-10-17-archive-collections/README.md)
-owns the implementation order after that smoke.
+The [complete Gov’t Mule smoke](../plans/active/2026-10-17-archive-collections/govt-mule-smoke.md)
+verified an isolated catalog, actual listener responses and repeat identities, including
+the [current rules-version-8 repeat](../plans/active/2026-10-17-archive-collections/evidence/govt-mule-v8-repeat.json). The
+[Archive collections roadmap](../plans/active/2026-10-17-archive-collections/README.md)
+tracks the subsequent work and current evidence.
 
-The [collections design](../design/2026-10-17-relisten-collections.md) describes future
-membership and performer-resolution behavior. There are no implemented collection
-commands, APIs or migrations. The commands above retain their current scope: Taper’s
-Section imports approved new artists through reviewed creator keys and bulk database
-approval. They do not admit existing artists or discover Aadam items. Full Aadam
-support needs existing-artist import/linking and an Aadam extension of the shared
-Archive intake.
+[Collections](../plans/active/2026-10-17-archive-collections/contracts.md) now implement
+membership, exact native-source reuse, read-only v3 routes and configured discovery
+through `--collection-discover=SELECTOR_UUID`. The separate
+[performer contract](../plans/active/2026-10-17-archive-collections/performer-contract.md)
+defines explicit item-level project reviews through the existing artist writer, verified
+by the [bounded Jerry proof](../plans/active/2026-10-17-archive-collections/jerry-projects-smoke.md).
+Ordinary intake still matches reviewed structured creator keys. Descriptions do not
+automatically assign performers. Missing-recording publication for existing artists
+and a full Aadam import remain deferred; exact reuse preserves native ownership.
 
-This local sequence does not complete the production pilot, collection-wide terminal
-pagination or production backup checks. Keep those release checks separate and leave
-new production schedules paused until they pass.
+These local checks do not complete the production pilot, collection-wide terminal
+pagination or production backup checks. Leave new production schedules paused until
+those checks pass.
 
 ## Configuration
 

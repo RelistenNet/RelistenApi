@@ -1,66 +1,53 @@
-# Next work: Gov’t Mule, collections, then Jerry Garcia
+# Archive collections and reviewed performers
 
-The next work follows three steps: verify the complete Gov’t Mule inventory locally; implement Relisten collections and membership; then resolve and import Jerry Garcia recordings by performing project. This is the execution sequence. The [collections design](../../../design/2026-10-17-relisten-collections.md) defines the model, Aadam Jacobs reuse, data ownership, and unresolved decisions.
+The local implementation is complete and verified through real artist workflows and running APIs. Gov’t Mule’s complete 381-item inventory produces 359 recordings, 285 shows and 6,533 tracks; 22 items remain held. Collections provide both inclusion rules, exact existing-source reuse, configured discovery and read-only v3 routes. A bounded Jerry check publishes three recordings under three reviewed projects and holds one mixed acoustic/electric item. Repeats preserve playback identities and URLs.
 
-This plan is for the Relisten engineer and reviewer/operator. The [current intake plan](../2026-10-16-taperssection-intake/README.md) remains authoritative for implemented Taper’s Section behavior. Collections, Aadam import, and Jerry performer resolution are future work. This documentation update does not start a live import or change production schedules.
+This overview is for the Relisten engineer and reviewer/operator. Read the [collection contract](contracts.md) for schema, service writes, read APIs and discovery recovery, and the [performer contract](performer-contract.md) for project review and publication. The [design](../../../design/2026-10-17-relisten-collections.md) explains why collection membership, performer identity and import ownership stay separate. The original [intake plan](../2026-10-16-taperssection-intake/README.md) remains the ordinary recording-publication contract.
 
 ## Progress
 
-- [x] October 17, 2026: record the collections, Aadam, and performer-identity design separately from the execution sequence.
-- [ ] Verify the complete Gov’t Mule catalog in isolated local services.
-- [ ] Specify and implement collection identities and both membership rules.
-- [ ] Specify per-item performer resolution and verify Jerry Garcia projects locally.
+- [x] October 17, 2026: retain the collections and performer-identity design separately from this execution record.
+- [x] Verify the [complete Gov’t Mule inventory](govt-mule-smoke.md), then repeat under [rules version 8](evidence/govt-mule-v8-repeat.json) after performer-review implementation.
+- [x] Verify collection identities, both membership rules, exact reuse and durable discovery through focused and registered-worker tests; retain [actual HTTP evidence](evidence/collection-http-smoke.json) and a [bounded live selector check](aadam-first-page-smoke.md).
+- [x] Verify [three Jerry performing projects](jerry-projects-smoke.md), their collection fixture and one held mixed recording through normal artist admission and a real-API repeat.
 
-The complete indexed Pavement inventory passed a [local import and v3 check](../2026-10-16-taperssection-intake/full-artist-smoke.md): 107 recordings, 100 shows, and 1,993 tracks. A repeat preserved identities and date notes. Those results establish a recording-publication baseline, not assignment accuracy for another artist or support for another collection.
+These are local results. Production rollout and a full Aadam or Jerry inventory import remain separate work. The final [API verification](evidence/final-api-read.json) passed 300 HTTP checks after restarting both test APIs from commit `7a65d46`; it preserved the Mule and Jerry playback results without restarting workers or importing again.
 
-## 1. Test Gov’t Mule locally
+## 1. Reproduce the complete Gov’t Mule verification
 
-Freeze a fresh inventory of Taper’s Section recordings for Gov’t Mule, including reviewed spelling variants such as `Gov't Mule`, `Govt Mule`, `Gov’t Mule`, and `Gov't. Mule`. Review expanded billing such as `Gov't Mule & Friends` separately rather than accepting it as another spelling. Retain the dated queries and per-item creator values so the inventory and its exclusions can be reproduced. Supplied dates are not verified performance identities, and the inventory count is not an expected publication count.
+The [Mule record](govt-mule-smoke.md) retains the frozen query, finite spelling variants, exclusions, per-item outcomes and workflow IDs. It distinguishes the search’s 298 supplied date values from the final 285 published shows. Two `Gov't Mule & Friends` items were excluded from the 381-item selection rather than accepted as spelling variants.
 
-Confirm the artist is still absent from the full current Relisten registry, including empty and auto-created entries, before treating it as new. Use a read-only query over `artists`, `artists_upstream_sources`, and retained intake candidates, applying the registry’s normalization to the reviewed names, slugs, and provider labels. `/api/v3/artists?include_autocreated=true` is a useful browsing check, but still omits artists with no shows or sources; it cannot establish absence. Materialization must retain its locked registry recheck. A catalog match requires the existing-artist decision instead of a duplicate identity presented as production-ready.
+Before treating an artist as new, inspect the full live registry: `artists`, Archive provider labels and retained candidates, using registry normalization. The artist-list API can omit empty artists, so its absence alone is insufficient. Mule’s read-only production check found no matching identity; local materialization still performed its locked recheck. A catalog match requires the existing-artist decision instead of a duplicate.
 
-Use a separate local PostgreSQL catalog, Redis instance, and Temporal server, following the [live-smoke setup](../2026-10-16-taperssection-intake/live-smoke.md#reproduce-the-bounded-smoke). Keep schedules unregistered. Review the exact candidate and finite creator variants before approving them in the test database. Approval does not waive item-level context, date, or playback checks.
+Use isolated PostgreSQL, Redis and Temporal services, with schedules unregistered. Retain the selected observations, review the candidate and finite labels, then run the ordinary artist workflow. Verify current artist visibility, normalized artist, year details, every published show, source ownership, ordered playback tracks and media references through the running v3 API. Review holds against their evidence. A sampled media request proves only sampled access.
 
-Run the current workflow against the complete frozen inventory. Capture upstream queries, identifiers, terminal-page behavior for that inventory, selected dates, publication/hold/error outcomes, and workflow result. Verify the running v3 default artist list, normalized artist, year details, every published show, source ownership, track order, and playable URLs. Sample media access and distinguish it from a full listening audit.
+Repeat the named artist refresh and compare source, show, set and track UUIDs, dates and complete URLs. The v8 Mule repeats each made 321 successful GETs. All 381 decisions matched the prior policy apart from the rules version, with all 359 sources, 359 sets and 6,533 tracks preserved. Both rebuilds completed with zero failures. Confirmed parser errors were corrected with regressions before widening their affected rules; the remaining holds stayed held.
 
-Repeat the artist refresh. Compare artist, source, set, and track identities; confirm rebuilt revisions and retained date notes. Review held items and a fresh sample of accepted assignments independently. Correct a confirmed wrong assignment and add a meaningful regression before widening the affected rule. Record the result beside the Pavement evidence without replacing it.
+## 2. Reproduce collection and discovery verification
 
-**Outcome:** a second, larger artist exercises the current publication path. Every frozen item has an explained outcome, and repeat imports converge. This does not verify the collection-wide scrape protocol; that remains a separate release check.
+[Migration 14 and the collection contract](contracts.md) define collection identities, selectors, both inclusion rules, shared exact-item resolution and read APIs. Collection identity never substitutes for a canonical artist or an importer mapping. The playable union deduplicates source UUIDs while retaining independent editorial/provider bases.
 
-## 2. Add collections and membership
+The shared regression suite passed all 402 cases across Taper’s Section, collections, ingestion, Archive.org, catalog rebuild and artist registry behavior. The final native receipt/status regression also passed after its cleanup. The solution build completed with zero errors and 18 existing NuGet warnings; the repository CSharpier check passed. The suite includes two collection end-to-end cases with actual registered Temporal workers, PostgreSQL and loopback HTTP. Tests cover present and later artist-wide content, selected-recording isolation, overlapping inclusion, explicit retirement/reactivation, missing or identity-mismatched references, protected intake visibility, seek cursors, metadata holds and checkpoint recovery.
 
-Turn the agreed [design](../../../design/2026-10-17-relisten-collections.md) into a concrete migration and service contract. Keep collection identity, upstream discovery selectors, selected-recording membership, and artist-wide membership separate from canonical artist and source ownership. Do not introduce collection-as-artist mappings.
+The [running HTTP check](evidence/collection-http-smoke.json) passed 55 requests, including valid reads, malformed requests, missing/unpublished collections and artist filtering. Artist-wide, editorial and two provider bases returned the same 359 Mule sources once. Selected membership returned four sources across two artists, with three under the Mule filter. All 413 sources, 429 sets and 7,561 tracks in that isolated catalog retained their identities and media references.
 
-Selected-recording membership must support Aadam without including unrelated recordings from the same artists. Artist-wide membership includes present and later recordings for explicitly selected projects. Their union returns each canonical source once. Retain unresolved provider items before a source exists, and preserve independent editorial/provider membership bases.
+For discovery, persist a whole received page, its memberships and pending identifiers before advancing its cursor. Resume retained pending work before fetching another page. Explicitly inactive provider membership stays inactive on rediscovery; absence never retires it. A completed traversal with failed observations remains visibly partial in its result. Exact source reuse writes no recordings and leaves the native importer in charge. The [bounded live Aadam selector check](aadam-first-page-smoke.md) fetched one real page through configured discovery: 100 items observed, 100 unresolved, zero failures and no canonical catalog writes. It retained its cursor with `Limited=true`, `Completed=false` and no pending items. The unpublished fixture remained hidden from public collection reads. Continuation and terminal traversal remain unverified against live upstream behavior.
 
-Generalize the collection selector and row validation in `TapersSectionSearchClient` while preserving pagination checks and the current Taper’s Section workflow contract. Discovery progress belongs to each selector; Archive item identity and observations are shared. Extend `ArchiveIntakeService` and its recovery/ownership contracts rather than creating an Aadam-only writer.
+## 3. Reproduce reviewed Jerry project publication
 
-Define exact existing-source linking and existing-artist publication before enabling Aadam imports. Reusing a native source only adds membership and leaves its importer in charge. A missing recording for an existing artist still needs a reviewed assignment and a supported write owner. The present new-artist restriction remains until that extension is implemented and verified.
+The [Jerry record](jerry-projects-smoke.md) retains four current items whose provider creator is `Jerry Garcia`. Exact item-level billing supports historical Jerry Garcia Band, Legion of Mary and Garcia/Saunders. An acoustic/electric recording retains unresolved alternatives and stays held. No broad creator alias was added to any project.
 
-Specify any collection read API before coding it: routes, DTOs, ordering, pagination, distinct counts, unresolved-item visibility, and cache behavior. Preserve existing listener identities and payloads. Collection implementation does not require a person/musician graph or the full venue/song normalization schema.
+The existing production `JGB` artist (`a3ffe2d0-a626-cd1d-56bf-13c617eb94be`) is the Melvin Seals continuation. Preserve its 480 sources, including earlier-dated recordings. The new historical full-name project is separate; the local proof does not audit or repair existing assignments.
 
-**Outcome:** service tests prove both membership rules, deduplication, overlap, unchanged playback identities, and recovery. Aadam fixtures prove that an existing source is linked without another import and that one selected recording does not pull in its artist’s catalog. A full Aadam live import is separate work after the shared discovery and publication extensions pass.
+Follow the [performer operator sequence](performer-contract.md#operator-sequence-and-verification): retain immutable observations, propose specific project candidates, review exact field spans, approve resolved item decisions and start normal named artist refreshes. Artist approval and ordinary date, context and playback checks still apply. A review cannot reparent an already published item. Existing native matches are reused without intake ownership; missing recordings for existing artists remain deferred.
 
-## 3. Resolve Jerry recordings by performing project
+Six normal artist executions published three recordings and then reported them unchanged, with all rebuilds complete and zero failures. Forty actual HTTP checks verified three artists, three shows, three sets and 31 tracks, plus the explicit local collection fixture. Complete identities and media URLs matched across the repeat. The fixture excludes Grateful Dead; it does not decide the final product collection’s contents.
 
-Use collections to group reviewed projects. Define the Jerry collection’s explicit membership and decide whether it includes Grateful Dead or only other projects. Preserve JGB, Legion of Mary, Garcia/Saunders, and other performing identities independently.
+## Remaining decisions and release work
 
-Extend reviewed-label assignment with retained per-item performer decisions. Freeze a reviewed sample that includes explicit JGB billing under a generic Jerry creator, other projects, compilations, unknown dates, early/late ambiguity, and contradictory metadata. Establish which evidence selects the performer, when it is insufficient, and how an operator approves a correction. Do not alias all `Jerry Garcia` items to JGB or assign a project by date alone.
+- Decide the Jerry collection’s explicit project membership before production publication, including whether Grateful Dead belongs. Item review does not supply membership.
+- Define write ownership before publishing missing recordings for existing artists. A full Aadam import and larger Jerry review remain separate from exact reuse and this bounded proof.
+- Complete live configured discovery continuation and collection-wide terminal traversal. The successful 100-item Aadam first-page check cannot establish full pagination or recovery from every upstream listing change.
+- Complete production backup/restore, matching API/worker deployment, history compatibility and a reviewed pilot. Follow the [deployment and rollback guide](../2026-10-16-taperssection-intake/verification-and-operations.md). Keep new production schedules paused until those checks pass.
 
-Keep performer decisions separate from membership and original observations. Protect published artist assignments; a correction requires the reviewed catalog repair contract because current source/track identity rules depend on artist identity. Continue using the shared writer and artist rebuild sequence.
-
-**Outcome:** representative recordings land under their actual performing projects and can be grouped through the Jerry collection. The same raw creator can produce different supported assignments. Unresolved or multi-project items stay held. Local v3 and collection-service checks establish stable references across retries and conflicting updates before a larger pilot.
-
-## Decisions and constraints
-
-The sequence was agreed on October 17, 2026. Gov’t Mule verifies intake before collections change its scope. Collections provide a shared browsing model for Aadam and Jerry. Jerry follows because its broad creator label needs per-recording performer resolution, which artist approval alone cannot express.
-
-Bulk database artist approval, automatic later clear items, metadata precedence over identifiers, supported `XX` dates, internal date notes, and retained evidence remain in force. Alec’s bespoke provider agreements are the confirmed permission basis. Keep existing identities and ordinary importer ownership intact.
-
-Production rollout is separate. Collection-wide terminal pagination, production backup coverage, matching API/worker deployment, workflow compatibility, and a reviewed production pilot remain pending. Follow the [deployment and rollback guide](../2026-10-16-taperssection-intake/verification-and-operations.md); a completed local step does not authorize enabling schedules.
-
-## Verification and outcomes
-
-For implementation, use `./test-local.sh --filter 'FullyQualifiedName~TapersSection'` for current intake behavior and add focused public-contract tests for changed boundaries. Run the broader Archive/registry suites when changing shared identity or publication code. Run `dotnet build RelistenApi.sln` and `dotnet csharpier check .` before committing code. Keep live upstream probes distinct from automated fixture coverage.
-
-This revision records design and work order. The Gov’t Mule import, collection migration/read contracts, existing-artist extension, and Jerry assignment rules remain to be executed or specified in that order. Update progress and linked evidence as each outcome is verified.
+Bulk database artist approval, automatic later clear items, supported `XX` dates, metadata precedence over identifiers and retained date notes remain in force. Alec’s bespoke provider agreements are the confirmed permission basis. The complete [Pavement proof](../2026-10-16-taperssection-intake/full-artist-smoke.md) remains historical evidence for the earlier publication policy; these new records supplement it.

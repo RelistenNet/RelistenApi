@@ -4,6 +4,14 @@ The frozen Gov’t Mule inventory passed a real local import and repeat on Octob
 
 The [per-item evidence](evidence/govt-mule-full-artist.json) retains every selected identifier, projected creator/title/date, outcome, selected date, hold evidence and published source UUID. It also records catalog reference digests, current set UUIDs, workflow results and request provenance. This document explains what those checks establish for the engineer and operator executing the [next-work plan](README.md).
 
+## Current-code repeat after performer reviews
+
+After migration 15 and the rules-version-8 performer implementation, two normal named-artist refreshes rechecked all 381 retained items against live metadata. The first reported 359 publications under the new rules version; the repeat reported 359 unchanged recordings. Both kept the same 22 holds, reported zero failures, continued through four runs and completed their rebuilds. First run IDs were `01a148ea-74e9-74fd-9237-67cc531f3944` and `01a148eb-6746-7b94-960f-99112c0e8c62`.
+
+The current API passed all 321 GETs on each pass. A new pre-v8 SQL snapshot let this check compare every one of the 359 source/show references, **359 ordered set UUIDs** and **6,533 ordered track UUIDs**, including complete MP3 and FLAC URLs. They were identical before v8 and after both runs. All 381 projection hashes and decisions also matched; only the interpretation rules version changed. This set comparison supplements the earlier evidence’s stated limit.
+
+The [additive v8 evidence](evidence/govt-mule-v8-repeat.json) retains both execution chains, all per-item outcomes, comparison digests and exact hash definitions. It leaves the original v7 artifact intact. The dedicated worker was stopped after verification; the isolated API remains available. These repeats did not add per-item reviews to Mule, change approval, rerun the broad search or test new media bodies.
+
 ## Inventory and artist approval
 
 The artist-specific Archive query was captured at **2026-10-17 07:37:49 UTC**:
@@ -20,7 +28,7 @@ A direct read-only production registry inspection covered all artist rows and Ar
 
 One local candidate was approved with the four reviewed keys. The materialized artist UUID is `2d1d7746-1e91-94e9-e86b-1cbb37a56a8a`. It has no provider collection mapping. All 381 items resolved to that candidate; approval did not bypass recording checks.
 
-## Final workflows and listener behavior
+## Version-7 workflows and listener behavior
 
 The test used PostgreSQL database `relisten_govt_mule_20261017`, Redis at `127.0.0.1:16382`, Temporal at `127.0.0.1:17235`, and the API at `http://127.0.0.1:13824`. It preserved the existing local catalog and Pavement services. It made no production catalog writes and registered no schedules. The ingestion worker was stopped after verification.
 

@@ -1,0 +1,368 @@
+{
+  "started_utc": "2026-10-17T07:59:20.672334+00:00",
+  "finished_utc": "2026-10-17T07:59:21.239821+00:00",
+  "base_url": "http://127.0.0.1:13824",
+  "database": "relisten_govt_mule_20261017",
+  "requests": 55,
+  "http_status_counts": {
+    "200": 27,
+    "404": 12,
+    "400": 16
+  },
+  "wide_recordings": 359,
+  "selected_recordings": 4,
+  "filtered_recordings": 3,
+  "artist_facets": 2,
+  "catalog_identity_and_url_snapshot_unchanged": true,
+  "fixtures_retained": true,
+  "requests_detail": [
+    {
+      "path": "/api/v3/collections?limit=1",
+      "status": 200,
+      "elapsed_ms": 29.86,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiY29sbGVjdGlvbnMiLCJDb2xsZWN0aW9uIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwiVXVpZCI6IjQxMTNiZjkzLWRmN2QtNWVjMi1hNWU5LWZlYmU4YjIzM2U4MyIsIlNvcnQiOiJ6ei1odHRwLTIwMjYxMDE3LWVtcHR5IiwiQXJ0aXN0IjpudWxsfQ",
+      "status": 200,
+      "elapsed_ms": 11.55,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiY29sbGVjdGlvbnMiLCJDb2xsZWN0aW9uIjoiMDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwIiwiVXVpZCI6ImI2N2MzZGRhLTZjZTEtNWQyMi1iMTI3LTE5MjU1YjZjNGQ5ZCIsIlNvcnQiOiJ6ei1odHRwLTIwMjYxMDE3LXNlbGVjdGVkIiwiQXJ0aXN0IjpudWxsfQ",
+      "status": 200,
+      "elapsed_ms": 7.48,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/12577533-6de0-5dd5-a5f3-e133fe067358",
+      "status": 200,
+      "elapsed_ms": 13.69,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-wide",
+      "status": 200,
+      "elapsed_ms": 7.51,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft",
+      "status": 404,
+      "elapsed_ms": 14.3,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/artists",
+      "status": 404,
+      "elapsed_ms": 5.37,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/recordings",
+      "status": 404,
+      "elapsed_ms": 6.42,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d",
+      "status": 200,
+      "elapsed_ms": 2.89,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-selected",
+      "status": 200,
+      "elapsed_ms": 2.63,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft",
+      "status": 404,
+      "elapsed_ms": 1.82,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/artists",
+      "status": 404,
+      "elapsed_ms": 1.83,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/recordings",
+      "status": 404,
+      "elapsed_ms": 1.73,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/4113bf93-df7d-5ec2-a5e9-febe8b233e83",
+      "status": 200,
+      "elapsed_ms": 0.9,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-empty",
+      "status": 200,
+      "elapsed_ms": 0.83,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft",
+      "status": 404,
+      "elapsed_ms": 0.79,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/artists",
+      "status": 404,
+      "elapsed_ms": 0.83,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-draft/recordings",
+      "status": 404,
+      "elapsed_ms": 0.78,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/12577533-6de0-5dd5-a5f3-e133fe067358/recordings?limit=200",
+      "status": 200,
+      "elapsed_ms": 23.81,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/12577533-6de0-5dd5-a5f3-e133fe067358/recordings?limit=200&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiIxMjU3NzUzMy02ZGUwLTVkZDUtYTVmMy1lMTMzZmUwNjczNTgiLCJVdWlkIjoiODEzOTk3ODYtOWQ4Mi03Y2ZhLWVhZTktZjVhZWYzNTdhZDdiIiwiU29ydCI6IjIwMDktMTAtMjQiLCJBcnRpc3QiOm51bGx9",
+      "status": 200,
+      "elapsed_ms": 13.0,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=1",
+      "status": 200,
+      "elapsed_ms": 3.65,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiYTI3ZTMwYmItYmZhYy02MGYxLTQ2MWMtN2MxMmU3NzFkODI5IiwiU29ydCI6IjIwMjYtMTAtMTIiLCJBcnRpc3QiOm51bGx9",
+      "status": 200,
+      "elapsed_ms": 3.54,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiZmYwOTdmZmEtM2IxZS00MWZiLTBmOTUtNDhjY2FjNjg5OWViIiwiU29ydCI6IjIwMjYtMDktMjciLCJBcnRpc3QiOm51bGx9",
+      "status": 200,
+      "elapsed_ms": 3.27,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiMjFiOTJmMmYtYzdjNi1lNDBmLTVjMzctMDlkNDI5MDQ2MTRkIiwiU29ydCI6IjIwMjYtMDktMjUiLCJBcnRpc3QiOm51bGx9",
+      "status": 200,
+      "elapsed_ms": 2.82,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?limit=1",
+      "status": 200,
+      "elapsed_ms": 6.36,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoiYXJ0aXN0cyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiMmQxZDc3NDYtMWU5MS05NGU5LWU4NmItMWNiYjM3YTU2YThhIiwiU29ydCI6Ikdvdlx1MDAyN3QgTXVsZSIsIkFydGlzdCI6bnVsbH0",
+      "status": 200,
+      "elapsed_ms": 3.94,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/12577533-6de0-5dd5-a5f3-e133fe067358/artists",
+      "status": 200,
+      "elapsed_ms": 11.85,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=2d1d7746-1e91-94e9-e86b-1cbb37a56a8a&limit=1",
+      "status": 200,
+      "elapsed_ms": 3.37,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=2d1d7746-1e91-94e9-e86b-1cbb37a56a8a&limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiZmYwOTdmZmEtM2IxZS00MWZiLTBmOTUtNDhjY2FjNjg5OWViIiwiU29ydCI6IjIwMjYtMDktMjciLCJBcnRpc3QiOiIyZDFkNzc0Ni0xZTkxLTk0ZTktZTg2Yi0xY2JiMzdhNTZhOGEifQ",
+      "status": 200,
+      "elapsed_ms": 3.29,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=2d1d7746-1e91-94e9-e86b-1cbb37a56a8a&limit=1&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiMjFiOTJmMmYtYzdjNi1lNDBmLTVjMzctMDlkNDI5MDQ2MTRkIiwiU29ydCI6IjIwMjYtMDktMjUiLCJBcnRpc3QiOiIyZDFkNzc0Ni0xZTkxLTk0ZTktZTg2Yi0xY2JiMzdhNTZhOGEifQ",
+      "status": 200,
+      "elapsed_ms": 3.01,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=87854964-5ee6-53b2-8265-2af0153fd9e7",
+      "status": 200,
+      "elapsed_ms": 2.96,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections?limit=0",
+      "status": 400,
+      "elapsed_ms": 1.02,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections?limit=201",
+      "status": 400,
+      "elapsed_ms": 0.51,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections?limit=bogus",
+      "status": 400,
+      "elapsed_ms": 4.43,
+      "cache_control": null
+    },
+    {
+      "path": "/api/v3/collections?cursor=not-a-cursor",
+      "status": 400,
+      "elapsed_ms": 1.09,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?limit=0",
+      "status": 400,
+      "elapsed_ms": 1.48,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?limit=201",
+      "status": 400,
+      "elapsed_ms": 1.04,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?limit=bogus",
+      "status": 400,
+      "elapsed_ms": 0.44,
+      "cache_control": null
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?cursor=not-a-cursor",
+      "status": 400,
+      "elapsed_ms": 1.12,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=0",
+      "status": 400,
+      "elapsed_ms": 1.43,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=201",
+      "status": 400,
+      "elapsed_ms": 1.05,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=bogus",
+      "status": 400,
+      "elapsed_ms": 0.41,
+      "cache_control": null
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?cursor=not-a-cursor",
+      "status": 400,
+      "elapsed_ms": 1.04,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=invalid",
+      "status": 400,
+      "elapsed_ms": 0.39,
+      "cache_control": null
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?limit=1",
+      "status": 200,
+      "elapsed_ms": 1.98,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/12577533-6de0-5dd5-a5f3-e133fe067358/recordings?cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiYTI3ZTMwYmItYmZhYy02MGYxLTQ2MWMtN2MxMmU3NzFkODI5IiwiU29ydCI6IjIwMjYtMTAtMTIiLCJBcnRpc3QiOm51bGx9",
+      "status": 400,
+      "elapsed_ms": 6.29,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/artists?cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiYTI3ZTMwYmItYmZhYy02MGYxLTQ2MWMtN2MxMmU3NzFkODI5IiwiU29ydCI6IjIwMjYtMTAtMTIiLCJBcnRpc3QiOm51bGx9",
+      "status": 400,
+      "elapsed_ms": 1.46,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/b67c3dda-6ce1-5d22-b127-19255b6c4d9d/recordings?artist_uuid=2d1d7746-1e91-94e9-e86b-1cbb37a56a8a&cursor=eyJWZXJzaW9uIjoxLCJLaW5kIjoicmVjb3JkaW5ncyIsIkNvbGxlY3Rpb24iOiJiNjdjM2RkYS02Y2UxLTVkMjItYjEyNy0xOTI1NWI2YzRkOWQiLCJVdWlkIjoiYTI3ZTMwYmItYmZhYy02MGYxLTQ2MWMtN2MxMmU3NzFkODI5IiwiU29ydCI6IjIwMjYtMTAtMTIiLCJBcnRpc3QiOm51bGx9",
+      "status": 400,
+      "elapsed_ms": 1.29,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-missing",
+      "status": 404,
+      "elapsed_ms": 0.79,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-missing/artists",
+      "status": 404,
+      "elapsed_ms": 0.89,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/collections/zz-http-20261017-missing/recordings",
+      "status": 404,
+      "elapsed_ms": 0.84,
+      "cache_control": "no-store,no-cache"
+    },
+    {
+      "path": "/api/v3/shows/8289ec8a-0517-1a27-00b4-adfc4d4803cb",
+      "status": 200,
+      "elapsed_ms": 89.11,
+      "cache_control": "public, max-age=1800, immutable, stale-while-revalidate=60"
+    },
+    {
+      "path": "/api/v3/shows/f64e92ea-1b88-ab3e-7817-7505528b73f8",
+      "status": 200,
+      "elapsed_ms": 17.52,
+      "cache_control": "public, max-age=1800, immutable, stale-while-revalidate=60"
+    },
+    {
+      "path": "/api/v3/shows/63031485-570e-9f1f-28f2-70b68144722b",
+      "status": 200,
+      "elapsed_ms": 10.91,
+      "cache_control": "public, max-age=1800, immutable, stale-while-revalidate=60"
+    },
+    {
+      "path": "/api/v3/shows/fb1b67e9-1c5d-0e2a-17d2-1c87c82c2de2",
+      "status": 200,
+      "elapsed_ms": 5.68,
+      "cache_control": "public, max-age=1800, immutable, stale-while-revalidate=60"
+    }
+  ],
+  "unchanged_catalog_row_counts": {
+    "sets": 429,
+    "sources": 413,
+    "tracks": 7561
+  },
+  "v3_show_reference_checks": 4,
+  "successful_responses_no_store": true,
+  "checks": {
+    "overlapping_artist_editorial_and_two_provider_bases": "359 distinct recordings",
+    "selected_recordings_across_two_artists": 4,
+    "selected_mule_recordings_after_artist_filter": 3,
+    "pagination": "List, artist and recording cursors exhausted without duplicates; resource and artist filter mismatches rejected",
+    "drafts_and_missing": "404 for identity, artist and recording routes",
+    "invalid_limits_and_model_binding": "400",
+    "unresolved_items": "Retained for operators; absent from playable results",
+    "existing_v3": "Four show responses retained source/track UUIDs and media URLs",
+    "catalog_comparison": "All source, set and track rows in isolated catalog unchanged"
+  }
+}
