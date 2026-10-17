@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Net;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json.Linq;
@@ -105,7 +106,7 @@ public sealed record TapersSectionInterpretation(
 /// </summary>
 public sealed class TapersSectionEligibilityEvaluator
 {
-    public const int RulesVersion = 5;
+    public const int RulesVersion = 7;
 
     // Event wording can hold attribution. A venue's "Memorial" name alone cannot.
     private static readonly Regex Tribute = new(
@@ -151,7 +152,7 @@ public sealed class TapersSectionEligibilityEvaluator
             .ToArray();
         var candidate = MatchCreator(metadata["creator"], creators, candidates, reasons);
 
-        CheckContext(metadata, reasons, evidence);
+        CheckContext(metadata, root["files"] as JArray, reasons, evidence);
         CheckTitlePerformer(metadata, candidate, reasons, evidence);
         var date = new TapersSectionDateResolver().Resolve(
             metadata,
@@ -308,6 +309,7 @@ public sealed class TapersSectionEligibilityEvaluator
 
     private static void CheckContext(
         JObject metadata,
+        JArray? files,
         List<TapersSectionReason> reasons,
         List<TapersSectionEvidence> evidence
     )
@@ -340,9 +342,17 @@ public sealed class TapersSectionEligibilityEvaluator
                     }
                 )
                 {
-                    var match = pattern.Match(text);
-                    if (match.Success)
+                    foreach (Match match in pattern.Matches(text))
                     {
+                        if (
+                            field == "description"
+                            && reason == TapersSectionReason.TributeContext
+                            && IsDescriptionSongReference(text, match, files)
+                        )
+                        {
+                            continue;
+                        }
+
                         reasons.Add(reason);
                         evidence.Add(
                             new TapersSectionEvidence(
@@ -353,10 +363,92 @@ public sealed class TapersSectionEligibilityEvaluator
                                 match.Length
                             )
                         );
+                        break;
                     }
                 }
             }
         }
+    }
+
+    private static bool IsDescriptionSongReference(string description, Match match, JArray? files)
+    {
+        if (!match.Value.Equals("in memory of", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Only description music notes can exempt this wording. Titles, creator labels,
+        // tribute headings and other memorial wording retain their normal review behavior.
+        var start = description.LastIndexOfAny(['>', '\r', '\n'], match.Index) + 1;
+        var end = description.IndexOfAny(['<', '\r', '\n'], match.Index + match.Length);
+        if (end < 0)
+        {
+            end = description.Length;
+        }
+
+        var prefix = WebUtility.HtmlDecode(description[start..match.Index]).Trim();
+        var suffix = WebUtility.HtmlDecode(description[(match.Index + match.Length)..end]).Trim();
+        var musicNote =
+            Regex.IsMatch(
+                prefix,
+                @"^(?:[*#^@]+\s*)?(?:w/|with)$|\bhas an?$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            )
+            && Regex.IsMatch(
+                suffix,
+                @"\b(?:jam|tease)\.?$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+            );
+        if (musicNote)
+        {
+            return true;
+        }
+
+        // A numbered line alone could be a memorial program heading. Require the retained
+        // file title to corroborate that this particular line names recorded song content.
+        if (!Regex.IsMatch(prefix, @"^\d{1,3}[.)]$", RegexOptions.CultureInvariant))
+        {
+            return false;
+        }
+
+        var title = ArtistRegistryService.NormalizeIdentityKey(match.Value + " " + suffix);
+        return files?.Any(file =>
+                Strings(file["title"])
+                    .Any(value => ArtistRegistryService.NormalizeIdentityKey(value) == title)
+            ) == true;
+    }
+
+    private static bool MatchesReviewedTitlePerformer(string performer, string[] reviewedKeys)
+    {
+        var key = ArtistRegistryService.NormalizeIdentityKey(performer);
+        if (
+            reviewedKeys.Any(reviewed =>
+                ArtistRegistryService.NormalizeIdentityKey(reviewed) == key
+            )
+        )
+        {
+            return true;
+        }
+
+        // Some Archive titles put the complete performance date before "Live at".
+        // Remove only that exact date slot, and only if the remaining label is reviewed.
+        var dated = Regex.Match(
+            performer,
+            @"^(?<performer>.+?)\s+(?<date>\d{4}-\d{2}-\d{2})$",
+            RegexOptions.CultureInvariant
+        );
+        return dated.Success
+            && DateOnly.TryParseExact(
+                dated.Groups["date"].Value,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _
+            )
+            && reviewedKeys.Any(reviewed =>
+                ArtistRegistryService.NormalizeIdentityKey(reviewed)
+                == ArtistRegistryService.NormalizeIdentityKey(dated.Groups["performer"].Value)
+            );
     }
 
     private static void CheckTitlePerformer(
@@ -381,9 +473,9 @@ public sealed class TapersSectionEligibilityEvaluator
             );
             if (
                 match.Success
-                && !candidate.ReviewedCreatorKeys.Any(key =>
-                    ArtistRegistryService.NormalizeIdentityKey(key)
-                    == ArtistRegistryService.NormalizeIdentityKey(match.Groups["performer"].Value)
+                && !MatchesReviewedTitlePerformer(
+                    match.Groups["performer"].Value,
+                    candidate.ReviewedCreatorKeys
                 )
             )
             {

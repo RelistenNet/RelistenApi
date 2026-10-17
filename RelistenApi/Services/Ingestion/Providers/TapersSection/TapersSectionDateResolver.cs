@@ -90,7 +90,15 @@ internal sealed class TapersSectionDateResolver
     {
         var structured = ReadStructuredDates(metadata, reasons, evidence);
         var titles = ReadTitleDates(metadata, evidence);
-        var identifier = FindDates(item.Value, "item_identifier", "identifier_iso_date").ToArray();
+        // Bare four-digit identifier components also encode audio formats, such as .2496.
+        // Only dates with explicit components can supply identifier diagnostics.
+        var identifier = FindDates(
+                item.Value,
+                "item_identifier",
+                "identifier_iso_date",
+                includeStandaloneYears: false
+            )
+            .ToArray();
         var descriptions = ReadDescriptionDates(metadata).ToArray();
         evidence.AddRange(identifier.Select(date => date.Evidence));
         evidence.AddRange(descriptions.Select(date => date.Evidence));
@@ -348,20 +356,27 @@ internal sealed class TapersSectionDateResolver
             .Any(label => ArtistRegistryService.NormalizeIdentityKey(label) == key);
     }
 
-    private static IEnumerable<ParsedDate> FindDates(string text, string locator, string rule)
+    private static IEnumerable<ParsedDate> FindDates(
+        string text,
+        string locator,
+        string rule,
+        bool includeStandaloneYears = true
+    )
     {
         var written = WrittenDates.Matches(text).Cast<Match>().ToArray();
+        var numeric = IsoDates.Matches(text).Cast<Match>();
+        if (includeStandaloneYears)
+        {
+            numeric = numeric.Concat(BareYears.Matches(text).Cast<Match>());
+        }
+
         var matches = written
             .Concat(
-                IsoDates
-                    .Matches(text)
-                    .Cast<Match>()
-                    .Concat(BareYears.Matches(text).Cast<Match>())
-                    .Where(match =>
-                        !written.Any(full =>
-                            match.Index >= full.Index && match.Index < full.Index + full.Length
-                        )
+                numeric.Where(match =>
+                    !written.Any(full =>
+                        match.Index >= full.Index && match.Index < full.Index + full.Length
                     )
+                )
             )
             .OrderBy(match => match.Index);
         foreach (var match in matches)

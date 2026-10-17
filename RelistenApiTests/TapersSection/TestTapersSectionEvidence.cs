@@ -201,6 +201,116 @@ public class TestTapersSectionEvidence
         result.Evidence.Should().Contain(value => value.Locator == "metadata.description");
     }
 
+    [TestCase(
+        "2001-05-12",
+        "Gov't Mule 2001-05-12 Live at Lupo's Heartbreak Hotel in Providence, RI"
+    )]
+    [TestCase("2025-09-06", "Gov't Mule 2025-09-06 Live at Xfinity Center in Mansfield, MA")]
+    public void ReviewedArtistWithPerformanceDateBeforeLiveAtIsNotADifferentPerformer(
+        string date,
+        string title
+    )
+    {
+        var raw = JObject.Parse(Raw(date, title));
+        raw["metadata"]!["creator"] = "Gov't Mule";
+
+        var result = new TapersSectionEligibilityEvaluator().Evaluate(
+            Project(raw.ToString()),
+            [new(CandidateId, true, ["Gov't Mule"], ArtistUuid)]
+        );
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be(date);
+        result.Evidence.Should().NotContain(value => value.Rule == "title_performer_conflict");
+    }
+
+    [TestCase("Other Artist 2025-01-02 Live at Venue", TapersSectionReason.AmbiguousCreator)]
+    [TestCase("Performer 1999 Live at Venue", TapersSectionReason.AmbiguousCreator)]
+    [TestCase("Performer 2025-99-99 Live at Venue", TapersSectionReason.AmbiguousCreator)]
+    [TestCase("Performer 2025-01-03 Live at Venue", TapersSectionReason.ConflictingDate)]
+    public void DateBeforeLiveAtCannotHideAnUnreviewedPerformerOrConflictingDate(
+        string title,
+        TapersSectionReason expected
+    )
+    {
+        var result = Evaluate(Project(Raw("2025-01-02", title)));
+
+        result.IsEligible.Should().BeFalse();
+        result.Reasons.Should().Contain(expected);
+    }
+
+    [TestCase("<div>* w/ In Memory of Elizabeth Reed Jam</div>")]
+    [TestCase("<div>Kind of Bird has an In Memory of Elizabeth Reed tease.</div>")]
+    [TestCase("Kind of Bird has an In Memory of Elizabeth Reed tease.")]
+    [TestCase("* w/ In Memory of Another Song Jam")]
+    public void ExplicitDescriptionSongJamAndTeaseNotesDoNotDescribeAMemorialEvent(
+        string description
+    )
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]!["description"] = description;
+
+        var result = Evaluate(Project(raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.Reasons.Should().NotContain(TapersSectionReason.TributeContext);
+    }
+
+    [Test]
+    public void NumberedSongEntryNeedsItsRetainedFileTitleAsCorroboration()
+    {
+        var raw = JObject.Parse(Raw("2019-07-03", "Performer Live at Venue on 2019-07-03"));
+        raw["metadata"]!["description"] =
+            "<div>03. Kind Of Bird &gt;</div><div>04. In Memory Of Elizabeth Reed &gt;</div>";
+        raw["files"]![0]!["title"] = "In Memory Of Elizabeth Reed >";
+
+        var result = Evaluate(Project(raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+    }
+
+    [TestCase("<div>04. In Memory Of Elizabeth Reed &gt;</div>")]
+    [TestCase("<div>Set 2 - In Memory Of Elizabeth Reed</div>")]
+    [TestCase("<div>In Memory Of Dickey Betts</div>")]
+    [TestCase("<div>Set 2 - Tribute To Levon Helm #</div>")]
+    public void NumberingOrASongNameAloneDoesNotExcuseMemorialContext(string description)
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]!["description"] = description;
+
+        var result = Evaluate(Project(raw.ToString()));
+
+        result.Reasons.Should().Contain(TapersSectionReason.TributeContext);
+        result.Evidence.Should().Contain(value => value.Rule == "explicit_tribute_context");
+    }
+
+    [Test]
+    public void SkippingASongReferenceDoesNotHideALaterTributeSetHeading()
+    {
+        var raw = JObject.Parse(Raw("2012-06-02", "Performer Live at Venue on 2012-06-02"));
+        raw["metadata"]!["description"] =
+            "<div>* w/ In Memory of Elizabeth Reed Jam</div><div>Set 2 - Tribute To Levon Helm #</div>";
+
+        var result = Evaluate(Project(raw.ToString()));
+
+        result.Reasons.Should().Contain(TapersSectionReason.TributeContext);
+        result
+            .Evidence.Should()
+            .Contain(value => value.Locator == "metadata.description" && value.Value == "Tribute");
+    }
+
+    [Test]
+    public void AMatchingSongFileCannotExcuseATributeSetHeading()
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]!["description"] = "<div>Set 2 - In Memory Of Elizabeth Reed</div>";
+        raw["files"]![0]!["title"] = "In Memory Of Elizabeth Reed";
+
+        Evaluate(Project(raw.ToString()))
+            .Reasons.Should()
+            .Contain(TapersSectionReason.TributeContext);
+    }
+
     [Test]
     public void CurrentMetadataMarch6WinsOverImmutableJune6Identifier()
     {
@@ -214,6 +324,56 @@ public class TestTapersSectionEvidence
         result
             .DateDetails!.Notes.Should()
             .Contain(note => note.Code == TapersSectionDateNoteCode.IdentifierDateDisagreement);
+    }
+
+    [TestCase("2025-09-06", false)]
+    [TestCase("2025-10-20", true)]
+    public void AudioFormatIdentifierSuffixCannotInventAYearButItsIsoDateStillSuppliesDiagnostics(
+        string metadataDate,
+        bool identifierDisagrees
+    )
+    {
+        // A real Gov't Mule identifier ends in .2496 for 24-bit/96 kHz audio.
+        const string identifier = "govtmule2025-09-06.mk21.cmc1k.ad8.sxr4.2496";
+        var raw = JObject.Parse(Raw(metadataDate, "Performer Live at Venue on " + metadataDate));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be(metadataDate);
+        result
+            .DateDetails!.Notes.Any(note =>
+                note.Code == TapersSectionDateNoteCode.IdentifierDateDisagreement
+            )
+            .Should()
+            .Be(identifierDisagrees);
+        result
+            .Evidence.Where(value => value.Locator == "item_identifier")
+            .Select(value => value.Value)
+            .Should()
+            .Equal("2025-09-06");
+    }
+
+    [Test]
+    public void PartialIsoIdentifierDateStillSuppliesDiagnosticsWithoutAStandaloneYearLimit()
+    {
+        const string identifier = "performer7316-07.audio.2496";
+        var raw = JObject.Parse(Raw("7316-08-XX", "Performer"));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("7316-08-XX");
+        result
+            .DateDetails!.Notes.Should()
+            .Contain(note => note.Code == TapersSectionDateNoteCode.IdentifierDateDisagreement);
+        result
+            .Evidence.Where(value => value.Locator == "item_identifier")
+            .Select(value => value.Value)
+            .Should()
+            .Equal("7316-07");
     }
 
     [Test]
