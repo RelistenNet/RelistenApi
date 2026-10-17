@@ -38,7 +38,18 @@ Attempts retain history after catalog deletion and have no cascading source FK.
 The preparation references an immutable fetch receipt. Headers, saved preparations
 and terminal outcomes cannot be replaced. The processing version includes the
 catalog representation, decoder and extractor versions. Reusing an attempt UUID
-for another source or version raises `NormalizationConflictException`.
+for another source raises `NormalizationConflictException`. The proposal store
+also rejects a changed processing version; processor compatibility behavior is
+specified below.
+
+The processor preparation contract is version 2. It carries source UUID lookup
+clocks alongside the original producer and binding read set. The processor
+returns a saved same-source terminal result before applying the current version.
+An unfinished older-version attempt ends as `Unresolved` with
+`processing_version_changed`; use a new attempt UUID to prepare current evidence.
+It cannot publish or replace the previous extraction. Drain older workers before
+changing binaries so two processing versions cannot compete over one attempt.
+Existing pages encode the processor version; start a new page after this change.
 
 ## Processing and recovery
 
@@ -89,6 +100,11 @@ acquire work locks. Neither operation makes catalog writes or external calls.
 A terminal missing, unresolved or stale attempt needs a new UUID to try changed
 facts. None of these outcomes withdraws accepted identities, recording credits,
 song contents or playable files. Empty extraction also leaves accepted data alone.
+
+The processor and proposal-saving service enforce the same complete read-set
+contract. Extra resources, artist or identifier clocks, source UUIDs, causal
+owners, imported venues or candidate facts cannot be acknowledged by a batch
+that did not consume them.
 
 The current producer consumes one legacy recording input. Contributed admission
 preserves other contributors' inputs, but this producer must not publish a subset

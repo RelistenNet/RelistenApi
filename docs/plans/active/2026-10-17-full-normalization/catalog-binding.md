@@ -29,7 +29,7 @@ domain publication still validates the original citations.
 
 The returned `NormalizationRecordingBindingSnapshot` contains the original input
 revision, the recording result, one result for each file, catalog revision
-lists and any supporting input or mapping-registry dependencies. A result is `Bound`, `Missing`, `Ambiguous` or `ProviderConflict`, with a
+lists, consumed source UUID clocks and any supporting input or mapping-registry dependencies. A result is `Bound`, `Missing`, `Ambiguous` or `ProviderConflict`, with a
 reason. Only `Bound` supplies catalog identities. Original file observations remain
 available alongside unresolved results.
 
@@ -66,11 +66,20 @@ it adds no alternate playback references.
 ## Carry the catalog read set into publication
 
 A bound recording supplies an artist revision in `CatalogInputs`. Archive and
-Phish also supply a revision in `SourceIdentities` for their upstream identifier.
+Phish supply a revision in `SourceIdentities` for their upstream identifier,
+including unresolved results. An unresolved lookup with no identifier clock
+reads as zero. A bound provider recording still requires its existing clock.
 The artist revision detects changes to known catalog rows. The global identifier
 revision also detects a new rival recording arriving under another artist after
 the lookup. Its key is the stored identifier string, so unrelated providers can
 cause conservative invalidation when their identifiers coincide.
+
+`SourceUuids` fences exact requested recording UUIDs, including absent ones.
+Legacy consumes its requested source UUID; Archive also consumes retained
+canonical/published UUIDs read by its resolver. These clocks survive deletion
+and detect a retained UUID arriving under a different upstream identifier.
+See [lookup fences](lookup-fences.md) for original-read-set admission, contributor
+ownership and the remaining durable-outcome coordinator.
 
 Local additionally returns `MappingRegistry`, a singleton revision that detects
 a root acquiring another artist before that artist has any recordings. It
@@ -89,9 +98,9 @@ domain write callback. A new attempt must reload the affected evidence and
 bindings and use a new work UUID. An exact retry reuses its original UUID and
 request; replay returns its saved result.
 
-Legacy, Archive and Phish recording lookups supply revisions for positive
-bindings. Local also supplies lookup dependencies for unresolved outcomes. A
-coordinator must still register durable owners and retries for those outcomes.
+Legacy, Archive, Phish and Local recording lookups return the catalog fences
+their resolvers consumed, including unresolved outcomes. A coordinator must
+still register durable lookup owners and retries for those outcomes.
 Preserve unresolved results for reconciliation; absence from the pending-owner
 query does not establish completion.
 
@@ -155,14 +164,22 @@ a trigger does not start normalization work.
 
 Work admission and publication acquire locks in this order:
 
-1. Shared locks on artist revision rows, ordered by UUID.
-2. Shared locks on source-identifier revision rows, ordered with PostgreSQL's `C` collation.
-3. A shared lock on the mapping-registry revision, when required.
-4. Exclusive locks on retained input resource rows.
-5. Exclusive locks on work owners and their accepted-identity dependencies.
+1. Artist revision rows, ordered by UUID.
+2. Source-identifier revision rows, ordered with PostgreSQL's `C` collation.
+3. Source UUID revision rows, ordered by UUID.
+4. Imported venue revision rows, ordered by UUID.
+5. The mapping-registry revision, when required.
+6. Candidate scopes, ordered by domain and scope UUID.
+7. Retained input resource rows.
+8. Work owners, causal dependencies and observed owners, ordered by UUID.
+9. Domain rows inside the publication callback.
+
+Catalog clocks take shared locks; admission initializes absent lookup tombstones
+under the same ordering. Candidate writes reserve exclusive scopes before later
+locks. Resources and work owners take exclusive locks.
 
 Admission takes its configuration and dependency-graph locks before this sequence.
-Each catalog trigger callback updates artist clocks before source-identifier clocks. Publication
+Catalog callbacks advance artist, source-identifier and source UUID clocks in that order. Publication
 callbacks must use the supplied transaction for **normalization domain writes
 only**. They may read catalog rows but must not lock or mutate them, fetch providers
 or call external services. Catalog writers can already hold catalog row locks
@@ -177,7 +194,7 @@ registry lock; retrying only that statement does not recover the transaction.
 
 ## Rollout requirements and remaining work
 
-Before enabling publication, install migrations 24–25 and their triggers with
+Before enabling publication, install the catalog-binding migrations through 33 and their triggers with
 catalog writers and normalization publishers stopped. Drain or explicitly
 recreate older work tickets that lack catalog fences; adding the migration does
 not repair those tickets. Validate trigger coverage and writer overhead against
@@ -195,47 +212,44 @@ Binding refreshes associations and clocks, **not retained wording**. The
 its producer clocks before binding. Historical seed and association-only APIs
 retain their original behavior.
 
-Remaining work includes imported venue and repertoire binding,
-unresolved-lookup registration, complete-ticket coordinators,
+Remaining work includes unresolved-lookup registration, complete-ticket coordinators,
 multi-candidate resolution and evaluated automatic acceptance. A recording read
 set does not authorize unrelated unbound context facts; each new domain binder
 must define their ownership and freshness. Model comparison, backfill and rollout
 rehearsal remain requirements of the [main plan](README.md). This increment does
 not enable a production resolver or establish matching accuracy.
 
-### Imported venue and repertoire prerequisites
+### Imported venue and repertoire inputs
 
-Imported catalog facts require retained snapshots and their original producer
-revisions before they can support canonical assignments. Bind stored UUIDs.
+The [imported-catalog service](imported-catalog.md) retains venue and repertoire
+snapshots with their original producer revisions and checks their stored UUID
+bindings before canonical assignment.
 `SetlistSongService` can update a song's upstream identifier without replacing its
 UUID; `VenueService` can replace a venue UUID during an ownership/identifier edit.
 Recomputing either identity from current labels would lose those contracts.
 
 An imported venue can have no artist and no catalog users. Artist clocks alone
-cannot protect that row. Add a retained per-venue UUID clock, including old/new
-UUIDs on replacement and tombstones after deletion. Integrate its dependency into
-work admission, publication, contributor unions and pending-owner queries before
-publishing from an imported-venue snapshot. Do not assign a global venue to an
+cannot protect that row. Migration 29 retains a per-venue UUID clock, including
+old/new UUIDs on replacement and tombstones after deletion. Its dependency
+participates in work admission, publication, contributor unions and pending-owner
+queries. Do not assign a global venue to an
 arbitrary artist to obtain a clock. Legacy coordinates have unknown precision:
 the Setlist.fm importer stores city coordinates in venue columns. Preserve
 `past_names` as original prose until an evidenced interpretation is available.
 
-An artist's imported repertoire can use the existing artist clock. Retain one
-bounded, complete snapshot of its song rows; reject oversized snapshots instead
-of truncating them. Individual song observations keep their stored UUIDs, but
+An artist's imported repertoire uses the existing artist clock. Its retained
+snapshot includes the complete bounded song dictionary and rejects oversized
+inputs instead of truncating them. Individual song observations keep their stored UUIDs, but
 their evidence and admission revision belong to the containing repertoire input
 resource. The legacy song/show membership table supplies neither repeated
 occurrences nor order. Those require retained provider accounts or file evidence.
 
-Unresolved provider lookups also need durable outcomes, separate from current
-extraction batches. Reuse global source-identifier clocks for Archive/Phish
-absence checks, with generation zero admitted under the same lock protocol.
-Exact source-UUID lookups need a retained clock even when the source is absent.
-This covers missing legacy sources and an Archive retained source UUID that
-later arrives under a different upstream identifier; the requested item's
-identifier clock alone cannot detect that arrival. A processed lookup can consume its watermark and sleep
-until evidence changes; it must not replace a prior successful extraction or an
-accepted relationship. Retry enrollment must preserve other contributors' inputs.
+The [lookup-fence foundation](lookup-fences.md) now supplies identifier and
+source UUID absence checks. Durable lookup outcomes remain required, separate
+from extraction batches. A processed lookup can consume its own watermark and
+sleep until evidence changes; it must not replace a prior successful extraction
+or accepted relationship. Retry enrollment must preserve other contributors'
+inputs and retain a durable handoff when a recording becomes bound.
 
 ## Verify the contracts
 
