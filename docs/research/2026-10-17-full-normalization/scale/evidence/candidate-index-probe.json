@@ -1,0 +1,22 @@
+{
+  "kind": "synthetic_local_query_plan_probe",
+  "date": "2026-10-17",
+  "rows": 100000,
+  "equal_distance_matching_rows": 10000,
+  "requested_rows": 101,
+  "queries_run_in_separate_disposable_databases": true,
+  "uuid_tie_breaker": {
+    "plan": "Limit -> Incremental Sort -> GiST Index Scan",
+    "index_rows_read": 10000,
+    "shared_hit_blocks": 13129,
+    "execution_ms": 113.273
+  },
+  "distance_only": {
+    "plan": "Limit -> GiST Index Scan",
+    "index_rows_read": 101,
+    "shared_hit_blocks": 142,
+    "execution_ms": 1.399
+  },
+  "scope": "Single name lookup with deliberately tied scores. Timings are observations, not a controlled benchmark or production capacity estimate. Candidate recall and matching precision were not evaluated.",
+  "reproduce": "../../scripts/candidate_index_probe.sql"
+}
