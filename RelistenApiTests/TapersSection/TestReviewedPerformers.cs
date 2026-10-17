@@ -822,7 +822,7 @@ public class TestReviewedPerformers
     }
 
     [Test]
-    public async Task ConflictingPerformanceBillingKeepsOwnedSourceAndAcceptedPublicationDate()
+    public async Task ConflictingRecordingDatesKeepOwnedSourceAndAcceptedPublicationDate()
     {
         var project = await ExistingProject();
         await Intake.BindExistingArtistAsync(
@@ -832,12 +832,13 @@ public class TestReviewedPerformers
         );
         var item = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
         recordings[item]["metadata"]!["creator"] = project.Name;
+        var peer = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
+        recordings[peer]["metadata"]!["creator"] = project.Name;
         await Discover();
-        (await Refresh()).Published.Should().Be(1);
-        var before = await ListenerRecording(project.Artist, "1975-10-17");
+        (await Refresh()).Published.Should().Be(2);
+        var before = await ListenerRecording(project.Artist, "1975-10-17", itemIdentifier: item);
         var accepted = await ItemStatus(item);
 
-        recordings[item]["metadata"]!["title"] = project.Name + " Live at Fixture Hall Late Show";
         recordings[item]["metadata"]!["date"] = "1975-10-18";
         var result = await Refresh();
         result.Failed.Should().Be(0);
@@ -848,7 +849,9 @@ public class TestReviewedPerformers
         held["published_observation_id"]!
             .Should()
             .BeEquivalentTo(accepted["published_observation_id"]);
-        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+        (await ListenerRecording(project.Artist, "1975-10-17", itemIdentifier: item))
+            .Should()
+            .BeEquivalentTo(before);
     }
 
     [Test]
@@ -890,7 +893,7 @@ public class TestReviewedPerformers
     }
 
     [Test]
-    public async Task PausedArtistRecoversAnOwnedPerformanceHoldCommittedBeforeTheWorkflowRebuild()
+    public async Task PausedArtistRecoversAnOwnedDateConflictCommittedBeforeTheWorkflowRebuild()
     {
         var project = await ExistingProject();
         await Intake.BindExistingArtistAsync(
@@ -900,10 +903,12 @@ public class TestReviewedPerformers
         );
         var item = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
         recordings[item]["metadata"]!["creator"] = project.Name;
+        var peer = AddRecording(project.Name + " Live at Fixture Hall Early Show", "1975-10-17");
+        recordings[peer]["metadata"]!["creator"] = project.Name;
         await Discover();
-        (await Refresh()).Published.Should().Be(1);
-        var before = await ListenerRecording(project.Artist, "1975-10-17");
-        recordings[item]["metadata"]!["title"] = project.Name + " Live at Fixture Hall Late Show";
+        (await Refresh()).Published.Should().Be(2);
+        var before = await ListenerRecording(project.Artist, "1975-10-17", itemIdentifier: item);
+        recordings[item]["metadata"]!["date"] = "1975-10-18";
         var raw = recordings[item].ToString();
         var held = await Intake.ApplyObservationAsync(
             new(new(item), project.Candidate),
@@ -926,11 +931,13 @@ public class TestReviewedPerformers
             .Requests.Should()
             .Be(requests, "paused repair must rebuild without fetching metadata");
         (await Intake.CaptureDirtyRevisionsAsync(artist)).Should().BeEmpty();
-        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(before);
+        (await ListenerRecording(project.Artist, "1975-10-17", itemIdentifier: item))
+            .Should()
+            .BeEquivalentTo(before);
     }
 
     [Test]
-    public async Task UnlabeledRecordingOnAnExistingSplitDateRemainsHeld()
+    public async Task UnlabeledRecordingOnAnExistingSplitDatePublishesUnderItsStableDefault()
     {
         var project = await ExistingProject();
         await Intake.BindExistingArtistAsync(
@@ -944,27 +951,49 @@ public class TestReviewedPerformers
         recordings[late]["metadata"]!["creator"] = project.Name;
         await Discover();
         (await Refresh()).Published.Should().Be(2);
+        var defaultShow = (
+            await host
+                .Services.GetRequiredService<ShowService>()
+                .ShowWithSourcesForArtistOnDate(project.Artist, "1975-10-17")
+        )!;
         var unlabeled = AddRecording(project.Name + " Live at Fixture Hall", "1975-10-17");
         recordings[unlabeled]["metadata"]!["creator"] = project.Name;
         await Discover();
         var result = await Refresh();
-        result.NeedsReview.Should().Be(1);
+        result.NeedsReview.Should().Be(0);
         result.Failed.Should().Be(0);
-        result.Published.Should().Be(0);
+        result.Published.Should().Be(1);
         (
             await host
                 .Services.GetRequiredService<SourceService>()
                 .AllForArtistFromPrimary(project.Artist)
         )
             .Should()
-            .HaveCount(2);
-        (await ItemStatus(unlabeled))["reason"]!.Value<string>().Should().Be("ambiguous_date");
+            .HaveCount(3);
+        var published = await ListenerRecording(
+            project.Artist,
+            "1975-10-17",
+            itemIdentifier: unlabeled
+        );
+        published.Show.Should().Be(defaultShow.uuid);
+        var assignment = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<string>(
+                "SELECT a.assignment_kind FROM source_show_assignments a JOIN sources s ON s.id=a.source_id WHERE s.uuid=@source",
+                new { source = published.Source }
+            )
+        );
+        assignment.Should().Be("unresolved");
+        (await Refresh()).Failed.Should().Be(0);
+        (await ListenerRecording(project.Artist, "1975-10-17", itemIdentifier: unlabeled))
+            .Should()
+            .BeEquivalentTo(published);
     }
 
-    [TestCase("Early Show & Late Show")]
-    [TestCase("Maybe Early Show")]
-    public async Task UnresolvedPerformanceBillingIsHeldWithoutFailingTheArtistWorkflow(
-        string billing
+    [TestCase("Early Show & Late Show", "combined")]
+    [TestCase("Maybe Early Show", "unresolved")]
+    public async Task UnresolvedSameDayPerformanceBillingPublishesAndRetainsItsCoverage(
+        string billing,
+        string assignmentKind
     )
     {
         var project = await ExistingProject();
@@ -977,17 +1006,26 @@ public class TestReviewedPerformers
         recordings[item]["metadata"]!["creator"] = project.Name;
         await Discover();
         var result = await Refresh();
-        result.NeedsReview.Should().Be(1);
+        result.NeedsReview.Should().Be(0);
         result.Failed.Should().Be(0);
-        result.Published.Should().Be(0);
-        (await ItemStatus(item))["reason"]!.Value<string>().Should().Be("ambiguous_date");
+        result.Published.Should().Be(1);
+        var published = await ListenerRecording(project.Artist, "1975-10-17");
+        var retained = await db.WithWriteConnection(connection =>
+            connection.QuerySingleAsync<string>(
+                "SELECT a.assignment_kind FROM source_show_assignments a JOIN sources s ON s.id=a.source_id WHERE s.uuid=@source",
+                new { source = published.Source }
+            )
+        );
+        retained.Should().Be(assignmentKind);
+        (await Refresh()).Failed.Should().Be(0);
+        (await ListenerRecording(project.Artist, "1975-10-17")).Should().BeEquivalentTo(published);
         (
             await host
                 .Services.GetRequiredService<SourceService>()
                 .AllForArtistFromPrimary(project.Artist)
         )
             .Should()
-            .BeEmpty();
+            .ContainSingle();
     }
 
     private async Task<Project> ExistingProject()
@@ -1171,14 +1209,18 @@ public class TestReviewedPerformers
     private async Task<RecordingIdentity> ListenerRecording(
         Artist artist,
         string date,
-        string firstTitle = "First song"
+        string firstTitle = "First song",
+        string? itemIdentifier = null
     )
     {
         var show = await host
             .Services.GetRequiredService<ShowService>()
             .ShowWithSourcesForArtistOnDate(artist, date);
         show.Should().NotBeNull();
-        var source = show!.sources.Should().ContainSingle().Subject;
+        var source =
+            itemIdentifier == null
+                ? show!.sources.Should().ContainSingle().Subject
+                : show!.sources.Single(source => source.upstream_identifier == itemIdentifier);
         var tracks = source.sets.SelectMany(set => set.tracks).ToArray();
         tracks.Select(track => track.title).Should().Equal(firstTitle, "Second song");
         tracks

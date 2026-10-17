@@ -111,7 +111,7 @@ public sealed record TapersSectionInterpretation(
 /// </summary>
 public sealed class TapersSectionEligibilityEvaluator
 {
-    public const int RulesVersion = 8;
+    public const int RulesVersion = 9;
 
     // Event wording can hold attribution. A venue's "Memorial" name alone cannot.
     private static readonly Regex Tribute = new(
@@ -399,6 +399,21 @@ public sealed class TapersSectionEligibilityEvaluator
             for (var index = 0; index < values.Length; index++)
             {
                 var text = values[index];
+                // Same-day coverage uncertainty belongs to performance assignment. Keep
+                // the billing evidence without preventing an otherwise playable recording.
+                var ambiguousBilling = AmbiguousSet.Match(text);
+                if (ambiguousBilling.Success)
+                {
+                    evidence.Add(
+                        new TapersSectionEvidence(
+                            Locator(metadata[field], field, index),
+                            ambiguousBilling.Value,
+                            "ambiguous_early_late_billing",
+                            ambiguousBilling.Index,
+                            ambiguousBilling.Length
+                        )
+                    );
+                }
                 foreach (
                     var (pattern, reason, rule) in new[]
                     {
@@ -412,11 +427,6 @@ public sealed class TapersSectionEligibilityEvaluator
                             MultiAct,
                             TapersSectionReason.MultiplePerformers,
                             "explicit_multi_act_context"
-                        ),
-                        (
-                            AmbiguousSet,
-                            TapersSectionReason.AmbiguousDate,
-                            "ambiguous_early_late_billing"
                         ),
                     }
                 )

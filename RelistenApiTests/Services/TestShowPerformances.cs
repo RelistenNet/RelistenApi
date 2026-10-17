@@ -121,6 +121,221 @@ public sealed class TestShowPerformances
         (await Playback(late)).Should().BeEquivalentTo(playback);
     }
 
+    [TestCase("unresolved")]
+    [TestCase("combined")]
+    public async Task NewUncertainCoverageUsesStableDateDefaultAndCanLaterMoveWithPlaybackUnchanged(
+        string kind
+    )
+    {
+        var artist = await CreateArtist();
+        var early = await CreateSource(artist, "1975-03-07");
+        var late = await CreateSource(artist, "1975-03-07");
+        var first = await performances.AssignSourceAsync(
+            artist,
+            early,
+            "provider:early",
+            "1975-03-07",
+            PerformanceType.Early,
+            "Early show"
+        );
+        var second = await performances.AssignSourceAsync(
+            artist,
+            late,
+            "provider:late",
+            "1975-03-07",
+            PerformanceType.Late,
+            "Late show"
+        );
+        var uncertain = await CreateSource(artist, "1975-03-07");
+        var playback = await Playback(uncertain);
+        var assigned = await performances.AssignDefaultSourceAsync(
+            artist,
+            uncertain,
+            "1975-03-07",
+            "{\"basis\":\"artist and date known; performance coverage uncertain\"}",
+            kind
+        );
+        await rebuild.RebuildShows(artist);
+        assigned.uuid.Should().Be(first.uuid);
+        (await ShowForSource(uncertain)).uuid.Should().Be(first.uuid);
+        (await performances.CanEnrichSourceAsync(artist, uncertain)).Should().BeFalse();
+        var classification = await db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                "SELECT assignment_kind FROM source_show_assignments WHERE source_id=@uncertain",
+                new { uncertain }
+            )
+        );
+        classification.Should().Be(kind);
+        await performances.AssignSourceAsync(
+            artist,
+            early,
+            "provider:early",
+            "1975-03-07",
+            PerformanceType.Other,
+            "Z-last label"
+        );
+        var repeated = await performances.AssignDefaultSourceAsync(
+            artist,
+            uncertain,
+            "1975-03-07",
+            assignmentKind: kind
+        );
+        repeated.uuid.Should().Be(first.uuid, "presentation changes cannot move the date default");
+        await performances.AssignSourceAsync(
+            artist,
+            uncertain,
+            "provider:late",
+            "1975-03-07",
+            PerformanceType.Late,
+            "Late show"
+        );
+        await rebuild.RebuildShows(artist);
+        (await ShowForSource(uncertain)).uuid.Should().Be(second.uuid);
+        (await Playback(uncertain)).Should().BeEquivalentTo(playback);
+        var retained = await performances.AssignDefaultSourceAsync(
+            artist,
+            uncertain,
+            "1975-03-07",
+            assignmentKind: kind
+        );
+        retained
+            .uuid.Should()
+            .Be(second.uuid, "uncertain updates retain an existing accepted primary");
+    }
+
+    [TestCase("1975-03-07")]
+    [TestCase("1975-XX-XX")]
+    public async Task DefaultCoverageMetadataCorrectionKeepsUnclaimedIdentity(string originalDate)
+    {
+        var artist = await CreateArtist();
+        var source = await CreateSource(artist, originalDate);
+        var original = await performances.AssignDefaultSourceAsync(
+            artist,
+            source,
+            originalDate,
+            assignmentKind: "combined"
+        );
+        await rebuild.RebuildShows(artist);
+        await db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE sources SET display_date='1975-03-08' WHERE id=@source",
+                new { source }
+            )
+        );
+        await performances.AssignDefaultSourceAsync(
+            artist,
+            source,
+            "1975-03-08",
+            assignmentKind: "combined"
+        );
+        await rebuild.RebuildShows(artist);
+        var corrected = await ShowForSource(source);
+        corrected.uuid.Should().Be(original.uuid);
+        corrected.display_date.Should().Be("1975-03-08");
+    }
+
+    [Test]
+    public async Task DefaultCombinedCoverageStaysPlayableWithoutAuthorizingDateOnlySetlistEnrichment()
+    {
+        var artist = await CreateArtist();
+        var source = await CreateSource(artist, "1975-03-07");
+        var venue = await db.WithWriteConnection(c =>
+            c.QuerySingleAsync<int>(
+                "INSERT INTO venues(artist_id,name,slug,uuid,updated_at) VALUES(@id,'Unassigned venue',@slug,@uuid,now()) RETURNING id",
+                new
+                {
+                    artist.id,
+                    slug = "unassigned-" + Guid.NewGuid(),
+                    uuid = Guid.NewGuid(),
+                }
+            )
+        );
+        var providerSetlists = new SetlistShowService(db);
+        var setlist = await providerSetlists.Save(
+            new SetlistShow
+            {
+                artist_id = artist.id,
+                venue_id = venue,
+                upstream_identifier = "date-only",
+                date = new DateTime(1975, 3, 7),
+                updated_at = DateTime.UtcNow,
+            }
+        );
+        var songService = new SetlistSongService(db);
+        var song = (
+            await songService.InsertAll(
+                artist,
+                new[]
+                {
+                    new SetlistSong
+                    {
+                        artist_id = artist.id,
+                        name = "Unassigned song",
+                        slug = "unassigned-song",
+                        upstream_identifier = "unassigned-song",
+                        updated_at = DateTime.UtcNow,
+                    },
+                }
+            )
+        ).Single();
+        await providerSetlists.UpdateSongPlays(setlist, new[] { song });
+        await rebuild.RebuildShows(artist);
+        var original = await ShowForSource(source);
+        original.venue_id.Should().Be(venue);
+        await performances.AssignDefaultSourceAsync(
+            artist,
+            source,
+            "1975-03-07",
+            assignmentKind: "combined"
+        );
+        await rebuild.RebuildShows(artist);
+        var uncertain = await ShowForSource(source);
+        uncertain.uuid.Should().Be(original.uuid);
+        uncertain.venue_id.Should().BeNull();
+        (await performances.CanEnrichSourceAsync(artist, source)).Should().BeFalse();
+        (await songService.AllForArtistWithPlayCount(artist))
+            .Single()
+            .shows_played_at.Should()
+            .Be(0);
+        await performances.AssignSourceAsync(
+            artist,
+            source,
+            "review:one-performance",
+            "1975-03-07"
+        );
+        await rebuild.RebuildShows(artist);
+        (await ShowForSource(source)).uuid.Should().Be(original.uuid);
+        (await ShowForSource(source)).venue_id.Should().Be(venue);
+        (await songService.AllForArtistWithPlayCount(artist))
+            .Single()
+            .shows_played_at.Should()
+            .Be(1);
+    }
+
+    [Test]
+    public async Task NewCombinedUnknownDatesStayPlayableWithSeparateSourceIdentities()
+    {
+        var artist = await CreateArtist();
+        var first = await CreateSource(artist, "1975-XX-XX");
+        var second = await CreateSource(artist, "1975-XX-XX");
+        var firstShow = await performances.AssignDefaultSourceAsync(
+            artist,
+            first,
+            "1975-XX-XX",
+            assignmentKind: "combined"
+        );
+        var secondShow = await performances.AssignDefaultSourceAsync(
+            artist,
+            second,
+            "1975-XX-XX",
+            assignmentKind: "combined"
+        );
+        await rebuild.RebuildShows(artist);
+        firstShow.uuid.Should().NotBe(secondShow.uuid);
+        (await ShowForSource(first)).uuid.Should().Be(firstShow.uuid);
+        (await ShowForSource(second)).uuid.Should().Be(secondShow.uuid);
+    }
+
     [Test]
     public async Task RebuildDoesNotMergeEqualPartialDatesAndOrdinaryDateCorrectionKeepsIdentity()
     {

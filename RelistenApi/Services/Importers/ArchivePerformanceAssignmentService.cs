@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -6,6 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Dapper;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Relisten.Api.Models;
 using Relisten.Data;
 using Relisten.Vendor.ArchiveOrg.Metadata;
@@ -15,7 +17,8 @@ namespace Relisten.Import;
 /// <summary>
 /// Uses explicit Archive title billing to distinguish performances. Ordinary set numbers
 /// describe a recording's contents and never establish a separate concert. Accepted keys
-/// survive corrected dates; contradictory billing holds the update for review.
+/// survive corrected dates. Uncertain billing keeps audio on the default or existing
+/// primary show without authorizing performance-specific enrichment.
 /// </summary>
 public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerformanceService shows)
 {
@@ -60,6 +63,13 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
     )
     {
         var billing = ParseTitle(metadata.title);
+        // Description text may establish combined coverage without identifying a single
+        // performance. Retain that uncertainty; single description labels require review.
+        var combinedDescription = ParseTitle(metadata.description).Combined;
+        if (combinedDescription)
+        {
+            billing = new(null, null, "multiple_performances_in_description", true);
+        }
         var current =
             source == null
                 ? null
@@ -68,7 +78,8 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
                         """
                         SELECT sh.id AS ShowId,sh.display_date AS DisplayDate,
                             sh.performance_key AS Key,sh.performance_type AS Type,
-                            a.assignment_kind AS Kind
+                            a.assignment_kind AS Kind,sh.performance_label AS Label,
+                            a.evidence::text AS Evidence
                         FROM source_show_assignments a JOIN shows sh ON sh.id=a.show_id
                         WHERE a.source_id=@id
                         """,
@@ -76,7 +87,22 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
                     )
                 );
 
-        var hold = billing.HoldReason;
+        var priorEvidence = current == null ? null : JObject.Parse(current.Evidence);
+        var hasAcceptedIdentity =
+            current != null
+            && (
+                current.Kind == "accepted"
+                || (string?)priorEvidence!["diagnostic"] == "performance_billing_changed"
+                || priorEvidence!["reviewed_fields"] is JObject
+            );
+        var diagnostic = billing.Diagnostic;
+        var reviewedEvidenceChanged =
+            priorEvidence != null && ReviewedEvidenceChanged(priorEvidence, metadata);
+        if (reviewedEvidenceChanged)
+        {
+            diagnostic = "reviewed_performance_evidence_changed";
+        }
+
         if (
             source == null
             && billing.Type == null
@@ -91,16 +117,20 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
             );
             if (ambiguousDate)
             {
-                hold ??= "performance_required_on_split_date";
+                diagnostic ??= "default_performance_on_split_date";
             }
         }
 
-        if (current != null && current.Kind != "legacy")
+        if (hasAcceptedIdentity)
         {
-            var acceptedType = Enum.Parse<PerformanceType>(current.Type, true);
-            if (acceptedType != PerformanceType.Unknown && billing.Type != acceptedType)
+            var acceptedType = Enum.Parse<PerformanceType>(current!.Type, true);
+            if (
+                billing.Type.HasValue
+                && acceptedType != PerformanceType.Unknown
+                && billing.Type != acceptedType
+            )
             {
-                hold ??= "performance_billing_changed";
+                diagnostic ??= "performance_billing_changed";
             }
         }
 
@@ -125,8 +155,22 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
             );
             if (conflictingPeer)
             {
-                hold ??= "performance_date_conflicts_with_recordings";
+                diagnostic = "performance_date_conflicts_with_recordings";
             }
+        }
+
+        // An unlabeled title supplies no new performance claim. Keep reviewed evidence
+        // from another metadata field, rather than replacing it with absent title billing.
+        if (billing.Type == null && diagnostic == null && current is { Kind: "accepted" })
+        {
+            return new(
+                current.Key,
+                Enum.Parse<PerformanceType>(current.Type, true),
+                current.Label,
+                current.Evidence,
+                null,
+                false
+            );
         }
 
         // Preserve previously accepted identities even if corrected metadata changes the
@@ -134,11 +178,11 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
         string? key = null;
         if (billing.Type.HasValue)
         {
-            key = current is { Kind: not "legacy", Key: not "legacy" }
-                ? current.Key
+            key = hasAcceptedIdentity
+                ? current!.Key
                 : PerformanceKey(metadata, displayDate, billing.Type.Value);
             if (
-                current is not { Kind: not "legacy", Key: not "legacy" }
+                !hasAcceptedIdentity
                 && !displayDate.Contains('X', StringComparison.OrdinalIgnoreCase)
             )
             {
@@ -154,26 +198,106 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
                 }
                 else if (matches.Length > 1)
                 {
-                    hold ??= "multiple_matching_performances";
+                    diagnostic ??= "multiple_matching_performances";
                 }
             }
         }
 
-        var evidence = JsonConvert.SerializeObject(
+        var evidence =
+            current != null && priorEvidence?["reviewed_fields"] is JObject
+                ? RetainReviewedEvidence(current.Evidence, metadata, displayDate, diagnostic)
+                : JsonConvert.SerializeObject(
+                    new
+                    {
+                        provider = "archive.org",
+                        item_identifier = metadata.identifier,
+                        field = combinedDescription ? "description" : "title",
+                        value = combinedDescription ? metadata.description : metadata.title,
+                        metadata_date = metadata.date,
+                        display_date = displayDate,
+                        venue = metadata.venue,
+                        coverage = metadata.coverage,
+                        diagnostic = diagnostic,
+                    }
+                );
+        var label =
+            current != null && priorEvidence?["reviewed_fields"] is JObject
+                ? current.Label
+                : billing.Label;
+        return new(key, billing.Type, label, evidence, diagnostic, billing.Combined);
+    }
+
+    private static string RetainReviewedEvidence(
+        string acceptedEvidence,
+        Metadata metadata,
+        string displayDate,
+        string? diagnostic
+    )
+    {
+        var retained = JObject.Parse(acceptedEvidence);
+        if (diagnostic == null)
+        {
+            retained.Remove("current_evidence_conflict");
+            return retained.ToString(Formatting.None);
+        }
+
+        retained["current_evidence_conflict"] = JObject.FromObject(
             new
             {
-                provider = "archive.org",
-                item_identifier = metadata.identifier,
-                field = "title",
-                value = metadata.title,
-                metadata_date = metadata.date,
+                diagnostic,
                 display_date = displayDate,
-                venue = metadata.venue,
-                coverage = metadata.coverage,
-                diagnostic = hold,
+                title = metadata.title,
+                observed_fields = new Dictionary<string, string?>
+                {
+                    ["metadata.description"] =
+                        metadata.description == null
+                            ? null
+                            : Convert.ToHexString(
+                                SHA256.HashData(Encoding.UTF8.GetBytes(metadata.description))
+                            ),
+                    ["metadata.title"] =
+                        metadata.title == null
+                            ? null
+                            : Convert.ToHexString(
+                                SHA256.HashData(Encoding.UTF8.GetBytes(metadata.title))
+                            ),
+                },
             }
         );
-        return new(key, billing.Type, billing.Label, evidence, hold, billing.Combined);
+        return retained.ToString(Formatting.None);
+    }
+
+    // Reviewed operators may bind their decision to these complete provider strings.
+    // Hash the typed value as UTF-8, without trimming, case folding or HTML normalization.
+    // Missing/empty maps preserve older permanent decisions and automatic provider evidence.
+    private static bool ReviewedEvidenceChanged(JObject evidence, Metadata metadata)
+    {
+        var fields = evidence["reviewed_fields"] as JObject;
+        if (fields == null)
+        {
+            return false;
+        }
+
+        foreach (var field in fields.Properties())
+        {
+            var value = field.Name switch
+            {
+                "metadata.description" => metadata.description,
+                "metadata.title" => metadata.title,
+                _ => null,
+            };
+            if (value == null)
+            {
+                return true;
+            }
+
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+            if (!string.Equals(hash, (string?)field.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Look up current evidence, rather than reconstructing an old key from today's
@@ -212,20 +336,17 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
 
     internal Task ApplyAsync(Artist artist, Source source, ArchivePerformanceAssignment assignment)
     {
-        if (assignment.HoldReason != null)
+        if (assignment.Diagnostic != null)
         {
-            // Existing playable coverage stays on its last accepted show. Recording the
-            // ambiguity removes permission to use it for performance-specific enrichment.
-            return source.show_id.HasValue
-                ? shows.AssignSourceAsync(
-                    artist,
-                    source.id,
-                    assignment.Key ?? "archive:held:" + source.uuid,
-                    source.display_date,
-                    evidence: assignment.Evidence,
-                    assignmentKind: assignment.Combined ? "combined" : "unresolved"
-                )
-                : Task.CompletedTask;
+            // Uncertain performance evidence affects enrichment, not audio eligibility.
+            // The core retains an existing primary or picks the date's default once.
+            return shows.AssignDefaultSourceAsync(
+                artist,
+                source.id,
+                source.display_date,
+                assignment.Evidence,
+                assignment.Combined ? "combined" : "unresolved"
+            );
         }
 
         return assignment.Key == null
@@ -307,14 +428,16 @@ public sealed class ArchivePerformanceAssignmentService(DbService db, ShowPerfor
         string DisplayDate,
         string Key,
         string Type,
-        string Kind
+        string Kind,
+        string? Label,
+        string Evidence
     );
 }
 
 internal sealed record ArchiveTitleBilling(
     PerformanceType? Type,
     string? Label,
-    string? HoldReason,
+    string? Diagnostic,
     bool Combined
 );
 
@@ -323,9 +446,12 @@ internal sealed record ArchivePerformanceAssignment(
     PerformanceType? Type,
     string? Label,
     string Evidence,
-    string? HoldReason,
+    string? Diagnostic,
     bool Combined
-);
+)
+{
+    internal bool HoldsMetadata => Diagnostic == "performance_date_conflicts_with_recordings";
+}
 
-/// <summary>A new item cannot publish until its performance coverage is resolved.</summary>
+/// <summary>A conflicting performance date retains the last accepted recording metadata.</summary>
 public sealed class ArchivePerformanceHeldException(string diagnostic) : Exception(diagnostic);

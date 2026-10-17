@@ -2,21 +2,7 @@
 
 These contracts implement the [release plan](README.md). The names below refer to the implemented additions or identify existing contracts. Preserve the behavior and ownership described here; private helper names and class layout can follow the surrounding code.
 
-## Implemented extensions
-
-The [collection contract](../2026-10-17-archive-collections/contracts.md) adds migration
-14, collection membership, exact existing-source reuse, configured discovery and
-read-only v3 routes. The separate [performer contract](../2026-10-17-archive-collections/performer-contract.md)
-adds migration 15 and explicit per-item reviews targeting project candidates. Those
-reviews are a documented exception to structured creator matching, not automatic
-inference from descriptions or approval of a collection’s contents.
-
-This release’s three intake relations and ordinary publication rules remain the
-baseline below. Full Aadam publication still needs a missing-recording write contract
-for existing artists. Exact native-source reuse does not claim their ownership.
-Partial dates remain `XX`, current metadata takes precedence over identifiers, and
-date details remain operator-only output. See the [current roadmap](../2026-10-17-archive-collections/README.md)
-for verified extensions and remaining release work.
+Use this baseline with the [collection contract](../2026-10-17-archive-collections/contracts.md) for discovery and membership, the [performer contract](../2026-10-17-archive-collections/performer-contract.md) for item-level billing review, and the [existing-artist publication contract](../2026-10-17-archive-collections/existing-artist-publication.md) for explicit catalog bindings. The [show contract](../2026-10-17-show-performances/contracts.md) defines distinct performances, preserved UUIDs and same-day splits. Current API and worker deployments require migrations through 17. The [current execution plan](../2026-10-17-show-performances/README.md) tracks verification and release work.
 
 ## State and ownership
 
@@ -24,18 +10,19 @@ Add three relations in a `normalization` schema in the application PostgreSQL da
 
 ### `archive_artist_candidates`
 
-One row groups a proposed performer for review and becomes its durable intake membership after materialization.
+One row groups a proposed performer for review and records either an intake-created artist or an explicitly reviewed existing-artist binding.
 
 - `candidate_id uuid` primary key, allocated once.
 - `creator_key text` unique grouping key; `proposed_name`, `proposed_slug`; `reviewed_creator_keys text[]` initially containing that key.
 - `approved boolean NOT NULL DEFAULT false` is the operator-owned publication permission.
 - `identity_status`: `pending`, `existing_match`, `needs_review` or `cohort`; `matched_artist_uuids uuid[]`; representative observation IDs for review.
-- `artist_uuid uuid NULL UNIQUE` is the mapped catalog identity. Only the materialization service writes it, once. Retain the creation slug and creation numeric artist ID alongside it for identity checks.
+- `artist_uuid uuid NULL UNIQUE` is the mapped catalog identity. Materialization or explicit existing-artist binding sets it; later rebinds cannot select another identity. Retain the identity name, slug and numeric artist ID for rechecks.
+- `is_existing_artist boolean NOT NULL DEFAULT false` distinguishes existing-artist bindings from intake-created artists. It determines artist and recording ownership under the linked publication contract.
 - Creation/update timestamps and a bounded current error/reason. Do not store credentials or exception dumps.
 
 Normalize lookup keys with Unicode normalization, invariant case folding and collapsed whitespace. Do not remove words, split ampersands, translate names or apply fuzzy acceptance. The grouping key groups observations; it does not prove that everyone using the name is the same performer. Conflicting identity evidence makes the candidate unresolved. Reviewed extra labels are a finite intake vocabulary, not a new global alias registry. If a label matches multiple candidates, abstain.
 
-The discovery worker may append representative evidence and refresh match diagnostics. It must not rewrite proposed identity or reviewed labels underneath an existing approval. Operators may edit those fields before approval. After materialization, keep the name, slug and mapped identity fixed; adding a reviewed label is a deliberate database maintenance action performed with the candidate paused and its row locked. Removing a label stops new matching; it does not erase published assignments.
+The discovery worker may append representative evidence and refresh match diagnostics. It must not rewrite proposed identity or reviewed labels underneath an existing approval. Operators may edit those fields before approval. For an intake-created artist, keep the materialized name, slug and mapped identity fixed. A bound native artist remains editable by its native owner; a rename holds intake publication until an explicit same-identity rebind updates the retained name and slug. Existing artist UUIDs survive name and slug edits. Adding a reviewed label is a deliberate database maintenance action performed with the candidate paused and its row locked. Removing a label stops new matching; it does not erase published assignments.
 
 Clearing `approved` pauses subsequent catalog writes and automatic visibility promotion. It neither removes membership nor retracts existing recordings. The publication transaction locks this row before its final check, so a concurrent approval update takes effect at a transaction boundary. It cannot undo a committed import.
 
@@ -70,9 +57,9 @@ Foreign keys between these three intake relations may restrict deletion. Catalog
 Evaluate each current observation independently. Approval of a candidate enables the following rule; it does not bypass it.
 
 1. There is exactly one nonempty structured creator value after deduplicating equal lookup keys. It matches exactly one approved candidate’s reviewed keys. Missing creators and unreviewed spelling variants remain pending. No automatic artist inference from a free-form description. An explicit retained [per-item performer review](../2026-10-17-archive-collections/performer-contract.md) can instead target one reviewed project candidate; ordinary artist approval and item eligibility still apply.
-2. The candidate either has no catalog match and can be materialized safely, or already belongs to this intake cohort. A match to a pre-existing artist is deferred. Check current names, slugs, Archive collection labels and retained intake labels. A shared name or conflicting candidate is a review case.
-3. The item is an audio recording for one performer and a supported full or partial performance date. Hold explicit compilation/remaster-only, tribute/memorial, multi-act billing and ambiguous early/late evidence. Use named, tested parsing rules with evidence spans. Do not equate several named guests with several headline performers without supporting context. Unresolved performer or item-kind uncertainty yields `needs_review`, never a guessed single performer.
-4. Accept known-year full or partial performance dates under the [date selection contract](#date-selection-and-nonblocking-notes). Current metadata takes precedence over the immutable identifier. Preserve unknown components as `XX`; do not turn a year-only recording into a precise January 1 performance. An identifier disagreement or supported partial date creates a nonblocking note, not a publication hold. Actual conflicting current metadata, an unusable date, an unknown year and ambiguous early/late attribution still require review.
+2. The candidate can be materialized safely, already maps to an intake-created artist, or has an explicit approved existing-artist binding. An unreviewed match to a pre-existing artist is deferred. Check current names, slugs, Archive collection labels and retained intake labels. A shared name or conflicting candidate is a review case.
+3. The item is an audio recording for one performer and a supported full or partial performance date. Hold compilations across different days, remaster-only items, tribute/memorial context and multi-act billing. Unclear or combined early/late coverage for one supported artist and date does not block publication; use the default show and retain `unresolved` or `combined` assignment state internally. Use named, tested parsing rules with evidence spans. Do not equate several named guests with several headline performers without supporting context. Unresolved performer or item-kind uncertainty yields `needs_review`, never a guessed single performer.
+4. Accept known-year full or partial performance dates under the [date selection contract](#date-selection-and-nonblocking-notes). Current metadata takes precedence over the immutable identifier. Preserve unknown components as `XX`; do not turn a year-only recording into a precise January 1 performance. An identifier disagreement or supported partial date creates a nonblocking note, not a publication hold. Actual conflicting current date metadata, an unusable date and an unknown year still require review. Same-day performance uncertainty keeps audio under the default show; it does not establish performance equivalence or authorize performance-specific setlist enrichment.
 5. The item passes current Archive metadata and access checks and has playable VBR MP3 files under the existing parser. Keep its existing ordering, format-pairing and duration behavior. FLAC metadata is retained, but this release does not broaden codec eligibility. Lack of normalized songs or a physical venue ID does not block import.
 6. If already published, the candidate’s mapped artist equals the stored published artist. A different artist holds the update. A supported current metadata date correction may move the recording to another show or year during rebuild while preserving source, set and track identities. Before writing, validate that the existing catalog source still matches its last committed ownership record; an out-of-band catalog edit remains a repair case. Track identity continues to follow the existing MP3 URL formula; do not transfer annotations or decisions by title or position.
 
@@ -82,7 +69,7 @@ Use stable reason codes, including `missing_creator`, `ambiguous_creator`, `unap
 
 ## Date selection and nonblocking notes
 
-The existing listener contract remains `display_date` plus the derived show sorting `date`. Full dates use `YYYY-MM-DD`; partial dates use `XX` for unknown components. The sorting surrogate does not assert a precise performance date. No new listener API fields are added.
+Dates retain `display_date` plus the derived show sorting `date`. Full dates use `YYYY-MM-DD`; partial dates use `XX` for unknown components. The sorting surrogate does not assert a precise performance date. Date notes remain operator-only. Separate performance fields and date browsing are defined in the linked show contract. Same-day unresolved or combined coverage remains internal; no listener ambiguity field is added.
 
 Use current structured metadata when it supplies a supported date. Compatible current title metadata may add known components to a partial date. A supported performer/date title can supply the date when structured metadata is absent. If a title explicitly supplies a compatible partial date and structured metadata merely fills the unknown components with first-day placeholders, retain the title’s partial precision. For example, title `Pavement: 1992-00-00 ...` with structured `1992-01-01` selects `1992-XX-XX`. A confirmed January 1 date without that uncertainty stays exact.
 
@@ -104,7 +91,7 @@ The operator status command includes `selected_display_date` and structured `dat
 
 `ArchiveIntakeService.MaterializeArtistAsync(candidateId)` owns this operation. Acquire the existing artist-registry advisory transaction lock, then lock the candidate row. Recheck approval and the current artist registry. Use sequential data-service calls within `CatalogImportTransaction`; perform HTTP before the transaction.
 
-If the row already maps to a live cohort artist with the recorded identity, reuse it. If an unlinked candidate now matches an established cohort member, attach its item observations to that member’s candidate only when the reviewed key is already present; otherwise require reviewed label maintenance. A new non-cohort match becomes `existing_match`, even if the candidate’s approval flag is true. A slug collision or ambiguous match remains unresolved; do not create a suffix to avoid an identity question.
+If the row already maps to a live intake-created artist with the recorded identity, reuse it. An explicitly bound existing artist is reused only while its reviewed UUID, numeric ID, name and slug remain valid; materialization must not recreate or rename it. If an unlinked candidate now matches an established cohort member, attach its item observations to that member’s candidate only when the reviewed key is already present; otherwise require reviewed label maintenance. Without an explicit existing-artist binding, a new non-cohort match becomes `existing_match`, even if the candidate’s approval flag is true. A slug collision or ambiguous match remains unresolved; do not create a suffix to avoid an identity question.
 
 Otherwise create the artist through `ArtistService.Save`, create the normal Archive feature defaults, and store its UUID/numeric ID/creation slug in the candidate in the same transaction. Set `AutoCreated` initially. Do not insert an `artists_upstream_sources` collection mapping. A replay after a lost acknowledgement finds the mapped row.
 
@@ -124,7 +111,7 @@ Commit source/sets/tracks and the item’s published references plus incremented
 
 The per-artist workflow settles started item activities, captures each dirty item’s catalog revision, and runs existing `RebuildShows → RebuildYears → InvalidateArtistCache`. Record rebuild completion for only those captured revisions. A later revision remains dirty. A fresh cohort refresh or standalone recovery can repeat the rebuild safely.
 
-After a successful rebuild with at least one published playable recording, clear `AutoCreated` for the cohort artist, while retaining other feature bits. Lock the candidate and recheck approval before changing the flag. Invalidate the artist-list and artist-detail caches affected by visibility. Do not claim source insertion alone made the release browseable. A crash between source commit and rebuild leaves dirty rows for repair. A crash during visibility promotion is repaired by the next cohort refresh.
+After a successful rebuild with at least one published playable recording, clear `AutoCreated` only for an intake-created artist, while retaining other feature bits. A bound existing artist keeps its native flags and provider mappings. Lock the candidate and recheck approval before changing the flag. Invalidate the artist-list and artist-detail caches affected by visibility. Do not claim source insertion alone made the release browseable. A crash between source commit and rebuild leaves dirty rows for repair. A crash during visibility promotion is repaired by the next cohort refresh.
 
 ## Discovery and refresh protocol
 
@@ -167,7 +154,7 @@ record TapersSectionArtistResult(
 
 ```
 
-Use closed enums with stable string wire values for outcomes/reasons in the implemented contract; the records above show the response fields. The artist result must also identify the artist and whether rebuild completed. Define item outcomes as `published`, `unchanged`, `deferred`, `needs_review`, `paused`, `unavailable` or `failed`; deferred means an existing non-cohort artist; unavailable has its own summary count. Observed counts successful activity results with retained metadata observations, including reused hashes. Failed activities can also retain observations; those remain visible through database status and are not included in Observed. This outcome counter does not attempt exact per-attempt accounting across overlapping discovery and refresh operations. Conflicts counts rejected artist workflow admissions, not metadata conflicts. Results count processing outcomes, not exact insertion counts after retries. Retain at most 20 failure details, alongside the total failure count, following current ingestion practice. Item failures use Archive item keys; a failed artist operation uses an artist key and keeps its catalog revisions pending for recovery.
+Use closed enums with stable string wire values for outcomes/reasons in the implemented contract; the records above show the response fields. The artist result must also identify the artist and whether rebuild completed. Define item outcomes as `published`, `unchanged`, `deferred`, `needs_review`, `paused`, `unavailable` or `failed`; deferred means an existing artist without the required approved binding or a held exact-reuse outcome; unavailable has its own summary count. Observed counts successful activity results with retained metadata observations, including reused hashes. Failed activities can also retain observations; those remain visible through database status and are not included in Observed. This outcome counter does not attempt exact per-attempt accounting across overlapping discovery and refresh operations. Conflicts counts rejected artist workflow admissions, not metadata conflicts. Results count processing outcomes, not exact insertion counts after retries. Retain at most 20 failure details, alongside the total failure count, following current ingestion practice. Item failures use Archive item keys; a failed artist operation uses an artist key and keeps its catalog revisions pending for recovery.
 
 Add named methods to `TemporalIngestionClient`: discovery, cohort refresh and single-cohort-artist refresh. Admit the artist operation on existing `ingest/artist/{uuid}` with the current execution-bound handle and `ImportAlreadyRunning` conflict. Validate durable cohort membership instead of an artist collection mapping. Use distinct global IDs `ingest/taperssection/discovery` and `ingest/taperssection/refresh` for the two coordinators. An overlap returns a conflict, not another execution as a successful new start.
 
@@ -175,11 +162,11 @@ Add three worker CLI starts:
 
 - `--taperssection-discover` with optional `--max-items=N` for a bounded pilot;
 - `--taperssection-refresh` for all approved candidates and dirty rebuilds;
-- `--taperssection-artist=UUID` for a mapped cohort artist.
+- `--taperssection-artist=UUID` for a mapped intake-created or explicitly bound existing artist.
 
 Add `--taperssection-status` with optional `--item=IDENTIFIER`, returning bounded JSON from PostgreSQL: candidate/approval, input and published versions, blocking reason/error, selected date, structured date details and rebuild state. Validate incompatible options explicitly. Starts return an execution-bound workflow identifier and do not claim completion. Existing cancellation and Temporal result inspection remain available. Add `--register-taperssection-schedules`; create only missing schedules and create them paused. Preserve existing paused/running state on repetition.
 
-No new listener HTTP API or payload field is required. Existing import HTTP routes and collection membership checks retain their semantics. Existing authenticated artist writes gain a single transaction and registry serialization; their successful response shapes stay unchanged. Cohort identity edits that would violate the pinned name/slug/UUID, cohort collisions, and an attempt to install the shared `taperssection` collection mapping return HTTP 409 with `{ "code": "intake_identity_conflict", "artist_uuid": "<affected UUID>", "message": "<specific conflict>" }`. If no catalog identity exists yet, `artist_uuid` is null. A real dedicated collection may be attached explicitly; intake ownership checks still apply to its overlapping items. All other successful response shapes remain unchanged.
+Intake decision notes remain outside listener payloads. The collection and show contracts define their additive read APIs. Existing import HTTP routes and collection membership checks retain their semantics. Existing authenticated artist writes gain a single transaction and registry serialization; their successful response shapes stay unchanged. Cohort identity edits that would violate the pinned name/slug/UUID, cohort collisions, and an attempt to install the shared `taperssection` collection mapping return HTTP 409 with `{ "code": "intake_identity_conflict", "artist_uuid": "<affected UUID>", "message": "<specific conflict>" }`. If no catalog identity exists yet, `artist_uuid` is null. A real dedicated collection may be attached explicitly; intake ownership checks still apply to its overlapping items. All other successful response shapes remain unchanged.
 
 ## Existing contracts and change locations
 
@@ -188,7 +175,7 @@ Paths here are relative to the repository root.
 - `RelistenApi/Services/Ingestion/Providers/TapersSection/ArchiveObservationProjector.cs`, `TapersSectionSearchClient.cs`, `TapersSectionEligibilityEvaluator.cs`: retain and interpret provider evidence and page item identifiers. Keep the existing tolerant converter’s legacy behavior.
 - `RelistenApi/Services/Data/ArchiveIntakeService.cs`: owner of the three intake tables, approval/materialization, item state and atomic publication checks. SQL stays in data services.
 - `RelistenApi/Services/Data/CatalogImportTransaction.cs`: expose registry locking; retain sequential connection use, deadlines and cancellation checks.
-- `RelistenApi/Services/Indexing/ArchiveOrgArtistIndexer.cs`, `Controllers/ArtistsController.cs`: cooperate in registry locking and cohort collision/identity protection. `ArtistService.Save`, `SourceService.Save` and `SourceTrackService.InsertAll` keep their identity formulas.
+- `RelistenApi/Services/Indexing/ArchiveOrgArtistIndexer.cs`, `Controllers/ArtistsController.cs`: cooperate in registry locking and cohort collision/identity protection. `ArtistService.Save` preserves existing artist UUIDs on update and uses the creation formula only on insert. `SourceService.Save` and `SourceTrackService.InsertAll` retain their UUID formulas.
 - `RelistenApi/Services/Importers/ArchiveOrgImporter.cs`, `.Item.cs`, `.Ingestion.cs`, `.Recording.cs`: separate selection/validation from the shared resolved recording write; enforce intake ownership on ordinary writes and deletion accounting.
 - `RelistenApi/Services/Ingestion/Providers/TapersSection/`: contracts, activities and workflows. Activity scopes resolve artist and Archive provider explicitly from intake ownership. Reuse existing HTTP handling, heartbeat lifetime and diagnostics without routing through a fabricated mapping.
 - `TemporalIngestionClient.cs`, `TemporalIngestionRegistration.cs`, `IngestionServiceRegistration.cs`: admission, workflow/activity registration and dependency injection. The existing `ArtistRefreshWorkflow` remains the ordinary provider coordinator.

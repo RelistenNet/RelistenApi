@@ -16,7 +16,7 @@ public sealed class TestArchivePerformanceBilling
     {
         var result = ArchivePerformanceAssignmentService.ParseTitle(title);
         result.Type.Should().Be(type);
-        result.HoldReason.Should().BeNull();
+        result.Diagnostic.Should().BeNull();
         result.Label.Should().NotBeNullOrEmpty();
     }
 
@@ -28,7 +28,7 @@ public sealed class TestArchivePerformanceBilling
     {
         var result = ArchivePerformanceAssignmentService.ParseTitle(title);
         result.Type.Should().BeNull();
-        result.HoldReason.Should().BeNull();
+        result.Diagnostic.Should().BeNull();
     }
 
     [TestCase("Garcia - Early and Late Show")]
@@ -40,24 +40,24 @@ public sealed class TestArchivePerformanceBilling
         var result = ArchivePerformanceAssignmentService.ParseTitle(title);
         result.Type.Should().BeNull();
         result.Combined.Should().BeTrue();
-        result.HoldReason.Should().Be("multiple_performances_in_recording");
+        result.Diagnostic.Should().Be("multiple_performances_in_recording");
     }
 
     [TestCase("Garcia - Early Show?")]
     [TestCase("Garcia - probably Late Show")]
-    public void QualifiedBillingRequiresReview(string title)
+    public void QualifiedBillingLeavesThePerformanceUnresolved(string title)
     {
         var result = ArchivePerformanceAssignmentService.ParseTitle(title);
         result.Type.Should().BeNull();
-        result.HoldReason.Should().Be("uncertain_performance_billing");
+        result.Diagnostic.Should().Be("uncertain_performance_billing");
     }
 
     [TestCase("Garcia - First Show")]
     [TestCase("Garcia - Show #2")]
-    public void OrdinalConcertLabelsRequireAnExplicitReviewedAssignment(string title)
+    public void OrdinalConcertLabelsLeaveThePerformanceUnresolved(string title)
     {
         var result = ArchivePerformanceAssignmentService.ParseTitle(title);
         result.Type.Should().BeNull();
-        result.HoldReason.Should().Be("unclassified_performance_billing");
+        result.Diagnostic.Should().Be("unclassified_performance_billing");
     }
 }

@@ -131,7 +131,6 @@ public class TestTapersSectionEvidence
         "Bill Frisell & Ron Carter joint performance",
         TapersSectionReason.MultiplePerformers
     )]
-    [TestCase("Performer early and late shows", TapersSectionReason.AmbiguousDate)]
     public void RecognizedAttributionRisksRemainReviewCases(
         string title,
         TapersSectionReason reason
@@ -140,10 +139,24 @@ public class TestTapersSectionEvidence
         var result = Evaluate(Project(Raw("2025-01-02", title)));
         result.IsEligible.Should().BeFalse();
         result.Reasons.Should().Contain(reason);
+        result.Evidence.Should().Contain(value => value.Rule.StartsWith("explicit_"));
+    }
+
+    [TestCase("title")]
+    [TestCase("description")]
+    public void SameDayEarlyAndLateCoverageRetainsEvidenceWithoutHoldingPublication(string field)
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]![field] = "Performer early and late shows";
+        var result = Evaluate(Project(raw.ToString()));
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("2025-01-02");
         result
             .Evidence.Should()
             .Contain(value =>
-                value.Rule.StartsWith("explicit_") || value.Rule == "ambiguous_early_late_billing"
+                value.Rule == "ambiguous_early_late_billing"
+                && value.Locator == "metadata." + field
+                && value.Value == "early and late"
             );
     }
 

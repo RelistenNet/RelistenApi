@@ -110,6 +110,17 @@ public sealed class ShowPerformanceService(DbService db)
         string assignmentKind = "accepted"
     )
     {
+        if (assignmentKind != "accepted")
+        {
+            return await AssignDefaultSourceAsync(
+                artist,
+                sourceId,
+                displayDate,
+                evidence,
+                assignmentKind
+            );
+        }
+
         if (string.IsNullOrWhiteSpace(performanceKey) || performanceKey == "legacy")
         {
             throw new ArgumentException(
@@ -130,70 +141,25 @@ public sealed class ShowPerformanceService(DbService db)
                 "SELECT * FROM sources WHERE id=@sourceId AND artist_id=@artistId FOR UPDATE",
                 new { sourceId, artistId = artist.id }
             );
-            Show show;
-            if (assignmentKind != "accepted")
-            {
-                // Classification of uncertain legacy coverage may not invent a new primary.
-                if (!source.show_id.HasValue)
-                {
-                    throw new InvalidOperationException(
-                        "Unresolved or combined recordings need an existing primary show; hold new recordings instead."
-                    );
-                }
-
-                show = await connection.QuerySingleAsync<Show>(
-                    "SELECT * FROM shows WHERE id=@id AND artist_id=@artistId",
-                    new { id = source.show_id.Value, artistId = artist.id }
-                );
-            }
-            else
-            {
-                show = await ResolveAcceptedPerformanceAsync(
-                    connection,
-                    artist,
-                    source,
-                    performanceKey,
-                    displayDate,
-                    date
-                );
-            }
-
-            if (assignmentKind == "accepted")
-            {
-                await UpdatePerformanceAsync(
-                    connection,
-                    show.id,
-                    performanceKey,
-                    displayDate,
-                    date,
-                    performanceType,
-                    label
-                );
-            }
-
-            await connection.ExecuteAsync(
-                """
-                INSERT INTO source_show_assignments(source_id,show_id,assignment_kind,basis_display_date,evidence)
-                VALUES(@sourceId,@showId,@assignmentKind,@basisDate,@evidence::jsonb)
-                ON CONFLICT(source_id) DO UPDATE SET show_id=EXCLUDED.show_id,
-                    assignment_kind=EXCLUDED.assignment_kind,basis_display_date=EXCLUDED.basis_display_date,
-                    evidence=CASE WHEN source_show_assignments.show_id=EXCLUDED.show_id
-                        AND source_show_assignments.evidence ? 'provider_evidence'
-                        THEN EXCLUDED.evidence||jsonb_build_object('provider_evidence',source_show_assignments.evidence->'provider_evidence')
-                        ELSE EXCLUDED.evidence END,updated_at=statement_timestamp();
-                UPDATE sources SET show_id=@showId WHERE id=@sourceId;
-                """,
-                new
-                {
-                    sourceId,
-                    showId = show!.id,
-                    assignmentKind,
-                    basisDate = source.display_date,
-                    evidence,
-                    artistId = artist.id,
-                    displayDate,
-                }
+            var show = await ResolveAcceptedPerformanceAsync(
+                connection,
+                artist,
+                source,
+                performanceKey,
+                displayDate,
+                date
             );
+            await UpdatePerformanceAsync(
+                connection,
+                show.id,
+                performanceKey,
+                displayDate,
+                date,
+                performanceType,
+                label
+            );
+
+            await PersistPrimaryAssignmentAsync(connection, source, show, assignmentKind, evidence);
             return await connection.QuerySingleAsync<Show>(
                 "SELECT * FROM shows WHERE id=@id",
                 new { show.id }
@@ -201,6 +167,89 @@ public sealed class ShowPerformanceService(DbService db)
         });
         scope.Complete();
         return result;
+    }
+
+    /// <summary>
+    /// Publishes uncertain performance coverage under the stable date default, retaining
+    /// an existing primary association. Uncertainty is internal and does not block playback.
+    /// Partial dates remain source-specific; their equality is not evidence of one event.
+    /// </summary>
+    public async Task<Show> AssignDefaultSourceAsync(
+        Artist artist,
+        int sourceId,
+        string displayDate,
+        string evidence = "{}",
+        string assignmentKind = "unresolved"
+    )
+    {
+        if (assignmentKind is not ("unresolved" or "combined" or "legacy"))
+        {
+            throw new ArgumentException(
+                "A default association cannot accept a specific performance.",
+                nameof(assignmentKind)
+            );
+        }
+
+        var date = ParseDate(displayDate);
+        using var scope = CreateScope();
+        await LockArtistAsync(artist);
+        var show = await db.WithWriteConnection(async connection =>
+        {
+            var source = await connection.QuerySingleAsync<Source>(
+                "SELECT * FROM sources WHERE id=@sourceId AND artist_id=@artistId FOR UPDATE",
+                new { sourceId, artistId = artist.id }
+            );
+            var isPartial = displayDate.Contains("X", StringComparison.OrdinalIgnoreCase);
+            var current = source.show_id.HasValue
+                ? await connection.QuerySingleAsync<Show>(
+                    "SELECT * FROM shows WHERE id=@id AND artist_id=@artistId",
+                    new { id = source.show_id.Value, artistId = artist.id }
+                )
+                : await connection.QuerySingleOrDefaultAsync<Show>(
+                    """
+                    SELECT sh.* FROM shows sh WHERE sh.artist_id=@artistId AND sh.display_date=@displayDate
+                        AND (NOT @isPartial OR sh.performance_key=@sourceKey)
+                    ORDER BY sh.is_legacy_survivor DESC,sh.id LIMIT 1
+                    """,
+                    new
+                    {
+                        artistId = artist.id,
+                        displayDate,
+                        isPartial,
+                        sourceKey = "source:" + source.uuid,
+                    }
+                );
+            if (current == null)
+            {
+                current = await connection.QuerySingleAsync<Show>(
+                    """
+                    INSERT INTO shows(artist_id,date,display_date,uuid,updated_at,performance_key,is_legacy_survivor)
+                    VALUES(@artistId,@date,@displayDate,@uuid,now(),@key,NOT @isPartial)
+                    RETURNING *
+                    """,
+                    new
+                    {
+                        artistId = artist.id,
+                        date,
+                        displayDate,
+                        uuid = Guid.NewGuid(),
+                        key = isPartial ? "source:" + source.uuid : "legacy",
+                        isPartial,
+                    }
+                );
+            }
+
+            await PersistPrimaryAssignmentAsync(
+                connection,
+                source,
+                current,
+                assignmentKind,
+                evidence
+            );
+            return current;
+        });
+        scope.Complete();
+        return show;
     }
 
     /// <summary>Links one provider setlist to a supported canonical performance.</summary>
@@ -242,6 +291,37 @@ public sealed class ShowPerformanceService(DbService db)
         });
         scope.Complete();
     }
+
+    private static Task PersistPrimaryAssignmentAsync(
+        IDbConnection connection,
+        Source source,
+        Show show,
+        string assignmentKind,
+        string evidence
+    ) =>
+        connection.ExecuteAsync(
+            """
+            INSERT INTO source_show_assignments(source_id,show_id,assignment_kind,basis_display_date,evidence)
+            VALUES(@sourceId,@showId,@assignmentKind,@basisDate,@evidence::jsonb)
+            ON CONFLICT(source_id) DO UPDATE SET show_id=EXCLUDED.show_id,
+                assignment_kind=EXCLUDED.assignment_kind,basis_display_date=EXCLUDED.basis_display_date,
+                evidence=CASE WHEN source_show_assignments.show_id=EXCLUDED.show_id
+                    AND source_show_assignments.evidence ? 'provider_evidence'
+                    THEN EXCLUDED.evidence||jsonb_build_object('provider_evidence',source_show_assignments.evidence->'provider_evidence')
+                    ELSE EXCLUDED.evidence END,updated_at=statement_timestamp();
+            UPDATE sources SET show_id=@showId WHERE id=@sourceId;
+            """,
+            new
+            {
+                sourceId = source.id,
+                showId = show.id,
+                assignmentKind,
+                // A fallback keeps the last supported date as its correction basis.
+                // Rebuild can advance an unclaimed identity when its recordings agree.
+                basisDate = assignmentKind == "accepted" ? source.display_date : show.display_date,
+                evidence,
+            }
+        );
 
     private static Task UpdatePerformanceAsync(
         IDbConnection connection,
@@ -398,7 +478,8 @@ public sealed class ShowPerformanceService(DbService db)
             FROM source_show_assignments a JOIN performance_source_dates src ON src.id=a.source_id
             JOIN shows current_show ON current_show.id=a.show_id
             WHERE src.artist_id=@id AND src.catalog_date IS NOT NULL
-                AND (a.assignment_kind='legacy' OR current_show.performance_key='source:'||src.uuid::text)
+                AND (a.assignment_kind='legacy' OR current_show.performance_key LIKE 'legacy%'
+                    OR current_show.performance_key='source:'||src.uuid::text)
             GROUP BY a.show_id HAVING count(DISTINCT src.display_date)=1
                 AND bool_and(src.display_date<>a.basis_display_date)
         )
@@ -416,7 +497,7 @@ public sealed class ShowPerformanceService(DbService db)
         UPDATE source_show_assignments a SET basis_display_date=src.display_date
         FROM performance_source_dates src,shows sh WHERE a.source_id=src.id AND sh.id=a.show_id AND src.artist_id=@id
             AND src.catalog_date IS NOT NULL AND src.display_date=sh.display_date
-            AND (a.assignment_kind='legacy' OR sh.performance_key='source:'||src.uuid::text);
+            AND (a.assignment_kind='legacy' OR sh.performance_key LIKE 'legacy%' OR sh.performance_key='source:'||src.uuid::text);
 
         INSERT INTO shows(artist_id,date,display_date,updated_at,uuid,performance_key,is_legacy_survivor)
         SELECT DISTINCT ON (src.display_date,CASE WHEN upper(src.display_date) LIKE '%X%' THEN src.uuid END)
@@ -457,13 +538,21 @@ public sealed class ShowPerformanceService(DbService db)
             AND a.evidence->>'basis'='unique exact date'
             AND (sh.display_date<>to_char(sl.date,'YYYY-MM-DD') OR
                 (SELECT count(*) FROM shows other WHERE other.artist_id=@id AND other.display_date=sh.display_date)<>1 OR
-                (SELECT count(*) FROM setlist_shows other WHERE other.artist_id=@id AND other.date=sl.date)<>1);
+                (SELECT count(*) FROM setlist_shows other WHERE other.artist_id=@id AND other.date=sl.date)<>1 OR
+                NOT EXISTS(SELECT 1 FROM source_show_assignments source_assignment
+                    JOIN sources src ON src.id=source_assignment.source_id
+                    WHERE source_assignment.show_id=sh.id AND source_assignment.assignment_kind IN ('accepted','legacy')
+                        AND src.display_date=sh.display_date AND source_assignment.basis_display_date=src.display_date));
         INSERT INTO setlist_show_assignments(setlist_show_id,show_id,evidence)
         SELECT sl.id,sh.id,'{"basis":"unique exact date"}'::jsonb
         FROM shows sh JOIN setlist_shows sl ON sl.artist_id=sh.artist_id AND to_char(sl.date,'YYYY-MM-DD')=sh.display_date
         WHERE sh.artist_id=@id
             AND (SELECT count(*) FROM shows other WHERE other.artist_id=@id AND other.display_date=sh.display_date)=1
             AND (SELECT count(*) FROM setlist_shows other WHERE other.artist_id=@id AND other.date=sl.date)=1
+            AND EXISTS(SELECT 1 FROM source_show_assignments source_assignment
+                JOIN sources src ON src.id=source_assignment.source_id
+                WHERE source_assignment.show_id=sh.id AND source_assignment.assignment_kind IN ('accepted','legacy')
+                    AND src.display_date=sh.display_date AND source_assignment.basis_display_date=src.display_date)
         ON CONFLICT(setlist_show_id) DO NOTHING;
         """;
 }

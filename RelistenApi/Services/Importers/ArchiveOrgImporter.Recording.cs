@@ -23,7 +23,7 @@ public partial class ArchiveOrgImporter
     /// Source, set, and track identities retain the ordinary Archive import formulas.
     /// </summary>
     /// <exception cref="ArchivePerformanceHeldException">
-    /// Performance billing needs review. Existing playback rows remain unchanged, while
+    /// A conflicting date needs review. Existing playback rows remain unchanged, while
     /// assignment evidence is retained in the caller's transaction. Handle the exception
     /// before completing that transaction if the evidence should commit.
     /// </exception>
@@ -63,13 +63,13 @@ public partial class ArchiveOrgImporter
             meta,
             properDisplayDate
         );
-        if (performance.HoldReason != null)
+        if (performance.HoldsMetadata)
         {
             if (dbSource != null)
             {
                 await performanceAssignments.ApplyAsync(artist, dbSource, performance);
             }
-            throw new ArchivePerformanceHeldException(performance.HoldReason);
+            throw new ArchivePerformanceHeldException(performance.Diagnostic!);
         }
 
         var mp3Files =

@@ -4,6 +4,8 @@ Update the show contract, implement it, verify Phish, then run larger local Jerr
 
 This plan is for the Relisten engineer and reviewer/operator. It extends the [implemented collection and performer work](../2026-10-17-archive-collections/README.md). That work verified three Jerry recordings and discovered 100 Aadam items; it did not publish hundreds of either. The milestones below are future work.
 
+The [show contract](contracts.md) specifies the migration, public fields and date-grouping route, durable assignments, combined-recording behavior and provider responsibilities. Keep its verified behavior aligned with the implementation as work proceeds.
+
 ## Intended behavior
 
 A `Show` represents one performance by an artist. An artist can have several shows on the same date. A date page groups those shows for browsing. Sets within a concert remain subdivisions of that concert.
@@ -16,12 +18,12 @@ An ordinary one-show date keeps its existing show row and UUID. When evidence su
 
 Moving a source changes its show association, including the `show_uuid` returned on source and track reads. It preserves the source, set and track UUIDs and media URLs. A split moves existing recordings; it does not import duplicate recordings. Sources whose performance remains uncertain retain their last accepted association while reviewed assignments are resolved; that association is not evidence for performance-specific enrichment.
 
-Retain explicit recording-to-show and provider-setlist-to-show assignments with their supporting evidence. Do not infer the assignment from a date-only join. A recording covering several performances must retain its original playback identity; do not invent track boundaries or choose a primary performance without a supported contract. Unresolved new combined recordings can remain held.
+Retain explicit recording-to-show and provider-setlist-to-show assignments with their supporting evidence. An otherwise eligible recording with unclear same-day performance coverage publishes under the day's default show. Internal unresolved or combined classification records that the primary reference does not establish exact coverage. Existing uncertain recordings keep their prior primary association. Move recordings when supported evidence identifies the performance; do not invent audio boundaries or withhold playback solely because performance identity is unclear.
 
 ## Progress
 
 - [x] 2026-10-17: record the revised show model, dependencies and acceptance sequence.
-- [ ] 1. Finish the migration and public compatibility contracts below.
+- [x] 1. Finish the migration and public compatibility contracts below, including default-show publication for uncertain same-day coverage.
 - [ ] 2. Implement show identity and assignments; pass synthetic contract tests.
 - [ ] 3. Verify Phish through actual local imports and API reads.
 - [ ] 4. Verify a larger Jerry sample.
@@ -33,10 +35,10 @@ Update the relevant design and ingestion contracts before schema changes. The [c
 
 Specify the enum values, wire format, defaults, ordering and label behavior. Distinguish a performance's billed date from a known start time; a late show does not establish a timestamp or imply a date correction.
 
-The split identity rule is settled. Its migration and the remaining combined-recording behavior need concrete contracts before implementation:
+The [implemented contract](contracts.md) defines both split identity and default-show compatibility:
 
 - **Old show references after a split.** Keep the existing UUID on one supported performance and allocate new UUIDs to the others. `GET /api/v3/shows/{showUuid}` continues to return the show bearing that UUID, with its current assigned sources. Define the durable split record, reviewed survivor choice and atomic source moves. An old show link remains valid but does not promise the former whole-day source list. Source and track references remain valid after moving.
-- **Recordings spanning performances.** `Source.show_id` and the public `show_uuid` currently name one show. Define the relationship and compatible response for already-published combined recordings. Holding new combined items does not solve migration of existing ones. Define how date pages and collection counts avoid duplicating recordings.
+- **Recordings spanning same-day performances.** `Source.show_id` and public `show_uuid` retain one primary association. Otherwise eligible new recordings publish on the default show with internal combined or unresolved coverage. Previously published recordings keep their current primary association. Date browsing and collection reads return each recording once. A primary reference does not authorize performance-specific enrichment or imply invented track boundaries.
 
 Document the existing date route, UUID route, year/artist listings, random-show selection, collection recording references, counts, cache invalidation and client expectations. Date pages must remain usable. Any additive route or response field must have a precise schema and error behavior before coding. These decisions may require a focused product review; the implementer must not improvise them during a rebuild.
 
@@ -110,9 +112,10 @@ Before production rollout, verify backfill and backup/restore against a represen
 
 - 2026-10-17, Alec: make `Show` the performance and allow several shows per date. Preserve date browsing and saved references.
 - 2026-10-17, Alec: an existing show keeps its UUID through a split; additional performances receive new UUIDs and their sources move over. The old UUID resolves to the retained performance, with its current source list.
+- 2026-10-17, Alec: uncertainty between performances on the same day must not withhold an otherwise eligible recording. Publish under the default show and retain internal unresolved or combined evidence.
 - 2026-10-17: separate stable identity from performance type and presentation. Retain unresolved evidence and internal ambiguity notes.
 - 2026-10-17: verify Phish before the larger Jerry and Aadam runs. Treat existing-artist publication as an explicit dependency.
 
 ## Outcomes and retrospective
 
-This update records the sequence and accepted model. The show migration, new compatibility behavior and larger samples have not run. Steps 1 and 5 contain the remaining contracts that must be completed before their corresponding writes are enabled.
+The identity and existing-artist publication implementation is committed in `735b94f`, with a fixture follow-up in `d6ee0b8`. The 88-case gate passed. Phish.in and Phish.net each completed 42 recordings twice with zero failures; 258 actual API checks confirmed stable identities and URLs across the repeat. The latest default-show policy is being applied before the larger Jerry and Aadam publication runs. Those samples remain incomplete.
