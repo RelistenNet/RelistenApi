@@ -148,7 +148,28 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                             "Automatic publication cannot claim reviewed authority."
                         );
                     }
-                    await WriteCredit(connection, transaction, credit, workUuid, false, 0, ct);
+                    var written = await WriteCredit(
+                        connection,
+                        transaction,
+                        credit,
+                        workUuid,
+                        false,
+                        0,
+                        ct
+                    );
+                    if (written != null)
+                    {
+                        // Append publication is independent support, even when it coalesces a
+                        // claim originally introduced by the replacement-based pipeline.
+                        await connection.ExecuteAsync(
+                            new CommandDefinition(
+                                "INSERT INTO normalization.recording_credit_unmanaged_support(credit_uuid) VALUES(@Uuid) ON CONFLICT DO NOTHING",
+                                new { written.Uuid },
+                                transaction,
+                                cancellationToken: ct
+                            )
+                        );
+                    }
                 }
             },
             cancellationToken,
@@ -532,14 +553,15 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         role AS "Role",original_text AS "OriginalText",reason_code AS "ReasonCode"
         """;
 
-    private static async Task WriteCredit(
+    private static async Task<CreditWriteOutcome?> WriteCredit(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         RecordingCredit credit,
         Guid decisionUuid,
         bool reviewed,
         long expectedRevision,
-        CancellationToken ct
+        CancellationToken ct,
+        bool preserveExistingClaims = false
     )
     {
         if (credit.Evidence.Count == 0)
@@ -578,10 +600,22 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         }
         if (!reviewed)
         {
-            var resolved = await ResolveAutomaticCredit(c, t, credit, current, ct);
+            var resolved = await ResolveAutomaticCredit(
+                c,
+                t,
+                credit,
+                current,
+                ct,
+                preserveExistingClaims
+            );
             if (resolved == null)
             {
-                return;
+                return null;
+            }
+            if (resolved.AppendOnly)
+            {
+                await AppendCreditEvidence(c, t, resolved.Credit.Uuid, credit.Evidence, ct);
+                return new(resolved.Credit.Uuid, false);
             }
             credit = resolved.Credit;
             current = resolved.Current;
@@ -596,9 +630,10 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             // A new extraction run is not a new credit interpretation. Preserve the current
             // assertion revision, while retaining each new supporting citation.
             await AppendCreditEvidence(c, t, credit.Uuid, credit.Evidence, ct);
-            return;
+            return new(credit.Uuid, false);
         }
         await StoreCreditRevision(c, t, credit, current, decisionUuid, reviewed, ct);
+        return new(credit.Uuid, current == null);
     }
 
     private static async Task StoreCreditRevision(
@@ -706,7 +741,8 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         NpgsqlTransaction t,
         RecordingCredit credit,
         CreditRow? current,
-        CancellationToken ct
+        CancellationToken ct,
+        bool preserveExistingClaims
     )
     {
         var previousCorrection = await c.ExecuteScalarAsync<bool>(
@@ -770,6 +806,25 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                 cancellationToken: ct
             )
         );
+        if (!preserveExistingClaims && (claim != null || current != null))
+        {
+            // An append caller has no authority to reinterpret another contributor's
+            // replacement-owned support. Preserve that claim and store independent support.
+            preserveExistingClaims = await c.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    "SELECT EXISTS(SELECT 1 FROM normalization.recording_credit_contributor_support WHERE credit_uuid=ANY(@uuids) AND retired_work_uuid IS NULL)",
+                    new
+                    {
+                        uuids = new[] { claim?.Uuid, current?.Uuid }
+                            .OfType<Guid>()
+                            .Distinct()
+                            .ToArray(),
+                    },
+                    t,
+                    cancellationToken: ct
+                )
+            );
+        }
         if (claim?.Basis == "reviewed")
         {
             var sameEvidence = await c.ExecuteScalarAsync<bool>(
@@ -797,10 +852,20 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             };
             current = null;
         }
-        else if (claim != null)
+        else if (claim != null && (!preserveExistingClaims || claim.HasSameAssertion(credit)))
         {
             credit = credit with { Uuid = claim.Uuid };
             current = claim;
+        }
+        else if (preserveExistingClaims && current?.Basis != "reviewed")
+        {
+            // A contributor correction cannot rewrite a claim still supported by a peer.
+            // Retire its support separately after the replacement is safely attached.
+            if (current != null && !current.HasSameAssertion(credit))
+            {
+                credit = credit with { Uuid = Guid.NewGuid() };
+                current = null;
+            }
         }
         else if (current?.Basis == "reviewed")
         {
@@ -866,14 +931,19 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             if (duplicate != null)
             {
                 await ValidateCreditScope(c, t, credit, duplicate, ct);
-                await AppendCreditEvidence(c, t, duplicate.Uuid, credit.Evidence, ct);
-                return null;
+                return new CreditWrite(credit with { Uuid = duplicate.Uuid }, duplicate, true);
             }
         }
         return new CreditWrite(credit, current);
     }
 
-    private sealed record CreditWrite(RecordingCredit Credit, CreditRow? Current);
+    private sealed record CreditWrite(
+        RecordingCredit Credit,
+        CreditRow? Current,
+        bool AppendOnly = false
+    );
+
+    private sealed record CreditWriteOutcome(Guid Uuid, bool Created);
 
     private static async Task AppendCreditEvidence(
         NpgsqlConnection c,

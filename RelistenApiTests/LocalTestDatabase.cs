@@ -114,6 +114,10 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationSetlistProcessing.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddRecordingCreditContributorSupport.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
