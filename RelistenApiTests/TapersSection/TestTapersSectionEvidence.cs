@@ -120,6 +120,13 @@ public class TestTapersSectionEvidence
     [TestCase("In Memory Of Dickey Betts", TapersSectionReason.TributeContext)]
     [TestCase("1989: The Songs Of Taylor Swift", TapersSectionReason.TributeContext)]
     [TestCase("Garcia compilation 2025 remaster", TapersSectionReason.Compilation)]
+    [TestCase("Performer: Best of 2025", TapersSectionReason.Compilation)]
+    [TestCase("A Tribute to Jerry Garcia", TapersSectionReason.TributeContext)]
+    [TestCase("Performer memorial concert", TapersSectionReason.TributeContext)]
+    [TestCase(
+        "Performer — A Jerry Garcia Tribute — 2025-01-02",
+        TapersSectionReason.TributeContext
+    )]
     [TestCase(
         "Bill Frisell & Ron Carter joint performance",
         TapersSectionReason.MultiplePerformers
@@ -138,6 +145,141 @@ public class TestTapersSectionEvidence
             .Contain(value =>
                 value.Rule.StartsWith("explicit_") || value.Rule == "ambiguous_early_late_billing"
             );
+    }
+
+    [Test]
+    public void TransferRepairNotesDoNotClassifyARecordingAsACompilation()
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]!["description"] = "Most has been fixed to the best of my abilities";
+
+        Evaluate(Project(raw.ToString())).IsEligible.Should().BeTrue();
+    }
+
+    [Test]
+    public void ExplicitTributeCreatorLabelStillRequiresReview()
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Live at Venue on 2025-01-02"));
+        raw["metadata"]!["creator"] = "Jerry Garcia Tribute";
+
+        var result = new TapersSectionEligibilityEvaluator().Evaluate(
+            Project(raw.ToString()),
+            [new(CandidateId, true, ["Jerry Garcia Tribute"], ArtistUuid)]
+        );
+
+        result.Reasons.Should().Contain(TapersSectionReason.TributeContext);
+        result
+            .Evidence.Should()
+            .Contain(value => value.Locator == "metadata.creator" && value.Value == "Tribute");
+    }
+
+    [Test]
+    public void MemorialInAVenueNameDoesNotClassifyARecordingAsATribute()
+    {
+        var raw = JObject.Parse(
+            Raw("2025-01-02", "Performer Live at Robert F. Kennedy Memorial Stadium on 2025-01-02")
+        );
+        raw["metadata"]!["description"] = "Venue: Robert F. Kennedy Memorial Stadium";
+
+        Evaluate(Project(raw.ToString())).IsEligible.Should().BeTrue();
+    }
+
+    [TestCase("A memorial performance for the late musician", TapersSectionReason.TributeContext)]
+    [TestCase("A Jerry Garcia tribute", TapersSectionReason.TributeContext)]
+    [TestCase("The best of performances from several shows", TapersSectionReason.Compilation)]
+    [TestCase("A compilation of concert recordings", TapersSectionReason.Compilation)]
+    public void ExplicitDescriptionPerformanceContextStillRequiresReview(
+        string description,
+        TapersSectionReason reason
+    )
+    {
+        var raw = JObject.Parse(Raw("2025-01-02", "Performer Live at Venue on 2025-01-02"));
+        raw["metadata"]!["description"] = description;
+
+        var result = Evaluate(Project(raw.ToString()));
+        result.Reasons.Should().Contain(reason);
+        result.Evidence.Should().Contain(value => value.Locator == "metadata.description");
+    }
+
+    [Test]
+    public void StructuredAndTitleMarch6StillConflictWithJune6Identifier()
+    {
+        const string identifier = "pavement1994-06-06";
+        var raw = JObject.Parse(Raw("1994-03-06", "Performer Live at Venue on 1994-03-06"));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+        result.Reasons.Should().Contain(TapersSectionReason.ConflictingDate);
+        result.DisplayDate.Should().Be("1994-03-06");
+    }
+
+    [TestCase("1992-00-00")]
+    [TestCase("1992-03-00")]
+    [TestCase("1992-00-06")]
+    [TestCase("1992-XX-14")]
+    [TestCase("1992-05-XX")]
+    [TestCase("1992-xx-xx")]
+    [TestCase("1992-??-??")]
+    public void StructuredJanuary1CannotResolveUnknownTitleAndIdentifierDateParts(
+        string uncertainDate
+    )
+    {
+        var identifier = "pavement" + uncertainDate;
+        var raw = JObject.Parse(
+            Raw("1992-01-01", "Performer: " + uncertainDate + " KSSU Radio?, Sacremento, CA")
+        );
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeFalse();
+        result.Reasons.Should().Contain(TapersSectionReason.AmbiguousDate);
+        result
+            .Evidence.Should()
+            .Contain(value => value.Locator == "metadata.title" && value.Value == uncertainDate);
+        result
+            .Evidence.Should()
+            .Contain(value => value.Locator == "item_identifier" && value.Value == uncertainDate);
+    }
+
+    [TestCase("metadata.title")]
+    [TestCase("item_identifier")]
+    public void EitherUnknownTitleOrUnknownIdentifierDateIndependentlyHoldsJanuary1(
+        string uncertainField
+    )
+    {
+        var identifier =
+            uncertainField == "item_identifier" ? "performer1992-00-00" : "performer1992-01-01";
+        var title =
+            uncertainField == "metadata.title"
+                ? "Performer - 1992-00-00"
+                : "Performer - 1992-01-01";
+        var raw = JObject.Parse(Raw("1992-01-01", title));
+        raw["metadata"]!["identifier"] = identifier;
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeFalse();
+        result.Reasons.Should().Contain(TapersSectionReason.AmbiguousDate);
+        result
+            .Evidence.Should()
+            .Contain(value =>
+                value.Locator == uncertainField && value.Rule == "unknown_performance_date_parts"
+            );
+    }
+
+    [Test]
+    public void CompleteJanuary1PerformanceDateRemainsEligibleDespiteUncertainTransferDate()
+    {
+        const string identifier = "performer1992-01-01";
+        var raw = JObject.Parse(Raw("1992-01-01", "Performer Live at Venue on 1992-01-01"));
+        raw["metadata"]!["identifier"] = identifier;
+        raw["metadata"]!["description"] = "Transfer date: 2001-00-00";
+
+        var result = Evaluate(ArchiveObservationProjector.Project(new(identifier), raw.ToString()));
+
+        result.IsEligible.Should().BeTrue();
+        result.DisplayDate.Should().Be("1992-01-01");
     }
 
     [Test]

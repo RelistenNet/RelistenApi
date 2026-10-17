@@ -104,22 +104,37 @@ public sealed record TapersSectionInterpretation(
 /// </summary>
 public sealed class TapersSectionEligibilityEvaluator
 {
-    public const int RulesVersion = 1;
+    public const int RulesVersion = 4;
 
     private static readonly Regex IsoDate = new(
         @"(?<!\d)(?<date>\d{4}-\d{2}-\d{2})(?!\d)",
         RegexOptions.CultureInvariant
     );
+    private static readonly Regex IsoDateWithUnknownParts = new(
+        @"(?<!\d)\d{4}-(?<month>\d{2}|XX|\?\?)-(?<day>\d{2}|XX|\?\?)(?!\d)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
     private static readonly Regex WrittenDate = new(
         @"\b(?<date>(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}|\d{1,2}[ -](?:January|February|March|April|May|June|July|August|September|October|November|December)[ -]\d{4})\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
+
+    // Event wording can hold attribution. A venue's "Memorial" name alone cannot.
     private static readonly Regex Tribute = new(
-        @"\b(?:tribute|memorial|in memory of|dear jerry|celebrat(?:ion|ing)\s+(?:of\s+)?(?:the\s+)?(?:life|music|jerry)|the songs of)\b",
+        @"\b(?:tribute|memorial\s+(?:concert|show|performance|tribute|benefit)|in memory of|dear jerry|celebrat(?:ion|ing)\s+(?:of\s+)?(?:the\s+)?(?:life|music|jerry)|the songs of)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
+    private const string CompilationPattern =
+        @"\b(?:compilations?|best[- ]of\s+(?:recordings|performances|shows|concerts)|remaster[- ]only|recordings from (?:multiple|various|several))\b";
     private static readonly Regex Compilation = new(
-        @"\b(?:compilations?|best of|remaster[- ]only|recordings from (?:multiple|various|several))\b",
+        CompilationPattern,
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+
+    // "Best of" labels a title; description prose needs a recording-related object
+    // so transfer notes such as "the best of my abilities" do not hold publication.
+    private static readonly Regex CompilationTitle = new(
+        CompilationPattern + @"|\bbest[- ]of\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
     private static readonly Regex MultiAct = new(
@@ -320,7 +335,7 @@ public sealed class TapersSectionEligibilityEvaluator
                     {
                         (Tribute, TapersSectionReason.TributeContext, "explicit_tribute_context"),
                         (
-                            Compilation,
+                            field == "title" ? CompilationTitle : Compilation,
                             TapersSectionReason.Compilation,
                             "explicit_compilation_context"
                         ),
@@ -438,6 +453,12 @@ public sealed class TapersSectionEligibilityEvaluator
         var titles = Strings(metadata["title"]).ToArray();
         for (var index = 0; index < titles.Length; index++)
         {
+            CheckUnknownDateParts(
+                titles[index],
+                Locator(metadata["title"], "title", index),
+                reasons,
+                evidence
+            );
             foreach (var date in ExplicitDates(titles[index]))
             {
                 titleDates.Add(date.Date);
@@ -450,6 +471,8 @@ public sealed class TapersSectionEligibilityEvaluator
                 );
             }
         }
+
+        CheckUnknownDateParts(item.Value, "item_identifier", reasons, evidence);
 
         var identifierDates = ExplicitDates(item.Value)
             .Select(date => date.Date)
@@ -540,6 +563,38 @@ public sealed class TapersSectionEligibilityEvaluator
         reasons.Add(TapersSectionReason.MissingDate);
         return null;
     }
+
+    private static void CheckUnknownDateParts(
+        string text,
+        string locator,
+        List<TapersSectionReason> reasons,
+        List<TapersSectionEvidence> evidence
+    )
+    {
+        foreach (Match match in IsoDateWithUnknownParts.Matches(text))
+        {
+            var month = match.Groups["month"].Value;
+            var day = match.Groups["day"].Value;
+            if (IsUnknownDatePart(month) || IsUnknownDatePart(day))
+            {
+                // A complete structured date does not resolve an explicit unknown
+                // month/day in the recording title or identifier.
+                reasons.Add(TapersSectionReason.AmbiguousDate);
+                evidence.Add(
+                    new(
+                        locator,
+                        match.Value,
+                        "unknown_performance_date_parts",
+                        match.Index,
+                        match.Length
+                    )
+                );
+            }
+        }
+    }
+
+    private static bool IsUnknownDatePart(string value) =>
+        value == "00" || value.Equals("XX", StringComparison.OrdinalIgnoreCase) || value == "??";
 
     private static bool IsPerformanceTitle(string title, JToken? creator)
     {
