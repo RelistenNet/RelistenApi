@@ -1,0 +1,46 @@
+{
+  "checks": [
+    {
+      "case": "incomplete_snapshot",
+      "rejected_before_output": true
+    },
+    {
+      "case": "missing_artist",
+      "rejected_before_output": true
+    },
+    {
+      "case": "corrupted_total",
+      "rejected_before_output": true
+    },
+    {
+      "case": "negative_measure",
+      "rejected_before_output": true
+    },
+    {
+      "case": "missing_link_measure",
+      "rejected_before_output": true
+    },
+    {
+      "case": "wrapper_success_snapshot_hash_and_no_overwrite",
+      "passed": true
+    },
+    {
+      "case": "wrapper_failed_query_retains_partial_and_sql",
+      "passed": true
+    },
+    {
+      "case": "actual_final_json_csv_hashes_all_artists_all_relations_lf_zero_counts",
+      "passed": true
+    },
+    {
+      "case": "failed_secret_lookup_does_not_launch_psql",
+      "passed": true
+    }
+  ],
+  "sql_sha256": "4d39ca0256310afc31f34c900ea759b2da73c3d68116c0b5ad83cddcec1d63fb",
+  "census_sha256": "cc5a4720e7590621fe936b901d1226feced0a8129dcf0aa5e309fe3249d249aa",
+  "helper_sha256": {
+    "scripts/run_live_census.sh": "8afa7496a3d837ef91432bf5a86297d67af833e4cb5fca58c6ecfefb8fdce389",
+    "scripts/summarize_census.py": "ee7e67ff6902a64cd542624f4e2a14add6254113b4ccc280cc4b4d2c9226bae7"
+  }
+}

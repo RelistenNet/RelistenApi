@@ -81,9 +81,9 @@ Collection pages, artist filters, counts and playback relationships passed. Aada
 
 ## Normalization scope
 
-This increment distinguishes shows and retains provider assignments. Shared physical venue identities and visibly title-derived, artist-scoped song search are later work. Repeated-song occurrences, file/setlist alignment and cross-artist compositions need separate contracts. Preserve original venue names, song identifiers, track order, provider setlists and supporting evidence for that work. A track title alone does not establish a composition or an exact performed passage.
+This completed increment distinguishes shows and retains provider assignments. The [full normalization plan](../2026-10-17-full-normalization/README.md) now owns delivery of shared physical venues, artist-scoped repertoire, cross-artist compositions, people, recording lineage, ordered occurrences and file/setlist relationships. All are required domains for current and future artists. Preserve original venue names, song identifiers, track order, provider setlists and supporting evidence. A track title alone does not establish a composition or an exact performed passage.
 
-[People and recording credits](../../../design/2026-10-17-people-and-recording-credits.md) are also normalization requirements: stable person identities, supported aliases and role-specific credits must enable taper and transferrer search across artists. Preserve imported credit text and source UUIDs. That search can precede a complete capture/transfer lineage graph. The linked design reconciles the colleague's “catalogue” terminology with Relisten's imported catalog and current show model.
+[People and recording credits](../../../design/2026-10-17-people-and-recording-credits.md) supply stable person identities, supported aliases and role-specific credits for taper and transferrer search across artists. Preserve imported credit text and source UUIDs. Credits and capture/transfer lineage are part of the same full layer; available evidence determines which individual relationships can resolve. The linked design reconciles the colleague's “catalogue” terminology with Relisten's imported catalog and current show model.
 
 The broader schema is not a prerequisite for the local samples. Do not claim that the performance change implements venue, song or full setlist normalization.
 
@@ -107,4 +107,4 @@ Before production rollout, rehearse backfill and backup/restore against a repres
 
 ## Outcomes and remaining work
 
-All five local milestones are complete: implemented contracts, controlled verification, Phish repeat, Jerry publication and reviewed split, and Aadam publication with checkpoint recovery. The affected regression suite, fresh review and isolated backup/restore passed. Production rollout, production Jerry membership and broader venue/song/setlist normalization remain separate work. No production writes or schedules were used for these proofs.
+All five local milestones are complete: implemented contracts, controlled verification, Phish repeat, Jerry publication and reviewed split, and Aadam publication with checkpoint recovery. The affected regression suite, fresh review and isolated backup/restore passed. Production rollout and production Jerry membership remain separate work. The full normalization plan owns the next implementation, including lineage and cross-artist compositions. No production writes or schedules were used for these proofs.

@@ -1,0 +1,772 @@
+[
+  {
+    "data_type": "integer",
+    "table_name": "artists",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "artists",
+    "column_name": "musicbrainz_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "artists",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "artists",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "artists",
+    "column_name": "name",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "artists",
+    "column_name": "featured",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "artists",
+    "column_name": "slug",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "artists",
+    "column_name": "sort_name",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "artists",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "artists_upstream_sources",
+    "column_name": "upstream_source_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "artists_upstream_sources",
+    "column_name": "artist_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "artists_upstream_sources",
+    "column_name": "upstream_identifier",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_shows",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "setlist_shows",
+    "column_name": "artist_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_shows",
+    "column_name": "venue_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "setlist_shows",
+    "column_name": "upstream_identifier",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "date",
+    "table_name": "setlist_shows",
+    "column_name": "date",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "setlist_shows",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "setlist_shows",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_shows",
+    "column_name": "tour_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_shows",
+    "column_name": "era_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "setlist_shows",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_songs",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "setlist_songs",
+    "column_name": "artist_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "setlist_songs",
+    "column_name": "name",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "setlist_songs",
+    "column_name": "slug",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "setlist_songs",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "setlist_songs",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "setlist_songs",
+    "column_name": "upstream_identifier",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "setlist_songs",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_songs_plays",
+    "column_name": "played_setlist_song_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "setlist_songs_plays",
+    "column_name": "played_setlist_show_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "shows",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "shows",
+    "column_name": "artist_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "shows",
+    "column_name": "tour_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "shows",
+    "column_name": "year_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "shows",
+    "column_name": "era_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "date",
+    "table_name": "shows",
+    "column_name": "date",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "real",
+    "table_name": "shows",
+    "column_name": "avg_rating",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "real",
+    "table_name": "shows",
+    "column_name": "avg_duration",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "shows",
+    "column_name": "display_date",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "shows",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "shows",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "shows",
+    "column_name": "venue_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "shows",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "source_sets",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "source_sets",
+    "column_name": "source_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "source_sets",
+    "column_name": "index",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "boolean",
+    "table_name": "source_sets",
+    "column_name": "is_encore",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_sets",
+    "column_name": "name",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "source_sets",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "source_sets",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "source_sets",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "source_tracks",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "source_tracks",
+    "column_name": "source_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "source_tracks",
+    "column_name": "source_set_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "source_tracks",
+    "column_name": "track_position",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "source_tracks",
+    "column_name": "duration",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "title",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "slug",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "mp3_url",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "mp3_md5",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "source_tracks",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "source_tracks",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "flac_md5",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "source_tracks",
+    "column_name": "flac_url",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "source_tracks",
+    "column_name": "artist_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "source_tracks",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "boolean",
+    "table_name": "source_tracks",
+    "column_name": "is_orphaned",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "sources",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "sources",
+    "column_name": "show_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "boolean",
+    "table_name": "sources",
+    "column_name": "is_soundboard",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "boolean",
+    "table_name": "sources",
+    "column_name": "is_remaster",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "real",
+    "table_name": "sources",
+    "column_name": "avg_rating",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "sources",
+    "column_name": "num_reviews",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "upstream_identifier",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "boolean",
+    "table_name": "sources",
+    "column_name": "has_jamcharts",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "description",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "taper_notes",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "source",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "taper",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "transferrer",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "lineage",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "sources",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "sources",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "sources",
+    "column_name": "artist_id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "real",
+    "table_name": "sources",
+    "column_name": "avg_rating_weighted",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "real",
+    "table_name": "sources",
+    "column_name": "duration",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "sources",
+    "column_name": "venue_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "sources",
+    "column_name": "display_date",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "sources",
+    "column_name": "num_ratings",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "sources",
+    "column_name": "flac_type",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "sources",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "upstream_sources",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "upstream_sources",
+    "column_name": "name",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "upstream_sources",
+    "column_name": "url",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "upstream_sources",
+    "column_name": "description",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "upstream_sources",
+    "column_name": "credit_line",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "bigint",
+    "table_name": "venues",
+    "column_name": "id",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "integer",
+    "table_name": "venues",
+    "column_name": "artist_id",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "double precision",
+    "table_name": "venues",
+    "column_name": "latitude",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "double precision",
+    "table_name": "venues",
+    "column_name": "longitude",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "venues",
+    "column_name": "name",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "venues",
+    "column_name": "location",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "venues",
+    "column_name": "upstream_identifier",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "venues",
+    "column_name": "created_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "timestamp with time zone",
+    "table_name": "venues",
+    "column_name": "updated_at",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "venues",
+    "column_name": "slug",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "text",
+    "table_name": "venues",
+    "column_name": "past_names",
+    "is_nullable": "YES",
+    "table_schema": "public"
+  },
+  {
+    "data_type": "uuid",
+    "table_name": "venues",
+    "column_name": "uuid",
+    "is_nullable": "NO",
+    "table_schema": "public"
+  }
+]
