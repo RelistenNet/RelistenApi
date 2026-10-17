@@ -1,0 +1,2623 @@
+{
+  "verified_at_utc": "2026-10-17T15:57:06.997613+00:00",
+  "production_code_revision": "5a34337",
+  "helper_revision": "7632d4e",
+  "environment": {
+    "database": "relisten_jerry_20261017",
+    "api": "http://127.0.0.1:13825",
+    "production_writes": false,
+    "schedules_registered": false
+  },
+  "selection": {
+    "retained_metadata": 500,
+    "reviewed_items": 349,
+    "reviewed_selected_published": 347,
+    "reviewed_selected_unpublished": [
+      "jerry-2021-05-14",
+      "jg82-03-18.015193.jgb.vallee.gale.sbeok.t-flac16"
+    ],
+    "previously_published_outside_new_selection": [
+      "jgb1993-11-01"
+    ],
+    "not_selected_for_billing_review": 151,
+    "review_plan_sha256": "defc840587dec214a2baf33c357fa22899d6a70c2b3d91d7133df3a21381e9a6",
+    "metadata_manifest_sha256": "8e6dc5dfb02d89a7aef995416d68a3f005328cb3a0a706e2725311b552ef26a9"
+  },
+  "collection": {
+    "uuid": "b2fc4b22-b452-4da7-84a6-f8ef6db9096f",
+    "slug": "jerry-projects-smoke",
+    "name": "Jerry Garcia projects \u2014 local acceptance",
+    "description": "Six reviewed performing projects; excludes Grateful Dead and the existing Melvin Seals JGB. Explicit local test membership.",
+    "published": true,
+    "source_count": 3,
+    "show_count": 3,
+    "artist_count": 3
+  },
+  "first_workflows": [
+    {
+      "slug": "garcia-saunders",
+      "artistUuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "workflowId": "ingest/artist/5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "resultRunId": "01a14a90-cf6f-7403-b6c6-f0bcb2edc8cd",
+      "result": {
+        "artist": {
+          "value": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 17,
+          "published": 17,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "legion-of-mary",
+      "artistUuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "workflowId": "ingest/artist/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "resultRunId": "01a14a90-cf86-7ae8-b6b5-5a6b5c6c2776",
+      "result": {
+        "artist": {
+          "value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 39,
+          "published": 39,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "jerry-garcia-band",
+      "artistUuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "workflowId": "ingest/artist/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "resultRunId": "01a14a90-cf8b-7b90-8a81-37ed93ed2cd7",
+      "result": {
+        "artist": {
+          "value": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 268,
+          "published": 265,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 3,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "reconstruction",
+      "artistUuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b",
+      "workflowId": "ingest/artist/9005bbe7-66fd-e468-ebf0-38185d1d2b7b",
+      "resultRunId": "01a14a90-cf8e-71a1-bf3b-0609254db026",
+      "result": {
+        "artist": {
+          "value": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 11,
+          "published": 11,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "garcia-kahn",
+      "artistUuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c",
+      "workflowId": "ingest/artist/ffc6f61c-dd5d-83a2-a319-4a486ac0123c",
+      "resultRunId": "01a14a90-cf90-7abe-9cb8-76d4065418b6",
+      "result": {
+        "artist": {
+          "value": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 11,
+          "published": 11,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "jerry-garcia-acoustic-band",
+      "artistUuid": "506e3842-2f38-3b99-ae64-35caeb928e6b",
+      "workflowId": "ingest/artist/506e3842-2f38-3b99-ae64-35caeb928e6b",
+      "resultRunId": "01a14a90-cf95-72c6-b901-145c6348c237",
+      "result": {
+        "artist": {
+          "value": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 5,
+          "published": 5,
+          "unchanged": 0,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    }
+  ],
+  "repeat_workflows": [
+    {
+      "slug": "garcia-saunders",
+      "artistUuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "workflowId": "ingest/artist/5018c6e6-333c-4a13-8d45-298ac56b2295",
+      "resultRunId": "01a14a93-751f-74de-9d6a-a4e300e82073",
+      "result": {
+        "artist": {
+          "value": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 17,
+          "published": 0,
+          "unchanged": 17,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "legion-of-mary",
+      "artistUuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "workflowId": "ingest/artist/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+      "resultRunId": "01a14a93-7535-7436-a332-b2a67e4a6f49",
+      "result": {
+        "artist": {
+          "value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 39,
+          "published": 0,
+          "unchanged": 39,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "jerry-garcia-band",
+      "artistUuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "workflowId": "ingest/artist/28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+      "resultRunId": "01a14a93-7537-74d2-a575-83b7bd1713f5",
+      "result": {
+        "artist": {
+          "value": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 268,
+          "published": 0,
+          "unchanged": 265,
+          "deferred": 0,
+          "needsReview": 3,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "reconstruction",
+      "artistUuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b",
+      "workflowId": "ingest/artist/9005bbe7-66fd-e468-ebf0-38185d1d2b7b",
+      "resultRunId": "01a14a93-7539-71c1-b460-f2d57b0699a2",
+      "result": {
+        "artist": {
+          "value": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 11,
+          "published": 0,
+          "unchanged": 11,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "garcia-kahn",
+      "artistUuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c",
+      "workflowId": "ingest/artist/ffc6f61c-dd5d-83a2-a319-4a486ac0123c",
+      "resultRunId": "01a14a93-753e-7167-bfa0-4740ae1be6e2",
+      "result": {
+        "artist": {
+          "value": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 11,
+          "published": 0,
+          "unchanged": 11,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    },
+    {
+      "slug": "jerry-garcia-acoustic-band",
+      "artistUuid": "506e3842-2f38-3b99-ae64-35caeb928e6b",
+      "workflowId": "ingest/artist/506e3842-2f38-3b99-ae64-35caeb928e6b",
+      "resultRunId": "01a14a93-7541-776e-b928-f9401d435ece",
+      "result": {
+        "artist": {
+          "value": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+        },
+        "summary": {
+          "discovered": 0,
+          "observed": 5,
+          "published": 0,
+          "unchanged": 5,
+          "deferred": 0,
+          "needsReview": 0,
+          "paused": 0,
+          "unavailable": 0,
+          "failed": 0,
+          "conflicts": 0,
+          "limited": false,
+          "failures": null
+        },
+        "rebuildCompleted": true
+      },
+      "failureType": null
+    }
+  ],
+  "performance_review": {
+    "artistUuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+    "assignments": [
+      {
+        "identifier": "jg75-04-11.014607.lom.early.aud.moore-minches.shnf",
+        "sourceUuid": "4e8ee71a-82ca-863c-bfec-d2752854541d",
+        "showUuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+        "performanceType": "early",
+        "observationId": "a68f0a34-48ac-43bc-9da9-ea2f9d04be65",
+        "contentHash": "9291ba5fc891db1fa00c41a77d25599d92fc233ce0bf6b3d2e09dffa8e5f3bae"
+      },
+      {
+        "identifier": "jg75-04-11.112588.lom.early.aud-moore.flac16",
+        "sourceUuid": "2d655e30-635f-a5bf-8291-1259d684bfc4",
+        "showUuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+        "performanceType": "early",
+        "observationId": "73168b4b-3316-417d-b352-fe61367eb34f",
+        "contentHash": "e72d836058d8bcb5f7335f468f6b4c4861d2231650e72f95acb544dd0fdffcb5"
+      },
+      {
+        "identifier": "jg75-04-11.138207.lom.early.sonyf99s.peters.zombiwoof.t-flac16",
+        "sourceUuid": "6178c73a-818d-0ce0-a269-e95ac1680aaf",
+        "showUuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+        "performanceType": "early",
+        "observationId": "f5b2a42b-0924-401c-ac75-4eaec3f6440b",
+        "contentHash": "446766328d7bf1b21ff2bfc06ead3a36392dff912bfc8b0c53ed0bae253557bc"
+      },
+      {
+        "identifier": "jg75-04-11.014608.lom.aud-late.moore-minches.sbeok.uv-flac16",
+        "sourceUuid": "9cf38e56-76c8-5c97-d89e-671ac47dfa99",
+        "showUuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd",
+        "performanceType": "late",
+        "observationId": "a66e8c75-be02-40e7-87ff-779400068f05",
+        "contentHash": "389984c817b69f1209903be287efba8c43b93a50720760235d190bbe687f87c4"
+      },
+      {
+        "identifier": "jg75-04-11.112587.lom.late.aud-moore.flac16",
+        "sourceUuid": "b2a5f3a7-826d-c492-4a11-a71ead6cc756",
+        "showUuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd",
+        "performanceType": "late",
+        "observationId": "b0c4a33e-e801-4b5f-9792-aa32f7cd1452",
+        "contentHash": "6dbbf01c6a09f659cd88d1b972eba9f238219bf5ee06120353a774b64f76a136"
+      }
+    ],
+    "workflowId": "ingest/artist/a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+    "resultRunId": "01a14a93-4209-7340-9295-0b9ca27d5052",
+    "result": {
+      "artist": {
+        "value": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+      },
+      "completedItems": 0,
+      "skippedItems": 0,
+      "failedItems": 0,
+      "status": "Completed"
+    }
+  },
+  "split_comparison": {
+    "passed": true,
+    "original_show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+    "new_show_uuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd",
+    "moved_sources": [
+      {
+        "source_uuid": "9cf38e56-76c8-5c97-d89e-671ac47dfa99",
+        "identifier": "jg75-04-11.014608.lom.aud-late.moore-minches.sbeok.uv-flac16",
+        "old_show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+        "new_show_uuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd"
+      },
+      {
+        "source_uuid": "b2a5f3a7-826d-c492-4a11-a71ead6cc756",
+        "identifier": "jg75-04-11.112587.lom.late.aud-moore.flac16",
+        "old_show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+        "new_show_uuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd"
+      }
+    ],
+    "all_source_set_track_uuids_and_playback_unchanged": true,
+    "sources_checked": 348,
+    "sets_checked": 348,
+    "tracks_checked": 3700
+  },
+  "http_before_split": {
+    "checked_at_utc": "2026-10-17T15:55:14.166365+00:00",
+    "passed": true,
+    "playable_recordings_in_scope": 348,
+    "artists": 6,
+    "shows_read": 268,
+    "sources_read": 348,
+    "sets_read": 348,
+    "tracks_read": 3700,
+    "dates_read": 266,
+    "dates_with_multiple_performances": 1,
+    "partial_date_shows": 4,
+    "performance_types": {
+      "unknown": 268
+    },
+    "identity_sha256": "985f7004eb30d6c1deb6757f4af7504053fb40b4bfb3101e0c0233e8641add84",
+    "repeat_equal": false,
+    "http_requests": 843
+  },
+  "http_after_split": {
+    "checked_at_utc": "2026-10-17T15:55:35.563808+00:00",
+    "passed": true,
+    "playable_recordings_in_scope": 348,
+    "artists": 6,
+    "shows_read": 269,
+    "sources_read": 348,
+    "sets_read": 348,
+    "tracks_read": 3700,
+    "dates_read": 266,
+    "dates_with_multiple_performances": 2,
+    "partial_date_shows": 4,
+    "performance_types": {
+      "unknown": 267,
+      "early": 1,
+      "late": 1
+    },
+    "identity_sha256": "a0bbc7120c4b92061869a6f242822f8bfc0af3d4f2486085951bb06a53babf3a",
+    "repeat_equal": false,
+    "http_requests": 844
+  },
+  "http_repeat": {
+    "checked_at_utc": "2026-10-17T15:57:06.997613+00:00",
+    "passed": true,
+    "media_range": {
+      "track_uuid": "d502ea83-ce68-a3ae-78f7-bc9b47bdd87f",
+      "status": 206,
+      "bytes_read": 4096,
+      "content_type": "audio/mpeg",
+      "url_sha256": "04b37f45cf045d880aacda2ab8ce2d216ef6411de33c7f027cb72746a99516bd"
+    },
+    "playable_recordings_in_scope": 348,
+    "artists": 6,
+    "shows_read": 269,
+    "sources_read": 348,
+    "sets_read": 348,
+    "tracks_read": 3700,
+    "dates_read": 266,
+    "dates_with_multiple_performances": 2,
+    "partial_date_shows": 4,
+    "performance_types": {
+      "unknown": 267,
+      "early": 1,
+      "late": 1
+    },
+    "identity_sha256": "a0bbc7120c4b92061869a6f242822f8bfc0af3d4f2486085951bb06a53babf3a",
+    "repeat_equal": true,
+    "http_requests": 844
+  },
+  "repeat_comparison": {
+    "equal": true,
+    "differences": []
+  },
+  "internal_assignment_counts": {
+    "legacy": 319,
+    "combined": 20,
+    "unresolved": 4,
+    "accepted": 5
+  },
+  "recordings": [
+    {
+      "identifier": "jg73-01-24.009783.jgms.late.sbd.jjoops.sbeok.t-flac1648",
+      "source_uuid": "155b6eb4-8b4c-e20f-7d14-8a963f666bc2",
+      "show_uuid": "15027207-92c3-4922-8d18-f6ae6429b908",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg73-05-23.009587.jgms.late.sonyECM22p.night_crew.jupille.sbeok.t-flac16",
+      "source_uuid": "59b901f0-9fc5-4a93-2254-4e2fa2e27a41",
+      "show_uuid": "08589460-3f1d-4faf-8ab1-e77e1538520d",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg73-07-08.011039.jgms.prefm.sbd.sbeok.t-flac16",
+      "source_uuid": "faf04011-a309-5502-8e20-ae862ffb189b",
+      "show_uuid": "d3856ff0-6015-eb52-9a98-b1120ce7c5c8",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg73-09-06.016878.jgms.akg1000.moore.jupille.sbeok.t-flac16",
+      "source_uuid": "bd3553e6-1150-bfc8-1ee5-e832358a2a20",
+      "show_uuid": "eff7834e-545f-46e8-8529-f6803cea4133",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-01-17.076474.jgms.sbd.tobin.sbeok.t-flac16",
+      "source_uuid": "880ed47d-5164-41dc-3cae-7e3875ca897c",
+      "show_uuid": "bcb8ae93-22ef-4067-93b0-f1839db14c47",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-01-18.008873.jgms.sonyECM250.falanga.jupille.sbeok.t-flac16",
+      "source_uuid": "3d998a28-1d5e-1ee8-a6c5-1f4b7ce5f4a8",
+      "show_uuid": "1342bb15-34b9-428f-8b99-b7dfff75ad99",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-02-16.008063.jgms.sonyECM250.falanga.jupille.sbeok.t-flac16",
+      "source_uuid": "6223aa6e-90ca-460c-43da-d3a0de5334f6",
+      "show_uuid": "5ce6a2e1-48b2-4740-8a7f-916201cc27f5",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-06-06.006375.jgms.aud.falanga.jjoops.sbeok.t-flac16",
+      "source_uuid": "bf0c109b-2f15-ab20-f8b5-e48565f56017",
+      "show_uuid": "a14458e7-f667-4232-ad31-4edae89f7252",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-07-02.112133.jgms.akg100.moore.minches.speed-corrected.flac16",
+      "source_uuid": "fd25a88a-633d-4eeb-bc48-dbee0707612a",
+      "show_uuid": "245040c9-cbd4-4786-aaf4-f9c8eb65bea5",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-08-15.008650.jgms.sonyECM250.falanga.sbeok.t-flac16",
+      "source_uuid": "19a71cb9-d7a8-7c68-b246-b7a516190cda",
+      "show_uuid": "1239327d-dc42-4f76-b8c5-8c6d9afde615",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-08-24.010612.jgms.sbd.jjoops.sbeok.t-flac16",
+      "source_uuid": "cbd14ad5-3e74-c2a4-98c9-cf8cb8b7011f",
+      "show_uuid": "41785dbc-4131-493e-bbe6-2bed67f08aca",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-09-02.076174.jgms.partial.sbd.sterchelle.sbeok.t-flac16",
+      "source_uuid": "7cf015df-7c20-4ae6-6575-a7f87c60735e",
+      "show_uuid": "4930b9ee-4d93-411c-b8aa-6d2ee6b23a38",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg74-10-31.019436.jgms.sbd.cousinit.sbeok.t-flac16",
+      "source_uuid": "e736a614-8614-f2f9-8364-3d8803b93b53",
+      "show_uuid": "971d08a4-7867-47b3-aa19-2e6ddd31a63c",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg74-11-05.111498.jgms.early.akg1000.moore.berger.t-flac16",
+      "source_uuid": "6a1a3398-d3bd-bd1e-df0c-cff5e4de7859",
+      "show_uuid": "7b1f7a1a-6fe6-4645-a85f-e5008d930498",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-11-06.016807.jgms.early.akg1000.moore.minches.jjoops.sbeok.t-flac16",
+      "source_uuid": "c25153cb-9363-7681-535d-3946ac1d331a",
+      "show_uuid": "ae8b9e6b-c69a-4d71-9556-7b528abcb6bc",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-11-08.016839.jgms.akg1000.moore.jjoops.sbeok.t-flac16",
+      "source_uuid": "8255d749-9570-e5d7-d1eb-99d63080ae81",
+      "show_uuid": "3dc79ebd-2e33-43dc-a7ef-51b66be84a61",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-11-09.008661.jgms.late.akg190e.slabicky.jjoops.sbeok.t-flac16",
+      "source_uuid": "570e45ad-3959-4427-96d5-12bb37940e9e",
+      "show_uuid": "9f4da489-be0d-4ee8-a4e6-166777a7d857",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-11-14.135968.jgms.early.aud.unknown.andrewf.t-flac16",
+      "source_uuid": "6094e9ba-1767-6d8e-9bd9-6e43a2117dd9",
+      "show_uuid": "d5006639-036b-410b-a11e-eb8af5de3e64",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg74-11-15.008071.jgms.late.sbd.shriver-lemieux.sbeok.t-flac16",
+      "source_uuid": "f371cb01-6077-11b0-2441-4af8b6a86389",
+      "show_uuid": "b179daed-f0fc-4fe3-a828-523e9ed17ca4",
+      "artist_uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295"
+    },
+    {
+      "identifier": "jg75-03-07.023338.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "source_uuid": "2afdcac8-ca0c-75a8-6d6f-99e10378dc4b",
+      "show_uuid": "a2ec3f92-2b0c-0b14-8f1b-333747f6f65e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-03-08.017315.lom.late.aud.philips.jupille.sbeok.t-flac16",
+      "source_uuid": "9bf212c4-bd10-9d81-cdec-be8b13653f33",
+      "show_uuid": "08c7754a-d848-4d26-bc20-b1a22bdcdae4",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-03-16.024417.lom.early.aud.unknown.powell-ladner.t-flac16",
+      "source_uuid": "2b78a269-f5cc-384b-ca5d-340202fc5c07",
+      "show_uuid": "ffb786f9-b225-4da6-b1f3-7f80a4b6ebdf",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-04.011020.lom.sbd.jupille.t-flac16",
+      "source_uuid": "e64e31be-8f54-f1e4-7391-e1862d57e909",
+      "show_uuid": "082c4a9e-8e97-4372-bd3b-82a7156a549e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-05.010977.lom.early.sbd.partial.jupille.sbeok.t-flac16",
+      "source_uuid": "d3d8bbd3-2bbc-a2c4-5aa3-fd0f63950287",
+      "show_uuid": "636a7e8c-6e08-4749-b7ba-88df7b2d707e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-05.138217.lom.early.aud.unknown.andrewf.flac16",
+      "source_uuid": "487f1ac8-7e3d-5e2f-b808-2e3e941a015d",
+      "show_uuid": "636a7e8c-6e08-4749-b7ba-88df7b2d707e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-06.122862.lom.early-plate.sonyECM99a.warburton.cousinit.t-flac16",
+      "source_uuid": "bf161b47-242a-1c31-e938-97933a0689fc",
+      "show_uuid": "b4e35713-4398-4ddc-96c4-b0f1177043d2",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-08.014207.lom.aud.early.moore.sbeok.shnf",
+      "source_uuid": "39a84b74-f137-de10-bd25-fac47fa9d8ea",
+      "show_uuid": "7bf42ae4-b83d-42b1-bf6c-cfdc441e6546",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-08.114091.lom.early.aud.moore.flac16",
+      "source_uuid": "e7b93cf9-5bee-a8b9-eee9-619ba5a4d231",
+      "show_uuid": "7bf42ae4-b83d-42b1-bf6c-cfdc441e6546",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-09.014606.lom.early.akg1000.moore.minches.t-flac16",
+      "source_uuid": "e5040890-a927-cc09-9283-6b8e4fbbb4c4",
+      "show_uuid": "acd7caa0-851c-428d-8467-a229d15fd77b",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-09.035022.lom.mtx.early.chappell.sbeok.t-flac16",
+      "source_uuid": "ee7b1b1e-17d4-4f56-c608-b06e6ac479e7",
+      "show_uuid": "acd7caa0-851c-428d-8467-a229d15fd77b",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-09.088932.lom.plate.sonyECM99a.slabicky.minches.t-flac16",
+      "source_uuid": "01ba9be8-a919-eba3-6637-d67063e0ea03",
+      "show_uuid": "acd7caa0-851c-428d-8467-a229d15fd77b",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-09.114442.lom.early.aud.moore.flac16",
+      "source_uuid": "d8afbf45-928d-7f23-8c5f-a73a7757498e",
+      "show_uuid": "acd7caa0-851c-428d-8467-a229d15fd77b",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-09.141665.lom.sbd.stuccoholmes.wenzel.gems.t-flac1648",
+      "source_uuid": "ea9c5d1f-4765-c2dc-4bd8-b45c84d57c63",
+      "show_uuid": "acd7caa0-851c-428d-8467-a229d15fd77b",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-10.014209.lom.early.akg1000.moore.minches.sbeok.t-flac16",
+      "source_uuid": "2e798bf0-0a59-da26-7132-7558ee7b8d09",
+      "show_uuid": "a6e53c4a-fc72-4ba6-8873-e1b35c7356c3",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-10.117250.lom.early.akgd100e.moore.minches.t-flac2496",
+      "source_uuid": "51354cc4-5516-6b51-7492-592c0fd1f841",
+      "show_uuid": "a6e53c4a-fc72-4ba6-8873-e1b35c7356c3",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-10.121745.lom.late.aud.disalovo.berger.t-flac16",
+      "source_uuid": "a1223087-a7d2-5411-85b0-9ab16f8a0448",
+      "show_uuid": "a6e53c4a-fc72-4ba6-8873-e1b35c7356c3",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-11.014607.lom.early.aud.moore-minches.shnf",
+      "source_uuid": "4e8ee71a-82ca-863c-bfec-d2752854541d",
+      "show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-11.014608.lom.aud-late.moore-minches.sbeok.uv-flac16",
+      "source_uuid": "9cf38e56-76c8-5c97-d89e-671ac47dfa99",
+      "show_uuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-11.112587.lom.late.aud-moore.flac16",
+      "source_uuid": "b2a5f3a7-826d-c492-4a11-a71ead6cc756",
+      "show_uuid": "8963bf0a-2819-408e-bc36-a9f54c67b9fd",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-11.112588.lom.early.aud-moore.flac16",
+      "source_uuid": "2d655e30-635f-a5bf-8291-1259d684bfc4",
+      "show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-11.138207.lom.early.sonyf99s.peters.zombiwoof.t-flac16",
+      "source_uuid": "6178c73a-818d-0ce0-a269-e95ac1680aaf",
+      "show_uuid": "8f949dd1-526a-4074-8da3-4986785068e8",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-12.031479.lom.late.sbd.sirmick.sbeok.t-flac16",
+      "source_uuid": "f92ea98a-0585-03b1-f66e-3cdc17e7612a",
+      "show_uuid": "ce028f5f-252e-46eb-9cbd-596bed21c12e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-12.117832.lom.sbd.late.gems.flac16",
+      "source_uuid": "b5de8345-ffb3-f424-6cdd-bc573ca8f587",
+      "show_uuid": "ce028f5f-252e-46eb-9cbd-596bed21c12e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-12.118574.lom.early.psbd.arfarf.t-flac16",
+      "source_uuid": "c9dd89f0-b4df-099f-bc53-8a9246e1d62a",
+      "show_uuid": "ce028f5f-252e-46eb-9cbd-596bed21c12e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-12.123478.lom.early.psbd.composite.flac16",
+      "source_uuid": "aad66e9e-bac0-b92e-c98a-cf5610b52903",
+      "show_uuid": "ce028f5f-252e-46eb-9cbd-596bed21c12e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-13.004483.lom.late.psbd.metz.sbeok.t-flac16",
+      "source_uuid": "cb0f2a74-5841-d54b-90c1-ef8e7566e598",
+      "show_uuid": "debb23b0-c9be-44a8-b832-cae64795ff5a",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-18.138626.lom.pset2.sbd.gastwirt.miller.sirmick.sbeok.t-flac1648",
+      "source_uuid": "a45458b9-a340-10d7-736f-613561bd8add",
+      "show_uuid": "dd6ac94d-a892-4bd3-837b-3d05b39bd4ca",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-04-19.138941.lom.sbd.gastwirt.miller.sirmick.sbeok.t-flac16",
+      "source_uuid": "60062bdf-f16d-f956-b14a-4a271622d908",
+      "show_uuid": "6f2349e8-0aaf-40de-93c6-76f1af6bf066",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-05-09.107829.lom.aud.castelli.menke.motb.0144.flac16",
+      "source_uuid": "0c08837b-9dce-759a-7894-5eb4156c3f9a",
+      "show_uuid": "59efb603-2396-471d-9556-7e490e0fe00e",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-05-21.087149.lom.sbd.tobin.sbeok.t-flac16",
+      "source_uuid": "825a64ae-45be-65f0-7e24-a398a864c728",
+      "show_uuid": "b9ecc669-ac4e-4834-8cc9-7a8be603e5e3",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-05-21.138651.lom.psbd.gastwirt.miller.sirmick.sbeok.t-flac1648",
+      "source_uuid": "9264fbcb-8251-4eee-d639-16c79f8868c6",
+      "show_uuid": "b9ecc669-ac4e-4834-8cc9-7a8be603e5e3",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-05-22.089046.lom.sbd.part.betty.t-flac16",
+      "source_uuid": "b9786cec-45ae-1ad4-2c43-a06ea21f125b",
+      "show_uuid": "f48681b5-03e0-4160-88b0-34f98adbb21c",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-06-08.089915.lom.fob-sonyECMs.menke-falanga.motb.0061.t-flac16",
+      "source_uuid": "afe5b1ee-a1d8-a9bf-6fa7-cf481779853d",
+      "show_uuid": "d733cc28-7720-4f82-bced-e4a7b4b1f2a1",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-06-21.089228.lom.sbd.set1p.betty.t-flac16",
+      "source_uuid": "c34a3146-9d6c-7416-5f12-572da621b660",
+      "show_uuid": "be6def81-e5ca-4cf7-b4ca-6e5b7fa3f7aa",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-07-04.091465.lom.fob.rhinotrocity2.motb.0067.flac16",
+      "source_uuid": "34395c21-eed1-9c57-d6eb-cae079d59619",
+      "show_uuid": "32b93012-eca7-4255-869f-77c85d4b29c8",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-07-04.105594.lom.set2.mtx.sirmick.sbeok.t-flac16",
+      "source_uuid": "d311d01a-a6ba-6657-32e7-303d428c1094",
+      "show_uuid": "32b93012-eca7-4255-869f-77c85d4b29c8",
+      "artist_uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1"
+    },
+    {
+      "identifier": "jg75-09-20.023739.jgb.aud.unknown.powell-ladner.sbeok.t-flac16",
+      "source_uuid": "d2ac10f4-0acc-3867-0c7b-b8a5d24ac4d6",
+      "show_uuid": "c89bd933-f40c-4717-9d72-29bf570930a5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-09-xx.121425.jgb.rehearsals.sbd.tamarkin.t-flac16",
+      "source_uuid": "d03278b6-e825-0a7e-8fef-f08d7910aabd",
+      "show_uuid": "8ddf129f-2718-4a9a-bc97-ad2780b02921",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-08.088933.jgb.part.sbd.unknown.t-flac16",
+      "source_uuid": "b8d6fafa-da55-057a-a0af-09b4b07582b9",
+      "show_uuid": "5ca7ac06-825c-4723-9f12-c00c3c242d60",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-11.031213.jgb.sbd.minches.t-flac16",
+      "source_uuid": "6e3b795a-6e05-758e-375e-24d85598e624",
+      "show_uuid": "8d3eb381-2137-4808-b074-7d5af07b6709",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-12.007669.jgb.fob-sonyECMs.menke-falanga.warner.t-flac16",
+      "source_uuid": "2d55f3cc-286e-8426-8725-4cca65477455",
+      "show_uuid": "34a48e07-e029-4c58-b967-4223209650c9",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-17.090056.jgb.psbd.gmb.sbeok.t-flac16",
+      "source_uuid": "2da22d1f-ceba-9222-4b66-b2d059c3d907",
+      "show_uuid": "f00ee0d3-7faf-44b4-ad3f-c850eac61b23",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-22.100623.jgb.GEMS.flac16",
+      "source_uuid": "7dd6f78b-8ef7-c9ea-3cf8-04a549f57e72",
+      "show_uuid": "888a4f9f-8370-45f3-8783-59f0b9998009",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-24.076113.jgb.early.sbd.gans.bcp.t-flac16",
+      "source_uuid": "bba562d9-ad70-4fc0-6abe-6d265c9ddf3e",
+      "show_uuid": "a497d856-177d-4cb3-8ea0-1a8f46e09f21",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-24.089504.jgb.early.mtx.tobin.t-flac16",
+      "source_uuid": "9b64cdde-82d1-4e8a-15b3-a19b1ec62a00",
+      "show_uuid": "a497d856-177d-4cb3-8ea0-1a8f46e09f21",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-27.080296.jgb.aud.unknown.minches.t-flac16",
+      "source_uuid": "6d60069b-3c7e-05f9-ff08-f957178d34db",
+      "show_uuid": "794e23b1-80fb-4b15-9605-d315ccfab570",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-28.011282.jgb.late.akg1000.moore.jupille.sbeok.t-flac16",
+      "source_uuid": "d33d1b45-5eab-7b2e-4546-90847bea8254",
+      "show_uuid": "99acbb29-3e97-4ea5-9aef-eda31fc66368",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-28.125513.jgb.late.sonyECM22.cooper.berger.t-flac16",
+      "source_uuid": "bb086116-58eb-ba67-f8ba-ef484d9b46ba",
+      "show_uuid": "99acbb29-3e97-4ea5-9aef-eda31fc66368",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-28.135275.jgb.early.aud.unknown.andrewf.t-flac16",
+      "source_uuid": "ac11f664-63c9-4a6b-8914-ff98ce0c931f",
+      "show_uuid": "99acbb29-3e97-4ea5-9aef-eda31fc66368",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-31.009267.jgb.late.shure.disalvo.t-flac16",
+      "source_uuid": "db9b52f5-19c6-094c-350f-ea9fdfeb3b70",
+      "show_uuid": "558ac4c1-2063-4db7-aa7f-1a943264be2f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-31.085634.jgb.early.aud.wh1pnk.sbeok.t-flac16",
+      "source_uuid": "26c20d92-69d7-a251-ca79-5df8d3a06f47",
+      "show_uuid": "558ac4c1-2063-4db7-aa7f-1a943264be2f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-10-31.088934.jgb.late.aud.minkin.jjoops.t-flac16",
+      "source_uuid": "a6569f06-9c6c-ed5a-eb2a-b33894ac3c1b",
+      "show_uuid": "558ac4c1-2063-4db7-aa7f-1a943264be2f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-11-01.089458.jgb.akg190.slabicky.waddell.GEMS.t-flac16",
+      "source_uuid": "0f5c7772-a2e9-2e4d-0348-75820e58ead4",
+      "show_uuid": "9c3e5a5e-b36d-4ca2-9940-a77ababd0d21",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-11-08.109001.jgb.fob.castelli.menke.motb.0151.flac16",
+      "source_uuid": "4bd2ac6f-ac0c-d565-ba47-df40b6a69623",
+      "show_uuid": "396b834f-ec51-4985-a5ab-5ba3260c27e9",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-11-21.142000.jgb.aud.unknown.t-flac16",
+      "source_uuid": "1ef37dc7-d4e2-fbd8-8d44-df8dde922a66",
+      "show_uuid": "5c89c9b3-e83e-4b56-aa3d-8a512a6f3ff5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-11-23.028367.jgb.aud.unknown.t-flac16",
+      "source_uuid": "d1a07a10-750e-98e8-8a95-cb5ca554d8a4",
+      "show_uuid": "0e9ab166-e332-408b-856c-a7fb9498d8ac",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-17.008662.jgb.fob-sonyECMs.menke-falanga.sbeok.t-flac16",
+      "source_uuid": "ea5965c2-7f7d-c5b0-5963-be56f4ab0779",
+      "show_uuid": "74a23ddc-2adc-4763-9bcf-c2d7b81f9142",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-19.031779.jgb.sbd.ashley.bertha.sbeok.t-flac16",
+      "source_uuid": "236265ad-19f6-8a25-06f4-a2055d230b5c",
+      "show_uuid": "a07890b6-c2f7-4980-955a-f02839c9ad8a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-19.094390.jgb.fob-sonyEcm.rhinotrocity3.motb.0075.flac24",
+      "source_uuid": "c72d7b3e-6427-a5b3-bb22-4c402757940b",
+      "show_uuid": "a07890b6-c2f7-4980-955a-f02839c9ad8a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-20.008663.jgb.sonyECM.menke-falanga.warner.sbeok.t-flac16",
+      "source_uuid": "a55a22b3-30da-390b-c663-57023243fca6",
+      "show_uuid": "30715795-7416-4303-88c7-a985658597e5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-20.089580.jgb.mtx.tobin.t-flac16",
+      "source_uuid": "7bb650fe-cafa-877d-a951-aa048b3749f8",
+      "show_uuid": "30715795-7416-4303-88c7-a985658597e5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-31.008664.jgb.fob-sonyECMs.menke-falanga.sbeok.t-flac16",
+      "source_uuid": "8e3e7520-566c-d21d-d1c5-e2b52b5500aa",
+      "show_uuid": "6c9d61d8-f653-4d5f-8f68-01f849b2bd6d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-12-31.126967.jgb.mtx.chappell.sb33.flac16",
+      "source_uuid": "803f3429-47a0-6e4c-40c5-86001bb8ad59",
+      "show_uuid": "6c9d61d8-f653-4d5f-8f68-01f849b2bd6d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-xx-xx.122575.jgb.reflectionsouttakes.sbd.damico.t-flac16",
+      "source_uuid": "d43bf134-300d-b511-4196-2a440da4d31a",
+      "show_uuid": "c5e45925-6b05-4d92-8cf7-fc596eaab705",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-xx-xx.134027.jgb.rehearsal.boswell-smith.flac16",
+      "source_uuid": "39e8f178-cfaf-ed85-d182-6756e30b722a",
+      "show_uuid": "a9a7e37d-6d09-478e-a81d-f079eedb69d8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg75-xx-xx.136764.jgb.reflectionsouttakes.phasecorrected-122575.GEMS.t-flac16",
+      "source_uuid": "402c31d8-1c4f-5bb9-4d8b-c68496092472",
+      "show_uuid": "4b51868e-82b7-4012-8633-262e9534e881",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-01-07.028366.jgjb.sbd.sbeok.t-flac16",
+      "source_uuid": "e4f3867d-df0c-6deb-1477-759c9ac0f0a3",
+      "show_uuid": "1115c2fd-d22e-440a-95c5-acbf21377f45",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-01-25.012504.jgb.rehearsal.sbd.jupille.sbeok.t-flac16",
+      "source_uuid": "d164597e-2ba0-2468-385c-4ece08cc9bd3",
+      "show_uuid": "44fe1c43-a3cc-4492-8a97-76e88f950028",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-01-28.135944.jgb.sbd.t-flac16",
+      "source_uuid": "50713886-d835-32cd-aaf1-6f8076d7b5fe",
+      "show_uuid": "6026ce95-28f0-48d0-9616-2bc5c76e9a20",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-14.004465.jgb.sbd.unknown.t-flac16",
+      "source_uuid": "201cc9ce-8697-5c57-72b8-9b56cdf1d17f",
+      "show_uuid": "65ca3d9d-8ae8-417b-85a3-91fff385a8f1",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-15.133622.jgb.sony.parrish.jupille.t-flac16",
+      "source_uuid": "4414cbd6-2f6e-49aa-ed91-2ac38fafb5a6",
+      "show_uuid": "91ca75a4-e5ff-43f2-b8e1-da18adc21371",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-21.032834.jgb.early.sbd.ladner.sbeok.t-flac16",
+      "source_uuid": "2479d41d-e382-dcb2-e90b-be1ab949de36",
+      "show_uuid": "8fd1b54a-472b-4d15-a30c-96b73656b53c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-21.108055.jgb.late.sbd.shriver.t-flac16",
+      "source_uuid": "36e401eb-6b86-7b51-2267-b9f1092da73b",
+      "show_uuid": "8fd1b54a-472b-4d15-a30c-96b73656b53c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-22.015181.jgb.early.aud.unknown.jupille.sbeok.t-flac16",
+      "source_uuid": "ecb7ce88-b12d-03ec-3979-1a302ee9d12f",
+      "show_uuid": "3931b607-ab64-475c-bb9f-b800a27f2a04",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-22.015182.jgb.late.aud.unknown.jupille.sbeok.t-flac16",
+      "source_uuid": "8bfa0691-f85a-0049-8c83-26a7a9ff2f93",
+      "show_uuid": "3931b607-ab64-475c-bb9f-b800a27f2a04",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-02-24.100710.jgb.s2.sbd.t-flac16",
+      "source_uuid": "f2ebbadc-0282-e445-4412-57e55f07dc58",
+      "show_uuid": "dcbb4a8c-96e4-422f-8690-43578e585245",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-03-03.009588.jgb.set2.fob-sonyECM18.wolfe.sbeok.t-flac16",
+      "source_uuid": "6034378b-f520-43ac-730a-d7c961b29351",
+      "show_uuid": "5be917a2-8535-4ca5-8b1f-36c6e5549428",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-03-06.107734.jgb.fob.lee.smith.motb.0142.flac16",
+      "source_uuid": "d3700a53-efa2-c33f-f034-6df1fdc6b8b3",
+      "show_uuid": "2361f7c3-4620-46d4-9bb6-879d9eb3e767",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-03-12.139524.jgb.late.aud.unknown.andrewf.t-flac16",
+      "source_uuid": "3950cfa6-8b87-3e06-4986-233b25a5de6e",
+      "show_uuid": "ad4221e0-b1aa-4bf4-8c10-0f2d5223b8c3",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-03-14.029134.jgb.set1.aud.unknown.minches.sbeok.t-flac16",
+      "source_uuid": "123e55d8-4fe5-8643-279e-3cbe82840e12",
+      "show_uuid": "ca2e9b12-6478-4de7-bd31-9a06e5f130b0",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-03-26.008387.jgb.aud.unknown.sbeok.t-flac16",
+      "source_uuid": "4d757cd5-7a17-a123-6e6f-dfa4c549aca7",
+      "show_uuid": "3c04f113-d97c-44cb-887f-98d2f5ce430e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-04-01.018602.jgb.sonyECM33.moore.cohen.sbeok.t-flac16",
+      "source_uuid": "bddc4675-b438-9778-7ec9-a21c62a1c119",
+      "show_uuid": "3c81bfe9-a87a-4c19-899f-1200ed2d498e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-04-03.017328.jgb.late.aud.jones.sbeok.t-flac16",
+      "source_uuid": "4cef801b-973d-30ba-51dd-4993fc62938a",
+      "show_uuid": "57e17937-69ae-414d-92a0-a97f347aa3a7",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-04-03.082761.jgb.early.aud.unknown.t-flac16",
+      "source_uuid": "49b2781c-7664-e02b-e578-d3d30e9c2263",
+      "show_uuid": "57e17937-69ae-414d-92a0-a97f347aa3a7",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-04-03.123020.jgb.late.shure.stevenson.t-flac16",
+      "source_uuid": "76735576-c446-621c-20f3-8275a2eb67e4",
+      "show_uuid": "57e17937-69ae-414d-92a0-a97f347aa3a7",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-04-03.138204.jgb.early.sonyf99s.peters.zombiwoof.t-flac16",
+      "source_uuid": "6b70868b-b2f9-db67-d8ae-f4f445c39b72",
+      "show_uuid": "57e17937-69ae-414d-92a0-a97f347aa3a7",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-05-20.101352.jgb.fob.menke-hohlwein.motb.0094.flac16",
+      "source_uuid": "4c9abcf8-8894-a1f6-5aad-1ebf80680ff8",
+      "show_uuid": "fadb0b52-2d28-4b15-bae7-39e5f054c71a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-05-23.143280.jgb.sony.tarzwell-martin.flyingm.t-flac16",
+      "source_uuid": "7deb8174-9465-a165-da8f-9674da4322fb",
+      "show_uuid": "eb77d4b7-9eea-4ab2-a52a-e13bb932bb6f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-07-09.013539.jgb.sbd-set2.sbeok.t-flac16",
+      "source_uuid": "8d1df96f-7281-50e5-9b54-2eed29d7535e",
+      "show_uuid": "480ec427-7cc6-4239-87ba-80f78f46bcef",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-07-20.016478.jgb.sbd.clifton.sbeok.t-flac16",
+      "source_uuid": "c89e8789-7aa5-92f9-ced3-f742043e1798",
+      "show_uuid": "a14514f4-833f-4f29-bad7-5562e0f5f80e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-08-22.081065.jgb.aud.unknown.tobin.sbeok.t-flac16",
+      "source_uuid": "cdf86194-7346-effd-447e-3156fa3d1488",
+      "show_uuid": "bf0f81c5-3d5b-4387-8f2d-9f0a8b932f74",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-09-10.096791.jgb.fob.menke.motb.0031.flac16",
+      "source_uuid": "68af7551-3a43-4368-056c-c58fce23f0e0",
+      "show_uuid": "8bc4ebe3-35fc-4b39-9919-b98f9e8e2b0f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-09-12.015765.jgb.sbd.shriver.t-flac16",
+      "source_uuid": "550f45cd-2a10-8625-6bcc-64116991b7f7",
+      "show_uuid": "f401c25e-5876-4d8e-938e-e1a8b0969cb1",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-09-15.086326.jgb.aud.unknown.cohen.t-flac16",
+      "source_uuid": "3ad7e1a8-a7dc-e60e-38d4-73e67912f1fa",
+      "show_uuid": "e0e17c90-4afe-4c10-9afe-17fb0c3f0627",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-09-18.020100.jgb.fob-sony.unknown.schultz.sbeok.t-flac16",
+      "source_uuid": "9ce5a835-b721-72b0-de00-b1fe24ff6d19",
+      "show_uuid": "5bc50d38-f524-4e26-a134-f05bf996c1da",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-09-20.138205.jgb.late.sonyf99s.peters.zombiwoof.t-flac16",
+      "source_uuid": "4a743d67-1e0c-c188-090d-830e061e5bd3",
+      "show_uuid": "1c5c0ef2-bda7-4f0e-a716-3a23e561029b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-11-12.015850.jgb.psbd.unknown.sbeok.t-flac16",
+      "source_uuid": "054677b1-da18-791b-e5d5-7ba000aaa995",
+      "show_uuid": "0e763e53-d2b0-4c02-b0db-4149e0eb5267",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-11-13.015851.jgb.late.psbd.unknown.sbeok.t-flac16",
+      "source_uuid": "b858c581-4f34-47c7-9db0-a03386a93693",
+      "show_uuid": "d2423ced-b072-4fe5-8008-c0c90dcac888",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-11-13.132402.jgb.Late.sbd.betty.wise.flac16",
+      "source_uuid": "c2bc8c1c-f67a-ff61-4594-f0a20830ad87",
+      "show_uuid": "d2423ced-b072-4fe5-8008-c0c90dcac888",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-11-16.013030.jgb.aud.parrish.donhauser-hanno.sbeok.t-flac16",
+      "source_uuid": "42f18b93-5122-549f-c4a1-20cb32d5c426",
+      "show_uuid": "3cfc3d75-7ee1-4764-852d-df09a125982b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-12-21.020474.jgb.aud.hanno.t-flac16",
+      "source_uuid": "dfd7ed2b-6d74-183b-6f5c-3b6369b53292",
+      "show_uuid": "276a7763-7680-440d-82cf-662d3f877f21",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg76-12-22.136571.jgb.sbd.dolgushkin.miller.t-flac16",
+      "source_uuid": "0a07dc49-41e6-ff6b-7249-22389931eb73",
+      "show_uuid": "bb9dd430-91d3-4115-96ee-ee57c5d5d974",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-02-05.024757.jgb.sbd.ladner.sbeok.t-flac16",
+      "source_uuid": "3885989f-85b7-37f6-ac72-ce9dece6ef03",
+      "show_uuid": "8d9c4cae-aab3-41cb-9a43-6fd4eb21372d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-06-23.137527.jgb.set1.realistic.mcclary.miller.sirmick.sbeok.t-flac16",
+      "source_uuid": "d4ad2067-7d5e-907d-ab0a-04de6f70d27a",
+      "show_uuid": "e458ff0a-73dd-4909-8b49-a38397c3d077",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-08.017055.jgb.late.akg.moore.minches-jupille.sbeok.t-flac16",
+      "source_uuid": "ee8b1d25-e044-0202-744e-280c5ff8eb92",
+      "show_uuid": "1b66edac-0633-4442-a452-e015459dd23e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-08.021478.jgb.early.sonyECM33.moore-minches.sbeok.t-flac16",
+      "source_uuid": "42860b2c-2ad3-0bd9-3fbe-79e1316a8bbc",
+      "show_uuid": "1b66edac-0633-4442-a452-e015459dd23e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-08.138060.jgb.late.sonyf50.lee.hance.sirmick.sbeok.t-flac16",
+      "source_uuid": "ac073383-ee0c-6dfc-a35b-a302eb738665",
+      "show_uuid": "1b66edac-0633-4442-a452-e015459dd23e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-09.124426.jgb.late.aud.strange.miller.t-flac16",
+      "source_uuid": "d5f08808-ed96-043f-1696-06410a1657a9",
+      "show_uuid": "3ab243cf-fd70-46e6-a2df-2670ccc247e4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-09.141228.jgb.late-encore.mtx.unknown.t-flac16",
+      "source_uuid": "d065bb9a-79ea-a178-48fd-998c1356b2ee",
+      "show_uuid": "3ab243cf-fd70-46e6-a2df-2670ccc247e4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-29.017217.jgb.aud.menke.jupille.sbeok.t-flac16",
+      "source_uuid": "bd3f0e05-fdd2-a491-6ad0-dc74fce5acaa",
+      "show_uuid": "cec04504-4694-4f2c-bd49-f897252b6893",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-07-30.121534.jgb.sbd.tc3.t-flac16",
+      "source_uuid": "d62156bc-99c9-30fa-a73d-080d376e9aab",
+      "show_uuid": "a82c914b-39d0-4514-9537-39f559ca7435",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-21.015853.jgb.late.aud.mattson.jupille.sbeok.t-flac16",
+      "source_uuid": "578e8727-47c3-362a-4ddd-940157f30a8a",
+      "show_uuid": "8b450103-499c-40f4-942a-8e513a9a2cff",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-21.111582.jgb.early.sbd.flac16",
+      "source_uuid": "d4d45fc7-befe-3b6d-843a-c55d85748162",
+      "show_uuid": "8b450103-499c-40f4-942a-8e513a9a2cff",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-23.016204.jgb.sonyECM33.moore.minches.sbeok.t-flac16",
+      "source_uuid": "cd1ec3b1-bb82-79f9-e31b-b85359d2c4dc",
+      "show_uuid": "f8ff322d-c425-493f-9d9d-90e7c9015e1a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-25.016837.jgb.early.aud.unknown.sbeok.t-flac16",
+      "source_uuid": "fb7d6e88-e9f9-97dc-2d45-20bd84cf5723",
+      "show_uuid": "b701c7ee-2622-4dea-b683-77f2c3e07c85",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-25.107799.jgb.late.aud.unknown.morris.sbeok.t-flac16",
+      "source_uuid": "fb38bee1-2edb-3892-e99e-b61bb4065ee4",
+      "show_uuid": "b701c7ee-2622-4dea-b683-77f2c3e07c85",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-25.133584.jgb.late.aud.unknown.jupille.t-flac16",
+      "source_uuid": "d61f5e8a-a294-091f-953f-7aa3f3e20804",
+      "show_uuid": "b701c7ee-2622-4dea-b683-77f2c3e07c85",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-25.138209.jgb.early.sonyf99s.peters.zombiwoof.t-flac16",
+      "source_uuid": "ed9384e4-9c02-fc73-70cf-f69d40aca60b",
+      "show_uuid": "b701c7ee-2622-4dea-b683-77f2c3e07c85",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-26.085051.jgb.late.akgd200e.anderson.berger.t-flac16",
+      "source_uuid": "613d365d-eff6-3daa-1bfb-16d3d40f8a51",
+      "show_uuid": "ea6409ae-2daf-4906-aa19-4d253c9b0d96",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-27.016913.jgb.early.sonyECM270.glassberg.minches.sbeok.t-flac16",
+      "source_uuid": "8fccd2b4-30a0-45ed-3ec2-7b8e15dd7280",
+      "show_uuid": "3021e501-df44-46a0-8440-06fd8c350450",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-27.016914.jgb.late.sonyECM270.glassberg.minches.sbeok.t-flac16",
+      "source_uuid": "789be408-bdb4-89f7-7e53-f1f7c7f942e6",
+      "show_uuid": "3021e501-df44-46a0-8440-06fd8c350450",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-27.141958.jgb.early.sony.minkin.miller.clugston.t-flac16",
+      "source_uuid": "c521c2b1-4a38-53ad-d091-7af15607eec5",
+      "show_uuid": "3021e501-df44-46a0-8440-06fd8c350450",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-11-29.146764.jgb.set2.aud.unknown.andrewf.t-flac2448",
+      "source_uuid": "be4ecc64-e76f-977a-3c2a-d5e7c481909e",
+      "show_uuid": "718304e5-823a-48e2-9e87-d4935b605901",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-12-04.013819.jgb.psbd.unknown.sbeok.t-flac16",
+      "source_uuid": "87a96c60-0e2e-442a-e7c3-90ab777daf63",
+      "show_uuid": "e06d5cb2-2b1f-415d-9642-980d76538fe4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-12-06.083740.jgb.sbd.tetzeli-edited.patched-12028.t-flac16",
+      "source_uuid": "1f13d26d-3585-1821-5972-ffa499bd7085",
+      "show_uuid": "0ccc95f5-ab94-4e41-9c8e-289e6e7454db",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-12-10.101750.jgb.late.sonyECM.moskal.mandel.t-flac16",
+      "source_uuid": "5b77ce30-2d91-fe71-5322-4e0a9e498dec",
+      "show_uuid": "ce9b2e5f-f838-491a-b38a-0e9cd8dd09a3",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg77-12-11.080773.jgb.sbd-remaster.sirmick.sbeok.t-flac16",
+      "source_uuid": "0d563417-213f-0311-e446-055f39ca2406",
+      "show_uuid": "69006dfe-9767-498e-826d-82959819a863",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-02-18.017750.jgb.aud.jupille.sbeok.t-flac16",
+      "source_uuid": "c3cc367a-964a-9df0-7f52-860ae077f482",
+      "show_uuid": "dde6dee8-da1d-4722-be94-1381b21d1803",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-12.082587.aud.unknown.andrewf.sbeok.t-flac16",
+      "source_uuid": "da8a4c28-716b-a639-18a3-e5d74c41e6cf",
+      "show_uuid": "32639f5b-e5da-45c9-ab85-7ec3350895df",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-16.124066.jgb.petrunis.berger.t-flac16",
+      "source_uuid": "8619bb00-7371-eb27-d43e-7f775f870d1e",
+      "show_uuid": "940fb161-6789-49f3-b198-d9c8058ee3a6",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-17.098256.jgb.early.fm.moore-berger.t-flac16",
+      "source_uuid": "54fdeac5-5b7e-0e8a-6cf3-f52ea48a13d9",
+      "show_uuid": "cf132005-f2b8-4658-b743-eeee8fe17105",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-17.123123.jgb.early.akgd200e.anderson.berger.t-flac16",
+      "source_uuid": "690d0721-b1f0-d32b-7224-c52777c84e21",
+      "show_uuid": "cf132005-f2b8-4658-b743-eeee8fe17105",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-17.123179.jgb.early.mtx.tobin.flac16",
+      "source_uuid": "c2c7aae6-d7cb-6258-6364-e03d38613967",
+      "show_uuid": "cf132005-f2b8-4658-b743-eeee8fe17105",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-17.123184.jgb.late.sbd.bershaw-nolan.t-flac16",
+      "source_uuid": "7aa975a1-d812-ddfc-f8d2-132a217b0a91",
+      "show_uuid": "cf132005-f2b8-4658-b743-eeee8fe17105",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-18.007326.jgb.late.fm.serafin.sbefail.t-flac16",
+      "source_uuid": "99144df0-0e1c-d976-6edc-9c115df966b8",
+      "show_uuid": "85d814c2-a372-4484-aa04-cfa40fc1cd5c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-18.009465.jgb.early.nak700.unknown.sacks.sbeok.t-flac16",
+      "source_uuid": "e972b1e4-7add-3c35-4910-334570c78674",
+      "show_uuid": "85d814c2-a372-4484-aa04-cfa40fc1cd5c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-18.030119.jgb.late.fm.oade.patched.sbeok.t-flac16",
+      "source_uuid": "3be9d02a-88eb-8df6-eecf-365bba8c73e5",
+      "show_uuid": "85d814c2-a372-4484-aa04-cfa40fc1cd5c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-03-19.004440.jgb.sbd.unknown.sbeok.t-flac16",
+      "source_uuid": "33f4abd0-2dcd-ca93-5b62-2e617cc0d30b",
+      "show_uuid": "69b8b1d0-4c35-4d1a-be9c-b3a9ce95ca1b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-06-11.097713.jgb.s2p.sbd.miller.t-flac16",
+      "source_uuid": "155297bc-8b53-3fa3-64d7-82ac5de10a37",
+      "show_uuid": "2685b56b-ee0e-4c17-a273-a67f5a3752c7",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-08-12.022380.jgb.aud.riley.ladner.sbeok.t-flac16",
+      "source_uuid": "3065f91b-42e5-c9c5-28e8-88d0233f353a",
+      "show_uuid": "5a47c2f8-5e09-4c41-8126-69b76decdd6b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-10-07.014112.jgb.sonyECM99.angus-hart.jupille.sbeok.t-flac16",
+      "source_uuid": "ae6cc6d8-f7ab-a7b7-4333-24b9b352aa05",
+      "show_uuid": "f2e3301a-bfd7-4fc9-982c-084bc6195b9f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-10-10.104920.jgb.sonyECM99.angus-hart.minches.fix-104919.t-flac16",
+      "source_uuid": "ba2768ff-d504-fd01-ff23-220122d5a3a7",
+      "show_uuid": "3bb768fe-dfe7-4531-b52c-de26498de6dd",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-10-26.016805.jgb.aud.unknown.jim.sbeok.t-flac16",
+      "source_uuid": "21135fe2-f8dc-ea5c-e6db-fc194b248766",
+      "show_uuid": "4e6ebbf0-47f0-4a86-b205-dc7ea1c2d7b1",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg78-10-28.089135.jgb.sonyECM270.severson.minches.t-flac16",
+      "source_uuid": "3e1de21c-63af-92ca-3f55-1d381f0d51c4",
+      "show_uuid": "e67d1369-4347-4bab-8199-ff6e1352c28d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg79-01-30.012560.recon.sonyECM990.spitalny-angus.jupille.sbeok.t-flac16",
+      "source_uuid": "33e7385d-a57e-382c-7c32-41ee0774b989",
+      "show_uuid": "a39fbdbd-f575-41e6-80e2-21e60db6ec3b",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-03-07.006364.recon.sbd.metz.sbefixed.t-flac16",
+      "source_uuid": "d5c6dd3d-d1d2-6efb-2045-d16638cabdb2",
+      "show_uuid": "02102666-71ee-4fed-88e2-b2ba05b12e5e",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-03-30.011673.recon.fob-nak700.porray.jupille.sbeok.t-flac16",
+      "source_uuid": "0b468e04-9308-4b9f-bd95-c18222527587",
+      "show_uuid": "1eff661a-00ee-47e9-ae19-552256d554ad",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-04-13.126161.recon.sbd.t-flac2448",
+      "source_uuid": "4abb91af-7794-c8d4-c705-472c52966274",
+      "show_uuid": "738c538f-8577-4eaa-ab89-362f37f270bb",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-04-23.097899.recon.sbd.late.crawford.t-flac16",
+      "source_uuid": "d41dd793-5a68-3c7e-005b-1ecad35e3d37",
+      "show_uuid": "3e30c4d8-a306-488d-9be4-266c3ce7d37a",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-05-18.027919.recon.aud.unknown.warner.sbeok.t-flac16",
+      "source_uuid": "8b2a2359-b66e-7271-e6b5-a1a677f17511",
+      "show_uuid": "ea37edc4-1971-442a-8b54-d37212559521",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-06-13.096235.recon.nak300.bershaw-waddell.gems.t-flac16",
+      "source_uuid": "9aac6cf6-028e-4260-0b65-11c11a895cf4",
+      "show_uuid": "5e39f2e9-94ac-4666-9d4a-36a1aef3e5d5",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-06-17.027920.recon.sbd.warner.sbeok.t-flac16",
+      "source_uuid": "2f38006d-e01b-ab15-f04e-1f18738b98fa",
+      "show_uuid": "fdce65ab-db57-4245-a362-f81f0a632aa2",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-07-07.010142.recon.nak700.porray.jupille.sbeok.t-flac16",
+      "source_uuid": "e42d14fa-9b96-2054-e499-ff8162758848",
+      "show_uuid": "94c07c64-3cd3-499c-ae24-8ba860331fc3",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-07-22.017257.recon.sbd-partial.carr.sbeok.t-flac16",
+      "source_uuid": "5f4e4890-0c72-2303-4336-c96a6214ea43",
+      "show_uuid": "402597fe-2bd1-4893-b80e-27581b7aa783",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-09-15.023792.recon.nak700.menke.ladner.sbeok.t-flac16",
+      "source_uuid": "468fe352-e713-59ff-7571-1e6d35d095d7",
+      "show_uuid": "203c7d91-2e28-45b3-8389-4b233d3ce983",
+      "artist_uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b"
+    },
+    {
+      "identifier": "jg79-10-07.106528.jgb.technics.angus-hart.minches.t-flac16",
+      "source_uuid": "0b8e60f2-61fb-6818-8612-9f885eb2480f",
+      "show_uuid": "340cb4eb-d39f-452c-933a-3c810afc1969",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg79-11-18.106894.jgb.sony.angus-hart.t-flac16",
+      "source_uuid": "5d996b78-1d1f-e4d9-dfe0-b690f6d015b3",
+      "show_uuid": "b71b0ed7-8ea6-468a-ba9c-7333e997337b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg79-12-20.022889.jgb.sbd.powell.sbeok.t-flac16",
+      "source_uuid": "6f46ab85-252d-ae96-eac3-134d65781f05",
+      "show_uuid": "7c5262d1-b402-4590-a8d3-bbf82958a9b0",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg79-12-21.024642.jgb.sbd.bertha-ashley.sbeok.t-flac16",
+      "source_uuid": "d9a85abd-db8d-f6c9-80a9-3b4192f6dd65",
+      "show_uuid": "a9e0fd7b-0171-4f97-89e6-32ec3aeeac57",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-01-27.108049.jgb.pset2.aud.unknown.t-flac16",
+      "source_uuid": "d48eab8f-e3d3-3aa5-ca58-ffb8220de37a",
+      "show_uuid": "e6cfb733-184f-4b9e-ad3d-ef216443fdbf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-01.106227.jgb.all.aud-jaret.flac16",
+      "source_uuid": "42caf786-30ca-4770-0bfd-b46ff5ad2ada",
+      "show_uuid": "82edf6f5-fd50-4617-85ab-bf2ed1742563",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-02.016681.jgb.nak700.porray.sbeok.t-flac16",
+      "source_uuid": "422d4812-3bf6-1333-a0d5-3344a84a47e9",
+      "show_uuid": "8cb447d1-4837-40e7-acbf-78c726e4120c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-02.jgb.fob.menke.motb.0038.flac16",
+      "source_uuid": "a13548bd-8d5f-daf8-1045-3dd2aa3f96e5",
+      "show_uuid": "8cb447d1-4837-40e7-acbf-78c726e4120c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-12.024683.jgb.early.sbd.misSHN.sbeok.t-flac16",
+      "source_uuid": "e8fdc0bd-7038-e2b5-593c-e7e3ae07c7df",
+      "show_uuid": "fbb288e9-61da-48d9-9e63-0dad900e2eb8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-13.082400.jgb.aud.unknown.andrewf.sbeok.t-flac16",
+      "source_uuid": "46bc771d-247d-863a-e23f-6eb0847fcfe2",
+      "show_uuid": "7a4ca0e8-99c3-43bc-a89c-c81b779e88dc",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-15.jgb.early.aud.rolfe-ladner.30371.sbeok.flac16",
+      "source_uuid": "a9c3d8e0-126b-a5d6-43e3-b3a25264926c",
+      "show_uuid": "c2090de5-4430-4b77-a399-27becea64818",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-16.102002.jgb.fob.morris.t-flac16",
+      "source_uuid": "f039acb2-bf1b-be2e-48f5-7a8be5f7bb8e",
+      "show_uuid": "cf586cbb-e6e4-4d6a-9af9-9e00b9a3a434",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-16.141452.jgb.unknown.mederios",
+      "source_uuid": "e6173d86-15a0-de32-337f-1c3cec9538c0",
+      "show_uuid": "cf586cbb-e6e4-4d6a-9af9-9e00b9a3a434",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-20.029308.jgb.aud.unknown.ladner.sbeok.t-flac16",
+      "source_uuid": "2cdaf931-2e5a-42c3-d995-8f771bb37abf",
+      "show_uuid": "6047718e-6f1f-49a1-a228-512ead4018db",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-22.018015.jgb.fob-nak700.glassberg.sbeok.t-flac16",
+      "source_uuid": "10d0a75d-2382-7c6c-fdd7-d00904db1548",
+      "show_uuid": "4b805511-0318-43ce-83ea-b8dfa8579cf6",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-23.035179.jgb.late.sonyECM990.connor.sbeok.t-flac16",
+      "source_uuid": "b5a9e3fa-4e5f-b307-d613-183cef425957",
+      "show_uuid": "8d9cf291-c601-49dc-a89b-09ce2745afc8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-23.098932.jgb.aud.early.unknown.t-flac16",
+      "source_uuid": "6ac57335-7117-dffd-fb04-1c8f5fe9a45c",
+      "show_uuid": "8d9cf291-c601-49dc-a89b-09ce2745afc8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-24.018019.jgb.nak700.cohen.jupille.t-flac16",
+      "source_uuid": "a4dce65b-406f-1f1a-180d-1a1b6f46ad0b",
+      "show_uuid": "444c0575-b9b9-45e9-a2d2-4f80233f97f5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-24.126078.jgb.fob-akg.stankiewicz.flac16",
+      "source_uuid": "f8debdd4-a7ea-f2e6-ee6c-07333b67065e",
+      "show_uuid": "444c0575-b9b9-45e9-a2d2-4f80233f97f5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-28.123006.jgb.early.fob-nak300.fredo.moore.berger.t-flac16",
+      "source_uuid": "1ffbeff2-238a-23dd-9978-47ba64de6926",
+      "show_uuid": "4de129fc-d135-4e8f-b2e5-87382dc3cc88",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.004460.jgb.late.fm-sbd.unknown.sbefail.t-flac16",
+      "source_uuid": "08707d06-0f92-f65b-e58a-bdc3b05c6527",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.009163.jgb.late.pre-fm.lai.sbefail.t-flac16",
+      "source_uuid": "cea27782-5171-3ddd-a7e5-a28b5b61ac93",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.021461.jgb.late.sbd.bertha-ashley.sbeok.t-flac16",
+      "source_uuid": "af953fc8-435e-2485-065e-5367b3f903ba",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.027563.jgb.early.akg222.hance.jupille.sbeok.t-flac16",
+      "source_uuid": "258da884-5214-fa3a-389f-ae949dda634a",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.035180.jgb.early.fob-sonyECM990.connor.sbeok.t-flac16",
+      "source_uuid": "14b8ae5f-c7ef-5f6e-34af-b758a717405c",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.035216.jgb.late.fob-sonyECM990.connor.sbeok.t-flac16",
+      "source_uuid": "1074380c-28bf-8b3e-67dd-c72eb7b9f7ba",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-02-29.114053.jgb.late.prefm.hederman.t-flac16",
+      "source_uuid": "9581d09e-b039-be1a-a246-761a1bb6711b",
+      "show_uuid": "17d0373c-2154-4349-8a9e-548a37f1926d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-03-01.004429.jgb.early.sbd.metz.sbeok.t-flac16",
+      "source_uuid": "70814c88-166e-92ee-c0ee-765377997de9",
+      "show_uuid": "8a49600c-d11b-4b5f-af55-41926069ffaf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-03-01.014983.jgb.late.aud.lemieux-jupille.sbeok.t-flac16",
+      "source_uuid": "fa0017bb-0c88-e501-608c-bf4275e69aec",
+      "show_uuid": "8a49600c-d11b-4b5f-af55-41926069ffaf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-03-01.017928.jgb.early.fm.glassberg.cohen-jupille.sbeok.t-flac16",
+      "source_uuid": "bb2d92ba-beec-5c52-83cd-f654630e6dad",
+      "show_uuid": "8a49600c-d11b-4b5f-af55-41926069ffaf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-03-07.014594.jgb.sonyECM99.angus-hart.jupille.sbeok.t-flac16",
+      "source_uuid": "876f158d-117e-c4fc-9493-1f11dd930066",
+      "show_uuid": "180987fe-bec0-4111-99dc-0ef6f93b2fa9",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-03-26.013423.jgb.sonyECM99.angus.ladner.sbeok.t-flac16",
+      "source_uuid": "3411b962-40b6-934e-24f4-279197c3c19a",
+      "show_uuid": "adf773b7-3793-49a3-bea3-a2b8f6d77616",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-24.jgb.aud.108004.flac16",
+      "source_uuid": "36a86797-e627-e642-53bc-d96907fb7c7b",
+      "show_uuid": "af569c76-d416-4112-ad45-58b4c59b81ae",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-25.017069.jgb.early.aud.unknown.sbeok.t-flac16",
+      "source_uuid": "9128a5d9-896c-7cbc-849a-3410cc15133c",
+      "show_uuid": "c7a20b33-759e-48f1-a8d4-8bcda5162d80",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-25.017070.jgb.late.aud.unknown.sbeok.t-flac16",
+      "source_uuid": "006cdd4d-9a9d-d8a7-d5b4-d16406221740",
+      "show_uuid": "c7a20b33-759e-48f1-a8d4-8bcda5162d80",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-25.028736.jgb.early.nak700.wagner-minches.sbeok.t-flac16",
+      "source_uuid": "5fcfc421-094e-60f7-f213-10ad8a73cd30",
+      "show_uuid": "c7a20b33-759e-48f1-a8d4-8bcda5162d80",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-25.028737.jgb.late.nak700.wagner-minches.sbeok.t-flac16",
+      "source_uuid": "5ccf701d-95f1-663c-7e87-a60a5dacca6c",
+      "show_uuid": "c7a20b33-759e-48f1-a8d4-8bcda5162d80",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-26.018744.jgb.late.nak300.johnson.warner-minches.t-flac16",
+      "source_uuid": "03f84bd1-08cc-2969-56f5-ceff85a68e9f",
+      "show_uuid": "1cb101d7-4032-4371-a864-bbfabc39df20",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-26.026217.jgb.early.nak300.jaeger.hance-jupille.sbeok.t-flac16",
+      "source_uuid": "ad0d7ef2-cec4-435b-7ad3-a59e6a5c571c",
+      "show_uuid": "1cb101d7-4032-4371-a864-bbfabc39df20",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg80-07-27.120085.jgb.nak700.dyche.t-flac16",
+      "source_uuid": "b756daff-9470-9ed8-0d1b-9c18b85ba08e",
+      "show_uuid": "4367f48e-7ac2-48e0-9c82-cd0661c43d1f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-01-23.097205.jgb.aud.latvala.knudsen-df.t-flac16",
+      "source_uuid": "035e2581-1c91-a149-f256-b6c92ed91fe6",
+      "show_uuid": "6f288bc4-f0a5-4712-8c9a-e1a9ba85a335",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-01-29.021137.jgb.aud-sbd.misSHN.t-flac16",
+      "source_uuid": "070af267-4a47-c505-f201-b25d878aa6fb",
+      "show_uuid": "476a956b-17e1-4f30-8c6e-0e02cb3b3550",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-04.030859.jgb.nak300.redman.sbeok.t-flac16",
+      "source_uuid": "b1cec4ee-7ae3-a150-1489-7b61cc6c536b",
+      "show_uuid": "f07079e5-83cf-412a-af37-8583035c142d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-06.088819.jgb.nak500.vita.minches.t-flac16",
+      "source_uuid": "cca588d2-97bb-dd9a-20ab-277683305f3c",
+      "show_uuid": "dbf66434-1d0b-4b2d-bbd6-057cdab6a98b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-07.107333.jgb.nak300.lavene.speed-corrected.flac16",
+      "source_uuid": "d6136c5e-5520-ed38-2e5d-43deea75c86a",
+      "show_uuid": "3c464da8-d4ed-48ef-8757-3fa257bd1573",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-09.102008.jgb.nak300.morris.t-flac16",
+      "source_uuid": "1b90f201-9f7e-b5e5-baef-7245e9ae4a67",
+      "show_uuid": "7ced8825-5615-4816-a52e-da0e9a683f98",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-11.019439.jgb.aud.wise.ladner.t-flac16",
+      "source_uuid": "ad77ceff-5b6b-ae17-0295-308e59e78537",
+      "show_uuid": "1043bdfa-ff40-414e-9122-17e8e815e2d4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-11.120256.jgb.nak300.dyche.t-flac16",
+      "source_uuid": "77609350-3804-e3fc-527f-e9939ae6893b",
+      "show_uuid": "1043bdfa-ff40-414e-9122-17e8e815e2d4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-14.014079.jgb.ecm.nak.weinberg.sbeok.t-flac16",
+      "source_uuid": "93905e05-fdf2-3a63-3761-e99349110488",
+      "show_uuid": "bff66f75-dddb-4c54-b1a3-6eb228245104",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-02-22.105438jgb.all.aud-angus-hart.flac16",
+      "source_uuid": "f42e702b-5ec4-106c-f942-949398016294",
+      "show_uuid": "3f1e0998-5729-40bd-bbde-4e11b6b8e026",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-04-21.020983.jgb.nak700.martin.misSHN.t-flac16",
+      "source_uuid": "941daa1b-393f-3cea-3960-1ccace6104aa",
+      "show_uuid": "46bfc674-5884-4ff6-89d9-a3e34c972e58",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-04-25.017888.jgb.nak700.martin.jjoops.t-flac16",
+      "source_uuid": "7e7818e9-8ae7-d4b6-2c73-58d43d1be226",
+      "show_uuid": "775cf65b-04c9-4d63-b2fc-b5d29c80fd15",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-05-30.030792.jgb.pset2-sbd.unknown.t-flac16",
+      "source_uuid": "c1d2fd7b-c651-5c5c-0e5d-bfc44967432c",
+      "show_uuid": "7e466d3d-915b-49b9-b427-9b082f8a0e88",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-05-30.xxxxxx.jgb.aud.motb0169.flac16",
+      "source_uuid": "410c6f4c-d072-6e07-ec2a-035aa7e41a41",
+      "show_uuid": "7e466d3d-915b-49b9-b427-9b082f8a0e88",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-06-25.089567.jgb.naks.senicola-poris.minches.t-flac16",
+      "source_uuid": "82b3bfcc-25f3-6f13-7fbc-4c3d0ce2d458",
+      "show_uuid": "ff5b06a9-9799-493f-918b-b42717a27e2e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-07-26.xxxxxx.jgb.sbd.GEMS.patched.remastered.flac1644",
+      "source_uuid": "faf4a80c-3ce2-21b4-fb20-52031fc54d83",
+      "show_uuid": "52b5446d-1a08-4a24-ac4c-3d95bb4fdbab",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-08-06.110492.jgb.aud.russjcan.t-flac16",
+      "source_uuid": "bc827494-49ef-e6c6-9a6a-1c9ffb777f1e",
+      "show_uuid": "4686e80b-805b-4605-b4f9-44df47f2850a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-06.024865.jgb.early.sonyECM23f.weinberg.t-flac16",
+      "source_uuid": "99c00670-3bd6-c08f-e89d-844eecc60196",
+      "show_uuid": "a4ff1fb0-2a9c-4818-9429-06f10d50a68e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-06.089217.jgb.late.partial.fob-nak300.unknown.t-flac16",
+      "source_uuid": "de536efd-a298-6e2b-2981-14f9b27cfc44",
+      "show_uuid": "a4ff1fb0-2a9c-4818-9429-06f10d50a68e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-08.014008.jgb.beyerM160.hance.t-flac16",
+      "source_uuid": "312a734e-f211-be69-6815-575990460d9f",
+      "show_uuid": "84c31bc3-7834-4e98-9fa6-b9673b5099e8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-10.010173.jgb.late.beyerM160.unknown.t-flac16",
+      "source_uuid": "096fbdf5-5106-56ec-3d29-d9189018ee00",
+      "show_uuid": "d5ee0df0-c162-41f1-8b53-5abdcce4dcca",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-10.027760.jgb.early.nak700.cohen.jjoops.t-flac16",
+      "source_uuid": "1f47978c-6454-5368-449e-a43df0c228b0",
+      "show_uuid": "d5ee0df0-c162-41f1-8b53-5abdcce4dcca",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-10.077357.jgb.late.nak300.andrewf.t-flac16",
+      "source_uuid": "a44fbd50-0c41-57f3-763d-2ecc92f5ef2b",
+      "show_uuid": "d5ee0df0-c162-41f1-8b53-5abdcce4dcca",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-13.089005.jgb.late.nak300.levene.t-flac16",
+      "source_uuid": "4f9d3f8a-0aa4-ac7e-e57b-7ecb1707b764",
+      "show_uuid": "3fe2e530-08c3-43eb-b875-21d849bc2887",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-13.123554.jgb.senn421.streeter.t-flac16",
+      "source_uuid": "2da04ed3-ad5f-31aa-8fae-e663d592e402",
+      "show_uuid": "3fe2e530-08c3-43eb-b875-21d849bc2887",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-11-15.127062.jgb.beyerM88.stankiewicz.t-flac16",
+      "source_uuid": "a556d5b5-080f-3752-63c0-0ee4776a25d2",
+      "show_uuid": "9e30d0bb-4383-4458-bc2f-9168ceaeeb10",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg81-12-07.030372.jgb.sbd.rehearsal.wally.t-flac16",
+      "source_uuid": "94f7c88c-a61b-5edd-9bad-d3d9ce1a26bb",
+      "show_uuid": "6a64e14b-ccb0-4cb4-bd3c-4e7f56209c6f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-01-11.084012.jgb.sbd.gmb.sbeok.t-flac16",
+      "source_uuid": "682dc124-7092-a6f7-751a-8187ff26d4e6",
+      "show_uuid": "ee465967-4c0e-4d11-a26a-bc12692e1d89",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-02-02.nak300.hoey.126225.flac24",
+      "source_uuid": "23d0da4a-ee71-d38f-9612-a3e445e67713",
+      "show_uuid": "a2cdb311-7ea9-43ac-84fe-e52da495d449",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-02-03.110534.jgb.nak300.hoey.t-flac16",
+      "source_uuid": "c30003c3-cb31-2701-9fbf-0458fcd1e0b4",
+      "show_uuid": "24d501c6-3d2f-4079-afc3-c9fc5c304ada",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-02-05.018071.jgb.sbd.pset2.jupille.sbeok.t-flac16",
+      "source_uuid": "3b5c9679-af68-a877-2d43-083147907c82",
+      "show_uuid": "25b4c20b-0f8a-4c5d-bd55-a3ef7160d648",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-02-05.xxxxxx.jgb.knudsen.gems.1648",
+      "source_uuid": "59121628-7d4a-6dbd-5df3-ed261996b638",
+      "show_uuid": "25b4c20b-0f8a-4c5d-bd55-a3ef7160d648",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-02-26.091280.jgb.sbd.metz-edited.patched.sbefail.t-flac16",
+      "source_uuid": "195c4f49-0acb-7f52-acee-8792b1cc8bbf",
+      "show_uuid": "a95d2bbc-f689-4451-96dc-c04da1d870ec",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-03-03.111509.jgb.gems.knudsen.flac16",
+      "source_uuid": "964656f1-047a-1bec-f8a7-af415a6a3534",
+      "show_uuid": "afc87063-6784-49b2-8ca3-a715809b416f",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-03-07.107838.jgb.sbd.knudsen.smith.motb.0143.flac16",
+      "source_uuid": "0b8381a3-cbb4-9e64-de3a-2e4fc9033d48",
+      "show_uuid": "1e2ac3a2-6040-42a2-a6a4-d4dfeceb46c8",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-03-27.006605.jgb.sbd.sbeok.t-flac16",
+      "source_uuid": "54c1bef0-245e-bcc5-2b0e-e2143e54e5ae",
+      "show_uuid": "129d7946-3ab2-4dda-91f6-7b549ceec62b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-04-21.014718.jgjk.sbd.late.jupille.sbeok.t-flac16",
+      "source_uuid": "5fd44252-7204-3134-03ac-72ef99881f5c",
+      "show_uuid": "0c80605a-2af9-46df-b39d-3299bbe7d33d",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-04-21.029187.jgjk.senn421.early.nolan.t-flac16",
+      "source_uuid": "8f118731-aaaa-5d28-d1dc-9e6db4e8fb9b",
+      "show_uuid": "0c80605a-2af9-46df-b39d-3299bbe7d33d",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-05-08.017751.jgb.sbd.jjoops.sbeok.t-flac16",
+      "source_uuid": "6367f88c-1e08-ddfc-ca79-0d931ce0d6b7",
+      "show_uuid": "708caca1-03b7-4ba1-9bb0-15c63a93f504",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-05-14.jgb.aud.GEMS.95775.flac",
+      "source_uuid": "85497d6c-1069-01e4-d6bc-0a9ccf7540af",
+      "show_uuid": "5d0f8059-1f70-49ea-9837-53bead788085",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-05-31.jgb.aud.GEMS.95427.flac16",
+      "source_uuid": "d3833c78-4a66-02bb-de26-05f632ebbf41",
+      "show_uuid": "b41f160b-0511-4cc3-834b-5cde7114aeef",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-12.107913.jgb.aud.martin-knudsen.smith.patched.t-flac16",
+      "source_uuid": "588036f5-e6ab-6b88-9ac1-d33cfd884549",
+      "show_uuid": "0edcb160-f481-4982-b95d-926b63444d2b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-16.089042.jgb.sbd.set1.unknown.t-flac16",
+      "source_uuid": "dd8dc883-721b-605c-8171-0d2d77ead4e5",
+      "show_uuid": "b8654cd8-bdeb-495b-8a39-88a8c6cfd8fd",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-18.108318.jgb.nak700.rolfe.miller.t-flac16",
+      "source_uuid": "7ff005db-a992-1381-e348-e7b9b944f804",
+      "show_uuid": "da983270-9912-4381-bd2c-4e87a5913c78",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-20.121457.jgb.senn441.lamarre.berger.t-flac16",
+      "source_uuid": "6ff3a4aa-88a5-969e-2931-ef00117797fc",
+      "show_uuid": "e124eef7-90fa-4d6e-9c5b-11655526f27d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-24.079428.jgb.sbd.late.sbeok.t-flac16",
+      "source_uuid": "82865d6b-b46e-8c3d-a8ac-c38ec89bb2e3",
+      "show_uuid": "75297dec-8d11-4262-85eb-eac6df5c31f3",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-06-26.101296.jgjk.aud.brentz.t-flac16",
+      "source_uuid": "8eb011b0-f887-e862-ee7a-6c4cfde304e1",
+      "show_uuid": "b56f3dfa-0655-4182-a0fb-ad54a3a39a28",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-07-01.088339.jgjk.sony.sirmick.sbeok.t-flac16",
+      "source_uuid": "89aec8a6-335e-90a7-f53b-41c17394ecba",
+      "show_uuid": "a04e9862-d221-4146-86bf-3f3dd6203854",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-07-02.013982.jgjk.aud.early.gibian.jupille.sbeok.t-flac16",
+      "source_uuid": "2ec226ee-2a48-b916-fac4-20329d0cd146",
+      "show_uuid": "d510ea02-5b9d-4ecf-b5e1-f2dbe832b578",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-07-02.014014.jgjk.aud.late.gibian.jupille.sbeok.t-flac16",
+      "source_uuid": "9482d3ab-465f-43a6-e7d5-0c1d7d885ce5",
+      "show_uuid": "d510ea02-5b9d-4ecf-b5e1-f2dbe832b578",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-08-23.106691.jgjk.aud.early.jaret.t-flac16",
+      "source_uuid": "2e619a1a-0e0e-360a-f797-11b778633daf",
+      "show_uuid": "dcd8c487-371c-4a0a-8bd9-f1ebab0ee19c",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg82-10-21.099530.jgb.sonyECM.anzaldo.t-flac16",
+      "source_uuid": "31c27cc9-cede-0e81-21b6-d12f9c3556f9",
+      "show_uuid": "e4ff99fc-5c70-44b0-86e6-62d6e393637a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-10-23.112275.jgb.aud.GEMS.Knudsen.Smith.flac16",
+      "source_uuid": "29a5978c-0325-2ded-2fa7-9e56b1796b0c",
+      "show_uuid": "bc98ee04-c72a-4b27-b70a-e1c063745fa1",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-10-28.009704.jgb.sonyECM.early.late-partial.keshavan.t-flac16",
+      "source_uuid": "fa1b9b08-9e87-50ed-8a03-d69e0179d961",
+      "show_uuid": "1c3bd421-771f-4fed-bc68-2dc816cffc8c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-10-28.132076.jgb.naks.mason.flac16",
+      "source_uuid": "4de396a3-8d77-e302-8930-32ded712bb09",
+      "show_uuid": "1c3bd421-771f-4fed-bc68-2dc816cffc8c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-01.100575.jgb.aud.dogman.t-flac16",
+      "source_uuid": "df97b445-b3fd-7029-84e1-24a119b2bc7b",
+      "show_uuid": "1debe134-ee2d-428e-b4a1-d133d4e3398c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-05.034855.jgb.aud.brentz.sbeok.t-flac16",
+      "source_uuid": "ed4130bf-af5f-81ac-9afd-e89b7d6c68e8",
+      "show_uuid": "dbe9e81e-49d9-42fc-9aaa-f21652acec6a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-09.089126.jgb.aud-senn421.levene.sbefail.flac16",
+      "source_uuid": "ab0144b6-c700-ae08-dcb8-b7a843a9bfa3",
+      "show_uuid": "5c14e67a-3a05-4658-8200-83ea51044483",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-10.035141.jgb.nak100.adelman.koucky-ladner.sbeok.t-flac16",
+      "source_uuid": "143254de-e4c3-68be-3696-298e05cfea41",
+      "show_uuid": "92b03a61-05d7-4cfd-9a8a-985270cc86d4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-11.120087.jgb.early.nak700.dyche.t-flac16",
+      "source_uuid": "e698f637-88d6-fadd-5a2d-c130baa18c0d",
+      "show_uuid": "26c44d31-e473-4189-962b-36876291ba26",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-11.120088.jgb.late.senn421.dyche.t-flac16",
+      "source_uuid": "e349edf8-21da-96ef-c9fb-457e20f71200",
+      "show_uuid": "26c44d31-e473-4189-962b-36876291ba26",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-14.102006.jgb.nak300.morris.sbeok.t-flac16",
+      "source_uuid": "53814484-ab51-9656-7a85-1d38f38714cc",
+      "show_uuid": "7677b266-bccf-4fb6-9255-5b4f5eba0b43",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg82-11-15.023339.jgb.late.sbd.misSHN.sbeok.t-flac16",
+      "source_uuid": "2259a0c5-3f2c-89ec-a047-0f0de7830202",
+      "show_uuid": "481cbf4d-cece-4255-b75c-31c466e200b3",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-01-13.084227.jgb.sbd.gmb.sbeok.t-flac16",
+      "source_uuid": "feddb5d2-00d0-1629-f9a4-1963d20e9122",
+      "show_uuid": "747ee45b-56f7-4dcc-b36b-baae65f1212d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-01-22.08653.jgb.sbd.jupille.sbeok.shnf",
+      "source_uuid": "ca660729-32f5-acc4-bd0a-e96060ce1ac6",
+      "show_uuid": "113e8085-223a-4ead-9fef-028d2d616c63",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-01-23.008061.jgb.set2.nak100.jones.jjoops.sbeok.t-flac16",
+      "source_uuid": "527706e6-c129-edfb-91ef-7961b49cac9a",
+      "show_uuid": "982bf3e9-0b77-4272-9218-6ef4cef950a5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-02-26.032137.jgb.set2.aud.unknown.ladner.sbeok.t-flac16",
+      "source_uuid": "e5fbc65e-8deb-fcc0-8b2f-8da5275cb2a3",
+      "show_uuid": "02e4b54f-20d7-4b23-a179-20a722a41db4",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-03-05.014445.jgb.sbd.sanders.sbeok.t-flac16",
+      "source_uuid": "cc808c3d-d781-b344-604c-f96339fabba3",
+      "show_uuid": "a415fcad-dc83-439b-a730-28ea475fc3e5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-03-12.017147.jgb.late.nak300.unknown.jjoops.sbeok.t-flac16",
+      "source_uuid": "3cd80f0c-e5a5-c1e8-3547-a2385fd2b6d1",
+      "show_uuid": "6f7ff875-31e8-4630-9aa5-9229222ce6e0",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-03-12.026207.jgb.early.aud.unknown.ladner.sbeok.t-flac16",
+      "source_uuid": "8ca0f408-baf9-6f7b-8f49-d92bea10602b",
+      "show_uuid": "6f7ff875-31e8-4630-9aa5-9229222ce6e0",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-05-21.091115.jgb.panasonic610.johnson.minches.t-flac16",
+      "source_uuid": "2371d48f-48a9-19b1-d989-2a30ee25014d",
+      "show_uuid": "72c6d1d9-45c5-43fb-a283-8b2f8180fd24",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-05-25.130353.jgb.aud.unknown.flac2448",
+      "source_uuid": "334c7108-aaee-d167-53f2-3f2724fb874d",
+      "show_uuid": "84e03749-711a-43a6-bba6-0ce3e20bce4e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-05-29.106095.jgb.nak300.morris.sbeok.t-flac16a",
+      "source_uuid": "7628c7e9-f1c9-151b-6940-f3340dc58938",
+      "show_uuid": "00066bd4-f0f7-4d59-9565-3a9d54e813ee",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-05-30.120374.jgb.nak300.morrone.flac16",
+      "source_uuid": "36a53d46-ec45-d207-af89-a0304103f7ef",
+      "show_uuid": "c797d582-bb41-4062-9fcf-68d07c774ffa",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-06-04.015619.jgb.early.fob-nak700.cohen.minches.sbeok.t-flac16",
+      "source_uuid": "99239115-ecc5-eb7d-4128-7b0abc921b4e",
+      "show_uuid": "45c0ec29-e601-4899-b9ec-370371d4aa0b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-06-04.015620.jgb.late.fob.cohen.vita.minches.sbeok.t-flac16",
+      "source_uuid": "5155fa61-45cf-e4a8-298f-d2e0681c3017",
+      "show_uuid": "45c0ec29-e601-4899-b9ec-370371d4aa0b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-07-24.020736.jgb.nak700.menke.ladner.sbeok.t-flac16",
+      "source_uuid": "868c2fd6-62d5-d380-9635-1b22999f2d94",
+      "show_uuid": "922da791-350e-439b-965e-3deeba1d3384",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-12.022512.jgb.sbd.ladner.sbeok.t-flac16",
+      "source_uuid": "b2615ae4-34ff-15e5-f396-e7778ba10e37",
+      "show_uuid": "1e7d0977-db24-48d8-bcbf-e020bfbaa1f9",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-14.aud.motb.0214.flac16",
+      "source_uuid": "451583a2-6208-ce4e-a69b-8066884890b7",
+      "show_uuid": "7e7a0059-38e1-47c6-99e9-bc95a670d9cf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-23.031281.jgb.senn421.cohen.minches.sbeok.t-flac16",
+      "source_uuid": "fe7fd7ff-a138-8daf-5fc3-7b1cc1f7c3c8",
+      "show_uuid": "5ca0a3aa-c2e9-491a-a55c-cf744ccb43bf",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-26.020657.jgb.sbd.misSHN.sbeok.t-flac16",
+      "source_uuid": "d7ec5ef0-26c4-681c-c505-45b5d054e43c",
+      "show_uuid": "254ed948-68f2-4cda-9b5d-1c9adef68b2e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-29.012026.jgb.sbd.ladner.sbeok.t-flac16",
+      "source_uuid": "0fa81bbc-3ede-571e-cfd1-39cad22a1c79",
+      "show_uuid": "ee99c036-e573-4a04-a4d1-749e41d6ce15",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-11-30.aud.nak300.flac16",
+      "source_uuid": "12efd584-f108-53d0-ec59-64b7eb5717f2",
+      "show_uuid": "b711a88d-97a7-4ee7-b1cb-5c832c44d7ae",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-04.020735.jgb.sbd-senn421.ladner.sbeok.t-flac16",
+      "source_uuid": "8bc50546-fd29-2a41-5ecc-8c2e15e939fe",
+      "show_uuid": "fae749ba-a166-43a3-8728-58e39d75028e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-06.135010.jgb.early.senn441s._SonyTC-D5m.scarletdog.flac24",
+      "source_uuid": "b14a7797-022b-5a16-20c2-e6de39dfb4bb",
+      "show_uuid": "a7306c65-1d8d-47a3-a17b-a999d6036555",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-06.135014.jgb.late.Nak100s_SonyTC-D5m.scarletdog.flac24",
+      "source_uuid": "bc191b41-a734-f63b-c11d-1182d931f46c",
+      "show_uuid": "a7306c65-1d8d-47a3-a17b-a999d6036555",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-07.016869.jgb.aud.unknown.ladner.sbeok.t-flac16",
+      "source_uuid": "ea285a22-6cb5-f921-e876-ffb93eff32d0",
+      "show_uuid": "6580429b-4eac-4451-b181-40a991b3332b",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-09.015621.jgb.early.fob-nak700.cohen.minches.sbeok.t-flac16",
+      "source_uuid": "57f510e1-f3da-328a-8cff-5ffeafe9b93c",
+      "show_uuid": "ccf42d21-b8a9-4a9a-a627-110afcf6d324",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-09.015622.jgb.late.fob-nak700.cohen.minches.sbeok.t-flac16",
+      "source_uuid": "fccae2d8-b463-f042-0432-2c1bb903be2d",
+      "show_uuid": "ccf42d21-b8a9-4a9a-a627-110afcf6d324",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg83-12-11.126714.jgb.shure_pe9.ackerman.flac16",
+      "source_uuid": "28224e84-9bac-2e4d-cfa9-fbed0e495a2f",
+      "show_uuid": "07b28187-6c9c-45ac-8d45-4a25268a7490",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-01-13.032037.jgb.ecm270.lee.minches.t-flac16",
+      "source_uuid": "84b92d08-8c33-8490-e6d4-97dd333e7221",
+      "show_uuid": "551ac039-33f3-4175-9c96-c1153b4a2bcb",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-01-14.101128.jgb.parital.sbd.russjcan.sbeok.t-flac16",
+      "source_uuid": "eaa2965d-cb98-ea31-3f8d-804342f3f8f8",
+      "show_uuid": "d9a0d2d0-8c35-41a4-9117-a923b0b3c447",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-03-02.085293.jgb.sbd.gmb.flac16",
+      "source_uuid": "5bd907eb-639c-c5d4-6034-026af1bee739",
+      "show_uuid": "762f5081-94b9-495d-886a-4dc8b401db79",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-03-09.023891.jgb.nak700.corley.sbeok.t-flac16",
+      "source_uuid": "f0b10e6a-91ab-4577-3458-d4bd54c78d4d",
+      "show_uuid": "625a31df-5333-4fb9-93bf-3187f1aa4341",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-03-22.022191.jgb.nak700.corley.sbeok.t-flac16",
+      "source_uuid": "f5b1582f-9208-41fb-d665-3db77969eda4",
+      "show_uuid": "3e6352db-7fd5-4987-a89b-2ebabbfbd22c",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-05-18.032156.jgb.fm.ladner.t-flac16",
+      "source_uuid": "f2e7cff4-250d-3aee-932d-e43654667f45",
+      "show_uuid": "8b23ee17-067f-4f1b-a191-b1e4e7edbdae",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-05-19.124791.nak300.rossi.ford.sbeok.t-flac16",
+      "source_uuid": "376dae05-55bb-6fc7-13db-1b197ef06075",
+      "show_uuid": "8f32fb15-1566-485b-a5e1-e94680c11f16",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-07-31.014429.jgb.sbd.ladner.sbeok.t-flac16",
+      "source_uuid": "a4a33756-53dd-a16b-c225-6647c1cfcf5b",
+      "show_uuid": "0c053050-bdfb-4e02-96b8-8a3ec641c9c2",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-01.149281.jgb.sennmk441.tb.flac16",
+      "source_uuid": "21b8cddf-c129-70c9-a4cb-98d38ef212a6",
+      "show_uuid": "3bde046a-adf5-46f4-95f9-cc397204bbda",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-01.xxxxxx.jgb.akg.rogers-mance.wise.flac16",
+      "source_uuid": "a9717714-e03e-62e0-c7fa-ed92c701b546",
+      "show_uuid": "3bde046a-adf5-46f4-95f9-cc397204bbda",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-10.020750.jgb.fob-nak300.reutelhuber.miller.sbeok.t-flac16",
+      "source_uuid": "8b083066-79a9-d7a0-e212-925e5161d277",
+      "show_uuid": "2e030da3-beac-46a4-90cf-ee3f6e36354d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-11.078159.jgb.senn421.vita.minches.sbeok.t-flac16",
+      "source_uuid": "348dce65-c241-8c8c-f09e-c9a613dfd936",
+      "show_uuid": "b4d2717f-3285-4906-bfaa-83e424fe19c5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-11.120062.jgb.akg224.dyche.t-flac16",
+      "source_uuid": "98b49ef6-ae43-5845-0fcd-2d475b0adef7",
+      "show_uuid": "b4d2717f-3285-4906-bfaa-83e424fe19c5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-13.032070.jgb.aud.unknown.trumland.sbeok.t-flac16",
+      "source_uuid": "97d3c060-e681-bc05-d432-3cd3d1d1a5d5",
+      "show_uuid": "9113a475-e3d3-4e6a-ae0e-96e51037fef2",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-13.149555.senn441.lamarre.gems.flac24",
+      "source_uuid": "23d307d4-0c96-46d6-31dd-5457eca67602",
+      "show_uuid": "9113a475-e3d3-4e6a-ae0e-96e51037fef2",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-16.091442.jgb.nak300.damico.t-flac16",
+      "source_uuid": "16c1d167-69a0-6a34-45ff-592c6a82f4ae",
+      "show_uuid": "d41c9d6f-9113-441e-a779-3b1a5cb44f52",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-18.148835.jgb.senn.me80.hessberg.miller.clugston.flac2496",
+      "source_uuid": "99d616e8-db9c-8afd-085f-b0aa10eca0bf",
+      "show_uuid": "28feb166-ce34-48e9-95e4-6baa06db0c5a",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-08-26.084568.jgb.sony.dearth.moses.sbefail.t-flac16",
+      "source_uuid": "bd896b94-2b2d-73ea-72e5-9244574d44de",
+      "show_uuid": "d277bcc6-9114-4c7f-a700-7fd4f34d1c21",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-11-17.135213.jgjk.senn441.lamarre-berger.flac16",
+      "source_uuid": "dc05fe97-9e6b-7eba-3975-d52b1a8b8a9f",
+      "show_uuid": "1ac8d7d2-767f-42b8-9cc9-0a74d306fa12",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg84-11-24.028789.jgjk.aud.early.late.ackerman.sbeok.shnf",
+      "source_uuid": "745bdc91-b64d-b528-92ba-39bef1dcf829",
+      "show_uuid": "df9a8282-1d15-48e8-bc7f-44b87b9c5a08",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg84-11-26.109348.jgjk.sbd.flac2448",
+      "source_uuid": "5f2935d5-6ebe-1a61-abd2-707b9aa17521",
+      "show_uuid": "6fd02429-7af0-4dfb-a981-978b850006bb",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg84-12-02.012588.jgb.nak700.corley.ward.t-flac16",
+      "source_uuid": "f806fca2-68d7-1f9b-7d06-6cfb3d9d794e",
+      "show_uuid": "7a68ba56-6b32-42f6-a388-8f55211d0dbb",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-12-06.020325.jgb.sbd.angus.ladner.sbeok.t-flac16",
+      "source_uuid": "80fff08a-6a74-74ff-95d2-2477c2ea60b3",
+      "show_uuid": "f362f28b-09ed-4b93-8b75-2dedb0601a71",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg84-12-08.089290.jgb.sonyECM270.lee.minches.t-flac16",
+      "source_uuid": "da9723bd-4666-8077-9e01-de25970fc4b1",
+      "show_uuid": "3e44cc33-1c0d-4940-88e3-4bed620765b9",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg85-03-02.023146.jgb.nak700.corley.ladner.sbeok.t-flac16",
+      "source_uuid": "3c27a430-8055-ec3f-6d65-d411c05257a9",
+      "show_uuid": "290c114d-27f6-4314-a7d6-0e86b4c0dcaa",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg85-03-03.087650.jgb.shure.holtz.GEMS.sbeok.t-flac16",
+      "source_uuid": "e3a32f24-6d16-5f59-311b-d420760934cd",
+      "show_uuid": "7d22fe7c-ddac-495d-9e0b-64108ab816ce",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg85-05-31.032007.jgjk.early.sony939.pinedo.mandel.sbeok.t-flac16",
+      "source_uuid": "5d8c645e-427c-3e28-d8c6-b1a1421917f1",
+      "show_uuid": "830bfbeb-7479-4053-88e7-32a208814d61",
+      "artist_uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c"
+    },
+    {
+      "identifier": "jg85-06-03.092786.jgb.pzm.russjcan.sbeok.t-flac16",
+      "source_uuid": "22aa8bcb-72fc-f23f-f354-042bb1813cbe",
+      "show_uuid": "150274b2-93e0-4ff7-8755-db2da6645241",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-03-18.022299.jgab.aud.unknown.ladner.t-flac16",
+      "source_uuid": "5a36c357-5152-9a5f-d2c9-4e6ea2769ea5",
+      "show_uuid": "16ac248f-35e2-4d62-8970-f574ceb4f053",
+      "artist_uuid": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+    },
+    {
+      "identifier": "jg87-08-29.031639.jgab.jgb.mtx.dan.t-flac16",
+      "source_uuid": "161033db-5df5-3b41-4dc6-802369261447",
+      "show_uuid": "c4acecc6-c42d-4233-b100-b1e11c26457d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-08-29.106934.jgab.jgb.sbd.walker.scotton.miller.t-flac16",
+      "source_uuid": "343c1c64-cd3b-f390-e971-5d523dc3a5bc",
+      "show_uuid": "c4acecc6-c42d-4233-b100-b1e11c26457d",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-10-15.091776.jgab.jgb.fob-nak300.damico.t-flac16",
+      "source_uuid": "7d18cbd0-bc5b-28a9-184b-8ff7ad86b229",
+      "show_uuid": "155a6b3b-6167-4482-b896-337783181c6e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-10-21.006350.jgab.jgb.early.p-late.sbd.cole.tobin.sbeok.t-flac16",
+      "source_uuid": "826c4862-2478-190b-637e-012837d3e5fa",
+      "show_uuid": "26d4973e-9a3d-4dc2-9bab-db459ec8fec7",
+      "artist_uuid": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+    },
+    {
+      "identifier": "jg87-10-21.080043.jgb.late.set2.nak300.unknown.andrewf.sbeok.t-flac16",
+      "source_uuid": "4653b669-1b1f-0ea2-698a-1f2de5febe7e",
+      "show_uuid": "f7fe3582-d913-4bf7-8b0d-f2f7aba394be",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-10-25.080295.jgb.early.nak300.unknown.ladner.sbeok.t-flac16",
+      "source_uuid": "7995f248-7910-8aba-4fc8-3cc552935f65",
+      "show_uuid": "00c61667-4082-44c4-aa51-8712ebfd04f6",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-10-28.083239.jgab.early.sbd.GEMS.t-flac16",
+      "source_uuid": "1e2cf37a-f1b6-1d67-fe32-9bec2457152d",
+      "show_uuid": "ff1b3153-2d45-47d4-ae2e-6cb7c230c995",
+      "artist_uuid": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+    },
+    {
+      "identifier": "jg87-10-31.080696.jgb.early.nak300.unknown.ladner.t-flac16",
+      "source_uuid": "2e0ae2cd-9d7e-25b1-25ef-b2a8c1be9a62",
+      "show_uuid": "60e56807-89e5-44cd-a1d7-563299448bf5",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-11-27.080133.jgab.jgb.sennMKE2002.andrewf.t-flac16",
+      "source_uuid": "e551df6c-216e-ecba-0d27-0296f076540b",
+      "show_uuid": "154d20cb-c6b5-45cf-b2bb-27342facd77e",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg87-11-29.022149.jgab.aud.unknown.misSHN.sbeok.t-flac16",
+      "source_uuid": "a7b3e2ce-58c9-0da8-7f8a-f36e0bac59a7",
+      "show_uuid": "576493c3-ab7c-41a0-9d32-1ac6b014b6f0",
+      "artist_uuid": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+    },
+    {
+      "identifier": "jg88-02-05.xxxxxx.jgb.all.aud-CC.flac2448",
+      "source_uuid": "5a41ff44-1d13-b44b-54b5-e305bf37c9a5",
+      "show_uuid": "df44634a-1855-46f4-8713-1e64d5ea4b64",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jg88-07-09.084650.jgab.fob-nak700.corley.fixed-82171.sbeok.t-flac16",
+      "source_uuid": "42a9585e-bd1b-603b-5675-2cc9cf61a965",
+      "show_uuid": "089ebcd2-0446-452e-a283-d1bd501d03a1",
+      "artist_uuid": "506e3842-2f38-3b99-ae64-35caeb928e6b"
+    },
+    {
+      "identifier": "jg88-11-05.099565.jgb.late.sbd.minches.t-flac16",
+      "source_uuid": "e60bab27-c2c5-27b6-f300-733cf4a44283",
+      "show_uuid": "9be2900c-7cdf-469d-897f-b7f98bbe6175",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    },
+    {
+      "identifier": "jgb1993-11-01",
+      "source_uuid": "e4d1f9da-9ead-80d0-7bbe-8b72526db870",
+      "show_uuid": "2d5ebde2-a904-40d3-0565-f0c4d5875281",
+      "artist_uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715"
+    }
+  ],
+  "evidence_file_sha256": {
+    "http-before-split/requests.json": "5ee96cc79472accd69e9bcc115b89b14bf8062e551ee5dba9a2e1a9fdd0db1ce",
+    "http-after-split/requests.json": "192e41b1dc8ffde8c88f0eca45633dfa7803cf59f4f62287c08572794f4bdc2f",
+    "http-repeat/requests.json": "1bd219d19f1713824567d7732121a761cfd874dfa42c21e3ad028140bff1c189",
+    "http-repeat/identity-manifest.json": "2f1ed013cbe9d25654427df2185de11152392fba00164191eeeaefee350772a8"
+  },
+  "limitations": [
+    "Finite reviewed selection, not full Jerry traversal.",
+    "Native-source reuse was not claimed for this cohort-owned sample.",
+    "Initial workflow totals count evaluation outcomes and can include prior items or repeated review outcomes; HTTP counts are distinct playable recordings.",
+    "The conservative tribute detector holds one supported historical recording because transfer notes mention a tribute to a lost venue; it needs separate contextual review."
+  ]
+}

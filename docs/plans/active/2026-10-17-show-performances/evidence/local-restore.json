@@ -1,0 +1,107 @@
+{
+  "all_restricted_fingerprints_equal": true,
+  "assignment_kind_counts": {
+    "accepted": 5,
+    "combined": 20,
+    "legacy": 319,
+    "unresolved": 4
+  },
+  "completed_at_utc": "2026-10-17T16:00:20.122557+00:00",
+  "consistent_exported_snapshot": true,
+  "dump_bytes": 11949762,
+  "dump_sha256": "137dcdc6140306e100bb96dfff6ea72ad5509833ce8883f3e08571f2ea871bb2",
+  "extensions": [
+    "plpgsql:1.0",
+    "timescaledb:2.28.2"
+  ],
+  "repository_head": "7632d4ef46419d7572d4a437bf1685e0e1e1d2ff",
+  "requested_code_revision": "5a34337",
+  "requested_code_revision_is_ancestor_of_recorded_head": true,
+  "restore_succeeded": true,
+  "restored_database": "relisten_performance_restore_20261017",
+  "restored_split_shows": [
+    "8963bf0a-2819-408e-bc36-a9f54c67b9fd:late:2",
+    "8f949dd1-526a-4074-8da3-4986785068e8:early:3"
+  ],
+  "reviewed_performance_keys": 2,
+  "reviewed_source_assignments": 5,
+  "schema_comparison": "Column schema comparison omits table_catalog, udt_catalog and domain_catalog: the restored database intentionally has a different name. Data, assignments, evidence, constraints and migration rows compare without normalization.",
+  "schema_versions": [
+    16,
+    17
+  ],
+  "scope": "Local isolated catalog restore rehearsal only; no production rollout or production backup validation.",
+  "source_database": "relisten_jerry_20261017",
+  "started_at_utc": "2026-10-17T15:59:55.712166+00:00",
+  "timescale_restore_mode_after": "off",
+  "verified": {
+    "additive_columns": {
+      "rows": 31,
+      "sha256": "dfb558ff8fc3d5ac44947bc848f20ddf375bb54ebde9ccdbb8723bfd485c985a"
+    },
+    "additive_constraints": {
+      "rows": 19,
+      "sha256": "7aa58555ab996ded768d7025369a66c811890f0398f464a2710400c2c254e9a2"
+    },
+    "artist_candidates": {
+      "rows": 6,
+      "sha256": "a10afd4c3dc4e4fa95383de8e9be3315243dd90816b145c46dac3f20237fa8a9"
+    },
+    "artists": {
+      "rows": 6,
+      "sha256": "4ccddafd2817d93194fcaf28987c180229f789806c21a29e4134e725b6e7bcfa"
+    },
+    "features": {
+      "rows": 6,
+      "sha256": "cd91575fe34030ed6bfa3ee70d307561b122f9c5d08f5e33856ca88d5ca74463"
+    },
+    "item_intake": {
+      "rows": 350,
+      "sha256": "7067c56f808e69b20e12d076adcde152d5cf1bfd3266f638ee09b0385fb642e6"
+    },
+    "item_resolutions": {
+      "rows": 351,
+      "sha256": "c4effeb233c10ebd2aeeaf6909bff5ced142516eb243490d593f78f90199720b"
+    },
+    "migration_versions": {
+      "rows": 2,
+      "sha256": "1bc436577d7a86763dbb749dd107c96c1e4c41fe1bc070202438c80b2ebddd9e"
+    },
+    "observations": {
+      "rows": 351,
+      "sha256": "0b8763c6839ddbdfa1c750e1c029017a4275f3612f9b14f8aaa77991a93c045f"
+    },
+    "setlist_show_assignments": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "show_performance_keys": {
+      "rows": 2,
+      "sha256": "6371a4a32d378f9830f21fc8e244ec77b78ebc26d3ba8c9d943a00b8a10c9fad"
+    },
+    "shows": {
+      "rows": 269,
+      "sha256": "e8267e43a73f9a9fecdb0ad2d393f0d2ddc96df6c94fb33335d3176173940f94"
+    },
+    "source_sets": {
+      "rows": 348,
+      "sha256": "b4a9a054501645b3bc768fe928d38a3fffe4b379975f4e09339351b3525f933a"
+    },
+    "source_show_assignments": {
+      "rows": 348,
+      "sha256": "ac5803970caea8600012e6dc06b2ad9d0af8a7984b371c5838e505eef18c26ed"
+    },
+    "source_tracks": {
+      "rows": 3700,
+      "sha256": "7984e6e03046798a0cfecc8ab0b03afd90ebfec12dc25af301b39b927894c014"
+    },
+    "sources": {
+      "rows": 348,
+      "sha256": "a60d305814a766a1844c5fc19a6baebae7a9d9f85a19f92a2cfc4b79ad796734"
+    },
+    "years": {
+      "rows": 24,
+      "sha256": "877b45ae53656ead492184cb8b4fa2648ae8774f3bc1e0fc4d8519bc74f3142c"
+    }
+  }
+}

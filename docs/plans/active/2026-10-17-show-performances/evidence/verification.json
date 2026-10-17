@@ -1,0 +1,43 @@
+{
+  "production_code_revision": "5a34337",
+  "build": {
+    "errors": 0,
+    "warnings": 18,
+    "warning_context": "Existing NuGet warnings; full output retained outside Git.",
+    "target": "RelistenApi.sln"
+  },
+  "format": {
+    "command": "dotnet csharpier check .",
+    "files": 435,
+    "passed": true
+  },
+  "regression": {
+    "command": "./test-local.sh --no-build --no-restore --filter 'FullyQualifiedName~TapersSection|FullyQualifiedName~ReviewedPerformers|FullyQualifiedName~Collections|FullyQualifiedName~Ingestion|FullyQualifiedName~ArchiveOrg|FullyQualifiedName~ArchivePerformance|FullyQualifiedName~CatalogRebuild|FullyQualifiedName~ShowPerformances|FullyQualifiedName~ArtistRegistry' --logger 'trx;LogFileName=performance-publish-default.trx'",
+    "counters": {
+      "total": "483",
+      "executed": "483",
+      "passed": "483",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "duration": "7m17s",
+    "trx_sha256": "b990e14f363c2f0558720d5992184c190ca24f2b0f7e66cefa0e36d4f8726117"
+  },
+  "review": {
+    "correctness": "Independent fresh reader traced accepted and uncertain source assignment, evidence freshness, native-first concurrency, dirty recovery and UUID/date routing. No remaining actionable findings.",
+    "readability": "Entry points reviewed for ownership, phase responsibilities, cancellation, durable state and recovery; helpers reviewed and simplified where useful.",
+    "helper_endpoint_checks": "Four remote endpoint configurations rejected before clients were constructed; loopback results command accepted without workflows or writes."
+  },
+  "scope": "Affected regression and isolated live acceptance; production rollout is separate."
+}
