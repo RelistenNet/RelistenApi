@@ -119,6 +119,12 @@ acknowledges the post-write generation while the immutable audit ticket retains
 the original observed generation. This keeps its own accepted change from
 immediately making it pending. Other consumers still become pending.
 
+Fresh attempts with unchanged matching facts must also settle. The
+[unchanged-publication contract](unchanged-publication.md) preserves current
+claim revisions and deduplicates exact citations. New support still invalidates
+matching facts. This prevents repeated equal writes from keeping candidate
+consumers pending after the catalog stops changing.
+
 Apply migration 30 before code that consumes these dependencies. Before enabling
 automatic matching, drain older work that lacks the required fences. For binary
 rollback, stop normalization coordinators and publication; older binaries do not
