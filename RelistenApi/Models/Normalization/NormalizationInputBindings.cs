@@ -26,5 +26,6 @@ public sealed record NormalizationInputContributionState(
     IReadOnlyList<NormalizationResourceKey> Resources,
     IReadOnlyList<Guid> DependencySubjectUuids,
     IReadOnlyList<Guid> CatalogArtistUuids,
-    IReadOnlyList<string> SourceIdentifiers
+    IReadOnlyList<string> SourceIdentifiers,
+    bool UsesMappingRegistry = false
 );

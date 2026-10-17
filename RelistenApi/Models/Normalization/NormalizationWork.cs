@@ -38,6 +38,12 @@ public sealed record NormalizationSourceIdentityDependency(
 );
 
 /// <summary>
+/// Fences provider-mapping searches, including an artist mapping that did not exist in the
+/// caller's snapshot. Generation zero is valid; null on a ticket means no registry dependency.
+/// </summary>
+public sealed record NormalizationMappingRegistryDependency(long Generation);
+
+/// <summary>
 /// Durable read set captured before extraction. Load immutable input bytes by RevisionUuid.
 /// A retry reuses WorkUuid; a new attempt after changed evidence needs a new WorkUuid.
 /// </summary>
@@ -51,7 +57,8 @@ public sealed record NormalizationWorkTicket(
     IReadOnlyList<NormalizationInputDependency> Inputs,
     IReadOnlyList<NormalizationSubjectDependency> Dependencies,
     IReadOnlyList<NormalizationCatalogDependency>? CatalogInputs = null,
-    IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null
+    IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null,
+    NormalizationMappingRegistryDependency? MappingRegistry = null
 );
 
 public enum NormalizationPublicationStatus

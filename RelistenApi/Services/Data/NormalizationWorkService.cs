@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
@@ -35,6 +36,9 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// Changed policy or bindings require ExpectedConfigurationGeneration matching the current
     /// desired generation, preventing obsolete workers from reinstalling an old configuration.
     /// Equal configuration and exact work replays need no configuration CAS.
+    /// expectedInputRevisions pins inputs consumed before admission, such as a catalog binding's
+    /// provider snapshot. Each expected key must be in resourceKeys; changed heads reject the run
+    /// before its configuration commits. Omitted or empty expectations capture current heads.
     /// Changing input bytes needs no fan-out write:
     /// pending queries and publication compare the durable resource generations directly.
     /// </summary>
@@ -47,7 +51,9 @@ public sealed partial class NormalizationWorkService(DbService db)
         long? expectedConfigurationGeneration = null,
         CancellationToken cancellationToken = default,
         IReadOnlyList<NormalizationCatalogDependency>? catalogInputs = null,
-        IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null
+        IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null,
+        NormalizationMappingRegistryDependency? mappingRegistry = null,
+        IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -57,34 +63,36 @@ public sealed partial class NormalizationWorkService(DbService db)
             resourceKeys,
             dependencySubjectUuids,
             expectedCatalog.Select(input => input.ArtistUuid),
-            expectedSources.Select(input => input.UpstreamIdentifier)
+            expectedSources.Select(input => input.UpstreamIdentifier),
+            mappingRegistry != null
         );
         var configurationHash = bindings.ConfigurationHash(policyVersion);
-        // Preserve existing run hashes when no catalog snapshot was supplied.
-        var requestHash =
+        var expectedInputs = NormalizeExpectedInputRevisions(
+            expectedInputRevisions,
+            bindings.Resources
+        );
+        // Keep both pre-catalog request shapes for durable work UUID replays.
+        var requestPayload =
             expectedCatalog.Length == 0 && expectedSources.Length == 0
-                ? Hash(
-                    JsonSerializer.SerializeToElement(
-                        new
-                        {
-                            subject,
-                            configurationHash,
-                            expectedConfigurationGeneration,
-                        }
-                    )
+                ? JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        subject,
+                        configurationHash,
+                        expectedConfigurationGeneration,
+                    }
                 )
-                : Hash(
-                    JsonSerializer.SerializeToElement(
-                        new
-                        {
-                            subject,
-                            configurationHash,
-                            expectedConfigurationGeneration,
-                            catalogInputs = expectedCatalog,
-                            sourceIdentities = expectedSources,
-                        }
-                    )
+                : JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        subject,
+                        configurationHash,
+                        expectedConfigurationGeneration,
+                        catalogInputs = expectedCatalog,
+                        sourceIdentities = expectedSources,
+                    }
                 );
+        var requestHash = HashWorkRequest(requestPayload, mappingRegistry, expectedInputs);
         var request = new WorkStartRequest(
             workUuid,
             subject,
@@ -93,7 +101,9 @@ public sealed partial class NormalizationWorkService(DbService db)
             expectedConfigurationGeneration,
             requestHash,
             expectedCatalog,
-            expectedSources
+            expectedSources,
+            mappingRegistry,
+            expectedInputs
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -184,10 +194,22 @@ public sealed partial class NormalizationWorkService(DbService db)
             transaction,
             bindings.CatalogArtists,
             bindings.SourceIdentifiers,
+            bindings.UsesMappingRegistry,
             ct
         );
-        RequireCatalogReadSet(catalog, request.CatalogInputs, request.SourceIdentities);
+        RequireCatalogReadSet(
+            catalog,
+            request.CatalogInputs,
+            request.SourceIdentities,
+            request.MappingRegistry
+        );
         var inputs = await LockInputs(connection, transaction, bindings.Resources, ct);
+        await RequireExpectedInputRevisions(
+            connection,
+            transaction,
+            request.ExpectedInputRevisions,
+            ct
+        );
         var configurationHash = bindings.ConfigurationHash(request.PolicyVersion);
         var subjectUuid = await FindOrCreateSubject(
             connection,
@@ -254,7 +276,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                 ))
                 .ToArray(),
             catalog.Artists.Count == 0 ? null : catalog.Artists,
-            catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities
+            catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities,
+            catalog.MappingRegistry
         );
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -282,6 +305,8 @@ public sealed partial class NormalizationWorkService(DbService db)
         string RequestHash,
         NormalizationCatalogDependency[] CatalogInputs,
         NormalizationSourceIdentityDependency[] SourceIdentities,
+        NormalizationMappingRegistryDependency? MappingRegistry,
+        NormalizationBindingInputReference[] ExpectedInputRevisions,
         ContributionChange? Contribution = null
     );
 
@@ -289,14 +314,19 @@ public sealed partial class NormalizationWorkService(DbService db)
         NormalizationResourceKey[] Resources,
         Guid[] Dependencies,
         Guid[] CatalogArtists,
-        string[] SourceIdentifiers
+        string[] SourceIdentifiers,
+        // Omit false in contributed request JSON so pre-registry work hashes still replay.
+        [property: JsonIgnore(
+            Condition = JsonIgnoreCondition.WhenWritingDefault
+        )] bool UsesMappingRegistry = false
     )
     {
         public static WorkBindingSet Create(
             IEnumerable<NormalizationResourceKey> resources,
             IEnumerable<Guid> dependencies,
             IEnumerable<Guid> catalogArtists,
-            IEnumerable<string> sourceIdentifiers
+            IEnumerable<string> sourceIdentifiers,
+            bool usesMappingRegistry = false
         ) =>
             new(
                 resources
@@ -310,11 +340,26 @@ public sealed partial class NormalizationWorkService(DbService db)
                 sourceIdentifiers
                     .Distinct(StringComparer.Ordinal)
                     .Order(StringComparer.Ordinal)
-                    .ToArray()
+                    .ToArray(),
+                usesMappingRegistry
             );
 
         public string ConfigurationHash(string policyVersion) =>
-            CatalogArtists.Length == 0 && SourceIdentifiers.Length == 0
+            UsesMappingRegistry
+                ? Hash(
+                    JsonSerializer.SerializeToElement(
+                        new
+                        {
+                            policyVersion,
+                            resources = Resources,
+                            dependencies = Dependencies,
+                            catalogArtists = CatalogArtists,
+                            sourceIdentifiers = SourceIdentifiers,
+                            mappingRegistry = true,
+                        }
+                    )
+                )
+            : CatalogArtists.Length == 0 && SourceIdentifiers.Length == 0
                 ? Hash(
                     JsonSerializer.SerializeToElement(
                         new
@@ -325,18 +370,18 @@ public sealed partial class NormalizationWorkService(DbService db)
                         }
                     )
                 )
-                : Hash(
-                    JsonSerializer.SerializeToElement(
-                        new
-                        {
-                            policyVersion,
-                            resources = Resources,
-                            dependencies = Dependencies,
-                            catalogArtists = CatalogArtists,
-                            sourceIdentifiers = SourceIdentifiers,
-                        }
-                    )
-                );
+            : Hash(
+                JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        policyVersion,
+                        resources = Resources,
+                        dependencies = Dependencies,
+                        catalogArtists = CatalogArtists,
+                        sourceIdentifiers = SourceIdentifiers,
+                    }
+                )
+            );
     }
 
     private static NormalizationCatalogDependency[] NormalizeCatalogInputs(
@@ -413,6 +458,7 @@ public sealed partial class NormalizationWorkService(DbService db)
                     (ticket.SourceIdentities ?? [])
                         .Select(input => input.UpstreamIdentifier)
                         .ToArray(),
+                    ticket.MappingRegistry != null,
                     cancellationToken
                 );
                 var inputs = await LockInputUuids(
@@ -592,6 +638,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                             OR EXISTS(SELECT 1 FROM normalization.work_catalog_inputs i JOIN normalization.catalog_artist_revisions r ON r.artist_uuid=i.artist_uuid
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_source_identity_inputs i JOIN normalization.catalog_source_identity_revisions r ON r.upstream_identifier=i.upstream_identifier
+                                WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
+                            OR EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs i CROSS JOIN normalization.catalog_mapping_registry_revision r
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation))
                         ORDER BY s.uuid LIMIT @limit
                         """,

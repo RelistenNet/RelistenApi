@@ -13,11 +13,12 @@ public sealed partial class NormalizationWorkService
 {
     private sealed record CatalogReadSet(
         IReadOnlyList<NormalizationCatalogDependency> Artists,
-        IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities
+        IReadOnlyList<NormalizationSourceIdentityDependency> SourceIdentities,
+        NormalizationMappingRegistryDependency? MappingRegistry
     );
 
     /// <summary>
-    /// Take artist clocks before source-identity clocks, then input resources and work owners.
+    /// Take artist clocks before source-identity clocks and the mapping registry, then input resources and work owners.
     /// Shared locks let independent publications proceed together while catalog writers wait.
     /// A publication callback must never acquire catalog row locks or mutate catalog tables.
     /// </summary>
@@ -26,6 +27,7 @@ public sealed partial class NormalizationWorkService
         NpgsqlTransaction transaction,
         Guid[] artistUuids,
         string[] sourceIdentifiers,
+        bool usesMappingRegistry,
         CancellationToken ct
     )
     {
@@ -74,18 +76,35 @@ public sealed partial class NormalizationWorkService
                 "Catalog binding revisions are missing; reload the catalog binding."
             );
         }
-        return new(artistRows, identityRows);
+        NormalizationMappingRegistryDependency? mappingRegistry = null;
+        if (usesMappingRegistry)
+        {
+            mappingRegistry =
+                await connection.QuerySingleAsync<NormalizationMappingRegistryDependency>(
+                    new CommandDefinition(
+                        "SELECT generation AS \"Generation\" FROM normalization.catalog_mapping_registry_revision WHERE singleton FOR SHARE",
+                        transaction: transaction,
+                        cancellationToken: ct
+                    )
+                );
+        }
+        return new(artistRows, identityRows, mappingRegistry);
     }
 
     private static void RequireCatalogReadSet(
         CatalogReadSet current,
         IReadOnlyList<NormalizationCatalogDependency> expectedArtists,
-        IReadOnlyList<NormalizationSourceIdentityDependency> expectedSources
+        IReadOnlyList<NormalizationSourceIdentityDependency> expectedSources,
+        NormalizationMappingRegistryDependency? expectedMappingRegistry
     )
     {
         if (
             expectedArtists.Any(expected => !current.Artists.Contains(expected))
             || expectedSources.Any(expected => !current.SourceIdentities.Contains(expected))
+            || (
+                expectedMappingRegistry != null
+                && expectedMappingRegistry != current.MappingRegistry
+            )
         )
         {
             throw new NormalizationConflictException(
@@ -105,7 +124,8 @@ public sealed partial class NormalizationWorkService
                     value => value.UpstreamIdentifier,
                     StringComparer.Ordinal
                 )
-            );
+            )
+        && ticket.MappingRegistry == current.MappingRegistry;
 
     private static async Task ConfigureCatalogBindings(
         NpgsqlConnection connection,
@@ -130,12 +150,16 @@ public sealed partial class NormalizationWorkService
                 SELECT @subjectUuid,unnest(@artists::uuid[]) ON CONFLICT DO NOTHING;
                 INSERT INTO normalization.work_source_identity_inputs(subject_uuid,upstream_identifier)
                 SELECT @subjectUuid,unnest(@identifiers::text[]) ON CONFLICT DO NOTHING;
+                DELETE FROM normalization.work_mapping_registry_inputs WHERE subject_uuid=@subjectUuid AND NOT @usesMappingRegistry;
+                INSERT INTO normalization.work_mapping_registry_inputs(subject_uuid)
+                SELECT @subjectUuid WHERE @usesMappingRegistry ON CONFLICT DO NOTHING;
                 """,
                 new
                 {
                     subjectUuid,
                     artists,
                     identifiers,
+                    usesMappingRegistry = readSet.MappingRegistry != null,
                 },
                 transaction,
                 cancellationToken: ct
@@ -158,10 +182,13 @@ public sealed partial class NormalizationWorkService
                 UPDATE normalization.work_source_identity_inputs i SET published_generation=c.generation
                 FROM unnest(@identifiers::text[],@identityGenerations::bigint[]) AS c(identifier,generation)
                 WHERE i.subject_uuid=@SubjectUuid AND i.upstream_identifier=c.identifier;
+                UPDATE normalization.work_mapping_registry_inputs SET published_generation=@mappingGeneration
+                WHERE subject_uuid=@SubjectUuid;
                 """,
                 new
                 {
                     ticket.SubjectUuid,
+                    mappingGeneration = ticket.MappingRegistry?.Generation,
                     artists = (ticket.CatalogInputs ?? [])
                         .Select(value => value.ArtistUuid)
                         .ToArray(),
