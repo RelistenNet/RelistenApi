@@ -57,7 +57,10 @@ namespace Relisten
             if (hostEnvironment.IsDevelopment())
             {
                 var loggerFactory = LoggerFactory.Create(builder =>
-                    builder.SetMinimumLevel(LogLevel.Debug).AddConsole()
+                    builder
+                        .SetMinimumLevel(LogLevel.Debug)
+                        // Keep database diagnostics separate from machine-readable command output.
+                        .AddConsole(options => options.LogToStandardErrorThreshold = LogLevel.Trace)
                 );
                 NpgsqlLoggingConfiguration.InitializeLogging(
                     loggerFactory,

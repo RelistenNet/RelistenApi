@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 using Newtonsoft.Json;
 using Relisten;
 using Relisten.Api.Models;
@@ -18,7 +19,22 @@ using SimpleMigrations.DatabaseProvider;
 var registerSchedules = args.Contains("--register-schedules");
 var registerIntakeSchedules = args.Contains("--register-taperssection-schedules");
 var migrate = args.Contains("--migrate");
-var builder = CreateWorkerBuilder(args);
+HostApplicationBuilder builder;
+try
+{
+    builder = CreateWorkerBuilder(args);
+}
+catch (FormatException)
+    when (args.Any(argument =>
+            argument == "--normalize-recordings"
+            || argument.StartsWith("--normalize-recordings=", StringComparison.Ordinal)
+        )
+    )
+{
+    Console.Error.WriteLine("Invalid recording command options. Each option requires a value.");
+    Environment.ExitCode = 1;
+    return;
+}
 var sentryOptions = WorkerLogging.Configure(builder);
 using var sentry = sentryOptions == null ? null : SentrySdk.Init(sentryOptions);
 using var host = builder.Build();
@@ -35,6 +51,7 @@ var operations = new[]
     "taperssection-artist",
     "taperssection-status",
     "collection-discover",
+    "normalize-recordings",
 }
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
@@ -82,6 +99,15 @@ try
         return;
     }
 
+    if (operations[0] == "normalize-recordings")
+    {
+        Environment.ExitCode = await RunRecordingNormalizationAsync(
+            host.Services,
+            builder.Configuration
+        );
+        return;
+    }
+
     using var scope = host.Services.CreateScope();
     var commands = scope.ServiceProvider.GetRequiredService<IngestionOperatorCommands>();
     Console.WriteLine(await commands.RunAsync(operations[0]));
@@ -104,6 +130,7 @@ catch (Exception error)
 
 static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
 {
+    RequireRecordingOptionValues(arguments);
     var switches = new[]
     {
         "--register-schedules",
@@ -152,8 +179,46 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     builder.Services.AddRelistenCatalogServices();
     builder.Services.AddTemporalIngestionWorkers(builder.Configuration);
     builder.Services.AddScoped<IngestionOperatorCommands>();
+    builder.Services.AddScoped<NormalizationRecordingCommand>();
+    if (builder.Configuration["normalize-recordings"] != null)
+    {
+        // Operator receipts use stdout as a JSON stream; diagnostics remain on stderr.
+        builder.Services.Configure<ConsoleLoggerOptions>(options =>
+            options.LogToStandardErrorThreshold = LogLevel.Trace
+        );
+    }
 
     return builder;
+}
+
+static void RequireRecordingOptionValues(string[] arguments)
+{
+    if (
+        !arguments.Any(argument =>
+            argument == "--normalize-recordings"
+            || argument.StartsWith("--normalize-recordings=", StringComparison.Ordinal)
+        )
+    )
+    {
+        return;
+    }
+
+    // The configuration provider silently ignores a trailing key without a value. A recording
+    // command must reject that request before it can resolve services or select recordings.
+    var options = new[] { "--normalize-recordings", "--artist", "--after", "--limit" };
+    for (var index = 0; index < arguments.Length; index++)
+    {
+        if (
+            options.Contains(arguments[index])
+            && (
+                index + 1 == arguments.Length
+                || arguments[index + 1].StartsWith("--", StringComparison.Ordinal)
+            )
+        )
+        {
+            throw new FormatException("Recording command options require values.");
+        }
+    }
 }
 
 static bool ValidateOperationSelection(
@@ -171,7 +236,7 @@ static bool ValidateOperationSelection(
         + (registerIntakeSchedules ? 1 : 0);
     if (operationCount > 1)
     {
-        Console.Error.WriteLine("Choose one ingestion, status, migration, or schedule operation.");
+        Console.Error.WriteLine("Choose one worker operation.");
         return false;
     }
 
@@ -201,7 +266,68 @@ static bool ValidateOperationSelection(
         return false;
     }
 
+    if (
+        configuration["normalize-recordings"] == null
+        && new[] { "artist", "after", "limit" }.Any(key => configuration[key] != null)
+    )
+    {
+        Console.Error.WriteLine(
+            "Artist, after-source and limit options require --normalize-recordings."
+        );
+        return false;
+    }
+
     return true;
+}
+
+static async Task<int> RunRecordingNormalizationAsync(
+    IServiceProvider services,
+    IConfiguration configuration
+)
+{
+    using var cancellation = new CancellationTokenSource();
+    ConsoleCancelEventHandler cancel = (_, args) =>
+    {
+        args.Cancel = true;
+        cancellation.Cancel();
+    };
+    Console.CancelKeyPress += cancel;
+    try
+    {
+        var request = NormalizationRecordingCommand.Parse(configuration);
+        using var scope = services.CreateScope();
+        return await scope
+            .ServiceProvider.GetRequiredService<NormalizationRecordingCommand>()
+            .RunAsync(request, Console.Out, cancellation.Token);
+    }
+    catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+    {
+        Console.Error.WriteLine(
+            "Recording processing canceled. Retry the same page UUID and selectors to resume."
+        );
+        return 130;
+    }
+    catch (Exception error)
+        when (error
+                is ArgumentException
+                    or Relisten.Api.Models.Normalization.NormalizationConflictException
+        )
+    {
+        Console.Error.WriteLine(error.Message);
+        return 1;
+    }
+    catch (Exception error)
+    {
+        SentrySdk.CaptureException(error);
+        Console.Error.WriteLine(
+            "Recording processing failed. Inspect the retained page, attempts and failure receipts before retrying."
+        );
+        return 1;
+    }
+    finally
+    {
+        Console.CancelKeyPress -= cancel;
+    }
 }
 
 static void MigrateCatalog(DbService database, IConfiguration configuration)
