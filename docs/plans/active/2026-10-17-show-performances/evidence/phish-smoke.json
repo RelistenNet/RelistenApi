@@ -1,0 +1,718 @@
+{
+  "format": 1,
+  "purpose": "Bounded local Phish provider import and repeat verification",
+  "proof_commit": "735b94fb6cb9478f5eea2867fe44ce9a761f6929",
+  "scope": {
+    "artist_uuid": "ca53d281-0041-ae33-a050-c87702d93b0c",
+    "provider_year": 2026,
+    "first_date": "2026-01-28",
+    "last_date": "2026-10-12",
+    "full_artist_catalog": false,
+    "live_same_day_split_observed": false,
+    "production_writes": false,
+    "schedules_registered": false
+  },
+  "executions": [
+    {
+      "provider": "phish.in",
+      "pass": "first",
+      "workflowId": "ingest/artist/ca53d281-0041-ae33-a050-c87702d93b0c",
+      "resultRunId": "01a14a86-89f8-7130-a76b-4650445a825b",
+      "result": {
+        "artist": {
+          "value": "ca53d281-0041-ae33-a050-c87702d93b0c"
+        },
+        "completedItems": 42,
+        "skippedItems": 0,
+        "failedItems": 0,
+        "status": "Completed"
+      }
+    },
+    {
+      "provider": "phish.net",
+      "pass": "first",
+      "workflowId": "ingest/artist/ca53d281-0041-ae33-a050-c87702d93b0c",
+      "resultRunId": "01a14a86-fbab-70cb-b04d-c9eae46c6638",
+      "result": {
+        "artist": {
+          "value": "ca53d281-0041-ae33-a050-c87702d93b0c"
+        },
+        "completedItems": 42,
+        "skippedItems": 0,
+        "failedItems": 0,
+        "status": "Completed"
+      }
+    },
+    {
+      "provider": "phish.in",
+      "pass": "repeat",
+      "workflowId": "ingest/artist/ca53d281-0041-ae33-a050-c87702d93b0c",
+      "resultRunId": "01a14a88-1bd1-735b-93dc-8395bdeb7ee4",
+      "result": {
+        "artist": {
+          "value": "ca53d281-0041-ae33-a050-c87702d93b0c"
+        },
+        "completedItems": 42,
+        "skippedItems": 0,
+        "failedItems": 0,
+        "status": "Completed"
+      }
+    },
+    {
+      "provider": "phish.net",
+      "pass": "repeat",
+      "workflowId": "ingest/artist/ca53d281-0041-ae33-a050-c87702d93b0c",
+      "resultRunId": "01a14a88-28b9-71e0-ad79-5237ab1aec22",
+      "result": {
+        "artist": {
+          "value": "ca53d281-0041-ae33-a050-c87702d93b0c"
+        },
+        "completedItems": 42,
+        "skippedItems": 0,
+        "failedItems": 0,
+        "status": "Completed"
+      }
+    }
+  ],
+  "api_first": {
+    "checked_at_utc": "2026-10-17T15:43:01.621623+00:00",
+    "passed": true,
+    "playable_recordings_in_scope": 42,
+    "artists": 1,
+    "shows_read": 42,
+    "sources_read": 42,
+    "sets_read": 128,
+    "tracks_read": 746,
+    "dates_read": 42,
+    "performance_types": {
+      "unknown": 42
+    },
+    "identity_sha256": "4018c8229eaa48841b343e2f4211f89d4ccccd4fe1a28f7380e1250e57579b3b",
+    "repeat_equal": false,
+    "http_requests": 129
+  },
+  "api_repeat": {
+    "checked_at_utc": "2026-10-17T15:43:22.652900+00:00",
+    "passed": true,
+    "media_range": {
+      "track_uuid": "2b901a0c-bdd0-98d0-2189-e73d4d0ffd89",
+      "status": 206,
+      "bytes_read": 4096,
+      "content_type": "audio/mpeg",
+      "url_sha256": "4310152164bd2e83e3a1bfa9d9c38f87b80de436d93044d141dd69d3ef21becc"
+    },
+    "playable_recordings_in_scope": 42,
+    "artists": 1,
+    "shows_read": 42,
+    "sources_read": 42,
+    "sets_read": 128,
+    "tracks_read": 746,
+    "dates_read": 42,
+    "performance_types": {
+      "unknown": 42
+    },
+    "identity_sha256": "4018c8229eaa48841b343e2f4211f89d4ccccd4fe1a28f7380e1250e57579b3b",
+    "repeat_equal": true,
+    "http_requests": 129
+  },
+  "comparison": {
+    "equal": true,
+    "differences": []
+  },
+  "seed_identity_preservation": {
+    "passed": true,
+    "preserved": {
+      "shows": 8,
+      "sources": 8,
+      "sets": 24,
+      "tracks": 136
+    }
+  },
+  "request_evidence": [
+    {
+      "file": "http-first/requests.json",
+      "bytes": 24700,
+      "sha256": "f2d26d264fb4f068f5407a569aa5dff3d41ab9c93f11e51707f13657e698962d",
+      "requests": 129,
+      "status_counts": {
+        "200": 129
+      },
+      "buckets": {
+        "artist_reads": 3,
+        "show_uuid_reads": 42,
+        "date_performance_reads": 42,
+        "legacy_date_reads": 42
+      }
+    },
+    {
+      "file": "http-repeat/requests.json",
+      "bytes": 24700,
+      "sha256": "f2d26d264fb4f068f5407a569aa5dff3d41ab9c93f11e51707f13657e698962d",
+      "requests": 129,
+      "status_counts": {
+        "200": 129
+      },
+      "buckets": {
+        "artist_reads": 3,
+        "show_uuid_reads": 42,
+        "date_performance_reads": 42,
+        "legacy_date_reads": 42
+      }
+    }
+  ],
+  "identity_digest_contract": "SHA-256 of UTF-8 JSON with sorted keys, compact separators and ensure_ascii=false; covers artist, show, source, set, track, date destinations and scope from verify.py. Full manifests remain outside Git.",
+  "shows": [
+    {
+      "show_uuid": "f81526bd-818f-4b2c-916e-c6af47bafa90",
+      "display_date": "2026-01-28",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "01ce8f79-d0f3-1fce-a495-639ba3fc50e8"
+      ],
+      "upstream_identifiers": [
+        "2528"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "f7ac0068-60ff-4a35-9175-d70f253fd5f1",
+      "display_date": "2026-01-29",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "0a40f9a1-f258-fb79-1d6c-1fa35540329e"
+      ],
+      "upstream_identifiers": [
+        "2529"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "a68cb7f2-9d7c-4729-ab94-08dc3f3dd5be",
+      "display_date": "2026-01-30",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "d2fd0950-1be4-9c84-e787-202ed762f57f"
+      ],
+      "upstream_identifiers": [
+        "2531"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "f0ccf851-df26-4860-935a-2e22c7d3e6a4",
+      "display_date": "2026-01-31",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "dc9216cb-4d35-e8c7-01ed-7629c917663a"
+      ],
+      "upstream_identifiers": [
+        "2532"
+      ],
+      "sets": 3,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "0a326d19-1982-48c6-83ce-9fb17b28e2f8",
+      "display_date": "2026-04-16",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "cf240868-8d44-8531-eba9-781d330755d0"
+      ],
+      "upstream_identifiers": [
+        "2534"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "725ad91d-a0ce-45cf-852e-09f40ba03868",
+      "display_date": "2026-04-17",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "7d0d6aed-64e6-6d90-8d3e-5a2a99855796"
+      ],
+      "upstream_identifiers": [
+        "2535"
+      ],
+      "sets": 3,
+      "tracks": 19
+    },
+    {
+      "show_uuid": "de1f1047-b7df-4696-a5d9-579b505ec602",
+      "display_date": "2026-04-18",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "073f84ea-7697-24fa-181f-58e566c41d45"
+      ],
+      "upstream_identifiers": [
+        "2536"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "87ae6029-357c-48ff-ad1a-b63a3a154922",
+      "display_date": "2026-04-23",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "90a55114-96e9-5a23-4c72-fc5e616679ce"
+      ],
+      "upstream_identifiers": [
+        "2537"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "e1be5904-652f-4a6e-aa9b-28aa5bc78e93",
+      "display_date": "2026-04-24",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "5f32f9bb-321b-b09c-2d81-6857c04f05f5"
+      ],
+      "upstream_identifiers": [
+        "2538"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "13f395a0-f56a-4fa5-8b6a-ab5bb0d8401a",
+      "display_date": "2026-04-25",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "61a87984-9aea-9438-ebd0-2c83ca5bb2a8"
+      ],
+      "upstream_identifiers": [
+        "2539"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "3eab57ba-30ad-495a-b7ee-07f5f10c6dc9",
+      "display_date": "2026-04-30",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "047cf399-27b7-372d-e2a7-fd0e25a6c156"
+      ],
+      "upstream_identifiers": [
+        "2540"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "03bd377e-4875-4e3d-a006-f3332fc0216f",
+      "display_date": "2026-05-01",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "79df83e5-e81e-8505-1a26-a40c1fc97d4a"
+      ],
+      "upstream_identifiers": [
+        "2541"
+      ],
+      "sets": 3,
+      "tracks": 21
+    },
+    {
+      "show_uuid": "5f328869-2983-4570-afbc-300c12e35673",
+      "display_date": "2026-05-02",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "c28092b5-8072-02d9-03cb-144a6e047f63"
+      ],
+      "upstream_identifiers": [
+        "2542"
+      ],
+      "sets": 3,
+      "tracks": 20
+    },
+    {
+      "show_uuid": "58605dcf-e9f8-4dce-bea0-292a2f3701c7",
+      "display_date": "2026-07-07",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "473d4a02-9950-061c-c634-184c1aaf35ba"
+      ],
+      "upstream_identifiers": [
+        "2544"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "cdc06e64-cd4c-4e40-ab69-2823483194c1",
+      "display_date": "2026-07-08",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "c92effe2-cbc2-78a3-aa24-585bca017394"
+      ],
+      "upstream_identifiers": [
+        "2545"
+      ],
+      "sets": 3,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "4a380392-ec46-4364-96f9-5fb4aea7ca79",
+      "display_date": "2026-07-10",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "90043b10-8aaf-936d-f4df-64bc14d02327"
+      ],
+      "upstream_identifiers": [
+        "2547"
+      ],
+      "sets": 3,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "0115c23b-823c-4f71-9ebd-690442b02479",
+      "display_date": "2026-07-11",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "770f0346-e064-a74a-967a-ba0c1a6ad04d"
+      ],
+      "upstream_identifiers": [
+        "2548"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "ea2b52a1-2b58-4e98-b82d-280c503f4652",
+      "display_date": "2026-07-12",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "cc9e9336-4c82-8f58-4df1-f73f41e3996d"
+      ],
+      "upstream_identifiers": [
+        "2549"
+      ],
+      "sets": 3,
+      "tracks": 15
+    },
+    {
+      "show_uuid": "566019a8-8557-474d-833b-5a8feb2fbd75",
+      "display_date": "2026-07-14",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "8f5b493f-00c3-476c-14e2-8e896c393b75"
+      ],
+      "upstream_identifiers": [
+        "2561"
+      ],
+      "sets": 3,
+      "tracks": 15
+    },
+    {
+      "show_uuid": "32dcfca1-fba7-4b59-a70c-7c98ca1ab4d8",
+      "display_date": "2026-07-15",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "d513d12f-55e5-65fb-0cba-874fa6ddc1cc"
+      ],
+      "upstream_identifiers": [
+        "2562"
+      ],
+      "sets": 3,
+      "tracks": 15
+    },
+    {
+      "show_uuid": "5d9600ea-5b5b-41b7-b6bc-c09ffe569c21",
+      "display_date": "2026-07-17",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "074e0899-6b9a-524a-5e66-76c31b266643"
+      ],
+      "upstream_identifiers": [
+        "2550"
+      ],
+      "sets": 3,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "e7578ecd-e5b0-41c3-8543-5366ef6d0c2c",
+      "display_date": "2026-07-18",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "cfe6e771-1af4-a3a6-80a9-d1766e027a7d"
+      ],
+      "upstream_identifiers": [
+        "2551"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "bdab925e-a0d9-46d8-8612-7d6d6f3f5e49",
+      "display_date": "2026-07-19",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "276f9ca5-4eaf-9e4e-6a75-6e309bb192df"
+      ],
+      "upstream_identifiers": [
+        "2552"
+      ],
+      "sets": 3,
+      "tracks": 15
+    },
+    {
+      "show_uuid": "b4be5101-4c9b-415e-858d-f78247879b77",
+      "display_date": "2026-07-21",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "d0aad61a-8929-0d54-9771-cac7e9bdc181"
+      ],
+      "upstream_identifiers": [
+        "2553"
+      ],
+      "sets": 2,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "56859cd7-6a92-4307-8e0c-ecc6c400055b",
+      "display_date": "2026-07-22",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "630b3fdc-6ab5-3109-ab00-96620db8ed54"
+      ],
+      "upstream_identifiers": [
+        "2554"
+      ],
+      "sets": 3,
+      "tracks": 27
+    },
+    {
+      "show_uuid": "8623bf77-7026-458f-a7d6-a73bfe3e2c48",
+      "display_date": "2026-07-24",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "fbfca86e-68e5-594d-f20a-b4c87d975bb7"
+      ],
+      "upstream_identifiers": [
+        "2555"
+      ],
+      "sets": 3,
+      "tracks": 23
+    },
+    {
+      "show_uuid": "b3962a5b-12cb-425e-9ac3-0ef3ea77bc80",
+      "display_date": "2026-07-25",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "6b8f5d77-c1d9-9f8b-8fb6-b620b2f55741"
+      ],
+      "upstream_identifiers": [
+        "2556"
+      ],
+      "sets": 3,
+      "tracks": 22
+    },
+    {
+      "show_uuid": "8ae4cab5-55b7-42de-a8c6-e7755baf8077",
+      "display_date": "2026-07-27",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "3aa909ad-88bf-559b-cf65-3bd63368cbc2"
+      ],
+      "upstream_identifiers": [
+        "2557"
+      ],
+      "sets": 3,
+      "tracks": 20
+    },
+    {
+      "show_uuid": "5f1da9f6-4715-4eda-8ad9-5e074c0af9db",
+      "display_date": "2026-07-29",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "59f2b86d-1830-ac8e-9227-2d60e1753ea7"
+      ],
+      "upstream_identifiers": [
+        "2558"
+      ],
+      "sets": 3,
+      "tracks": 20
+    },
+    {
+      "show_uuid": "bf3debbc-31be-439a-b65e-f2503847eadb",
+      "display_date": "2026-07-31",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "2739ea07-324f-8a5a-ddca-3ace641c4413"
+      ],
+      "upstream_identifiers": [
+        "2559"
+      ],
+      "sets": 3,
+      "tracks": 15
+    },
+    {
+      "show_uuid": "8346bac2-fe55-4124-b8e7-5fa564eb6bc8",
+      "display_date": "2026-08-01",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "e9a22fc7-c7e9-1b90-d248-7f6992dbdf50"
+      ],
+      "upstream_identifiers": [
+        "2560"
+      ],
+      "sets": 3,
+      "tracks": 18
+    },
+    {
+      "show_uuid": "2f6c0d7e-c7fb-43eb-acc7-92100f476191",
+      "display_date": "2026-09-04",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "2e0c8cd8-6607-e24b-19b9-e5379bbc54be"
+      ],
+      "upstream_identifiers": [
+        "2563"
+      ],
+      "sets": 4,
+      "tracks": 19
+    },
+    {
+      "show_uuid": "3c9fcd9d-bb0a-4969-a458-511d8636e439",
+      "display_date": "2026-09-05",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "60c50782-0735-33ae-1db5-f59a37757b7b"
+      ],
+      "upstream_identifiers": [
+        "2564"
+      ],
+      "sets": 4,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "daad091d-6c0d-4066-a532-32bd547effff",
+      "display_date": "2026-09-06",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "a234a7ac-6691-cf35-7149-13ad03713fcf"
+      ],
+      "upstream_identifiers": [
+        "2565"
+      ],
+      "sets": 4,
+      "tracks": 21
+    },
+    {
+      "show_uuid": "f002053e-2f69-0a99-4697-93ab22152f93",
+      "display_date": "2026-10-02",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "ec4fde22-c5ee-dfe4-9d57-833befec3568"
+      ],
+      "upstream_identifiers": [
+        "2567"
+      ],
+      "sets": 3,
+      "tracks": 14
+    },
+    {
+      "show_uuid": "af6e7fca-acec-2554-5afa-677116d622d6",
+      "display_date": "2026-10-03",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "e82dedcd-7944-6c8b-c1f7-7cfa1ae25418"
+      ],
+      "upstream_identifiers": [
+        "2568"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "d655e2a2-9032-a846-57be-5dac39fc82b8",
+      "display_date": "2026-10-04",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "4aebd6cb-6091-d680-3e04-7155760ed22d"
+      ],
+      "upstream_identifiers": [
+        "2570"
+      ],
+      "sets": 3,
+      "tracks": 13
+    },
+    {
+      "show_uuid": "4d49647b-1307-86ad-dd12-16ced8a830bf",
+      "display_date": "2026-10-06",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "89ccc63a-7ba0-203c-f724-aa95d33efb0e"
+      ],
+      "upstream_identifiers": [
+        "2571"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "a8686e26-37ad-08da-0f2a-09315bfe82a9",
+      "display_date": "2026-10-07",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "211a23c2-3010-47c3-3925-f68ce54047c4"
+      ],
+      "upstream_identifiers": [
+        "2572"
+      ],
+      "sets": 3,
+      "tracks": 16
+    },
+    {
+      "show_uuid": "a14738bb-1530-df90-e8af-a02f03d06c66",
+      "display_date": "2026-10-09",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "3d26e135-4f69-0e42-ae41-4e2487c81ff7"
+      ],
+      "upstream_identifiers": [
+        "2575"
+      ],
+      "sets": 3,
+      "tracks": 22
+    },
+    {
+      "show_uuid": "91fd6509-bd6a-6a9a-4623-3a470dbbb752",
+      "display_date": "2026-10-11",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "966b46ab-f3ce-d6ee-0256-48651f01cb1b"
+      ],
+      "upstream_identifiers": [
+        "2573"
+      ],
+      "sets": 3,
+      "tracks": 17
+    },
+    {
+      "show_uuid": "8289ec8a-0517-1a27-00b4-adfc4d4803cb",
+      "display_date": "2026-10-12",
+      "performance_type": "unknown",
+      "source_uuids": [
+        "a27e30bb-bfac-60f1-461c-7c12e771d829"
+      ],
+      "upstream_identifiers": [
+        "2574"
+      ],
+      "sets": 3,
+      "tracks": 20
+    }
+  ],
+  "limits": [
+    "All 42 performance categories are unknown.",
+    "No selected live date contains more than one performance.",
+    "The sampled HTTP206 range proves access to one track at verification time.",
+    "This proof exercises Phish adapters; it does not verify the later Archive default-show policy or larger Jerry/Aadam samples."
+  ]
+}

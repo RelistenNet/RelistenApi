@@ -1,0 +1,91 @@
+{
+  "artistIdOrSlug": "legion-of-mary",
+  "reviewBasis": "Reviewed exact Legion of Mary, Tower Theater, April 11 1975 description headings. Three recordings explicitly identify the early show; two identify the late show. Assign early first to retain the existing date show UUID, then move the two late recordings to their new performance. This local review preserves all recording and playback identities.",
+  "items": [
+    {
+      "identifier": "jg75-04-11.014607.lom.early.aud.moore-minches.shnf",
+      "metadataSha256": "04a52f1f9b3dc4ff03c1fb474e97b33d6aade35dc27d93b9d46b5d4fd3f35271",
+      "performanceKey": "reviewed:ea4f9827-b0e0-5a62-b0b1-b64f4bdd608b",
+      "displayDate": "1975-04-11",
+      "performanceType": "early",
+      "performanceLabel": "Early show",
+      "evidence": [
+        {
+          "locator": "metadata.description",
+          "value": "Legion of Mary\nTower Theater\nUpper Darby, PA\n4/11/75 Early Show",
+          "rule": "reviewed_performer_venue_date_and_performance_heading",
+          "start": 0,
+          "length": 63
+        }
+      ]
+    },
+    {
+      "identifier": "jg75-04-11.112588.lom.early.aud-moore.flac16",
+      "metadataSha256": "648e382b6af17dd9a32ecbe36f02d5e24af53316b4204ce4f059965ac528a988",
+      "performanceKey": "reviewed:ea4f9827-b0e0-5a62-b0b1-b64f4bdd608b",
+      "displayDate": "1975-04-11",
+      "performanceType": "early",
+      "performanceLabel": "Early show",
+      "evidence": [
+        {
+          "locator": "metadata.description",
+          "value": "Legion of Mary\nTower Theater, Upper Darby, PA\nApril 11, 1975\n\nEarly Show",
+          "rule": "reviewed_performer_venue_date_and_performance_heading",
+          "start": 0,
+          "length": 72
+        }
+      ]
+    },
+    {
+      "identifier": "jg75-04-11.138207.lom.early.sonyf99s.peters.zombiwoof.t-flac16",
+      "metadataSha256": "3910c219c94effcc908bf30449998577a32bf08a7c3e8ee3158c50b12ba7a069",
+      "performanceKey": "reviewed:ea4f9827-b0e0-5a62-b0b1-b64f4bdd608b",
+      "displayDate": "1975-04-11",
+      "performanceType": "early",
+      "performanceLabel": "Early show",
+      "evidence": [
+        {
+          "locator": "metadata.description",
+          "value": "This is a tagged version of shnid: 138207\n\nLegion of Mary\nTower Theater\nPhiladelphia PA\nApril 11 1975\nEarly show",
+          "rule": "reviewed_performer_venue_date_and_performance_heading",
+          "start": 0,
+          "length": 112
+        }
+      ]
+    },
+    {
+      "identifier": "jg75-04-11.014608.lom.aud-late.moore-minches.sbeok.uv-flac16",
+      "metadataSha256": "9a263a87c2f74658cfb2fbc1738cff6565c3087bb968516299e6ad82acf5cefa",
+      "performanceKey": "reviewed:e7e0be03-9615-5411-af46-6f7f5ae6bb2a",
+      "displayDate": "1975-04-11",
+      "performanceType": "late",
+      "performanceLabel": "Late show",
+      "evidence": [
+        {
+          "locator": "metadata.description",
+          "value": "Legion of Mary\nTower Theater - Upper Darby, PA\n4/11/75 Late Show",
+          "rule": "reviewed_performer_venue_date_and_performance_heading",
+          "start": 0,
+          "length": 64
+        }
+      ]
+    },
+    {
+      "identifier": "jg75-04-11.112587.lom.late.aud-moore.flac16",
+      "metadataSha256": "2a0974e197e17e619491711de24f0e94b5998f78859e7743a50b0db9301ed9ce",
+      "performanceKey": "reviewed:e7e0be03-9615-5411-af46-6f7f5ae6bb2a",
+      "displayDate": "1975-04-11",
+      "performanceType": "late",
+      "performanceLabel": "Late show",
+      "evidence": [
+        {
+          "locator": "metadata.description",
+          "value": "Legion of Mary\nTower Theater, Upper Darby, PA\nApril 11, 1975\n\nLate Show",
+          "rule": "reviewed_performer_venue_date_and_performance_heading",
+          "start": 0,
+          "length": 71
+        }
+      ]
+    }
+  ]
+}
