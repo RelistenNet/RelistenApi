@@ -10,7 +10,9 @@ using Relisten.Ingestion;
 using Relisten.Ingestion.Providers.ArchiveCollections;
 using Relisten.Ingestion.Providers.TapersSection;
 using Relisten.Services.Indexing;
+using Temporalio.Api.Enums.V1;
 using Temporalio.Client;
+using Temporalio.Exceptions;
 
 // This local acceptance runner uses the same review, collection and Temporal admission
 // contracts as an operator. It cannot publish sources directly or target a remote database.
@@ -108,6 +110,9 @@ sealed class SampleOperator(IServiceProvider services)
             case "discover":
                 await DiscoverAsync(Guid.Parse(args[1]), int.Parse(args[2]), args[3]);
                 break;
+            case "cancel-discovery":
+                await CancelDiscoveryAsync(args[1], args[2]);
+                break;
             case "native-item":
                 await ImportNativeItemAsync(Guid.Parse(args[1]), args[2], args[3]);
                 break;
@@ -131,7 +136,7 @@ sealed class SampleOperator(IServiceProvider services)
                 break;
             default:
                 throw new ArgumentException(
-                    "Use review-plan PLAN RAW_DIR OUTPUT, refresh BINDINGS OUTPUT, results ADMISSIONS, collection PLAN OUTPUT, discover SELECTOR_UUID MAX_PAGES OUTPUT, native-item ARTIST_UUID ITEM OUTPUT, provider-refresh phish-in|phish-net ARTIST_UUID YEAR OUTPUT, import-result ADMISSION, or review-performance PLAN RAW_DIR OUTPUT."
+                    "Use review-plan PLAN RAW_DIR OUTPUT, refresh BINDINGS OUTPUT, results ADMISSIONS, collection PLAN OUTPUT, discover SELECTOR_UUID MAX_PAGES OUTPUT, cancel-discovery ADMISSION OUTPUT, native-item ARTIST_UUID ITEM OUTPUT, provider-refresh phish-in|phish-net ARTIST_UUID YEAR OUTPUT, import-result ADMISSION, or review-performance PLAN RAW_DIR OUTPUT."
                 );
         }
     }
@@ -357,6 +362,78 @@ sealed class SampleOperator(IServiceProvider services)
                 result,
             }
         );
+    }
+
+    private async Task CancelDiscoveryAsync(string admissionFile, string output)
+    {
+        var admission = Read<ImportAdmission>(admissionFile);
+        if (!admission.WorkflowId.StartsWith("ingest/collection/", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Use a saved collection discovery admission.");
+        }
+
+        var client = services.GetRequiredService<ITemporalClient>();
+        // A continuation changes the current run. Bind cancellation to the original
+        // admitted execution so this command cannot cancel a later unrelated scan.
+        var handle = client.GetWorkflowHandle(
+            admission.WorkflowId,
+            firstExecutionRunId: admission.ResultRunId
+        );
+        var before = await handle.DescribeAsync();
+        Save(
+            output,
+            new
+            {
+                admission.WorkflowId,
+                firstExecutionRunId = admission.ResultRunId,
+                currentRunId = before.RunId,
+                status = before.Status.ToString(),
+            }
+        );
+        if (before.Status == WorkflowExecutionStatus.Running)
+        {
+            await handle.CancelAsync();
+            Save(
+                output,
+                new
+                {
+                    admission.WorkflowId,
+                    firstExecutionRunId = admission.ResultRunId,
+                    currentRunId = before.RunId,
+                    status = "cancellation_requested",
+                }
+            );
+            try
+            {
+                await client
+                    .GetWorkflowHandle(admission.WorkflowId, before.RunId)
+                    .GetResultAsync<ArchiveCollectionDiscoverySummary>();
+            }
+            catch (WorkflowFailedException error)
+                when (error.InnerException is CanceledFailureException)
+            {
+                // Expected terminal result for the deliberately bounded observation run.
+            }
+        }
+
+        var after = await handle.DescribeAsync();
+        Save(
+            output,
+            new
+            {
+                admission.WorkflowId,
+                firstExecutionRunId = admission.ResultRunId,
+                currentRunId = after.RunId,
+                status = after.Status.ToString(),
+                settledAtUtc = DateTimeOffset.UtcNow,
+            }
+        );
+        if (after.Status == WorkflowExecutionStatus.Running)
+        {
+            throw new InvalidOperationException(
+                "Discovery cancellation has not settled; inspect the saved execution before retrying."
+            );
+        }
     }
 
     private async Task ImportNativeItemAsync(Guid artist, string item, string output)
