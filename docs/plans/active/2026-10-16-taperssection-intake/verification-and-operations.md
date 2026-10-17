@@ -93,6 +93,8 @@ Local verification covers metadata and pagination rules, authenticated registry 
 
 A fresh disposable database was migrated through the worker's actual `--migrate` entry point. A full PostgreSQL dump and restore preserved approval, evidence, published references and dirty revisions. The status command read the restored state with Temporal pointed at an unavailable endpoint. These checks establish the application's restore contract; production backup configuration must still be checked by the operator.
 
+A subsequent [full Pavement smoke](full-artist-smoke.md) imported its complete 107-recording indexed inventory, verified every published show through v3 HTTP, and corrected two false context holds plus an unknown-date placeholder that had been accepted as January 1. A clean reimport holds both uncertain-date recordings before publication.
+
 The production pilot, complete live pagination terminal behavior and production backup coverage remain operational release checks. No production artist has been approved and no production schedule has been enabled. A later [live smoke](live-smoke.md) imported two real recordings into a separate local catalog and verified them through actual v3 HTTP requests.
 
 Verification completed October 16, 2026:

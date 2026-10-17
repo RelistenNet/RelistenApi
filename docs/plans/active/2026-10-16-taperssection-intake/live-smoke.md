@@ -1,6 +1,6 @@
 # Live local import and v3 verification
 
-On October 16, 2026, a bounded import fetched real Archive metadata, published two approved Taper’s Section artists, and exposed their recordings through a running API host. This supplements the synthetic integration suite. It does not establish accuracy across the full collection.
+On October 16, 2026, a bounded import fetched real Archive metadata, published two approved Taper’s Section artists, and exposed their recordings through a running API host. This supplements the synthetic integration suite. The subsequent [full Pavement import](full-artist-smoke.md) verifies the complete indexed inventory for one artist. It does not establish accuracy across the full collection.
 
 ## Results
 
@@ -69,4 +69,4 @@ Check `/health/ready`, then the v3 artist list, normalized artist and show endpo
 
 The existing local catalog and Redis instance were preserved. Production received only read requests for the artist listing. No production migration, approval, import or schedule change occurred.
 
-After verification, the smoke worker and its Temporal server were stopped. The separate catalog, Redis container and API host were left available for local inspection at `http://127.0.0.1:13823`. Stop the API before removing its Redis container (`relisten-tapers-live-redis`); the catalog is separate from `relisten_db`.
+After this first verification, the smoke worker and its Temporal server were stopped. The later [full-artist smoke](full-artist-smoke.md) replaced the API on port 13823 with a clean catalog and a separate Redis container. The first catalog remains offline as evidence; its Redis container has been stopped. Both catalogs are separate from `relisten_db`.
