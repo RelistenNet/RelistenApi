@@ -395,6 +395,40 @@ public sealed class TestNormalizationRecordingProcessor
     }
 
     [Test]
+    public async Task VenueOnlyContributorCannotBeAcknowledgedWithoutReadingItsFacts()
+    {
+        var source = await Source();
+        var contributor = new NormalizationResourceKey(
+            "test",
+            "other-venue-input",
+            Guid.NewGuid().ToString("D")
+        );
+        var venue = new NormalizationImportedVenueDependency(Guid.NewGuid(), 0);
+        await fixture.Work.BeginContributedWorkAsync(
+            Guid.NewGuid(),
+            Owner(source.SourceUuid),
+            NormalizationRecordingProcessor.Version,
+            new(contributor, 0, [], []),
+            importedVenues: [venue]
+        );
+
+        var result = await processor.ProcessAsync(Guid.NewGuid(), source.SourceUuid);
+
+        result.Disposition.Should().Be(NormalizationRecordingProcessingDisposition.Unresolved);
+        result.Reason.Should().Be("unsupported_owner_inputs");
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await proposals.GetAttemptBatchAsync(result.AttemptUuid)).Should().BeNull();
+        var retained = (
+            await fixture.Work.GetInputContributionAsync(Owner(source.SourceUuid), contributor)
+        )!;
+        retained.ImportedVenueUuids.Should().Equal(venue.VenueUuid);
+        retained.Revision.Should().Be(1);
+        var owner = (await fixture.Work.GetSubjectAsync(Owner(source.SourceUuid)))!;
+        owner.PublishedWorkUuid.Should().BeNull();
+        (await IsPending(owner.SubjectUuid)).Should().BeTrue();
+    }
+
+    [Test]
     public async Task UnknownCreditsAndEmptyTitlesDoNotWithdrawExistingAcceptedAssignments()
     {
         var source = await Source();

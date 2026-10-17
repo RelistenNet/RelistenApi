@@ -21,9 +21,9 @@ public sealed partial class NormalizationWorkService
     /// the contributor's current revision, even when the proposed bindings are unchanged.
     /// Returned input and dependency sets can exceed the incoming contribution: reload all
     /// facts required by this owner from that ticket before extracting or matching.
-    /// The catalogInputs and sourceIdentities parameters replace this contributor's complete owned key sets;
-    /// omitting either removes those bindings from this contributor. Other contributors retain theirs.
-    /// Catalog and mappingRegistry generations supplied by the caller remain preconditions, never freshened values.
+    /// The catalogInputs, sourceIdentities and importedVenues parameters replace this contributor's complete owned key sets;
+    /// omitting a set removes its bindings from this contributor. Other contributors retain theirs.
+    /// Catalog, imported venue and mappingRegistry generations remain caller preconditions, never freshened values.
     /// Omitting mappingRegistry removes only this contributor's registry dependency; the owner retains
     /// the dependency while any contributor still requires it.
     /// expectedInputRevisions pins only this contributor's resources to the revisions consumed
@@ -41,7 +41,8 @@ public sealed partial class NormalizationWorkService
         IReadOnlyList<NormalizationCatalogDependency>? catalogInputs = null,
         IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null,
         NormalizationMappingRegistryDependency? mappingRegistry = null,
-        IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null
+        IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null,
+        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
@@ -49,6 +50,7 @@ public sealed partial class NormalizationWorkService
         ArgumentOutOfRangeException.ThrowIfNegative(contribution.ExpectedRevision);
         var expectedCatalog = NormalizeCatalogInputs(catalogInputs);
         var expectedSources = NormalizeSourceInputs(sourceIdentities);
+        var expectedVenues = NormalizeImportedVenues(importedVenues);
         var replacement = new ContributionReplacement(
             contribution.Contributor,
             contribution.ExpectedRevision,
@@ -57,7 +59,8 @@ public sealed partial class NormalizationWorkService
                 contribution.DependencySubjectUuids,
                 expectedCatalog.Select(input => input.ArtistUuid),
                 expectedSources.Select(input => input.UpstreamIdentifier),
-                mappingRegistry != null
+                mappingRegistry != null,
+                expectedVenues.Select(input => input.VenueUuid)
             )
         );
         var expectedInputs = NormalizeExpectedInputRevisions(
@@ -78,7 +81,8 @@ public sealed partial class NormalizationWorkService
                 }
             ),
             mappingRegistry,
-            expectedInputs
+            expectedInputs,
+            expectedVenues
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -113,6 +117,7 @@ public sealed partial class NormalizationWorkService
                     expectedSources,
                     mappingRegistry,
                     expectedInputs,
+                    expectedVenues,
                     change
                 );
                 return await StartConfiguredWork(
@@ -156,6 +161,7 @@ public sealed partial class NormalizationWorkService
                     + previous.Dependencies.Length
                     + previous.CatalogArtists.Length
                     + previous.SourceIdentifiers.Length
+                    + (previous.ImportedVenueUuids?.Length ?? 0)
                     > 0
                 || previous.UsesMappingRegistry
             )
@@ -192,7 +198,10 @@ public sealed partial class NormalizationWorkService
                 .SelectMany(state => state.SourceIdentifiers)
                 .Concat(replacement.Bindings.SourceIdentifiers),
             retained.Any(state => state.UsesMappingRegistry)
-                || replacement.Bindings.UsesMappingRegistry
+                || replacement.Bindings.UsesMappingRegistry,
+            retained
+                .SelectMany(state => state.ImportedVenueUuids ?? [])
+                .Concat(replacement.Bindings.ImportedVenueUuids ?? [])
         );
         return (union, new(replacement, baseline));
     }
@@ -314,6 +323,7 @@ public sealed partial class NormalizationWorkService
                 DELETE FROM normalization.work_contribution_catalog_inputs WHERE contribution_uuid=@contributionUuid;
                 DELETE FROM normalization.work_contribution_source_identities WHERE contribution_uuid=@contributionUuid;
                 DELETE FROM normalization.work_contribution_mapping_registry_inputs WHERE contribution_uuid=@contributionUuid;
+                DELETE FROM normalization.work_contribution_venue_inputs WHERE contribution_uuid=@contributionUuid;
                 INSERT INTO normalization.work_contribution_inputs(contribution_uuid,resource_uuid)
                     SELECT @contributionUuid,r.uuid FROM normalization.input_resources r
                     JOIN jsonb_to_recordset(@resources::jsonb) AS k("Provider" text,"ResourceType" text,"ProviderKey" text)
@@ -324,6 +334,8 @@ public sealed partial class NormalizationWorkService
                     SELECT @contributionUuid,unnest(@artists::uuid[]);
                 INSERT INTO normalization.work_contribution_source_identities(contribution_uuid,upstream_identifier)
                     SELECT @contributionUuid,unnest(@identifiers::text[]);
+                INSERT INTO normalization.work_contribution_venue_inputs(contribution_uuid,venue_uuid)
+                    SELECT @contributionUuid,unnest(@venues::uuid[]);
                 INSERT INTO normalization.work_contribution_mapping_registry_inputs(contribution_uuid)
                     SELECT @contributionUuid WHERE @usesMappingRegistry
                 """,
@@ -334,6 +346,7 @@ public sealed partial class NormalizationWorkService
                     dependencies = replacement.Bindings.Dependencies,
                     artists = replacement.Bindings.CatalogArtists,
                     identifiers = replacement.Bindings.SourceIdentifiers,
+                    venues = replacement.Bindings.ImportedVenueUuids ?? [],
                     usesMappingRegistry = replacement.Bindings.UsesMappingRegistry,
                 },
                 transaction,
@@ -360,7 +373,8 @@ public sealed partial class NormalizationWorkService
             states.SelectMany(state => state.DependencySubjectUuids),
             states.SelectMany(state => state.CatalogArtistUuids),
             states.SelectMany(state => state.SourceIdentifiers),
-            states.Any(state => state.UsesMappingRegistry)
+            states.Any(state => state.UsesMappingRegistry),
+            states.SelectMany(state => state.ImportedVenueUuids ?? [])
         );
         if (
             !union.Resources.SequenceEqual(requested.Resources)
@@ -368,6 +382,7 @@ public sealed partial class NormalizationWorkService
             || !union.CatalogArtists.SequenceEqual(requested.CatalogArtists)
             || !union.SourceIdentifiers.SequenceEqual(requested.SourceIdentifiers)
             || union.UsesMappingRegistry != requested.UsesMappingRegistry
+            || !(union.ImportedVenueUuids ?? []).SequenceEqual(requested.ImportedVenueUuids ?? [])
         )
         {
             throw new NormalizationConflictException(
@@ -401,6 +416,8 @@ public sealed partial class NormalizationWorkService
                 SELECT i.contribution_uuid AS Uuid,i.upstream_identifier AS Value FROM normalization.work_contribution_source_identities i
                     JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter};
                 SELECT i.contribution_uuid FROM normalization.work_contribution_mapping_registry_inputs i
+                    JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter};
+                SELECT i.contribution_uuid AS Uuid,i.venue_uuid AS Value FROM normalization.work_contribution_venue_inputs i
                     JOIN normalization.work_input_contributions h ON h.uuid=i.contribution_uuid WHERE {filter}
                 """,
                 new
@@ -420,6 +437,7 @@ public sealed partial class NormalizationWorkService
         var artists = (await rows.ReadAsync<ContributionGuid>()).ToLookup(row => row.Uuid);
         var identifiers = (await rows.ReadAsync<ContributionText>()).ToLookup(row => row.Uuid);
         var registry = (await rows.ReadAsync<Guid>()).ToHashSet();
+        var venues = (await rows.ReadAsync<ContributionGuid>()).ToLookup(row => row.Uuid);
         return headers
             .Select(header =>
             {
@@ -433,7 +451,8 @@ public sealed partial class NormalizationWorkService
                     dependencies[header.Uuid].Select(row => row.Value),
                     artists[header.Uuid].Select(row => row.Value),
                     identifiers[header.Uuid].Select(row => row.Value),
-                    registry.Contains(header.Uuid)
+                    registry.Contains(header.Uuid),
+                    venues[header.Uuid].Select(row => row.Value)
                 );
                 return ToContributionState(
                     subjectUuid,
@@ -459,7 +478,8 @@ public sealed partial class NormalizationWorkService
                 SELECT dependency_uuid FROM normalization.work_dependencies WHERE subject_uuid=@subjectUuid;
                 SELECT artist_uuid FROM normalization.work_catalog_inputs WHERE subject_uuid=@subjectUuid;
                 SELECT upstream_identifier FROM normalization.work_source_identity_inputs WHERE subject_uuid=@subjectUuid;
-                SELECT EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs WHERE subject_uuid=@subjectUuid)
+                SELECT EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs WHERE subject_uuid=@subjectUuid);
+                SELECT venue_uuid FROM normalization.work_venue_inputs WHERE subject_uuid=@subjectUuid
                 """,
                 new { subjectUuid },
                 transaction,
@@ -471,12 +491,14 @@ public sealed partial class NormalizationWorkService
         var artists = (await rows.ReadAsync<Guid>()).ToArray();
         var identifiers = (await rows.ReadAsync<string>()).ToArray();
         var usesMappingRegistry = await rows.ReadSingleAsync<bool>();
+        var venues = (await rows.ReadAsync<Guid>()).ToArray();
         return WorkBindingSet.Create(
             resources,
             dependencies,
             artists,
             identifiers,
-            usesMappingRegistry
+            usesMappingRegistry,
+            venues
         );
     }
 
@@ -493,7 +515,8 @@ public sealed partial class NormalizationWorkService
             replacement.Bindings.Dependencies,
             replacement.Bindings.CatalogArtists,
             replacement.Bindings.SourceIdentifiers,
-            replacement.Bindings.UsesMappingRegistry
+            replacement.Bindings.UsesMappingRegistry,
+            replacement.Bindings.ImportedVenueUuids
         );
 
     private sealed record ContributionReplacement(

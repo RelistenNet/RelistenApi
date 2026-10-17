@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -44,6 +45,12 @@ public sealed record NormalizationSourceIdentityDependency(
 public sealed record NormalizationMappingRegistryDependency(long Generation);
 
 /// <summary>
+/// Fences an imported venue by its stable catalog UUID, including a missing or unowned venue.
+/// The retained clock survives deletion; zero means no catalog change has yet been observed.
+/// </summary>
+public sealed record NormalizationImportedVenueDependency(Guid VenueUuid, long Generation);
+
+/// <summary>
 /// Durable read set captured before extraction. Load immutable input bytes by RevisionUuid.
 /// A retry reuses WorkUuid; a new attempt after changed evidence needs a new WorkUuid.
 /// </summary>
@@ -58,7 +65,9 @@ public sealed record NormalizationWorkTicket(
     IReadOnlyList<NormalizationSubjectDependency> Dependencies,
     IReadOnlyList<NormalizationCatalogDependency>? CatalogInputs = null,
     IReadOnlyList<NormalizationSourceIdentityDependency>? SourceIdentities = null,
-    NormalizationMappingRegistryDependency? MappingRegistry = null
+    NormalizationMappingRegistryDependency? MappingRegistry = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationImportedVenueDependency>? ImportedVenues = null
 );
 
 public enum NormalizationPublicationStatus

@@ -355,6 +355,24 @@ public sealed class TestNormalizationRecordingProposals
         saved.Extraction.Titles.Should().BeEquivalentTo(batch.Extraction.Titles);
     }
 
+    [Test]
+    public async Task VenueClockOutsideCurrentBatchFormatCannotBeSavedOrPublished()
+    {
+        var source = await fixture.Source();
+        var batch = await Batch(source, importedVenues: [new(Guid.NewGuid(), 0)]);
+        batch.Ticket.ImportedVenues.Should().ContainSingle();
+
+        Func<Task> save = () => proposals.SaveExtractionAsync(batch);
+        await save.Should().ThrowAsync<ArgumentException>().WithMessage("*imported venue inputs*");
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(source.SourceUuid)).Should().BeNull();
+        (await fixture.Work.GetSubjectAsync(Owner(source)))!.PublishedWorkUuid.Should().BeNull();
+
+        // A new complete contribution can remove unsupported inputs and proceed.
+        var supported = await Batch(source);
+        (await Publish(supported)).Status.Should().Be(NormalizationPublicationStatus.Published);
+    }
+
     [TestCase("source")]
     [TestCase("version")]
     public async Task TerminalExtractionRejectsChangedHeadersButKeepsItsFirstOutcome(string field)
@@ -602,7 +620,8 @@ public sealed class TestNormalizationRecordingProposals
         Func<
             NormalizationRecordingPreparation,
             NormalizationRecordingPreparation
-        >? changePreparation = null
+        >? changePreparation = null,
+        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null
     )
     {
         await fixture.Db.WithWriteConnection(c =>
@@ -633,7 +652,8 @@ public sealed class TestNormalizationRecordingProposals
             catalogInputs: preparation.Binding.CatalogInputs,
             sourceIdentities: preparation.Binding.SourceIdentities,
             mappingRegistry: preparation.Binding.MappingRegistry,
-            expectedInputRevisions: preparation.Binding.Inputs
+            expectedInputRevisions: preparation.Binding.Inputs,
+            importedVenues: importedVenues
         );
         var input = (
             await new NormalizationEvidenceService(fixture.Db).GetCaptureAsync(

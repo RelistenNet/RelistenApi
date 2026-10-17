@@ -82,6 +82,10 @@ internal static class LocalTestDatabase
             Migrations.FenceNormalizationArtistMappings.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationImportedVenueBindings.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

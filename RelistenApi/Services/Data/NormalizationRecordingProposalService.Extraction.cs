@@ -182,6 +182,15 @@ public sealed partial class NormalizationRecordingProposalService
     private static void ValidateBatch(NormalizationRecordingProposalBatch batch)
     {
         ValidatePreparation(batch.SourceUuid, batch.Preparation);
+        if ((batch.Ticket.ImportedVenues?.Count ?? 0) > 0)
+        {
+            // This batch format has no separately consumed imported-venue facts.
+            // Saving it must not let publication acknowledge another contributor's clock.
+            throw new ArgumentException(
+                "Recording proposals do not yet consume imported venue inputs."
+            );
+        }
+
         var recording = batch.Preparation.Binding.Recording;
         if (
             recording.Status != NormalizationCatalogBindingStatus.Bound

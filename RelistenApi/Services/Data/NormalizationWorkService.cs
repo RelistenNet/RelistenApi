@@ -39,6 +39,9 @@ public sealed partial class NormalizationWorkService(DbService db)
     /// expectedInputRevisions pins inputs consumed before admission, such as a catalog binding's
     /// provider snapshot. Each expected key must be in resourceKeys; changed heads reject the run
     /// before its configuration commits. Omitted or empty expectations capture current heads.
+    /// importedVenues contains the caller's observed catalog venue clocks, including missing venues.
+    /// Admission initializes absent clocks at zero and compares the original observation. Adding or
+    /// removing venue keys changes configuration; a new generation for the same keys does not.
     /// Changing input bytes needs no fan-out write:
     /// pending queries and publication compare the durable resource generations directly.
     /// </summary>
@@ -53,18 +56,21 @@ public sealed partial class NormalizationWorkService(DbService db)
         IReadOnlyList<NormalizationCatalogDependency>? catalogInputs = null,
         IReadOnlyList<NormalizationSourceIdentityDependency>? sourceIdentities = null,
         NormalizationMappingRegistryDependency? mappingRegistry = null,
-        IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null
+        IReadOnlyList<NormalizationBindingInputReference>? expectedInputRevisions = null,
+        IReadOnlyList<NormalizationImportedVenueDependency>? importedVenues = null
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
         var expectedCatalog = NormalizeCatalogInputs(catalogInputs);
         var expectedSources = NormalizeSourceInputs(sourceIdentities);
+        var expectedVenues = NormalizeImportedVenues(importedVenues);
         var bindings = WorkBindingSet.Create(
             resourceKeys,
             dependencySubjectUuids,
             expectedCatalog.Select(input => input.ArtistUuid),
             expectedSources.Select(input => input.UpstreamIdentifier),
-            mappingRegistry != null
+            mappingRegistry != null,
+            expectedVenues.Select(input => input.VenueUuid)
         );
         var configurationHash = bindings.ConfigurationHash(policyVersion);
         var expectedInputs = NormalizeExpectedInputRevisions(
@@ -92,7 +98,12 @@ public sealed partial class NormalizationWorkService(DbService db)
                         sourceIdentities = expectedSources,
                     }
                 );
-        var requestHash = HashWorkRequest(requestPayload, mappingRegistry, expectedInputs);
+        var requestHash = HashWorkRequest(
+            requestPayload,
+            mappingRegistry,
+            expectedInputs,
+            expectedVenues
+        );
         var request = new WorkStartRequest(
             workUuid,
             subject,
@@ -103,7 +114,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             expectedCatalog,
             expectedSources,
             mappingRegistry,
-            expectedInputs
+            expectedInputs,
+            expectedVenues
         );
         return InTransaction(
             async (connection, transaction) =>
@@ -194,13 +206,16 @@ public sealed partial class NormalizationWorkService(DbService db)
             transaction,
             bindings.CatalogArtists,
             bindings.SourceIdentifiers,
+            bindings.ImportedVenueUuids ?? [],
             bindings.UsesMappingRegistry,
+            initializeVenueClocks: true,
             ct
         );
         RequireCatalogReadSet(
             catalog,
             request.CatalogInputs,
             request.SourceIdentities,
+            request.ImportedVenues,
             request.MappingRegistry
         );
         var inputs = await LockInputs(connection, transaction, bindings.Resources, ct);
@@ -277,7 +292,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                 .ToArray(),
             catalog.Artists.Count == 0 ? null : catalog.Artists,
             catalog.SourceIdentities.Count == 0 ? null : catalog.SourceIdentities,
-            catalog.MappingRegistry
+            catalog.MappingRegistry,
+            catalog.ImportedVenues.Count == 0 ? null : catalog.ImportedVenues
         );
         await connection.ExecuteAsync(
             new CommandDefinition(
@@ -307,6 +323,7 @@ public sealed partial class NormalizationWorkService(DbService db)
         NormalizationSourceIdentityDependency[] SourceIdentities,
         NormalizationMappingRegistryDependency? MappingRegistry,
         NormalizationBindingInputReference[] ExpectedInputRevisions,
+        NormalizationImportedVenueDependency[] ImportedVenues,
         ContributionChange? Contribution = null
     );
 
@@ -318,7 +335,11 @@ public sealed partial class NormalizationWorkService(DbService db)
         // Omit false in contributed request JSON so pre-registry work hashes still replay.
         [property: JsonIgnore(
             Condition = JsonIgnoreCondition.WhenWritingDefault
-        )] bool UsesMappingRegistry = false
+        )] bool UsesMappingRegistry = false,
+        // Keep old contributed request JSON unchanged when venue inputs were not supplied.
+        [property: JsonIgnore(
+            Condition = JsonIgnoreCondition.WhenWritingNull
+        )] Guid[]? ImportedVenueUuids = null
     )
     {
         public static WorkBindingSet Create(
@@ -326,7 +347,8 @@ public sealed partial class NormalizationWorkService(DbService db)
             IEnumerable<Guid> dependencies,
             IEnumerable<Guid> catalogArtists,
             IEnumerable<string> sourceIdentifiers,
-            bool usesMappingRegistry = false
+            bool usesMappingRegistry = false,
+            IEnumerable<Guid>? importedVenueUuids = null
         ) =>
             new(
                 resources
@@ -341,13 +363,15 @@ public sealed partial class NormalizationWorkService(DbService db)
                     .Distinct(StringComparer.Ordinal)
                     .Order(StringComparer.Ordinal)
                     .ToArray(),
-                usesMappingRegistry
+                usesMappingRegistry,
+                NormalizeVenueKeys(importedVenueUuids)
             );
 
-        public string ConfigurationHash(string policyVersion) =>
-            UsesMappingRegistry
-                ? Hash(
-                    JsonSerializer.SerializeToElement(
+        public string ConfigurationHash(string policyVersion)
+        {
+            var configuration =
+                UsesMappingRegistry
+                    ? JsonSerializer.SerializeToElement(
                         new
                         {
                             policyVersion,
@@ -358,10 +382,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                             mappingRegistry = true,
                         }
                     )
-                )
-            : CatalogArtists.Length == 0 && SourceIdentifiers.Length == 0
-                ? Hash(
-                    JsonSerializer.SerializeToElement(
+                : CatalogArtists.Length == 0 && SourceIdentifiers.Length == 0
+                    ? JsonSerializer.SerializeToElement(
                         new
                         {
                             policyVersion,
@@ -369,9 +391,7 @@ public sealed partial class NormalizationWorkService(DbService db)
                             dependencies = Dependencies,
                         }
                     )
-                )
-            : Hash(
-                JsonSerializer.SerializeToElement(
+                : JsonSerializer.SerializeToElement(
                     new
                     {
                         policyVersion,
@@ -380,8 +400,23 @@ public sealed partial class NormalizationWorkService(DbService db)
                         catalogArtists = CatalogArtists,
                         sourceIdentifiers = SourceIdentifiers,
                     }
-                )
-            );
+                );
+            if (ImportedVenueUuids == null)
+            {
+                return Hash(configuration);
+            }
+            var fields = configuration
+                .EnumerateObject()
+                .ToDictionary(property => property.Name, property => property.Value);
+            fields.Add("importedVenues", JsonSerializer.SerializeToElement(ImportedVenueUuids));
+            return Hash(JsonSerializer.SerializeToElement(fields));
+        }
+
+        private static Guid[]? NormalizeVenueKeys(IEnumerable<Guid>? keys)
+        {
+            var normalized = (keys ?? []).Distinct().Order().ToArray();
+            return normalized.Length == 0 ? null : normalized;
+        }
     }
 
     private static NormalizationCatalogDependency[] NormalizeCatalogInputs(
@@ -425,6 +460,27 @@ public sealed partial class NormalizationWorkService(DbService db)
         return result;
     }
 
+    private static NormalizationImportedVenueDependency[] NormalizeImportedVenues(
+        IReadOnlyList<NormalizationImportedVenueDependency>? inputs
+    )
+    {
+        var result = (inputs ?? [])
+            .Distinct()
+            .OrderBy(input => input.VenueUuid)
+            .ThenBy(input => input.Generation)
+            .ToArray();
+        if (
+            result.Any(input => input.VenueUuid == Guid.Empty || input.Generation < 0)
+            || result.GroupBy(input => input.VenueUuid).Any(group => group.Count() != 1)
+        )
+        {
+            throw new ArgumentException(
+                "Imported venue snapshots require stable UUIDs and consistent nonnegative generations."
+            );
+        }
+        return result;
+    }
+
     /// <summary>
     /// Publishes typed domain changes exactly once per committed run. Stale/replayed runs never call
     /// publish. Callback failure or cancellation rolls back both domain writes and publication, so
@@ -458,7 +514,9 @@ public sealed partial class NormalizationWorkService(DbService db)
                     (ticket.SourceIdentities ?? [])
                         .Select(input => input.UpstreamIdentifier)
                         .ToArray(),
+                    (ticket.ImportedVenues ?? []).Select(input => input.VenueUuid).ToArray(),
                     ticket.MappingRegistry != null,
+                    initializeVenueClocks: false,
                     cancellationToken
                 );
                 var inputs = await LockInputUuids(
@@ -638,6 +696,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                             OR EXISTS(SELECT 1 FROM normalization.work_catalog_inputs i JOIN normalization.catalog_artist_revisions r ON r.artist_uuid=i.artist_uuid
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_source_identity_inputs i JOIN normalization.catalog_source_identity_revisions r ON r.upstream_identifier=i.upstream_identifier
+                                WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
+                            OR EXISTS(SELECT 1 FROM normalization.work_venue_inputs i JOIN normalization.catalog_venue_revisions r ON r.venue_uuid=i.venue_uuid
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation)
                             OR EXISTS(SELECT 1 FROM normalization.work_mapping_registry_inputs i CROSS JOIN normalization.catalog_mapping_registry_revision r
                                 WHERE i.subject_uuid=s.uuid AND i.published_generation IS DISTINCT FROM r.generation))

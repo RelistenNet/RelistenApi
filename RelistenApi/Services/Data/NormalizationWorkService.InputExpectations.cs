@@ -52,10 +52,11 @@ public sealed partial class NormalizationWorkService
     private static string HashWorkRequest(
         JsonElement request,
         NormalizationMappingRegistryDependency? mappingRegistry,
-        NormalizationBindingInputReference[] expectedInputs
+        NormalizationBindingInputReference[] expectedInputs,
+        NormalizationImportedVenueDependency[] importedVenues
     )
     {
-        if (mappingRegistry == null && expectedInputs.Length == 0)
+        if (mappingRegistry == null && expectedInputs.Length == 0 && importedVenues.Length == 0)
         {
             return Hash(request);
         }
@@ -69,6 +70,10 @@ public sealed partial class NormalizationWorkService
         if (expectedInputs.Length > 0)
         {
             fields.Add("expectedInputRevisions", JsonSerializer.SerializeToElement(expectedInputs));
+        }
+        if (importedVenues.Length > 0)
+        {
+            fields.Add("importedVenues", JsonSerializer.SerializeToElement(importedVenues));
         }
         return Hash(JsonSerializer.SerializeToElement(fields));
     }

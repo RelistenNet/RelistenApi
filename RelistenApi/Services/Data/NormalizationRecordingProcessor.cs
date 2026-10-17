@@ -326,6 +326,9 @@ public sealed class NormalizationRecordingProcessor(
         && ticket.Inputs.Count == 1
         && ticket.Inputs[0].RevisionUuid == preparation.Binding.InputRevisionUuid
         && ticket.Dependencies.Count == 0
+        // The current producer consumes one legacy recording snapshot. A venue-only
+        // contributor still adds facts this producer cannot read or acknowledge.
+        && (ticket.ImportedVenues?.Count ?? 0) == 0
         && (ticket.CatalogInputs ?? [])
             .OrderBy(input => input.ArtistUuid)
             .SequenceEqual(preparation.Binding.CatalogInputs.OrderBy(input => input.ArtistUuid))
