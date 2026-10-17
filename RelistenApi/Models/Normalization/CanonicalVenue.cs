@@ -17,7 +17,8 @@ public sealed record VenueNameAssertion(
     string? Language,
     DateOnly? ValidFrom,
     DateOnly? ValidTo,
-    NormalizedEvidenceReference Evidence
+    NormalizedEvidenceReference Evidence,
+    string Basis = "provider_assertion"
 );
 
 public sealed record VenueLocationAssertion(
@@ -33,7 +34,8 @@ public sealed record VenueLocationAssertion(
     string? CoordinatePrecision,
     DateOnly? ValidFrom,
     DateOnly? ValidTo,
-    NormalizedEvidenceReference Evidence
+    NormalizedEvidenceReference Evidence,
+    string Basis = "provider_assertion"
 );
 
 public sealed record VenueExternalIdentity(
@@ -41,7 +43,9 @@ public sealed record VenueExternalIdentity(
     string Provider,
     string ResourceType,
     string ProviderKey,
-    NormalizedEvidenceReference Evidence
+    NormalizedEvidenceReference Evidence,
+    Guid? Uuid = null,
+    string Basis = "provider_assertion"
 );
 
 public sealed record VenueAssignment(
@@ -87,4 +91,21 @@ public sealed record VenueIdentityDecision(
     IReadOnlyList<Guid> ImportedAssignmentUuids,
     IReadOnlyList<Guid> ShowAssignmentUuids,
     string Reason
+);
+
+/// <summary>Changes one venue-owned assertion or replaces its display identity. Accept can add an assertion; other actions require its existing UUID.</summary>
+public sealed record VenueMetadataDecision(
+    Guid OperationUuid,
+    Guid SubjectUuid,
+    long ExpectedEditorialRevision,
+    Guid VenueUuid,
+    long ExpectedVenueRevision,
+    string Action,
+    string Reason,
+    VenueNameAssertion? Name = null,
+    VenueLocationAssertion? Location = null,
+    VenueExternalIdentity? ExternalIdentity = null,
+    CanonicalVenue? Identity = null,
+    NormalizedEvidenceReference? IdentityEvidence = null,
+    long ExpectedAssertionRevision = 0
 );

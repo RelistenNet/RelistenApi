@@ -39,7 +39,7 @@ public sealed partial class NormalizedPeopleService
             using var document = JsonDocument.Parse(payload);
             foreach (var reference in revision)
             {
-                var value = ResolvePointer(document.RootElement, reference.JsonPointer);
+                var value = ResolveMetadataPointer(document.RootElement, reference.JsonPointer);
                 if (
                     reference.StartCodePoint == null
                     && reference.EndCodePoint == null
@@ -103,7 +103,7 @@ public sealed partial class NormalizedPeopleService
                 )
             );
             using var document = JsonDocument.Parse(payload);
-            var value = ResolvePointer(document.RootElement, evidence.JsonPointer);
+            var value = ResolveMetadataPointer(document.RootElement, evidence.JsonPointer);
             if (value.ValueKind != JsonValueKind.String)
             {
                 throw new ArgumentException(
@@ -238,7 +238,7 @@ public sealed partial class NormalizedPeopleService
         await ValidateOwnerAsync(c, t, subjectUuid, domain, kind, entityUuid, ct);
     }
 
-    private static JsonElement ResolvePointer(JsonElement root, string pointer)
+    internal static JsonElement ResolveMetadataPointer(JsonElement root, string pointer)
     {
         if (pointer.Length == 0)
         {

@@ -117,7 +117,7 @@ public sealed partial class NormalizedVenueService
                                 """
                                 SELECT EXISTS(SELECT 1 FROM normalization.venue_external_identities a JOIN normalization.venue_external_identities b
                                     ON a.provider=b.provider AND a.resource_type=b.resource_type AND a.provider_key<>b.provider_key
-                                    WHERE a.venue_uuid=@OriginalUuid AND b.venue_uuid=@target)
+                                    WHERE a.venue_uuid=@OriginalUuid AND b.venue_uuid=@target AND a.state='accepted' AND b.state='accepted')
                                 """,
                                 new { command.OriginalUuid, target = command.Target.Uuid },
                                 t,

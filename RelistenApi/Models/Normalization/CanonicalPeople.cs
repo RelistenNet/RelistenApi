@@ -18,7 +18,8 @@ public sealed record PersonAlias(
     Guid Uuid,
     Guid PersonUuid,
     string Wording,
-    NormalizedEvidenceReference Evidence
+    NormalizedEvidenceReference Evidence,
+    string Basis = "provider_assertion"
 );
 
 public sealed record PersonExternalIdentity(
@@ -26,7 +27,9 @@ public sealed record PersonExternalIdentity(
     string Provider,
     string ResourceType,
     string ProviderKey,
-    NormalizedEvidenceReference Evidence
+    NormalizedEvidenceReference Evidence,
+    Guid? Uuid = null,
+    string Basis = "provider_assertion"
 );
 
 public sealed record RecordingCredit(
@@ -86,4 +89,20 @@ public sealed record IdentityMergeReversal(
     long ExpectedOriginalRevision,
     long ExpectedSurvivorRevision,
     string Reason
+);
+
+/// <summary>Changes one identity-owned claim. Accept can add an assertion; other actions require its existing UUID. Assertions keep their original owner after a merge.</summary>
+public sealed record PersonMetadataDecision(
+    Guid OperationUuid,
+    Guid SubjectUuid,
+    long ExpectedEditorialRevision,
+    Guid PersonUuid,
+    long ExpectedPersonRevision,
+    string Action,
+    string Reason,
+    PersonAlias? Alias = null,
+    PersonExternalIdentity? ExternalIdentity = null,
+    CanonicalPerson? Identity = null,
+    NormalizedEvidenceReference? IdentityEvidence = null,
+    long ExpectedAssertionRevision = 0
 );

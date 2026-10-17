@@ -146,7 +146,7 @@ public sealed partial class NormalizedPeopleService
                             """
                             SELECT EXISTS(SELECT 1 FROM normalization.person_external_identities a JOIN normalization.person_external_identities b
                                 ON a.provider=b.provider AND a.resource_type=b.resource_type AND a.provider_key<>b.provider_key
-                                WHERE a.person_uuid=@OriginalUuid AND b.person_uuid=@target)
+                                WHERE a.person_uuid=@OriginalUuid AND b.person_uuid=@target AND a.state='accepted' AND b.state='accepted')
                             """,
                             new { command.OriginalUuid, target = command.Target.Uuid },
                             t,

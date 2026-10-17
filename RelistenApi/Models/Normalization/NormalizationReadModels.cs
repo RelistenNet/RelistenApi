@@ -48,6 +48,8 @@ public class NormalizationPublicEvidence
 
 public sealed class NormalizationExternalIdentity : NormalizationPublicEvidence
 {
+    public long revision { get; set; }
+    public string basis { get; set; } = "";
     public string provider { get; set; } = "";
     public string resource_type { get; set; } = "";
     public string provider_key { get; set; } = "";
@@ -55,6 +57,8 @@ public sealed class NormalizationExternalIdentity : NormalizationPublicEvidence
 
 public sealed class NormalizedVenueName : NormalizationPublicEvidence
 {
+    public long revision { get; set; }
+    public string basis { get; set; } = "";
     public Guid uuid { get; set; }
     public string wording { get; set; } = "";
     public string? language { get; set; }
@@ -64,6 +68,8 @@ public sealed class NormalizedVenueName : NormalizationPublicEvidence
 
 public sealed class NormalizedVenueLocation : NormalizationPublicEvidence
 {
+    public long revision { get; set; }
+    public string basis { get; set; } = "";
     public Guid uuid { get; set; }
     public string original_locality { get; set; } = "";
     public string? country { get; set; }

@@ -98,7 +98,7 @@ public sealed partial class NormalizationReadService
                 venue.names = (
                     await c.QueryAsync<NormalizedVenueName>(
                         new CommandDefinition(
-                            "SELECT e.uuid,e.wording,e.language,e.valid_from,e.valid_to,"
+                            "SELECT e.uuid,e.wording,e.language,e.valid_from,e.valid_to,e.revision,e.basis,"
                                 + EvidenceColumns
                                 + " FROM normalization.resolved_venue_names e "
                                 + EvidenceJoins
@@ -112,7 +112,7 @@ public sealed partial class NormalizationReadService
                 venue.locations = (
                     await c.QueryAsync<NormalizedVenueLocation>(
                         new CommandDefinition(
-                            "SELECT e.uuid,e.original_locality,e.country,e.region,e.city,e.address,e.latitude,e.longitude,e.coordinate_precision,e.valid_from,e.valid_to,"
+                            "SELECT e.uuid,e.original_locality,e.country,e.region,e.city,e.address,e.latitude,e.longitude,e.coordinate_precision,e.valid_from,e.valid_to,e.revision,e.basis,"
                                 + EvidenceColumns
                                 + " FROM normalization.resolved_venue_locations e "
                                 + EvidenceJoins
@@ -126,7 +126,7 @@ public sealed partial class NormalizationReadService
                 venue.external_identities = (
                     await c.QueryAsync<NormalizationExternalIdentity>(
                         new CommandDefinition(
-                            "SELECT e.provider,e.resource_type,e.provider_key,"
+                            "SELECT e.provider,e.resource_type,e.provider_key,e.revision,e.basis,"
                                 + EvidenceColumns
                                 + " FROM normalization.resolved_venue_external_identities e "
                                 + EvidenceJoins

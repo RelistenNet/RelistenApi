@@ -155,8 +155,10 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
     )
     {
         var inserted = 0;
-        foreach (var alias in aliases)
+        foreach (var originalAlias in aliases)
         {
+            var alias = originalAlias;
+            ValidateAutomaticMetadataBasis(alias.Basis);
             await ValidateNameEvidenceAsync(
                 connection,
                 transaction,
@@ -186,15 +188,36 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                     ct
                 );
             }
+            var state = await AutomaticMetadataState(
+                connection,
+                transaction,
+                "person_aliases",
+                "person_uuid",
+                alias.PersonUuid,
+                "name_key=@key OR uuid=@Uuid",
+                new { key = NameKey(alias.Wording), alias.Uuid },
+                alias.Evidence,
+                ct
+            );
+            if (state == null)
+            {
+                continue;
+            }
+            if (state == "pending")
+            {
+                alias = alias with { Uuid = Guid.NewGuid() };
+            }
             inserted += await connection.ExecuteAsync(
                 new CommandDefinition(
                     """
-                    INSERT INTO normalization.person_aliases(uuid,person_uuid,wording,name_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote)
-                    VALUES(@Uuid,@PersonUuid,@Wording,@nameKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote)
+                    INSERT INTO normalization.person_aliases(uuid,person_uuid,wording,name_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
+                    VALUES(@Uuid,@PersonUuid,@Wording,@nameKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis)
                     ON CONFLICT(uuid) DO NOTHING
                     """,
                     new
                     {
+                        state,
+                        alias.Basis,
                         alias.Uuid,
                         alias.PersonUuid,
                         alias.Wording,
@@ -354,6 +377,20 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         CancellationToken ct
     )
     {
+        if (
+            await c.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    "SELECT EXISTS(SELECT 1 FROM normalization.people WHERE uuid=@Uuid AND metadata_reviewed)",
+                    person,
+                    t,
+                    cancellationToken: ct
+                )
+            )
+        )
+        {
+            // A provider refresh may repeat the identity shape that the operator corrected.
+            return false;
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(person.DisplayName);
         var inserted = await c.ExecuteAsync(
             new CommandDefinition(
@@ -371,7 +408,7 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         );
         var same = await c.ExecuteScalarAsync<bool>(
             new CommandDefinition(
-                "SELECT display_name=@DisplayName AND kind=@Kind FROM normalization.people WHERE uuid=@Uuid",
+                "SELECT metadata_reviewed OR (display_name=@DisplayName AND kind=@Kind) FROM normalization.people WHERE uuid=@Uuid",
                 person,
                 t,
                 cancellationToken: ct
@@ -393,18 +430,35 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         CancellationToken ct
     )
     {
+        ValidateAutomaticMetadataBasis(identity.Basis);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.Provider);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.ResourceType);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.ProviderKey);
+        var state = await AutomaticMetadataState(
+            c,
+            t,
+            "person_external_identities",
+            "person_uuid",
+            identity.PersonUuid,
+            "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+            identity,
+            identity.Evidence,
+            ct
+        );
+        if (state == null)
+        {
+            return 0;
+        }
         var inserted = await c.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO normalization.person_external_identities(person_uuid,provider,resource_type,provider_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote)
-                VALUES(@PersonUuid,@Provider,@ResourceType,@ProviderKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote)
-                ON CONFLICT(provider,resource_type,provider_key) DO NOTHING
+                INSERT INTO normalization.person_external_identities(uuid,person_uuid,provider,resource_type,provider_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
+                VALUES(@uuid,@PersonUuid,@Provider,@ResourceType,@ProviderKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis) ON CONFLICT DO NOTHING
                 """,
                 new
                 {
+                    uuid = state == "pending" ? Guid.NewGuid() : identity.Uuid ?? Guid.NewGuid(),
+                    identity.Basis,
                     identity.PersonUuid,
                     identity.Provider,
                     identity.ResourceType,
@@ -414,22 +468,25 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
                     identity.Evidence.StartCodePoint,
                     identity.Evidence.EndCodePoint,
                     identity.Evidence.Quote,
+                    state,
                 },
                 t,
                 cancellationToken: ct
             )
         );
-        var owner = await c.ExecuteScalarAsync<Guid>(
+        var owner = await c.ExecuteScalarAsync<Guid?>(
             new CommandDefinition(
-                "SELECT person_uuid FROM normalization.person_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+                "SELECT person_uuid FROM normalization.person_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey AND state='accepted'",
                 identity,
                 t,
                 cancellationToken: ct
             )
         );
         if (
-            await ResolvePersonUuidAsync(c, t, owner, ct)
-            != await ResolvePersonUuidAsync(c, t, identity.PersonUuid, ct)
+            state == "accepted"
+            && owner.HasValue
+            && await ResolvePersonUuidAsync(c, t, owner.Value, ct)
+                != await ResolvePersonUuidAsync(c, t, identity.PersonUuid, ct)
         )
         {
             throw new NormalizationConflictException(

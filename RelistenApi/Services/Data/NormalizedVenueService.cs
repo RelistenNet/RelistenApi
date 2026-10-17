@@ -152,8 +152,10 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
     )
     {
         var inserted = 0;
-        foreach (var name in assertions)
+        foreach (var originalName in assertions)
         {
+            var name = originalName;
+            NormalizedPeopleService.ValidateAutomaticMetadataBasis(name.Basis);
             await NormalizedPeopleService.ValidateNameEvidenceAsync(
                 c,
                 t,
@@ -183,14 +185,42 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     ct
                 );
             }
+            var state = await NormalizedPeopleService.AutomaticMetadataState(
+                c,
+                t,
+                "venue_names",
+                "venue_uuid",
+                name.VenueUuid,
+                "(name_key=@key AND language IS NOT DISTINCT FROM @Language::text AND valid_from IS NOT DISTINCT FROM @ValidFrom::date AND valid_to IS NOT DISTINCT FROM @ValidTo::date) OR uuid=@Uuid",
+                new
+                {
+                    key = NormalizedPeopleService.NameKey(name.Wording),
+                    name.Language,
+                    name.Uuid,
+                    ValidFrom = name.ValidFrom?.ToDateTime(TimeOnly.MinValue),
+                    ValidTo = name.ValidTo?.ToDateTime(TimeOnly.MinValue),
+                },
+                name.Evidence,
+                ct
+            );
+            if (state == null)
+            {
+                continue;
+            }
+            if (state == "pending")
+            {
+                name = name with { Uuid = Guid.NewGuid() };
+            }
             inserted += await c.ExecuteAsync(
                 new CommandDefinition(
                     """
-                    INSERT INTO normalization.venue_names(uuid,venue_uuid,wording,name_key,language,valid_from,valid_to,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote)
-                    VALUES(@Uuid,@VenueUuid,@Wording,@key,@Language,@ValidFrom,@ValidTo,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote) ON CONFLICT(uuid) DO NOTHING
+                    INSERT INTO normalization.venue_names(uuid,venue_uuid,wording,name_key,language,valid_from,valid_to,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
+                    VALUES(@Uuid,@VenueUuid,@Wording,@key,@Language,@ValidFrom,@ValidTo,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis) ON CONFLICT(uuid) DO NOTHING
                     """,
                     new
                     {
+                        state,
+                        name.Basis,
                         name.Uuid,
                         name.VenueUuid,
                         name.Wording,
@@ -222,8 +252,10 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
     )
     {
         var inserted = 0;
-        foreach (var location in assertions)
+        foreach (var originalLocation in assertions)
         {
+            var location = originalLocation;
+            NormalizedPeopleService.ValidateAutomaticMetadataBasis(location.Basis);
             if (
                 !created.Contains(location.VenueUuid)
                 && !await c.ExecuteScalarAsync<bool>(
@@ -246,14 +278,54 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     ct
                 );
             }
+            var state = await NormalizedPeopleService.AutomaticMetadataState(
+                c,
+                t,
+                "venue_locations",
+                "venue_uuid",
+                location.VenueUuid,
+                """
+                (original_locality=@OriginalLocality AND country IS NOT DISTINCT FROM @Country::text
+                    AND region IS NOT DISTINCT FROM @Region::text AND city IS NOT DISTINCT FROM @City::text
+                    AND address IS NOT DISTINCT FROM @Address::text AND latitude IS NOT DISTINCT FROM @Latitude::double precision
+                    AND longitude IS NOT DISTINCT FROM @Longitude::double precision AND coordinate_precision IS NOT DISTINCT FROM @CoordinatePrecision::text
+                    AND valid_from IS NOT DISTINCT FROM @ValidFrom::date AND valid_to IS NOT DISTINCT FROM @ValidTo::date) OR uuid=@Uuid
+                """,
+                new
+                {
+                    location.Uuid,
+                    location.OriginalLocality,
+                    location.Country,
+                    location.Region,
+                    location.City,
+                    location.Address,
+                    location.Latitude,
+                    location.Longitude,
+                    location.CoordinatePrecision,
+                    ValidFrom = location.ValidFrom?.ToDateTime(TimeOnly.MinValue),
+                    ValidTo = location.ValidTo?.ToDateTime(TimeOnly.MinValue),
+                },
+                location.Evidence,
+                ct
+            );
+            if (state == null)
+            {
+                continue;
+            }
+            if (state == "pending")
+            {
+                location = location with { Uuid = Guid.NewGuid() };
+            }
             inserted += await c.ExecuteAsync(
                 new CommandDefinition(
                     """
-                    INSERT INTO normalization.venue_locations(uuid,venue_uuid,original_locality,country,region,city,address,latitude,longitude,coordinate_precision,valid_from,valid_to,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote)
-                    VALUES(@Uuid,@VenueUuid,@OriginalLocality,@Country,@Region,@City,@Address,@Latitude,@Longitude,@CoordinatePrecision,@ValidFrom,@ValidTo,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote) ON CONFLICT(uuid) DO NOTHING
+                    INSERT INTO normalization.venue_locations(uuid,venue_uuid,original_locality,country,region,city,address,latitude,longitude,coordinate_precision,valid_from,valid_to,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
+                    VALUES(@Uuid,@VenueUuid,@OriginalLocality,@Country,@Region,@City,@Address,@Latitude,@Longitude,@CoordinatePrecision,@ValidFrom,@ValidTo,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis) ON CONFLICT(uuid) DO NOTHING
                     """,
                     new
                     {
+                        state,
+                        location.Basis,
                         location.Uuid,
                         location.VenueUuid,
                         location.OriginalLocality,
@@ -394,6 +466,20 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
         CancellationToken ct
     )
     {
+        if (
+            await c.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    "SELECT EXISTS(SELECT 1 FROM normalization.canonical_venues WHERE uuid=@Uuid AND metadata_reviewed)",
+                    venue,
+                    t,
+                    cancellationToken: ct
+                )
+            )
+        )
+        {
+            // A provider refresh may repeat the identity shape that the operator corrected.
+            return false;
+        }
         ArgumentException.ThrowIfNullOrWhiteSpace(venue.DisplayName);
         if (
             venue.ParentVenueUuid.HasValue
@@ -427,7 +513,7 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
         if (
             !await c.ExecuteScalarAsync<bool>(
                 new CommandDefinition(
-                    "SELECT display_name=@DisplayName AND kind=@Kind AND parent_venue_uuid IS NOT DISTINCT FROM @ParentVenueUuid::uuid FROM normalization.canonical_venues WHERE uuid=@Uuid",
+                    "SELECT metadata_reviewed OR (display_name=@DisplayName AND kind=@Kind AND parent_venue_uuid IS NOT DISTINCT FROM @ParentVenueUuid::uuid) FROM normalization.canonical_venues WHERE uuid=@Uuid",
                     venue,
                     t,
                     cancellationToken: ct
@@ -447,17 +533,35 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
         CancellationToken ct
     )
     {
+        NormalizedPeopleService.ValidateAutomaticMetadataBasis(identity.Basis);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.Provider);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.ResourceType);
         ArgumentException.ThrowIfNullOrWhiteSpace(identity.ProviderKey);
+        var state = await NormalizedPeopleService.AutomaticMetadataState(
+            c,
+            t,
+            "venue_external_identities",
+            "venue_uuid",
+            identity.VenueUuid,
+            "provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+            identity,
+            identity.Evidence,
+            ct
+        );
+        if (state == null)
+        {
+            return 0;
+        }
         var inserted = await c.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO normalization.venue_external_identities(venue_uuid,provider,resource_type,provider_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote)
-                VALUES(@VenueUuid,@Provider,@ResourceType,@ProviderKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote) ON CONFLICT(provider,resource_type,provider_key) DO NOTHING
+                INSERT INTO normalization.venue_external_identities(uuid,venue_uuid,provider,resource_type,provider_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
+                VALUES(@uuid,@VenueUuid,@Provider,@ResourceType,@ProviderKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis) ON CONFLICT DO NOTHING
                 """,
                 new
                 {
+                    uuid = state == "pending" ? Guid.NewGuid() : identity.Uuid ?? Guid.NewGuid(),
+                    identity.Basis,
                     identity.VenueUuid,
                     identity.Provider,
                     identity.ResourceType,
@@ -467,22 +571,25 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
                     identity.Evidence.StartCodePoint,
                     identity.Evidence.EndCodePoint,
                     identity.Evidence.Quote,
+                    state,
                 },
                 t,
                 cancellationToken: ct
             )
         );
-        var owner = await c.ExecuteScalarAsync<Guid>(
+        var owner = await c.ExecuteScalarAsync<Guid?>(
             new CommandDefinition(
-                "SELECT venue_uuid FROM normalization.venue_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey",
+                "SELECT venue_uuid FROM normalization.venue_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey AND state='accepted'",
                 identity,
                 t,
                 cancellationToken: ct
             )
         );
         if (
-            await ResolveVenueUuidAsync(c, t, owner, ct)
-            != await ResolveVenueUuidAsync(c, t, identity.VenueUuid, ct)
+            state == "accepted"
+            && owner.HasValue
+            && await ResolveVenueUuidAsync(c, t, owner.Value, ct)
+                != await ResolveVenueUuidAsync(c, t, identity.VenueUuid, ct)
         )
         {
             throw new NormalizationConflictException(

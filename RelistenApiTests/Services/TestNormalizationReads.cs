@@ -128,7 +128,10 @@ public sealed class TestNormalizationReads
         person.requested_uuid.Should().Be(retired);
         person.redirect_uuid.Should().Be(survivor);
         person.aliases.Should().Contain("Old handle");
-        person.external_identities.Should().ContainSingle().Which.provider_key.Should().Be(key);
+        var externalIdentity = person.external_identities.Should().ContainSingle().Subject;
+        externalIdentity.provider_key.Should().Be(key);
+        externalIdentity.basis.Should().Be("provider_assertion");
+        externalIdentity.revision.Should().Be(1);
         (await reads.ListPeopleAsync(key + " old"))
             .items.Should()
             .ContainSingle()

@@ -94,7 +94,7 @@ public sealed partial class NormalizationReadService
                 person.external_identities = (
                     await c.QueryAsync<NormalizationExternalIdentity>(
                         new CommandDefinition(
-                            "SELECT e.provider,e.resource_type,e.provider_key,"
+                            "SELECT e.provider,e.resource_type,e.provider_key,e.revision,e.basis,"
                                 + EvidenceColumns
                                 + " FROM normalization.resolved_person_external_identities e "
                                 + EvidenceJoins
