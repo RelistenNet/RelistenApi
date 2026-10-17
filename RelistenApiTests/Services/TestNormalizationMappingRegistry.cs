@@ -70,6 +70,97 @@ public sealed class TestNormalizationMappingRegistry
             .Be(NormalizationPublicationStatus.Stale);
     }
 
+    [TestCase("insert")]
+    [TestCase("delete")]
+    [TestCase("uuid")]
+    [TestCase("musicbrainz_id")]
+    public async Task ArtistIdentityChangesInvalidateLookupAdmissionPublicationAndPendingWork(
+        string change
+    )
+    {
+        var artist = await Artist();
+        var snapshot = await Registry();
+        var published = await Begin(Subject(), snapshot);
+        await Publish(published);
+        var unpublished = await Begin(Subject(), snapshot);
+
+        switch (change)
+        {
+            case "insert":
+                await Artist();
+                break;
+            case "delete":
+                await Execute("DELETE FROM artists WHERE id=@artist", new { artist });
+                break;
+            case "uuid":
+                await Execute(
+                    "UPDATE artists SET uuid=@uuid WHERE id=@artist",
+                    new { artist, uuid = Guid.NewGuid() }
+                );
+                break;
+            case "musicbrainz_id":
+                await Execute(
+                    "UPDATE artists SET musicbrainz_id=@mbid WHERE id=@artist",
+                    new { artist, mbid = Guid.NewGuid().ToString("D") }
+                );
+                break;
+        }
+
+        (await Pending(published.SubjectUuid)).Should().BeTrue();
+        (await fixture.Work.TryPublishAsync(unpublished.WorkUuid, NeverWrite))
+            .Status.Should()
+            .Be(NormalizationPublicationStatus.Stale);
+        var staleAdmission = () => Begin(Subject(), snapshot);
+        await staleAdmission.Should().ThrowAsync<NormalizationConflictException>();
+    }
+
+    [Test]
+    public async Task ArtistNamesTimestampsAndUnchangedIdentifiersDoNotInvalidateMappingLookup()
+    {
+        var artist = await Artist();
+        var snapshot = await Registry();
+        var ticket = await Begin(Subject(), snapshot);
+
+        await Execute(
+            "UPDATE artists SET name=@name,updated_at=clock_timestamp(),uuid=uuid,musicbrainz_id=musicbrainz_id WHERE id=@artist",
+            new { artist, name = "Renamed registry artist" }
+        );
+
+        (await Registry()).Should().Be(snapshot);
+        await Publish(ticket);
+        (await Pending(ticket.SubjectUuid)).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task RolledBackMusicBrainzCorrectionDoesNotDirtyPublishedLookup()
+    {
+        var artist = await Artist();
+        var snapshot = await Registry();
+        var ticket = await Begin(Subject(), snapshot);
+        await Publish(ticket);
+        await using var connection = new NpgsqlConnection(LocalTestDatabase.ConnectionString);
+        await connection.OpenAsync();
+        await using var transaction = await connection.BeginTransactionAsync();
+        await connection.ExecuteAsync(
+            "UPDATE artists SET musicbrainz_id=@mbid WHERE id=@artist",
+            new { artist, mbid = Guid.NewGuid().ToString("D") },
+            transaction
+        );
+        (
+            await connection.ExecuteScalarAsync<long>(
+                "SELECT generation FROM normalization.catalog_mapping_registry_revision",
+                transaction: transaction
+            )
+        )
+            .Should()
+            .BeGreaterThan(snapshot.Generation);
+
+        await transaction.RollbackAsync();
+
+        (await Registry()).Should().Be(snapshot);
+        (await Pending(ticket.SubjectUuid)).Should().BeFalse();
+    }
+
     [Test]
     public async Task MappingRollbackAndNoOpDoNotInvalidateLookup()
     {
