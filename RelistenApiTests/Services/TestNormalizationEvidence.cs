@@ -73,6 +73,99 @@ public sealed class TestNormalizationEvidence
     }
 
     [Test]
+    public async Task FetchLookupRecoversTheOriginalReceiptAfterItsInputIsReplaced()
+    {
+        var capture = Capture("original bytes") with { ProviderRevision = "original-etag" };
+        var original = await evidence.CaptureInputAsync(capture);
+        var newer = await evidence.CaptureInputAsync(
+            capture with
+            {
+                FetchUuid = Guid.NewGuid(),
+                Payload = Encoding.UTF8.GetBytes("corrected bytes"),
+                ExpectedGeneration = original.Fetch.ResourceGeneration,
+                ProviderRevision = "corrected-etag",
+            }
+        );
+
+        var recovered = await new NormalizationEvidenceService(db).GetCaptureAsync(
+            capture.FetchUuid
+        );
+
+        recovered.Should().BeEquivalentTo(original);
+        recovered!.Revision.Payload.Should().Equal(capture.Payload);
+        recovered.Fetch.ResourceGeneration.Should().Be(1);
+        (await evidence.GetCurrentInputAsync(capture.Resource))!
+            .Revision.Uuid.Should()
+            .Be(newer.Revision.Uuid);
+        (await evidence.GetFetchHistoryAsync(capture.Resource)).Should().HaveCount(2);
+    }
+
+    [Test]
+    public async Task FetchLookupKeepsDistinctReceiptsThatShareOneContentRevision()
+    {
+        var capture = Capture("same retained bytes") with
+        {
+            ObservedAt = new DateTimeOffset(2026, 10, 17, 16, 0, 0, TimeSpan.Zero),
+            ProviderRevision = "etag-one",
+        };
+        var first = await evidence.CaptureInputAsync(capture);
+        var second = await evidence.CaptureInputAsync(
+            capture with
+            {
+                FetchUuid = Guid.NewGuid(),
+                ExpectedGeneration = first.Fetch.ResourceGeneration,
+                ObservedAt = capture.ObservedAt.AddMinutes(1),
+                ProviderRevision = "etag-two",
+            }
+        );
+
+        var recoveredFirst = await evidence.GetCaptureAsync(first.Fetch.FetchUuid);
+        var recoveredSecond = await evidence.GetCaptureAsync(second.Fetch.FetchUuid);
+
+        recoveredFirst.Should().BeEquivalentTo(first);
+        recoveredSecond.Should().BeEquivalentTo(second);
+        recoveredSecond!.Revision.Uuid.Should().Be(recoveredFirst!.Revision.Uuid);
+        recoveredFirst.Fetch.AdvancedCurrent.Should().BeTrue();
+        recoveredSecond.Fetch.AdvancedCurrent.Should().BeFalse();
+        recoveredSecond
+            .Fetch.ResourceGeneration.Should()
+            .Be(recoveredFirst.Fetch.ResourceGeneration + 1);
+        recoveredSecond.Fetch.ObservedAt.Should().Be(capture.ObservedAt.AddMinutes(1).UtcDateTime);
+    }
+
+    [Test]
+    public async Task FetchLookupRecoversNonadmittedBytesWithoutSubstitutingCurrentInput()
+    {
+        var capture = Capture("current bytes");
+        var current = await evidence.CaptureInputAsync(capture);
+        var stale = await evidence.CaptureInputAsync(
+            capture with
+            {
+                FetchUuid = Guid.NewGuid(),
+                Payload = Encoding.UTF8.GetBytes("never current bytes"),
+                ProviderRevision = "stale-etag",
+            }
+        );
+
+        var recovered = await evidence.GetCaptureAsync(stale.Fetch.FetchUuid);
+
+        recovered.Should().BeEquivalentTo(stale);
+        recovered!.Fetch.AcceptedAsCurrent.Should().BeFalse();
+        recovered.Revision.Payload.Should().Equal(Encoding.UTF8.GetBytes("never current bytes"));
+        recovered.Revision.Uuid.Should().NotBe(current.Revision.Uuid);
+        (await evidence.GetCurrentInputAsync(capture.Resource))!
+            .Revision.Uuid.Should()
+            .Be(current.Revision.Uuid);
+    }
+
+    [Test]
+    public async Task UnknownFetchUuidReturnsNoCapture()
+    {
+        (await evidence.GetCaptureAsync(Guid.NewGuid())).Should().BeNull();
+        (await evidence.GetCaptureAsync(Guid.Empty)).Should().BeNull();
+    }
+
+    [Test]
     public async Task RepeatedContentRetainsDistinctFetchesAndReversionAdvancesGeneration()
     {
         var firstCapture = Capture("A");

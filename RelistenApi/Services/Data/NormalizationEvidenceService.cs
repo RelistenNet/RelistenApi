@@ -156,6 +156,34 @@ public sealed class NormalizationEvidenceService(DbService db)
             ReadRevision(connection, null, revisionUuid, cancellationToken)
         );
 
+    /// <summary>
+    /// Reads one committed fetch UUID with its original receipt and immutable input bytes.
+    /// Historical and nonadmitted fetches retain their original admission result and generations;
+    /// this lookup does not read or assert the resource's current input. Unknown UUIDs return null.
+    /// </summary>
+    public Task<NormalizationCaptureResult?> GetCaptureAsync(
+        Guid fetchUuid,
+        CancellationToken cancellationToken = default
+    ) =>
+        db.WithWriteConnection<NormalizationCaptureResult?>(async connection =>
+        {
+            var fetch = await ReadFetch(connection, null, fetchUuid, cancellationToken);
+            if (fetch == null)
+            {
+                return null;
+            }
+
+            // Receipts and revisions are immutable and commit together. Following this receipt's
+            // foreign key needs no current-head read or transaction spanning the two lookups.
+            var revision = await ReadRevision(
+                connection,
+                null,
+                fetch.InputRevisionUuid,
+                cancellationToken
+            );
+            return new(revision!, fetch);
+        });
+
     /// <summary>Reads the primary database; an absent resource has expected generation zero.</summary>
     public Task<NormalizationCurrentInput?> GetCurrentInputAsync(
         NormalizationResourceKey resource,
@@ -448,7 +476,7 @@ public sealed class NormalizationEvidenceService(DbService db)
 
     private static Task<NormalizationInputFetch?> ReadFetch(
         IDbConnection connection,
-        IDbTransaction transaction,
+        IDbTransaction? transaction,
         Guid fetchUuid,
         CancellationToken cancellationToken
     ) =>
