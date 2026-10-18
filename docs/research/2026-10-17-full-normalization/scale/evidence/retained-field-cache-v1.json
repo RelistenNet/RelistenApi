@@ -1,0 +1,41 @@
+{
+  "version": "retained-field-cache-v1",
+  "state": "verified",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/retained-field-cache-v1/execution-verification-v1/manifest-execution.json",
+    "sha256": "a7f59099c5e40642cb1613bbaaae12ff7efef271f68f159f07a68d4b5d0f199c"
+  },
+  "testRuns": [
+    {
+      "run": "retained-field-cache-baseline-v1",
+      "passed": 5,
+      "failed": 2,
+      "note": "Old implementation allocates a complete backing-field Rune array for every short citation."
+    },
+    {
+      "run": "source-actor-publication-and-evidence-core-v1",
+      "passed": 198,
+      "failed": 0,
+      "newCacheCases": 7,
+      "existingEvidenceAndExtractionCases": 55,
+      "note": "Remaining 136 cases cover source publication, owner/candidate facts and genuine upgrades. Capacity and migration 58 cases excluded."
+    }
+  ],
+  "allocationEvidence": {
+    "citationsPerMeasuredLoop": 256,
+    "backingFieldCodePoints": 100002,
+    "baselineAllocatedBytes": {
+      "text": 153749056,
+      "json": 153722992
+    },
+    "correctedAllocatedBytesUpperBoundExclusive": 8388608,
+    "note": "Warm repeated validation allocation, not initial field decoding, whole-test memory or catalog throughput."
+  },
+  "behavior": [
+    "Keep one last-field decoded scalar array per retained document; pointer and runes publish together for concurrent readers.",
+    "Every call still resolves the exact JSON Pointer and checks revision, value kind, Unicode scalar offsets and original exact quote.",
+    "Alternating fields, astral characters, empty/end spans, document isolation, disposal and concurrent readonly validation pass.",
+    "No extraction outputs, processing versions, public signatures or retained evidence format change."
+  ],
+  "review": "Fresh independent correctness and readability reviews found no issues."
+}

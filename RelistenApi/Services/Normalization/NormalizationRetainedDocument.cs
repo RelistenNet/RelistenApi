@@ -18,6 +18,7 @@ public sealed class NormalizationRetainedDocument : IDisposable
     private readonly Guid revisionUuid;
     private readonly JsonDocument document;
     private readonly bool textOnly;
+    private CachedText? cachedText;
 
     private NormalizationRetainedDocument(Guid revisionUuid, JsonDocument document, bool textOnly)
     {
@@ -182,7 +183,17 @@ public sealed class NormalizationRetainedDocument : IDisposable
             );
         }
 
-        var runes = value.GetString()!.EnumerateRunes().ToArray();
+        // A source field can supply thousands of citations. Keep only its most recent
+        // decoded scalar sequence, rather than allocating the whole field for every span.
+        // Publish pointer and runes together so concurrent readers never mix two fields.
+        var cached = Volatile.Read(ref cachedText);
+        if (cached == null || cached.Pointer != evidence.JsonPointer)
+        {
+            cached = new(evidence.JsonPointer, value.GetString()!.EnumerateRunes().ToArray());
+            Volatile.Write(ref cachedText, cached);
+        }
+
+        var runes = cached.Runes;
         var start = evidence.StartCodePoint.Value;
         var end = evidence.EndCodePoint.Value;
         if (
@@ -198,5 +209,11 @@ public sealed class NormalizationRetainedDocument : IDisposable
         }
     }
 
-    public void Dispose() => document.Dispose();
+    public void Dispose()
+    {
+        document.Dispose();
+        Volatile.Write(ref cachedText, null);
+    }
+
+    private sealed record CachedText(string Pointer, Rune[] Runes);
 }
