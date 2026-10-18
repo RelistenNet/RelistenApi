@@ -93,7 +93,7 @@ def catalog():
     return {
         "schema_version": verify_api.INPUT_VERSION,
         "database": "relisten_normalization_fixture", "transaction_read_only": "on",
-        "migration": 49,
+        "migration": 50,
         "normalization_state": dict.fromkeys(verify_api.NORMALIZATION_COUNTERS, 0),
         "artists": artists, "shows": shows, "sources": sources,
         "sets": sets, "tracks": tracks, "collections": [collection],
@@ -334,8 +334,9 @@ class TestRehearsal(unittest.TestCase):
         result = self.run_check()
         self.assertEqual("completed", result["state"], result["errors"])
 
-    def test_unknown_music_content_or_active_composition_policy_rejects_before_http(self):
-        for counter in ("track_contents", "setlist_editions", "active_composition_policies"):
+    def test_unknown_music_content_or_active_policy_rejects_before_http(self):
+        for counter in ("track_contents", "setlist_editions", "active_people_policies",
+                        "active_composition_policies", "active_venue_policies"):
             with self.subTest(counter=counter):
                 data = copy.deepcopy(self.manifest)
                 data["normalization_state"][counter] = 1
@@ -344,6 +345,34 @@ class TestRehearsal(unittest.TestCase):
                     verify_api.run(
                         "http://localhost:18290", self.input, self.root / counter, self.api.get
                     )
+                self.assertFalse((self.root / counter).exists())
+        self.assertEqual([], self.api.calls)
+
+    def test_missing_policy_counter_rejects_before_http_or_output(self):
+        for counter in ("active_people_policies", "active_composition_policies", "active_venue_policies"):
+            with self.subTest(counter=counter):
+                data = copy.deepcopy(self.manifest)
+                del data["normalization_state"][counter]
+                self.input.write_text(json.dumps(data))
+                output = self.root / counter
+                with self.assertRaises(ValueError):
+                    verify_api.run("http://localhost:18290", self.input, output, self.api.get)
+                self.assertFalse(output.exists())
+        self.assertEqual([], self.api.calls)
+
+    def test_older_or_missing_migration_rejects_even_with_all_policy_counters(self):
+        for version in (None, 49):
+            with self.subTest(version=version):
+                data = copy.deepcopy(self.manifest)
+                if version is None:
+                    del data["migration"]
+                else:
+                    data["migration"] = version
+                self.input.write_text(json.dumps(data))
+                output = self.root / ("missing-version" if version is None else "older-version")
+                with self.assertRaises(ValueError):
+                    verify_api.run("http://localhost:18290", self.input, output, self.api.get)
+                self.assertFalse(output.exists())
         self.assertEqual([], self.api.calls)
 
     def test_null_detail_payload_cannot_pass_as_missing_optional_data(self):

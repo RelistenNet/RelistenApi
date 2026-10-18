@@ -26,7 +26,7 @@ NORMALIZATION_COUNTERS = {
     "people", "venues", "compositions", "repertoire_songs", "recording_credits",
     "imported_venue_assignments", "show_venue_assignments", "track_contents",
     "setlist_editions", "song_occurrences", "setlist_structures", "setlist_sets",
-    "music_exclusions", "active_people_policies", "active_composition_policies",
+    "music_exclusions", "active_people_policies", "active_composition_policies", "active_venue_policies",
 }
 
 
@@ -96,8 +96,8 @@ class CatalogSnapshot:
             )
             require(data["transaction_read_only"] == "on", "SQL snapshot was not read-only")
             require(
-                type(data["migration"]) is int and data["migration"] >= 49,
-                "Manifest needs migration49 or later, including composition-policy state",
+                type(data["migration"]) is int and data["migration"] >= 50,
+                "Manifest needs migration50 or later, including all three acceptance-policy counters",
             )
             self.data = data
             self.by_uuid = {}

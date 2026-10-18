@@ -1,0 +1,287 @@
+{
+  "schemaVersion": "local-normalization-api-rehearsal-v2",
+  "status": "migration50_catalog_api_verified_matching_inactive",
+  "implementationCommit": "e701f8e",
+  "priorRehearsal": "docs/research/2026-10-17-full-normalization/scale/evidence/local-normalization-api-rehearsal-v1.json",
+  "apiAssembly": {
+    "path": "RelistenApi/bin/net10.0/RelistenApi.dll",
+    "bytes": 7618560,
+    "sha256": "3ff81a708ecf2267114532f0a7d3ea854bd89fdfd668f2cfb34f79266ff28870"
+  },
+  "workerApiAssembly": {
+    "path": "RelistenIngestionWorker/bin/Debug/net10.0/RelistenApi.dll",
+    "bytes": 7618560,
+    "sha256": "3ff81a708ecf2267114532f0a7d3ea854bd89fdfd668f2cfb34f79266ff28870"
+  },
+  "workerAssembly": {
+    "path": "RelistenIngestionWorker/bin/Debug/net10.0/RelistenIngestionWorker.dll",
+    "bytes": 46592,
+    "sha256": "679f0d416753afb55211d9005f08b5b9cab7274f1d49a09ea435b19cdf5ad102"
+  },
+  "verifier": {
+    "path": "tools/normalization-rehearsal/verify_api.py",
+    "bytes": 24026,
+    "sha256": "3e151266cff26c71c2d1b23777d34f91b5a910e2db1863002d0ec6c623a8f46a"
+  },
+  "expectedSql": {
+    "path": "tools/normalization-rehearsal/expected-catalog.sql",
+    "bytes": 6035,
+    "sha256": "74f891a374623ac640b67f535d3e5bd9595da0ec6c19e39ef8d8e4adc91e5ed2"
+  },
+  "catalogFingerprintSql": {
+    "path": "docs/research/2026-10-17-full-normalization/sql/local-rehearsal-fingerprints.sql",
+    "bytes": 1818,
+    "sha256": "e364292b529365fc69693b32b2549f8331cb513b10a9de204149f19f52e70bce"
+  },
+  "operatorScript": {
+    "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/rehearse-migration50.py",
+    "bytes": 7048,
+    "sha256": "ff764eb403ebc6d249bdb2ed1b0d2e1f15535023b6bbde7904001a45ba3c600a"
+  },
+  "method": "Serialize migration-only worker and Development API against the existing dedicated normalization copies. Use a fresh private Redis endpoint per cohort, Temporal client without workers or schedules, bounded catalog GETs and retained read-only SQL snapshots.",
+  "cohorts": [
+    {
+      "cohort": "jerry",
+      "database": "relisten_normalization_jerry_20261017",
+      "migration": 50,
+      "state": "completed",
+      "errorCount": 0,
+      "requestAttempts": 1409,
+      "counts": {
+        "artists_expected": 263,
+        "browsable_sources_not_reached": 0,
+        "catalog_artists": 268,
+        "catalog_collections": 2,
+        "catalog_sets": 717,
+        "catalog_shows": 607,
+        "catalog_sources": 701,
+        "catalog_tracks": 7826,
+        "collection_recording_memberships_expected": 647,
+        "distinct_sources_checked": 701,
+        "distinct_tracks_checked": 7684,
+        "flac_only_recordings": 0,
+        "full_show_responses": 607,
+        "mp3_bearing_recordings": 701,
+        "multiple_performance_date_cohorts": 2,
+        "non_orphan_tracks_without_media": 0,
+        "orphan_tracks_excluded_from_playback": 142,
+        "partial_date_cohorts": 2,
+        "shows_expected": 607,
+        "sources_outside_browsable_show_view": 0,
+        "sources_with_missing_or_inconsistent_context": 0,
+        "tracks_with_inconsistent_context": 0
+      },
+      "normalizationState": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "setlist_sets": 0,
+        "track_contents": 0,
+        "music_exclusions": 0,
+        "repertoire_songs": 0,
+        "setlist_editions": 0,
+        "song_occurrences": 0,
+        "recording_credits": 0,
+        "setlist_structures": 0,
+        "active_venue_policies": 0,
+        "active_people_policies": 0,
+        "show_venue_assignments": 0,
+        "imported_venue_assignments": 0,
+        "active_composition_policies": 0
+      },
+      "allSevenLegacyFingerprintsPreserved": true,
+      "completeManifestPreservedAcrossMigrationExceptVersionAndVenueCounter": true,
+      "completePost50ManifestUnchangedDuringApiWalk": true,
+      "responseHashesAuthenticated": 1409,
+      "ownedApiAndRedisStopped": true,
+      "artifacts": {
+        "execution": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-execution50.json",
+          "bytes": 1699,
+          "sha256": "9a4c5b9e4f75b40ed4492a785a102d91aab19287a178bcb1f16aabbc62e4bb00"
+        },
+        "result": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-api50/result.json",
+          "bytes": 370321,
+          "sha256": "a783bdefb74d2c1ea3f17ab66d5c936a7626a29d9d4d95d700860db3c42ed27b"
+        },
+        "pre50": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-pre50-expected.json",
+          "bytes": 5812506,
+          "sha256": "81395398e7af64304458ff204ee5daed117e0dd768338bec1cb4cdeefbd030b8"
+        },
+        "before": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-expected50-before.json",
+          "bytes": 5812534,
+          "sha256": "057e2c7e2bb737d23375a783033dc5da8dda4ef77bed0da04af758254da706a1"
+        },
+        "after": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-expected50-after.json",
+          "bytes": 5812534,
+          "sha256": "057e2c7e2bb737d23375a783033dc5da8dda4ef77bed0da04af758254da706a1"
+        },
+        "fingerprintsPre50": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-pre50-fingerprints.json",
+          "bytes": 950,
+          "sha256": "e8b665da08d314374171d229ed02a3331e734eeec71d4b6aed7aa50d5d9cdfca"
+        },
+        "fingerprintsBefore": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-fingerprints50-before.json",
+          "bytes": 949,
+          "sha256": "87c1f5e807f01555352885158c2e91419e4f570bc870dcc00c50a1810ed43999"
+        },
+        "fingerprintsAfter": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-fingerprints50-after.json",
+          "bytes": 950,
+          "sha256": "51c75a53e6fa9e2e4d5d58dcd9e51d8b57fbdc7cff0b73e906181bb9a2ae0d1f"
+        },
+        "migrationLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-migrate50.log",
+          "bytes": 15517,
+          "sha256": "0bfe477ed0b17f8544a8a9453cd7832946955799d55fe0ccfb6189fb81eea41c"
+        },
+        "apiLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-api50.log",
+          "bytes": 17926747,
+          "sha256": "318f1114342d6fb832d3fde5643e5296e2795a2133b32d4660a527037a5fa101"
+        },
+        "verifierLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/jerry-verifier50.log",
+          "bytes": 762,
+          "sha256": "9c8ac4411672945416bede3cb907d4b587d59dbcb2c0565baa0e04d53b507034"
+        }
+      }
+    },
+    {
+      "cohort": "govt-mule",
+      "database": "relisten_normalization_govt_mule_20261017",
+      "migration": 50,
+      "state": "completed",
+      "errorCount": 0,
+      "requestAttempts": 353,
+      "counts": {
+        "artists_expected": 6,
+        "browsable_sources_not_reached": 0,
+        "catalog_artists": 6,
+        "catalog_collections": 3,
+        "catalog_sets": 429,
+        "catalog_shows": 325,
+        "catalog_sources": 413,
+        "catalog_tracks": 7561,
+        "collection_recording_memberships_expected": 363,
+        "distinct_sources_checked": 413,
+        "distinct_tracks_checked": 7419,
+        "flac_only_recordings": 0,
+        "full_show_responses": 325,
+        "mp3_bearing_recordings": 413,
+        "multiple_performance_date_cohorts": 0,
+        "non_orphan_tracks_without_media": 0,
+        "orphan_tracks_excluded_from_playback": 142,
+        "partial_date_cohorts": 0,
+        "shows_expected": 325,
+        "sources_outside_browsable_show_view": 0,
+        "sources_with_missing_or_inconsistent_context": 0,
+        "tracks_with_inconsistent_context": 0
+      },
+      "normalizationState": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "setlist_sets": 0,
+        "track_contents": 0,
+        "music_exclusions": 0,
+        "repertoire_songs": 0,
+        "setlist_editions": 0,
+        "song_occurrences": 0,
+        "recording_credits": 0,
+        "setlist_structures": 0,
+        "active_venue_policies": 0,
+        "active_people_policies": 0,
+        "show_venue_assignments": 0,
+        "imported_venue_assignments": 0,
+        "active_composition_policies": 0
+      },
+      "allSevenLegacyFingerprintsPreserved": true,
+      "completeManifestPreservedAcrossMigrationExceptVersionAndVenueCounter": true,
+      "completePost50ManifestUnchangedDuringApiWalk": true,
+      "responseHashesAuthenticated": 353,
+      "ownedApiAndRedisStopped": true,
+      "artifacts": {
+        "execution": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-execution50.json",
+          "bytes": 1701,
+          "sha256": "718b18d35a2750285a10fef8d383b35a6644f37160a765c00d7c6e5e461faf40"
+        },
+        "result": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-api50/result.json",
+          "bytes": 89146,
+          "sha256": "87963a96df1ecc6c5d3e414ad839d73a391cfabb8d3f81cddb2e11bc6c3ef8bb"
+        },
+        "pre50": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-pre50-expected.json",
+          "bytes": 5071426,
+          "sha256": "065ca019db77ef77308d08c33637840279462394a396cda8569914dd99c6d4f2"
+        },
+        "before": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-expected50-before.json",
+          "bytes": 5071454,
+          "sha256": "16129c57e13b609fc442d8dbf1b5a5d79484a0f6e65bba8e8f4de24cce5bff95"
+        },
+        "after": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-expected50-after.json",
+          "bytes": 5071454,
+          "sha256": "16129c57e13b609fc442d8dbf1b5a5d79484a0f6e65bba8e8f4de24cce5bff95"
+        },
+        "fingerprintsPre50": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-pre50-fingerprints.json",
+          "bytes": 952,
+          "sha256": "ac0f3b03c8bd099794ddc684996488d8485d9d3c0f8d31147b24a54da4c27632"
+        },
+        "fingerprintsBefore": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-fingerprints50-before.json",
+          "bytes": 952,
+          "sha256": "d1242c20f013ba2b29827467e92f24946fefb5c666b664f87280ddf479e41d9c"
+        },
+        "fingerprintsAfter": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-fingerprints50-after.json",
+          "bytes": 952,
+          "sha256": "5ab8892e5c2cb853727908f28c663ff2c7ae62dc0ce576e574dcada42ed6fdef"
+        },
+        "migrationLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-migrate50.log",
+          "bytes": 15557,
+          "sha256": "c12162191884f07c061b6c9b80ac2894f17b5d4cbbc145437718965d90665fc2"
+        },
+        "apiLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-api50.log",
+          "bytes": 3703997,
+          "sha256": "d8e9716b8aa6c72d9f1180b1beee432ef3881cf3af4025febfca569097b0422d"
+        },
+        "verifierLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v2/govt-mule-verifier50.log",
+          "bytes": 758,
+          "sha256": "339c103c51547423b7f540c4d7657e6278f89b618ca27174028441932e563a4c"
+        }
+      }
+    }
+  ],
+  "verification": {
+    "optimizedPythonContractTests": 17,
+    "combinedFullSuitePassed": 2630,
+    "combinedFullSuiteFailed": 0,
+    "existingFullSuiteSkips": 24,
+    "responseHashesRechecked": 1762,
+    "originalImportedDatabaseMigrations": {
+      "relisten_jerry_20261017": 17,
+      "relisten_govt_mule_20261017": 15
+    }
+  },
+  "limits": [
+    "This is a migration and legacy catalog compatibility rehearsal. Accepted normalization identities and all three automatic-policy pointers remained empty. It does not measure matching accuracy or normalized backfill.",
+    "Stored media URLs and current ownership relationships are compared literally. No media bytes or provider resources were fetched.",
+    "The copies share seed rows. Cohort totals must not be summed as globally distinct recordings; Jerry/Aadam and Mule collection membership was checked by the retained verifier.",
+    "Jerry contains two partial-date cohorts and two same-day performance cohorts. Mule contains neither; its result makes no claim about those routes.",
+    "Proposal/attempt and inactive policy registry counts were not captured. Binary rollback and full-artist load remain separate checks.",
+    "Only the existing dedicated normalization copies advanced from49 to50. Original imported catalogs remain at17 and15. No production writes or paid calls occurred."
+  ]
+}

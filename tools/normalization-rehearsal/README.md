@@ -7,14 +7,18 @@ reference and media URL with a saved SQL snapshot. It fetches no audio and start
 Use the already-migrated `relisten_normalization_jerry_20261017` and
 `relisten_normalization_govt_mule_20261017` copies. Run each separately with its own output
 directory. The normalization identities, accepted credits, venue assignments and active
-people and composition policies must remain empty. Collection membership and invalidation clocks are existing
-state; the entire `normalization` schema is not expected to be empty.
+people, composition and venue policies must remain empty. Collection membership and
+invalidation clocks are existing state; the entire `normalization` schema is not expected
+to be empty.
 
 ## Prepare the API and comparison input
 
 API startup runs migrations. Point it only at the local rehearsal copy, already at the
-current checkout's migration version, at least migration 49. The export includes both people and
-composition-policy state. Configure these values explicitly:
+current checkout's migration version, at least migration 50. The export requires explicit
+active-policy counters for people, compositions and venues, all zero. Export a new manifest
+after migration; preserve earlier manifests and completed receipts unchanged. The current
+verifier rejects pre-50 manifests and missing policy counters before HTTP or output work.
+Configure these values explicitly:
 
 - `ASPNETCORE_ENVIRONMENT=Development`
 - `DATABASE_URL` for the selected local normalization copy

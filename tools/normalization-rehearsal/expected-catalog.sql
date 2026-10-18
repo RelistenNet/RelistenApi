@@ -1,4 +1,4 @@
--- Export one immutable comparison input from a local rehearsal copy at migration49 or later.
+-- Export one immutable comparison input from a local rehearsal copy at migration50 or later.
 -- IDs are retained for ownership checks. Credit prose and artist configuration are excluded.
 BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;
 SET LOCAL statement_timeout = '30s';
@@ -85,6 +85,8 @@ SELECT jsonb_build_object(
         'active_people_policies',(SELECT count(*) FROM normalization.people_acceptance_active
             WHERE artifact_uuid IS NOT NULL),
         'active_composition_policies',(SELECT count(*) FROM normalization.composition_acceptance_active
+            WHERE artifact_uuid IS NOT NULL),
+        'active_venue_policies',(SELECT count(*) FROM normalization.venue_acceptance_active
             WHERE artifact_uuid IS NOT NULL)
     )
 );
