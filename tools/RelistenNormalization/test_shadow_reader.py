@@ -235,6 +235,40 @@ class TestShadowReader(unittest.TestCase):
         self.assertEqual(self.index.search({})["total"], 0)
         self.assertEqual(self.index.stats()["indexedRecords"], 0)
 
+    def test_existing_cache_migration_and_replay_keep_coverage_equal_to_visible_results(self):
+        first = self.record()
+        second = self.record("source_sample:two")
+        original = self.chunk("100", first, first, second)
+        self.index.scan_once()
+        identifier = self.index.search({"q": first["inputKey"]})["items"][0]["id"]
+        self.assertEqual(self.index.stats()["indexedRecords"], 2)
+        # Historical v3 caches have records and chunk pointers but no aggregate
+        # table. Upgrade those existing pointers; do not reread or duplicate chunks.
+        with closing(self.index.connect()) as db:
+            db.execute("DROP TABLE chunk_facets")
+            db.commit()
+        migrated = ShadowIndex(self.run)
+        self.assertEqual(migrated.stats()["indexedRecords"], 2)
+        self.assertEqual(migrated.detail(identifier)["record"], first)
+
+        replacement = self.record(outcome="unresolved", provider="taperssection",
+                                  artistUuid="artist-two", artistName="Phish")
+        self.chunk("200", replacement, replacement)
+        migrated.scan_once()
+        stats = migrated.stats()
+        self.assertEqual(stats["indexedRecords"], 2)
+        self.assertEqual({item["value"]: item["count"] for item in stats["facets"]["outcome"]},
+                         {"proposed": 1, "unresolved": 1})
+        self.assertEqual({item["value"]: item["count"] for item in stats["facets"]["provider"]},
+                         {"archive.org": 1, "taperssection": 1})
+        self.assertEqual(migrated.detail(identifier)["record"], replacement)
+
+        original.unlink()
+        migrated.scan_once()
+        self.assertEqual(migrated.stats()["indexedRecords"], 1)
+        self.assertEqual(migrated.search({})["total"], 1)
+        self.assertEqual(migrated.detail(identifier)["record"], replacement)
+
     def test_checkpoint_progress_is_separate_from_visible_unique_results_and_lag(self):
         self.chunk("100", self.record(), self.record("source_sample:two"))
         self.index.scan_once()

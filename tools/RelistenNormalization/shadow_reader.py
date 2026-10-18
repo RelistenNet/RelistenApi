@@ -18,6 +18,7 @@ import time
 import zlib
 import uuid
 from contextlib import closing
+from collections import Counter
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -155,7 +156,28 @@ class ShadowIndex:
                 JOIN terms reason ON reason.id=r.reason_id JOIN terms m ON m.id=r.method_id
                 JOIN summaries s ON s.id=r.summary_id;
             """)
+            self._ensure_chunk_facets(db)
             db.commit()
+
+    @staticmethod
+    def _ensure_chunk_facets(db):
+        """Upgrade an existing cache once; interrupted DDL/data migration rolls back together."""
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='chunk_facets'").fetchone():
+            return
+        db.execute("BEGIN")
+        db.execute("""CREATE TABLE chunk_facets (
+            chunk_id INTEGER NOT NULL, domain_id INTEGER NOT NULL, provider_id INTEGER NOT NULL,
+            outcome_id INTEGER NOT NULL, artist_id INTEGER NOT NULL, records INTEGER NOT NULL,
+            PRIMARY KEY(chunk_id,domain_id,provider_id,outcome_id,artist_id)
+        ) WITHOUT ROWID""")
+        # Count current logical pointers, including failed chunks. Visibility is
+        # decided by the chunk state at read time, so missing/changed artifacts
+        # disappear atomically without rescanning all record headers on every request.
+        db.execute("""INSERT INTO chunk_facets
+            SELECT r.chunk_id,r.domain_id,h.provider_id,r.outcome_id,h.artist_id,count(*)
+            FROM records r JOIN headers h ON h.id=r.header_id
+            GROUP BY r.chunk_id,r.domain_id,h.provider_id,r.outcome_id,h.artist_id""")
+        db.commit()
 
     def connect(self, read_timeout=None):
         db = sqlite3.connect(self.database, timeout=10)
@@ -253,15 +275,21 @@ class ShadowIndex:
                 "INSERT INTO chunks(path,bytes,mtime_ns,state) VALUES(?,?,?,'indexing')",
                 (relative, stat.st_size, stat.st_mtime_ns)).lastrowid
             rows = 0
+            facet_changes = Counter()
             with gzip.open(path, "rt", encoding="utf-8") as stream:
                 for line_no, line in enumerate(stream, 1):
                     if not line.strip():
                         continue
                     record = json.loads(line)
-                    self._store_record(db, record, chunk_id, path.name, line_no, path.parent.name)
+                    self._store_record(db, record, chunk_id, path.name, line_no, path.parent.name, facet_changes)
                     rows += 1
             if (path.stat().st_size, path.stat().st_mtime_ns) != (stat.st_size, stat.st_mtime_ns):
                 raise ValueError("Completed chunk changed during indexing.")
+            db.executemany("""INSERT INTO chunk_facets VALUES(?,?,?,?,?,?)
+                ON CONFLICT(chunk_id,domain_id,provider_id,outcome_id,artist_id)
+                DO UPDATE SET records=records+excluded.records""",
+                           [(*key, count) for key, count in facet_changes.items() if count])
+            db.execute("DELETE FROM chunk_facets WHERE records=0")
             db.execute("UPDATE chunks SET state='indexed', rows=? WHERE id=?", (rows, chunk_id))
             db.commit()
             self._changed()
@@ -313,10 +341,10 @@ class ShadowIndex:
         values = (input_id, input_uuid, kind_id, artist_id, provider_id)
         row = db.execute("""SELECT id FROM headers WHERE input_id=? AND input_uuid IS ?
             AND kind_id=? AND artist_id=? AND provider_id=?""", values).fetchone()
-        if row:
-            return row[0]
-        return db.execute("""INSERT INTO headers(input_id,input_uuid,kind_id,artist_id,provider_id)
+        header_id = row[0] if row else db.execute(
+            """INSERT INTO headers(input_id,input_uuid,kind_id,artist_id,provider_id)
             VALUES(?,?,?,?,?)""", values).lastrowid
+        return header_id, provider_id, artist_id
 
     def _replace_entities(self, db, input_id, domain_id, keys):
         # One input/entity link can serve several outcomes. Replaying one domain
@@ -331,7 +359,7 @@ class ShadowIndex:
                 ON CONFLICT(input_id,entity_id) DO UPDATE SET domains=add_domain(domains,?)""",
                        (input_id, entity_id, bits, domain_id))
 
-    def _store_record(self, db, record, chunk_id, order_key, line_no, domain):
+    def _store_record(self, db, record, chunk_id, order_key, line_no, domain, facet_changes):
         required = ("domain", "inputKey", "inputKind", "inputUuid", "artistUuid", "artistName",
                     "provider", "outcome", "method")
         if not isinstance(record, dict) or any(not isinstance(record.get(key), str) for key in required):
@@ -343,8 +371,10 @@ class ShadowIndex:
             raise ValueError("Entity keys must be strings.")
         input_id = self._key(db, "input_keys", record["inputKey"])
         domain_id = self._term(db, domain, "domains", "name")
-        previous = db.execute("""SELECT r.id,c.path,r.line_no FROM records r
-            JOIN chunks c ON c.id=r.chunk_id WHERE r.domain_id=? AND r.input_id=?""",
+        previous = db.execute("""SELECT r.id,c.path,r.line_no,r.chunk_id,r.outcome_id,
+                h.provider_id,h.artist_id FROM records r
+            JOIN chunks c ON c.id=r.chunk_id JOIN headers h ON h.id=r.header_id
+            WHERE r.domain_id=? AND r.input_id=?""",
                               (domain_id, input_id)).fetchone()
         if previous and (Path(previous["path"]).name, previous["line_no"]) >= (order_key, line_no):
             return
@@ -352,8 +382,10 @@ class ShadowIndex:
             record["inputKind"] == "track_sample" and domain in ("repertoire", "file_contents")))
         label = labels[0] if labels else (record.get("reason") or record["inputKind"])[:240]
         summary = json.dumps([label, " ".join(labels).casefold()], ensure_ascii=False, separators=(",", ":"))
-        values = (domain_id, input_id, self._header(db, record, input_id),
-                  self._term(db, record["outcome"]), self._term(db, (record.get("reason") or "")[:500]),
+        header_id, provider_id, artist_id = self._header(db, record, input_id)
+        outcome_id = self._term(db, record["outcome"])
+        values = (domain_id, input_id, header_id,
+                  outcome_id, self._term(db, (record.get("reason") or "")[:500]),
                   self._term(db, record["method"][:256]), self._key(db, "summaries", summary), chunk_id, line_no)
         if previous:
             db.execute("""UPDATE records SET domain_id=?,input_id=?,header_id=?,outcome_id=?,reason_id=?,
@@ -362,6 +394,10 @@ class ShadowIndex:
             db.execute("""INSERT INTO records(domain_id,input_id,header_id,outcome_id,reason_id,method_id,
                 summary_id,chunk_id,line_no) VALUES(?,?,?,?,?,?,?,?,?)""", values)
         self._replace_entities(db, input_id, domain_id, keys)
+        if previous:
+            facet_changes[(previous["chunk_id"], domain_id, previous["provider_id"],
+                           previous["outcome_id"], previous["artist_id"])] -= 1
+        facet_changes[(chunk_id, domain_id, provider_id, outcome_id, artist_id)] += 1
 
     @classmethod
     def _labels(cls, proposal, prefer_file_title=False):
@@ -558,9 +594,9 @@ class ShadowIndex:
             revision = self._revision
         with closing(self.connect(read_timeout=15)) as db:
             db.execute("BEGIN")
-            groups = db.execute("""SELECT r.domain_id,h.provider_id,r.outcome_id,h.artist_id,count(*) n
-                FROM records r JOIN chunks c ON c.id=r.chunk_id JOIN headers h ON h.id=r.header_id
-                WHERE c.state='indexed' GROUP BY r.domain_id,h.provider_id,r.outcome_id,h.artist_id""").fetchall()
+            groups = db.execute("""SELECT f.domain_id,f.provider_id,f.outcome_id,f.artist_id,sum(f.records) n
+                FROM chunk_facets f JOIN chunks c ON c.id=f.chunk_id
+                WHERE c.state='indexed' GROUP BY f.domain_id,f.provider_id,f.outcome_id,f.artist_id""").fetchall()
             terms = dict(db.execute("SELECT id,value FROM terms"))
             domains = dict(db.execute("SELECT id,name FROM domains"))
             artists = {row["id"]: (row["uuid"], row["name"]) for row in db.execute("SELECT * FROM artists")}

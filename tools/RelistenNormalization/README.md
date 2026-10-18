@@ -61,6 +61,11 @@ To reserve capacity for other local work, restart the reader with
 and pending chunks through `/api/stats`. Restart without that flag to continue
 indexing into the same cache. No completed chunks or indexed records are deleted.
 
+Coverage counts are committed with each indexed chunk. Replays replace counts for
+the same logical result, and failed or missing chunks remain excluded. The first
+restart of an older v3 cache builds these counts once in an atomic migration;
+later HTTP requests read the small count table instead of scanning every result.
+
 Open `http://127.0.0.1:18764/` for that local instance. The current hosted instance
 uses the Tailscale links above. The reader's rebuildable `.shadow-reader-v3.sqlite3`
 stores summaries, filters, entity keys and chunk/line pointers. Detail views read
