@@ -274,10 +274,90 @@ public sealed class TestPeopleViewBaselineBatch
         report.Counts.CompleteBags.Should().Be(1);
     }
 
-    [Test]
-    public async Task SeparateTargetsCannotChangeViewPairsOrThePreservedOldComparator()
+    [TestCase("archive.org")]
+    [TestCase("local")]
+    [TestCase("phish.in")]
+    public async Task NativeFieldsProjectTheirCompleteOriginalValueRatherThanThePriorCatalogName(
+        string provider
+    )
     {
-        var hash = await Package();
+        var hash = await NativePackage(NativeOrigin(provider));
+
+        var report = await Run(hash);
+
+        report.State.Should().Be("completed");
+        report.PackageManifestSha256.Should().Be(hash);
+        var left = EndpointRows(report)["left"];
+        left.GetProperty("coverage").GetString().Should().Be("complete");
+        var view = left.GetProperty("views").EnumerateArray().Should().ContainSingle().Which;
+        var record = MatchRecord(view.GetProperty("projection").GetProperty("record"));
+        record.Names.Select(name => name.Wording).Should().Equal("Native Recorder");
+        record
+            .ActorContext!.Contacts.Should()
+            .ContainSingle(contact => contact.LookupKey == "native@example.test");
+        report.Counts.LeafPairs.Should().Be(1);
+        report.Counts.CompleteBags.Should().Be(1);
+        File.Exists(Path.Combine(output, "manifest.json")).Should().BeTrue();
+    }
+
+    [TestCase("missing")]
+    [TestCase("null")]
+    [TestCase("wrong_shape")]
+    [TestCase("missing_kind")]
+    [TestCase("wrong_kind")]
+    [TestCase("unknown_provider")]
+    [TestCase("invalid_evidence_hash")]
+    [TestCase("invalid_resource_hash")]
+    [TestCase("null_hash")]
+    public async Task NativeFieldsWithoutSupportedProvenanceCannotCompleteAnExport(string defect)
+    {
+        JsonNode? origin = NativeOrigin("archive.org");
+        switch (defect)
+        {
+            case "missing":
+            case "null":
+                origin = null;
+                break;
+            case "wrong_shape":
+                origin = JsonValue.Create("unstructured provenance");
+                break;
+            case "missing_kind":
+                origin.AsObject().Remove("kind");
+                break;
+            case "wrong_kind":
+                origin["kind"] = "importer_execution";
+                break;
+            case "unknown_provider":
+                origin["provider"] = "unverified-provider";
+                break;
+            case "invalid_evidence_hash":
+                origin["evidence_sha256"] = new string('z', 64);
+                break;
+            case "invalid_resource_hash":
+                origin["resource_key_sha256"] = "short";
+                break;
+            case "null_hash":
+                origin["evidence_sha256"] = null;
+                break;
+        }
+        var hash = await NativePackage(origin, includeNullOrigin: defect == "null");
+        var run = () => Run(hash);
+
+        await run.Should().ThrowAsync<InvalidDataException>();
+
+        File.Exists(Path.Combine(output, "manifest.json")).Should().BeFalse();
+        Directory.Exists(output).Should().BeFalse();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task SeparateTargetsCannotChangeViewPairsOrThePreservedOldComparator(
+        bool nativeSource
+    )
+    {
+        var hash = nativeSource
+            ? await NativePackage(NativeOrigin("archive.org"))
+            : await Package();
         var first = await Run(hash);
         var leaves = await File.ReadAllBytesAsync(Path.Combine(output, first.LeafPairs.Path));
         var baseline = await File.ReadAllBytesAsync(Path.Combine(output, first.Baseline.Path));
@@ -310,7 +390,7 @@ public sealed class TestPeopleViewBaselineBatch
             .ContainSingle()
             .Which.GetProperty("comparison")
             .ValueKind.Should()
-            .Be(JsonValueKind.Null);
+            .Be(nativeSource ? JsonValueKind.Object : JsonValueKind.Null);
     }
 
     [Test]
@@ -547,6 +627,46 @@ public sealed class TestPeopleViewBaselineBatch
         await Write("manifest.json", manifestBytes);
         return Hash(manifestBytes);
     }
+
+    private Task<string> NativePackage(JsonNode? origin, bool includeNullOrigin = false)
+    {
+        const string native = "Native Recorder (native@example.test)";
+        var source = Source(0, new() { ["taper"] = "Prior Catalog Recorder" });
+        source["resource"]!["provider"] = "relisten_retained_provider_field";
+        source["raw_record"]!["row"]!["taper"] = native;
+        if (origin != null || includeNullOrigin)
+        {
+            source["provider_origin"] = origin;
+        }
+        return WritePackage(
+            [source, Source(1, new() { ["taper"] = "Native Recorder" })],
+            [
+                Endpoint(
+                    "left",
+                    0,
+                    null,
+                    new(Selector("taper", native, "actor_name", "Native Recorder"))
+                ),
+                Endpoint(
+                    "right",
+                    1,
+                    null,
+                    new(Selector("taper", "Native Recorder", "actor_name", "Native Recorder"))
+                ),
+            ],
+            [Question("native-task", "cross_recording_identity", "left", ["right"])],
+            [new JsonObject { ["task_ids"] = new JsonArray("native-task") }]
+        );
+    }
+
+    private static JsonObject NativeOrigin(string provider) =>
+        new()
+        {
+            ["provider"] = provider,
+            ["kind"] = "retained_provider_input",
+            ["evidence_sha256"] = Hash(Encoding.UTF8.GetBytes("operator-retained native response")),
+            ["resource_key_sha256"] = Hash(Encoding.UTF8.GetBytes("native resource")),
+        };
 
     private static JsonObject Source(int index, Dictionary<string, string> fields)
     {

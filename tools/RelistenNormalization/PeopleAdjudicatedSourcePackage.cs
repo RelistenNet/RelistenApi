@@ -246,7 +246,7 @@ internal sealed class PeopleAdjudicatedSourcePackage
                     && Text(raw, "kind") == "source_sample"
                     && Text(row, "artist_partition") == "development"
                     && Text(row, "family_partition") == "development"
-                    && Text(resource, "provider") == "relisten_catalog_snapshot"
+                    && SupportedSourceProvider(row, resource)
                     && Text(resource, "resource_type") == "source"
                     && resource.GetProperty("resource_uuid").GetGuid() == uuid
                     && NullableText(raw, "family") == NullableText(row, "known_recording_family"),
@@ -277,6 +277,40 @@ internal sealed class PeopleAdjudicatedSourcePackage
             );
         }
         return result;
+    }
+
+    private static bool SupportedSourceProvider(JsonElement row, JsonElement resource)
+    {
+        if (Text(resource, "provider") == "relisten_catalog_snapshot")
+        {
+            return true;
+        }
+        if (
+            Text(resource, "provider") != "relisten_retained_provider_field"
+            || !row.TryGetProperty("provider_origin", out var origin)
+            || origin.ValueKind != JsonValueKind.Object
+        )
+        {
+            return false;
+        }
+
+        string[] required = ["provider", "kind", "evidence_sha256", "resource_key_sha256"];
+        if (
+            required.Any(name =>
+                !origin.TryGetProperty(name, out var value)
+                || value.ValueKind != JsonValueKind.String
+            )
+        )
+        {
+            return false;
+        }
+
+        // These hashes bind operator-retained provenance through the pinned package.
+        // They do not establish upstream authenticity or accepted identity authority.
+        return Text(origin, "provider") is "archive.org" or "local" or "phish.in"
+            && Text(origin, "kind") == "retained_provider_input"
+            && IsHash(Text(origin, "evidence_sha256"))
+            && IsHash(Text(origin, "resource_key_sha256"));
     }
 
     private static Dictionary<string, Endpoint> ReadEndpoints(

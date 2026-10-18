@@ -8,6 +8,21 @@ RelistenNormalization people-view-baseline <prepared-package-directory> <new-out
 
 Pin the package manifest hash externally. The reader authenticates only its four source artifacts: records, endpoints, questions, and grouping. Each selected field and Unicode span must agree with its original source, including artist and development eligibility. Target paths and other upstream receipts described by the package manifest remain inert metadata. Missing or changed target files cannot change this export.
 
+Source records retain their text authority. `resource.provider` may be
+`relisten_catalog_snapshot` or `relisten_retained_provider_field`. A native record
+requires `provider_origin` with provider `archive.org`, `local` or `phish.in`, kind
+`retained_provider_input`, and lowercase 64-character SHA-256 values in
+`evidence_sha256` and `resource_key_sha256`. Keep this object unchanged from the
+authenticated preparation evidence. Native values may differ from prior catalog
+text; selectors and hashes must cite the complete native field, without replacing
+it with the catalog wording.
+
+The operator must retain the native response, pointer or ordered composition and
+resource evidence behind those hashes. The hashes alone do not authenticate an
+upstream provider. This reader validates the declared provenance profile and
+binds the exact source package to the export; it does not fetch provider data,
+read targets or grant accepted-data authority.
+
 ## What one view means
 
 The existing source-context and source-reference projectors parse each complete original field. A selector contributes a view when it selects exactly one independently attributed actor whose query projection is complete. An exact name selector can also contribute its existing name-only fallback when it has no ambiguous actor context. Missing context does not invent a credit role, contact owner, or actor UUID.
