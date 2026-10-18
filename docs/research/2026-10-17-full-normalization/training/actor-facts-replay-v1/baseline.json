@@ -1,0 +1,391 @@
+{
+  "comparison_counts": {
+    "facets": {
+      "Aliases/complete_undisputed_draft": {
+        "actor_facet_comparisons": 337,
+        "expected_labeled_positive": 12,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 12,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 0,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Aliases/disputed": {
+        "actor_facet_comparisons": 27,
+        "expected_labeled_positive": 0,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 0,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 0,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Aliases/partial_undisputed_draft": {
+        "actor_facet_comparisons": 171,
+        "expected_labeled_positive": 0,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 0,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 0,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Contacts/complete_undisputed_draft": {
+        "actor_facet_comparisons": 379,
+        "expected_labeled_positive": 121,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 73,
+        "missing_labeled_positive": 1,
+        "unaligned_labeled_positive": 47,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Contacts/disputed": {
+        "actor_facet_comparisons": 27,
+        "expected_labeled_positive": 21,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 7,
+        "missing_labeled_positive": 3,
+        "unaligned_labeled_positive": 11,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Contacts/partial_undisputed_draft": {
+        "actor_facet_comparisons": 129,
+        "expected_labeled_positive": 98,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 44,
+        "missing_labeled_positive": 22,
+        "unaligned_labeled_positive": 32,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Context/complete_undisputed_draft": {
+        "actor_facet_comparisons": 377,
+        "expected_labeled_positive": 377,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 262,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 115,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Context/disputed": {
+        "actor_facet_comparisons": 31,
+        "expected_labeled_positive": 30,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 15,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 15,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Context/partial_undisputed_draft": {
+        "actor_facet_comparisons": 127,
+        "expected_labeled_positive": 125,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 79,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 46,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Profiles/complete_undisputed_draft": {
+        "actor_facet_comparisons": 379,
+        "expected_labeled_positive": 4,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 0,
+        "missing_labeled_positive": 2,
+        "unaligned_labeled_positive": 2,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Profiles/disputed": {
+        "actor_facet_comparisons": 29,
+        "expected_labeled_positive": 3,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 0,
+        "missing_labeled_positive": 1,
+        "unaligned_labeled_positive": 2,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Profiles/partial_undisputed_draft": {
+        "actor_facet_comparisons": 127,
+        "expected_labeled_positive": 33,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 0,
+        "missing_labeled_positive": 12,
+        "unaligned_labeled_positive": 21,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Roles/complete_undisputed_draft": {
+        "actor_facet_comparisons": 377,
+        "expected_labeled_positive": 379,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 263,
+        "missing_labeled_positive": 0,
+        "unaligned_labeled_positive": 116,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Roles/disputed": {
+        "actor_facet_comparisons": 31,
+        "expected_labeled_positive": 42,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 18,
+        "missing_labeled_positive": 2,
+        "unaligned_labeled_positive": 22,
+        "unscored_extra_partial_or_disputed": 0
+      },
+      "Roles/partial_undisputed_draft": {
+        "actor_facet_comparisons": 127,
+        "expected_labeled_positive": 201,
+        "extra_in_complete_undisputed_draft_field": 0,
+        "matched_labeled_positive": 111,
+        "missing_labeled_positive": 12,
+        "unaligned_labeled_positive": 78,
+        "unscored_extra_partial_or_disputed": 0
+      }
+    },
+    "fields_with_independent_disputes": 33,
+    "independently_reviewed_fields": 43,
+    "kind_accuracy_denominator": 0,
+    "names": {
+      "actual_anchored_references": 516,
+      "ambiguous_spans": 0,
+      "exact_unique_raw_span_matches": 356,
+      "expected_references": 547,
+      "unaligned_actual_spans": 160
+    },
+    "not_independently_reviewed_fields": 500,
+    "outcomes": {
+      "extracted": 543
+    },
+    "relationships": {
+      "actual": 137,
+      "actual_unscored_endpoints": 13,
+      "exact_fully_anchored_correspondences": 35,
+      "expected": 109,
+      "scored": false
+    },
+    "whole_fields": 543
+  },
+  "contact_positive_diagnostics": {
+    "absent_on_exact_aligned_actor": 26,
+    "blocked_by_actor_anchor_alignment": 90,
+    "expected_literal_attachment_claims": 240,
+    "interpretation": "These are draft diagnostic counts, not recall or a person identity result. Partial coverage and independently disputed expectations remain separate in comparison_counts.",
+    "matched_on_exact_aligned_actor": 124
+  },
+  "evaluation_eligible": false,
+  "fresh_review": {
+    "result": "clean_after_fixes",
+    "reviewer": "Codex /root/normalization_local_capture",
+    "scope": "Source correctness/readability review of C# batch/CLI/tests, exporter and comparator/docs; did not independently rerun .NET or the actual extraction."
+  },
+  "limits": [
+    "43 fields received independent source review; 500 remain unreviewed drafts. Thirty-three fields have explicit review disputes. No human adjudication or launch accuracy claim.",
+    "Named-reference diagnostics include explicit alias references. A nested alias fact can match while its reference lacks a separately emitted raw anchor. Reference counts are not distinct people or a recall denominator.",
+    "Expected facet values are sets per actor: repeated href/display occurrences do not create independent claims. Original raw fact records remain in the frozen bundle.",
+    "Exact spans establish alignment. Unaligned and ambiguous references are retained without string-based identity repair.",
+    "Unknown actor kind supplies no binary negatives. Relationship endpoints without raw anchors remain unscored.",
+    "Raw input text, contacts, full extractor output and per-field diagnostic detail stay in ignored local artifacts.",
+    "No source labels, blind first answers, runtime parser, canonical ontology or acceptance policy changed. No paid/API/database/network calls were used for replay."
+  ],
+  "policy_activation_permitted": false,
+  "profile_coverage": {
+    "actual_profile_facts": 0,
+    "current_qualified_forms_present": 0,
+    "distinct_actor_literal_relationship_expectations": 40,
+    "interpretation": "All 44 draft records fall outside the current qualified provider/attachment combinations. Zero profile output establishes a coverage gap, not a demonstrated failure of an existing qualified-provider rule. Some proposed profile relationships need source review; provider support does not validate attachment or turn a show/resource URL into an actor profile. Detailed source audit is separate and incomplete.",
+    "raw_draft_fact_records": 44,
+    "raw_fact_records_by_url_family": {
+      "facebook": 5,
+      "myspace": 2,
+      "personal_or_project_sites": 23,
+      "twitter": 2,
+      "youtube": 12
+    }
+  },
+  "retained_artifacts": [
+    {
+      "bytes": 389313,
+      "path": "local-dev/normalization-data/actor-field-replay-input-v2/fields.jsonl",
+      "sha256": "d9f1ce40718c36484c8b9ba5a624f098c14031b9355512b031892be92a7c6723"
+    },
+    {
+      "bytes": 1212,
+      "path": "local-dev/normalization-data/actor-field-replay-input-v2/receipt.json",
+      "sha256": "987f6796d287eb4f7719523506e3518d57221550fbde9dfb7d4a0d9fb67c2bc5"
+    },
+    {
+      "bytes": 1629856,
+      "path": "local-dev/normalization-data/actor-field-replay-output-v1/results.jsonl",
+      "sha256": "e0633d7195392a96b4386aa97a5438609c86118bc2e7e92e349065d1fa73417a"
+    },
+    {
+      "bytes": 2232,
+      "path": "local-dev/normalization-data/actor-field-replay-output-v1/status.json",
+      "sha256": "2e213400e0a430985ab6dc83aca03fa585eb440411f198494ee1da0741f47034"
+    },
+    {
+      "bytes": 2232,
+      "path": "local-dev/normalization-data/actor-field-replay-output-v1/manifest.json",
+      "sha256": "2e213400e0a430985ab6dc83aca03fa585eb440411f198494ee1da0741f47034"
+    },
+    {
+      "bytes": 1689491,
+      "path": "local-dev/normalization-data/actor-field-replay-comparison-v1/fields.jsonl",
+      "sha256": "9e90215181638305c9ef5c6d65b7c8bcf2ba2c4af50f31387944cdaf3dd3ff5b"
+    },
+    {
+      "bytes": 9630,
+      "path": "local-dev/normalization-data/actor-field-replay-comparison-v1/report.json",
+      "sha256": "31b7de42467b1b002c88c745e63e45c4541cdd9a363028524a5e26ff57de3d98"
+    }
+  ],
+  "runtime": {
+    "api_assembly": {
+      "file": {
+        "bytes": 6707712,
+        "path": "/Users/alecgorge/.codex/worktrees/actor-field-replay/RelistenApi/tools/RelistenNormalization/bin/Debug/net10.0/RelistenApi.dll",
+        "sha256": "51ed05fcf939ffa60e832266429ce7fcc5db2495c5873c8405ba0327c66e4347"
+      },
+      "moduleVersionId": "013063a5-9e70-4f22-a0c9-4374336c5c86",
+      "name": "RelistenApi, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+    },
+    "error_fields": 0,
+    "expected_fields": 543,
+    "extractor_version": "recording-credits-v3/recording-actor-evidence-v1",
+    "processed_fields": 543,
+    "tool_assembly": {
+      "file": {
+        "bytes": 292864,
+        "path": "/Users/alecgorge/.codex/worktrees/actor-field-replay/RelistenApi/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+        "sha256": "566c3b2c0f1db7fd415281b5900c713650c03c96ffd4b3aedb4ffd312af061ec"
+      },
+      "moduleVersionId": "8903b409-cff6-4bca-8824-bc6e4948580a",
+      "name": "RelistenNormalization, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null"
+    }
+  },
+  "schema_version": "actor-facts-replay-baseline-v1",
+  "source_corpus": {
+    "adjudication": "pending",
+    "citations_sha256": "fb1324d84e84c7d0fa54e5a9b6df00cf4adefa13f931e138926a2c6223ecf527",
+    "counts": {
+      "actor_references": 547,
+      "actors": 535,
+      "aliases": 12,
+      "citations": 1628,
+      "complete_fields_by_kind": {
+        "Aliases": 331,
+        "Contacts": 375,
+        "Context": 372,
+        "Profiles": 380,
+        "Relationships": 330
+      },
+      "contacts": 240,
+      "context": 532,
+      "kind_positive": 0,
+      "profiles": 44,
+      "relationships": {
+        "DistinctActors": 7,
+        "ExplicitAlias": 12,
+        "JointRoles": 90
+      },
+      "source_records": 207,
+      "tasks": 543,
+      "unresolved_by_kind": {
+        "Aliases": 68,
+        "Contacts": 15,
+        "Context": 55,
+        "Profiles": 145,
+        "Relationships": 34
+      },
+      "values": 244
+    },
+    "field_index_sha256": "2a7a3bdd8dbc60902f70ae41e5960f88308ede326b28db6b4c542fbc9695f74f",
+    "labels_sha256": "4fd5fe8eb60435d522163a60adeadd2542bf2f7047538d338b5f7fdcf9fcd428",
+    "manifest": {
+      "bytes": 8872,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/manifest.json",
+      "sha256": "8bcd34756f911984e05d6970a92a1350a5af154c7f28edc648f83cffad034569"
+    },
+    "source_exclusions_unchanged": true,
+    "source_scope": {
+      "artists": 172,
+      "discovery_family_hypotheses": 38,
+      "field_kinds": {
+        "description": 121,
+        "source": 1,
+        "taper": 205,
+        "taper_notes": 42,
+        "transferrer": 174
+      },
+      "positive_scope": "Recording/transfer contributor expressions and their field-local actor/reference context. Unrelated performer/composition/venue promotion is outside positive contributor scope.",
+      "selection": "Every original field cited by a frozen discovery occurrence, structured-credit citation, or person-context citation; no other source fields were added.",
+      "source_records": 207,
+      "whole_fields": 543
+    }
+  },
+  "state": "completed_development_baseline",
+  "tool_source": [
+    {
+      "bytes": 20184,
+      "path": "tools/RelistenNormalization/ActorFieldReplayBatch.cs",
+      "sha256": "9581fc622e17da02b19df5d8c394d7afb735ce2e7947c14138db6129c7e2ae18"
+    },
+    {
+      "bytes": 7163,
+      "path": "tools/RelistenNormalization/Program.cs",
+      "sha256": "5c1ed7ba21f067d2fb7eea750db769a4b63fcc41250f0c81b423cbb7b96312e4"
+    },
+    {
+      "bytes": 13327,
+      "path": "RelistenApiTests/Normalization/TestActorFieldReplayBatch.cs",
+      "sha256": "5c8c33adec6c55e515cb7218fba5b438d9fd663d7388296c37f684ab739a64be"
+    },
+    {
+      "bytes": 11182,
+      "path": "tools/actor-field-replay/export_fields.py",
+      "sha256": "160df857b4aaeb8ab66328a68dcb8f18f2bd0500e3f6fb79653fae1dcfe5bbd1"
+    },
+    {
+      "bytes": 13044,
+      "path": "tools/actor-field-replay/test_export_fields.py",
+      "sha256": "670c18d8f9943dafa3a60b58cd69f1a52480ff6f268283344bbfaf5e2e945238"
+    },
+    {
+      "bytes": 22286,
+      "path": "tools/actor-field-replay/compare_fields.py",
+      "sha256": "74ac08ff91ac8c5bbd6f2da38a4f943d2c7f9d076d9166b32cf3569ab65aba99"
+    },
+    {
+      "bytes": 19405,
+      "path": "tools/actor-field-replay/test_compare_fields.py",
+      "sha256": "d353a60e63990cc249e0476890cf1e2f0c2cd72feaad42b340599d795e1dc471"
+    },
+    {
+      "bytes": 8762,
+      "path": "tools/actor-field-replay/README.md",
+      "sha256": "5e8cfddb6b01b5d51142bd7a6f8cb25345536b5bba25480cd1e842aa9eca1851"
+    }
+  ],
+  "usage": "development_only",
+  "verification": [
+    {
+      "command": "python3 -B -O tools/actor-field-replay/test_export_fields.py",
+      "observer": "annotation/replay implementation agent",
+      "result": "passed",
+      "tests": 12
+    },
+    {
+      "command": "python3 -B -O tools/actor-field-replay/test_compare_fields.py",
+      "observer": "annotation/replay implementation agent",
+      "result": "passed",
+      "tests": 22
+    },
+    {
+      "command": "dotnet test RelistenApiTests/RelistenApiTests.csproj --filter FullyQualifiedName~TestActorFieldReplayBatch",
+      "observer": "root agent; serialized verification",
+      "result": "passed",
+      "tests": 13
+    },
+    {
+      "command": "dotnet build tools/RelistenNormalization/RelistenNormalization.csproj",
+      "csharp_warnings": 0,
+      "observer": "root agent; serialized verification",
+      "result": "passed"
+    }
+  ]
+}
