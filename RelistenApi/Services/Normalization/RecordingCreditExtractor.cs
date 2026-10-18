@@ -14,7 +14,7 @@ namespace Relisten.Normalization;
 public sealed class RecordingCreditExtractor
 {
     /// <summary>Persist with extraction output so cached results can be invalidated when grammar changes.</summary>
-    public const string Version = "recording-credits-v1";
+    public const string Version = "recording-credits-v2";
 
     private const string CreditVerbs =
         @"(?:recorded|taped|transferred|mastered|uploaded|collected|matrixed)";
@@ -34,8 +34,16 @@ public sealed class RecordingCreditExtractor
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1)
     );
+    private const string PersonalSuffix = @"(?:Jr|Sr|II|III|IV|V)\.?";
     private static readonly Regex NameSeparator = new(
-        @"\s*(?:,|;|\s+and\s+|&|\s+/\s+)\s*",
+        @"\s*(?:,(?!\s*"
+            + PersonalSuffix
+            + @"(?=\s*(?:$|[,;&/]|\band\b)))|;|\s+and\s+|&|\s+/\s+)\s*",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1)
+    );
+    private static readonly Regex PersonalSuffixAtEnd = new(
+        @"\b" + PersonalSuffix + "$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1)
     );
@@ -73,8 +81,15 @@ public sealed class RecordingCreditExtractor
                 foreach (var clause in clauses)
                 {
                     var creditLine = new RecordingText.Line(clause, line.Evidence);
-                    ExtractNamedRoles(creditLine, structuredRole, credits, unresolved);
-                    ExtractOperationActors(creditLine, credits, unresolved);
+                    var explicitCredits = ExplicitCredit.Matches(clause);
+                    ExtractNamedRoles(
+                        creditLine,
+                        explicitCredits,
+                        structuredRole,
+                        credits,
+                        unresolved
+                    );
+                    ExtractOperationActors(creditLine, explicitCredits, credits, unresolved);
                 }
             }
         }
@@ -106,12 +121,12 @@ public sealed class RecordingCreditExtractor
 
     private static void ExtractNamedRoles(
         RecordingText.Line line,
+        MatchCollection explicitMatches,
         RecordingCreditRole? structuredRole,
         List<CreditMention> credits,
         List<RecordingExtractionUnresolved> unresolved
     )
     {
-        var explicitMatches = ExplicitCredit.Matches(line.Text);
         if (explicitMatches.Count > 0)
         {
             foreach (Match match in explicitMatches)
@@ -155,12 +170,24 @@ public sealed class RecordingCreditExtractor
 
     private static void ExtractOperationActors(
         RecordingText.Line line,
+        MatchCollection explicitCredits,
         List<CreditMention> credits,
         List<RecordingExtractionUnresolved> unresolved
     )
     {
         foreach (Match actor in OperationActor.Matches(line.Text))
         {
+            // An explicit role clause owns its actor, even when a processing chain precedes it.
+            // Let named-role extraction handle that claim, including negation and multiple roles.
+            if (
+                explicitCredits.Any(credit =>
+                    actor.Index >= credit.Index && actor.Index < credit.Groups["name"].Index
+                )
+            )
+            {
+                continue;
+            }
+
             var prefix = line.Text[..actor.Index];
             var boundary = Math.Max(
                 prefix.LastIndexOf(", ", StringComparison.Ordinal),
@@ -253,7 +280,13 @@ public sealed class RecordingCreditExtractor
         var withoutContact = Regex.Replace(withoutDate, @"\s*\([^)]*@[^)]*\)", "");
         foreach (var part in NameSeparator.Split(withoutContact))
         {
-            var name = originalRole is null ? part.Trim() : part.Trim().TrimEnd('.');
+            var name = part.Trim();
+            // Prose sentence punctuation is not a name, but a credited suffix keeps its literal dot.
+            if (originalRole is not null && !PersonalSuffixAtEnd.IsMatch(name))
+            {
+                name = name.TrimEnd('.');
+            }
+
             if (name.Length == 0)
             {
                 continue;

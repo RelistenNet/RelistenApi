@@ -1,0 +1,448 @@
+{
+  "schema_version": "local-credit-parser-development-comparison-v2",
+  "status": "development_diagnostic",
+  "local_extractor_version": "recording-credits-v2",
+  "luna_extractor_version": "luna-recording-credits-v2",
+  "policy_activation_permitted": false,
+  "identity_accuracy_established": false,
+  "independent_human_adjudication": false,
+  "run_state": "completed_partial",
+  "input_fields": 100,
+  "resolved_scored_fields": 85,
+  "excluded_fields": 15,
+  "methods": {
+    "local": {
+      "true_positive": 61,
+      "false_positive": 4,
+      "false_negative": 9,
+      "precision": 0.9384615384615385,
+      "recall": 0.8714285714285714,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 77
+    },
+    "luna": {
+      "true_positive": 60,
+      "false_positive": 3,
+      "false_negative": 4,
+      "precision": 0.9523809523809523,
+      "recall": 0.9375,
+      "scored_fields": 79,
+      "unavailable_fields": 6,
+      "gold_assertions": 64,
+      "exact_fields": 75
+    },
+    "current_routing": {
+      "true_positive": 63,
+      "false_positive": 4,
+      "false_negative": 5,
+      "precision": 0.9402985074626866,
+      "recall": 0.9264705882352942,
+      "scored_fields": 83,
+      "unavailable_fields": 2,
+      "gold_assertions": 68,
+      "exact_fields": 78
+    },
+    "luna_with_local_on_failure": {
+      "true_positive": 63,
+      "false_positive": 4,
+      "false_negative": 7,
+      "precision": 0.9402985074626866,
+      "recall": 0.9,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 78
+    },
+    "current_routing_with_local_on_failure": {
+      "true_positive": 63,
+      "false_positive": 4,
+      "false_negative": 7,
+      "precision": 0.9402985074626866,
+      "recall": 0.9,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 78
+    }
+  },
+  "paired_local_luna": {
+    "transitions": {
+      "paired_fields": 79,
+      "recovered_gold_assertions": 2,
+      "lost_gold_assertions": 0,
+      "removed_extra_predictions": 0,
+      "introduced_extra_predictions": 0,
+      "both_correct_fields": 74,
+      "both_wrong_unchanged_fields": 4,
+      "corrected_fields": 1
+    },
+    "methods": {
+      "local": {
+        "true_positive": 58,
+        "false_positive": 3,
+        "false_negative": 6,
+        "precision": 0.9508196721311475,
+        "recall": 0.90625
+      },
+      "luna": {
+        "true_positive": 60,
+        "false_positive": 3,
+        "false_negative": 4,
+        "precision": 0.9523809523809523,
+        "recall": 0.9375
+      }
+    }
+  },
+  "states_all_fields": {
+    "extracted": 91,
+    "no_text": 1,
+    "unresolved": 8
+  },
+  "routing_states_all_fields": {
+    "local": 91,
+    "extracted": 6,
+    "unresolved": 3
+  },
+  "baseline": {
+    "artifact": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-report-v2/report.json",
+      "bytes": 30606,
+      "sha256": "2dd5744298eba751089184d22f56cbb1420494f2a82e6b9e3962bda49ad5daa6"
+    },
+    "local_extractor_version": "recording-credits-v1",
+    "selection_bytes_unchanged": true,
+    "local_metrics": {
+      "true_positive": 60,
+      "false_positive": 7,
+      "false_negative": 10,
+      "precision": 0.8955223880597015,
+      "recall": 0.8571428571428571,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 75
+    }
+  },
+  "local_transitions_on_resolved_fields": {
+    "scored_fields": 85,
+    "corrected_fields": 2,
+    "new_error_fields": 0,
+    "both_correct_fields": 75,
+    "both_wrong_fields": 8
+  },
+  "changed_local_field_objects_all_100": 2,
+  "changed_local_field_review": [
+    {
+      "label_id": "credit-field:ff133b30-f111-27bf-835d-b8ed1e08189d:taper",
+      "field_sha256": "822b278bb235d269541ab6dd377890be9e3fad7416b09935a88b03fd0aefd8f4",
+      "field": "taper",
+      "support": {
+        "start": 0,
+        "end": 18,
+        "quote": "George Hodges, Jr.",
+        "unit": "unicode_code_points"
+      },
+      "before": {
+        "credits": [
+          {
+            "name": "George Hodges",
+            "role": "taper",
+            "evidence": {
+              "field": "taper",
+              "jsonPointer": "/taper",
+              "quote": "George Hodges, Jr.",
+              "startCodePoint": 0,
+              "endCodePoint": 18
+            },
+            "originalRole": null
+          },
+          {
+            "name": "Jr.",
+            "role": "taper",
+            "evidence": {
+              "field": "taper",
+              "jsonPointer": "/taper",
+              "quote": "George Hodges, Jr.",
+              "startCodePoint": 0,
+              "endCodePoint": 18
+            },
+            "originalRole": null
+          }
+        ],
+        "unresolved": []
+      },
+      "after": {
+        "credits": [
+          {
+            "name": "George Hodges, Jr.",
+            "role": "taper",
+            "evidence": {
+              "field": "taper",
+              "jsonPointer": "/taper",
+              "quote": "George Hodges, Jr.",
+              "startCodePoint": 0,
+              "endCodePoint": 18
+            },
+            "originalRole": null
+          }
+        ],
+        "unresolved": []
+      },
+      "interpretation": "Personal suffix remains within one credited name."
+    },
+    {
+      "label_id": "credit-field:f67f5854-ecd1-a861-02fb-f13c92123935:lineage",
+      "field_sha256": "bd4e094254ef65bc651cbafb8881c1e264b475e44316bddd113fd2efd42734bb",
+      "field": "lineage",
+      "support": {
+        "start": 0,
+        "end": 78,
+        "quote": "CD > Soundforge 6 > USB > Adobe Audition > Flac > TLH  Recorded By John Rivers",
+        "unit": "unicode_code_points"
+      },
+      "before": {
+        "credits": [
+          {
+            "name": "John Rivers",
+            "role": "taper",
+            "evidence": {
+              "field": "lineage",
+              "jsonPointer": "/lineage",
+              "quote": "CD > Soundforge 6 > USB > Adobe Audition > Flac > TLH  Recorded By John Rivers",
+              "startCodePoint": 0,
+              "endCodePoint": 78
+            },
+            "originalRole": null
+          },
+          {
+            "name": "John Rivers",
+            "role": "transferrer",
+            "evidence": {
+              "field": "lineage",
+              "jsonPointer": "/lineage",
+              "quote": "CD > Soundforge 6 > USB > Adobe Audition > Flac > TLH  Recorded By John Rivers",
+              "startCodePoint": 0,
+              "endCodePoint": 78
+            },
+            "originalRole": null
+          }
+        ],
+        "unresolved": []
+      },
+      "after": {
+        "credits": [
+          {
+            "name": "John Rivers",
+            "role": "taper",
+            "evidence": {
+              "field": "lineage",
+              "jsonPointer": "/lineage",
+              "quote": "CD > Soundforge 6 > USB > Adobe Audition > Flac > TLH  Recorded By John Rivers",
+              "startCodePoint": 0,
+              "endCodePoint": 78
+            },
+            "originalRole": null
+          }
+        ],
+        "unresolved": []
+      },
+      "interpretation": "An explicit recording actor does not inherit a transfer role from a preceding processing chain."
+    }
+  ],
+  "cached_luna_comparison": {
+    "valid_fields": 91,
+    "cached_fields": 91,
+    "valid_extractions_unchanged": true,
+    "limits": "Eight unavailable outcomes remain failures. Extraction data embedded in unresolved outcomes is local fallback, not a Luna answer."
+  },
+  "job": {
+    "uuid": "16a6d4fd-acc3-4e6c-916d-80d1fff8abf6",
+    "capUsd": 5,
+    "accountedUsd": 0.0137572
+  },
+  "admitted_attempts_for_job": 192,
+  "new_attempts": 0,
+  "new_accounted_usd": 0.0,
+  "historical_attempts": {
+    "membership_unchanged": true,
+    "prior_fields_unchanged": true,
+    "attempts": 192,
+    "additive_diagnostic_fields": [
+      "failureStage",
+      "failedResponseBody"
+    ],
+    "new_fields_null_for_historical_attempts": true,
+    "limits": "The additive migration permits future diagnostic retention; it does not reconstruct missing response bodies for earlier failures."
+  },
+  "runtime_code_receipt": {
+    "artifact": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-code-receipt.json",
+      "bytes": 846,
+      "sha256": "310ea23165a4a4212a4cde04b2dc2831c8d09a0b2e9dfb1119e7bc57701a7ba6"
+    },
+    "source_and_dll_hashes_verified": true,
+    "loaded_extractor_assembly_sha256": "305a3f6f63b67c10e52b49dbfe8fe8018e1a0983dfab802f7e27c625a24c09bd",
+    "loaded_runner_assembly_sha256": "f0d2020e52691705d767f54f9512bed8315c59028d6136436a9d15e561e0cefc"
+  },
+  "migration": {
+    "artifact": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/migration44-receipt.json",
+      "bytes": 283,
+      "sha256": "ae9340f412aa7a195e45a0f98373490838946adf05bfcf42e994dd250bb1dca3"
+    },
+    "source_sha256": "1062fc2e16156e47b8620c355f4c2549bbb784d161bbe9a67f4264b95e13982d",
+    "scope": "Additive migration 44 applied to the dedicated local comparison database. Historical attempt values are preserved."
+  },
+  "provenance": {
+    "labels_sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12",
+    "manifest_sha256": "c04d52309a4db90e19cab38c9105b510aab78d036c0b4cad8d9fa8b68fa2198b",
+    "results_sha256": "769c6f25561614841184e096b58e1fe4226fb743601756579eb078b3d67abb65",
+    "receipts_sha256": "5f52a8930f521d11d2ba4e1062ace5239f24b8cb9aaa365b04e591256a2d22cf",
+    "label_receipt_sha256": "bba2cc9c6d6d1d7dbd42d9034c9f4e86bf97ef218d9a592cc3956b08bdbbe46f",
+    "scorer_sha256": "70773939a87e5adbb9d2652a5e5348343802c6d3b45fe457af799625447086f9"
+  },
+  "whole_field_sensitivity": {
+    "artifact": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-sensitivity/report.json",
+      "bytes": 28719,
+      "sha256": "1800c160d7f83d304f189bfb1772c2e46b696e0bd052a984cc50179172fc75b8"
+    },
+    "status": "pending_adjudication",
+    "additional_excluded_label_ids": [
+      "credit-field:77a09858-c858-c73c-3f98-43d653c2b26f:lineage"
+    ],
+    "resolved_fields": 84,
+    "excluded_fields": 16,
+    "methods": {
+      "local": {
+        "true_positive": 60,
+        "false_positive": 4,
+        "false_negative": 8,
+        "precision": 0.9375,
+        "recall": 0.8823529411764706,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 77
+      },
+      "luna": {
+        "true_positive": 59,
+        "false_positive": 3,
+        "false_negative": 3,
+        "precision": 0.9516129032258065,
+        "recall": 0.9516129032258065,
+        "scored_fields": 78,
+        "unavailable_fields": 6,
+        "gold_assertions": 62,
+        "exact_fields": 75
+      },
+      "current_routing": {
+        "true_positive": 62,
+        "false_positive": 4,
+        "false_negative": 4,
+        "precision": 0.9393939393939394,
+        "recall": 0.9393939393939394,
+        "scored_fields": 82,
+        "unavailable_fields": 2,
+        "gold_assertions": 66,
+        "exact_fields": 78
+      },
+      "luna_with_local_on_failure": {
+        "true_positive": 62,
+        "false_positive": 4,
+        "false_negative": 6,
+        "precision": 0.9393939393939394,
+        "recall": 0.9117647058823529,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 78
+      },
+      "current_routing_with_local_on_failure": {
+        "true_positive": 62,
+        "false_positive": 4,
+        "false_negative": 6,
+        "precision": 0.9393939393939394,
+        "recall": 0.9117647058823529,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 78
+      }
+    },
+    "paired_local_luna": {
+      "transitions": {
+        "paired_fields": 78,
+        "recovered_gold_assertions": 2,
+        "lost_gold_assertions": 0,
+        "removed_extra_predictions": 0,
+        "introduced_extra_predictions": 0,
+        "both_correct_fields": 74,
+        "both_wrong_unchanged_fields": 3,
+        "corrected_fields": 1
+      },
+      "methods": {
+        "local": {
+          "true_positive": 57,
+          "false_positive": 3,
+          "false_negative": 5,
+          "precision": 0.95,
+          "recall": 0.9193548387096774
+        },
+        "luna": {
+          "true_positive": 59,
+          "false_positive": 3,
+          "false_negative": 3,
+          "precision": 0.9516129032258065,
+          "recall": 0.9516129032258065
+        }
+      }
+    },
+    "provenance": {
+      "labels_sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12",
+      "selection_sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0",
+      "manifest_sha256": "c04d52309a4db90e19cab38c9105b510aab78d036c0b4cad8d9fa8b68fa2198b",
+      "results_sha256": "769c6f25561614841184e096b58e1fe4226fb743601756579eb078b3d67abb65",
+      "finding_sha256": "2f9cf430266bfbee378a023179c341db1627580b94bc84bae2ec71ed2b6684b2",
+      "scorer_sha256": "70773939a87e5adbb9d2652a5e5348343802c6d3b45fe457af799625447086f9"
+    },
+    "limits": "The disputed taper and supported transfer credit are both masked, without relabeling either as negative."
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-keyless/selection.json",
+      "bytes": 56146,
+      "sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-keyless/manifest.json",
+      "bytes": 57104,
+      "sha256": "c04d52309a4db90e19cab38c9105b510aab78d036c0b4cad8d9fa8b68fa2198b"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-keyless/results.jsonl",
+      "bytes": 124910,
+      "sha256": "769c6f25561614841184e096b58e1fe4226fb743601756579eb078b3d67abb65"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-keyless/receipts.json",
+      "bytes": 403713,
+      "sha256": "5f52a8930f521d11d2ba4e1062ace5239f24b8cb9aaa365b04e591256a2d22cf"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/local-parser-v2-report/report.json",
+      "bytes": 28173,
+      "sha256": "e470061c584170b063aed40b77370410e87f67f0c9364bb70c369862c985f1ed"
+    }
+  ],
+  "interpretation": [
+    "On the same 85 resolved fields with 70 draft priority assertions, the local parser moves from 60 matches, seven extra predictions and ten misses to 61 matches, four extras and nine misses. Exact fields increase from 75 to 77.",
+    "Only two of all 100 local extraction objects change: a personal suffix is retained, and an unsupported transfer role inferred from a nearby processing chain is removed. Both changes match the drafts; no previously correct resolved field becomes wrong.",
+    "All 91 valid cached Luna extractions and the full original selection remain unchanged. The local comparison makes no new paid attempt or accounted spend; the cumulative job remains at 192 attempts and $0.0137572.",
+    "On the available 79-field subset with 64 draft assertions, local v2 matches 58 and cached Luna matches 60. Explicit routing with local output on unavailable API outcomes matches 63 of all 70 assertions, with four extras and seven misses.",
+    "The supplemental whole-field sensitivity leaves 84 resolved fields and 68 assertions. It excludes the disputed Josh recording role together with its supported transfer credit, while leaving the frozen labels intact.",
+    "These small draft development measurements do not establish global person identity, independent human adjudication, launch accuracy, or acceptance policy."
+  ]
+}

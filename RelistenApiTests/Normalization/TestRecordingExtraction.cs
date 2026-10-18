@@ -35,6 +35,51 @@ public sealed class TestRecordingExtraction
         result.Unresolved.Should().BeEmpty();
     }
 
+    [TestCase("René Diaz, Jr., Morgan Vale", "René Diaz, Jr.", "Morgan Vale")]
+    [TestCase("Avery Reed, Sr. and Zoë (Night Owl)", "Avery Reed, Sr.", "Zoë (Night Owl)")]
+    [TestCase("Jamie King, III; Pat Noor", "Jamie King, III", "Pat Noor")]
+    [TestCase("Kai Moss,Jr., Pat Vale", "Kai Moss,Jr.", "Pat Vale")]
+    [TestCase("Robin Marsh, Julian Vale", "Robin Marsh", "Julian Vale")]
+    public void NameListsKeepPersonalSuffixesWithoutCombiningDifferentPeople(
+        string original,
+        string first,
+        string second
+    )
+    {
+        var result = credits.Extract(new Dictionary<string, string?> { ["taper"] = original });
+
+        result.Credits.Select(credit => credit.Name).Should().Equal(first, second);
+        result.Credits.Should().OnlyContain(credit => credit.Role == RecordingCreditRole.Taper);
+        result.Unresolved.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(original, credit.Evidence);
+        }
+    }
+
+    [Test]
+    public void ExplicitNamesRetainSuffixPunctuationAndOriginalUnicodeHtmlEvidence()
+    {
+        const string text =
+            "🎵<div>Recorded by Léon March, Jr.; Transferred by Zoë Pine, Sr.</div>";
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = text });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Léon March, Jr.", RecordingCreditRole.Taper),
+                ("Zoë Pine, Sr.", RecordingCreditRole.Transferrer)
+            );
+        foreach (var credit in result.Credits)
+        {
+            credit
+                .Evidence.Quote.Should()
+                .Be("Recorded by Léon March, Jr.; Transferred by Zoë Pine, Sr.");
+            AssertCitation(text, credit.Evidence);
+        }
+    }
+
     [TestCase("taperjeff", "taper", RecordingCreditRole.Taper)]
     [TestCase("taperjeff", "transferrer", RecordingCreditRole.Transferrer)]
     [TestCase("Nate Tapernate Evans", "taper", RecordingCreditRole.Taper)]
@@ -225,6 +270,47 @@ public sealed class TestRecordingExtraction
                 ("Joe Jupille", RecordingCreditRole.Transferrer)
             );
         result.Credits[0].OriginalRole.Should().Be("Renamed and tagged by");
+    }
+
+    [TestCase("Recorded", RecordingCreditRole.Taper)]
+    [TestCase("Taped", RecordingCreditRole.Taper)]
+    [TestCase("Mastered", RecordingCreditRole.MasteringEngineer)]
+    public void EarlierChainDoesNotAssignTransferToAnExplicitRoleActor(
+        string operation,
+        RecordingCreditRole role
+    )
+    {
+        var text = $"🎤<div>CD > WAV > FLAC {operation} By Mira Sol.</div>";
+        var result = credits.Extract(new Dictionary<string, string?> { ["lineage"] = text });
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Mira Sol");
+        credit.Role.Should().Be(role);
+        AssertCitation(text, credit.Evidence);
+    }
+
+    [Test]
+    public void ConversionActorsKeepTheirOwnRolesBesideExplicitAndNegatedCredits()
+    {
+        const string text =
+            "CD > WAV Recorded by Mira Sol; EAC > FLAC by Jules Nor.\n"
+            + "CD > WAV not recorded by Lena Moss. EAC > FLAC by Noor Hale.\n"
+            + "EAC > FLAC Renamed and tagged by Avery Ray.";
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = text });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Mira Sol", RecordingCreditRole.Taper),
+                ("Jules Nor", RecordingCreditRole.Transferrer),
+                ("Noor Hale", RecordingCreditRole.Transferrer),
+                ("Avery Ray", RecordingCreditRole.Other)
+            );
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(text, credit.Evidence);
+        }
     }
 
     private static void AssertCitation(string raw, NormalizationTextEvidence evidence)
