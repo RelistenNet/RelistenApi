@@ -79,6 +79,9 @@ completion; the unchanged comparator remains available beside those outputs.
 The [combined training comparison](people-adjudicated-trainer/README.md) joins
 the separate targets after grouping, counts repeated actor pairs once and
 reports conflicting or unsupported examples without turning them into negatives.
+Use the [source-view training comparison](people-adjudicated-trainer/source-views.md)
+to retain each field comparison and fit complete relationships once. It keeps
+partial coverage and unlabeled field observations separate from identity targets.
 
 The separate [cross-artist review packet tool](people-identity-packet/README.md)
 prepares 55 unanswered source-backed identity questions and validates complete

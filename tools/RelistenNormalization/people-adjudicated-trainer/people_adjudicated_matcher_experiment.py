@@ -476,7 +476,20 @@ def authenticate_targets(inputs, package_manifest, target_rows):
             require(sha in receipt_cache[receipt_sha], "Adjudication file was not covered by its validation receipt")
 
 
-def load_inputs(experiment, package, package_sha, baseline, baseline_sha):
+@dataclass
+class PreparedSources:
+    directory: Path
+    manifest_sha256: str
+    manifest: dict
+    artifacts: dict
+    sources: dict
+    endpoints: dict
+    questions: dict
+    groups: list
+
+
+def read_prepared_sources(experiment, package, package_sha):
+    """Authenticate the shared source package without decoding its target rows."""
     inputs = Inputs(experiment)
     manifest = inputs.json(package / "manifest.json", expected_sha=package_sha)
     require(manifest["version"] == PACKAGE and manifest["state"] == "prepared_source_selectors_and_separate_targets"
@@ -491,15 +504,20 @@ def load_inputs(experiment, package, package_sha, baseline, baseline_sha):
     endpoints = unique(inputs.rows(package / SOURCE_FILES[1], artifacts[SOURCE_FILES[1]]), "endpoint_id")
     questions = unique(inputs.rows(package / SOURCE_FILES[2], artifacts[SOURCE_FILES[2]]), "task_id")
     package_groups = inputs.rows(package / SOURCE_FILES[3], artifacts[SOURCE_FILES[3]])
+    return inputs, PreparedSources(package, package_sha, manifest, artifacts, sources, endpoints, questions, package_groups)
+
+
+def read_comparator(inputs, prepared, baseline, baseline_sha):
+    """Read the existing single-comparison contract, including when nested by a view export."""
     exported = inputs.json(baseline / "manifest.json", expected_sha=baseline_sha)
     require(exported["state"] == "completed" and exported["version"] == BASELINE
             and exported["projectionVersion"] == PROJECTION and exported["featureOrder"] == list(FEATURES)
             and exported["actorFeaturesVersion"] == "people-actor-context-features-v1"
-            and exported["packageManifestSha256"] == package_sha and exported["policyActivationPermitted"] is False,
+            and exported["packageManifestSha256"] == prepared.manifest_sha256 and exported["policyActivationPermitted"] is False,
             "C# baseline input/projection contract changed")
     require(set(exported["inputFiles"]) == {"manifest.json", *SOURCE_FILES}, "Baseline must consume exactly the source package")
     for name, record in exported["inputFiles"].items():
-        inputs.pin(relative_file(package, name), record)
+        inputs.pin(relative_file(prepared.directory, name), record)
     for record in exported["artifacts"]:
         inputs.pin(record["path"], record)
     require(len(exported["artifacts"]) == 2, "Expected API and exporter assembly snapshots")
@@ -513,23 +531,34 @@ def load_inputs(experiment, package, package_sha, baseline, baseline_sha):
         loaded[key] = inputs.rows(path, allow_empty=key == "Bridge")
     diagnostics = unique(loaded["Endpoint"], "endpointId")
     require(sorted(sorted(group["taskIds"]) for group in loaded["Grouping"])
-            == sorted(sorted(group["task_ids"]) for group in package_groups), "Baseline original task grouping changed")
-    require(exported["pairs"] == len(loaded["Baseline"]) and exported["allTasks"] == len(questions)
-            and exported["endpoints"] == len(endpoints) and exported["sources"] == len(sources)
-            and exported["groups"] == len(package_groups) and exported["bridges"] == len(loaded["Bridge"]),
+            == sorted(sorted(group["task_ids"]) for group in prepared.groups), "Baseline original task grouping changed")
+    require(exported["pairs"] == len(loaded["Baseline"]) and exported["allTasks"] == len(prepared.questions)
+            and exported["endpoints"] == len(prepared.endpoints) and exported["sources"] == len(prepared.sources)
+            and exported["groups"] == len(prepared.groups) and exported["bridges"] == len(loaded["Bridge"]),
             "C# baseline counts changed")
-    require(exported["questions"] == sum(question["task_kind"] != "actor_kind" for question in questions.values())
+    require(exported["questions"] == sum(question["task_kind"] != "actor_kind" for question in prepared.questions.values())
             and exported["supportedPairs"] == sum(row["projectionSupported"] for row in loaded["Baseline"]),
             "C# identity/supported pair counts changed")
+    return exported, loaded, diagnostics
+
+
+def read_targets(inputs, prepared):
+    targets = inputs.rows(prepared.directory / TARGET_FILE, prepared.artifacts[TARGET_FILE])
+    authenticate_targets(inputs, prepared.manifest, targets)
+    return targets
+
+
+def load_inputs(experiment, package, package_sha, baseline, baseline_sha):
+    inputs, prepared = read_prepared_sources(experiment, package, package_sha)
+    exported, loaded, diagnostics = read_comparator(inputs, prepared, baseline, baseline_sha)
     # Source actor keys, pair membership and split groups are fixed before targets
     # are opened. Altering a judgment cannot move a pair to another fold.
-    edges, components = source_edges(experiment, questions, endpoints, diagnostics, loaded["Baseline"],
+    edges, components = source_edges(experiment, prepared.questions, prepared.endpoints, diagnostics, loaded["Baseline"],
                                     loaded["Grouping"], loaded["Bridge"])
-    target_rows = inputs.rows(package / TARGET_FILE, artifacts[TARGET_FILE])
-    authenticate_targets(inputs, manifest, target_rows)
+    target_rows = read_targets(inputs, prepared)
     join_targets(edges, target_rows)
     inputs.recheck()
-    return inputs, edges, components, manifest, exported
+    return inputs, edges, components, prepared.manifest, exported
 
 
 def run(experiment, inputs, edges, components, baseline_manifest, output, environment):
