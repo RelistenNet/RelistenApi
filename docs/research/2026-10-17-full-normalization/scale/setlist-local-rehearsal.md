@@ -63,8 +63,10 @@ provider requests, model calls, media requests or production writes.
 The checked-in Jerry HTML excerpt and annotation tests reproduce the decoder
 and public-reader regressions. Both new tests failed before their fixes.
 Afterward, 166 decoder/compatibility checks, 203 processor/consumer/operator
-checks and 14 annotation/real-decoder checks passed. The final full-suite rerun
-remains required; the earlier [consumer contract record](evidence/repertoire-consumer-contracts-v1.json)
+checks and 14 annotation/real-decoder checks passed. The final full suite passes
+with 2,838 tests, 24 existing skips and zero failures. Its receipt rechecks all 11
+source artifacts and six executed binaries against the focused checks and API
+rehearsal. The earlier [consumer contract record](evidence/repertoire-consumer-contracts-v1.json)
 retains its original assertion mismatch and corrected targeted pass.
 
 The ignored directory

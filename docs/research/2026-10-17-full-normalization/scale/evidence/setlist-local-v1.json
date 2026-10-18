@@ -73,7 +73,16 @@
     "annotation_and_real_decoder": 14,
     "new_decoder_test_failed_before_fix": true,
     "new_annotation_test_failed_before_fix": true,
-    "final_full_suite_rerun": "pending"
+    "final_full_suite_rerun": "completed",
+    "final_full_suite": {
+      "passed": 2838,
+      "failed": 0,
+      "skipped": 24,
+      "total": 2862,
+      "minutes": 24.8558,
+      "source_artifacts_rechecked": 11,
+      "executed_binary_artifacts_rechecked": 6
+    }
   },
   "scope": {
     "provider_requests_after_retention": 0,
@@ -189,6 +198,11 @@
       "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/tools-v1/manifest.json",
       "bytes": 58766,
       "sha256": "6aa703e3a21234977c099fb2dca26a39eb673e114efa72c077ed477112b5187a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/final-suite-v1/receipt.json",
+      "bytes": 1226,
+      "sha256": "f64745ce82174aac745de16053b74fecfc59aca2bc492337eb41c6479b0477cb"
     }
   ]
 }
