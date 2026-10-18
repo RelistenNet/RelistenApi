@@ -32,6 +32,8 @@ The live replica is on migrations 1–12. The locally tested performance and int
 
 **For compositions**, reconcile repertoire entries with supported work and credit information. Composer, lyricist, arranger and original performer remain different credits. Preserve arrangements and excerpts without pretending they are exact work equivalences. Shared titles retrieve candidates; they do not select the work.
 
+The [composition readiness audit](composition-readiness.md) identifies actual development writer evidence, the absent qualified-work inputs and the next supported acquisition step.
+
 The [provider evidence audit](provider-evidence.md) identifies where importers retain or discard the needed information. Missing stored fields require expanded input capture and metadata refresh as part of this program. The current recording-credit and composition outcomes require that acquisition work.
 
 Evaluation must distinguish parsing accuracy, candidate retrieval, accepted identity accuracy, occurrence alignment and role accuracy. Use independently reviewed cases across providers, catalog sizes and ambiguity levels. Keep related recordings and shared upstream setlist families together in evaluation partitions. Full coverage means every artist is processed with an explicit outcome; unsupported facts remain unresolved rather than fabricated.

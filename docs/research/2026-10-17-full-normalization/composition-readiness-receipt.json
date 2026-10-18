@@ -1,0 +1,135 @@
+{
+  "schema_version": "composition-readiness-audit-v1",
+  "created_at_utc": "2026-10-18T00:22:28.945435+00:00",
+  "source_commit": "8e52eb7169e3d63a7714300d6cd8a8d86f6ba783",
+  "selection": {
+    "family_partition": "development",
+    "artist_partition": "development",
+    "filter_before_string_inspection": true,
+    "scan_root": "raw_record",
+    "scan_excludes_kind": "venue_sample"
+  },
+  "inputs": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/annotation-v1/evidence.jsonl",
+      "bytes": 37001675,
+      "sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/annotation-v1/tasks.jsonl",
+      "bytes": 7623096,
+      "sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/annotation-v1/manifest.json",
+      "bytes": 5082,
+      "sha256": "925db125599f4c28d8cc4c7c7cb6b48727619c8336afc915d3beadf4e7821a93"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/snapshot.jsonl",
+      "bytes": 176666741,
+      "sha256": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/evaluation/cases.jsonl",
+      "bytes": 82015,
+      "sha256": "9f05f4ddcb8a85bb8578a203be56f2ee10d6f07aa19605e8bcf2b172d25f1040"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/evaluation/references/evidence.jsonl",
+      "bytes": 975,
+      "sha256": "8d1f85c2edc9738c36e727c7bdc1a6ff2ab7194fcb85ff75bc8c4d5afa1aee73"
+    }
+  ],
+  "counts": {
+    "all_annotation_records": 18628,
+    "strict_development_records": 6678,
+    "strict_development_kinds": {
+      "setlist_sample": 141,
+      "song_sample": 567,
+      "source_sample": 2185,
+      "track_sample": 1625,
+      "venue_sample": 2160
+    },
+    "scanned_music_records": 4518,
+    "scanned_music_artists": 2227,
+    "repertoire_artists": 29,
+    "composition_pair_tasks_total": 74,
+    "composition_pair_tasks_strict_development": 2,
+    "composition_pair_tasks_strict_development_with_answers": 0
+  },
+  "scan": {
+    "method": "recursive string leaves, count a matching field once; Python re.IGNORECASE; structured key search only checks string-leaf paths",
+    "patterns": {
+      "authorship_words": "\\b(?:iswc|songwriter|lyricist|composer|composed by|written by|words by|lyrics by|music by)\\b|musicbrainz[^\\s<>\\\"]*/work/",
+      "explicit_authorship_wording": "\\b(?:written by|composed by|words by|lyrics by|music by)\\b",
+      "recognized_work_identifiers": "musicbrainz(?:\\.org)?[^\\s<>\\\"]*/work/|\\biswc\\b|musicbrainz_workid",
+      "specific_composer_or_lyricist_wording": "lyricist|lyrics by|words by|composed by",
+      "structured_author_or_work_field_paths": "(?:^|/)(?:writers?|composers?|lyricists?|iswc|work_id|musicbrainz_workid)(?:/|$)"
+    },
+    "results": {
+      "authorship_words": {
+        "matching_fields": 37,
+        "matching_records": 36
+      },
+      "explicit_authorship_wording": {
+        "matching_fields": 24,
+        "matching_records": 24
+      },
+      "recognized_work_identifiers": {
+        "matching_fields": 0,
+        "matching_records": 0
+      },
+      "specific_composer_or_lyricist_wording": {
+        "matching_fields": 0,
+        "matching_records": 0
+      },
+      "structured_author_or_work_field_paths": {
+        "matching_fields": 0,
+        "matching_records": 0
+      }
+    },
+    "limitations": [
+      "Catalog projection cannot recover discarded upstream fields.",
+      "Recognized work-ID patterns are not an exhaustive provider identifier vocabulary.",
+      "Word matches are unreviewed candidates, not certified credits or completeness assertions."
+    ]
+  },
+  "exposed_reserved_seed_cases": [
+    {
+      "case_id": "compositions-claudia-title",
+      "evidence_id": "track:33689437",
+      "input_field": "title"
+    },
+    {
+      "case_id": "compositions-yes-filename",
+      "evidence_id": "track:7018353",
+      "input_field": "title"
+    }
+  ],
+  "exposure": {
+    "displayed_fields": [
+      "id",
+      "domain",
+      "task",
+      "group",
+      "split",
+      "annotation_status",
+      "inputs",
+      "basis",
+      "expected",
+      "rationale"
+    ],
+    "used_for_findings_labels_or_policy": false,
+    "exclude_from_untouched_scored_holdout": true,
+    "partition_file_modified": false,
+    "follow_up": "Replace these cases or move complete related families to development before a future scored evaluation."
+  },
+  "actions": {
+    "runtime_code_changes": false,
+    "catalog_mutations": false,
+    "production_queries": 0,
+    "paid_model_or_api_calls": 0,
+    "work_record_fetches": 0
+  }
+}
