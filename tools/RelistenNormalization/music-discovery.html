@@ -1,0 +1,878 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Relisten · Music discovery</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0c121c;
+        --panel: #141e2b;
+        --line: #2a3a4e;
+        --text: #edf3fa;
+        --muted: #a3b2c5;
+        --accent: #8ce0bf;
+        --gold: #f7d18b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font:
+          16px/1.55 system-ui,
+          -apple-system,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        max-width: 1150px;
+        margin: auto;
+        padding: 38px 24px 90px;
+      }
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        align-items: center;
+      }
+      header small {
+        color: var(--accent);
+        letter-spacing: 0.17em;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      h1 {
+        font-size: clamp(32px, 5vw, 52px);
+        letter-spacing: -0.045em;
+        line-height: 1.15;
+        margin: 12px 0 16px;
+      }
+      h2 {
+        font-size: 26px;
+        line-height: 1.3;
+        margin: 10px 0;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 0 0 6px;
+      }
+      p {
+        margin: 8px 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .intro {
+        max-width: 800px;
+        color: var(--muted);
+      }
+      .notice {
+        border-left: 3px solid var(--gold);
+        padding: 10px 16px;
+        background: #251f17;
+        color: #ecd4ae;
+        font-size: 14px;
+        margin: 22px 0;
+      }
+      .search {
+        display: flex;
+        gap: 8px;
+        margin: 24px 0 18px;
+      }
+      input,
+      select,
+      button {
+        font: inherit;
+        color: inherit;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 14px;
+      }
+      input {
+        width: 100%;
+        min-width: 0;
+      }
+      button,
+      a.button {
+        cursor: pointer;
+      }
+      button:hover,
+      a.button:hover {
+        border-color: var(--accent);
+        text-decoration: none;
+      }
+      button.primary {
+        background: var(--accent);
+        color: #0c251d;
+        border-color: var(--accent);
+        font-weight: 650;
+      }
+      button:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 16px 0 24px;
+      }
+      .tabs .active {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+        gap: 13px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        padding: 18px;
+        border-radius: 12px;
+        overflow-wrap: anywhere;
+      }
+      .card:hover {
+        border-color: #4b657f;
+      }
+      .tag {
+        font-size: 12px;
+        display: inline-block;
+        padding: 2px 8px;
+        background: #223044;
+        border-radius: 20px;
+        margin: 3px 4px 3px 0;
+        color: #cbd8e8;
+      }
+      .tag.supported {
+        background: #183e32;
+        color: #a8ebd0;
+      }
+      .tag.warning {
+        background: #42351e;
+        color: var(--gold);
+      }
+      .section {
+        margin-top: 30px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+      }
+      .stack {
+        display: grid;
+        gap: 12px;
+      }
+      .pagination {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        justify-content: center;
+        margin-top: 25px;
+      }
+      .back {
+        display: inline-block;
+        margin: 0 0 15px;
+      }
+      .key {
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        color: #91a4bd;
+        overflow-wrap: anywhere;
+      }
+      .details {
+        border-top: 1px solid var(--line);
+        margin-top: 14px;
+        padding-top: 14px;
+      }
+      .passage {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 14px;
+      }
+      .position {
+        min-width: 32px;
+        color: var(--muted);
+      }
+      .source-section {
+        margin: 18px 0;
+      }
+      .audio {
+        width: 100%;
+        margin: 12px 0;
+      }
+      details {
+        margin: 8px 0;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        max-height: 340px;
+        overflow: auto;
+        font-size: 12px;
+        background: #09101a;
+        padding: 14px;
+        border-radius: 8px;
+      }
+      .loading {
+        color: var(--muted);
+        padding: 24px 0;
+      }
+      .error {
+        border: 1px solid #a66d62;
+        color: #ffc8bd;
+        padding: 15px;
+        border-radius: 8px;
+      }
+      .coverage {
+        font-size: 12px;
+        color: var(--muted);
+        margin-top: 35px;
+      }
+      .scope {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .title-link {
+        font-weight: 650;
+        font-size: 18px;
+      }
+      .number {
+        font-variant-numeric: tabular-nums;
+      }
+      .empty {
+        padding: 28px;
+        border: 1px dashed var(--line);
+        color: var(--muted);
+        border-radius: 12px;
+      }
+      .hidden {
+        display: none !important;
+      }
+      @media (max-width: 600px) {
+        main {
+          padding: 22px 16px 60px;
+        }
+        header {
+          align-items: flex-start;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .search {
+          flex-wrap: wrap;
+        }
+        .search input {
+          flex-basis: 100%;
+        }
+        .row {
+          align-items: flex-start;
+        }
+        .card {
+          padding: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <small>Relisten / retained results</small>
+          <h1>Find the song.<br />Hear the performance.</h1>
+        </div>
+        <a href="/">Music discovery</a>
+      </header>
+      <p class="intro">
+        Browse artist repertoire, follow supported composition links across
+        artists, and reach the original playable recordings. Setlists preserve
+        the order their source actually reports.
+      </p>
+      <div class="notice">
+        These are retained normalization results, not a replacement accepted
+        catalogue. Equal titles do not establish one song or work. Title-derived
+        identities, unresolved alternatives, and incomplete index coverage stay
+        visible.
+      </div>
+      <form id="search" class="search">
+        <input
+          id="query"
+          type="search"
+          placeholder="Search an artist, song, or supported work title"
+          aria-label="Search music"
+        /><button class="primary">Search</button
+        ><select id="scope" aria-label="Catalogue scope">
+          <option value="">All scopes</option>
+          <option value="catalogue">Captured catalogue</option>
+          <option value="local">Local collections</option>
+        </select>
+      </form>
+      <nav class="tabs" id="tabs" aria-label="Music search">
+        <button data-tab="artists">Artists</button
+        ><button data-tab="songs">Songs</button
+        ><button data-tab="works">Compositions</button
+        ><button data-tab="setlists">Setlists</button>
+      </nav>
+      <div id="content" aria-live="polite"></div>
+      <div id="coverage" class="coverage"></div>
+    </main>
+    <script>
+      "use strict";
+      const $ = (id) => document.getElementById(id);
+      let stats,
+        generation = 0;
+      const esc = (value) =>
+        String(value ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      const query = (value) => new URLSearchParams(value).toString();
+      const link = (kind, values) => "#" + kind + "?" + query(values);
+      const sourceOf = (row) =>
+        stats.sources.find((s) => String(s.id) === String(row.witness_run));
+      const scopeLabel = (scope) =>
+        scope === "local"
+          ? "Local collections · separate identity scope"
+          : "Captured catalogue";
+      function badge(row) {
+        const basis = row.basis || row.status || "";
+        return `<span class="tag ${basis === "title_derived" ? "warning" : "supported"}">${esc(basis.replaceAll("_", " "))}</span>`;
+      }
+      async function api(path) {
+        const r = await fetch(path);
+        const body = await r.json();
+        if (!r.ok) throw Error(body.error || "The result is unavailable.");
+        return body;
+      }
+      function navigate(kind, values = {}) {
+        location.hash = link(kind, values);
+      }
+      function card(row, kind) {
+        if (kind === "artists")
+          return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><a class="title-link" href="${link("songs", { artist: row.uuid, scope: row.scope })}">${esc(row.name || row.uuid)}</a><p class="muted">Browse this artist’s repertoire</p><a href="${link("setlists", { artist: row.uuid, scope: row.scope })}">View setlists →</a></article>`;
+        if (kind === "songs")
+          return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><a class="title-link" href="${link("song", { scope: row.scope, key: row.entity_key })}">${esc(row.title || "Title not available")}</a><p class="muted">${esc(row.artist_name || "")}</p>${badge(row)}<p class="key">${esc(row.entity_key)}</p></article>`;
+        if (kind === "works")
+          return `<article class="card"><span class="tag supported">Supported work correspondence</span><h3><a href="${link("work", { key: row.entity_key })}">${esc(row.title || row.entity_key)}</a></h3><p class="muted">Qualified MusicBrainz work · artist repertoire links below</p><p class="key">${esc(row.entity_key)}</p></article>`;
+        return `<article class="card"><div class="scope">${esc(scopeLabel(row.scope))}</div><h3><a href="${link("setlist", { scope: row.scope, key: row.entity_key })}">${esc(row.label || row.literal_date || "Retained setlist")}</a></h3><p class="muted">${esc(row.artist_name || "")} · ${esc(row.literal_date || "Date not reported")}</p><span class="tag ${row.ordered ? "supported" : "warning"}">${row.ordered ? "Source-reported order" : "Unordered membership"}</span></article>`;
+      }
+      function pagination(result, change) {
+        const el = document.createElement("div");
+        el.className = "pagination";
+        el.innerHTML = `<button ${result.offset === 0 ? "disabled" : ""}>Previous</button><span class="number">${result.total ? result.offset + 1 : 0}–${Math.min(result.offset + result.limit, result.total)} of ${result.total.toLocaleString()}</span><button ${result.offset + result.limit >= result.total ? "disabled" : ""}>Next</button>`;
+        el.children[0].onclick = () =>
+          change(Math.max(0, result.offset - result.limit));
+        el.children[2].onclick = () => change(result.offset + result.limit);
+        return el;
+      }
+      async function list(kind, params, token) {
+        const filters = {
+          q: params.get("q") || "",
+          artist: params.get("artist") || "",
+          scope: params.get("scope") || "",
+          offset: params.get("offset") || 0,
+          limit: 40,
+        };
+        const result = await api("/api/" + kind + "?" + query(filters));
+        if (token !== generation) return;
+        const artist = filters.artist
+          ? `<p class="muted">Artist ${esc(filters.artist)} · <a href="${link("songs", { artist: filters.artist, scope: filters.scope })}">songs</a> / <a href="${link("setlists", { artist: filters.artist, scope: filters.scope })}">setlists</a></p>`
+          : "";
+        $("content").innerHTML =
+          artist +
+          (kind === "setlists"
+            ? '<p class="muted">Browse by artist. A legacy song-membership list does not establish song positions or set boundaries.</p>'
+            : "") +
+          (result.items.length
+            ? `<div class="grid">${result.items.map((r) => card(r, kind)).join("")}</div>`
+            : '<div class="empty">No entries in this discovery snapshot. Newer retained results may not yet be indexed; an empty search is not proof of absence.</div>');
+        $("content").append(
+          pagination(result, (offset) =>
+            navigate(kind, { ...Object.fromEntries(params), offset }),
+          ),
+        );
+      }
+      async function relationships(container, scope, key, domain, token) {
+        const sources = stats.sources.filter((s) => s.scope === scope);
+        for (const source of sources) {
+          const section = document.createElement("section");
+          section.className = "source-section";
+          container.append(section);
+          const load = async (offset) => {
+            section.innerHTML =
+              '<p class="loading">Looking up exact identity in ' +
+              esc(source.run?.split("/").pop() || "result reader") +
+              "…</p>";
+            try {
+              const result = await api(
+                "/api/related?" +
+                  query({
+                    source: source.id,
+                    generation: stats.generation,
+                    key,
+                    domain,
+                    limit: 20,
+                    offset,
+                  }),
+              );
+              if (token !== generation) return;
+              section.innerHTML = `<h3>${esc(source.run?.split("/").pop() || "Result reader")} <span class="tag">${result.total.toLocaleString()} indexed results</span></h3>`;
+              const stack = document.createElement("div");
+              stack.className = "stack";
+              section.append(stack);
+              for (const row of result.items) {
+                const item = document.createElement("article");
+                item.className = "card";
+                item.innerHTML = `<div class="row"><div><strong>${esc(row.label || row.input_uuid)}</strong><p class="muted">${esc(row.artist_name)} · ${esc(row.outcome)} · ${esc(row.reason)}</p></div><button>Open ${domain === "file_contents" ? "recording" : "source"}</button></div>`;
+                item.querySelector("button").onclick = () =>
+                  openRecord(item, source, row.id, token);
+                stack.append(item);
+              }
+              if (!result.items.length)
+                section.insertAdjacentHTML(
+                  "beforeend",
+                  '<p class="muted">No indexed relationship here. Other source readers and unindexed chunks remain separate.</p>',
+                );
+              if (result.total > result.limit)
+                section.append(pagination(result, load));
+            } catch (e) {
+              section.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+            }
+          };
+          await load(0);
+        }
+      }
+      async function openRecord(container, source, id, token) {
+        let panel = container.querySelector(".details");
+        if (panel) {
+          panel.hidden = !panel.hidden;
+          return;
+        }
+        panel = document.createElement("div");
+        panel.className = "details";
+        panel.innerHTML =
+          '<p class="loading">Loading exact retained result…</p>';
+        container.append(panel);
+        try {
+          const detail = await api(
+            "/api/record?" +
+              query({ source: source.id, generation: stats.generation, id }),
+          );
+          if (token !== generation) return;
+          const record = detail.record,
+            p = record.proposal || {},
+            home = p.home || {};
+          panel.innerHTML = `<p>${esc(home.literalDate || "")} ${esc(home.performanceLabel || home.performanceType || "")}</p><p class="key">${home.showUuid ? "show " + esc(home.showUuid) + "<br>" : ""}${home.sourceUuid ? "recording " + esc(home.sourceUuid) : ""}</p>`;
+          for (const url of detail.playback || []) {
+            const audio = document.createElement("audio");
+            audio.className = "audio";
+            audio.controls = true;
+            audio.preload = "none";
+            audio.src = url;
+            audio.onplay = () =>
+              document.querySelectorAll("audio").forEach((a) => {
+                if (a !== audio) a.pause();
+              });
+            panel.append(audio);
+            const a = document.createElement("a");
+            a.href = url;
+            a.textContent = "Open original audio";
+            a.target = "_blank";
+            a.rel = "noopener";
+            panel.append(a);
+          }
+          const interpretation = p.titleInterpretation;
+          if (interpretation) {
+            panel.insertAdjacentHTML(
+              "beforeend",
+              `<p><strong>Original file title:</strong> ${esc(interpretation.originalTitle)}</p>`,
+            );
+            for (const segment of interpretation.segments || []) {
+              const choices = [
+                ...new Map(
+                  [
+                    ...(segment.song ? [segment.song] : []),
+                    ...(segment.candidateSongs || []),
+                  ].map((song) => [song.entityKey, song]),
+                ).values(),
+              ];
+              panel.insertAdjacentHTML(
+                "beforeend",
+                `<p>${esc(segment.title || segment.kind)} <span class="tag ${segment.song ? "supported" : "warning"}">${esc(segment.outcome || segment.reason || "unresolved")}</span> ${choices.map((s) => `<a href="${link("song", { scope: source.scope, key: s.entityKey })}">${esc(s.name)}</a>`).join(" · ")}</p>`,
+              );
+            }
+            panel.insertAdjacentHTML(
+              "beforeend",
+              '<p class="muted">Title segments are source interpretations, not verified audio timings. This file retains its original performance home.</p>',
+            );
+          }
+          if (record.domain === "setlists") {
+            const accounts = Array.isArray(p) ? p : [p];
+            for (const account of accounts) {
+              if (!account?.entityKey) continue;
+              panel.insertAdjacentHTML(
+                "beforeend",
+                `<p><a href="${link("setlist", { scope: source.scope, key: account.entityKey })}">Browse ${esc(account.literalDate || "source setlist")} · ${account.ordered ? "source-reported order" : "unordered membership"} →</a></p>`,
+              );
+            }
+          }
+          const showKeys = (record.entityKeys || []).filter((k) =>
+            k.startsWith("show:"),
+          );
+          for (const key of showKeys) {
+            const a = document.createElement("a");
+            a.href =
+              source.reader_url +
+              "/?" +
+              query({ domain: "file_contents", entityKey: key });
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.textContent = "Browse this show in source reader →";
+            panel.append(a);
+          }
+          const raw = document.createElement("details");
+          raw.innerHTML =
+            "<summary>Original result, provenance and alternatives</summary>";
+          const pre = document.createElement("pre");
+          pre.textContent = JSON.stringify(record, null, 2);
+          raw.append(pre);
+          panel.append(raw);
+        } catch (e) {
+          panel.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+        }
+      }
+      async function detail(kind, params, token) {
+        const row = await api("/api/" + kind + "?" + params);
+        if (token !== generation) return;
+        $("content").innerHTML =
+          `<a class="back" href="${link(kind === "work" ? "works" : kind === "setlist" ? "setlists" : "songs", { scope: row.scope || "", artist: row.artist_uuid || "" })}">← Back to ${kind === "work" ? "compositions" : kind === "setlist" ? "setlists" : "repertoire"}</a><h2>${esc(row.title || row.label || row.literal_date || row.entity_key)}</h2><p class="muted">${esc(row.artist_name || "")} ${row.scope ? "· " + esc(scopeLabel(row.scope)) : ""}</p>${badge(row)}<p class="key">${esc(row.entity_key)}</p>`;
+        if (kind !== "setlist") {
+          const witness = document.createElement("section");
+          witness.className = "card section";
+          witness.innerHTML =
+            "<button>Inspect original interpretation and evidence</button>";
+          witness.querySelector("button").onclick = () =>
+            openRecord(witness, sourceOf(row), row.witness_record, token);
+          $("content").append(witness);
+        }
+        if (kind === "song") {
+          if (row.works?.length) {
+            const box = document.createElement("section");
+            box.className = "section";
+            box.innerHTML =
+              '<h3>Supported global composition links</h3><div class="grid">' +
+              row.works.map((w) => card(w, "works")).join("") +
+              "</div>";
+            $("content").append(box);
+          } else
+            $("content").insertAdjacentHTML(
+              "beforeend",
+              '<p class="muted">No supported global work link in this snapshot. Equal titles elsewhere remain separate.</p>',
+            );
+          if (row.works_total > row.works_limit) {
+            $("content").append(
+              pagination(
+                {
+                  total: row.works_total,
+                  limit: row.works_limit,
+                  offset: row.works_offset,
+                },
+                (offset) =>
+                  navigate("song", { ...Object.fromEntries(params), offset }),
+              ),
+            );
+          }
+          const files = document.createElement("section");
+          files.className = "section";
+          files.innerHTML =
+            '<h3>Playable recordings and shows</h3><p class="muted">Exact repertoire-key relationships in each existing reader. Results can include medleys or unresolved alternatives; open the original interpretation.</p>';
+          $("content").append(files);
+          await relationships(
+            files,
+            row.scope,
+            row.entity_key,
+            "file_contents",
+            token,
+          );
+          const appearances = document.createElement("details");
+          appearances.className = "section";
+          appearances.innerHTML =
+            "<summary>Source setlist appearances</summary>";
+          let loaded = false;
+          appearances.ontoggle = async () => {
+            if (appearances.open && !loaded) {
+              loaded = true;
+              await relationships(
+                appearances,
+                row.scope,
+                row.entity_key,
+                "setlists",
+                token,
+              );
+            }
+          };
+          $("content").append(appearances);
+        } else if (kind === "work") {
+          $("content").insertAdjacentHTML(
+            "beforeend",
+            '<p class="muted">This qualified work key connects only source-supported correspondences. Search rank and competing external candidates do not create links.</p><h3 class="section">Artist repertoire → playable recordings</h3><div class="grid">' +
+              (row.songs || []).map((s) => card(s, "songs")).join("") +
+              "</div>",
+          );
+          if (row.songs_total > row.songs_limit) {
+            $("content").append(
+              pagination(
+                {
+                  total: row.songs_total,
+                  limit: row.songs_limit,
+                  offset: row.songs_offset,
+                },
+                (offset) =>
+                  navigate("work", { ...Object.fromEntries(params), offset }),
+              ),
+            );
+          }
+          if (!(row.songs || []).length)
+            $("content").insertAdjacentHTML(
+              "beforeend",
+              '<div class="empty">No supported repertoire association in this projection.</div>',
+            );
+        } else {
+          const source = sourceOf(row);
+          const d = await api(
+            "/api/record?" +
+              query({
+                source: source.id,
+                generation: stats.generation,
+                id: row.witness_record,
+              }),
+          );
+          if (token !== generation) return;
+          const accounts = Array.isArray(d.record.proposal)
+            ? d.record.proposal
+            : [d.record.proposal];
+          const account = accounts.find((a) => a?.entityKey === row.entity_key);
+          if (!account)
+            throw Error(
+              "The retained witness no longer contains this setlist account.",
+            );
+          const box = document.createElement("section");
+          box.className = "section";
+          $("content").append(box);
+          renderAccount(box, account, row.scope);
+          if (account.showUuid) {
+            const recordings = document.createElement("details");
+            recordings.className = "section";
+            recordings.innerHTML =
+              "<summary>Files at this source-linked catalogue show</summary><p class='muted'>These files retain their existing show home. No passage-to-file alignment or audio timing is inferred.</p>";
+            let loaded = false;
+            recordings.ontoggle = async () => {
+              if (recordings.open && !loaded) {
+                loaded = true;
+                await relationships(
+                  recordings,
+                  row.scope,
+                  "show:" + account.showUuid,
+                  "file_contents",
+                  token,
+                );
+              }
+            };
+            $("content").append(recordings);
+          } else {
+            $("content").insertAdjacentHTML(
+              "beforeend",
+              "<p class='muted'>This account has no linked catalogue show. Its song links browse repertoire without inferring a performance from the date.</p>",
+            );
+          }
+        }
+      }
+      function renderAccount(box, account, scope) {
+        const provider = account.providerAccount || {};
+        box.innerHTML = `<p class="muted">${account.ordered ? "Source-reported order. Sets are sections of this account, not separate performances." : "Unordered source membership. No positions, occurrence correspondence, or set boundaries are inferred."}</p>`;
+        function passage(occurrence) {
+          const observation = occurrence.observation || {};
+          const key = occurrence.songEntityKey;
+          const alternatives =
+            occurrence.songInterpretation?.candidateSongs || [];
+          const marker = observation.transitionMarker?.value;
+          const annotations = (observation.annotations || [])
+            .map((a) => a.plainText || a.text?.value || a.value || "")
+            .filter(Boolean);
+          box.insertAdjacentHTML(
+            "beforeend",
+            `<div class="passage"><span class="position">${esc(occurrence.ordinal ?? "?")}</span><div>${key ? `<a href="${link("song", { scope, key })}">${esc(occurrence.title)}</a>` : esc(occurrence.title)} ${marker != null ? `<span class="tag">Source marker: ${esc(marker)}</span>` : ""}<p class="muted">${annotations.map(esc).join(" · ")}</p>${!key ? '<span class="tag warning">Song identity unresolved</span>' : ""}${!key && alternatives.length ? "<p>Alternatives: " + alternatives.map((a) => `<a href="${link("song", { scope, key: a.entityKey })}">${esc(a.name)}</a>`).join(" · ") + "</p>" : ""}</div></div>`,
+          );
+        }
+        if (account.ordered) {
+          const occurrences = account.occurrences || [];
+          const sets = provider.sets || [];
+          if (sets.length) {
+            for (const set of sets) {
+              box.insertAdjacentHTML(
+                "beforeend",
+                `<h3 class="section">${esc(set.label?.value ?? (set.ordinal == null ? "Set label not reported" : "Set " + set.ordinal))}</h3>`,
+              );
+              const members = occurrences.filter(
+                (o) => set.ordinal != null && o.setOrdinal === set.ordinal,
+              );
+              members.forEach(passage);
+              if (!members.length)
+                box.insertAdjacentHTML(
+                  "beforeend",
+                  '<p class="muted">No passages with an explicit membership in this set</p>',
+                );
+            }
+            const withoutSet = occurrences.filter(
+              (o) =>
+                !sets.some(
+                  (set) => set.ordinal != null && set.ordinal === o.setOrdinal,
+                ),
+            );
+            if (withoutSet.length) {
+              box.insertAdjacentHTML(
+                "beforeend",
+                '<h3 class="section">Set membership not reported</h3>',
+              );
+              withoutSet.forEach(passage);
+            }
+          } else {
+            occurrences.forEach(passage);
+          }
+        } else {
+          for (const member of account.memberships || []) {
+            box.insertAdjacentHTML(
+              "beforeend",
+              `<div class="passage">${member.songEntityKey ? `<a href="${link("song", { scope, key: member.songEntityKey })}">${esc(member.title || member.legacySongUuid || member.songEntityKey)}</a>` : esc(member.title || member.legacySongUuid || "Unresolved membership")}</div>`,
+            );
+          }
+        }
+        const notes = provider.text || [];
+        if (notes.length) {
+          const section = document.createElement("details");
+          section.open = true;
+          section.innerHTML =
+            "<summary>Account notes · separate from song occurrences</summary>";
+          for (const note of notes) {
+            const pre = document.createElement("pre");
+            pre.textContent = note.plainText || note.text?.value || "";
+            section.append(pre);
+          }
+          box.append(section);
+        }
+        const raw = document.createElement("details");
+        raw.innerHTML =
+          "<summary>Exact source account, annotations and evidence</summary>";
+        const pre = document.createElement("pre");
+        pre.textContent = JSON.stringify(account, null, 2);
+        raw.append(pre);
+        box.append(raw);
+      }
+      async function route() {
+        const token = ++generation;
+        const [rawKind, rawQuery = ""] = location.hash.slice(1).split("?");
+        const kind = [
+          "artists",
+          "songs",
+          "works",
+          "setlists",
+          "song",
+          "work",
+          "setlist",
+        ].includes(rawKind)
+          ? rawKind
+          : "artists";
+        const params = new URLSearchParams(rawQuery);
+        $("query").value = params.get("q") || "";
+        $("scope").value = params.get("scope") || "";
+        document
+          .querySelectorAll("[data-tab]")
+          .forEach((b) =>
+            b.classList.toggle(
+              "active",
+              b.dataset.tab ===
+                (kind === "song"
+                  ? "songs"
+                  : kind === "work"
+                    ? "works"
+                    : kind === "setlist"
+                      ? "setlists"
+                      : kind),
+            ),
+          );
+        $("content").innerHTML = '<p class="loading">Loading music…</p>';
+        try {
+          if (!stats) {
+            stats = await api("/api/stats");
+            const counts = Object.entries(stats.counts || {})
+              .map(
+                ([kind, count]) =>
+                  `${count.toLocaleString()} ${kind.replaceAll("_", " ")}`,
+              )
+              .join(" · ");
+            const snapshots = stats.sources
+              .map((source) =>
+                source.title_discovery_projected === false
+                  ? `${(source.run || "").split("/").pop()}: live relationship queries; titles not projected`
+                  : `${(source.run || "").split("/").pop()}: ${(source.current_records || 0).toLocaleString()} current index records at build (v${source.indexVersion})`,
+              )
+              .join(" / ");
+            $("coverage").textContent =
+              `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild.`;
+          }
+          if (["song", "work", "setlist"].includes(kind))
+            await detail(kind, params, token);
+          else await list(kind, params, token);
+        } catch (e) {
+          if (token === generation)
+            $("content").innerHTML =
+              `<div class="error">${esc(e.message)}</div>`;
+        }
+      }
+      $("search").onsubmit = (e) => {
+        e.preventDefault();
+        const current = location.hash.slice(1).split("?")[0];
+        navigate(
+          ["artists", "songs", "works", "setlists"].includes(current)
+            ? current
+            : "songs",
+          { q: $("query").value, scope: $("scope").value },
+        );
+      };
+      $("tabs").onclick = (e) => {
+        if (e.target.dataset.tab)
+          navigate(e.target.dataset.tab, {
+            q: $("query").value,
+            scope: $("scope").value,
+          });
+      };
+      window.onhashchange = route;
+      route();
+    </script>
+  </body>
+</html>
