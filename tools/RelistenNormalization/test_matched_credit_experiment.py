@@ -346,6 +346,92 @@ class MatchedCreditCliTests(unittest.TestCase):
 
 
 class MatchedCohortTests(unittest.TestCase):
+    def test_cohort_scores_literal_gold_that_bio_taggers_cannot_represent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            path = root / "exclusions.json"
+            exclusions = json.loads(path.read_text())
+            exclusions["explicit_receipt_exclusions"] += [reference.labels[i]["label_id"] for i in range(11, 24)]
+            write(path, exclusions)
+            cohort = SyntheticCohort(root / "cohort", 3,
+                field_texts=["Catfish", "Ann Lee", "Unresolved Person"])
+            # A literal name can occupy part of a word or overlap another credit.
+            # The frozen tokenizer cannot emit the first or both of the second.
+            cohort.labels[0]["answer"]["assertions"][0]["name"] = {"start": 0, "end": 3, "quote": "Cat"}
+            overlap = {"role": "Taper", "name": {"start": 0, "end": 3, "quote": "Ann"},
+                       "role_basis": {"kind": "structured_field", "field": "taper"}}
+            cohort.labels[1]["answer"]["assertions"].append(overlap)
+            cohort.labels[2]["answer"]["unresolved"] = True
+            cohort.labels[2]["answer"]["unknowns"] = [
+                {"span": {"start": 0, "end": 17, "quote": "Unresolved Person"}}]
+            cohort.save()
+            argv = reference.argv("cohort-output") + [
+                "--cohort-plan", str(cohort.root / "plan.json"), "--cohort-plan-sha256", cohort.plan_sha,
+                "--cohort-comparison", str(cohort.comparison), "--cohort-comparison-sha256",
+                digest(cohort.comparison / "manifest.json")]
+            original = study.load_trainer
+
+            class NoCreditModel:
+                weights = {}
+                def decode(self, features):
+                    return ["O"] * len(features)
+                def to_json(self):
+                    return {"synthetic": True}
+
+            def trainer_with_empty_predictions(snapshot):
+                trainer = original(snapshot)
+                def fit(examples, roles, *args, **kwargs):
+                    self.assertEqual(len(examples), 84)
+                    return {role: NoCreditModel() for role in roles}
+                trainer.fit_models = trainer.fit_logistic_models = fit
+                return trainer
+
+            with patch.object(study, "load_trainer", side_effect=trainer_with_empty_predictions), \
+                 patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(study.main(argv), 0)
+            output = root / "cohort-output"
+            predictions = study.indexed(study.jsonl((output / "predictions.jsonl").read_bytes()), "label_id")
+            report = json.loads((output / "report.json").read_text())
+            for label in cohort.labels:
+                row = predictions[label["label_id"]]
+                self.assertEqual(row["gold"], [
+                    {"name": claim["name"]["quote"], "span": [claim["name"]["start"], claim["name"]["end"]],
+                     "role": claim["role"]} for claim in label["answer"]["assertions"]])
+                self.assertEqual(row["complete_scoring"], not label["answer"]["unresolved"])
+            partial = predictions[cohort.labels[0]["label_id"]]["tokenizer_capacity"]
+            overlap = predictions[cohort.labels[1]["label_id"]]["tokenizer_capacity"]
+            self.assertIn("not representable", partial["role_limitations"][0]["reason"])
+            self.assertIn("Overlapping same-role", overlap["role_limitations"][0]["reason"])
+            self.assertEqual(report["tokenizer_capacity"]["fields_with_limitations"], 2)
+            self.assertEqual(report["tokenizer_capacity"]["role_heads_with_limitations"], {"Taper": 2})
+            for method in ("perceptron", "logistic"):
+                scores = report["full_resolved_priority"]["methods"][method]
+                self.assertEqual(scores["gold_assertions"], 3)
+                self.assertEqual(scores["false_negative"], 3)
+                self.assertEqual(scores["available_fields"], 2)
+                self.assertEqual(report["unresolved_positive_diagnostics"]["known_priority_assertions"], 1)
+
+    def test_cohort_still_refuses_an_invalid_literal_quote_before_fitting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            cohort = SyntheticCohort(root / "cohort", 1, field_texts=["Catfish"])
+            cohort.labels[0]["answer"]["assertions"][0]["name"] = {"start": 0, "end": 3, "quote": "Dog"}
+            cohort.save()
+            argv = reference.argv("invalid-output") + [
+                "--cohort-plan", str(cohort.root / "plan.json"), "--cohort-plan-sha256", cohort.plan_sha,
+                "--cohort-comparison", str(cohort.comparison), "--cohort-comparison-sha256",
+                digest(cohort.comparison / "manifest.json")]
+            error = io.StringIO()
+            with patch.object(study, "fit_cohort_reference") as fit, \
+                 redirect_stdout(io.StringIO()), redirect_stderr(error):
+                self.assertEqual(study.main(argv), 1)
+            fit.assert_not_called()
+            self.assertIn("Quote does not match original codepoint span", error.getvalue())
+            self.assertFalse((root / "invalid-output").exists())
+
     def test_cohort_cli_accepts_fresh_primary_and_fits_only_old84_before_scoring_every_new_field(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

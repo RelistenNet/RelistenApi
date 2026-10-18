@@ -364,6 +364,17 @@ def trained_predictions(models, example, trainer):
             for start, end, role in trainer.predict(models, example)]
 
 
+def tokenizer_capacity_diagnostics(example, trainer):
+    """Measure model limits without changing valid literal evaluation labels."""
+    limitations = []
+    for role in sorted({role for _, _, role in example.gold}):
+        try:
+            trainer.gold_tags(example, role)
+        except ValueError as error:
+            limitations.append({"role": role, "reason": str(error)})
+    return {"representable": not limitations, "role_limitations": limitations}
+
+
 def training_environment(snapshot):
     lock = Path(sys.prefix) / "requirements.lock.txt"
     require(lock.is_file(), "Run in the retained locked experiment environment")
@@ -571,8 +582,8 @@ class CohortFields(MatchedFields):
             example = self.trainer.Example(label, text, tokens,
                 self.trainer.token_features(tokens, label["field_path"].rsplit("/", 1)[-1]),
                 receipt_excluded=key in self.exclusions)
-            for role in {role for _, _, role in example.gold}:
-                self.trainer.gold_tags(example, role)
+            # Evaluation labels need literal support, not compatibility with a BIO
+            # tagger. Partial-token and overlapping names remain in the denominator.
             self.examples.append(example)
         self.snapshot.verify()
 
@@ -620,6 +631,7 @@ def run_cohort(args):
                      "complete_scoring": example.complete, "excluded_by_receipt": example.receipt_excluded,
                      "gold": [{"name": example.text[start:end], "span": [start, end], "role": role}
                               for start, end, role in example.gold],
+                     "tokenizer_capacity": tokenizer_capacity_diagnostics(example, trainer),
                      "methods": {"perceptron": trained_predictions(perceptron, example, trainer),
                                  "logistic": trained_predictions(logistic, example, trainer),
                                  "local": local, "luna": luna},
@@ -654,6 +666,14 @@ def run_cohort(args):
         "shared_luna_available_priority": score(rows, trainer, shared=True),
         "all_role_diagnostics": score(rows, trainer, priority=False),
         "unresolved_positive_diagnostics": partial_positive_diagnostics(rows),
+        "tokenizer_capacity": {
+            "fields_evaluated": len(rows),
+            "fields_with_limitations": sum(not row["tokenizer_capacity"]["representable"] for row in rows),
+            "role_heads_with_limitations": dict(Counter(
+                limitation["role"] for row in rows
+                for limitation in row["tokenizer_capacity"]["role_limitations"])),
+            "gold_labels_changed": False,
+        },
         "provider_outcomes": dict(Counter(inputs.outputs[row["label_id"]]["state"] for row in rows)),
         "coverage": cohort_coverage(inputs.cohort, inputs.outputs, inputs.audit, inputs.manifest),
         "cohort_declared_assemblies": {key: inputs.manifest[key] for key in
@@ -665,6 +685,7 @@ def run_cohort(args):
                    "Tune/evaluation label IDs cannot overlap the old100, including excluded fields. This does not prove complete unseen-identity disjointness; source/family partitions and unknown links remain operator evidence declarations.",
                    "The old training comparison code receipt does not authenticate the new runner's compilation. The new comparison is bound by its approved manifest digest and retained request/output hashes.",
                    "Known positives on incomplete fields are diagnostic only. Unavailable Luna outputs remain unavailable; fallback predictions are not Luna answers.",
+                   "Valid literal gold remains scored when token boundaries or overlapping same-role names cannot be represented by the trained BIO taggers. Per-field tokenizer capacity diagnostics record those limits without moving spans or dropping assertions.",
                    "Contact fields retain their full local/trained predictions but are not sent to Luna or evaluated through current routing; they are unavailable outputs, not empty answers.",
                    "These are extraction measurements, not global identity accuracy or permission to activate a production policy."],
     }
