@@ -36,6 +36,23 @@ The two prompt versions share available output on 77 resolved fields with 60 ass
 
 The prompt revision reduces the measured omissions, but validation failures rise from five to eight fields. The [v2 sensitivity report](label-sensitivity-v2.json) excludes the same disputed Josh Myers field as the v1 report. Neither prompt comparison resolves that label, proves global person identity or supplies independent release accuracy. Broader labels, failure analysis and measured fallback routing remain required.
 
+## Bounded retry and final key-free replay
+
+The [bounded-retry receipt](comparison-v2-bounded-retry.json) records eight additional attempts for the original eight unavailable v2 fields under the same $5 job and its 200-attempt limit. Six requests returned valid extractions; two failed credit-support validation. The job now contains 200 cumulative attempts and $0.0146575 of accounted usage, including $0.0009003 for these eight attempts. The final field outcomes are 97 extracted, one deterministic empty and two unresolved.
+
+This run uses local parser `recording-credits-v2` with the unchanged Luna v2 prompt. All 100 original fields, frozen labels and selected field identities are unchanged. All 100 local predictions match the saved local-v2 baseline. The earlier v1-local/v2-Luna comparison above remains separate; the latest metrics must not be read as a prompt-only change.
+
+Against the original draft denominator:
+
+- On the 84 resolved fields with available Luna output, containing 69 priority-role assertions, local v2 recovers 61 with four extra predictions and eight misses. Luna recovers 65 with three extras and four misses. It corrects three fields and introduces no newly incorrect field on this subset.
+- Across all 85 resolved fields and 70 assertions, Luna with explicitly labeled local output on failure recovers 65 with three extras and five misses, exactly matching 80 fields. Local v2 recovers 61 with four extras and nine misses, exactly matching 77. Current selective routing with local output on failure recovers 64 with four extras and six misses, exactly matching 79 fields. These measured comparisons do not authorize a routing change.
+
+The same conservative Josh Myers whole-field exclusion leaves 84 resolved fields and 68 assertions. Luna output is available on 83 of those fields, containing 67 assertions: it recovers 64 with three extras and three misses, while local v2 recovers 60 with four extras and seven misses on that same subset. Including local output on the remaining failure yields 64 of all 68 assertions with three extras and four misses. The receipt retains both denominators and every method's metrics; labels and predictions were not changed to compute this sensitivity.
+
+The new failure receipts retain private bodies and distinguish credit-support validation from other invalid-response stages. Inspection confirms one support quote omits its proposed name; the other supplies a quote offset that does not match the original field. Neither rejected response is a Luna prediction in the scores. Full bodies and source prose remain outside Git; the tracked receipt contains field IDs, hashes and derived checks only. One failure belongs to the resolved scoring denominator and the other remains excluded.
+
+The final key-free replay reuses all 97 extracted field results from 94 distinct cached successes. Its 200-attempt ledger and $0.0146575 accounted total are unchanged, with no new admissions or spend. Both failures remain unavailable with `configuration_unavailable`; this key-free replay does not itself demonstrate rejection by the attempt cap. Replay availability metadata and exported request sets differ, so the receipt files are not byte-identical. The scored predictions and metrics are unchanged. Existing draft-label, source-review and global-identity limits still apply.
+
 ## Independent source review
 
 [source-review.jsonl](source-review.jsonl) records a second Codex reading of 12 original fields before inspecting their draft answers or model results for this review. The reviewer read the whole field, retained exact Unicode spans and recorded uncertain actors separately. These fields include structured taper/transferrer names, equipment-only lineage, HTML description credits, two roles on one name and an uncertain organization or affiliation.

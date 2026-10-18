@@ -1,0 +1,423 @@
+{
+  "schema_version": "luna-credit-field-bounded-retry-v1",
+  "status": "development_diagnostic",
+  "policy_activation_permitted": false,
+  "identity_accuracy_established": false,
+  "independent_human_adjudication": false,
+  "versions": {
+    "luna_extractor": "luna-recording-credits-v2",
+    "local_extractor": "recording-credits-v2",
+    "runner": "luna-credit-fields-v1",
+    "scorer": "luna-credit-field-report-v1"
+  },
+  "frozen_inputs": {
+    "labels": {
+      "path": "docs/research/2026-10-17-full-normalization/training/credits-development-v1/labels.jsonl",
+      "sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12"
+    },
+    "label_receipt": {
+      "path": "docs/research/2026-10-17-full-normalization/training/credits-development-v1/receipt.json",
+      "sha256": "bba2cc9c6d6d1d7dbd42d9034c9f4e86bf97ef218d9a592cc3956b08bdbbe46f"
+    },
+    "fields": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/fields.jsonl",
+      "sha256": "652506634c3ff5a36010fcacd781b4e8c4fc003532778c03ef1ad58849f7bd44"
+    },
+    "selection_unchanged_from_initial_v2": true,
+    "all_100_local_outputs_unchanged_from_local_v2_baseline": true,
+    "prior_local_v1_comparison_preserved": "comparison-v2.json",
+    "all_96_rendered_luna_requests_unchanged_from_initial_v2": true
+  },
+  "run": {
+    "state": "completed_partial",
+    "fields": 100,
+    "states": {
+      "extracted": 97,
+      "no_text": 1,
+      "unresolved": 2
+    },
+    "routing_states": {
+      "local": 91,
+      "extracted": 7,
+      "unresolved": 2
+    },
+    "job": {
+      "uuid": "16a6d4fd-acc3-4e6c-916d-80d1fff8abf6",
+      "capUsd": 5,
+      "accountedUsd": 0.0146575,
+      "maximumTotalAttempts": 200
+    },
+    "cumulative_admitted_attempts": 200,
+    "cumulative_attempt_states": {
+      "succeeded": 185,
+      "failed": 15
+    },
+    "cumulative_measured_input_tokens": 83195,
+    "cumulative_measured_output_tokens": 12676,
+    "increment": {
+      "attempts": 8,
+      "attempt_states": {
+        "succeeded": 6,
+        "failed": 2
+      },
+      "input_tokens": 5033,
+      "output_tokens": 794,
+      "accounted_usd": 0.0009003,
+      "previous_accounted_usd": 0.0137572,
+      "only_original_eight_unavailable_request_keys": true
+    },
+    "cumulative_attempts_with_measured_usage": 200
+  },
+  "scores_original_draft_denominator": {
+    "scored_resolved_fields": 85,
+    "excluded_fields": 15,
+    "explicit_receipt_exclusions": [
+      "credit-field:51c9ea75-94cf-ed09-87f0-7e5f05502160:description"
+    ],
+    "methods": {
+      "local": {
+        "true_positive": 61,
+        "false_positive": 4,
+        "false_negative": 9,
+        "precision": 0.9384615384615385,
+        "recall": 0.8714285714285714,
+        "scored_fields": 85,
+        "unavailable_fields": 0,
+        "gold_assertions": 70,
+        "exact_fields": 77
+      },
+      "luna": {
+        "true_positive": 65,
+        "false_positive": 3,
+        "false_negative": 4,
+        "precision": 0.9558823529411765,
+        "recall": 0.9420289855072463,
+        "scored_fields": 84,
+        "unavailable_fields": 1,
+        "gold_assertions": 69,
+        "exact_fields": 80
+      },
+      "current_routing": {
+        "true_positive": 64,
+        "false_positive": 4,
+        "false_negative": 5,
+        "precision": 0.9411764705882353,
+        "recall": 0.927536231884058,
+        "scored_fields": 84,
+        "unavailable_fields": 1,
+        "gold_assertions": 69,
+        "exact_fields": 79
+      },
+      "luna_with_local_on_failure": {
+        "true_positive": 65,
+        "false_positive": 3,
+        "false_negative": 5,
+        "precision": 0.9558823529411765,
+        "recall": 0.9285714285714286,
+        "scored_fields": 85,
+        "unavailable_fields": 0,
+        "gold_assertions": 70,
+        "exact_fields": 80
+      },
+      "current_routing_with_local_on_failure": {
+        "true_positive": 64,
+        "false_positive": 4,
+        "false_negative": 6,
+        "precision": 0.9411764705882353,
+        "recall": 0.9142857142857143,
+        "scored_fields": 85,
+        "unavailable_fields": 0,
+        "gold_assertions": 70,
+        "exact_fields": 79
+      }
+    },
+    "paired_local_luna": {
+      "transitions": {
+        "paired_fields": 84,
+        "recovered_gold_assertions": 4,
+        "lost_gold_assertions": 0,
+        "removed_extra_predictions": 1,
+        "introduced_extra_predictions": 0,
+        "both_correct_fields": 77,
+        "both_wrong_unchanged_fields": 4,
+        "corrected_fields": 3
+      },
+      "methods": {
+        "local": {
+          "true_positive": 61,
+          "false_positive": 4,
+          "false_negative": 8,
+          "precision": 0.9384615384615385,
+          "recall": 0.8840579710144928
+        },
+        "luna": {
+          "true_positive": 65,
+          "false_positive": 3,
+          "false_negative": 4,
+          "precision": 0.9558823529411765,
+          "recall": 0.9420289855072463
+        }
+      }
+    }
+  },
+  "whole_field_exclusion_sensitivity": {
+    "kind": "conservative_whole_field_exclusion",
+    "finding_id": "local-credit-grammar-recording-noun-attribution-v1",
+    "excluded_label_id": "credit-field:77a09858-c858-c73c-3f98-43d653c2b26f:lineage",
+    "scope": "The entire disputed field is excluded, including the supported transfer credit. No disputed role becomes a scored negative.",
+    "labels_changed": false,
+    "predictions_changed": false,
+    "new_api_calls": 0,
+    "scored_resolved_fields": 84,
+    "excluded_fields": 16,
+    "explicit_receipt_exclusions": [
+      "credit-field:51c9ea75-94cf-ed09-87f0-7e5f05502160:description",
+      "credit-field:77a09858-c858-c73c-3f98-43d653c2b26f:lineage"
+    ],
+    "methods": {
+      "local": {
+        "true_positive": 60,
+        "false_positive": 4,
+        "false_negative": 8,
+        "precision": 0.9375,
+        "recall": 0.8823529411764706,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 77
+      },
+      "luna": {
+        "true_positive": 64,
+        "false_positive": 3,
+        "false_negative": 3,
+        "precision": 0.9552238805970149,
+        "recall": 0.9552238805970149,
+        "scored_fields": 83,
+        "unavailable_fields": 1,
+        "gold_assertions": 67,
+        "exact_fields": 80
+      },
+      "current_routing": {
+        "true_positive": 63,
+        "false_positive": 4,
+        "false_negative": 4,
+        "precision": 0.9402985074626866,
+        "recall": 0.9402985074626866,
+        "scored_fields": 83,
+        "unavailable_fields": 1,
+        "gold_assertions": 67,
+        "exact_fields": 79
+      },
+      "luna_with_local_on_failure": {
+        "true_positive": 64,
+        "false_positive": 3,
+        "false_negative": 4,
+        "precision": 0.9552238805970149,
+        "recall": 0.9411764705882353,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 80
+      },
+      "current_routing_with_local_on_failure": {
+        "true_positive": 63,
+        "false_positive": 4,
+        "false_negative": 5,
+        "precision": 0.9402985074626866,
+        "recall": 0.9264705882352942,
+        "scored_fields": 84,
+        "unavailable_fields": 0,
+        "gold_assertions": 68,
+        "exact_fields": 79
+      }
+    },
+    "paired_local_luna": {
+      "transitions": {
+        "paired_fields": 83,
+        "recovered_gold_assertions": 4,
+        "lost_gold_assertions": 0,
+        "removed_extra_predictions": 1,
+        "introduced_extra_predictions": 0,
+        "both_correct_fields": 77,
+        "both_wrong_unchanged_fields": 3,
+        "corrected_fields": 3
+      },
+      "methods": {
+        "local": {
+          "true_positive": 60,
+          "false_positive": 4,
+          "false_negative": 7,
+          "precision": 0.9375,
+          "recall": 0.8955223880597015
+        },
+        "luna": {
+          "true_positive": 64,
+          "false_positive": 3,
+          "false_negative": 3,
+          "precision": 0.9552238805970149,
+          "recall": 0.9552238805970149
+        }
+      }
+    }
+  },
+  "failure_diagnostics": [
+    {
+      "label_id": "credit-field:1142ea18-1e63-8dc4-dc23-e84e845fad1e:description",
+      "field_sha256": "c569bfa2e26db68708113380cb7c1e18b63ee1aa1b9f98d7b778a787d0f8643e",
+      "attempt_uuid": "ec98ab52-9f69-4d77-8f1d-2d3bddd437fc",
+      "cache_key": "55633639107b277a2a33be0706666968c2db04f36f1fc77b0ea9fd021ac994f5",
+      "reason": "invalid_response",
+      "failure_stage": "credit_support",
+      "failed_body_bytes": 3602,
+      "failed_body_sha256": "9ff5b657f9466e27f91c8d4e971e8d3eb509b6886eb9ee57cbf602175ce05942",
+      "provider_request_id_present": true,
+      "usage_measured": true,
+      "derived_checks": {
+        "name_contained_in_quote": false,
+        "provided_start_code_point": null,
+        "provided_end_code_point": null,
+        "exact_quote_first_start_code_point": 1895,
+        "provided_span_matches_quote": false
+      },
+      "interpretation": "support_quote_omits_proposed_name",
+      "scored_resolved_field": true
+    },
+    {
+      "label_id": "credit-field:d627fc6f-94c0-3dbf-e5d0-48fda37c75e2:taper_notes",
+      "field_sha256": "5bf19a998fc53af6a73b40b87888fc14b3438d355cd069bf92c226785f21cafe",
+      "attempt_uuid": "b8e98d33-89fc-478d-9635-88c42e593026",
+      "cache_key": "647b16186b8d95f65d8b6e070ad5c3b66c08023f4fb82d218dd233ef363cecce",
+      "reason": "invalid_response",
+      "failure_stage": "credit_support",
+      "failed_body_bytes": 3633,
+      "failed_body_sha256": "5fbc6d20750fd508c96b57890992db6c55dfaaf63e05402988d986849227b02e",
+      "provider_request_id_present": true,
+      "usage_measured": true,
+      "derived_checks": {
+        "name_contained_in_quote": true,
+        "provided_start_code_point": 166,
+        "provided_end_code_point": 192,
+        "exact_quote_first_start_code_point": 272,
+        "provided_span_matches_quote": false
+      },
+      "interpretation": "provided_quote_offsets_do_not_match_original_field",
+      "scored_resolved_field": false
+    }
+  ],
+  "keyless_replay": {
+    "state": "completed_partial",
+    "cached_fields": 97,
+    "distinct_cached_successes": 94,
+    "attempt_ledger_identical": true,
+    "admitted_attempts": 200,
+    "accounted_usd": 0.0146575,
+    "new_attempts": 0,
+    "new_accounted_usd": 0,
+    "scores_identical": true,
+    "unavailable_fields": 2,
+    "unavailable_reason": "configuration_unavailable",
+    "request_receipt_counts": {
+      "bounded_retry": 96,
+      "keyless_replay": 94
+    },
+    "limits": "Keyless replay omits the two unavailable request-cache entries and changes availability metadata; result/receipt files are not byte-identical. It demonstrates no new admissions/spend, not an attempt-cap rejection."
+  },
+  "runtime_code_receipt": {
+    "artifact": "v2-bounded-retry-code-receipt.json",
+    "recorded_files": [
+      {
+        "path": "RelistenApi/Services/Normalization/RecordingCreditExtractor.cs",
+        "sha256": "6d4d1de80703bc5e6435d910278eb349518c627299c5af7787a831f118019c9d"
+      },
+      {
+        "path": "RelistenApi/Services/Normalization/LunaRecordingCreditExtractor.cs",
+        "sha256": "58c938cb45df8cd0b9a4e1959768b17c4332f7c1109b2961b786ce07838e5382"
+      },
+      {
+        "path": "RelistenApi/Services/Normalization/LunaRecordingCreditClient.cs",
+        "sha256": "bae1fa7bcb7185accd0204b25b7e735c90f0ef365ec6613c4de1dda51e55f755"
+      },
+      {
+        "path": "RelistenApi/Services/Data/NormalizationExtractionCacheService.cs",
+        "sha256": "b34036a07ea0c34e60d1e1c8ff67a17bbdfbd26e5c58c5f1421d4618671f604a"
+      },
+      {
+        "path": "tools/RelistenNormalization/LunaCreditFieldEvaluationBatch.cs",
+        "sha256": "52f228c026826b438276681b83ce56761a4a39fe5c1ce4e17c1d7ec41240780c"
+      },
+      {
+        "path": "tools/RelistenNormalization/bin/Debug/net10.0/RelistenApi.dll",
+        "sha256": "8f46a93450b62f235ef132dac99b426805096feceade8058a8a8a4f96b728a87"
+      },
+      {
+        "path": "tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+        "sha256": "5cb14b7dc2ca152fdcbbc1cea1b8ce397e356e6afbfdb44519f5829140431bd0"
+      }
+    ],
+    "assembly_hashes_match_both_run_manifests": true,
+    "limits": "Recorded source hashes describe the bounded retry build. Current checkout/DLL contents can differ; they are not substituted for the retained build receipt."
+  },
+  "artifact_base": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1",
+  "artifacts": {
+    "v2-bounded-retry-code-receipt.json": {
+      "bytes": 1441,
+      "sha256": "8098df4a521c33f3bd9f0d578e36266a5e8d349c1978763ec03873c7d5ddc5a9"
+    },
+    "v2-bounded-retry-report/report.json": {
+      "bytes": 26273,
+      "sha256": "2a548614d51d98294b9597b7d3fcd88355453388001a50c1b08aacb85df7a9d5"
+    },
+    "paid-run-v2/receipts.json": {
+      "bytes": 427376,
+      "sha256": "47e3a5d97dd568e446eb4501e9ce83a79b80624522e1be0cde3720cc115c7a74"
+    },
+    "local-parser-v2-keyless/results.jsonl": {
+      "bytes": 124910,
+      "sha256": "769c6f25561614841184e096b58e1fe4226fb743601756579eb078b3d67abb65"
+    },
+    "v2-bounded-retry-01/selection.json": {
+      "bytes": 56146,
+      "sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0"
+    },
+    "v2-bounded-retry-01/results.jsonl": {
+      "bytes": 124870,
+      "sha256": "53eabff429fa05e94a18ed90e985505efa8cb3d6739907e30e94964d22c27473"
+    },
+    "v2-bounded-retry-01/receipts.json": {
+      "bytes": 450480,
+      "sha256": "fe7f4aebc78e06036fdf2f9c1b0a25ae2f37d0a909dc4d5c82c38f70287120c7"
+    },
+    "v2-bounded-retry-01/manifest.json": {
+      "bytes": 57131,
+      "sha256": "07238e304227d2cd4248ef17bef5dc99d696bf26dac106c5f035e52765613521"
+    },
+    "v2-attempt-cap-final-keyless/selection.json": {
+      "bytes": 56146,
+      "sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0"
+    },
+    "v2-attempt-cap-final-keyless/results.jsonl": {
+      "bytes": 124758,
+      "sha256": "9dc3fc7459d9770500cc067611771a4e59397a04a050587a8109bb80815d416e"
+    },
+    "v2-attempt-cap-final-keyless/receipts.json": {
+      "bytes": 441017,
+      "sha256": "c4703d51531aff72bc7616139528dc66dfbb89455b73ec1fb05b3f2313ae564c"
+    },
+    "v2-attempt-cap-final-keyless/manifest.json": {
+      "bytes": 57131,
+      "sha256": "713dbe57a1d65495395cbf6f3b11ba5dcb177acabb731432d62046396e2238f3"
+    }
+  },
+  "scorer": {
+    "path": "tools/RelistenNormalization/luna_credit_field_report.py",
+    "sha256": "70773939a87e5adbb9d2652a5e5348343802c6d3b45fe457af799625447086f9",
+    "api": "compare(labels_bytes, selection, results, explicit_exclusions)"
+  },
+  "limits": [
+    "Retried failures are selected development cases, not an independent accuracy sample.",
+    "Fifteen uncertain/excluded fields do not supply scored negatives; one remaining failure is in the resolved denominator and one is outside it.",
+    "Existing parenthetical-name disagreements, source-review caveats and draft Josh Myers attribution remain unadjudicated.",
+    "Failure bodies, rendered requests, full source prose and model responses remain in ignored local evidence; tracked diagnostics contain only identifiers, hashes and derived support checks.",
+    "No parser/prompt/routing/policy changes, label edits, API calls, .NET commands or database reads/writes were performed to create this receipt."
+  ]
+}

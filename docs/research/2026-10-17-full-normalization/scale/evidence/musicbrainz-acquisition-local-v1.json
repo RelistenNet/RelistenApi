@@ -1,0 +1,449 @@
+{
+  "version": "musicbrainz-local-acquisition-reconciliation-v1",
+  "status": "independent_filesystem_reconciliation_complete",
+  "reviewer": "Codex /root/normalization_local_capture; reviewed receipts independently after live acquisition",
+  "reviewed_at_utc": "2026-10-18T01:32:43.435039+00:00",
+  "source_directory": "local-dev/normalization-data/2026-10-17-musicbrainz-acquisition-v1",
+  "summary": "Eight local invocations reconcile to five commands, five HTTP responses and four captures. The work refresh resumes a retained 503 with a later 200. Refreshed work bytes differ only in JSON object-property ordering.",
+  "scope": {
+    "database": "relisten_normalization_20261017_musicbrainz at 127.0.0.1:15432",
+    "live_run": "Explicit MusicBrainz GET lookups; acquisition and retained observations only. No production writes, factual catalog links, accepted identities or automatic matching policy.",
+    "review": "Filesystem reads and Python checks only; no new provider requests, API calls, database queries or writes, .NET commands, or receipt modification.",
+    "snapshot_catalog_table_present": false,
+    "snapshot_accepted_people_table_present": false
+  },
+  "counts": {
+    "invocations": 8,
+    "commands": 5,
+    "http_attempts_with_saved_responses": 5,
+    "status_sequence": [
+      200,
+      200,
+      200,
+      503,
+      200
+    ],
+    "captures": 4,
+    "immutable_revisions": 4,
+    "resources": 3,
+    "manifest_listed_artifacts_verified": 48
+  },
+  "source_receipts": [
+    {
+      "path": "setup.json",
+      "bytes": 671,
+      "sha256": "e75a35041e9e48e96cdbed9ee0db86581edecbebb2eb7109cb7f9a70f22473da"
+    },
+    {
+      "path": "database-snapshot-v1.json",
+      "bytes": 22896,
+      "sha256": "aab983910fdaa07c44582ef0f22c0c5e44363ad90a4be4bfb17941b8d3bc0e2e"
+    }
+  ],
+  "artifact_manifests": [
+    {
+      "path": "chuck-artist-run-01/manifest.json",
+      "bytes": 883,
+      "sha256": "be2e75e9c908e948e26f89188c9224d7df71b3aac3a8c3b4600a81d01507b79b",
+      "verified_artifacts": 2
+    },
+    {
+      "path": "chuck-artist-run-02/manifest.json",
+      "bytes": 1617,
+      "sha256": "0d8c7cf59b33cce1eb1e1579334a1680ddc6406d46bb4bd5bf902eff79627452",
+      "verified_artifacts": 7
+    },
+    {
+      "path": "johnny-recording-run-01/manifest.json",
+      "bytes": 1619,
+      "sha256": "13fb2702d9c3c84baea4e7561f6e0e45004cae98fbff35b5b9bf45f62a8f2aee",
+      "verified_artifacts": 7
+    },
+    {
+      "path": "johnny-work-cache-read-01/manifest.json",
+      "bytes": 1197,
+      "sha256": "6af4df0a55c45179c55cc0dc9cd7574dbd4bbb425606ceeb13bcc39fd39de864",
+      "verified_artifacts": 5
+    },
+    {
+      "path": "johnny-work-refresh-01/manifest.json",
+      "bytes": 1187,
+      "sha256": "3a3ec56c9960bd657c9b22c6f19d129c7550dcaf4aceaa2234e8bf50917c6cde",
+      "verified_artifacts": 4
+    },
+    {
+      "path": "johnny-work-refresh-02/manifest.json",
+      "bytes": 1923,
+      "sha256": "b8358c62930b4881dde9fb60d64a9b797f8a0c07f8c1414e87903183c598caec",
+      "verified_artifacts": 9
+    },
+    {
+      "path": "johnny-work-run-01/manifest.json",
+      "bytes": 1617,
+      "sha256": "f6ba42e67257f6bd6472816fd2485d046aabe1d70dc9cfed7c05e38832e41f30",
+      "verified_artifacts": 7
+    },
+    {
+      "path": "johnny-work-terminal-replay/manifest.json",
+      "bytes": 1626,
+      "sha256": "ade221627adbec7957190b82b171352dcc264157d1dcfaa5054598673a09c49d",
+      "verified_artifacts": 7
+    }
+  ],
+  "invocations": [
+    {
+      "receipt": {
+        "path": "chuck-artist-invocation-01.json",
+        "bytes": 272,
+        "sha256": "b29cc262f2130cc2f8cdf1e2c76bb1096dbb811da7e304673c4d94193f311125"
+      },
+      "output": "chuck-artist-run-01",
+      "command_uuid": "687c46e9-3259-4de4-a605-943643e05e33",
+      "state": "pending",
+      "attempts_visible": 0,
+      "not_before": "2026-10-18T01:19:04.935338+00:00",
+      "disposition": null
+    },
+    {
+      "receipt": {
+        "path": "chuck-artist-invocation-02.json",
+        "bytes": 272,
+        "sha256": "e6996f7eea77b47365ffdcdd4c4d64c5ffccf90617677dc377153d3545ea5d21"
+      },
+      "output": "chuck-artist-run-02",
+      "command_uuid": "687c46e9-3259-4de4-a605-943643e05e33",
+      "state": "completed",
+      "attempts_visible": 1,
+      "not_before": null,
+      "disposition": "captured"
+    },
+    {
+      "receipt": {
+        "path": "johnny-recording-invocation-01.json",
+        "bytes": 280,
+        "sha256": "05581c32b5926f538b993772683c80be424a9f867347efb2c1effeab97e450d2"
+      },
+      "output": "johnny-recording-run-01",
+      "command_uuid": "96b900f5-e086-49dc-ace7-2fe6f0147d0e",
+      "state": "completed",
+      "attempts_visible": 1,
+      "not_before": null,
+      "disposition": "captured"
+    },
+    {
+      "receipt": {
+        "path": "johnny-work-cache-read-01-invocation.json",
+        "bytes": 277,
+        "sha256": "4deaa2152212cbe8b78a784650eb653a6a5f9d089ba9d21adccfa211e114eebc"
+      },
+      "output": "johnny-work-cache-read-01",
+      "command_uuid": "02ecd8d8-f01b-4ecb-86c2-be0d2daca5e5",
+      "state": "completed",
+      "attempts_visible": 0,
+      "not_before": null,
+      "disposition": "cached"
+    },
+    {
+      "receipt": {
+        "path": "johnny-work-invocation-01.json",
+        "bytes": 318,
+        "sha256": "104d3ce1f7cb7784b40dadda6f1ba8eaed76246568a1e920a0ce6427ab9c6b4f"
+      },
+      "output": "johnny-work-run-01",
+      "command_uuid": "99e760e2-5c97-49b6-a812-1d59207abd2e",
+      "state": "completed",
+      "attempts_visible": 1,
+      "not_before": null,
+      "disposition": "captured"
+    },
+    {
+      "receipt": {
+        "path": "johnny-work-refresh-invocation-01.json",
+        "bytes": 282,
+        "sha256": "4f5d7abf8fee2daf72f7be6c4001fc042ef08146886dda95771a5bae80c6fc97"
+      },
+      "output": "johnny-work-refresh-01",
+      "command_uuid": "4cf37c18-54d9-4b28-8f29-dd07e002bb79",
+      "state": "pending",
+      "attempts_visible": 1,
+      "not_before": "2026-10-18T01:21:35.909867+00:00",
+      "disposition": null
+    },
+    {
+      "receipt": {
+        "path": "johnny-work-refresh-invocation-02.json",
+        "bytes": 282,
+        "sha256": "97481f9b08fc77d058ceef38b0111f346ed52643e0ccd37bd80c71d11e1b4ba1"
+      },
+      "output": "johnny-work-refresh-02",
+      "command_uuid": "4cf37c18-54d9-4b28-8f29-dd07e002bb79",
+      "state": "completed",
+      "attempts_visible": 2,
+      "not_before": null,
+      "disposition": "captured"
+    },
+    {
+      "receipt": {
+        "path": "johnny-work-terminal-replay-invocation.json",
+        "bytes": 279,
+        "sha256": "6181d536269aa1ab6bd8349a28e3dfc71c950e950c83b8e8bedbe5f1e9296709"
+      },
+      "output": "johnny-work-terminal-replay",
+      "command_uuid": "99e760e2-5c97-49b6-a812-1d59207abd2e",
+      "state": "completed",
+      "attempts_visible": 1,
+      "not_before": null,
+      "disposition": "captured"
+    }
+  ],
+  "responses_in_observed_order": [
+    {
+      "attempt_uuid": "1b994085-5bac-4048-bca7-55f6e2cfb193",
+      "command_uuid": "99e760e2-5c97-49b6-a812-1d59207abd2e",
+      "ordinal": 1,
+      "prepared_at": "2026-10-18T01:17:04.779032+00:00",
+      "http_deadline": "2026-10-18T01:17:39.779032+00:00",
+      "lease_until": "2026-10-18T01:17:49.779032+00:00",
+      "status_code": 200,
+      "completed_at": "2026-10-18T01:17:05.829427+00:00",
+      "saved_at": "2026-10-18T01:17:05.847193+00:00",
+      "admission_eligible": true,
+      "body_complete": true,
+      "response_metadata": {
+        "path": "johnny-work-terminal-replay/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/response.json",
+        "bytes": 677,
+        "sha256": "4e3f4c04df4b1c9db7c29bb21a3ab82ebc28728ff40be7b3120c6eb9c9620999"
+      },
+      "body": {
+        "path": "johnny-work-terminal-replay/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/body.bin",
+        "bytes": 4591,
+        "sha256": "7387ab00a0611f9b042c876d6ec16a3fc00716f0d76bff3672eaf029d5b32255"
+      },
+      "capture": {
+        "metadata": {
+          "path": "johnny-work-terminal-replay/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/capture.json",
+          "bytes": 765,
+          "sha256": "7cc67210ea01fbf5c7b0299cb09fbf366006de0a002203c2d1555f32a1f048c7"
+        },
+        "input": {
+          "path": "johnny-work-terminal-replay/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/input.bin",
+          "bytes": 4591,
+          "sha256": "7387ab00a0611f9b042c876d6ec16a3fc00716f0d76bff3672eaf029d5b32255"
+        },
+        "decoded": {
+          "path": "johnny-work-terminal-replay/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/decoded.json",
+          "bytes": 42090,
+          "sha256": "f172698780f388a53317d02f38c4f40094671a9a69aab962398f44b38a095ea7"
+        },
+        "input_revision_uuid": "b8ac12af-2a6b-49ce-8b3b-4d5047fe7c39",
+        "fetch_uuid": "1b994085-5bac-4048-bca7-55f6e2cfb193",
+        "expected_generation": 0,
+        "resource_generation": 1,
+        "accepted_as_current": true,
+        "advanced_current": true,
+        "provider_revision": "\"daccd92dff6d83f1465021e9ef35be02\""
+      }
+    },
+    {
+      "attempt_uuid": "f848eea4-e110-4cf9-a957-2a3043c8b60e",
+      "command_uuid": "96b900f5-e086-49dc-ace7-2fe6f0147d0e",
+      "ordinal": 1,
+      "prepared_at": "2026-10-18T01:19:02.157061+00:00",
+      "http_deadline": "2026-10-18T01:19:37.157061+00:00",
+      "lease_until": "2026-10-18T01:19:47.157061+00:00",
+      "status_code": 200,
+      "completed_at": "2026-10-18T01:19:03.67078+00:00",
+      "saved_at": "2026-10-18T01:19:03.687861+00:00",
+      "admission_eligible": true,
+      "body_complete": true,
+      "response_metadata": {
+        "path": "johnny-recording-run-01/attempts/1-f848eea4-e110-4cf9-a957-2a3043c8b60e/response.json",
+        "bytes": 686,
+        "sha256": "d21ee1b705db1d43a6b93cc01745b5016526d4b41c74ce2d884a1c8373cac84c"
+      },
+      "body": {
+        "path": "johnny-recording-run-01/attempts/1-f848eea4-e110-4cf9-a957-2a3043c8b60e/body.bin",
+        "bytes": 914,
+        "sha256": "4e7a08c9f2de02b8ad805866f6777f7374c9aca6c04f610a701fbbb1d658a541"
+      },
+      "capture": {
+        "metadata": {
+          "path": "johnny-recording-run-01/attempts/1-f848eea4-e110-4cf9-a957-2a3043c8b60e/capture.json",
+          "bytes": 779,
+          "sha256": "b2689f314ffe1f8c90fe32b6ca2422ee3e3ae0302a95511ad235a6ed8c017844"
+        },
+        "input": {
+          "path": "johnny-recording-run-01/attempts/1-f848eea4-e110-4cf9-a957-2a3043c8b60e/input.bin",
+          "bytes": 914,
+          "sha256": "4e7a08c9f2de02b8ad805866f6777f7374c9aca6c04f610a701fbbb1d658a541"
+        },
+        "decoded": {
+          "path": "johnny-recording-run-01/attempts/1-f848eea4-e110-4cf9-a957-2a3043c8b60e/decoded.json",
+          "bytes": 6808,
+          "sha256": "6c63fd3e2609db92804d88e41badbdfc3c95c6cdd8e1e967f1d2ea3ce5b50205"
+        },
+        "input_revision_uuid": "3f0f4fa0-6187-44fa-8ad8-748f4700dab5",
+        "fetch_uuid": "f848eea4-e110-4cf9-a957-2a3043c8b60e",
+        "expected_generation": 0,
+        "resource_generation": 1,
+        "accepted_as_current": true,
+        "advanced_current": true,
+        "provider_revision": "\"f5fbbd6bc001f834977c5dabe849aac8\""
+      }
+    },
+    {
+      "attempt_uuid": "55281a3a-36f9-469e-9161-2e542330e65e",
+      "command_uuid": "687c46e9-3259-4de4-a605-943643e05e33",
+      "ordinal": 1,
+      "prepared_at": "2026-10-18T01:20:20.082605+00:00",
+      "http_deadline": "2026-10-18T01:20:55.082605+00:00",
+      "lease_until": "2026-10-18T01:21:05.082605+00:00",
+      "status_code": 200,
+      "completed_at": "2026-10-18T01:20:20.997305+00:00",
+      "saved_at": "2026-10-18T01:20:21.017107+00:00",
+      "admission_eligible": true,
+      "body_complete": true,
+      "response_metadata": {
+        "path": "chuck-artist-run-02/attempts/1-55281a3a-36f9-469e-9161-2e542330e65e/response.json",
+        "bytes": 666,
+        "sha256": "008e6264d9953f855a86a96d1a8951c8354d6360ba74abd3e7431ec6f91698ab"
+      },
+      "body": {
+        "path": "chuck-artist-run-02/attempts/1-55281a3a-36f9-469e-9161-2e542330e65e/body.bin",
+        "bytes": 2240,
+        "sha256": "8fe62a7e9941d402b4feb880f0a5f80ec83d1c283d1efd856d86c222b637342f"
+      },
+      "capture": {
+        "metadata": {
+          "path": "chuck-artist-run-02/attempts/1-55281a3a-36f9-469e-9161-2e542330e65e/capture.json",
+          "bytes": 768,
+          "sha256": "3ffb2340494e6227570f100692e4f959fac611ed45ae87bdb0a62265e0501d2a"
+        },
+        "input": {
+          "path": "chuck-artist-run-02/attempts/1-55281a3a-36f9-469e-9161-2e542330e65e/input.bin",
+          "bytes": 2240,
+          "sha256": "8fe62a7e9941d402b4feb880f0a5f80ec83d1c283d1efd856d86c222b637342f"
+        },
+        "decoded": {
+          "path": "chuck-artist-run-02/attempts/1-55281a3a-36f9-469e-9161-2e542330e65e/decoded.json",
+          "bytes": 7867,
+          "sha256": "512f15b3af92abc7f3fa12dcefa8e80f8eb64c435522a75fce9e8cb9b1cf27e7"
+        },
+        "input_revision_uuid": "b1e1c89f-3c10-4dce-b570-12791d70a482",
+        "fetch_uuid": "55281a3a-36f9-469e-9161-2e542330e65e",
+        "expected_generation": 0,
+        "resource_generation": 1,
+        "accepted_as_current": true,
+        "advanced_current": true,
+        "provider_revision": "\"ce651014af0f3c6a1e12d7f19f12ed09\""
+      }
+    },
+    {
+      "attempt_uuid": "014d6e66-62f3-43e6-88ce-9f0d8efee57e",
+      "command_uuid": "4cf37c18-54d9-4b28-8f29-dd07e002bb79",
+      "ordinal": 1,
+      "prepared_at": "2026-10-18T01:21:33.829133+00:00",
+      "http_deadline": "2026-10-18T01:22:08.829133+00:00",
+      "lease_until": "2026-10-18T01:22:18.829133+00:00",
+      "status_code": 503,
+      "completed_at": "2026-10-18T01:21:34.649974+00:00",
+      "saved_at": "2026-10-18T01:21:34.661501+00:00",
+      "admission_eligible": true,
+      "body_complete": true,
+      "response_metadata": {
+        "path": "johnny-work-refresh-02/attempts/1-014d6e66-62f3-43e6-88ce-9f0d8efee57e/response.json",
+        "bytes": 684,
+        "sha256": "f10f84394ba77ca7eb2243802738f4350b2441cf85afb4794c424f220f1fff4c"
+      },
+      "body": {
+        "path": "johnny-work-refresh-02/attempts/1-014d6e66-62f3-43e6-88ce-9f0d8efee57e/body.bin",
+        "bytes": 83,
+        "sha256": "33767dc9cc0ca702c142c290a0c6cd36949b89d483c79adc2115f80fd59850c4"
+      },
+      "capture": null
+    },
+    {
+      "attempt_uuid": "63e49c7e-f130-4bb8-a544-fab8cecf9a95",
+      "command_uuid": "4cf37c18-54d9-4b28-8f29-dd07e002bb79",
+      "ordinal": 2,
+      "prepared_at": "2026-10-18T01:25:45.553824+00:00",
+      "http_deadline": "2026-10-18T01:26:20.553824+00:00",
+      "lease_until": "2026-10-18T01:26:30.553824+00:00",
+      "status_code": 200,
+      "completed_at": "2026-10-18T01:25:46.408303+00:00",
+      "saved_at": "2026-10-18T01:25:46.424223+00:00",
+      "admission_eligible": true,
+      "body_complete": true,
+      "response_metadata": {
+        "path": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/response.json",
+        "bytes": 677,
+        "sha256": "0bca7d814383ffc813a1c1784db44a6838c9cfd91042f9ef7d20ad8286cd617f"
+      },
+      "body": {
+        "path": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/body.bin",
+        "bytes": 4591,
+        "sha256": "5c4de99ff9b63531d444d030a3a514f48f2ec8e9348709285c1d5f21012b1229"
+      },
+      "capture": {
+        "metadata": {
+          "path": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/capture.json",
+          "bytes": 765,
+          "sha256": "f6a7f7bf16b26c3df019b5552761c6776c8fd73c95758059bda28304b4e4506d"
+        },
+        "input": {
+          "path": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/input.bin",
+          "bytes": 4591,
+          "sha256": "5c4de99ff9b63531d444d030a3a514f48f2ec8e9348709285c1d5f21012b1229"
+        },
+        "decoded": {
+          "path": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/decoded.json",
+          "bytes": 42090,
+          "sha256": "4f783302785404f94e9e4adb2155ab48f46c9da5833c123ba4e1f2ba435dd25b"
+        },
+        "input_revision_uuid": "a2567ba7-a74b-4b41-b608-129ad696cf86",
+        "fetch_uuid": "63e49c7e-f130-4bb8-a544-fab8cecf9a95",
+        "expected_generation": 1,
+        "resource_generation": 2,
+        "accepted_as_current": true,
+        "advanced_current": true,
+        "provider_revision": "\"af6353654f1f7813285306e87a309891\""
+      }
+    }
+  ],
+  "recovery_and_reuse": {
+    "artist": "chuck-artist-run-01 is Pending with no attempts and notBefore 2026-10-18T01:19:04.935338+00:00. run-02 resumes the same command and makes its first GET.",
+    "terminal_replay": "johnny-work-terminal-replay returns command 99e760e2-5c97-49b6-a812-1d59207abd2e and the original capture, without another attempt. Its exported command, response, body, input, decoded and capture files match the original run byte-for-byte.",
+    "retained_cache": "johnny-work-cache-read-01 is a distinct command with zero attempts and disposition cached. It references the original work fetch and generation 1; cached input, decoded and capture files match the original run byte-for-byte.",
+    "refresh_failure": "Attempt 014d6e66-62f3-43e6-88ce-9f0d8efee57e returned complete HTTP 503. Its 83-byte JSON body says the MusicBrainz server is currently busy. The command remains Pending/http_503 and has no capture.",
+    "refresh_resume": "johnny-work-refresh-02 resumes the same command 4cf37c18-54d9-4b28-8f29-dd07e002bb79. Attempt 2 returns 200, captures with original expected generation 1 and advances work generation to 2. Its export retains both attempts.",
+    "timing": "The 503 response completed at 01:21:34.649974 UTC with Retry-After 0; saved Pending notBefore is 01:21:35.909867 UTC. The next invocation prepared attempt 2 at 01:25:45.553824 UTC. This is a later explicit resumption, not proof of an automatic retry scheduler. Admission eligibility is true even for the 503: it records valid permit/deadline ownership, not HTTP success or permission to capture an error body."
+  },
+  "work_comparison": {
+    "initial_input": "johnny-work-run-01/attempts/1-1b994085-5bac-4048-bca7-55f6e2cfb193/input.bin",
+    "refreshed_input": "johnny-work-refresh-02/attempts/2-63e49c7e-f130-4bb8-a544-fab8cecf9a95/input.bin",
+    "each_bytes": 4591,
+    "raw_sha256_initial": "7387ab00a0611f9b042c876d6ec16a3fc00716f0d76bff3672eaf029d5b32255",
+    "raw_sha256_refreshed": "5c4de99ff9b63531d444d030a3a514f48f2ec8e9348709285c1d5f21012b1229",
+    "parsed_json_equal": true,
+    "array_order_equal": true,
+    "observed_difference": "Object-property ordering differs, including nested objects. No JSON values or array ordering changed.",
+    "canonicalization": "Python json.dumps(parsed, sort_keys=True, separators=(comma, colon), ensure_ascii=False), UTF-8; comparison checksum only, not a replacement for retained raw input.",
+    "canonical_sha256": "b27716955e2b31496158cafa58a447a1820ceaeb0ddf45fa437626a8166c3023",
+    "generation_initial": 1,
+    "generation_refreshed": 2,
+    "decoded_changed_leaf_count": 195,
+    "decoded_changed_leaf_names": [
+      "inputRevisionUuid"
+    ],
+    "decoder_issues_initial": 0,
+    "decoder_issues_refreshed": 0,
+    "interpretation": "Exact-byte retention correctly creates a different immutable revision. The generation change and ETag difference do not demonstrate a change in the work facts."
+  },
+  "limits": [
+    "Invocation receipts contain request/output/command references, without independent process exit codes or invocation start/end timestamps.",
+    "The saved response/attempt timestamps support application admission and recovery accounting. They do not prove wire-level send timing, network exactly-once delivery, or coordination with unrelated clients.",
+    "The review authenticates exported files against their manifests and reconciles the saved database snapshot; it does not independently query the database or provider.",
+    "The 503 body supports server busy. Retained rate-limit headers do not establish a more specific infrastructure cause.",
+    "Raw inputs remain in the ignored local data directory; this tracked receipt preserves their paths, hashes and interpretation."
+  ]
+}
