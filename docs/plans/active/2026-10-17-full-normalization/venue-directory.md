@@ -43,6 +43,29 @@ coordinate precision and name-validity dates remain visible. See
 [venue resolution](venue-resolution.md) for matching and accepted-publication
 contracts; this lookup grants no additional authority.
 
+## Native provider venue observations
+
+[`ShadowNativeVenueAdapter`](../../../../tools/RelistenNormalization/ShadowNativeVenueAdapter.cs)
+projects retained provider inputs through the shared authenticated decoder context.
+Its `proposal.venues` entries preserve native provider identities, original venue
+names, structured locality, coordinate kind and historical-name prose with their
+original revision citations. Local directory inputs can use only the exact
+selected account in the authenticated supporting root. Missing roots and catalog
+bindings remain explicit; no legacy venue or source UUID is fabricated.
+
+Each entry has a scalar `displayName` for reader search, its own
+`native_venue_observation` key, and separate name/locality/provider-reference
+browse keys. Equal browse keys retrieve hypotheses across artists; they do not
+join physical identities. City coordinates remain city observations, room parents
+and name-validity dates remain unknown, and history prose is not converted into
+accepted intervals. Recording and setlist links retain their original account and
+literal date. Optional catalog source/show links require the retained binding.
+
+These native outcomes are `proposed`, `unresolved` or `not_applicable`, with
+`acceptedIdentity=false`. They can be inspected in the generic shadow reader.
+The directory above still indexes the retained legacy run; native venue outcomes
+are not automatically included in its counts or recording lists.
+
 ## Useful examples
 
 The current literal-field searches return 136 records for
