@@ -1,0 +1,185 @@
+{
+  "schema_version": "luna-credit-field-development-comparison-v1",
+  "extractor_version": "luna-recording-credits-v1",
+  "status": "development_diagnostic",
+  "policy_activation_permitted": false,
+  "independent_human_adjudication": false,
+  "run_state": "completed_partial",
+  "input_fields": 100,
+  "resolved_scored_fields": 85,
+  "excluded_fields": 15,
+  "methods": {
+    "local": {
+      "true_positive": 60,
+      "false_positive": 7,
+      "false_negative": 10,
+      "precision": 0.8955223880597015,
+      "recall": 0.8571428571428571,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 75
+    },
+    "luna": {
+      "true_positive": 48,
+      "false_positive": 1,
+      "false_negative": 18,
+      "precision": 0.9795918367346939,
+      "recall": 0.7272727272727273,
+      "scored_fields": 83,
+      "unavailable_fields": 2,
+      "gold_assertions": 66,
+      "exact_fields": 65
+    },
+    "current_routing": {
+      "true_positive": 60,
+      "false_positive": 7,
+      "false_negative": 7,
+      "precision": 0.8955223880597015,
+      "recall": 0.8955223880597015,
+      "scored_fields": 84,
+      "unavailable_fields": 1,
+      "gold_assertions": 67,
+      "exact_fields": 76
+    },
+    "luna_with_local_on_failure": {
+      "true_positive": 50,
+      "false_positive": 2,
+      "false_negative": 20,
+      "precision": 0.9615384615384616,
+      "recall": 0.7142857142857143,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 65
+    },
+    "current_routing_with_local_on_failure": {
+      "true_positive": 61,
+      "false_positive": 7,
+      "false_negative": 9,
+      "precision": 0.8970588235294118,
+      "recall": 0.8714285714285714,
+      "scored_fields": 85,
+      "unavailable_fields": 0,
+      "gold_assertions": 70,
+      "exact_fields": 76
+    }
+  },
+  "paired_local_luna": {
+    "transitions": {
+      "paired_fields": 83,
+      "recovered_gold_assertions": 5,
+      "lost_gold_assertions": 15,
+      "removed_extra_predictions": 6,
+      "introduced_extra_predictions": 1,
+      "both_correct_fields": 60,
+      "new_error_fields": 15,
+      "corrected_fields": 5,
+      "both_wrong_changed_fields": 1,
+      "both_wrong_unchanged_fields": 2
+    },
+    "methods": {
+      "local": {
+        "true_positive": 58,
+        "false_positive": 6,
+        "false_negative": 8,
+        "precision": 0.90625,
+        "recall": 0.8787878787878788
+      },
+      "luna": {
+        "true_positive": 48,
+        "false_positive": 1,
+        "false_negative": 18,
+        "precision": 0.9795918367346939,
+        "recall": 0.7272727272727273
+      }
+    }
+  },
+  "states_all_fields": {
+    "extracted": 94,
+    "unresolved": 5,
+    "no_text": 1
+  },
+  "routing_states_all_fields": {
+    "local": 91,
+    "extracted": 7,
+    "unresolved": 2
+  },
+  "job": {
+    "uuid": "16a6d4fd-acc3-4e6c-916d-80d1fff8abf6",
+    "capUsd": 5,
+    "accountedUsd": 0.0061393
+  },
+  "admitted_attempts_for_job": 96,
+  "attempt_states": {
+    "succeeded": 91,
+    "failed": 5
+  },
+  "attempts_with_measured_cost": 96,
+  "input_tokens": 31353,
+  "output_tokens": 6008,
+  "keyless_replay": {
+    "state": "completed_partial",
+    "cached_fields": 94,
+    "accounted_usd": 0.0061393,
+    "admitted_attempts_for_job": 96,
+    "new_accounted_usd": 0.0
+  },
+  "provenance": {
+    "labels_sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12",
+    "manifest_sha256": "1909c0ac29331adcfb03c10759a6a0afb06e7efd12bae15e293c53fc6efe5e99",
+    "results_sha256": "0c57812b151607baa05623d8f05a1380ea60623fde7b6d41fcf3e1f1c8d259e8",
+    "receipts_sha256": "9c19eec8942cded0931c5cd7bccdf350173f6933562f5babab4537d82d34c6be",
+    "label_receipt_sha256": "bba2cc9c6d6d1d7dbd42d9034c9f4e86bf97ef218d9a592cc3956b08bdbbe46f",
+    "scorer_sha256": "70773939a87e5adbb9d2652a5e5348343802c6d3b45fe457af799625447086f9"
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/job.json",
+      "bytes": 197,
+      "sha256": "82d376d18cdfa45ec83ae6a46346199e88a2a99f97981027febedb2bfe1dbbfa"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/dry-run/manifest.json",
+      "bytes": 57064,
+      "sha256": "34eb233c7e7e8c3460d3ca2923fcf8ab32e763bfdfc1da4b787f18b401028254"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-run/selection.json",
+      "bytes": 56146,
+      "sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-run/results.jsonl",
+      "bytes": 123682,
+      "sha256": "0c57812b151607baa05623d8f05a1380ea60623fde7b6d41fcf3e1f1c8d259e8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-run/receipts.json",
+      "bytes": 303974,
+      "sha256": "9c19eec8942cded0931c5cd7bccdf350173f6933562f5babab4537d82d34c6be"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-run/manifest.json",
+      "bytes": 57102,
+      "sha256": "1909c0ac29331adcfb03c10759a6a0afb06e7efd12bae15e293c53fc6efe5e99"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/paid-report/report.json",
+      "bytes": 39257,
+      "sha256": "5c9c0fcc8af2317709ec76beb7c7a5d48ac76c4ae389e960035cc1e5e912b279"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/keyless-replay/manifest.json",
+      "bytes": 57103,
+      "sha256": "2207f3c2ca668e7de7ba50ab0c829b29236db554a63f210b6ab8d2e67aa29d35"
+    }
+  ],
+  "interpretation": [
+    "Exact literal name/role extraction only; no global person identity or launch accuracy established.",
+    "Luna scores use only 83 available resolved fields/66 gold; paired local metrics use exactly those same 83 fields.",
+    "Local-on-failure and routing-on-failure methods explicitly retain local predictions; they are not Luna-only scores.",
+    "Five invalid-response outcomes remain failures, including three uncertain fields; all 100 original outcomes retained.",
+    "Refine structured-field and complete literal-name instructions on development inputs before a new measured comparison."
+  ]
+}

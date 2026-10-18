@@ -1,0 +1,32 @@
+{
+  "schema_version": "credit-luna-blind-source-review-receipt-v1",
+  "source_field_file_sha256": "652506634c3ff5a36010fcacd781b4e8c4fc003532778c03ef1ad58849f7bd44",
+  "selection_sha256": "13bcdb4de61f999d9f49f78ea0af1b091f736448b576d2b8fac271acb0b7a551",
+  "review_sha256": "26327790b5cc10e0827e29730c1fc2a4bacf0e6b7f468191deb5149562f127e3",
+  "selection_method": "Per-field deterministic SHA-256 rank of luna-field-root-review-v1:<label_id>; exclude 20 earlier blind-reviewed fields; quotas taper3/transferrer3/lineage2/description2/taper_notes2.",
+  "review_fields": 12,
+  "review_assertions": 12,
+  "priority_assertions": 10,
+  "unknown_fields": 2,
+  "before_luna_comparison": true,
+  "draft_answers_inspected_for_this_review": false,
+  "model_outputs_inspected_for_this_review": false,
+  "independent_human_adjudication": false,
+  "field_label_ids": [
+    "credit-field:9d7cf12d-9938-d686-818f-829f631db742:taper",
+    "credit-field:c0f7661f-0604-38e3-1fad-59e9b0d4993b:taper",
+    "credit-field:1282c73b-64ce-e7f0-6b07-e18bce3baa7a:taper",
+    "credit-field:f15ed95e-7770-574c-f9c4-b90363236fc3:transferrer",
+    "credit-field:c5d0e9d2-82a0-e731-659f-2a38467d54a7:transferrer",
+    "credit-field:608885e7-5e54-730b-f7fb-f0191bf3b4d0:transferrer",
+    "credit-field:de0fc10e-4c7f-254c-991d-cb920986909d:lineage",
+    "credit-field:c5d0e9d2-82a0-e731-659f-2a38467d54a7:lineage",
+    "credit-field:f63af8bf-514a-8bd3-a9dd-759383f03b21:description",
+    "credit-field:e2a402f0-e021-4ca2-7ddb-fc4911f2abe8:description",
+    "credit-field:d768c934-13c4-0ecf-d8cc-a589fee4cd49:taper_notes",
+    "credit-field:4823fc13-e9e0-e8d3-c971-1eabadc0db30:taper_notes"
+  ],
+  "source_field_file": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/fields.jsonl",
+  "selection_file": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/root-blind-comparison-v1/selection.json",
+  "comparison_sha256": "f91110091893a077e86a179da1b65c939a1bb1001bd875b86eb9b3b690a633dd"
+}
