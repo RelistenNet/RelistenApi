@@ -10,7 +10,7 @@ from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 from shadow_reader import ShadowIndex
 
-from venue_directory import VenueDirectory, VenueDirectoryBuilder, file_hash
+from venue_directory import VenueDirectory, VenueDirectoryBuilder, NativeVenueOverlayBuilder, file_hash
 
 
 def uid(number):
@@ -251,6 +251,189 @@ class TestVenueDirectory(unittest.TestCase):
             stream.write(b"changed")
         with self.assertRaisesRegex(ValueError, "source chunk changed"):
             self.build()
+
+
+    def native_fixture(self, parent=801, name="Greek Theatre", anchor=None, root=False):
+        origin = {"item": {"provider": "local", "resourceType": "directory_metadata", "providerKey": str(parent)},
+                  "evidence": {"inputRevisionUuid": uid(parent), "jsonPointer": "/recording"}, "scope": "resource_item"}
+        venue_origin = json.loads(json.dumps(origin))
+        if root:
+            venue_origin["evidence"] = {"inputRevisionUuid": uid(900), "jsonPointer": "/accounts/selected/venue"}
+        key = "native_venue_observation:original-root" if root else "native_venue_observation:" + str(parent)
+        account = {"observationKey": key, "displayName": name, "scope": "place", "outcome": "proposed",
+            "acceptedIdentity": False, "protectedUnknowns": ["relocation_history_unknown"],
+            "locality": {"originalWording": "Berkeley, CA", "city": None, "region": None, "countryCode": None},
+            "localityAssertions": [{"value": "Berkeley, CA", "evidence": venue_origin["evidence"]},
+                                   {"value": "Oakland?", "evidence": venue_origin["evidence"]}],
+            "venue": {"origin": venue_origin, "names": [{"value": name, "evidence": venue_origin["evidence"]}],
+                "identities": [{"identity": {"provider": "local", "providerKey": "1"}}],
+                "text": [{"field": "past_names", "text": {"value": "Formerly the Lantern; dates unknown", "evidence": venue_origin["evidence"]}}]},
+            "recordingLinks": [{"recording": origin, "catalogSourceUuid": anchor, "catalogShowUuid": None,
+                "catalogBindingReason": None if anchor else "no_catalog_binding", "literalDate": {"value": "1990-??", "evidence": origin["evidence"]}}],
+            "setlistLinks": []}
+        record = {"domain": "venues", "inputKind": "provider_input", "inputUuid": uid(parent),
+            "inputKey": "provider_input:" + uid(parent), "artistUuid": uid(10), "artistName": "Artist One",
+            "provider": "local", "method": "native-fixture", "outcome": "proposed", "reason": "unaccepted",
+            "proposal": {"venues": [account]}, "evidence": {}, "entityKeys": [key]}
+        child = {"entityKey": "native_file:" + str(parent), "fileOrdinal": 0,
+            "inputRevisionUuid": uid(parent), "recordingOrigin": origin,
+            "file": {"title": {"value": "Late song"}, "filename": {"value": "recording.mp3"}},
+            "outcome": "unresolved", "entityKeys": ["native_file:" + str(parent)]}
+        file_record = {**record, "domain": "file_contents", "proposal": {"files": [child]}}
+        return record, file_record
+
+    def native_overlay(self, records=None):
+        self.native_run = self.root / "native"
+        self.native_run.mkdir()
+        for domain in ("venues", "file_contents"):
+            (self.native_run / domain).mkdir()
+        records = records or [self.native_fixture()]
+        write_json(self.native_run / "manifest.json", {"state": "completed", "counts": [
+            {"domain": domain, "provider": "local", "processed": len(records)}
+            for domain in ("venues", "file_contents")]})
+        for domain, position in (("venues", 0), ("file_contents", 1)):
+            write_gzip(self.native_run / domain / "100.jsonl.gz", [r[position] for r in records])
+        self.overlay = self.root / "native.sqlite3"
+        NativeVenueOverlayBuilder(self.native_run, self.overlay, minimum_free=0).build()
+        return VenueDirectory(self.database, "http://files/", "http://core/", self.overlay, "http://native/")
+
+    def test_native_shared_search_keeps_legacy_and_native_namesakes_without_numeric_joins(self):
+        self.build()
+        before = file_hash(self.database)
+        directory = self.native_overlay()
+        self.assertEqual(file_hash(self.database), before)
+        result = directory.search({"q": "Greek"})
+        self.assertEqual(result["total"], 4)
+        self.assertEqual(directory.search({"kind": "native_observation"})["total"], 1)
+        self.assertEqual(directory.search({"kind": "legacy_catalog"})["total"], 4)
+        native = next(row for row in result["rows"] if row["record_kind"] == "native_observation")
+        self.assertIsNone(native["legacy_id"])
+        detail = directory.detail(native["uuid"], {})
+        self.assertEqual(detail["recordingsTotal"], 1)
+        self.assertIsNone(detail["recordings"][0]["source_uuid"])
+        self.assertIsNone(detail["recordings"][0]["filesUrl"])
+        self.assertEqual(detail["filesTotal"], 1)
+        self.assertEqual(directory.detail(uid(1), {})["recordingsTotal"], 2)
+        self.assertEqual(directory.stats()["venueRecords"], 4)
+        self.assertEqual(directory.stats()["recordings"], 3)
+        self.assertEqual(directory.stats()["nativeCoverage"]["observations"], 1)
+
+    def test_native_history_alternative_localities_and_root_citations_stay_original(self):
+        self.build()
+        record, files = self.native_fixture(root=True)
+        directory = self.native_overlay([(record, files)])
+        row = directory.search({"q": "Lantern", "locality": "Oakland"})["rows"][0]
+        detail = directory.detail(row["uuid"], {})
+        self.assertEqual(detail["venue"]["history"], [])
+        self.assertEqual(detail["venue"]["history_prose"], record["proposal"]["venues"][0]["venue"]["text"])
+        self.assertEqual(detail["venue"]["original_origin"]["evidence"]["inputRevisionUuid"], uid(900))
+        self.assertEqual(detail["venue"]["locality_assertions"], record["proposal"]["venues"][0]["localityAssertions"])
+        self.assertEqual(directory.evidence(row["uuid"]), record)
+        self.assertEqual(detail["recordings"][0]["recording_origin"]["evidence"]["inputRevisionUuid"], uid(801))
+        self.assertFalse(detail["venue"]["accepted_identity"])
+
+    def test_native_exact_file_links_follow_original_recording_not_shared_root_or_name(self):
+        self.build()
+        first = self.native_fixture(801, root=True)
+        second = self.native_fixture(802, root=True)
+        unrelated = json.loads(json.dumps(first[1]["proposal"]["files"][0]))
+        unrelated["entityKey"] = "native_file:unrelated"
+        unrelated["fileOrdinal"] = 1
+        unrelated["entityKeys"] = ["native_file:unrelated"]
+        unrelated["recordingOrigin"]["evidence"]["jsonPointer"] = "/another-recording"
+        first[1]["proposal"]["files"].append(unrelated)
+        directory = self.native_overlay([first, second])
+        rows = directory.search({"kind": "native_observation"})["rows"]
+        self.assertEqual(len(rows), 2)
+        first_id = next(row["uuid"] for row in rows if uid(801) in row["uuid"])
+        detail = directory.detail(first_id, {})
+        self.assertEqual(detail["filesTotal"], 1)
+        link = detail["files"][0]["url"]
+        filters = {key: values[-1] for key, values in parse_qs(urlsplit(link).query).items()}
+        self.assertEqual(filters, {"view": "files", "entityKey": "native_file:801"})
+        reader = ShadowIndex(self.native_run)
+        reader.scan_once()
+        found = reader.search_files(filters)
+        self.assertEqual(found["total"], 1)
+        child = reader.file_detail(found["items"][0]["parentId"], found["items"][0]["nativeFileKey"])
+        self.assertEqual(child["parent"]["inputUuid"], uid(801))
+
+    def test_native_latest_result_retracts_accounts_atomically_and_preserves_old_on_budget_failure(self):
+        self.build()
+        directory = self.native_overlay()
+        before = file_hash(self.overlay)
+        with self.assertRaisesRegex(RuntimeError, "storage bound"):
+            NativeVenueOverlayBuilder(self.native_run, self.overlay, 0, maximum_bytes=1).build()
+        self.assertEqual(file_hash(self.overlay), before)
+        self.assertFalse(self.overlay.with_name(self.overlay.name + ".building").exists())
+        builder = NativeVenueOverlayBuilder(self.native_run, self.overlay, 0)
+        checks = 0
+        def pause_after_venues(path):
+            nonlocal checks
+            checks += 1
+            if checks == 3:
+                raise RuntimeError("reserve after partial projection")
+        with patch.object(builder, "_budget", side_effect=pause_after_venues):
+            with self.assertRaisesRegex(RuntimeError, "partial projection"):
+                builder.build()
+        self.assertEqual(file_hash(self.overlay), before)
+        record, _ = self.native_fixture()
+        record["proposal"]["venues"] = []
+        write_gzip(self.native_run / "venues" / "200.jsonl.gz", [record])
+        NativeVenueOverlayBuilder(self.native_run, self.overlay, 0).build()
+        self.assertEqual(directory.search({"kind": "native_observation"})["total"], 0)
+        self.assertEqual(directory.stats()["nativeCoverage"]["parents"], 1)
+
+    def test_native_root_account_without_recording_link_cannot_acquire_files(self):
+        self.build()
+        record, files = self.native_fixture(root=True)
+        record["proposal"]["venues"][0]["recordingLinks"] = []
+        directory = self.native_overlay([(record, files)])
+        row = directory.search({"kind": "native_observation"})["rows"][0]
+        detail = directory.detail(row["uuid"], {})
+        self.assertEqual(detail["recordingsTotal"], 0)
+        self.assertEqual(detail["filesTotal"], 0)
+        self.assertEqual(directory.stats()["nativeCoverage"]["files"], 1)
+
+    def test_native_missing_domain_or_chunk_does_not_retract_published_observations(self):
+        self.build()
+        directory = self.native_overlay()
+        before = file_hash(self.overlay)
+        for domain in ("venues", "file_contents"):
+            with self.subTest(domain=domain):
+                path = self.native_run / domain / "100.jsonl.gz"
+                hidden = path.with_suffix(".retained")
+                path.rename(hidden)
+                with self.assertRaisesRegex(ValueError, "coverage differs"):
+                    NativeVenueOverlayBuilder(self.native_run, self.overlay, 0).build()
+                self.assertEqual(file_hash(self.overlay), before)
+                self.assertEqual(directory.search({"kind": "native_observation"})["total"], 1)
+                hidden.rename(path)
+        path = self.native_run / "venues" / "100.jsonl.gz"
+        write_gzip(path, [])
+        with self.assertRaisesRegex(ValueError, "coverage differs"):
+            NativeVenueOverlayBuilder(self.native_run, self.overlay, 0).build()
+        self.assertEqual(file_hash(self.overlay), before)
+
+    def test_native_overlay_cannot_replace_the_legacy_projection(self):
+        self.build()
+        self.native_overlay()
+        before = file_hash(self.database)
+        with self.assertRaisesRegex(ValueError, "not a native overlay"):
+            NativeVenueOverlayBuilder(self.native_run, self.database, 0).build()
+        self.assertEqual(file_hash(self.database), before)
+
+    def test_native_uuid_anchors_and_file_pagination_do_not_expand_to_other_catalog_sources(self):
+        self.build()
+        record, files = self.native_fixture(anchor=uid(101))
+        directory = self.native_overlay([(record, files)])
+        row = directory.search({"kind": "native_observation"})["rows"][0]
+        detail = directory.detail(row["uuid"], {"fileOffset": "1", "fileLimit": "1"})
+        self.assertEqual(detail["filesTotal"], 1)
+        self.assertEqual(detail["files"], [])
+        self.assertEqual(detail["recordingsTotal"], 1)
+        self.assertIn("source%3A" + uid(101), detail["recordings"][0]["filesUrl"])
+        self.assertEqual(directory.detail(row["uuid"], {"artist": "Other Artist"})["filesTotal"], 0)
 
 
 if __name__ == "__main__":

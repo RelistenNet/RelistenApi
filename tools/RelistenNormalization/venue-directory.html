@@ -49,7 +49,7 @@
       label { display: grid; gap: 7px; color: var(--muted); font-size: .78rem; font-weight: 650; }
       input, select { width: 100%; min-width: 0; background: #fcfdfb; border: 1px solid #becbc5; border-radius: 7px; color: var(--ink); padding: 11px 12px; font-size: .94rem; }
       input::placeholder { color: #8b9998; }
-      .secondary-filters { grid-column: 1 / -1; display: flex; align-items: end; gap: 14px; }
+      .secondary-filters { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: end; gap: 14px; }
       .secondary-filters label { min-width: 170px; }
       .button { display: inline-flex; align-items: center; justify-content: center; border: 1px solid #b7c8bf; border-radius: 7px; background: #fff; color: var(--ink); padding: 10px 15px; text-decoration: none; font-size: .85rem; font-weight: 650; }
       .button:hover { background: #edf3ee; }
@@ -134,7 +134,7 @@
       <header class="intro">
         <div class="eyebrow">Retained venue proposals · Unaccepted identities</div>
         <h1>Places behind the recordings.</h1>
-        <p>Explore retained venue proposals across artists. Several catalog records can refer to the same place; matching names alone do not merge them.</p>
+        <p>Explore catalog venue proposals and native provider accounts across artists. Matching names do not merge records or accept a physical place.</p>
       </header>
       <div id="coverage" class="coverage-bar" aria-live="polite"></div>
       <details class="method">
@@ -148,6 +148,7 @@
           <label>Artist<input id="artist" name="artist" placeholder="Artist name or UUID" /></label>
           <label>Locality<input id="locality" name="locality" placeholder="City, region or location" /></label>
           <div class="secondary-filters">
+            <label id="native-kind-filter" hidden>Records<select id="kind" name="kind" disabled><option value="">Catalog &amp; native</option><option value="legacy_catalog">Catalog records</option><option value="native_observation">Native observations</option></select></label>
             <label>Scope<select id="scope" name="scope"><option value="">All scopes</option></select></label>
             <label>Outcome<select id="outcome" name="outcome"><option value="">All outcomes</option></select></label>
             <div class="search-actions"><button id="reset" type="button" class="button">Clear</button><button type="submit" class="button primary">Find venues</button></div>
@@ -162,8 +163,8 @@
     <script>
       "use strict";
       const element = (id) => document.getElementById(id);
-      const searchKeys = ["q", "artist", "locality", "scope", "outcome"];
-      const formIds = { q: "query", artist: "artist", locality: "locality", scope: "scope", outcome: "outcome" };
+      const searchKeys = ["q", "artist", "locality", "scope", "outcome", "kind"];
+      const formIds = { q: "query", artist: "artist", locality: "locality", scope: "scope", outcome: "outcome", kind: "kind" };
       const pageSize = 40;
       let stats = {};
       let activeRequest;
@@ -230,7 +231,7 @@
       }
       function badges(record) {
         const result = node("div", undefined, "badges");
-        result.append(badge(record.scope), badge(record.outcome, true));
+        result.append(badge(record.scope), badge(record.outcome, true), badge(record.record_kind || "legacy_catalog"));
         return result;
       }
       function definition(values) {
@@ -306,7 +307,7 @@
       }
       function renderSearch(data, params) {
         const list = node("div", undefined, "result-list");
-        element("status").textContent = count(data.total) + " retained catalog records" + (params.q ? " matching “" + params.q + "”" : "") + ".";
+        element("status").textContent = count(data.total) + " retained records and observations" + (params.q ? " matching “" + params.q + "”" : "") + ".";
         if (!data.countsReady) { element("status").append(document.createTextNode(" Recording counts are pending while this directory is built.")); }
         setOptions("scope", data.rows.map((row) => row.scope), params.scope || "");
         setOptions("outcome", data.rows.map((row) => row.outcome), params.outcome || "");
@@ -320,9 +321,9 @@
           if (row.reason) { description.append(node("p", label(row.reason), "reason")); }
           const totals = node("div", undefined, "card-counts");
           const sources = node("div");
-          sources.append(node("strong", row.source_count === null ? "Pending" : count(row.source_count)), node("span", " sources"));
+          sources.append(node("strong", row.source_count === null ? "Pending" : count(row.source_count)), node("span", row.record_kind === "native_observation" ? " catalog source anchors" : " sources"));
           const shows = node("div");
-          shows.append(node("strong", row.show_count === null ? "Pending" : count(row.show_count)), node("span", " shows"));
+          shows.append(node("strong", row.show_count === null ? "Pending" : count(row.show_count)), node("span", row.record_kind === "native_observation" ? " catalog show anchors" : " shows"));
           totals.append(sources, shows);
           card.append(description, totals);
           list.append(card);
@@ -349,12 +350,12 @@
             files.searchParams.set("entityKey", "source:" + recording.source_uuid);
           }
         }
-        if (files) { result.append(link("Files & playback ↗", files.href, "button")); }
+        if (files) { result.append(link(recording.recording_origin ? "Catalog source files ↗" : "Files & playback ↗", files.href, "button")); }
         let source = safeUrl(recording.coreUrl);
         if (!source && recording.source_uuid) {
           source = safeUrl(readerUrl(data.coreUrl || stats.coreUrl, "performances", "source:" + recording.source_uuid));
         }
-        if (source) { result.append(link("Source account ↗", source.href, "button")); }
+        if (source) { result.append(link(recording.recording_origin ? "Native venue account ↗" : "Source account ↗", source.href, "button")); }
         if (recording.show_uuid) {
           const show = readerUrl(data.coreUrl || stats.coreUrl, "performances", "show:" + recording.show_uuid);
           if (show) { result.append(link("Show account ↗", show, "button")); }
@@ -363,7 +364,7 @@
       }
       function renderRecordings(data, params) {
         const content = node("div");
-        content.append(node("p", "These recordings link to the selected catalog venue record. Related place-key members have their own recording lists. Source and show accounts, including uncertain dates, remain separate."));
+        content.append(node("p", data.venue.record_kind === "native_observation" ? "These original recording accounts are associated with this cited native venue observation. Catalog UUIDs are optional historical anchors. Root, recording and file origins keep their own scopes." : "These recordings link to the selected catalog venue record. Related place-key members have their own recording lists. Source and show accounts, including uncertain dates, remain separate."));
         if (!data.recordingsComplete) { content.append(node("p", "Recording associations may be partial while this directory is built. The indexed records below do not establish complete coverage.", "unknown-note")); }
         const list = node("ul", undefined, "record-list");
         for (const recording of data.recordings) {
@@ -374,6 +375,7 @@
           if (recording.source_venue_id !== null && recording.source_venue_id !== undefined && recording.show_venue_id !== null && recording.show_venue_id !== undefined && recording.source_venue_id !== recording.show_venue_id) {
             row.append(node("p", "Source and show point to different catalog venue records. Both are retained.", "unknown-note"));
           }
+          if (recording.recording_origin) { row.append(richValue({ recording_origin: recording.recording_origin, literal_date: recording.literal_date, catalog_binding_reason: recording.catalog_binding_reason })); }
           row.append(recordingLinks(recording, data));
           list.append(row);
         }
@@ -385,6 +387,26 @@
         }
         renderPages(data.recordingsTotal, data.offset ?? Number(params.offset || 0), data.limit ?? pageSize, params, "Recording");
         return panel("Recordings · " + count(data.recordingsTotal) + (data.recordingsComplete ? "" : " indexed"), content);
+      }
+      function renderNativeFiles(data, params) {
+        const content = node("div");
+        content.append(node("p", "These are files of the exact recording accounts linked above. This relationship does not assert that each file independently names the venue. Original file keys and parent evidence remain in the native reader."));
+        const list = node("ul", undefined, "record-list");
+        for (const file of data.files) {
+          const row = node("li");
+          row.append(link(file.label, file.url), node("p", "Original file ordinal: " + file.ordinal, "subtle"));
+          list.append(row);
+        }
+        content.append(list);
+        if (!data.files.length) { content.append(node("p", "No associated files on this page. A venue account without a recording link supplies no file assignment.")); }
+        const controls = node("div", undefined, "actions");
+        const previous = button("← Previous files", () => navigate({ ...params, fileOffset: Math.max(0, data.fileOffset - data.fileLimit) }));
+        previous.disabled = data.fileOffset === 0;
+        const next = button("Next files →", () => navigate({ ...params, fileOffset: data.fileOffset + data.fileLimit }));
+        next.disabled = data.fileOffset + data.fileLimit >= data.filesTotal;
+        controls.append(previous, next);
+        content.append(controls);
+        return panel("Files in associated recordings · " + count(data.filesTotal), content);
       }
       function renderAlternatives(venue, params) {
         const content = node("div");
@@ -462,10 +484,11 @@
         const primary = node("div");
         const aside = node("aside");
         primary.append(panel("What this record says", definition({ scope: venue.scope, outcome: venue.outcome, reason: venue.reason, grouping_basis: venue.grouping_basis })));
+        if (venue.record_kind === "native_observation") { primary.append(panel("Original venue scope", richValue({ origin: venue.original_origin, setlist_links: venue.setlist_links }))); }
         const history = node("div");
-        history.append(node("p", "Historical names and date bounds are retained as reported. Missing dates do not mean a name applied forever."), richValue(venue.history || []));
+        history.append(node("p", venue.record_kind === "native_observation" ? "Original venue names and prose remain cited. Prose does not establish dated name history or relocation intervals." : "Historical names and date bounds are retained as reported. Missing dates do not mean a name applied forever."), richValue(venue.record_kind === "native_observation" ? { names: venue.names, original_venue_prose: venue.history_prose } : venue.history || []));
         primary.append(panel("Names & history", history));
-        primary.append(renderAlternatives(venue, params));
+        if (venue.record_kind !== "native_observation") { primary.append(renderAlternatives(venue, params)); }
         const unknowns = node("div", undefined, "unknown-note");
         unknowns.append(richValue(venue.protected_unknowns || []));
         aside.append(panel("What remains unknown", unknowns));
@@ -490,8 +513,9 @@
           related.append(node("p", "Showing " + count(data.relatedRecords.length) + " of " + count(data.relatedTotal) + " records in this retained group."));
         }
         if (!data.relatedRecords.length) { related.append(node("p", "No other records share this retained place key.")); }
-        primary.append(panel("Related catalog records", related));
+        if (venue.record_kind !== "native_observation") { primary.append(panel("Related catalog records", related)); }
         primary.append(renderRecordings(data, params));
+        if (venue.record_kind === "native_observation") { primary.append(renderNativeFiles(data, params)); }
         primary.append(renderEvidence(data.evidenceUrl, signal));
         grid.append(primary, aside);
         main.append(grid);
@@ -511,8 +535,13 @@
         element("results").replaceChildren();
         element("pagination").replaceChildren();
         try {
+          if ((params.kind === "native_observation" || params.id?.startsWith("native:")) && !stats.nativeRun) {
+            element("status").textContent = "Native observations are not published in this directory yet. Catalog search remains available.";
+            element("results").append(button("Browse catalog venues", () => navigate({ ...searchParams(params), kind: "", offset: 0 })));
+            return;
+          }
           if (params.id) {
-            const query = new URLSearchParams({ id: params.id, artist: params.artist || "", offset: params.offset || 0, limit: pageSize });
+            const query = new URLSearchParams({ id: params.id, artist: params.artist || "", offset: params.offset || 0, limit: pageSize, fileOffset: params.fileOffset || 0 });
             const data = await get("/api/venue?" + query, request.signal);
             if (!request.signal.aborted) { renderDetail(data, params, request.signal); }
           } else {
@@ -539,18 +568,21 @@
             const url = safeUrl(value);
             if (url) { element(id).href = url.href; element(id).hidden = false; }
           }
+          element("native-kind-filter").hidden = !stats.nativeRun;
+          element("kind").disabled = !stats.nativeRun;
           const coverage = element("coverage");
           coverage.replaceChildren(node("span", "Retained venue proposals"), node("span", "Build: " + valueText(stats.buildState)));
-          for (const [title, value] of [["catalog records", stats.venueRecords], ["place proposals", stats.placeHypotheses], ["artists", stats.artists], ["source records", stats.recordings]]) {
+          for (const [title, value] of [["catalog records", stats.venueRecords], ["place proposals", stats.placeHypotheses], ["artists", stats.artists], ["source records", stats.recordings], ["native observations", stats.nativeCoverage?.observations], ["native input outcomes", stats.nativeCoverage?.parents]]) {
             if (value !== undefined) {
               const metric = node("span");
               metric.append(node("strong", count(value)), node("span", " " + title));
               coverage.append(metric);
             }
           }
+          if (!stats.nativeRun) { coverage.append(node("span", "Native observations are not published here yet.")); }
           setOptions("scope", Object.keys(stats.scopes || {}), element("scope").value);
           setOptions("outcome", Object.keys(stats.outcomes || {}), element("outcome").value);
-          element("method-data").append(richValue({ method: stats.method || stats.sourceMethods, coverage: stats.coverage || { venueRecords: stats.venueRecords, placeHypotheses: stats.placeHypotheses, artists: stats.artists, sourceRecords: stats.recordings, venuesWithRecordings: stats.venuesWithRecordings, historicalNames: stats.historicalNames, scopes: stats.scopes, outcomes: stats.outcomes } }));
+          element("method-data").append(richValue({ nativeCoverage: stats.nativeCoverage, nativeRun: stats.nativeRun, method: stats.method || stats.sourceMethods, coverage: stats.coverage || { venueRecords: stats.venueRecords, placeHypotheses: stats.placeHypotheses, artists: stats.artists, sourceRecords: stats.recordings, venuesWithRecordings: stats.venuesWithRecordings, historicalNames: stats.historicalNames, scopes: stats.scopes, outcomes: stats.outcomes } }));
           if (stats.rawReader) { element("method-data").append(link("Open retained outcome reader ↗", stats.rawReader)); }
         } catch {
           element("coverage").textContent = "Coverage information unavailable. Search still uses the retained proposals.";
@@ -563,8 +595,7 @@
       });
       element("reset").addEventListener("click", () => navigate({}));
       addEventListener("popstate", load);
-      loadStats();
-      load();
+      loadStats().then(load);
     </script>
   </body>
 </html>

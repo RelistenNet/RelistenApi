@@ -12,6 +12,7 @@ import gzip
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -218,6 +219,145 @@ class VenueDirectoryBuilder:
         VenueDirectoryBuilder._metadata(db, coverage=stats)
 
 
+class NativeVenueOverlayBuilder:
+    """Replace a small native-only projection atomically; never open the legacy DB."""
+
+    def __init__(self, run, database, minimum_free=FLOOR, maximum_bytes=32 * 1024**2):
+        self.run = Path(run).resolve()
+        self.database = Path(database).resolve()
+        self.minimum_free = minimum_free
+        self.maximum_bytes = maximum_bytes
+
+    def _budget(self, path):
+        if shutil.disk_usage(path.parent).free < self.minimum_free:
+            raise RuntimeError("Native overlay stopped to preserve the host disk reserve")
+        if sum(p.stat().st_size for p in (path, Path(str(path) + "-journal")) if p.exists()) > self.maximum_bytes:
+            raise RuntimeError("Native overlay exceeds its storage bound")
+
+    def build(self):
+        manifest_path = self.run / "manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        if manifest["state"] != "completed":
+            raise ValueError("Native venue input must be a completed retained run")
+        expected = {(item["domain"], item["provider"]): item["processed"]
+                    for item in manifest.get("counts", []) if item["domain"] in ("venues", "file_contents")}
+        if not all(any(domain == key[0] for key in expected) for domain in ("venues", "file_contents")):
+            raise ValueError("Native manifest must declare venue and file_contents coverage")
+        self.database.parent.mkdir(parents=True, exist_ok=True)
+        if self.database.exists():
+            with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)) as existing:
+                version = existing.execute("SELECT value FROM metadata WHERE key='version'").fetchone()
+                if version is None or json.loads(version[0]) != "native-venue-overlay-v1":
+                    raise ValueError("Native update target is not a native overlay")
+        staging = self.database.with_name(self.database.name + ".building")
+        # Exclusive staging ownership prevents competing writers. A failed update
+        # leaves the previously published overlay intact and removes only our temp.
+        with staging.open("xb"):
+            pass
+        try:
+            self._budget(staging)
+            with closing(sqlite3.connect(staging)) as db:
+                db.executescript("""
+                    CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+                    CREATE TABLE parents(uuid TEXT PRIMARY KEY,provider TEXT,outcome TEXT);
+                    CREATE TABLE domain_inputs(domain TEXT,uuid TEXT,provider TEXT,PRIMARY KEY(domain,provider,uuid));
+                    CREATE TABLE accounts(uuid TEXT PRIMARY KEY,parent_uuid TEXT,observation_key TEXT,
+                        summary TEXT,chunk TEXT,line INTEGER);
+                    CREATE TABLE files(native_key TEXT PRIMARY KEY,parent_uuid TEXT,recording_origin TEXT,
+                        ordinal INTEGER,label TEXT,chunk TEXT,line INTEGER);
+                    CREATE INDEX file_recordings ON files(parent_uuid,recording_origin);
+                """)
+                self._project_domain(db, staging, "venues", self._venues)
+                self._project_domain(db, staging, "file_contents", self._files)
+                actual = {(domain, provider): count for domain, provider, count in db.execute(
+                    "SELECT domain,provider,count(*) FROM domain_inputs GROUP BY domain,provider")}
+                if actual != {key: count for key, count in expected.items() if count > 0}:
+                    raise ValueError("Native logical parent coverage differs from completed manifest")
+                coverage = dict(observations=db.execute("SELECT count(*) FROM accounts").fetchone()[0],
+                                parents=db.execute("SELECT count(*) FROM parents").fetchone()[0],
+                                files=db.execute("SELECT count(*) FROM files").fetchone()[0],
+                                outcomes=dict(db.execute("SELECT outcome,count(*) FROM parents GROUP BY outcome")))
+                VenueDirectoryBuilder._metadata(db, version="native-venue-overlay-v1", sourceRun=str(self.run),
+                    sourceManifestSha256=file_hash(manifest_path), coverage=coverage, buildState="completed")
+                db.commit()
+                self._budget(staging)
+            os.replace(staging, self.database)
+        finally:
+            staging.unlink(missing_ok=True)
+        return coverage
+
+    def _project_domain(self, db, staging, domain, project):
+        count = 0
+        for path in sorted((self.run / domain).glob("*.jsonl.gz")):
+            before = path.stat()
+            with gzip.open(path, "rt", encoding="utf-8") as stream:
+                for line, text in enumerate(stream, 1):
+                    record = json.loads(text)
+                    if record.get("domain") != domain or record.get("inputKind") != "provider_input":
+                        raise ValueError("Native overlay requires provider_input outcomes only")
+                    db.execute("INSERT OR REPLACE INTO domain_inputs VALUES(?,?,?)",
+                               (domain, record["inputUuid"], record["provider"]))
+                    project(db, record, path, line)
+                    count += 1
+                    if count > 10000:
+                        raise ValueError("Native overlay exceeds its parent-row bound")
+                    if count % 100 == 0:
+                        self._budget(staging)
+            after = path.stat()
+            if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                raise ValueError("Native immutable chunk changed during projection")
+        db.commit()
+        self._budget(staging)
+
+    def _venues(self, db, record, path, line):
+        parent = record["inputUuid"]
+        db.execute("DELETE FROM accounts WHERE parent_uuid=?", (parent,))
+        db.execute("INSERT OR REPLACE INTO parents VALUES(?,?,?)", (parent, record["provider"], record["outcome"]))
+        accounts = (record.get("proposal") or {}).get("venues", [])
+        if db.execute("SELECT count(*) FROM accounts").fetchone()[0] + len(accounts) > 10000:
+            raise ValueError("Native overlay exceeds its observation bound")
+        for account in accounts:
+            venue = account["venue"]
+            locality = account["locality"]
+            text = [entry["text"]["value"] for entry in venue.get("text", [])]
+            assertions = [entry["value"] for entry in account.get("localityAssertions", [])]
+            names = [entry["value"] for entry in venue.get("names", [])]
+            locations = [locality.get("originalWording"), *assertions, locality.get("city"),
+                         locality.get("region"), locality.get("countryCode"), locality.get("address")]
+            identifier = "native:" + parent + ":" + account["observationKey"]
+            links = account.get("recordingLinks", [])
+            summary = dict(uuid=identifier, legacy_id=None, place_key=account["observationKey"],
+                name=account.get("displayName") or next(iter(names), "Unnamed native venue"),
+                location=" · ".join(dict.fromkeys(value for value in locations if value)),
+                city=locality.get("city"), region=locality.get("region"), country=locality.get("countryCode"),
+                address=locality.get("address"), scope=account["scope"], grouping_basis="original_native_account",
+                outcome=account["outcome"], reason=record.get("reason"), artist_uuid=record["artistUuid"],
+                artist_name=record["artistName"], method=record["method"], history_names="", history_count=0,
+                unknown_count=len(account.get("protectedUnknowns", [])), alternative_count=0, alternatives_truncated=0,
+                search_text=folded(" ".join(value for value in [*names, *locations, *text] if value)),
+                chunk=str(path.relative_to(self.run)), line=line,
+                source_count=len({link["catalogSourceUuid"] for link in links if link.get("catalogSourceUuid")}),
+                show_count=len({link["catalogShowUuid"] for link in links if link.get("catalogShowUuid")}),
+                provider=record["provider"])
+            db.execute("INSERT INTO accounts VALUES(?,?,?,?,?,?)", (identifier, parent,
+                account["observationKey"], encoded(summary), str(path.relative_to(self.run)), line))
+
+    def _files(self, db, record, path, line):
+        db.execute("DELETE FROM files WHERE parent_uuid=?", (record["inputUuid"],))
+        for child in (record.get("proposal") or {}).get("files", []):
+            file = child["file"]
+            label = (file.get("title") or {}).get("value") or (file.get("filename") or {}).get("value") or child["entityKey"]
+            db.execute("INSERT INTO files VALUES(?,?,?,?,?,?,?)", (child["entityKey"], record["inputUuid"],
+                self.origin_key(child["recordingOrigin"]), child["fileOrdinal"], label,
+                str(path.relative_to(self.run)), line))
+        if db.execute("SELECT count(*) FROM files").fetchone()[0] > 100000:
+            raise ValueError("Native overlay exceeds its file bound")
+
+    @staticmethod
+    def origin_key(origin):
+        return json.dumps(origin, sort_keys=True, separators=(",", ":"))
+
+
 @lru_cache(maxsize=32)
 def retained_outcome(run, chunk, line):
     with gzip.open(Path(run) / chunk, "rt", encoding="utf-8") as stream:
@@ -228,16 +368,29 @@ def retained_outcome(run, chunk, line):
 
 
 class VenueDirectory:
-    def __init__(self, database, files_url, core_url):
+    def __init__(self, database, files_url, core_url, native_database=None, native_url=None):
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
+        self.native_database = Path(native_database).resolve() if native_database else None
+        self.native_url = native_url.rstrip("/") + "/" if native_url else None
+        if self.native_database == self.database:
+            raise ValueError("Native overlay and legacy database must be different files")
+        if self.native_database and not self.native_url:
+            raise ValueError("A native reader URL is required with a native overlay")
 
     def connect(self):
         db = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True, timeout=5)
         db.row_factory = sqlite3.Row
         db.create_function("folded", 1, folded, deterministic=True)
         db.execute("BEGIN")
+        selection = "SELECT v.*, 'legacy_catalog' record_kind, NULL provider FROM venues v"
+        if self.native_database:
+            db.execute("ATTACH DATABASE ? AS native", (self.native_database.as_uri() + "?mode=ro",))
+            columns = [row[1] for row in db.execute("PRAGMA table_info(venues)")]
+            projection = ",".join("json_extract(summary,'$." + name + "') AS " + name for name in columns)
+            selection += " UNION ALL SELECT " + projection + ", 'native_observation', json_extract(summary,'$.provider') FROM native.accounts"
+        db.execute("CREATE TEMP VIEW venue_accounts AS " + selection)
         return db
 
     @staticmethod
@@ -247,11 +400,15 @@ class VenueDirectory:
     def stats(self):
         with closing(self.connect()) as db:
             result = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM metadata")}
+            native = {row["key"]: json.loads(row["value"]) for row in db.execute("SELECT * FROM native.metadata")} if self.native_database else {}
         result.update(result.pop("coverage", {}))
         result["countsReady"] = result.get("buildState") == "completed"
         if not result["countsReady"]:
             result["venuesWithRecordings"] = None
-        result.update(filesUrl=self.files_url, coreUrl=self.core_url)
+        result.update(nativeCoverage=native.get("coverage", {"observations": 0, "parents": 0, "files": 0}),
+                      nativeRun=native.get("sourceRun"), nativeUrl=self.native_url,
+                      filesUrl=self.files_url, coreUrl=self.core_url)
+        result["directoryRecords"] = result.get("venueRecords", 0) + result["nativeCoverage"]["observations"]
         return result
 
     def search(self, parameters):
@@ -276,16 +433,20 @@ class VenueDirectory:
             if parameters.get(parameter):
                 conditions.append("v." + parameter + "=?")
                 values.append(parameters[parameter])
+        if parameters.get("kind"):
+            conditions.append("v.record_kind=?")
+            values.append(parameters["kind"])
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         with closing(self.connect()) as db:
-            total = db.execute("SELECT count(*) FROM venues v" + where, values).fetchone()[0]
-            rows = [dict(row) for row in db.execute("SELECT v.* FROM venues v" + where + " ORDER BY source_count DESC,name,uuid LIMIT ? OFFSET ?", values + [limit, offset])]
+            total = db.execute("SELECT count(*) FROM venue_accounts v" + where, values).fetchone()[0]
+            rows = [dict(row) for row in db.execute("SELECT v.* FROM venue_accounts v" + where + " ORDER BY source_count DESC,name,uuid LIMIT ? OFFSET ?", values + [limit, offset])]
             ready = self._complete(db)
         if not ready:
             for row in rows:
-                row.update(source_count=None, show_count=None)
+                if row["record_kind"] == "legacy_catalog":
+                    row.update(source_count=None, show_count=None)
         return {"rows": rows, "total": total, "offset": offset, "limit": limit,
-                "identityBasis": "retained_unaccepted_place_hypotheses", "countsReady": ready}
+                "identityBasis": "retained_unaccepted_catalog_and_native_accounts" if self.native_database else "retained_unaccepted_place_hypotheses", "countsReady": ready}
 
     @staticmethod
     def _complete(db):
@@ -294,6 +455,8 @@ class VenueDirectory:
 
     def evidence(self, identifier):
         with closing(self.connect()) as db:
+            if identifier.startswith("native:"):
+                return self._native_evidence(db, identifier)[0] if self.native_database else None
             venue = db.execute("SELECT chunk,line FROM venues WHERE uuid=?", (identifier,)).fetchone()
             root = db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()
         if venue is None:
@@ -306,10 +469,13 @@ class VenueDirectory:
     def detail(self, identifier, parameters):
         offset, limit = self.page(parameters)
         with closing(self.connect()) as db:
+            if identifier.startswith("native:"):
+                return self._native_detail(db, identifier, parameters) if self.native_database else None
             selected = db.execute("SELECT * FROM venues WHERE uuid=?", (identifier,)).fetchone()
             if selected is None:
                 return None
             venue = dict(selected)
+            venue["record_kind"] = "legacy_catalog"
             ready = self._complete(db)
             source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
             related = [dict(row) for row in db.execute("SELECT uuid,name,location,artist_name,artist_uuid,outcome,grouping_basis FROM venues WHERE place_key=? ORDER BY artist_name,uuid LIMIT 100", (venue["place_key"],))]
@@ -343,6 +509,70 @@ class VenueDirectory:
                 "recordings": recordings, "recordingsTotal": total, "recordingsScope": "selected_legacy_venue_record", "recordingsComplete": ready, "countsReady": ready, "offset": offset, "limit": limit,
                 "evidenceUrl": "/api/evidence?" + urlencode({"id": identifier}),
                 "coreUrl": self.core_url, "filesUrl": self.files_url}
+
+    def _native_evidence(self, db, identifier):
+        row = db.execute("SELECT * FROM native.accounts WHERE uuid=?", (identifier,)).fetchone()
+        if row is None:
+            return None, None
+        run = json.loads(db.execute("SELECT value FROM native.metadata WHERE key='sourceRun'").fetchone()[0])
+        outcome = retained_outcome(run, row["chunk"], row["line"])
+        if outcome["domain"] != "venues" or outcome["inputUuid"] != row["parent_uuid"]:
+            raise ValueError("Native evidence locator no longer describes this input")
+        account = next((item for item in outcome["proposal"]["venues"] if item["observationKey"] == row["observation_key"]), None)
+        if account is None:
+            raise ValueError("Native observation is absent from its original outcome")
+        return outcome, account
+
+    def _native_detail(self, db, identifier, parameters):
+        outcome, account = self._native_evidence(db, identifier)
+        if outcome is None:
+            return None
+        offset, limit = self.page(parameters)
+        summary = db.execute("SELECT summary FROM native.accounts WHERE uuid=?", (identifier,)).fetchone()[0]
+        venue = json.loads(summary)
+        venue.update(record_kind="native_observation", history=[], locality=account["locality"],
+            locality_assertions=account.get("localityAssertions", []), history_prose=account["venue"].get("text", []),
+            names=account["venue"].get("names", []), protected_unknowns=account.get("protectedUnknowns", []),
+            coordinates=account.get("coordinates"), provider_reference=account["venue"].get("identities", []),
+            accepted_identity=account.get("acceptedIdentity", False), alternatives=[], enrichment_tasks=[],
+            original_origin=account["venue"]["origin"], setlist_links=account.get("setlistLinks", []))
+        recordings = self._native_recordings(outcome, account, parameters.get("artist", "").strip())
+        files, total_files, file_offset, file_limit = self._native_file_page(db, outcome["inputUuid"], recordings, parameters)
+        return dict(venue=venue, relatedRecords=[], relatedTotal=0, recordings=recordings[offset:offset+limit],
+            recordingsTotal=len(recordings), recordingsScope="original_native_recording_accounts", recordingsComplete=True,
+            countsReady=True, offset=offset, limit=limit, files=files, filesTotal=total_files,
+            fileOffset=file_offset, fileLimit=file_limit, evidenceUrl="/api/evidence?" + urlencode({"id": identifier}),
+            coreUrl=self.native_url, filesUrl=self.files_url)
+
+
+    def _native_recordings(self, outcome, account, artist):
+        recordings = []
+        for link in account.get("recordingLinks", []):
+            source, show = link.get("catalogSourceUuid"), link.get("catalogShowUuid")
+            recordings.append(dict(source_uuid=source, show_uuid=show, artist_uuid=outcome["artistUuid"],
+                artist_name=outcome["artistName"], source_date=(link.get("literalDate") or {}).get("value"),
+                show_date=None, relationship="original_native_recording_account", recording_origin=link["recording"],
+                literal_date=link.get("literalDate"), catalog_binding_reason=link.get("catalogBindingReason"),
+                filesUrl=self.files_url + "?" + urlencode({"domain": "file_contents", "entityKey": "source:" + source}) if source else None,
+                coreUrl=self.native_url + "?" + urlencode({"domain": "venues", "entityKey": account["observationKey"]})))
+        if artist and artist != outcome["artistUuid"] and folded(artist) not in folded(outcome["artistName"]):
+            recordings = []
+        return recordings
+
+    def _native_file_page(self, db, parent_uuid, recordings, parameters):
+        # The original input AND recording origin establish the relationship.
+        # Root citations, matching names and catalog numeric IDs cannot supply it.
+        origins = [NativeVenueOverlayBuilder.origin_key(row["recording_origin"]) for row in recordings]
+        file_offset, file_limit = self.page({"offset": parameters.get("fileOffset", 0), "limit": parameters.get("fileLimit", 40)})
+        files, total_files = [], 0
+        if origins:
+            where = " WHERE parent_uuid=? AND recording_origin IN (" + ",".join("?" for _ in origins) + ")"
+            values = [parent_uuid, *origins]
+            total_files = db.execute("SELECT count(*) FROM native.files" + where, values).fetchone()[0]
+            files = [dict(row) for row in db.execute("SELECT * FROM native.files" + where + " ORDER BY ordinal LIMIT ? OFFSET ?", values + [file_limit, file_offset])]
+            for file in files:
+                file["url"] = self.native_url + "?" + urlencode({"view": "files", "entityKey": file["native_key"]})
+        return files, total_files, file_offset, file_limit
 
 
 def handler_for(directory):
@@ -394,10 +624,15 @@ def main():
     build.add_argument("--raw", required=True)
     build.add_argument("--database", required=True)
     build.add_argument("--resume", action="store_true")
+    native = sub.add_parser("native")
+    native.add_argument("--run", required=True)
+    native.add_argument("--database", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
     serve.add_argument("--files-url", required=True)
     serve.add_argument("--core-url", required=True)
+    serve.add_argument("--native-database")
+    serve.add_argument("--native-url")
     serve.add_argument("--bind", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=18770)
     args = parser.parse_args()
@@ -405,8 +640,10 @@ def main():
     if args.command == "build":
         result = VenueDirectoryBuilder(args.run, args.raw, args.database).build(args.resume)
         print(encoded(result), flush=True)
+    elif args.command == "native":
+        print(encoded(NativeVenueOverlayBuilder(args.run, args.database).build()), flush=True)
     else:
-        directory = VenueDirectory(args.database, args.files_url, args.core_url)
+        directory = VenueDirectory(args.database, args.files_url, args.core_url, args.native_database, args.native_url)
         print(encoded({"listening": f"http://{args.bind}:{args.port}", "stats": directory.stats()}), flush=True)
         ThreadingHTTPServer((args.bind, args.port), handler_for(directory)).serve_forever()
 
