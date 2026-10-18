@@ -171,6 +171,7 @@ public sealed partial class NormalizationProviderDecoder
                     EncoreNumber = set.TryGetProperty("encore", out var encore)
                         ? reader.Integer(encore, setPointer + "/encore")
                         : null,
+                    Annotations = EnrichmentSetAnnotations(reader, set, setPointer),
                 }
             );
             if (!set.TryGetProperty("song", out var songs))
@@ -320,13 +321,15 @@ public sealed partial class NormalizationProviderDecoder
             ? EnrichmentPerformer(reader, band, pointer + "/band", "phantasytour.com", "id")
             : null;
         var bandIdentity = performer?.Identities.FirstOrDefault();
+        var footnotes = EnrichmentFootnoteDefinitions(reader, item, pointer);
         var (observedSets, passages) = EnrichmentPhantasySets(
             reader,
             item,
             pointer,
             identity,
             bandIdentity,
-            detail
+            detail,
+            footnotes
         );
         return new()
         {
@@ -347,7 +350,8 @@ public sealed partial class NormalizationProviderDecoder
             Ordered = detail,
             Sets = observedSets,
             Passages = passages,
-            Text = EnrichmentPhantasyText(reader, item, pointer),
+            Text = EnrichmentPhantasyText(reader, item, pointer, footnotes),
+            Footnotes = footnotes,
         };
     }
 
@@ -360,7 +364,8 @@ public sealed partial class NormalizationProviderDecoder
         string pointer,
         ObservedProviderIdentity showIdentity,
         ObservedProviderIdentity? bandIdentity,
-        bool detail
+        bool detail,
+        IReadOnlyList<ProviderFootnoteDefinition> footnotes
     )
     {
         var passages = new List<ProviderPassageObservation>();
@@ -399,6 +404,7 @@ public sealed partial class NormalizationProviderDecoder
                     Ordinal = setOrdinal,
                     Evidence = reader.Evidence(setPointer),
                     Label = label,
+                    Annotations = EnrichmentSetAnnotations(reader, set, setPointer),
                     Identity =
                         setIdentity == null
                             ? null
@@ -495,10 +501,9 @@ public sealed partial class NormalizationProviderDecoder
                 }
                 var (notes, footnoteNumbers) = EnrichmentFootnotes(
                     reader,
-                    item,
-                    pointer,
                     song,
-                    songPointer
+                    songPointer,
+                    footnotes
                 );
                 passages.Add(
                     new()
@@ -522,7 +527,8 @@ public sealed partial class NormalizationProviderDecoder
     private static IReadOnlyList<ProviderTextObservation> EnrichmentPhantasyText(
         ProviderObservationReader reader,
         JsonElement item,
-        string pointer
+        string pointer,
+        IReadOnlyList<ProviderFootnoteDefinition> footnotes
     )
     {
         var text = new List<ProviderTextObservation>();
@@ -533,24 +539,79 @@ public sealed partial class NormalizationProviderDecoder
                 EnrichmentProse(reader, value, pointer + "/" + field, field, text);
             }
         }
+        text.AddRange(footnotes.Select(footnote => footnote.Text));
+        return text;
+    }
+
+    private static IReadOnlyList<ProviderTextObservation>? EnrichmentSetAnnotations(
+        ProviderObservationReader reader,
+        JsonElement set,
+        string pointer
+    )
+    {
+        var annotations = new List<ProviderTextObservation>();
+        var explicitlyEmpty = false;
+        foreach (var field in new[] { "info", "notes" })
+        {
+            if (!set.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null)
+            {
+                continue;
+            }
+            var fieldPointer = ProviderObservationReader.Pointer(pointer, field);
+            explicitlyEmpty |=
+                value.ValueKind == JsonValueKind.Array && value.GetArrayLength() == 0;
+            annotations.AddRange(
+                reader
+                    .Strings(value, fieldPointer)
+                    .Select(text => new ProviderTextObservation(field, text))
+            );
+        }
+        return annotations.Count > 0 || explicitlyEmpty ? annotations : null;
+    }
+
+    private static IReadOnlyList<ProviderFootnoteDefinition> EnrichmentFootnoteDefinitions(
+        ProviderObservationReader reader,
+        JsonElement item,
+        string pointer
+    )
+    {
+        var result = new List<ProviderFootnoteDefinition>();
         if (
-            item.TryGetProperty("footnotes", out var notes)
-            && notes.ValueKind == JsonValueKind.Array
+            !item.TryGetProperty("footnotes", out var notes)
+            || notes.ValueKind == JsonValueKind.Null
         )
         {
-            foreach (var (note, notePointer) in EnrichmentMembers(notes, pointer + "/footnotes"))
-            {
-                if (note.ValueKind == JsonValueKind.Object)
-                {
-                    var value = reader.String(note, "note", notePointer);
-                    if (value != null)
-                    {
-                        text.Add(new("footnote", value));
-                    }
-                }
-            }
+            return result;
         }
-        return text;
+        if (notes.ValueKind != JsonValueKind.Array)
+        {
+            reader.Issue("invalid_footnote_definitions", pointer + "/footnotes");
+            return result;
+        }
+        foreach (var (note, notePointer) in EnrichmentMembers(notes, pointer + "/footnotes"))
+        {
+            if (note.ValueKind == JsonValueKind.String)
+            {
+                result.Add(new(null, new("footnote", reader.String(note, notePointer)!)));
+                continue;
+            }
+            if (note.ValueKind != JsonValueKind.Object)
+            {
+                reader.Issue("invalid_footnote_definition", notePointer);
+                continue;
+            }
+            var number = note.TryGetProperty("id", out var id)
+                ? reader.Integer(id, notePointer + "/id")
+                : null;
+            var text = reader.String(note, "note", notePointer);
+            if (text == null)
+            {
+                reader.Issue("missing_footnote_text", notePointer);
+                continue;
+            }
+            result.Add(new(number, new("footnote", text)));
+        }
+        return result;
     }
 
     // Keep structured credit strings separately cited. Neither a name-looking
@@ -594,10 +655,9 @@ public sealed partial class NormalizationProviderDecoder
         IReadOnlyList<ObservedValue<int>> References
     ) EnrichmentFootnotes(
         ProviderObservationReader reader,
-        JsonElement item,
-        string pointer,
         JsonElement song,
-        string songPointer
+        string songPointer,
+        IReadOnlyList<ProviderFootnoteDefinition> footnotes
     )
     {
         var notes = new List<ProviderTextObservation>();
@@ -633,37 +693,11 @@ public sealed partial class NormalizationProviderDecoder
                 continue;
             }
             numbers.Add(number);
-            var resolved = false;
-            if (
-                item.TryGetProperty("footnotes", out var footnotes)
-                && footnotes.ValueKind == JsonValueKind.Array
-            )
-            {
-                foreach (
-                    var (footnote, footnotePointer) in EnrichmentMembers(
-                        footnotes,
-                        pointer + "/footnotes"
-                    )
-                )
-                {
-                    if (
-                        footnote.ValueKind == JsonValueKind.Object
-                        && footnote.TryGetProperty("id", out var noteId)
-                        && noteId.ValueKind == JsonValueKind.Number
-                        && noteId.TryGetInt32(out var key)
-                        && key == number.Value
-                    )
-                    {
-                        var text = reader.String(footnote, "note", footnotePointer);
-                        if (text != null)
-                        {
-                            notes.Add(new("footnote", text));
-                            resolved = true;
-                        }
-                    }
-                }
-            }
-            if (!resolved)
+            var definitions = footnotes
+                .Where(footnote => footnote.Number?.Value == number.Value)
+                .ToArray();
+            notes.AddRange(definitions.Select(definition => definition.Text));
+            if (definitions.Length == 0)
             {
                 reader.Issue("unresolved_footnote", referencePointer);
             }

@@ -11,7 +11,7 @@ namespace Relisten.Normalization;
 /// <summary>Retains evidenced account proposals without accepting music identities or catalog associations.</summary>
 public sealed class NormalizationSetlistExtractor
 {
-    public const string Version = "setlist-extraction-v1";
+    public const string Version = "setlist-extraction-v2";
     public const int MaximumAccountsPerInput = 1_000;
     public const int MaximumPassagesPerInput = 10_000;
 
@@ -196,6 +196,10 @@ public sealed class NormalizationSetlistExtractor
                 Value(set.Label);
                 Value(set.EncoreNumber);
                 Identity(set.Identity);
+                if (set.Annotations != null)
+                {
+                    Text(set.Annotations);
+                }
             }
 
             foreach (var passage in account.Passages)
@@ -221,6 +225,11 @@ public sealed class NormalizationSetlistExtractor
             }
 
             Text(account.Text);
+            foreach (var footnote in account.Footnotes)
+            {
+                Value(footnote.Number);
+                Value(footnote.Text.Text);
+            }
         }
 
         private void Text(IReadOnlyList<ProviderTextObservation> fields)

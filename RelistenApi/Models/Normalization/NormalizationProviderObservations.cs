@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -38,8 +39,29 @@ public sealed record ProviderPerformerObservation
     public IReadOnlyList<ObservedProviderIdentity> Identities { get; init; } = [];
 }
 
-/// <summary>Original prose with its semantic field; array entries remain separate fields.</summary>
-public sealed record ProviderTextObservation(string Field, ObservedValue<string> Text);
+public enum ProviderTextFormat
+{
+    PlainText,
+    SourceMarkup,
+}
+
+/// <summary>
+/// Original prose with its semantic field. Source markup retains exact raw support; PlainText
+/// is a separate display derivation and stays absent when that derivation is unavailable.
+/// </summary>
+public sealed record ProviderTextObservation(
+    string Field,
+    ObservedValue<string> Text,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? PlainText = null,
+    ProviderTextFormat Format = ProviderTextFormat.PlainText
+);
+
+/// <summary>An explicit footnote definition. Missing numbers remain unknown, including unnumbered HTML notes.</summary>
+public sealed record ProviderFootnoteDefinition(
+    ObservedValue<int>? Number,
+    ProviderTextObservation Text
+);
 
 /// <summary>A performance attribution, such as a cover performer or guest; not a work author.</summary>
 public sealed record ProviderPerformanceAnnotation(
@@ -162,6 +184,10 @@ public sealed record ProviderSetObservation
     public ObservedValue<string>? Label { get; init; }
     public ObservedValue<int>? EncoreNumber { get; init; }
     public ObservedProviderIdentity? Identity { get; init; }
+
+    /// <summary>Null means absent or uncaptured; an empty list requires an explicitly empty notes field.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ProviderTextObservation>? Annotations { get; init; }
 }
 
 public sealed record ProviderSetlistObservation
@@ -174,6 +200,7 @@ public sealed record ProviderSetlistObservation
     public IReadOnlyList<ProviderSetObservation> Sets { get; init; } = [];
     public IReadOnlyList<ProviderPassageObservation> Passages { get; init; } = [];
     public IReadOnlyList<ProviderTextObservation> Text { get; init; } = [];
+    public IReadOnlyList<ProviderFootnoteDefinition> Footnotes { get; init; } = [];
 }
 
 /// <summary>

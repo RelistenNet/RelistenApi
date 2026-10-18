@@ -47,7 +47,7 @@ public sealed partial class NormalizationProviderDecoder
         var time = html
             .Root.Descendants("time")
             .FirstOrDefault(node => node.Attributes["datetime"] != null);
-        var tour = names.Length > 2 ? html.RawText(names[2]) : null;
+        var tour = names.Length > 2 ? html.MarkupText("tour", names[2]) : null;
         var edition = new ProviderSetlistObservation
         {
             Origin = reader.Origin(
@@ -61,7 +61,7 @@ public sealed partial class NormalizationProviderDecoder
             Ordered = sets.Count > 0,
             Sets = sets,
             Passages = passages,
-            Text = tour == null ? [] : [new("tour", tour)],
+            Text = tour == null ? [] : [tour],
         };
         return reader.Result() with { Venues = venue == null ? [] : [venue], Setlists = [edition] };
     }
@@ -119,7 +119,11 @@ public sealed partial class NormalizationProviderDecoder
                 var rawItem = html.Text(item);
                 if (rawItem?.Value.EndsWith('*') == true)
                 {
-                    annotations.Add(new("annotation_marker", html.RawText(item)!));
+                    var annotation = html.MarkupText("annotation_marker", item);
+                    if (annotation != null)
+                    {
+                        annotations.Add(annotation);
+                    }
                 }
                 var key = songLink == null ? null : HtmlSongKey(songLink, "jerrygarcia.com");
                 var identity =
@@ -319,6 +323,7 @@ public sealed partial class NormalizationProviderDecoder
             .FirstOrDefault(node =>
                 Regex.IsMatch(node.GetAttributeValue("name", ""), @"^\d{4}-\d{2}-\d{2}$")
             );
+        var text = ReadPhishNetHtmlNotes(html, container);
 
         return new()
         {
@@ -329,7 +334,10 @@ public sealed partial class NormalizationProviderDecoder
             Ordered = true,
             Sets = sets,
             Passages = passages,
-            Text = ReadPhishNetHtmlNotes(html, container),
+            Text = text,
+            Footnotes = text.Where(note => note.Field == "footnotes")
+                .Select(note => new ProviderFootnoteDefinition(null, note))
+                .ToArray(),
         };
     }
 
@@ -403,11 +411,16 @@ public sealed partial class NormalizationProviderDecoder
         var texts = new List<ProviderTextObservation>();
         foreach (var kind in new[] { "setlist-footer", "setlist-notes" })
         {
-            var node = html.NodesWithClass(container, kind).FirstOrDefault();
-            var text = node == null ? null : html.RawText(node);
-            if (text != null)
+            foreach (var node in html.NodesWithClass(container, kind))
             {
-                texts.Add(new(kind == "setlist-footer" ? "footnotes" : "setlist_notes", text));
+                var text = html.MarkupText(
+                    kind == "setlist-footer" ? "footnotes" : "setlist_notes",
+                    node
+                );
+                if (text != null)
+                {
+                    texts.Add(text);
+                }
             }
         }
         return texts;

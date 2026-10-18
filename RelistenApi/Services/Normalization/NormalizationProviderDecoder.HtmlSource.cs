@@ -168,6 +168,22 @@ public sealed partial class NormalizationProviderDecoder
             return evidence == null ? null : new(evidence.Quote!, evidence);
         }
 
+        public ProviderTextObservation? MarkupText(string field, HtmlNode node)
+        {
+            var source = RawText(node);
+            return source == null
+                ? null
+                : new(field, source, Text(node)?.Value, ProviderTextFormat.SourceMarkup);
+        }
+
+        private ProviderTextObservation? MarkupAttribute(string field, HtmlNode node, string name)
+        {
+            var source = RawAttribute(node, name);
+            return source == null
+                ? null
+                : new(field, source, Attribute(node, name)?.Value, ProviderTextFormat.SourceMarkup);
+        }
+
         public ObservedValue<string>? Attribute(HtmlNode node, string name)
         {
             var rawAttribute = RawAttribute(node, name);
@@ -318,10 +334,13 @@ public sealed partial class NormalizationProviderDecoder
             {
                 if (annotation.Name == "sup")
                 {
-                    var text = RawAttribute(annotation, "title") ?? RawText(annotation);
+                    var text =
+                        annotation.Attributes["title"] != null
+                            ? MarkupAttribute("footnote", annotation, "title")
+                            : MarkupText("footnote", annotation);
                     if (text != null)
                     {
-                        result.Add(new("footnote", text));
+                        result.Add(text);
                     }
                 }
                 annotation = annotation.NextSibling;
@@ -329,7 +348,11 @@ public sealed partial class NormalizationProviderDecoder
             var tooltip = Attribute(node, "title");
             if (tooltip != null && tooltip.Value != Text(node)?.Value)
             {
-                result.Add(new("info", RawAttribute(node, "title")!));
+                var text = MarkupAttribute("info", node, "title");
+                if (text != null)
+                {
+                    result.Add(text);
+                }
             }
             return result;
         }
