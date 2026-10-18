@@ -1,0 +1,233 @@
+{
+  "version": "source-resolver-review-v1",
+  "state": "proposal_and_review_contracts_verified_recovery_authentication_pending",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-resolver-review-v1/execution-verification-v1/manifest.json",
+    "bytes": 17982,
+    "sha256": "7a3ab0eff9f2ec34c527ccaac95804d74eb1f2243fb307c77a52e3d7f40f768e"
+  },
+  "testRuns": [
+    {
+      "run": "source-resolver-capacity-v1",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "2",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-review-focused-v1",
+      "counters": {
+        "total": "208",
+        "executed": "208",
+        "passed": "160",
+        "failed": "48",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-review-repairs-v2",
+      "counters": {
+        "total": "6",
+        "executed": "6",
+        "passed": "5",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-review-focused-v3",
+      "counters": {
+        "total": "208",
+        "executed": "208",
+        "passed": "208",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-review-upgrade-v1",
+      "counters": {
+        "total": "1",
+        "executed": "1",
+        "passed": "1",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-large-v1",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "1",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-boundaries-v3",
+      "counters": {
+        "total": "2",
+        "executed": "2",
+        "passed": "2",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-resolver-large-v2",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "3",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "verification": {
+    "focused": {
+      "passed": 208,
+      "failed": 0
+    },
+    "positiveReviewInputRoundTrip": {
+      "passed": 2,
+      "failed": 0
+    },
+    "nonempty55to56Upgrade": {
+      "passed": 1,
+      "failed": 0
+    },
+    "explicitLargeBoundaries": {
+      "passed": 3,
+      "failed": 0
+    }
+  },
+  "measuredBytes": {
+    "largeProducer": {
+      "providerPayload": 7695105,
+      "fullProducer": 47275327,
+      "sourceConsumption": 15191385
+    },
+    "checkpointRefusal": {
+      "providerPayload": 7511617,
+      "sourceConsumption": 22858704
+    },
+    "sourceConsumptionRefusal": {
+      "providerPayload": 19511617,
+      "sourceConsumption": 58858904
+    },
+    "limit": 33554432
+  },
+  "behavior": [
+    "IDs-only source resolution retains complete original scopes, actual candidate comparisons, exact policy and source-review observations.",
+    "Trusted source decisions retain original human receipts and selected identities, with current target and input fences.",
+    "Historical withdrawals keep old evidence separate from current consumed heads; positive review rejects repeated old revisions at new generations.",
+    "Actual nonempty55-to56 upgrade preserves every earlier normalization row; trusted review and exact replay work afterward.",
+    "Proposals and source review write no canonical aliases, accepted source assignment/support, recording credits, participation or playback."
+  ],
+  "correctedRuns": [
+    "Initial focused run:160passed/48failed. Fixed missing set converter, exact scalar Dapper parameters, a parser-list fixture cast and supported provider fixture representations.",
+    "Targeted repair:5passed/1failed. Corrected Archive test to use actual decoded file origin.",
+    "Initial large run:1passed/2failed. Scoped count to original Archive input, preserving legitimate additional legacy evidence.",
+    "Boundary compile attempt lacked a namespace import; corrected before two passing ABA cases."
+  ],
+  "review": "Fresh source correctness and separate readability reviews cover resolver, review, nonempty upgrade and final fixture corrections. They identified the configuration recovery gap below.",
+  "remaining": [
+    "Authenticate source configuration recovery against actual contributed Work request, not header vector/latest attempt ordering; narrow shared request encoding follow-on in progress.",
+    "Accepted source support publication and merged-alias visibility lifecycle remain required.",
+    "Production accuracy evaluation, full-suite rerun, database cost, full backfill and rollout remain required.",
+    "No active source matching policy, production writes or deployment."
+  ]
+}

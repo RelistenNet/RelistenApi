@@ -154,8 +154,8 @@ provider fetch or paid call to extraction.
 
 ## 3. Source assignment and independent review authority
 
-Add a domain-specific source-actor resolution service/store under
-`RelistenApi/Services/Data`. Its owner is
+`SourceActorResolutionService` and its store live under
+`RelistenApi/Services/Data`. Their owner is
 `(people, source_actor_resolution, SourceUuid)`, separate from credit resolution
 and accepted recording credits. A saved attempt pins its processing version and
 original published extraction. A claim retains the scoped assertion, complete
@@ -272,6 +272,53 @@ existing receipt rows retain null proof. Apply migration 54 before this binary,
 including callers that still submit legacy reviews. On binary rollback, retain
 the column and receipts and stop callers that require fenced review behavior.
 This shared contract does not itself implement source-actor review.
+
+### Source proposal and trusted review interfaces
+
+`SourceActorResolutionService.ResolveAsync(attemptUuid, extractionAttemptUuid, ct)`
+derives its source, evidence, candidates and policy from the published extraction.
+Callers supply stable IDs, not facts or proposed decisions. Store mutation APIs
+are internal; public attempt, batch and source reads expose retained audit data.
+One primary repeatable-read transaction covers complete source evidence, current
+membership, reviews, policy and candidate facts. Preparation is immutable. New
+Work admission pins the original input generations, including revision
+round-trips; replay cannot refresh an old interpretation with today's stamps.
+
+The source consumption projection omits only unrelated credit and title output.
+It preserves complete preparations, tickets, groups, alias scopes and decode
+issues, and checks its PostgreSQL text size before transfer. The full public
+recording producer remains unchanged. The profile permits 1,000 assertions per
+source, 100 contributors and 100,000 bindings. Source consumption and compact
+checkpoints each have a 32 MiB limit; overflow produces an explicit unresolved
+outcome without truncating evidence. Repeated scopes and field correspondences
+are stored once within a checkpoint and expanded by audit reads.
+
+`SourceActorReviewService.PrepareAsync(preparationUuid, request, ct)` authenticates
+the exact extraction/claim selector and current review revisions. Accept and
+reassign also require an existing original person UUID and its expected identity
+revision. `ApplyAsync(operationUuid, preparationUuid, reason, trustedOperator, ct)`
+applies only that immutable preparation through the shared Work review
+transaction. Only the source owner's review state changes; observed person
+owners remain read-only. A stale apply makes no decision. Create another
+preparation after inspecting changed facts; reuse the same operation only for
+an exact retry.
+
+Positive review requires current original extraction inputs. Historical rejection
+or withdrawal retains its old field evidence and separately fences the current
+resource/catalog heads read for the correction. Exact committed replay succeeds
+before fresh validation. Strict unchanged-field correspondence can carry the
+original human selection to a newer extraction: it requires a complete mapping
+of local IDs and evidence, unchanged field text and supported producer versions.
+It retains the original review operation and selected UUID and creates no new
+human approval. Changed or unsupported fields remain review holds.
+
+Migration 55 retains proposal attempts and checkpoints; migration 56 retains
+immutable review preparations. Apply both before calling these services. Shared
+API/worker service registration starts no work. Proposal publication and source
+review create no canonical alias, accepted source assignment, support, recording
+credit, attendance claim or identity. Accepted publication remains a separate
+required stage. On rollback, stop these callers and retain all tables and
+receipts.
 
 ## 4. Additive storage and canonical write outcomes
 

@@ -183,6 +183,14 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationReviewReadSet.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddSourceActorResolution.SchemaSql,
+            commandTimeout: 120
+        );
+        await catalog.ExecuteAsync(
+            Migrations.AddSourceActorReviewPreparations.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

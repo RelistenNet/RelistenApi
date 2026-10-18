@@ -83,7 +83,14 @@ As of 2026-10-18:
   identities; credit creation and scoring keep their existing contracts. The
   policy reader can share the source/candidate transaction without bypassing
   fixture restrictions. Real evaluation evidence and activation remain required.
-- [ ] Implement immutable source assignment decisions and trusted source review.
+- [x] Implement immutable source identity proposals and trusted source review.
+  All 208 focused checks pass, followed by two positive-review input round-trip
+  checks and a nonempty 55-to-56 upgrade. These services preserve exact original
+  evidence and create no accepted canonical support or recording credits.
+- [ ] Authenticate configuration recovery against the actual contributed Work
+  request. Matching revision headers alone cannot establish which protocol
+  installed the bindings; recovery must refuse unrelated Work admissions while
+  preserving retries after admission but before checkpoint storage.
 - [ ] Implement accepted support publication, complete source-scope replacement,
   withdrawal, replay, partial progress and stale recovery.
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
@@ -92,9 +99,9 @@ As of 2026-10-18:
 Phase 2 adds storage and read compatibility: migration 53, typed ordinary alias
 outcomes, current visibility and `people-candidate-facts-v5`. The nonempty upgrade
 rehearsal preserves existing IDs, revisions, review history and candidate clocks.
-No source-actor resolver, assignment-review service, complete producer-scope map
-or accepted support publication route is implemented. No matching policy is
-activated.
+The source resolver and trusted review services are locally implemented through
+migrations 55 and 56. Configuration provenance hardening and complete accepted
+support publication remain required. No matching policy is activated.
 
 ### Verified storage and reader behavior
 
