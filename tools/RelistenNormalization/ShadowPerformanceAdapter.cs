@@ -17,7 +17,7 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
     private readonly ShadowRepertoireAdapter repertoire = new();
 
     public string Version =>
-        "shadow-performances-v4/"
+        "shadow-performances-v5/"
         + repertoire.Version
         + "/decoder="
         + NormalizationProviderDecoder.Version;
@@ -33,6 +33,11 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
 
     public void Observe(JsonElement record)
     {
+        if (Text(record, "kind") == "local_root_input")
+        {
+            ObserveLocalRoot(record);
+            return;
+        }
         // The runner also observes actual extraction DTOs. They share Kind values
         // with raw catalog rows but cannot supply catalog ownership or UUID indexes.
         if (!record.TryGetProperty("row", out var row))

@@ -14,20 +14,13 @@ public sealed partial class ShadowPerformanceAdapter
         ProviderDecodeResult decoded;
         try
         {
-            revision =
-                input
-                    .Record.GetProperty("input")
-                    .Deserialize<NormalizationInputRevision>(ProviderJson)
-                ?? throw new ArgumentException("Missing retained provider revision.");
+            revision = ReadProviderRevision(input.Record, input.Uuid);
             if (
-                revision.Uuid != input.Uuid
-                || !StringComparer.OrdinalIgnoreCase.Equals(
-                    revision.Sha256,
-                    Convert.ToHexStringLower(SHA256.HashData(revision.Payload))
-                )
+                revision.Resource.Provider == "local"
+                && revision.Resource.ResourceType == "directory_metadata"
             )
             {
-                throw new ArgumentException("Provider revision identity or retained bytes differ.");
+                return ProcessLocalProvider(input, revision);
             }
             decoded = new NormalizationProviderDecoder().Decode(revision);
             using var document = NormalizationRetainedDocument.Open(revision);
@@ -174,6 +167,27 @@ public sealed partial class ShadowPerformanceAdapter
                     .ToArray()
             ),
         ];
+    }
+
+    private static NormalizationInputRevision ReadProviderRevision(
+        JsonElement record,
+        Guid expectedUuid
+    )
+    {
+        var revision =
+            record.GetProperty("input").Deserialize<NormalizationInputRevision>(ProviderJson)
+            ?? throw new ArgumentException("Missing retained provider revision.");
+        if (
+            revision.Uuid != expectedUuid
+            || !StringComparer.OrdinalIgnoreCase.Equals(
+                revision.Sha256,
+                Convert.ToHexStringLower(SHA256.HashData(revision.Payload))
+            )
+        )
+        {
+            throw new ArgumentException("Provider revision identity or retained bytes differ.");
+        }
+        return revision;
     }
 
     private ShadowSetlistAccount ProviderAccount(

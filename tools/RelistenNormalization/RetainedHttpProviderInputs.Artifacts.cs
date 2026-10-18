@@ -106,7 +106,7 @@ public sealed partial class RetainedHttpProviderInputs
         return (document.RootElement.Clone(), new(path, expectedBytes, sha));
     }
 
-    private static async Task<byte[]> ReadVerifiedAsync(
+    internal static async Task<byte[]> ReadVerifiedAsync(
         string path,
         long bytes,
         string sha,
@@ -133,7 +133,7 @@ public sealed partial class RetainedHttpProviderInputs
         return raw;
     }
 
-    private static async Task<RetainedHttpArtifact> FingerprintAsync(
+    internal static async Task<RetainedHttpArtifact> FingerprintAsync(
         string path,
         CancellationToken ct
     )
@@ -144,7 +144,7 @@ public sealed partial class RetainedHttpProviderInputs
         return new(path, stream.Length, sha);
     }
 
-    private static string ContainedPath(string directory, string relative)
+    internal static string ContainedPath(string directory, string relative)
     {
         var path = Path.GetFullPath(Path.Combine(directory, relative));
         var relation = Path.GetRelativePath(directory, path);

@@ -12,6 +12,7 @@ if (
         )
         || (args.Length == 5 && args[0] == "luna-credits")
         || (args.Length == 4 && args[0] == "people-context")
+        || (args.Length == 5 && args[0] == "admit-retained-local")
         || (args.Length == 3 && args[0] is "shadow-compositions-acquire" or "retained-http-inputs")
         || (
             args.Length == 4
@@ -55,6 +56,7 @@ if (
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization shadow-compositions-acquire <request.json> <output-directory>\n"
             + "       RelistenNormalization retained-http-inputs <request.json> <new-output-directory>\n"
+            + "       RelistenNormalization admit-retained-local <catalog-manifest.json> <root-capture-directory> <directory-capture-directory> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
             + "       RelistenNormalization people-view-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization people-adjudicated-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -78,6 +80,19 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "admit-retained-local")
+    {
+        var result = await new RetainedLocalProviderInputs().PrepareAsync(
+            new(args[1], args[2], args[3]),
+            args[4],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        );
+        return 0;
+    }
+
     if (args[0] == "retained-http-inputs")
     {
         var request =

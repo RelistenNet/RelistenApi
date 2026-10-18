@@ -104,7 +104,9 @@ public sealed record ShadowPerformanceAssociation(
     IReadOnlyList<ShadowPerformanceDiscriminator> Discriminators,
     IReadOnlyList<ShadowPerformanceCandidate> Candidates,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        RetainedHttpCatalogBinding? CatalogBinding = null
+        RetainedHttpCatalogBinding? CatalogBinding = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        RetainedLocalCatalogBinding? LocalCatalogBinding = null
 );
 
 public sealed record ShadowPerformanceDiscriminator(

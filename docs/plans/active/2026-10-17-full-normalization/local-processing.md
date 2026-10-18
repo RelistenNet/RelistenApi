@@ -85,6 +85,11 @@ in for extraction or accepted matching.
 
 ## Verification and operation
 
+For offline reader work, [retained Local shadow admission](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
+prepares the original root and directory captures with historical media-backed
+bindings. It preserves the joint evidence contract without creating current input
+heads or publication dependencies.
+
 Verify lookup, dispatch and the proposal reader together. Include root-only taper
 notes, directory text, file scopes, Unicode directory keys, unknown dates,
 duplicate accounts, missing or ambiguous mappings, changed roots and directories,
