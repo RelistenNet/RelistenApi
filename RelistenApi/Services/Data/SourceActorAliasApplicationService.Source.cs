@@ -70,7 +70,7 @@ public sealed partial class SourceActorAliasApplicationService
             )
         ).ToHashSet();
         var carried = new List<SourceActorAliasClaimReceiptReference>();
-        var targets = new Dictionary<Guid, SourceActorReviewTarget>();
+        var targetUuids = new List<Guid>();
         var planned = new List<SourceActorAliasPlannedClaim>();
         var preparedInputs = new List<SourceActorResolutionInput>();
         var reference = new SourceActorAliasProposalReference(
@@ -141,13 +141,7 @@ public sealed partial class SourceActorAliasApplicationService
                                 carriedPerson
                             )
                         );
-                        if (!targets.ContainsKey(carriedPerson))
-                        {
-                            targets.Add(
-                                carriedPerson,
-                                await SourceActorReviewTargets.ReadAsync(c, t, carriedPerson, ct)
-                            );
-                        }
+                        targetUuids.Add(carriedPerson);
                         continue;
                     }
                     var exact = reviews.Reviews.SingleOrDefault(value =>
@@ -247,12 +241,9 @@ public sealed partial class SourceActorAliasApplicationService
                     }
                     claims.Add(claim);
                     var selected = authority ? claim.Decision.PersonUuid : null;
-                    if (selected is Guid person && !targets.ContainsKey(person))
+                    if (selected is Guid person)
                     {
-                        targets.Add(
-                            person,
-                            await SourceActorReviewTargets.ReadAsync(c, t, person, ct)
-                        );
+                        targetUuids.Add(person);
                     }
                     planned.Add(
                         new(
@@ -270,13 +261,16 @@ public sealed partial class SourceActorAliasApplicationService
             }
             preparedInputs.Add(input with { Scopes = scopes.ToArray() });
         }
+        // All claim authority above is authenticated before acquiring target components.
+        // The batch retains each original in source order within this same RR snapshot.
+        var targets = await SourceActorReviewTargets.ReadManyAsync(c, t, targetUuids, ct);
         return new(
             extraction,
             preparedInputs.ToArray(),
             reviews,
             [],
             null,
-            targets.Values.ToArray(),
+            targets,
             planned.ToArray(),
             current,
             proposal.Preparation.PolicyState,

@@ -44,9 +44,9 @@ retained separately from the passing text-reader checks.
 
 Finalization remains required even when it retires no aliases: it records
 complete field coverage and clears preliminary observations. Do not skip those
-writes to make the scale test pass. Current target reads also repeat for carried
-people during preparation and independently during publication. Batch those
-reads within each transaction while retaining every original identity, complete
-redirect component and current owner observation. Then repeat the full-size
+writes to make the scale test pass. The [target batch reader](source-target-batches.md)
+now shares current component acquisition within each transaction while retaining
+every original identity, complete redirect component and current owner observation.
+Preparation and publication remain independent. Repeat the full-size
 distinct-person, repeated-claim and 1,001-source lifecycle tests. Full-suite
 verification and independent automatic-matching evaluation remain required.

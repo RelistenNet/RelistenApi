@@ -41,6 +41,11 @@ stored proofs. Read one complete original proof with
 `SourceActorAliasApplicationStore.GetStageAsync(stageUuid, ct)`. This avoids
 loading every historical stage body just to resume an application with many people.
 
+Current target proofs use the [bounded batch reader](source-target-batches.md).
+Preparation shares component acquisition within its live snapshot while retaining
+each original target. Publication independently rereads every target under Work's
+owner protections. Historical proofs never substitute for those current checks.
+
 Planning reads each person's complete accepted map and contributor allocation
 through `ReadConfiguredMapInSnapshotAsync`. Certified committed stages use a
 projection from their immutable stored proof. Legacy, pending and stale recovery

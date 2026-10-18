@@ -25,7 +25,11 @@ public sealed partial class SourceActorAliasApplicationService
     )
     {
         source = await IncludeHistoricalReviews(c, t, source, map.Map, application.SourceUuid, ct);
-        var target = await SourceActorReviewTargets.ReadAsync(c, t, person, ct);
+        // Trusted and machine targets were acquired in this same read-only RR transaction.
+        // Publication independently rereads them under Work's complete owner protections.
+        var target =
+            source.Targets.SingleOrDefault(value => value.OriginalPersonUuid == person)
+            ?? await SourceActorReviewTargets.ReadAsync(c, t, person, ct);
         var targets = source
             .Targets.Where(value => value.OriginalPersonUuid != person)
             .Append(target)

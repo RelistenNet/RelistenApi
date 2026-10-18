@@ -76,8 +76,10 @@ span. All 645 affected checks pass, and old/new public extraction produces
 byte-identical results on the large synthetic inputs. The preceding 1,000-person
 lifecycle test reached its one-hour limit before finalization finished. The
 [text-reader verification](recording-text-scan.md) separates that failed baseline
-from the passing checks and extraction timings. Batch current target reads next,
-then repeat the full-size lifecycles; no publication-throughput claim is established.
+from the passing checks and extraction timings. [Current target reads](source-target-batches.md)
+now share component acquisition within each transaction, with 408 distinct
+public-contract and small-scale cases passing. Full-size lifecycles and final-code
+full-suite verification remain required; no publication-throughput claim is established.
 
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
@@ -116,7 +118,17 @@ aliases, and measure catalog-wide database cost before backfill.
 Venue context and catalog-to-composition evidence also need expansion before
 automatic acceptance.
 
-The latest full local API suite reports **3,052 passing tests, 24 existing skips and one failure**. That run predates the music-projection fix: optional people evidence made the full recording batch exceed its 32 MiB music-consumer bound. All 126 subsequent focused checks pass, including 5,001 files, 10,002 supporting mappings and historical review/replay. All 60 broader recording/setlist checks also pass. The subsequent alias-checkpoint validation passes 98 storage/publication and 88 extraction/recovery checks; its three large-recording regressions also pass, preserving all 5,001 files and 10,002 mappings. The full suite has not yet been repeated for these fixes. The [source-actor receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-proposals-v2.json) and [people-checkpoint receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-checkpoint-capacity-v1.json) retain this result separately from passing focused checks. The earlier [setlist rehearsal receipt](../../../research/2026-10-17-full-normalization/scale/evidence/setlist-local-v1.json) records the prior full run of 2,838 passing tests, 24 skips and zero failures; it predates these changes. Automatic matching remains inactive.
+The latest completed [broad suite](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-alias58-v1.json)
+excludes the separately run `SourceAliasScale` and `PeopleFactsSnapshotScale`
+categories. It has 3,633 passing tests, one failure and 28 unexecuted result entries. The adapter
+reports 24 skips and omits four additional explicit cases from that count. Its
+only failure is the historical credit fixture corrected in commit `2d64afe`;
+the corrected fixture passes in the separate focused recording checks. This run
+predates the text-reader and target-batch changes, so final-code full-suite
+verification remains required. The [recording](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-proposals-v2.json)
+and [checkpoint](../../../research/2026-10-17-full-normalization/scale/evidence/people-checkpoint-capacity-v1.json)
+receipts retain earlier capacity failures and their focused corrections.
+Automatic matching remains inactive.
 
 The [repertoire resolver](repertoire-resolution.md) authenticates complete imported dictionaries, published recording titles, published setlist passages and retained provider dictionaries. It preserves imported mappings and allocates visibly provisional title-derived identities where a dictionary is unavailable. The [setlist and file-content consumers](repertoire-consumers.md) are implemented and pass 115 focused consumer/operator checks. Their [real recording rehearsal](../../../research/2026-10-17-full-normalization/scale/materialization-local-inputs.md) publishes 257 contents across 256 files from 25 recordings and checks 2,165 API responses, including 1,409 unchanged legacy responses. Exact replay and fresh retries preserve accepted content UUIDs, ownership and revisions. All 12 legacy and four original accepted-music relation fingerprints remain unchanged.
 

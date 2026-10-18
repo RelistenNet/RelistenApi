@@ -229,14 +229,18 @@ public sealed partial class NormalizedPeopleService
                 "A source person stage requires its complete original target component."
             );
         }
-        foreach (var target in stage.Facts.Targets)
+        // Prepared targets are evidence, not a current cache. Read every original again in
+        // this publication transaction, sharing only acquisition of a terminal component.
+        var currentTargets = await SourceActorReviewTargets.ReadManyAsync(
+            c,
+            t,
+            stage.Facts.Targets.Select(target => target.OriginalPersonUuid),
+            ct
+        );
+        for (var index = 0; index < stage.Facts.Targets.Count; index++)
         {
-            var current = await SourceActorReviewTargets.ReadAsync(
-                c,
-                t,
-                target.OriginalPersonUuid,
-                ct
-            );
+            var target = stage.Facts.Targets[index];
+            var current = currentTargets[index];
             if (!SourceAliasSame(target, RestoreSourceAliasPrimary(current, stage)))
             {
                 throw new NormalizationConflictException(

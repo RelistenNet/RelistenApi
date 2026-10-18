@@ -1,0 +1,43 @@
+{
+  "kind": "full-suite-alias58-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "0f3bb0694b4db5c851fc02ada27007a2882d0748",
+  "status": "Completed broad suite with one historical test-fixture failure.",
+  "command": "./test-local.sh --no-build --filter 'TestCategory!=SourceAliasScale&TestCategory!=PeopleFactsSnapshotScale' --logger 'trx;LogFileName=normalization-full-final-alias58-v1.trx'",
+  "outcome": {
+    "exitCode": 1,
+    "passed": 3633,
+    "failed": 1,
+    "notExecutedResultEntries": 28,
+    "consoleSkipped": 24,
+    "additionalExplicitNotExecuted": 4,
+    "duration": "39m39s",
+    "qualification": "The command excludes SourceAliasScale and PeopleFactsSnapshotScale, which require separate runs. The 28 unexecuted result entries do not count those filtered cases. Actual entries include four explicit cases omitted from the adapter console skip count."
+  },
+  "failure": {
+    "test": "HistoricalPublishedExtractionCannotAuthorizeCompleteWithdrawal",
+    "error": "Source actor proposals require the current producer and every prepared input group.",
+    "cause": "The fixture assigned an old producer version to current extraction output that included optional source-actor scopes.",
+    "correctionCommit": "2d64afe",
+    "correction": "Restore absent source-actor output across every historical input group, retaining credit evidence and all withdrawal assertions. Production validation is unchanged.",
+    "passingFollowup": "The corrected fixture passes within the separate 206-check shared recording/credit run retained in recording-text-scan-v1.json."
+  },
+  "binaryProvenance": {
+    "filesAuthenticatedAgainstFrozenInventory": 339,
+    "apiSha256": "8108876ac3f92d86d2265843e2fde7fcd353c993713c4d3445a364241ea2eb72",
+    "testsSha256": "6578a111fe3a6b67f3a3d926f665af89189c8fd84c26ab35688fc0200936dabf",
+    "qualification": "All tested output files still match the frozen final-migration-58 inventory after termination. This run predates the later text-reader and target-batch changes."
+  },
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/full-suite-alias58-v1/runtime-v1/manifest.json",
+    "sha256": "61fa68ca13915a3c3b33c92436e900f3b5382ab97779a469d9c5357fd7117e64",
+    "files": 6
+  },
+  "remaining": [
+    "Final-code full-suite verification.",
+    "Full-size lifecycle and catalog cost verification.",
+    "Independent automatic-matching evaluation, backfill and rollout."
+  ],
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

@@ -1,0 +1,101 @@
+{
+  "kind": "source-target-batch-v1",
+  "observedDate": "2026-10-18",
+  "status": "Focused public contracts and small lifecycles pass; full-size verification remains open.",
+  "source": {
+    "baseCommit": "4f1e6ff52fcab196a5f4cdc225f6dd3821a41b5b",
+    "formattedFilesSha256": {
+      "RelistenApi/Services/Data/SourceActorReviewTargets.cs": "37e839ee010ab4853b231374f0c6c69db9d8519f5937686246e031fa6bd207dc",
+      "RelistenApi/Services/Data/SourceActorAliasApplicationService.Source.cs": "cb77141cb600596dcd3294089fd68b7805ae8a4b200395378aa1119e14a25719",
+      "RelistenApi/Services/Data/SourceActorAliasApplicationService.Stages.cs": "eed300d29ef0fe82a41980bf5081b4c47e6dd39e43a8a46aead52c01459b29ad",
+      "RelistenApi/Services/Data/NormalizedPeopleService.SourceActorAliases.Validation.cs": "da7d20def9a1ebf4726843ac4960c242070a3d9171eaae5efa76fa413d32804c",
+      "RelistenApiTests/Services/TestNormalizationSourceActorAliasApplications.TargetBatches.cs": "c6582beedf5f0b3b1a489b24b55f7021d0241c222de655785c17be68ed49feed"
+    },
+    "apiAssemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+    "testAssemblySha256": "134cf0e4a52e9997c07267cf8cacf80d19ac2d9d66242bbca5982547179e0905"
+  },
+  "contract": {
+    "ownership": "Keep every selected original UUID and its complete current terminal component.",
+    "acquisition": "Resolve originals and acquire distinct terminal components in chunks of 64 roots within the caller transaction.",
+    "publication": "Independently read all current targets under existing Work protections; saved targets do not supply current authority.",
+    "unchanged": [
+      "public interfaces",
+      "schema and durable DTOs",
+      "producer versions and IDs",
+      "per-component member limit",
+      "source/review/support authentication",
+      "lazy future machine candidates",
+      "current owner and redirect fencing"
+    ]
+  },
+  "verification": {
+    "build": {
+      "errors": 0,
+      "warnings": 49
+    },
+    "tests": {
+      "distinctPassingTests": 408,
+      "runs": [
+        {
+          "name": "normalization-target-batch-public-cases-v1",
+          "passed": 3,
+          "explicitNotExecuted": []
+        },
+        {
+          "name": "normalization-target-batch-source-lifecycle-v1",
+          "passed": 406,
+          "explicitNotExecuted": [
+            "CompleteFileScopeProofRefusesItsExceededByteBudgetWithoutTruncatingThePublishedExtraction(75000,True,\"checkpoint_capacity_exceeded\")",
+            "CompleteFileScopeProofRefusesItsExceededByteBudgetWithoutTruncatingThePublishedExtraction(195000,False,\"source_consumption_capacity_exceeded\")",
+            "LargeTitleProducerKeepsItsFullPublicBatchAndPublishesItsSmallerSourceConsumption",
+            "RestoredV1HistoryReplaysResumesAndConfiguresV2WhileForeignAdmissionStillRefuses"
+          ]
+        },
+        {
+          "name": "normalization-target-batch-small-scale-v1",
+          "passed": 2,
+          "explicitNotExecuted": []
+        }
+      ],
+      "newPublicCases": {
+        "passed": 3,
+        "includedInLifecycle406": true
+      },
+      "previousImplementationControl": {
+        "passed": 3,
+        "sameTestNamesAsNewCases": true,
+        "notAdditionalDistinctCases": true,
+        "meaning": "New public proof/freshness/recovery cases pass with both unbatched and batched API assemblies."
+      }
+    },
+    "formatter": {
+      "passed": true,
+      "filesChecked": 1114
+    },
+    "gitDiffCheck": "passed",
+    "independentReviews": [
+      "correctness",
+      "separate readability and code simplification"
+    ]
+  },
+  "queryCountAnalysis": {
+    "requestedDistinctOriginals": 1000,
+    "previousTargetCommands": 2000,
+    "maximumBatchResolutionCommands": 16,
+    "maximumBatchComponentCommands": 16,
+    "qualification": "Derived from the reader source. This does not count all application commands or establish measured throughput, latency or memory use."
+  },
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-target-batch-v1/runtime-v1/manifest.json",
+    "sha256": "1bb98f021b67dbd343c66514b97662c3ad853e26e4f77e0d2b96f52a8f0c4f8e",
+    "files": 36
+  },
+  "remaining": [
+    "Complete final-code lifecycles with 1,000 distinct people, 1,000 repeated claims and 1,001 sources.",
+    "Run the final-code full suite and catalog cost checks.",
+    "The new runtime packet does not exercise the 100,001-member overflow boundary.",
+    "Independent cross-artist matching evaluation, backfill and rollout remain required."
+  ],
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}
