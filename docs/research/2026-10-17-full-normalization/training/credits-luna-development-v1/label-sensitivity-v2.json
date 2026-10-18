@@ -1,0 +1,123 @@
+{
+  "version": "luna-credit-field-report-v1",
+  "status": "development_diagnostic",
+  "identity_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "fields": 100,
+  "scored_resolved_fields": 84,
+  "excluded_fields": 16,
+  "explicit_receipt_exclusions": [
+    "credit-field:51c9ea75-94cf-ed09-87f0-7e5f05502160:description",
+    "credit-field:77a09858-c858-c73c-3f98-43d653c2b26f:lineage"
+  ],
+  "sensitivity": {
+    "kind": "conservative_whole_field_exclusion",
+    "status": "pending_adjudication",
+    "finding_id": "local-credit-grammar-recording-noun-attribution-v1",
+    "additional_excluded_label_ids": [
+      "credit-field:77a09858-c858-c73c-3f98-43d653c2b26f:lineage"
+    ],
+    "scope": "Exclude the entire field, including its supported transfer credit; do not turn the disputed taper into a negative.",
+    "frozen_labels_changed": false,
+    "model_results_changed": false,
+    "new_api_requests": 0
+  },
+  "methods": {
+    "local": {
+      "true_positive": 59,
+      "false_positive": 7,
+      "false_negative": 9,
+      "precision": 0.8939393939393939,
+      "recall": 0.8676470588235294,
+      "scored_fields": 84,
+      "unavailable_fields": 0,
+      "gold_assertions": 68,
+      "exact_fields": 75
+    },
+    "luna": {
+      "true_positive": 59,
+      "false_positive": 3,
+      "false_negative": 3,
+      "precision": 0.9516129032258065,
+      "recall": 0.9516129032258065,
+      "scored_fields": 78,
+      "unavailable_fields": 6,
+      "gold_assertions": 62,
+      "exact_fields": 75
+    },
+    "current_routing": {
+      "true_positive": 61,
+      "false_positive": 7,
+      "false_negative": 5,
+      "precision": 0.8970588235294118,
+      "recall": 0.9242424242424242,
+      "scored_fields": 82,
+      "unavailable_fields": 2,
+      "gold_assertions": 66,
+      "exact_fields": 76
+    },
+    "luna_with_local_on_failure": {
+      "true_positive": 62,
+      "false_positive": 4,
+      "false_negative": 6,
+      "precision": 0.9393939393939394,
+      "recall": 0.9117647058823529,
+      "scored_fields": 84,
+      "unavailable_fields": 0,
+      "gold_assertions": 68,
+      "exact_fields": 78
+    },
+    "current_routing_with_local_on_failure": {
+      "true_positive": 61,
+      "false_positive": 7,
+      "false_negative": 7,
+      "precision": 0.8970588235294118,
+      "recall": 0.8970588235294118,
+      "scored_fields": 84,
+      "unavailable_fields": 0,
+      "gold_assertions": 68,
+      "exact_fields": 76
+    }
+  },
+  "paired_local_luna": {
+    "transitions": {
+      "paired_fields": 78,
+      "recovered_gold_assertions": 3,
+      "lost_gold_assertions": 0,
+      "removed_extra_predictions": 3,
+      "introduced_extra_predictions": 0,
+      "both_correct_fields": 72,
+      "both_wrong_unchanged_fields": 3,
+      "corrected_fields": 3
+    },
+    "methods": {
+      "local": {
+        "true_positive": 56,
+        "false_positive": 6,
+        "false_negative": 6,
+        "precision": 0.9032258064516129,
+        "recall": 0.9032258064516129
+      },
+      "luna": {
+        "true_positive": 59,
+        "false_positive": 3,
+        "false_negative": 3,
+        "precision": 0.9516129032258065,
+        "recall": 0.9516129032258065
+      }
+    }
+  },
+  "provenance": {
+    "labels_sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12",
+    "selection_sha256": "e550d7a3bfe77ebb8577117b577a8360d7daf43103777b6318af6ff11f312eb0",
+    "manifest_sha256": "0d92852b737b545bdb5aee74e59a4fd02d5853716bc046dd77571c7bcc7a665f",
+    "results_sha256": "7aa8f1bf765e8b09c7d703f9a66a941978645217e7d337464b8129feb914429a",
+    "finding_sha256": "2f9cf430266bfbee378a023179c341db1627580b94bc84bae2ec71ed2b6684b2",
+    "scorer_sha256": "70773939a87e5adbb9d2652a5e5348343802c6d3b45fe457af799625447086f9"
+  },
+  "artifact": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/luna-field-comparison-v1/label-sensitivity-v2/report.json",
+    "bytes": 31147,
+    "sha256": "f13dc60375a04200dd35ec2d0c03cf620ebd9c09c6b87581dfe43c659f4c62e5"
+  }
+}
