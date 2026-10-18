@@ -1,0 +1,30 @@
+{
+  "CaptureVersion": "source-actor-v1-storage-boundary-capture-v1",
+  "FixturePurpose": "STORAGE-ONLY; not admissible matching, identity or publication evidence",
+  "WriterFormat": "source-actor-resolution-checkpoint-v1",
+  "ResolverVersion": "source-actor-resolution-proposals-v1/catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v6/recording-source-actor-envelope-v2/recording-extraction-v4/retained-recording-credits-v2/recording-credits-v4/recording-actor-evidence-v1/retained-actor-facts-v1/track-title-v1/local-selected-account-v1/retained-source-actor-aliases-v1/source-actor-aliases-v2/recording-actor-evidence-v1/retained-source-actor-alias-mapping-v1/people-candidate-facts-v5/people-actor-retrieval-v3/people-actor-projection-v1/people-actor-context-linear-v3/people-actor-projection-v1/people-actor-context-features-v1/source-actor-review-correspondence-v1/source-actor-resolution-decisions-v1/people-source-actor-alias-projection-v1/source-actor-aliases-v2/recording-actor-evidence-v1/people-actor-context-features-v1",
+  "SourceCaptureFileName": "source-actor-v1-capture.json",
+  "SourceCaptureSha256": "bf1302dfc449ca794bc631c6de88193d9042247d42c52c4f0f591b76ebb7c09a",
+  "SourcePublishedAttemptUuid": "00f2668f-14fb-49bb-96a2-b947d69f9072",
+  "Mutation": "Append ASCII x bytes to CandidatePools[0].QueryHash only; each root is padded independently",
+  "Preparation": {
+    "FileName": "source-actor-v1-boundary-preparation.json.gz",
+    "UncompressedBytes": 33554432,
+    "UncompressedSha256": "5fb2ea31d6bcfc657b9e3a63ea0079b87f614daba7761a0fe24fdd296889993f",
+    "GzipBytes": 37327,
+    "GzipSha256": "c99d79d2486677b39d564f283a7e21e5fd1bb6cec38456ef9706e231bd8c249e",
+    "BaselineBytes": 15769,
+    "PaddingBytes": 33538663,
+    "OriginalQueryHashSha256": "1a9529ec4cda5f3f178eade83a92b15ece65cab51e98dc67523819cba0939434"
+  },
+  "Batch": {
+    "FileName": "source-actor-v1-boundary-batch.json.gz",
+    "UncompressedBytes": 33554432,
+    "UncompressedSha256": "23674965b5791960cb59ad2c3d038b3d233a6ad620a92fcaff8e2a13c0a7ab64",
+    "GzipBytes": 38070,
+    "GzipSha256": "07623c1c80a0e627627205fa2fa95e938e8833dbb2238b07a076006d3b16d216",
+    "BaselineBytes": 18966,
+    "PaddingBytes": 33535466,
+    "OriginalQueryHashSha256": "1a9529ec4cda5f3f178eade83a92b15ece65cab51e98dc67523819cba0939434"
+  }
+}

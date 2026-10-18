@@ -13,13 +13,16 @@ using Relisten.Normalization;
 namespace Relisten.Data;
 
 /// <summary>
-/// Stores repeated original scopes and whole-field correspondence maps once per immutable
-/// checkpoint. References address this document only. Decoding restores the original domain values without reading current
-/// state, changing evidence hashes or replacing any original observations.
+/// Stores repeated source scopes, correspondence maps and complete candidate facts once per
+/// immutable checkpoint. Local references restore the original domain values without reading
+/// current state, changing evidence hashes or replacing original observations. V1 history
+/// remains readable; new V2 storage does not change matching or Work admission.
 /// </summary>
-internal static class SourceActorResolutionCheckpoint
+internal static partial class SourceActorResolutionCheckpoint
 {
-    internal const string FormatVersion = "source-actor-resolution-checkpoint-v1";
+    internal const string FormatVersion = "source-actor-resolution-checkpoint-v2";
+    internal const string LegacyFormatVersion = "source-actor-resolution-checkpoint-v1";
+    internal static string[] SupportedFormats => [LegacyFormatVersion, FormatVersion];
     internal const string PreparationKind = "resolution_preparation";
     internal const string BatchKind = "resolution_batch";
     internal const int MaximumCheckpointBytes = 32 * 1024 * 1024;
@@ -29,49 +32,61 @@ internal static class SourceActorResolutionCheckpoint
         Converters = { new ReadOnlyGuidSetJsonConverter() },
     };
 
-    internal static string WritePreparation(SourceActorResolutionPreparation value)
-    {
-        var encoder = new Encoder();
-        return SerializeBounded(
-            new Envelope<StoredPreparation>(
-                FormatVersion,
-                PreparationKind,
-                encoder.Preparation(value),
-                encoder.Scopes,
-                encoder.CorrespondencePairs
-            )
-        );
-    }
+    // V1 rows remain immutable. New writes share complete candidate bodies; equality
+    // compares logical encoder values without imposing a new write budget on old history.
+    internal static string WritePreparation(SourceActorResolutionPreparation value) =>
+        SerializeBounded(EncodePreparation(value, enforceCapacity: true));
 
-    internal static string WriteBatch(SourceActorResolutionBatch value)
-    {
-        var encoder = new Encoder();
-        return SerializeBounded(
-            new Envelope<StoredBatch>(
-                FormatVersion,
-                BatchKind,
-                encoder.Batch(value),
-                encoder.Scopes,
-                encoder.CorrespondencePairs
-            )
-        );
-    }
+    internal static string WriteBatch(SourceActorResolutionBatch value) =>
+        SerializeBounded(EncodeBatch(value, enforceCapacity: true));
 
     internal static SourceActorResolutionPreparation ReadPreparation(string json)
     {
-        var envelope = Read<StoredPreparation>(json, PreparationKind);
-        var decoder = new Decoder(envelope.Scopes, envelope.CorrespondencePairs);
-        var result = decoder.Preparation(envelope.Value);
-        decoder.RequireAllReferenced();
+        using var document = ReadDocument(json, PreparationKind);
+        var root = document.RootElement;
+        if (root.GetProperty("Format").GetString() == LegacyFormatVersion)
+        {
+            var legacy = ReadLegacy<StoredPreparationV1>(root, PreparationKind);
+            var decoder = new Decoder(legacy.Scopes, legacy.CorrespondencePairs);
+            var value = decoder.Preparation(legacy.Value);
+            decoder.RequireAllReferenced();
+            return value;
+        }
+
+        var envelope = ReadCurrent<StoredPreparationV2>(root, PreparationKind);
+        var current = new Decoder(
+            envelope.Scopes,
+            envelope.CorrespondencePairs,
+            new CandidateDecoder(envelope.CandidateFacts, envelope.OwnerBlocks)
+        );
+        var result = current.Preparation(envelope.Value);
+        current.RequireAllReferenced();
+        RequireCanonical(root, EncodePreparation(result));
         return result;
     }
 
     internal static SourceActorResolutionBatch ReadBatch(string json)
     {
-        var envelope = Read<StoredBatch>(json, BatchKind);
-        var decoder = new Decoder(envelope.Scopes, envelope.CorrespondencePairs);
-        var result = decoder.Batch(envelope.Value);
-        decoder.RequireAllReferenced();
+        using var document = ReadDocument(json, BatchKind);
+        var root = document.RootElement;
+        if (root.GetProperty("Format").GetString() == LegacyFormatVersion)
+        {
+            var legacy = ReadLegacy<StoredBatchV1>(root, BatchKind);
+            var decoder = new Decoder(legacy.Scopes, legacy.CorrespondencePairs);
+            var value = decoder.Batch(legacy.Value);
+            decoder.RequireAllReferenced();
+            return value;
+        }
+
+        var envelope = ReadCurrent<StoredBatchV2>(root, BatchKind);
+        var current = new Decoder(
+            envelope.Scopes,
+            envelope.CorrespondencePairs,
+            new CandidateDecoder(envelope.CandidateFacts, envelope.OwnerBlocks)
+        );
+        var result = current.Batch(envelope.Value);
+        current.RequireAllReferenced();
+        RequireCanonical(root, EncodeBatch(result));
         return result;
     }
 
@@ -84,26 +99,7 @@ internal static class SourceActorResolutionCheckpoint
         {
             return left == right;
         }
-        var leftEncoder = new Encoder();
-        var leftValue = leftEncoder.Preparation(left);
-        var rightEncoder = new Encoder();
-        var rightValue = rightEncoder.Preparation(right);
-        return Same(
-            new Envelope<StoredPreparation>(
-                FormatVersion,
-                PreparationKind,
-                leftValue,
-                leftEncoder.Scopes,
-                leftEncoder.CorrespondencePairs
-            ),
-            new Envelope<StoredPreparation>(
-                FormatVersion,
-                PreparationKind,
-                rightValue,
-                rightEncoder.Scopes,
-                rightEncoder.CorrespondencePairs
-            )
-        );
+        return Same(EncodePreparation(left), EncodePreparation(right));
     }
 
     internal static bool EquivalentBatch(
@@ -115,25 +111,42 @@ internal static class SourceActorResolutionCheckpoint
         {
             return left == right;
         }
-        var leftEncoder = new Encoder();
-        var leftValue = leftEncoder.Batch(left);
-        var rightEncoder = new Encoder();
-        var rightValue = rightEncoder.Batch(right);
-        return Same(
-            new Envelope<StoredBatch>(
-                FormatVersion,
-                BatchKind,
-                leftValue,
-                leftEncoder.Scopes,
-                leftEncoder.CorrespondencePairs
-            ),
-            new Envelope<StoredBatch>(
-                FormatVersion,
-                BatchKind,
-                rightValue,
-                rightEncoder.Scopes,
-                rightEncoder.CorrespondencePairs
-            )
+        return Same(EncodeBatch(left), EncodeBatch(right));
+    }
+
+    private static EnvelopeV2<StoredPreparationV2> EncodePreparation(
+        SourceActorResolutionPreparation value,
+        bool enforceCapacity = false
+    )
+    {
+        var encoder = new Encoder(enforceCapacity);
+        var stored = encoder.Preparation(value);
+        return new(
+            FormatVersion,
+            PreparationKind,
+            stored,
+            encoder.Scopes,
+            encoder.CorrespondencePairs,
+            encoder.Candidates.Facts,
+            encoder.Candidates.OwnerBlocks
+        );
+    }
+
+    private static EnvelopeV2<StoredBatchV2> EncodeBatch(
+        SourceActorResolutionBatch value,
+        bool enforceCapacity = false
+    )
+    {
+        var encoder = new Encoder(enforceCapacity);
+        var stored = encoder.Batch(value);
+        return new(
+            FormatVersion,
+            BatchKind,
+            stored,
+            encoder.Scopes,
+            encoder.CorrespondencePairs,
+            encoder.Candidates.Facts,
+            encoder.Candidates.OwnerBlocks
         );
     }
 
@@ -151,15 +164,15 @@ internal static class SourceActorResolutionCheckpoint
         var rightEncoder = new Encoder();
         var rightValue = rightEncoder.Reviews(new(null, right));
         return Same(
-            new Envelope<StoredReviews>(
-                FormatVersion,
+            new EnvelopeV1<StoredReviews>(
+                LegacyFormatVersion,
                 "review_rows_equality",
                 leftValue,
                 leftEncoder.Scopes,
                 leftEncoder.CorrespondencePairs
             ),
-            new Envelope<StoredReviews>(
-                FormatVersion,
+            new EnvelopeV1<StoredReviews>(
+                LegacyFormatVersion,
                 "review_rows_equality",
                 rightValue,
                 rightEncoder.Scopes,
@@ -186,23 +199,42 @@ internal static class SourceActorResolutionCheckpoint
             .ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(assertion)))
             .ToLowerInvariant();
 
-    private static Envelope<T> Read<T>(string json, string kind)
+    private static readonly JsonSerializerOptions CurrentReadOptions = new(ReadOptions)
     {
-        using var document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+    };
+
+    private static JsonDocument ReadDocument(string json, string kind)
+    {
+        var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (
+            root.ValueKind != JsonValueKind.Object
+            || root.EnumerateObject()
+                .Select(property => property.Name)
+                .Distinct(StringComparer.Ordinal)
+                .Count() != root.EnumerateObject().Count()
+            || !root.TryGetProperty("Format", out var format)
+            || format.ValueKind != JsonValueKind.String
+            || !SupportedFormats.Contains(format.GetString(), StringComparer.Ordinal)
+            || !root.TryGetProperty("Kind", out var storedKind)
+            || storedKind.ValueKind != JsonValueKind.String
+            || storedKind.GetString() != kind
+        )
         {
-            throw Invalid("A source actor checkpoint must be an object.");
+            document.Dispose();
+            throw Invalid("Unsupported source actor checkpoint format, kind or payload.");
         }
-        var properties = document.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
-        if (properties.Distinct(StringComparer.Ordinal).Count() != properties.Length)
-        {
-            throw Invalid("Duplicate source actor checkpoint envelope property.");
-        }
+        return document;
+    }
+
+    private static EnvelopeV1<T> ReadLegacy<T>(JsonElement root, string kind)
+    {
         var envelope =
-            JsonSerializer.Deserialize<Envelope<T>>(json, ReadOptions)
+            root.Deserialize<EnvelopeV1<T>>(ReadOptions)
             ?? throw Invalid("Missing source actor checkpoint envelope.");
         if (
-            envelope.Format != FormatVersion
+            envelope.Format != LegacyFormatVersion
             || envelope.Kind != kind
             || envelope.Value is null
             || envelope.Scopes == null
@@ -211,10 +243,79 @@ internal static class SourceActorResolutionCheckpoint
         {
             throw Invalid("Unsupported source actor checkpoint format, kind or payload.");
         }
-        // PostgreSQL can add whitespace or change escaping. Apply the write boundary to
-        // canonical codec bytes, not to the transport text returned by JSONB ::text.
+        // Retain the original format's budget; a larger V2 framing must not invalidate V1 history.
         SerializeBounded(envelope);
         return envelope;
+    }
+
+    private static EnvelopeV2<T> ReadCurrent<T>(JsonElement root, string kind)
+    {
+        RequireUniqueProperties(root);
+        var envelope =
+            root.Deserialize<EnvelopeV2<T>>(CurrentReadOptions)
+            ?? throw Invalid("Missing source actor checkpoint envelope.");
+        if (
+            envelope.Format != FormatVersion
+            || envelope.Kind != kind
+            || envelope.Value is null
+            || envelope.Scopes == null
+            || envelope.CorrespondencePairs == null
+            || envelope.CandidateFacts == null
+            || envelope.OwnerBlocks == null
+        )
+        {
+            throw Invalid("Unsupported source actor checkpoint format, kind or payload.");
+        }
+        var preparation = envelope.Value switch
+        {
+            StoredPreparationV2 value => value,
+            StoredBatchV2 batch when batch.Preparation != null => batch.Preparation,
+            _ => throw Invalid("Missing source actor candidate preparation."),
+        };
+        if (preparation.CandidatePools == null)
+        {
+            throw Invalid("Missing source actor candidate pools.");
+        }
+        foreach (var pool in preparation.CandidatePools)
+        {
+            CandidateDecoder.RequirePoolShape(pool);
+        }
+        // JSONB whitespace and escaping do not enlarge the canonical encoded write budget.
+        SerializeBounded(envelope);
+        return envelope;
+    }
+
+    private static void RequireUniqueProperties(JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var property in value.EnumerateObject())
+            {
+                if (!names.Add(property.Name))
+                {
+                    throw Invalid("Duplicate source actor checkpoint property.");
+                }
+                RequireUniqueProperties(property.Value);
+            }
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in value.EnumerateArray())
+            {
+                RequireUniqueProperties(item);
+            }
+        }
+    }
+
+    private static void RequireCanonical<T>(JsonElement original, EnvelopeV2<T> canonical)
+    {
+        if (!JsonElement.DeepEquals(original, JsonSerializer.SerializeToElement(canonical)))
+        {
+            throw Invalid(
+                "Source actor checkpoint has hidden, unused or noncanonical proof blocks."
+            );
+        }
     }
 
     private static string SerializeBounded<T>(T value)
@@ -252,12 +353,23 @@ internal static class SourceActorResolutionCheckpoint
     // Stored contracts are private to this format. Inputs keep their original contributor
     // and revision fields at the same named paths used by configured-membership recovery.
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record Envelope<T>(
+    private sealed record EnvelopeV1<T>(
         string Format,
         string Kind,
         T Value,
         IReadOnlyList<NormalizationRecordingSourceActorAliasScope> Scopes,
         IReadOnlyList<StoredCorrespondencePair> CorrespondencePairs
+    );
+
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    private sealed record EnvelopeV2<T>(
+        string Format,
+        string Kind,
+        T Value,
+        IReadOnlyList<NormalizationRecordingSourceActorAliasScope> Scopes,
+        IReadOnlyList<StoredCorrespondencePair> CorrespondencePairs,
+        IReadOnlyList<PersonCandidateFacts> CandidateFacts,
+        IReadOnlyList<IReadOnlyList<NormalizationSubjectObservation>> OwnerBlocks
     );
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -333,7 +445,7 @@ internal static class SourceActorResolutionCheckpoint
     );
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record StoredPreparation(
+    private sealed record StoredPreparationV1(
         NormalizationSubjectObservation ExtractionObservation,
         NormalizationWorkTicket ExtractionTicket,
         PeopleAcceptancePolicyState PolicyState,
@@ -346,16 +458,39 @@ internal static class SourceActorResolutionCheckpoint
     );
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    private sealed record StoredBatch(
+    private sealed record StoredBatchV1(
         Guid AttemptUuid,
         Guid SourceUuid,
         Guid ExtractionAttemptUuid,
         string ProcessingVersion,
-        StoredPreparation Preparation,
+        StoredPreparationV1 Preparation,
         NormalizationWorkTicket Ticket
     );
 
-    private sealed class Encoder
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    private sealed record StoredPreparationV2(
+        NormalizationSubjectObservation ExtractionObservation,
+        NormalizationWorkTicket ExtractionTicket,
+        PeopleAcceptancePolicyState PolicyState,
+        NormalizationCandidateUniverseDependency PeopleUniverse,
+        StoredReviews SourceReviews,
+        long? ExpectedConfigurationGeneration,
+        IReadOnlyList<NormalizationInputContributionRevision> ExpectedContributions,
+        IReadOnlyList<StoredInput> Inputs,
+        IReadOnlyList<StoredPool> CandidatePools
+    );
+
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    private sealed record StoredBatchV2(
+        Guid AttemptUuid,
+        Guid SourceUuid,
+        Guid ExtractionAttemptUuid,
+        string ProcessingVersion,
+        StoredPreparationV2 Preparation,
+        NormalizationWorkTicket Ticket
+    );
+
+    private sealed class Encoder(bool enforceCapacity = false)
     {
         private readonly Dictionary<string, List<int>> scopeHashes = new(StringComparer.Ordinal);
         private readonly Dictionary<
@@ -368,8 +503,9 @@ internal static class SourceActorResolutionCheckpoint
         );
         public List<NormalizationRecordingSourceActorAliasScope> Scopes { get; } = [];
         public List<StoredCorrespondencePair> CorrespondencePairs { get; } = [];
+        public CandidateEncoder Candidates { get; } = new(enforceCapacity);
 
-        public StoredPreparation Preparation(SourceActorResolutionPreparation value) =>
+        public StoredPreparationV2 Preparation(SourceActorResolutionPreparation value) =>
             new(
                 value.ExtractionObservation,
                 value.ExtractionTicket,
@@ -379,10 +515,10 @@ internal static class SourceActorResolutionCheckpoint
                 value.ExpectedConfigurationGeneration,
                 value.ExpectedContributions,
                 value.Inputs.Select(Input).ToArray(),
-                value.CandidatePools
+                value.CandidatePools.Select(Candidates.Pool).ToArray()
             );
 
-        public StoredBatch Batch(SourceActorResolutionBatch value) =>
+        public StoredBatchV2 Batch(SourceActorResolutionBatch value) =>
             new(
                 value.AttemptUuid,
                 value.SourceUuid,
@@ -550,13 +686,14 @@ internal static class SourceActorResolutionCheckpoint
 
     private sealed class Decoder(
         IReadOnlyList<NormalizationRecordingSourceActorAliasScope> scopes,
-        IReadOnlyList<StoredCorrespondencePair> pairs
+        IReadOnlyList<StoredCorrespondencePair> pairs,
+        CandidateDecoder? candidates = null
     )
     {
         private readonly bool[] usedScopes = new bool[scopes.Count];
         private readonly bool[] usedPairs = new bool[pairs.Count];
 
-        public SourceActorResolutionPreparation Preparation(StoredPreparation value) =>
+        public SourceActorResolutionPreparation Preparation(StoredPreparationV1 value) =>
             new(
                 value.ExtractionObservation,
                 value.ExtractionTicket,
@@ -569,7 +706,30 @@ internal static class SourceActorResolutionCheckpoint
                 value.CandidatePools
             );
 
-        public SourceActorResolutionBatch Batch(StoredBatch value) =>
+        public SourceActorResolutionBatch Batch(StoredBatchV1 value) =>
+            new(
+                value.AttemptUuid,
+                value.SourceUuid,
+                value.ExtractionAttemptUuid,
+                value.ProcessingVersion,
+                Preparation(value.Preparation),
+                value.Ticket
+            );
+
+        public SourceActorResolutionPreparation Preparation(StoredPreparationV2 value) =>
+            new(
+                value.ExtractionObservation,
+                value.ExtractionTicket,
+                value.PolicyState,
+                value.PeopleUniverse,
+                Reviews(value.SourceReviews),
+                value.ExpectedConfigurationGeneration,
+                value.ExpectedContributions,
+                value.Inputs.Select(Input).ToArray(),
+                value.CandidatePools.Select(candidates!.Pool).ToArray()
+            );
+
+        public SourceActorResolutionBatch Batch(StoredBatchV2 value) =>
             new(
                 value.AttemptUuid,
                 value.SourceUuid,
@@ -581,6 +741,7 @@ internal static class SourceActorResolutionCheckpoint
 
         public void RequireAllReferenced()
         {
+            candidates?.RequireAllReferenced();
             if (usedScopes.Any(used => !used) || usedPairs.Any(used => !used))
             {
                 throw Invalid("Unreferenced source actor checkpoint scope or correspondence pair.");

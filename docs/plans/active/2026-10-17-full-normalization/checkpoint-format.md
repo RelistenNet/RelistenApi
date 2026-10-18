@@ -85,18 +85,50 @@ unsupported. No fresh Work or owner clocks are substituted.
 No database migration or rewrite of old checkpoint rows is required. The format
 uses the existing JSONB columns and immutability rules.
 
+## Source actor candidates
+
+Source actor resolution uses the same storage principle through its separate
+`SourceActorResolutionCheckpoint` codec. New preparations and batches use
+`source-actor-resolution-checkpoint-v2`; readers also accept the original v1
+format. This change addresses repeated comparisons after a source has published
+many aliases for one person. Each query previously stored that person's complete
+matching facts again, which could exceed the checkpoint limit on a later run.
+
+V2 stores exact complete candidate fact bodies and owner-observation lists once
+per checkpoint. Every query retains its ordered retrieval result, candidate
+order, scores, reasons, limits, issues and read set. A changed fact or owner clock
+requires a separate block. Decoding rejects conflicting candidate identities,
+missing or unused references, incomplete owner observations and hidden inline
+data. Sharing does not authorize a match or omit evidence.
+
+Configured-input recovery recognizes both formats and still authenticates the
+original contributed Work request and membership vector. Historical v1 rows
+stay unchanged. Logical equality can compare a valid v1 row at the old size
+limit even when v2 framing would exceed that limit; a new v2 write must still
+fit within 32 MiB. No schema, processing version, matching policy, public DTO or
+Work request hash changes.
+
+The fixtures include actual v1 public-service values and two files generated
+through the unchanged v1 writer at exactly 32 MiB. Those two boundary files pad
+one query hash solely to test storage compatibility; they cannot establish a
+matching or identity decision. The separate restored-database probe tests
+published replay, recovery after admission but before batch storage, new v2
+work configured from v1 history, and refusal of an unrelated ordinary admission.
+The [source publication plan](source-actor-publication.md) owns the large
+publication and catalog-capacity requirements.
+
 ## Deployment and rollback
 
 The current binary reads both formats and immediately writes compact checkpoints.
 There is no writer-format feature flag or reader-only mode. Pause all people
-resolution and acceptance writers before deployment. Deploy compatible binaries
-to every API, worker, operator and resume path that reads these checkpoints,
-then resume writers only after those paths are compatible. Registering a service
+resolution, acceptance and source actor writers before deployment. Deploy
+compatible binaries to every API, worker, operator and resume path that reads
+these checkpoints, then resume writers only after those paths are compatible. Registering a service
 starts no processing, schedule or identity policy.
 
-Before rollback, pause people writers. Roll back only to a release that can read
-both retained formats and handle the saved attempts under their processing-version
-rules. A binary that cannot read compact checkpoints is not a safe rollback
+Before rollback, pause people and source actor writers. Roll back only to a
+release that can read all retained formats and handle the saved attempts under
+their processing-version rules. A binary that cannot read compact checkpoints is not a safe rollback
 for that data. Retain compatible readers, original attempts, Work receipts,
 accepted identities and credit support. Do not rewrite immutable rows to make an
 older binary accept them, or delete an identity left by interrupted acceptance.

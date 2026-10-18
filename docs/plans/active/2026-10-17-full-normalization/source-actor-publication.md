@@ -183,9 +183,11 @@ publication transaction.
 
 Local verification covers the public lifecycle and nonempty upgrade. The
 [capacity evidence](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
-retains the separate large-input runs. The 1,000-claim first application commits
-all 3,000 name-evidence supports, but its complete repeat is not yet verified.
-The 1,000-person baseline also remains incomplete. Repeated candidate queries,
+retains the separate large-input baseline runs. The [checkpoint follow-up](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
+now verifies the complete 1,000-claim repeat through both applications and saved
+stage readback. A snapshot after the first application records 3,000 retained
+name-evidence supports.
+The 1,000-person baseline remains incomplete. Repeated candidate queries,
 full stage storage and per-claim retained scope copies require further cost work;
 the smaller passing cases do not establish catalog throughput.
 

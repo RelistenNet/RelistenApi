@@ -36,7 +36,7 @@ public sealed partial class SourceActorResolutionStore
                 JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
                 CROSS JOIN LATERAL (
                     SELECT CASE
-                        WHEN a.preparation->>'Format'=@checkpointFormat
+                        WHEN a.preparation->>'Format'=ANY(@checkpointFormats)
                             AND a.preparation->>'Kind'=@checkpointKind THEN a.preparation->'Value'
                     END AS payload
                 ) AS stored
@@ -72,7 +72,7 @@ public sealed partial class SourceActorResolutionStore
                 new
                 {
                     sourceUuid,
-                    checkpointFormat = SourceActorResolutionCheckpoint.FormatVersion,
+                    checkpointFormats = SourceActorResolutionCheckpoint.SupportedFormats,
                     checkpointKind = SourceActorResolutionCheckpoint.PreparationKind,
                     contributions = JsonSerializer.Serialize(
                         membership.Contributions.Select(

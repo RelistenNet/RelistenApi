@@ -275,7 +275,7 @@ public sealed partial class SourceActorAliasApplicationService
             if (
                 peer.Contributor.Provider != "relisten"
                 || peer.Contributor.ResourceType != "preexisting_owner_bindings"
-                || peer.Contributor.ProviderKey != state.Owner.SubjectUuid.ToString("D")
+                || peer.Contributor.ProviderKey != state.Owner!.SubjectUuid.ToString("D")
             )
             {
                 throw new NormalizationConflictException(

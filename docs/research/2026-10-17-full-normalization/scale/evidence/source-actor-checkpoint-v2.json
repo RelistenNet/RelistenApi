@@ -1,0 +1,75 @@
+{
+  "version": "source-actor-checkpoint-v2",
+  "state": "verified_storage_recovery_and_thousand_claim_repeat",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-checkpoint-v2-v1/execution-verification-v1/manifest.json",
+    "sha256": "1c24cfb2e38fd3b04a564c796570492c4674ddb5c6471757f109a22af5a48c5c"
+  },
+  "testRuns": [
+    {
+      "run": "source-actor-checkpoint-v2-pure-v1",
+      "passed": 80,
+      "failed": 0,
+      "scope": "Full ordered values, 70 malformed cases, distinct-query large facts, exact byte boundaries and actual v1 public values."
+    },
+    {
+      "run": "source-actor-checkpoint-v2-restored-v1",
+      "passed": 1,
+      "failed": 0,
+      "scope": "Exact restored old database: published replay, admitted-before-batch recovery, new v2 work configured from v1 history and ordinary-mode ownership refusal."
+    },
+    {
+      "run": "source-actor-checkpoint-v2-services-v1",
+      "passed": 190,
+      "failed": 0,
+      "scope": "Source resolution, publication, original owner observations, alias facts and nonempty migration57 upgrade; scale and migration58 visibility excluded.",
+      "notExecuted": 1
+    },
+    {
+      "run": "source-actor-publication-thousand-claims-checkpoint-v2-v2",
+      "passed": 1,
+      "failed": 0,
+      "claims": 1000,
+      "testDurationSeconds": 655.728089,
+      "wallSeconds": 658.778,
+      "scope": "Both applications complete; every retained stage passes complete codec roundtrip and byte-bound checks; all requested aliases remain current."
+    }
+  ],
+  "capacity": {
+    "unchangedCodecLimitBytes": 33554432,
+    "firstApplicationSupportsObserved": 3000,
+    "completedApplicationsObserved": 2,
+    "publishedPersonStagesObserved": 4,
+    "secondResolutionPublished": true,
+    "secondResolutionPostgresTextBytes": {
+      "preparation": 9640728,
+      "batch": 9644213
+    },
+    "postgresTextIsAdmissionSize": false,
+    "wholeTestPeakMemoryMeasured": false,
+    "note": "The old writer failed during the second source resolution with checkpoint_capacity_exceeded. The passing repeat establishes this synthetic lifecycle boundary, not catalog throughput or matching accuracy."
+  },
+  "legacyEvidence": {
+    "publicFixture": "RelistenApiTests/Fixtures/normalization/source-actor-v1-public-fixture.json",
+    "publicFixtureSha256": "e83281f9c5ca9c4362aba19a95836990a815ce4338d53fc30870e7bea6155c4c",
+    "boundaryRawBytesEach": 33554432,
+    "boundaryPurpose": "Actual old-writer storage fixtures pad one QueryHash only. They cannot authorize matching or identity changes.",
+    "oldRowsRewritten": false,
+    "restoredDatabaseRemoved": true
+  },
+  "behavior": [
+    "Share exact complete neutral-hit candidate bodies and owner lists within one checkpoint; retain every ordered query, actual hit, score, reason, issue and original observation.",
+    "Read genuine v1 and v2 history; compare logical values without imposing a new write budget on valid old rows. New v2 writes still enforce the unchanged limit.",
+    "Configured-input recovery authenticates the original contributed Work request and membership vector for either format. No schema, public DTO, processing version or Work hash changes."
+  ],
+  "verificationNotes": [
+    "One malformed runner filter failed before tests started; the corrected command selected exactly one full 1000-claim case.",
+    "A fresh independent correctness and readability review found no issues.",
+    "No automatic policy activation or production writes."
+  ],
+  "remaining": [
+    "1000 distinct people and 1001-source lifecycle completion/cost",
+    "Merged-alias review visibility and full suite rerun",
+    "Independent matching evaluation and catalog cost/backfill/rollout"
+  ]
+}
