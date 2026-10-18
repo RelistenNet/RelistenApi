@@ -313,6 +313,131 @@ public sealed class TestRecordingExtraction
         }
     }
 
+    [Test]
+    public void MixedLineAndHtmlBoundariesKeepOriginalUnicodeCreditCoordinates()
+    {
+        const string first = "  Recorded by <b>Ren&eacute; Vale</b>  ";
+        const string second = "Transferred by Zoe\u0308 Hart";
+        const string third = "Mastered by Jo Reed";
+        const string raw =
+            "🎵\r\n\r<div data-note='🌙'>"
+            + first
+            + "</div>\n\n<p>"
+            + second
+            + "</p>\r<br />\r\n"
+            + third;
+
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role, credit.Evidence))
+            .Should()
+            .Equal(
+                (
+                    "René Vale",
+                    RecordingCreditRole.Taper,
+                    new NormalizationTextEvidence("description", "/description", first, 23, 62)
+                ),
+                (
+                    "Zoe\u0308 Hart",
+                    RecordingCreditRole.Transferrer,
+                    new NormalizationTextEvidence("description", "/description", second, 73, 97)
+                ),
+                (
+                    "Jo Reed",
+                    RecordingCreditRole.MasteringEngineer,
+                    new NormalizationTextEvidence("description", "/description", third, 110, 129)
+                )
+            );
+        result.Unresolved.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.Evidence);
+        }
+    }
+
+    [Test]
+    public void AngleContactsStayInTheirRawLineBeforeLaterCreditOffsets()
+    {
+        const string first =
+            "Recorded by Alex Vale <br@example.test>; Transferred by Pat Lane <p@example.test>";
+        const string last = "Mastered by Rae Stone";
+        const string raw = "🌙<div>" + first + "</div>\r\n\r\n" + last;
+
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role, credit.Evidence))
+            .Should()
+            .Equal(
+                (
+                    "Alex Vale",
+                    RecordingCreditRole.Taper,
+                    new NormalizationTextEvidence("description", "/description", first, 6, 87)
+                ),
+                (
+                    "Pat Lane",
+                    RecordingCreditRole.Transferrer,
+                    new NormalizationTextEvidence("description", "/description", first, 6, 87)
+                ),
+                (
+                    "Rae Stone",
+                    RecordingCreditRole.MasteringEngineer,
+                    new NormalizationTextEvidence("description", "/description", last, 97, 118)
+                )
+            );
+        result
+            .Credits[0]
+            .ActorFacts!.Contacts.Should()
+            .ContainSingle()
+            .Which.Literal.Should()
+            .Be("br@example.test");
+        result
+            .Credits[1]
+            .ActorFacts!.Contacts.Should()
+            .ContainSingle()
+            .Which.Literal.Should()
+            .Be("p@example.test");
+        result.Credits[2].ActorFacts!.Contacts.Should().BeEmpty();
+        result.Unresolved.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.Evidence);
+        }
+    }
+
+    [Test]
+    public void InvalidSurrogatePrefixesKeepReplacementRuneCreditOffsetsAcrossBoundaries()
+    {
+        const string first = "Recorded by Mina Vale";
+        const string second = "Transferred by Bo Reed";
+        const string raw =
+            "\uD800\r\n\uDC00<div data-note='🧭'>\r<br />\n" + first + "\r\n\r" + second + "\n";
+
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role, credit.Evidence))
+            .Should()
+            .Equal(
+                (
+                    "Mina Vale",
+                    RecordingCreditRole.Taper,
+                    new NormalizationTextEvidence("description", "/description", first, 31, 52)
+                ),
+                (
+                    "Bo Reed",
+                    RecordingCreditRole.Transferrer,
+                    new NormalizationTextEvidence("description", "/description", second, 55, 77)
+                )
+            );
+        result.Unresolved.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.Evidence);
+        }
+    }
+
     private static void AssertCitation(string raw, NormalizationTextEvidence evidence)
     {
         var runes = raw.EnumerateRunes().ToArray();

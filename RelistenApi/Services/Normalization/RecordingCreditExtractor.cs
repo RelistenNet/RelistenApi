@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using Relisten.Api.Models.Normalization;
 
@@ -376,6 +377,7 @@ internal static class RecordingText
     internal static IEnumerable<Line> Lines(string field, string raw)
     {
         var start = 0;
+        var startCodePoint = 0;
         foreach (Match boundary in Boundaries.Matches(raw))
         {
             // A local part such as "br" can resemble a block tag. Preserve the same complete
@@ -384,16 +386,29 @@ internal static class RecordingText
             {
                 continue;
             }
-            var line = Read(field, raw, start, boundary.Index);
+            var endCodePoint =
+                startCodePoint + CountRunes(raw.AsSpan(start, boundary.Index - start));
+            var line = Read(field, raw, start, boundary.Index, startCodePoint, endCodePoint);
             if (line is not null)
             {
                 yield return line;
             }
 
+            // Boundaries begin and end with ASCII, so these disjoint spans never split a
+            // surrogate pair. Counting each span also preserves replacement-rune offsets
+            // for invalid surrogates without rescanning the growing prefix for every line.
+            startCodePoint = endCodePoint + CountRunes(raw.AsSpan(boundary.Index, boundary.Length));
             start = boundary.Index + boundary.Length;
         }
 
-        var last = Read(field, raw, start, raw.Length);
+        var last = Read(
+            field,
+            raw,
+            start,
+            raw.Length,
+            startCodePoint,
+            startCodePoint + CountRunes(raw.AsSpan(start))
+        );
         if (last is not null)
         {
             yield return last;
@@ -406,7 +421,24 @@ internal static class RecordingText
             match => RecordingActorEvidenceExtractor.IsAngleContact(match.Value) ? match.Value : ""
         );
 
-    private static Line? Read(string field, string raw, int start, int end)
+    private static int CountRunes(ReadOnlySpan<char> text)
+    {
+        var count = 0;
+        foreach (var rune in text.EnumerateRunes())
+        {
+            count++;
+        }
+        return count;
+    }
+
+    private static Line? Read(
+        string field,
+        string raw,
+        int start,
+        int end,
+        int startCodePoint,
+        int endCodePoint
+    )
     {
         var quote = raw[start..end];
         var text = WebUtility.HtmlDecode(WithoutMarkup(quote)).Trim();
@@ -416,15 +448,6 @@ internal static class RecordingText
         }
 
         var pointer = "/" + field.Replace("~", "~0").Replace("/", "~1");
-        return new(
-            text,
-            new(
-                field,
-                pointer,
-                quote,
-                raw[..start].EnumerateRunes().Count(),
-                raw[..end].EnumerateRunes().Count()
-            )
-        );
+        return new(text, new(field, pointer, quote, startCodePoint, endCodePoint));
     }
 }

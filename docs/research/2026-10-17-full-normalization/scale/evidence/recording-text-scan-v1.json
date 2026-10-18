@@ -1,0 +1,158 @@
+{
+  "kind": "recording-text-linear-coordinate-scan-v1",
+  "observedDate": "2026-10-18",
+  "status": "focused-correctness-and-extraction-comparison-pass; full-size publication incomplete",
+  "change": "Count disjoint raw spans once for Unicode evidence coordinates; preserve extraction grammar, producer versions, raw quotes and identities.",
+  "source": {
+    "baseCommit": "0f3bb0694b4db5c851fc02ada27007a2882d0748",
+    "formattedOverlaysSha256": {
+      "RelistenApiTests/Services/TestNormalizationCreditReconciliation.cs": "b9b86f4526d5e671d0b6d8d5503ac9a490dd38318d2f2f11524842560e499b2d",
+      "RelistenApi/Services/Normalization/RecordingCreditExtractor.cs": "a2a99a2e27a917261e0da1e67690660be4bb6b0181936bca7f1c163ce1aaac8f",
+      "RelistenApiTests/Normalization/TestRecordingExtraction.cs": "656f4fd86d6adcdae9d48d0361660a8d1145a30b58d8c0bbc913f5a75431dfff"
+    },
+    "historicalFixtureCommit": "2d64afe"
+  },
+  "verification": {
+    "build": {
+      "errors": 0,
+      "warnings": 49,
+      "location": "isolated source capsule; no live primary binaries replaced"
+    },
+    "tests": {
+      "distinctPassingTests": 645,
+      "runs": [
+        {
+          "name": "normalization-text-scan-credits-v1",
+          "passed": 36,
+          "explicitNotExecuted": []
+        },
+        {
+          "name": "normalization-text-scan-shared-contracts-v1",
+          "passed": 206,
+          "explicitNotExecuted": []
+        },
+        {
+          "name": "normalization-text-scan-source-lifecycle-v1",
+          "passed": 403,
+          "explicitNotExecuted": [
+            "RestoredV1HistoryReplaysResumesAndConfiguresV2WhileForeignAdmissionStillRefuses",
+            "CompleteFileScopeProofRefusesItsExceededByteBudgetWithoutTruncatingThePublishedExtraction(195000,False,\"source_consumption_capacity_exceeded\")",
+            "CompleteFileScopeProofRefusesItsExceededByteBudgetWithoutTruncatingThePublishedExtraction(75000,True,\"checkpoint_capacity_exceeded\")",
+            "LargeTitleProducerKeepsItsFullPublicBatchAndPublishesItsSmallerSourceConsumption"
+          ]
+        }
+      ],
+      "fullSuite": "The separate full-suite run predates this change and is still running. Its result is outside these passing checks.",
+      "largeLifecycle": "The baseline before migration 58 failed at the one-hour limit. This text-reader fix has not established a successful 1,000-person lifecycle."
+    },
+    "format": {
+      "filesChecked": 1113,
+      "passed": true
+    },
+    "gitDiffCheck": "passed",
+    "independentSourceReviews": [
+      "correctness",
+      "separate readability and code simplification"
+    ]
+  },
+  "extractionComparison": {
+    "scope": "Two shared-host comparisons in opposite order. Each case/extractor in each assembly invocation has five measured samples and two warmups. Within each case/extractor, all 28 sample outputs agree byte for byte; there are 112 samples in total. Timing covers pure extraction only.",
+    "comparisons": [
+      {
+        "case": "personnel",
+        "extractor": "Credits",
+        "completeResultBytes": 30,
+        "completeResultSha256": "9253a9ef75c849dcefef4c38d3d5cbdb09e2a6ff611f918b515e84c0c66ad787",
+        "all28SampleResultsEqual": true,
+        "oldMediansMs": [
+          192.4946,
+          196.6093
+        ],
+        "newMediansMs": [
+          5.7797,
+          5.9024
+        ]
+      },
+      {
+        "case": "personnel",
+        "extractor": "SourceActors",
+        "completeResultBytes": 1797020,
+        "completeResultSha256": "90f3ae34f69970843333a18f49518a5334e279a6b2af243b9a7c8f2140ba679d",
+        "all28SampleResultsEqual": true,
+        "oldMediansMs": [
+          213.6565,
+          211.3676
+        ],
+        "newMediansMs": [
+          30.7587,
+          30.9599
+        ]
+      },
+      {
+        "case": "role_credits",
+        "extractor": "Credits",
+        "completeResultBytes": 3277213,
+        "completeResultSha256": "d524cbf6c5ed00f0d769aab370cdeaaf8e71eb582c1751ebe7622c06fa998b35",
+        "all28SampleResultsEqual": true,
+        "oldMediansMs": [
+          232.7931,
+          232.6783
+        ],
+        "newMediansMs": [
+          74.8523,
+          76.9845
+        ]
+      },
+      {
+        "case": "role_credits",
+        "extractor": "SourceActors",
+        "completeResultBytes": 291093,
+        "completeResultSha256": "32eae0c953d7bdabd7b31abb035328fe03fb2137bc7802142151e2e20657180b",
+        "all28SampleResultsEqual": true,
+        "oldMediansMs": [
+          210.9002,
+          213.6519
+        ],
+        "newMediansMs": [
+          1.605,
+          1.5795
+        ]
+      }
+    ]
+  },
+  "largeBaseline": {
+    "sourceBase": "3a0ff63",
+    "migration58Included": false,
+    "test": "ManyPersonOrchestrationReturnsBoundedHeadersAndSeparateOriginalStageProofs(1000)",
+    "result": "Failed at the one-hour cancellation limit (3,600,000 ms).",
+    "testDuration": "01:00:00.1691940",
+    "processWallSeconds": 3604.6,
+    "lastSuccessfulObservation": {
+      "utc": "2026-10-18T14:50:11.48125Z",
+      "committedStages": 1106,
+      "initialAcceptanceStages": 1000,
+      "requiredCompleteFieldFinalizations": 106,
+      "storedStageBytes": 1019675240,
+      "databaseBytes": 1874392755
+    },
+    "limits": "Last observation is not final state or completed application. Later full-row capture failed during disposable database teardown. Sampled profile is wall-stack context, not CPU/self-time. Host and PostgreSQL were shared."
+  },
+  "privateEvidence": [
+    {
+      "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/recording-text-linear-scan-v1/runtime-v1/manifest.json",
+      "sha256": "bfeb682cd822489d5f9febe6de0004b196fbe0314fc2be7b197ab5b9b595ea9f"
+    },
+    {
+      "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-person-cohort-thousand-people-v1/runtime-v1/manifest.json",
+      "sha256": "e530be6ae29228a671dae6aeba83ebb9149c464488d51ef86389aa277c4840f4"
+    }
+  ],
+  "remaining": [
+    "Batch complete current target reads within each preparation/publication transaction; retain independent publication validation",
+    "Complete final-code lifecycle tests with 1,000 distinct people, 1,000 repeated claims and 1,001 sources.",
+    "Final-code full suite",
+    "Independent cross-artist automatic-matching evaluation, backfill and rollout"
+  ],
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

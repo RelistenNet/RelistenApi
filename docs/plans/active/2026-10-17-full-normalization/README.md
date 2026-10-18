@@ -71,6 +71,14 @@ records 28 final focused checks, 336 broader checks and 168 final synthetic quer
 plans, with their distinct execution scope. Full-suite and full-size publication
 checks remain required.
 
+The shared recording-text reader now counts raw evidence coordinates once per
+span. All 645 affected checks pass, and old/new public extraction produces
+byte-identical results on the large synthetic inputs. The preceding 1,000-person
+lifecycle test reached its one-hour limit before finalization finished. The
+[text-reader verification](recording-text-scan.md) separates that failed baseline
+from the passing checks and extraction timings. Batch current target reads next,
+then repeat the full-size lifecycles; no publication-throughput claim is established.
+
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
 aliases or create identities. All 106 focused policy and 160 people regression

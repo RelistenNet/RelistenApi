@@ -220,9 +220,12 @@ retains the separate large-input baseline runs. The [checkpoint follow-up](../..
 now verifies the complete 1,000-claim repeat through both applications and saved
 stage readback. A snapshot after the first application records 3,000 retained
 name-evidence supports.
-The 1,000-person baseline remains incomplete. Repeated candidate queries,
-full stage storage and per-claim retained scope copies require further cost work;
-the smaller passing cases do not establish catalog throughput.
+The latest 1,000-person baseline failed at its one-hour cancellation limit.
+The [text-reader follow-up](recording-text-scan.md) records the partial progress,
+retained proofs and a verified coordinate-counting correction. Current target
+reads, full stage storage and per-claim retained scope copies still require cost
+work. The smaller passing cases and pure extraction timings do not establish
+catalog throughput.
 
 Apply migrations 53–57 in order. Migration 57 adds two retained application/stage
 tables and indexes; it does not reinterpret existing accepted authority. Deploy
