@@ -34,12 +34,10 @@ accepted set table before projecting the selected sets' citations from the
 immutable structure payload. Migration 41 adds the set table and page index;
 apply it before enabling this route with the new binary.
 
-Provider annotations, tape flags, footnotes and cover/guest assertions remain in
-the retained internal source accounts. They are not available through this set
-endpoint. Public annotation support still needs a bounded typed projection with
-per-annotation citations and stable passage correspondence. Returning raw
-`Sources.Account` would expose unrelated account material and does not satisfy
-that contract.
+Provider annotations use the separate bounded [annotation endpoint](setlist-annotations.md),
+`GET /api/v3/normalization/setlists/{editionUuid}/annotations`. It preserves source
+account identity, exact annotation evidence and explicit set/passage correspondence.
+The set endpoint remains focused on accepted set boundaries.
 
 Verify service pagination across repeated, empty and unnamed sets, including
 unknown positions after the maximum integer position. Exercise the HTTP route,

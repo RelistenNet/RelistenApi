@@ -144,6 +144,22 @@ public sealed class NormalizationMusicController(NormalizationReadService reads)
             )
         );
 
+    [HttpGet("setlists/{uuid}/annotations")]
+    public Task<IActionResult> Annotations(
+        string uuid,
+        [FromQuery] int limit = 50,
+        [FromQuery] string? cursor = null,
+        CancellationToken cancellationToken = default
+    ) =>
+        ReadAsync(() =>
+            reads.ListSetlistAnnotationsAsync(
+                ParseUuid(uuid),
+                limit,
+                QueryValue("cursor", cursor),
+                cancellationToken
+            )
+        );
+
     [HttpGet("setlists/{uuid}/occurrences")]
     public Task<IActionResult> Occurrences(
         string uuid,
