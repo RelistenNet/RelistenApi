@@ -14,7 +14,8 @@ public sealed partial class SourceActorResolutionStore
     // document rather than opening the entire retained payload once per file.
     private sealed class OriginalInputAuthenticator(
         string processingVersion,
-        IReadOnlyDictionary<Guid, NormalizationInputRevision> inputs
+        IReadOnlyDictionary<Guid, NormalizationInputRevision> inputs,
+        bool allowV6NegativeReview
     )
     {
         private readonly NormalizationProviderDecoder decoder = new();
@@ -110,7 +111,7 @@ public sealed partial class SourceActorResolutionStore
                 );
             }
             if (
-                processingVersion != NormalizationRecordingProcessor.Version
+                !SupportsProcessingVersion()
                 || !SourceActorResolutionCheckpoint.Same(aliases, expected.ToArray())
             )
             {
@@ -128,6 +129,21 @@ public sealed partial class SourceActorResolutionStore
                     []
                 ))
                 .ToArray();
+        }
+
+        private bool SupportsProcessingVersion()
+        {
+            // v7 changes only MusicBrainz search relationship handling. Recording source
+            // decoding and role-free scope production are identical to v6. Keep the complete
+            // remaining producer identity in this boundary; an older alias grammar is not
+            // accepted merely because its decoder component says v6.
+            const string priorRecordingVersion =
+                "catalog-recording-processing-v4/"
+                + NormalizationLegacyInputService.RefreshCaptureVersion
+                + "/provider-observations-v6/"
+                + NormalizationRecordingExtractor.Version;
+            return processingVersion == NormalizationRecordingProcessor.Version
+                || allowV6NegativeReview && processingVersion == priorRecordingVersion;
         }
 
         private static SourceActorResolutionField[] ReadFields(

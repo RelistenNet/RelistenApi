@@ -10,7 +10,7 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed partial class NormalizationProviderDecoder
 {
-    public const string Version = "provider-observations-v6";
+    public const string Version = "provider-observations-v7";
 
     /// <summary>
     /// Requires a known provider/resource/capture-version contract. Unsupported versions

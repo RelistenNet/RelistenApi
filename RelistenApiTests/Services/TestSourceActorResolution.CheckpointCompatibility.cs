@@ -63,7 +63,7 @@ public sealed class TestSourceActorResolutionCheckpointCompatibility
             "Root must restore the exact private v1 capture into an owned local upgrade database."
         )
     ]
-    public async Task RestoredV1HistoryReplaysResumesAndConfiguresV2WhileForeignAdmissionStillRefuses()
+    public async Task RestoredV1HistoryPreservesAuthorityAcrossCodecAndProcessorVersions()
     {
         if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
         {
@@ -145,6 +145,79 @@ public sealed class TestSourceActorResolutionCheckpointCompatibility
                 capture.Admitted.Attempt.AttemptUuid,
                 capture.Admitted.Attempt.ExtractionAttemptUuid
             );
+
+            if (capture.ResolverVersion != SourceActorResolutionService.Version)
+            {
+                // A codec upgrade preserves historical values; it does not authorize the
+                // current processor to resume or reinterpret a different producer version.
+                resumed
+                    .Result!.Disposition.Should()
+                    .Be(SourceActorResolutionDisposition.Unresolved);
+                resumed.Result.Reason.Should().Be("processing_version_changed");
+                AssertDomainEqual(capture.Admitted.Attempt.Preparation, resumed.Preparation);
+                (await store.GetAttemptBatchAsync(resumed.AttemptUuid)).Should().BeNull();
+
+                foreach (
+                    var history in new[]
+                    {
+                        (
+                            capture.Published.Attempt,
+                            capture.Published.Storage,
+                            capture.Published.Membership
+                        ),
+                        (
+                            capture.Admitted.Attempt,
+                            capture.Admitted.Storage,
+                            capture.Admitted.Membership
+                        ),
+                        (
+                            capture.Foreign.Attempt,
+                            capture.Foreign.Storage,
+                            capture.Foreign.Membership
+                        ),
+                    }
+                )
+                {
+                    // Resolver-only changes can reuse a compatible producer. This refusal
+                    // applies when the captured extraction producer itself has changed.
+                    if (
+                        history.Attempt.Preparation!.ExtractionTicket.PolicyVersion
+                        != NormalizationRecordingProcessor.Version
+                    )
+                    {
+                        var freshUuid = Guid.NewGuid();
+                        var resolveHistorical = () =>
+                            resolver.ResolveAsync(freshUuid, history.Attempt.ExtractionAttemptUuid);
+
+                        await resolveHistorical.Should().ThrowAsync<ArgumentException>();
+                        var fresh = (await store.GetAttemptAsync(freshUuid))!;
+                        fresh.Preparation.Should().BeNull();
+                        fresh.Result.Should().BeNull();
+                        (await store.GetAttemptBatchAsync(freshUuid)).Should().BeNull();
+                        (
+                            await db.WithWriteConnection(c =>
+                                c.ExecuteScalarAsync<long>(
+                                    "SELECT count(*) FROM normalization.work_runs WHERE uuid=@freshUuid",
+                                    new { freshUuid }
+                                )
+                            )
+                        )
+                            .Should()
+                            .Be(0, "old producer evidence must refuse before Work admission");
+                    }
+
+                    await AssertRestored(
+                        db,
+                        work,
+                        history.Attempt,
+                        history.Storage,
+                        history.Membership
+                    );
+                }
+
+                (await AcceptedState(db)).Should().Be(accepted);
+                return;
+            }
 
             resumed.Result!.Disposition.Should().Be(SourceActorResolutionDisposition.Published);
             AssertDomainEqual(capture.Admitted.Attempt.Preparation, resumed.Preparation);
@@ -241,16 +314,21 @@ public sealed class TestSourceActorResolutionCheckpointCompatibility
             CaptureOptions
         )!;
         capture.CaptureVersion.Should().Be("source-actor-public-v1-capture-v1");
-        capture.ResolverVersion.Should().Be(SourceActorResolutionService.Version);
+        // This fixture records the historical writer. Later decoder versions must not
+        // rewrite its authority or make storage compatibility depend on today's resolver.
+        capture.ResolverVersion.Should().NotBeNullOrWhiteSpace();
         foreach (
-            var storage in new[]
+            var history in new[]
             {
-                capture.Published.Storage,
-                capture.Admitted.Storage,
-                capture.Foreign.Storage,
+                (capture.Published.Attempt, capture.Published.Storage),
+                (capture.Admitted.Attempt, capture.Admitted.Storage),
+                (capture.Foreign.Attempt, capture.Foreign.Storage),
             }
         )
         {
+            history.Attempt.ProcessingVersion.Should().Be(capture.ResolverVersion);
+            var storage = history.Storage;
+            ReadTicket(storage).PolicyVersion.Should().Be(capture.ResolverVersion);
             SourceActorResolutionCheckpoint
                 .TextHash(storage.PreparationJson)
                 .Should()

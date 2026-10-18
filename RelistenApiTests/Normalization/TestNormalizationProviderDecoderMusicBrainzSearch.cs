@@ -324,6 +324,104 @@ public sealed class TestNormalizationProviderDecoderMusicBrainzSearch
     }
 
     [Test]
+    public void WorkSearchRecordingTargetsWithoutDeclaredKindAreNotMissingArtists()
+    {
+        var input = Synthetic(
+            "work",
+            $$$"""
+            {"count":1,"offset":0,"works":[{"id":"{{{FirstId}}}","title":"Johnny B. Goode","relations":[
+              {"type":"lyricist","direction":"backward","artist":{"id":"{{{ArtistId}}}","name":"Chuck Berry"}},
+              {"type":"performance","direction":"backward","recording":{"id":"{{{SecondId}}}","title":"Johnny B. Goode","video":null}}]}]}
+            """
+        );
+        var result = decoder.Decode(input);
+        var page = result.MusicBrainzSearchPages.Should().ContainSingle().Subject;
+        var hit = page.Hits.Should().ContainSingle().Subject;
+        var relations = hit.WorkArtists!;
+
+        page.Count!.Value.Should().Be(1);
+        hit.Entity.Identity.Identity.ProviderKey.Should().Be(FirstId);
+        relations.Should().HaveCount(2);
+        relations[0].Artist!.Identity.Identity.ProviderKey.Should().Be(ArtistId);
+        relations[1].Artist.Should().BeNull();
+        relations[1].TargetType.Should().BeNull();
+        relations[1].Type!.Value.Should().Be("performance");
+        relations[1].Direction!.Value.Should().Be("backward");
+        hit.CompleteAuthorship.Should().BeNull();
+        result.Issues.Should().BeEmpty();
+        page.Issues.Should().BeEmpty();
+
+        using var retained = NormalizationRetainedDocument.Open(input);
+        retained
+            .Resolve(relations[1].Evidence.JsonPointer)
+            .GetProperty("recording")
+            .GetProperty("id")
+            .GetString()
+            .Should()
+            .Be(SecondId);
+        AssertSearchOnly(result);
+        AssertCitations(input, result);
+    }
+
+    [TestCase("null", "expected_object", "/recording")]
+    [TestCase("{}", "missing_provider_identity", "/recording")]
+    [TestCase("{\"id\":\"invalid\"}", "invalid_provider_identity", "/recording/id")]
+    public void MalformedUndeclaredRecordingTargetsRetainCitedDiagnostics(
+        string recording,
+        string code,
+        string pointer
+    )
+    {
+        var input = Synthetic(
+            "work",
+            $$$"""
+            {"count":1,"offset":0,"works":[{"id":"{{{FirstId}}}","relations":[
+              {"type":"performance","recording":{{{recording}}}}]}]}
+            """
+        );
+        var result = decoder.Decode(input);
+        var relation = result.MusicBrainzSearchPages!.Single().Hits!.Single().WorkArtists!.Single();
+
+        relation.Artist.Should().BeNull();
+        result
+            .Issues.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(new ProviderDecodeIssue(code, new(input.Uuid, "/works/0/relations/0" + pointer)));
+        AssertSearchOnly(result);
+        AssertCitations(input, result);
+    }
+
+    [Test]
+    public void RecordingCannotReplaceAnExplicitlyMissingArtistTarget()
+    {
+        var input = Synthetic(
+            "work",
+            $$$"""
+            {"count":1,"offset":0,"works":[{"id":"{{{FirstId}}}","relations":[
+              {"type":"composer","target-type":"artist","recording":{"id":"{{{SecondId}}}"}}]}]}
+            """
+        );
+        var result = decoder.Decode(input);
+        var relation = result.MusicBrainzSearchPages!.Single().Hits!.Single().WorkArtists!.Single();
+
+        relation.Artist.Should().BeNull();
+        relation.TargetType!.Value.Should().Be("artist");
+        result
+            .Issues.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(
+                new ProviderDecodeIssue(
+                    "missing_relationship_target",
+                    new(input.Uuid, "/works/0/relations/0")
+                )
+            );
+        AssertSearchOnly(result);
+        AssertCitations(input, result);
+    }
+
+    [Test]
     public void ConflictingExplicitTargetKindCannotQualifyAnEmbeddedArtist()
     {
         var input = Synthetic(

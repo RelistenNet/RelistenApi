@@ -149,10 +149,28 @@ public sealed partial class SourceActorResolutionStore
         return extraction;
     }
 
-    internal static async Task<SourceActorResolutionInput[]> ReadOriginalInputsAsync(
+    internal static Task<SourceActorResolutionInput[]> ReadOriginalInputsAsync(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorExtractionConsumption extraction,
+        CancellationToken ct
+    ) => AuthenticateOriginalInputsAsync(c, t, extraction, false, ct);
+
+    // A negative review may correct the immediately preceding recording producer, whose
+    // recording decoders and alias grammar are unchanged. This is not current interpretation
+    // authority: every original group, file and selected Local root is still replayed exactly.
+    internal static Task<SourceActorResolutionInput[]> ReadOriginalInputsForNegativeReviewAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorExtractionConsumption extraction,
+        CancellationToken ct
+    ) => AuthenticateOriginalInputsAsync(c, t, extraction, true, ct);
+
+    private static async Task<SourceActorResolutionInput[]> AuthenticateOriginalInputsAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorExtractionConsumption extraction,
+        bool allowV6NegativeReview,
         CancellationToken ct
     )
     {
@@ -195,7 +213,11 @@ public sealed partial class SourceActorResolutionStore
                 cancellationToken: ct
             )
         ).ToDictionary(input => input.Uuid);
-        var authenticator = new OriginalInputAuthenticator(extraction.ProcessingVersion, inputs);
+        var authenticator = new OriginalInputAuthenticator(
+            extraction.ProcessingVersion,
+            inputs,
+            allowV6NegativeReview
+        );
         var result = original
             .Select(prepared =>
                 authenticator.Authenticate(

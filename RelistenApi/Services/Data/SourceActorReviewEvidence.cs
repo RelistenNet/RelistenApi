@@ -34,7 +34,7 @@ internal static class SourceActorReviewEvidence
             request.Claim.SourceUuid,
             ct
         );
-        var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(c, t, extraction, ct);
+        var inputs = await ReadOriginalInputsForActionAsync(c, t, extraction, request.Action, ct);
         var original = SelectField(extraction, inputs, request.Claim);
         var reviews = await SourceActorResolutionStore.ReadSourceReviewsAsync(
             c,
@@ -235,7 +235,13 @@ internal static class SourceActorReviewEvidence
             preparation.Request.Claim.SourceUuid,
             ct
         );
-        var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(c, t, extraction, ct);
+        var inputs = await ReadOriginalInputsForActionAsync(
+            c,
+            t,
+            extraction,
+            preparation.Request.Action,
+            ct
+        );
         if (
             !Same(
                 SelectField(extraction, inputs, preparation.Request.Claim),
@@ -291,6 +297,22 @@ internal static class SourceActorReviewEvidence
             }
         }
     }
+
+    private static Task<SourceActorResolutionInput[]> ReadOriginalInputsForActionAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorExtractionConsumption extraction,
+        SourceActorReviewAction action,
+        CancellationToken ct
+    ) =>
+        action is SourceActorReviewAction.Reject or SourceActorReviewAction.Retract
+            ? SourceActorResolutionStore.ReadOriginalInputsForNegativeReviewAsync(
+                c,
+                t,
+                extraction,
+                ct
+            )
+            : SourceActorResolutionStore.ReadOriginalInputsAsync(c, t, extraction, ct);
 
     private static void RequireAction(
         SourceActorReviewAction action,

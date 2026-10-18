@@ -217,6 +217,12 @@ public sealed partial class NormalizationProviderDecoder
                     artist = ReadMusicBrainzEntity(reader, value, pointer + "/artist", "artist");
                 }
             }
+            else if (targetType == null && relation.TryGetProperty("recording", out var recording))
+            {
+                // Search responses can omit target-type and embed a recording instead.
+                // Validate that literal target without qualifying it as an author.
+                ReadMusicBrainzEntity(reader, recording, pointer + "/recording", "recording");
+            }
             else if (targetType == null || targetType.Value == "artist")
             {
                 reader.Issue("missing_relationship_target", pointer);

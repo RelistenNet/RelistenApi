@@ -100,10 +100,13 @@ and [bounded acquisition](musicbrainz-acquisition-contract.md) retain exact resp
 cache age, alternatives and recovery. The historical [live search probe](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-search-local-v1.json)
 timed out before headers. The [current typed health check](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-live-typed-search-health-v2.json)
 retains successful work, recording and artist HTTP responses, including recovery
-of the same work plan from HTTP 503 to 200. The work result still reports decoding
-issues; recording pagination and entity hydration remain incomplete. These checks
-verify transport and retained outcomes, not complete acquisition or identity
-matching. Acquisition outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
+of the same work plan from HTTP 503 to 200. The v6 work result reports decoding
+issues. The [v7 relationship correction](musicbrainz-search-relationships.md) removes
+those false diagnostics while preserving the same response and all relationships;
+it also preserves historical negative review across the producer change. Its 624
+distinct targeted checks pass. Recording pagination and entity hydration remain
+incomplete; complete acquisition and identity matching require their own evidence.
+Acquisition outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
 production matching implementations and independent qualification remain required.
 People's linear scorer and repertoire's qualified-identifier path do not complete
 matching across the other domains.

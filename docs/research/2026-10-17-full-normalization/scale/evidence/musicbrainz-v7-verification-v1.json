@@ -1,0 +1,55 @@
+{
+  "kind": "musicbrainz-v7-search-and-historical-review-verification-v1",
+  "observedDate": "2026-10-18",
+  "sourceBase": "8b702e0",
+  "decoderVersion": "provider-observations-v7",
+  "verification": {
+    "distinctPassed": 624,
+    "affectedPassed": 619,
+    "affectedNotExecuted": 8,
+    "separatelySelectedHistoricalPassed": 5,
+    "remainingExplicitOutsideScope": 3,
+    "broadSuiteState": "running",
+    "apiAssemblySha256": "ccf1f5b35fbaf0c447adc1f309be8c6ce367a815318523d64d3b208c1db4aecf"
+  },
+  "retainedResponseReplay": {
+    "sameHttpResponse": true,
+    "workHits": 6,
+    "relationships": 1125,
+    "artistTargets": 9,
+    "recordingTargets": 1116,
+    "oldFalseMissingTargetIssues": 1116,
+    "newIssues": 0,
+    "hydrationCompleted": false
+  },
+  "historicalAuthority": {
+    "genuineV6CapturePassed": 1,
+    "newAndSavedRejectRetractPassed": 4,
+    "actualV1CheckpointHistoryPassed": 1,
+    "versionStringsOrUuidsRewritten": false,
+    "acceptedFactsUnchanged": true,
+    "oldPositiveProducerRefused": true,
+    "changedSavedHeadsRefused": true
+  },
+  "qualification": "Source-review and targeted behavior verification, not matching accuracy or completed broad regression. Three large explicit cases retain earlier separate verification scope. Initial fixture-version assertion failure and its correction remain in retained diagnostics.",
+  "privateEvidence": [
+    {
+      "manifest": "local-dev/normalization-data/2026-10-18-musicbrainz-v7-verification-v1/manifest.json",
+      "sha256": "c07e4ab9c1a4fbd95fbfcfc7964f11e24d877a91451293fe5f49430e3191ddb3"
+    },
+    {
+      "manifest": "local-dev/normalization-data/2026-10-18-source-review-v6-history-v1/manifest.json",
+      "sha256": "70881ff7e8651f8160338357669bcc3cb15c011c71ab6c65d13b6156d2373ee4"
+    },
+    {
+      "manifest": "local-dev/normalization-data/2026-10-18-source-v1-v7-history-v1/manifest.json",
+      "sha256": "b86bbc5c454d6279954e10dbc85aee1ad311a31faf18858ac62cb82de35e24b2"
+    },
+    {
+      "manifest": "local-dev/normalization-data/2026-10-18-musicbrainz-work-v7-redecode-v1/export/manifest.json",
+      "sha256": "7b629636bc2e62a2608463ed17e867e5fc48ce31d5c2681ed290ca50499fb7f0"
+    }
+  ],
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}
