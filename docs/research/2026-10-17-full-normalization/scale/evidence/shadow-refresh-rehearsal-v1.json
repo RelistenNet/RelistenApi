@@ -1,0 +1,92 @@
+{
+  "version": "shadow-refresh-rehearsal-v1",
+  "recordedAt": "2026-10-18T21:55:14.446902+00:00",
+  "state": "passed",
+  "scope": "250 retained real files with complete retained song/setlist context. One title is changed only as a simulated refresh scenario; no claim about its real audio or a source correction.",
+  "computeRestart": {
+    "interruptedAfterInputLine": 6238,
+    "resumedOutcomes": 149635,
+    "sameInputAndMethodsRequired": true
+  },
+  "changedInput": {
+    "fileUuid": "adfa2a3c-acc8-5669-0160-709601cbdf5a",
+    "originalTitle": "dark star> %",
+    "simulatedTitle": "unidentified passage",
+    "changedDomains": [
+      "compositions",
+      "file_contents",
+      "repertoire"
+    ],
+    "unrelatedOutcomesUnchanged": true,
+    "performanceResultUnchanged": true,
+    "playbackAndOwnershipUnchanged": true
+  },
+  "readerRestart": {
+    "actualProcesses": 2,
+    "latestFileResultReturned": true,
+    "staleRepertoireFileMembershipRemoved": true,
+    "scope": "An eight-result reader view reconstructs its existing SQLite cache and serves actual HTTP requests before and after process restart."
+  },
+  "cliRefusal": {
+    "change": "Mismatched resumed inputs now raise InvalidDataException, handled by the existing CLI boundary.",
+    "exitCode": 1,
+    "outputPreserved": true
+  },
+  "verification": {
+    "batchAndInlineTestsPassed": 17,
+    "trx": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-refresh-rehearsal-v1/tests/shadow-resume-input-contracts.trx",
+      "bytes": 25759,
+      "sha256": "1ce3c71b6aafb74c973f1939816d343b0c17bbbbe4e7ab8d4c9e7fcd75181870"
+    },
+    "rehearsal": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-refresh-rehearsal-v1/manifest.json",
+      "bytes": 1472,
+      "sha256": "1fa4002399457b2d56f58a25b2f14edfbd4243fcfc31865c968e6a3dcefaeefe"
+    },
+    "cli": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-refresh-rehearsal-v1/cli-input-refusal.json",
+      "bytes": 500,
+      "sha256": "4ed22756494c8288466691ef807bb8afbcf83f092791281c4691808ee0609fc9"
+    }
+  },
+  "limits": [
+    "This is a local changed-input/restart rehearsal, not a full-catalog automatic dependency-refresh or production qualification run.",
+    "The immutable original capture and original shadow results remain unchanged."
+  ],
+  "databaseCalls": 0,
+  "paidModelCalls": 0,
+  "operatorIndexPause": {
+    "implementationCommit": "448d30c",
+    "readerContractTestsPassed": 25,
+    "reason": "Reserve capacity for contextual matching and smaller lookup jobs while keeping the existing index available.",
+    "reserveLowered": false,
+    "dataDeleted": false,
+    "actualSourceLookupFiles": 8,
+    "service": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-files-reader-paused-v1/service.json",
+      "bytes": 1127,
+      "sha256": "794ae16d6b3ea981afd7b138e2fd785dfde6b11fc13105ab7418e3e12886a9ff"
+    }
+  },
+  "durableCoverageCounts": {
+    "implementationCommit": "3dbe9b7",
+    "readerContractTestsPassed": 26,
+    "actualCacheMigrationSeconds": 20.132505541900173,
+    "actualHttpStatsSeconds": 0.5776,
+    "indexedLogicalRecords": 6745805,
+    "indexedChunks": 3513,
+    "pendingChunks": 7113,
+    "atomicity": "Per-chunk facet deltas, latest logical results and completed chunk state commit together. Unavailable chunks are excluded from visible coverage.",
+    "migration": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-files-reader-paused-v1/facet-migration.json",
+      "bytes": 355,
+      "sha256": "2a2a9b2b730486c1ac0d410a7b609e759fd708ec30e5d518ec29b1d94a13f483"
+    },
+    "service": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-files-reader-paused-v1/facet-service.json",
+      "bytes": 867,
+      "sha256": "b785cdefac29eaa79f945bd35a6c1032ad29a331175e21e6f1fd9e54bd966f47"
+    }
+  }
+}

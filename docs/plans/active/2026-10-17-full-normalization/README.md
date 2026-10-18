@@ -21,7 +21,11 @@ A shadow result is a proposed interpretation in separate local artifacts or a di
 
 Reuse the completed experiments and existing services. Process the full captured population with streaming, resumable batches; run model-assisted work at measured throughput within existing spending authorization. Use independent domain agents, integrate their outputs into one reader, and fix broad failure classes. The [evaluation ledger](evaluation-milestone.md#coverage-ledger) guides audit coverage while delivery proceeds. It is no longer a sequence of small labeling prerequisites.
 
-The immediate proof is a runnable shadow command, growing real outputs across providers, and a browsable result Alec can inspect. Complete population accounting and per-domain audits follow in the same run. A plan, a packet of labels, a candidate export or a test count alone does not complete this milestone. Complete all required domains, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
+The complete file producer has processed 5,064,097 captured files. The local readers now support cross-artist credit lookup, contextual person hypotheses, shared venue search, music discovery and playback. These features expose the current interpretations and their evidence; they also make the remaining extraction and identity failures visible.
+
+Start with the [delivery guide](shadow-delivery.md) for current coverage and working links. The [people directory](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?context=1) compares people across artist contexts; the [venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) follows venue observations into recordings; [music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) follows repertoire, supported work links and setlists into playable files. Each feature guide states what its current projection includes. The full-file index and broader title projection still need storage capacity. Native provider observations still need direct people and venue projection.
+
+Complete the remaining domain coverage, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
 
 ## How to iterate
 

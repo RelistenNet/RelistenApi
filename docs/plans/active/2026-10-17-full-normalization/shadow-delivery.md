@@ -18,7 +18,8 @@ This execution sequence supersedes the evaluation-first milestone. The [standing
 - [x] Independently audit every captured file's ownership, playback, literal evidence and sibling domain results; reconcile the complete outcome inventory.
 - [x] Correct the empty-title matching failure in all affected file results without changing playback or valid neighboring mentions.
 - [ ] Finish full-file reader indexing and reconcile remaining native-provider coverage.
-- [ ] Rehearse incremental input changes and restart locally, then continue production qualification and backfill preparation.
+- [x] Rehearse a changed file title, compute interruption/resume and reader restart locally.
+- [ ] Extend refresh/recovery qualification to the full catalog, then prepare production acceptance and backfill.
 
 ## Current results and remaining work
 
@@ -48,10 +49,16 @@ mismatch. It also verified 36,319,601 catalog literal/span citation instances.
 The 157,656 files without captured source homes retain explicit null
 coordinates. These checks establish preservation, not identity accuracy.
 The [full-file reader](http://alecs-macbook-pro.tail09dbf.ts.net:18767/?domain=file_contents)
-is available while indexing continues. Its coverage panel distinguishes the
-complete computed population from results already searchable. New results and
-playable files receive indexing priority. Known semantic issues remain visible;
+is available. Background indexing is temporarily paused to reserve capacity for
+contextual people matching and the shared lookup features. Existing indexed
+results remain searchable; its coverage panel distinguishes visible results from
+the complete computed population and reports pending chunks. Restarting without
+`--pause-indexing` resumes the same cache. Known semantic issues remain visible;
 native-provider coverage and identity accuracy remain open.
+The current cache exposes 6,745,805 logical outcomes from 3,513 chunks, with
+7,113 chunks pending. A full-size restart exposed a coverage-query timeout.
+Coverage now uses counts committed with each chunk; the existing-cache migration
+took 20 seconds and the actual HTTP stats request returned in 0.58 seconds.
 
 The completed run used repertoire v5. A title audit found a trailing `#` matched
 through a blank dictionary entry, producing a false proposal. An exhaustive
@@ -93,11 +100,48 @@ their overlap does not inflate recording counts. Model evidence links open the
 actual retained result, while captured dates, source ownership and playable-file
 links remain intact.
 
-This usable directory makes the main failure
-class visible: prose and extraction errors fragment names before identity
-matching can help. Test contextual extraction/grouping at broader scale. Do not
-grow a list of exceptions for individual names. See the
+The [contextual view](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?context=1)
+now exposes 1,550 validated relationship proposals from an immutable midpoint
+of the 5,000-question Luna run. That midpoint covers 3,751 recording witnesses
+across 1,136 artists: 716 possible same-person links, 89 possible different-person
+links and 745 insufficient-evidence decisions. Those are model proposals with
+checked supporting quotes, not independently established identity labels. The
+remaining 820 processed questions were in failed batches; exact per-question
+recovery can retain valid siblings without another model request. The complete
+run and final recovery remain in progress.
+
+Prose and extraction errors still fragment names before identity matching can
+help. Use the broader contextual results to improve those failure classes. Do
+not grow a list of exceptions for individual names. See the
 [directory interface and operations](../../../../tools/RelistenNormalization/people-directory.md).
+
+### Shared venue and music lookup
+
+The [venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/) covers
+216,332 retained venue rows across 4,362 artists. It keeps 207,304 proposed place
+keys and all 292,523 recording/show homes. A name search retrieves observations;
+its result count is not a physical-place count. Each venue detail follows the
+selected legacy UUID into recordings and their original playable files. Related
+observations expose shared hypotheses without claiming that every recording
+belongs to the same physical premises. The current projection uses retained v1
+hypotheses; historical-name evidence remains absent. See the
+[venue interface and operations](venue-directory.md).
+
+[Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) currently
+projects 19,407 repertoire keys, five supported work keys and 38,517 setlist
+accounts from the core and local readers. Its 4,626 artist entries keep catalog
+namespaces separate. Exact song/work keys also query the current full-file
+reader: Bob Weir's “Poison Ivy” returned 38 playable files with their original
+recording homes. The ordered Grateful Dead account retains three sets and
+18 passages, alongside its source annotations and unresolved song alternatives.
+
+The measured full-file cache contains 963,476 repertoire keys and 32 qualified
+work keys. That broader title projection stopped at its storage reserve before
+publication; the previous completed music catalog remains available. Full-reader
+relationships are queryable, but their titles are explicitly marked unprojected.
+Supported global work correspondences are still sparse. A browse interface does
+not supply missing composition evidence. See the
+[music interface and operations](../../../../tools/RelistenNormalization/music-discovery.md).
 
 Dictionary citation compaction retains one actual witness per distinct literal
 spelling while keeping every membership in its original setlist result. The
@@ -125,10 +169,23 @@ records exact inputs, method versions, tests, audits and limits.
 
 ### Matching and provider evidence
 
-A native-provider check admitted 300 Archive and 150 Phish responses. All 450
-recording/show bindings and 219,864 native citations verified against the full
-captured source index. Native file facts remain distinct from catalog file
-assignments and ordered setlist passages.
+The [native-provider reader](http://alecs-macbook-pro.tail09dbf.ts.net:18771/?domain=performances)
+now includes 300 Archive, 150 Phish and 220 Local retained inputs. All 670
+performance results bind to their existing recording/show homes. Local's
+220 directories resolve to 150 recordings through 3,060 exact media URL anchors;
+the root and directory revisions remain separate, jointly required evidence.
+The shared batch produced 152,445 outcomes. Its serving view contains only the
+2,010 provider outcomes: 670 proposed performances and 1,340 not-applicable
+composition/setlist results. No processing outcome failed.
+
+Native decoded file observations remain distinct from catalog assignments and
+ordered passages. Native people, venue and file-content facts are retained
+inside those observations, but do not yet produce standalone domain results.
+Direct native people and venue projection is in progress. The
+[native-wave guide](../../../research/2026-10-17-full-normalization/scale/native-provider-wave-v1.md)
+records the actual run and provider coverage. The
+[Local admission guide](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
+defines exact root selection and catalog binding.
 
 The people adapter now retains direct source-anchor identity hypotheses with
 exact observed membership counts and bounded citations. It can also compare
@@ -149,12 +206,15 @@ page. They include 1,318 recording lookups and 126
 work lookups. The retained recording relationships name 127 work IDs; one target
 has no full lookup. Search results and unhydrated rivals remain evidence, without
 an accepted catalog assignment. Later responses require a new replay selection.
-A separate follow-on retains its deadline of 2026-10-18 22:00:26 UTC. It resumed
-explicitly from its durable checkpoint after an unclassified process
-interruption, with its existing call reservations, failures and deadline intact.
-Its detached monitor protects the disk reserve and records closure. No automatic
-restart or additional budget was introduced. New captures remain separate from
-the frozen provider wave until a new replay selection admits them.
+That follow-on closed at its original deadline with 3,073 retained inputs.
+A new bounded acquisition reuses completed captures and durable resource history
+before issuing new requests. Two subsequent attempts retained 20 more responses,
+for 3,093 total, then closed at the disk reserve. Acquisition remains incomplete
+and is stopped pending capacity. Its request retains a 2,000-invocation,
+45-minute limit and a 128 MiB actual retained-payload limit. The separate 16,777,216,000-byte invocation
+allowance reserves a conservative 8 MiB per attempted call; it is not a disk
+allocation. The monitor stops at 4.6 GiB free space. New captures remain separate
+from the frozen provider wave until a new replay selection admits them.
 The [provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
 pins the exact frozen manifest and input bytes. The phone reader now includes
 this wave. The new replay changed 11 catalog composition results from unresolved
@@ -181,6 +241,25 @@ These suites overlap; their counts are not a distinct-test total. The
 [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
 pins the exact reports and source versions.
 
+### Changed input and restart
+
+A local rehearsal interrupted and resumed normalization over 250 retained files
+with the complete song/setlist context. It reconciled 149,635 outcomes. A
+simulated title correction changed only that file's repertoire, composition and
+file-content results. Its performance result, ownership and MP3 URL stayed the
+same; every unrelated outcome remained identical. Two actual reader processes
+served the corrected file result from the existing cache, with its stale song
+membership removed. The simulated title is test input, not a correction asserted
+about the audio.
+
+Changed bytes cannot resume the original run. The rehearsal found that this
+expected refusal escaped the CLI's error handler; the tool now returns exit 1
+with the input-mismatch message and preserves previous output. Seventeen batch
+and inline contract tests pass. The
+[refresh rehearsal receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-refresh-rehearsal-v1.json)
+records the actual process and HTTP checks. Full-catalog automatic refresh and
+production recovery still need qualification.
+
 ### Storage and next actions
 
 The approved cleanup of 21 temporary build folders recovered 1.61 MiB of actual
@@ -190,16 +269,18 @@ the existing readers available. The full-file producer then wrote 3,499,102,132 
 finished with 9,104,211,968 bytes free, above its 4 GiB reserve. These are actual
 host measurements in the full-file producer receipt. A measured reader
 benchmark projects 4.00–4.12 GB for the file population and song/setlist context;
-that range is not a final capacity measurement. The full index is now building
-in a separate view that hard-links every immutable base chunk and the four
+that range is not a final capacity measurement. The full index uses
+a separate view that hard-links every immutable base chunk and the four
 corrected chunks. The experimental reader uses a 3.5 GiB reserve plus 128 MiB
 for a chunk write. This revises the earlier 4 GiB reader planning threshold so
 the file index and people directory can coexist. Indexing pauses at the reserve
 while existing results remain browsable; other job limits are unchanged.
 
-Keep the current results available and finish the full-file index. Continue distinct-person resolution,
-physical-location evidence, composition investigation and native-provider
-coverage. Rehearse changed-input replay and restart after those corrections.
+Keep the current results available and resume the full-file index after the
+smaller lookup and contextual matching jobs finish. Continue distinct-person
+resolution, physical-location evidence, composition investigation and native
+provider coverage. Extend the bounded refresh rehearsal to full-catalog automatic
+change processing and recovery.
 Automatic production acceptance, full backfill and API compatibility still
 require independent qualification. Earlier bounded checks remain in the
 [inline range receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json)
@@ -320,9 +401,11 @@ Completed evaluation found format-specific credit gains, people features that ca
 
 The retained-sample pass, full raw capture, core recording/venue pass, local
 Jerry/Aadam rehearsal and full-file computation are complete. The full-file
-reader serves the verified correction while its index continues to grow. The
-people directory supports cross-artist credit lookup and includes the retained
-Luna interpretations. Next, use these results to improve contextual person
-matching and shared venue, composition and setlist lookup. Physical venue
+reader serves the verified correction from its existing index; indexing is
+temporarily paused to reserve capacity for the next domain jobs. The
+people directory supports cross-artist credit lookup and contextual Luna
+hypotheses. Shared venue and music lookup are available. Next, complete native
+domain extraction and broader title discovery, then improve physical-venue
+and composition evidence using the visible results. Physical venue
 history, legacy setlist order, importer provenance and independent accuracy
 qualification remain open; production acceptance follows that work.
