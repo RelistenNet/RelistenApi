@@ -1,0 +1,25 @@
+{
+  "kind": "full-suite-target-batch-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "f3ae5e8",
+  "status": "The preceding target-batch production code passes broad regression. Final current-code verification and separately selected scale and explicit tests remain required.",
+  "verification": {
+    "passed": 3640,
+    "failed": 0,
+    "notExecuted": 28,
+    "filter": "TestCategory!=SourceAliasScale&TestCategory!=PeopleFactsSnapshotScale",
+    "startTime": "2026-10-18T08:13:22.1071000-07:00",
+    "finishTime": "2026-10-18T08:55:47.0181950-07:00",
+    "apiAssemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+    "testAssemblySha256": "134cf0e4a52e9997c07267cf8cacf80d19ac2d9d66242bbca5982547179e0905",
+    "scope": "Actual TRX results include 28 NotExecuted entries. The console reports 24 skips and omits four explicit cases from its summary."
+  },
+  "qualification": "Precedes typed-stage JSON reuse and the strengthened incomplete-source fixture. The prior historical-fixture failure is corrected in this run. Shared-host elapsed time does not establish isolated throughput. This is regression evidence, not production matching accuracy.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/full-suite-target-batch-v1/runtime-v1/manifest.json",
+    "sha256": "330155f3a7f8c1988a5a59ee0c9fee222870d88778f6e0438c47d560117ad0ba",
+    "files": 8
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

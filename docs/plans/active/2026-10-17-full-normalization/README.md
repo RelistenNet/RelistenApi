@@ -15,204 +15,219 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 
 ## Progress
 
-Recording-credit refresh now preserves reviewed decisions while continuing to
-process independent taper/transferrer claims. Both proposal and accepted-credit
-configuration recovery authenticate the original contributed Work request,
-including recovery before checkpoint or ticket attachment. All 183 affected
-people, contribution and input-generation regression checks pass. The
-[recovery verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-configuration-recovery-v1.json)
-records the reproduced failures and passing controls. The [proposal
-contract](people-resolution.md#original-receipts-and-recovery) and
-[accepted-credit contract](people-acceptance.md#recover-configured-inputs-after-credit-review)
-explain the distinct owner-generation rules.
+Local storage, processing, review, accepted publication and additive reads are
+implemented. Automatic matching remains inactive. The release still requires
+qualified matching across physical venues and their history, artist repertoire,
+cross-artist compositions, global people and taper/transferrer credits, together
+with performances, ordered setlist occurrences and recording-file contents.
+Recording provenance covers the credited people; full audio ancestry is outside
+this release. Local implementation and synthetic scale results do not establish
+release accuracy, catalog throughput or rollout readiness.
 
-Prepared input expectations can now pin the exact resource generation, preventing
-old decisions from becoming admissible merely because corrected metadata returns
-to its earlier bytes. All 91 focused Work, binding and contribution checks pass,
-including concurrent updates and historical replay. The [binding
-contract](catalog-binding.md#fence-repeated-input-revisions) explains how consumers
-keep original evidence separate from current observations. Source matching and
-publication must supply these preconditions before automatic acceptance can be
-enabled.
+### Implemented services and authority
 
-Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source identity proposals and trusted review now pass 208 focused checks, two positive-review input round-trip checks and a nonempty migration-56 upgrade. Configuration recovery now authenticates the actual contributed Work request, with 73 focused Work/recovery checks passing. The [accepted publisher](source-actor-publication.md) passes 106 publication, owner-read and nonempty migration-57 upgrade checks within the 198-case combined run. Its [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-v1.json) retains the original large-repeat checkpoint failure. No policy is active.
+[Retained provider inputs](provider-capture.md), [typed decoding](provider-decoding.md)
+and [catalog binding](catalog-binding.md) preserve original facts across the seven
+configured importers and Archive intake. [Complete-input processing](provider-processing.md),
+[Local processing](local-processing.md), [setlist processing](setlist-processing.md)
+and [imported catalog snapshots](imported-catalog.md) retain every contributor,
+checked file scope and original producer revision. [Durable lookup outcomes](lookup-enrollment.md)
+and [recording processing](recording-processing.md) support interruption, retry and
+exact replay. Service registration starts no imports or schedules.
 
-Source actor checkpoints now share complete repeated candidate facts and owner
-observations without changing queries, evidence or the 32 MiB limit. All 80
-storage checks, the genuine old-database recovery probe and 190 affected service
-checks pass. The full 1,000-claim repeated application also passes, clearing the
-original checkpoint failure. Its roughly 11-minute local run does not establish
-catalog throughput. The [checkpoint verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
-records the exact scope; distinct-person cost, merged-alias visibility and the
-full-suite rerun remain required.
+Typed people, venue and music storage retains stable UUIDs, original assertions,
+exact citations, review history and corrections. [Atomic candidate facts](candidate-facts.md),
+[candidate-universe generations](candidate-universes.md), [observed owners](owner-observations.md)
+and [negative lookup fences](lookup-fences.md) protect complete positive and
+negative decisions. Input generations also fence corrections that later return
+to earlier bytes. [Unchanged publication](unchanged-publication.md) preserves
+existing assertions and identities while retaining genuinely new citations.
+Reviewed decisions remain separate from source facts and machine proposals;
+normalized public reads remain disabled by default.
 
-Source publication now prepares the next person's current claims without
-reevaluating every deferred person first. Complete original evidence and review
-authority stay upfront; original winners are grouping hints only. All 198
-service checks and two small lifecycle cases pass, including eight new behavior
-checks. The [cohort verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json)
-records the accepted partial-progress behavior and remaining full-size cost work.
+The [people proposal processor](people-resolution.md) and separate
+[accepted-credit consumer](people-acceptance.md) are implemented. They use
+whole-pool decisions, guarded identity creation, contributor-scoped
+[credit reconciliation](credit-reconciliation.md) and resumable publication.
+Explicit complete clearing can retire managed credit support; ambiguous or
+incomplete extraction preserves it. Missing playback or show context does not
+block independently evidenced credits. The [configuration recovery receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-configuration-recovery-v1.json)
+records 183 passing affected checks, including authentication of the original
+contributed Work request before checkpoint attachment. People membership uses an
+explicit 100-contributor/100,000-binding profile; Work's defaults are unchanged.
+The [people capacity contract](../../../research/2026-10-17-full-normalization/scale/people-candidate-capacity.md)
+retains all 6,789 owner observations across 6,788 recording owners, with the
+service-published versus relational-copy scope stated in its receipts.
 
-Source matching and publication now reuse complete person facts within one
-verified read-only database snapshot. Every query retains its own hits and
-complete owner observations; oversized bodies take the ordinary full read. All
-262 affected service checks and the separate large-credit case pass. The
-[snapshot-reader contract](candidate-facts.md#reuse-people-facts-within-one-snapshot)
-and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-facts-snapshot-reader-v1.json)
-explain the bounds. Full-size cost measurements remain required.
+[Source actor aliases](source-actor-aliases.md) identify an existing person or group
+without inferring a recording credit, attendance or actor kind. Their
+[source contracts](source-actor-alias-contracts.md) keep machine proposals, trusted
+review and accepted alias support separate. The [publisher](source-actor-publication.md)
+reconciles complete source scopes through durable stages; reviewed replacements,
+withdrawal and incomplete fields preserve their distinct authority. Migration 58
+makes [canonical review visibility](canonical-alias-review-visibility.md) consistent
+across merged originals without rewriting assertions or support. Its
+[receipt](../../../research/2026-10-17-full-normalization/scale/evidence/canonical-alias-review-visibility-v1.json)
+retains 28 final focused checks, 336 broader checks and 168 synthetic query plans,
+with their separate execution and warm-plan qualifications.
 
-Canonical alias writes and current reads now respect reviewed claims across
-merged identities. [Migration 58](canonical-alias-review-visibility.md) hides
-preexisting aliases when another merged original still excludes that name.
-Same-original restoration and merge reversal preserve original assertions,
-support and history. The [verification
-receipt](../../../research/2026-10-17-full-normalization/scale/evidence/canonical-alias-review-visibility-v1.json)
-records 28 final focused checks, 336 broader checks and 168 final synthetic query
-plans, with their distinct execution scope. Full-suite and full-size publication
-checks remain required.
+The [repertoire resolver](repertoire-resolution.md) authenticates imported
+dictionaries, recording titles, setlist passages and retained provider dictionaries.
+It preserves imported mappings and marks title-derived identities provisional.
+[Setlist and file-content consumers](repertoire-consumers.md),
+[complete set structures](setlist-structure.md), [display selection](setlist-selection.md),
+[recording-independent performances](setlist-performances.md) and
+[public set reads](setlist-public-reads.md) are implemented. [Correspondence/removal
+review](setlist-correspondence.md) and [annotation reads](setlist-annotations.md)
+retain source receipts and reviewed authority. Automatic correspondence and
+removal still require evaluated policies, including revised unkeyed accounts.
 
-The shared recording-text reader now counts raw evidence coordinates once per
-span. All 645 affected checks pass, and old/new public extraction produces
-byte-identical results on the large synthetic inputs. The preceding 1,000-person
-lifecycle test reached its one-hour limit before finalization finished. The
-[text-reader verification](recording-text-scan.md) separates that failed baseline
-from the passing checks and extraction timings. [Current target reads](source-target-batches.md)
-now share component acquisition within each transaction, with 408 distinct
-public-contract and small-scale cases passing. Full-size lifecycles and final-code
-full-suite verification remain required; no publication-throughput claim is established.
+The [venue resolver](venue-resolution.md), [venue review context](venue-review-context.md)
+and [composition resolver](composition-resolution.md) retain complete alternatives,
+policy observations and authenticated publication stages. [Composition authorship](composition-authorship.md)
+keeps full author sets and roles distinct. [MusicBrainz decoding](musicbrainz-decoding.md)
+and [bounded acquisition](musicbrainz-acquisition-contract.md) retain exact responses,
+cache age, alternatives and recovery. The [live search probe](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-search-local-v1.json)
+timed out before headers; successful live search verification and acquisition
+outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
+production matching implementations and independent qualification remain required.
+People's linear scorer and repertoire's qualified-identifier path do not complete
+matching across the other domains.
 
-Saved source stages now reuse their bounded typed serialization during recovery,
-while retaining independent proof reconstruction and all validation. The
-[stage-read verification](../../../research/2026-10-17-full-normalization/scale/evidence/source-stage-typed-json-v1.json)
-records 110 distinct passing application and small-lifecycle cases. Complete
-outputs match the preceding codec on three retained synthetic stages in both run
-orders, with lower managed allocations per read. Elapsed observations are mixed;
-full-size and final-code broad regression verification remain open.
+### Verification and current scale work
 
-Source matching now requires its own evaluated policy capability, tied to exact
-producer and comparison versions. It cannot reuse credit evaluation to accept
-aliases or create identities. All 106 focused policy and 160 people regression
-checks pass. The source resolver authenticates saved decisions and original
-observations. Accepted support publication is locally implemented; its scale,
-merged-alias visibility and rollout checks remain required. No source policy is
-active. The
-[source contracts](source-actor-alias-contracts.md#evaluated-source-capability-implemented)
-explain qualification, shared snapshot reads and rollback.
+Real-source rehearsals verify playback compatibility independently of matching
+accuracy. The [recording rehearsal](../../../research/2026-10-17-full-normalization/scale/materialization-local-inputs.md)
+publishes 257 contents across 256 files from 25 recordings and checks 2,165 API
+responses, including 1,409 unchanged legacy responses. Original legacy and accepted
+music relation fingerprints survive replay and fresh retry. The [Jerry setlist
+rehearsal](../../../research/2026-10-17-full-normalization/scale/setlist-local-rehearsal.md)
+checks three sets and 18 occurrences through 1,699 API requests; all 21 set/occurrence
+UUIDs survive retry without creating a show, moving a recording or selecting the
+source for display.
 
-The [complete metadata inventory](../../../research/2026-10-17-full-normalization/scale/full-metadata-frame.md) now covers every deployed artist, recording and show in one read-only replica snapshot: 4,379 artists, 292,522 recordings and 215,594 shows. An independent audit reconciles all 582,272 output rows and 69,728 requested track-coordinate results. Use this frame for catalog-wide reservation and sampling preparation. The [complete domain metadata capture](../../../research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md) has finished after 36 synthetic checks, one real PostgreSQL test and ten production query-plan inspections. It retains all 5,064,076 file rows, 216,331 venue records and repertoire relationships in the same snapshot. Offline verification and a separate independent audit both pass across all 6,719,411 metadata rows. Exposure reconciliation and matching evaluation remain required. It grants no untouched evaluation clearance or automatic-publication authority.
+Current source publication retains complete proof within the existing 32 MiB
+checkpoint bound. The [checkpoint format](checkpoint-format.md),
+[person cohorts](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json),
+[same-snapshot fact reader](candidate-facts.md#reuse-people-facts-within-one-snapshot),
+[text reader](recording-text-scan.md), [target batches](source-target-batches.md)
+and [typed-stage read receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-stage-typed-json-v1.json)
+record the implemented cost corrections and their focused compatibility checks.
+They preserve every query's hits, full owner observations, original evidence and
+independent proof reconstruction. Their historical test counts overlap and must
+not be summed. The receipts distinguish source-derived command bounds, extraction
+timings and allocation observations from whole-application cost.
 
-The [people comparison](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md)
-now retains 322 independently attributed source views and 295 view-pair
-comparisons across all 219 declared relationships. Grouping produces 100 eligible
-relationship units: 74 positive and 26 negative judgments, including 27 positive
-and two negative units spanning artists. Both trained models retain two false
-negatives and zero false positives at the diagnostic cutoff. All 295 final
-logistic scores agree with the public C# evaluator within 1e-12; every fixture
-action remains review. These development judgments do not calibrate automatic
-acceptance.
+The [current 1,000-claim repeated lifecycle](../../../research/2026-10-17-full-normalization/scale/evidence/source-current-thousand-repeat-v1.json)
+passes on production code `0cf5977`: both applications complete, all 1,000 aliases
+remain visible, and every stage reads back with complete structural equality and
+stays within its canonical byte bound. The test takes 16m02.90089s on a shared host
+using fixture policies. This does not establish isolated throughput, peak memory
+or matching accuracy. The earlier [checkpoint result](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
+and [one-hour distinct-person failure](recording-text-scan.md) remain separate
+historical evidence.
 
-The [people capacity work](../../../research/2026-10-17-full-normalization/scale/people-candidate-capacity.md)
-verifies complete distinct matching facts and all 6,789 owner observations across
-6,788 recording owners. The two-contributor metadata read exceeds the default
-binding limit. People entrypoints now select an explicit 100,000-binding
-membership envelope; public pipeline recovery and contributor-only withdrawal
-pass. The exact admitted-header fix retains independent contributor revisions.
-The [checkpoint storage format](checkpoint-format.md) now shares repeated exact
-evidence within each saved value while preserving complete original observations
-and the existing 32 MiB limit. All 147 focused people cases pass, including
-mixed-format recovery and a recording with eight claims across two contributors.
-Next, broaden independently checked identity evidence, improve source-supported
-aliases, and measure catalog-wide database cost before backfill.
-Venue context and catalog-to-composition evidence also need expansion before
-automatic acceptance.
+The ordinary [incomplete-source control](../../../research/2026-10-17-full-normalization/scale/evidence/source-incomplete-preservation-v1.json)
+passes with three sources and all six independent owner UUIDs. It verifies exact
+assignment/support preservation and the held source's original scope, bindings and
+last complete observation. It does not exercise interrupted recovery or replace
+the required 1,001-source case. At this update, the 1,000-distinct-person run remains
+in finalization on older target-reader binaries, and the strengthened 1,001-source
+run remains live. Neither has a passing result here.
 
-The latest completed [broad suite](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-alias58-v1.json)
-excludes the separately run `SourceAliasScale` and `PeopleFactsSnapshotScale`
-categories. It has 3,633 passing tests, one failure and 28 unexecuted result entries. The adapter
-reports 24 skips and omits four additional explicit cases from that count. Its
-only failure is the historical credit fixture corrected in commit `2d64afe`;
-the corrected fixture passes in the separate focused recording checks. This run
-predates the text-reader and target-batch changes, so final-code full-suite
-verification remains required. The [recording](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-proposals-v2.json)
-and [checkpoint](../../../research/2026-10-17-full-normalization/scale/evidence/people-checkpoint-capacity-v1.json)
-receipts retain earlier capacity failures and their focused corrections.
-Automatic matching remains inactive.
+The latest completed [broad suite](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-target-batch-v1.json)
+excludes `SourceAliasScale` and `PeopleFactsSnapshotScale`. It records 3,640 passes,
+no failures and 28 actual unexecuted entries; the console's 24 skips omit four
+explicit cases. It includes the correction for the earlier [historical fixture
+failure](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-alias58-v1.json).
+That passing run precedes typed-stage JSON reuse and the strengthened source-retention
+fixture. A separate current-code broad run started on October 18 and remains live;
+its completion and the explicit checks remain required. Production code is pinned
+at `0cf5977`; subsequent changes through `002f0d4` are tests and documentation.
+Each receipt owns the exact binaries and execution scope.
 
-The [repertoire resolver](repertoire-resolution.md) authenticates complete imported dictionaries, published recording titles, published setlist passages and retained provider dictionaries. It preserves imported mappings and allocates visibly provisional title-derived identities where a dictionary is unavailable. The [setlist and file-content consumers](repertoire-consumers.md) are implemented and pass 115 focused consumer/operator checks. Their [real recording rehearsal](../../../research/2026-10-17-full-normalization/scale/materialization-local-inputs.md) publishes 257 contents across 256 files from 25 recordings and checks 2,165 API responses, including 1,409 unchanged legacy responses. Exact replay and fresh retries preserve accepted content UUIDs, ownership and revisions. All 12 legacy and four original accepted-music relation fingerprints remain unchanged.
+### Evidence available for matching evaluation
 
-The separate [real Jerry setlist rehearsal](../../../research/2026-10-17-full-normalization/scale/setlist-local-rehearsal.md) verifies three sets and 18 occurrences through 1,699 API requests, including exact song assignments, source notes and unchanged existing responses. The full-suite result above includes its decoder and reader fixes. Automatic inferred matching remains inactive.
+The [complete metadata frame](../../../research/2026-10-17-full-normalization/scale/full-metadata-frame.md)
+contains 4,379 artists, 292,522 recordings and 215,594 shows, with all 582,272 output
+rows and 69,728 requested coordinate results reconciled. The separate
+[complete domain capture](../../../research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md)
+retains 5,064,076 files, 216,331 venue records and repertoire relationships; all
+6,719,411 metadata rows pass offline verification and independent audit. Each
+capture retains its own snapshot authority. These inventories support reservation
+and sampling; they confer no identity labels, untouched status or publication authority.
 
-Contributor context adds nonunique contact/profile indexes, actor-aware matching and authentication against the original extraction. The [credit-grammar v4 replay](../../../research/2026-10-17-full-normalization/training/actor-facts-replay-v1/grammar-v4.json) fixes 28 suffix attachments and one angle-email attachment in the frozen 543-field development corpus. The combined checkout reproduces that new output exactly; the other 514 rows and all original labels remain unchanged. A new key-free extraction export uses the same 100 original credit fields and current rules: 97 Luna results come from cache, one field is empty and two remain unavailable. The retained job stays at 200 admitted attempts and $0.0146575 in configured accounting. The [matched trained-model comparison](../../../research/2026-10-17-full-normalization/training/credits-development-v1/matched-experiment-v1.json) now completes five grouped folds. On the 83 jointly available resolved fields and 67 draft priority-role assertions, current rules recover 60 with four extra predictions, the perceptron 40 with ten, logistic regression 36 with 16, and Luna 64 with three. Luna corrects three whole-field rule errors without damaging a previously correct field. These development results keep the rules as the local baseline; they establish neither release accuracy nor production fallback routing.
+Preserve the [original census and sampling evidence](../../../research/2026-10-17-full-normalization/scale/README.md),
+[blind annotation pack](../../../research/2026-10-17-full-normalization/scale/annotation/README.md)
+and all exposure/reservation receipts. Reconcile known and unknown exposure,
+duplicate/recording families and identity families before new plaintext, extraction,
+training or model access. Do not join separate captures into an invented common
+snapshot or infer provider, verified format or historical knowledge from current
+metadata. Temporal evaluation needs the candidate records and aliases actually
+available at its cutoff.
 
-The [venue resolver](venue-resolution.md) now has source preparation, complete candidate context, evaluated-policy contracts and guarded publication. Review and unresolved decisions enroll source, candidate and policy dependencies through empty Work publications. The same refresh behavior is implemented for [people acceptance](people-acceptance.md) and [composition resolution](composition-resolution.md), with the combined focused behavior checks passing. Independent contributors keep their own original clocks; an acknowledgment cannot consume changed peer inputs merely because their bytes later return to an old revision. Missing freshness stamps remain stale rather than receiving fabricated observations.
+The [people development comparison](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md)
+retains 322 source views and 295 comparisons across 219 declared relationships.
+Complete bags yield 100 correlated relationship units: 74 positive and 26 negative.
+These include 27 positive and only two negative cross-artist units. Logistic and
+boosted-tree diagnostics retain two false negatives and no false positives at the
+diagnostic cutoff; all 295 logistic scores agree with the public C# evaluator
+within 1e-12, with review-only actions. The earlier [people labels](../../../research/2026-10-17-full-normalization/training/people-development-v1/README.md),
+[independent adjudication](../../../research/2026-10-17-full-normalization/training/people-identity-adjudication-v1/README.md),
+[source-view receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-source-views-v1.json)
+and [prior-exposed selection frame](../../../../tools/RelistenNormalization/people-evaluation-selection/README.md)
+retain the provenance and limitations. These comparisons do not establish catalog
+candidate recall, calibrated probabilities or release precision.
 
-The [read-only venue supplement](../../../research/2026-10-17-full-normalization/scale/evidence/venue-context-local-v1.json) confirms all 67 selected venue records are unchanged but supplies dates for only two eligible recordings. A [metadata-only projection](../../../research/2026-10-17-full-normalization/scale/venue-context-metadata.md) and [full original-group replay](../../../research/2026-10-17-full-normalization/scale/original-group-replay.md) then classify all 122 discovered recordings against their original partitions. Twenty-nine have verified development tuples, including 27 beyond the strict allowlist; 23 remain held out, nine are context-only and 61 are absent from the standalone source selection. The replay programmatically decodes the frozen capture only to reproduce original duplicate groups, verifies every saved annotation header and exports no prose. The [expanded read-only capture](../../../research/2026-10-17-full-normalization/scale/expanded-venue-context.md) now supplies dates for all 29 eligible recordings across 21 artists, covering 21 of the 67 venue records. A separate wrong-show-UUID probe flags all 29 mismatches and exposes no dates. No partition or label changes.
+[Whole-field actor annotations](../../../research/2026-10-17-full-normalization/training/actor-facts-development-v1/README.md),
+[credit labels](../../../research/2026-10-17-full-normalization/training/credits-development-v1/README.md)
+and the [matched rules/tagger/Luna comparison](../../../research/2026-10-17-full-normalization/training/credits-development-v1/matched-experiment-v1.json)
+retain exact spans, independent blinded reviews, unresolved disagreements and
+provider limitations. The frozen 543-field development corpus and original
+100-field comparisons remain development evidence. The [Luna comparison and
+budget history](../../../research/2026-10-17-full-normalization/training/credits-luna-development-v1/README.md)
+retain validation failures, unavailable fields, sensitivity checks and 200 admitted
+attempts with $0.0146575 configured accounting. These extraction experiments grant
+no global identity authority or production routing policy.
 
-Search acquisition retains alternatives, coverage and resumable outcomes. The [bounded live search probe](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-search-local-v1.json) timed out before headers, so successful live response verification remains open. The [composition resolver](composition-resolution.md) now retains catalog-to-work correspondence receipts and authenticated publication stages. Its 43 new cases and compatibility checks pass in the combined normalization run. Independently evaluated production matching rules remain required. Automatic matching remains inactive.
+The [venue drafts](../../../research/2026-10-17-full-normalization/training/venues-development-v1/README.md)
+contain 34 judgments: 11 resolved and 23 insufficient-evidence cases, with independent
+reviews still awaiting adjudication. [Venue model experiments](../../../../tools/RelistenNormalization/venue-matcher-experiment.md)
+show contextual and hard-negative gaps; unknown judgments cannot become negatives.
+The [composition inventory](../../../research/2026-10-17-full-normalization/scale/composition-development-selection.md)
+has only two eligible strict-intersection questions and neither has sufficient
+catalog-to-work evidence. The [MusicBrainz pilot](../../../research/2026-10-17-full-normalization/composition-enrichment-pilot.md)
+retains external recording/work bridges, but does not connect them to Relisten
+catalog rows or establish complete authorship. Expanded
+[venue context](../../../research/2026-10-17-full-normalization/scale/expanded-venue-context.md)
+supplies dates for all 29 eligible development recordings while preserving original
+partitions; it does not qualify venue acceptance.
 
-The [composition development inventory](../../../research/2026-10-17-full-normalization/scale/composition-development-selection.md)
-finds only two eligible cross-artist questions when both existing development
-partitions are required. Neither pair has writer or global work evidence. Expand
-supported catalog-to-work correspondence labels before fitting the composition
-matcher; preserve the separate artist and identity evaluation suites.
+### Required before release
 
-- [x] Define the complete scope, existing playback contracts, domain ownership and additive APIs for the engineer and reviewer/operator.
-- [x] Census all 4,379 production artists through the read-only replica and retain an unlabeled sampling frame of 86,655 rows across every eligible artist. This measures available evidence, not matching accuracy.
-- [x] Capture 132 evidence records and create 102 provisional development/challenge labels across 25 artists, with 36 reserved cases. Build a separate [blind annotation pack](../../../research/2026-10-17-full-normalization/scale/annotation/README.md) containing 18,628 extraction tasks and 866 entity-link candidates; its answers remain unlabeled.
-- [x] Draft [100 complete credit-field labels](../../../research/2026-10-17-full-normalization/training/credits-development-v1/README.md) from 78 artists in the Archive cohort, with exact source spans and uncertainty. Retain 20 independent blinded field reviews; one unresolved-span disagreement remains excluded from fitting. These development drafts do not establish global person identities or launch accuracy. Other provider formats and independently adjudicated evaluation remain required.
-- [x] Add [168 people development questions](../../../research/2026-10-17-full-normalization/training/people-development-v1/README.md) across 144 recordings and 137 artists, separating actor kind, source-local co-reference and cross-recording identity. Retain complete candidates within the declared inventory, exact citations, reserved-family exclusions and a separately frozen 30-question blind review. All 14 validator regressions pass. The drafts remain pending adjudication; cross-artist positive evidence covers one Aadam Jacobs project owner and cannot validate broad person matching.
-- [x] Build, independently review and adjudicate [55 additional cross-artist credited-actor questions](../../../research/2026-10-17-full-normalization/training/people-identity-adjudication-v1/README.md) across 82 recordings and 66 artists. Separate agent adjudication supports 54 same-actor links across ten hypotheses and leaves one question unresolved. Six separate controls add two same-actor and four different-actor answers; only two negatives span recordings. All 17 packet, 12 control and 31 review-validator tests pass; actual validation checks 919 and 125 exact citations. Original packets and labels remain unchanged. These are development judgments, with no accepted identity writes or release-accuracy claim.
-- [x] Compare [actual C# rules, logistic regression and boosted trees](../../../research/2026-10-17-full-normalization/training/people-matcher-comparison-v1/README.md) over all 158 original candidate edges, grouping all 168 questions into 82 components before selecting resolved targets. Both trained models miss six explicit aliases absent from the current names/artist projection. All 19 C# and 24 Python contracts pass; the final logistic model matches the public C# evaluator exactly on 155 supported comparisons, with three explicit unsupported cases. Add source-supported actor context and broader adjudicated targets before selecting thresholds or automatic policies.
-- [x] Supply [source-attached actor context](../../../research/2026-10-17-full-normalization/training/people-source-context-comparison-v1/README.md) to the actual people comparison. Both trained models improve from six to two false negatives on the same 81 resolved drafts through four explicit aliases. All 102 focused C# and 34 Python checks pass; 155 final scores match the public C# evaluator exactly, with three explicit skips. The final runtime reproduces all 158 original name-only comparisons byte for byte. This cohort supplies no contact/profile agreements; broader source-reference evaluation remains required.
-- [x] Implement source-reference actor selection and [prepare the combined development inputs](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md). All 119 C# and 15 optimized-Python checks pass. Actual preparation and independent audit preserve 229 tasks, 318 source endpoints, 227 source records and 219 declared identity edges. Targets remain separate from source selectors.
-- [x] Complete the [combined people comparison](../../../research/2026-10-17-full-normalization/scale/evidence/people-adjudicated-comparison-v1.json): 150 focused C# and 21 optimized-Python checks pass. The actual 219-edge export yields 215 distinct pair units, with 92 eligible labeled units after source grouping and deduplication. Both models retain two false negatives and zero false positives at the diagnostic cutoff. Independent audits verify targets, folds and all scores; the public C# evaluator matches final logistic scores within 1e-12 on 167 supported edges, with 52 explicit skips. Only 19 positive and two negative eligible units span artists; independent catalog calibration remains required.
-- [x] Retain [independent source views](../../../research/2026-10-17-full-normalization/scale/evidence/people-source-views-v1.json) and actual streamed comparisons: 322 views, 219 declared relationship bags and 295 view pairs. The 175 complete bags produce 100 eligible relationship units after full-pair overlap grouping, with 74 positive and 26 negative judgments. Partial coverage, ambiguity and unknowns remain explicit; no view pair inherits an identity label. All 47 Python, nine new C# and 178 compatibility cases pass. Seven earlier behavioral artifacts replay byte for byte, and all 295 final logistic scores match the public C# evaluator within 1e-12 with review-only actions.
-- [x] Implement the [development selection and capture foundation](../../../../tools/RelistenNormalization/people-evaluation-selection/README.md). All 19 cases pass; the actual capture retains all 2,184 permitted original recordings across 1,765 artists and 2,172 components, with eight prior selection artifacts and original record bytes unchanged. This frame is prior-exposed and does not yet prove that all recordings of one credited actor stay in the same evaluation component. It cannot calibrate the full catalog.
-- [ ] Broaden independent identity coverage and reserve family-disjoint evaluation before choosing automatic acceptance or Luna routing policies. Improve the remaining source-supported aliases and evaluate catalog-wide candidate retrieval.
-- [x] Retain [38 cross-artist actor-family hypotheses](../../../research/2026-10-17-full-normalization/scale/evidence/people-identity-discovery-v2.json) across 207 recordings and 172 artists, with exact development evidence and independently graded context. Thirty-four have corroborating credit-actor context and four remain ambiguous. They are discovery material, not 38 verified people or release accuracy. The original 168 labels remain unchanged.
-- [x] Freeze [543 whole-field actor annotations](../../../research/2026-10-17-full-normalization/training/actor-facts-development-v1/README.md) from those 207 recordings. Preserve 535 field-local actors, 240 contact claims and 44 profile claims with exact citations. An answer-blind review covers 43 fields; semantic disagreements and partial coverage remain explicit, with adjudication pending. All 18 optimized-Python validation tests pass. These drafts support extraction development, not global identity or launch accuracy; actual extractor replay and independent evaluation remain required.
-- [x] Run a [trained credit-extraction experiment](../../../../tools/RelistenNormalization/credit-tagger-experiment.md) on those frozen labels. Five grouped development folds score 91 assertions: the small model recovers 41 with 15 extra predictions; the retained parser recovers 63 with eight extra predictions. Keep the rules as the baseline while expanding data. This development comparison does not authorize production weights, fallback routing or identity acceptance; the historical parser output's producer equivalence is not independently verified.
-- [x] Draft [34 venue-pair judgments](../../../research/2026-10-17-full-normalization/training/venues-development-v1/README.md) across 66 artists, supported by retained catalog fields and venue-operator excerpts. Six proposed matches, five proposed different venues and 23 insufficient-evidence cases remain development drafts. Six blinded reviews agree with their draft decisions; all adjudication statuses remain pending. Unknown judgments must not become negative training examples.
-- [x] Run [logistic and boosted-tree venue experiments](../../../../tools/RelistenNormalization/venue-matcher-experiment.md) on the 11 resolved drafts, grouping all 34 pairs before selecting training rows. Preserve actual C# matcher output and exact model/input artifacts. Both models disagree with the separate-city Fox Theater draft and score 14 of 23 unknowns above one half. These diagnostics require stronger contextual features and hard negatives before model selection, calibration or automatic acceptance. Independent evaluation and the other identity domains remain required.
-- [x] Export the [actual C# venue matcher baseline](../../../../tools/RelistenNormalization/README.md#actual-venue-pair-baseline) over all 34 pairs with no inferred geography or active policy. Retain exact input, executable-assembly and output hashes. All 17 runner contract cases pass; actual command checks verify successful export and a controlled invalid-input failure without a completion marker. Its 25 evidence-needed and nine noncandidate outcomes are diagnostics, not identity labels.
-- [x] Audit [composition evidence readiness](../../../research/2026-10-17-full-normalization/composition-readiness.md) within the strict development intersection. The retained records contain writer statements but no recognized work identifiers or structured author sets. Acquire evidence connecting repertoire entries to external works before evaluating composition acceptance; title matches and cover performers cannot establish that connection. Record the two exposed seed cases so future evaluation cannot count them as untouched holdouts.
-- [x] Retain a bounded [MusicBrainz development pilot](../../../research/2026-10-17-full-normalization/composition-enrichment-pilot.md): two explicit external recording-to-work bridges, distinct writer/composer/lyricist credits and person/group types, same-title unresolved candidates and a retained 503 outcome. These assertions do not connect Relisten catalog rows to those external recordings or establish complete authorship.
-- [x] Add [typed MusicBrainz decoding](musicbrainz-decoding.md) for retained work, recording and external artist lookups, with exact citations, role distinctions and validated ISWC comparison keys. All 22 new decoder contracts, 68 combined focused cases and 1,495 relevant regressions pass. The full local API suite passes 2,120 tests with 24 existing tour-contract skips and zero failures. The solution builds with existing package advisory warnings; formatting and fresh correctness/readability reviews pass. Evaluated catalog resolution remains required; the acquisition increment below retains new source assertions without accepting identities.
-- [x] Implement [bounded MusicBrainz acquisition](musicbrainz-acquisition-contract.md), with a shared PostgreSQL provider gate, exact response receipts, explicit cache age, bounded attempts and saved-response recovery. All 31 acquisition cases and 114 combined acquisition/credit/cache checks pass against PostgreSQL and fake HTTP. The solution builds. The [local live integration](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-acquisition-local-v1.json) verifies retained 503 recovery, cache reuse and terminal replay across eight command invocations. Evaluated catalog-to-work links and outage/process-termination checks remain required.
-- [x] Implement immutable retained inputs, exact evidence validation, publication/review fences, typed canonical domain storage and reviewed corrections. People, venue and music readers exist with reads disabled by default.
-- [x] Implement [accepted people resolution](people-acceptance.md): immutable evaluated policies, whole-pool decisions, guarded identity creation, contributor-scoped credit reconciliation and resumable publication stages. Explicit clearing retires supported old credits; ambiguous or incomplete extraction preserves prior support. Missing playback/show context does not block independently supported credit evidence. Tests cover success, partial publication, policy revocation, stale inputs and interrupted recovery. Fixture policies remain isolated; no runtime policy is active.
-- [x] Implement local credit/title extraction, indexed candidate retrieval, typed pair comparison and bounded cached Luna extraction. A two-input [connectivity receipt](../../../research/2026-10-17-full-normalization/scale/evidence/luna-connectivity.json) verifies API integration and key-free cache replay for $0.0001745. No matching policy is active.
-- [x] Run the [matched-field Luna comparison](../../../research/2026-10-17-full-normalization/training/credits-luna-development-v1/README.md) on all 100 original fields, with current local parsing and keyless replay. The v1 run accounts for $0.0061393; five invalid responses remain explicit. On 83 jointly available resolved fields, Luna corrects five fields and introduces errors in 15 previously correct fields. Current selective routing recovers one additional supported credit over local parsing on the full 85-field resolved denominator. The clarified v2 prompt, with the identical original fields and local baseline, corrects three fields without adding an incorrect field on 79 jointly available resolved fields; eight responses fail validation. It recovers 63 of 70 priority-role assertions when local output is explicitly retained on failure. Both versions together account for $0.0137572, and a key-free v2 replay adds no attempts or spend. Retain both comparisons and their disputed-label sensitivity checks. These development results authorize no automatic identity policy or routing change.
-- [x] Fix local suffix splitting and processing-chain attribution, then rerun all 100 original fields without an API key. Local extraction now recovers 61 of 70 draft priority-role assertions with four extra predictions and nine misses, correcting two fields without a new error. [Parser evidence](../../../research/2026-10-17-full-normalization/training/credits-luna-development-v1/local-parser-v2.json) retains the unchanged selection and executable hashes. Add bounded private failure-response diagnostics so later rejected Luna output can be investigated without becoming reusable cache data; earlier failures remain unrecoverable.
-- [x] Bound matched-field extraction jobs to 200 cumulative attempts and retain only their own attempt history. The [bounded recovery run](../../../research/2026-10-17-full-normalization/training/credits-luna-development-v1/comparison-v2-bounded-retry.json) recovers six of eight unavailable v2 requests, ending at 97 extracted fields, one empty and two unresolved. All 200 attempts account for $0.0146575; keyless replay adds no attempts or spend. Preserve both failed support checks and the draft-label sensitivity results. No automatic policy or fallback routing changed.
-- [x] Implement [capture adapters](provider-capture.md) for all seven configured importers and Archive intake/discovery, plus [typed decoding and legacy recording seeds](provider-decoding.md).
-- [x] Implement [catalog binding and contributed input sets](catalog-binding.md) for legacy, Archive and Phish.in recordings/files, with transactional artist/global-identifier clocks and publication watermarks. Add [joint Local binding](local-binding.md), mapping-registry invalidation and [v2 recording refresh](catalog-refresh.md) with exact input-revision admission.
-- [x] Verify binding, refresh, input admission, recording pages, setlist accounts and imported venue/dictionary binding: the full local API suite passes 1,399 tests with 24 existing tour-contract skips and zero failures. The solution builds, formatting passes, and fresh correctness/readability reviews cover failure and recovery. These results precede candidate-universe invalidation.
-- [x] Implement [resumable recording processing](recording-processing.md), with immutable preparation and extraction checkpoints, complete read-set checks, exact replay and historical stale proposals. Extraction never writes accepted identities.
-- [x] Add bounded recording pages and the explicit worker command, with saved selections, partial-failure receipts and resumable attempts. All 40 focused page/store/worker-process checks pass, including Test and Development environments. API-only popularity services are registered separately so the standalone worker passes dependency validation without Hangfire.
-- [x] Add [setlist-account binding](setlist-binding.md) for Jerry, Setlist.fm, Phantasy Tour and explicitly artist-scoped Phish.net accounts. Independent artist/imported-setlist/performance outcomes preserve passages when playback context is missing. All 80 focused binding/decoder/registry cases and 765 normalization regressions pass, including the importer boundary and controlled race regressions. The full suite above includes this increment.
-- [x] Implement [imported venue and artist-dictionary snapshots](imported-catalog.md), pure decoding and checked binding by stored UUID. Original producer revisions are retained with the facts; independent venue revisions cover artistless records and participate in contributed work. All 169 focused checks and 838 normalization regressions pass, including publication, correction/revert, caller mutation and recovery. The full suite above includes this increment.
-- [x] Add [candidate-universe generations](candidate-universes.md) to admission, contributor ownership, publication and pending work. Typed writers lock complete scope sets before owner mutations; source ownership changes also invalidate people context. All 216 focused cases and 890 normalization regressions pass. The full API suite passes 1,451 tests with 24 existing tour-contract skips and zero failures.
-- [x] Make [unchanged publication](unchanged-publication.md) settle across fresh attempts: matching music facts, credits, venue assignments and identity metadata retain their revisions or exact assertions. New full citations remain evidence; reviewed decisions and UUID ownership stay protected. All 106 focused cases and 983 normalization regressions pass, including existing music tests and a cross-artist file move with preserved playback identities. The full API suite passes 1,544 tests with 24 existing tour-contract skips and zero failures.
-- [x] Add [atomic candidate-facts snapshots](candidate-facts.md) for people, venues, repertoire and compositions, with [observed-owner read sets](owner-observations.md). Preserve complete dated venue alternatives, exact artist credit totals and original assertion provenance. All 182 focused cases and 1,090 normalization regressions pass, including concurrent review, empty candidate pools and a 513-credit aggregation. The solution builds, formatting and fresh reviews pass. The full API suite passes 1,651 tests with 24 existing tour-contract skips and zero failures.
-- [x] Add [negative catalog lookup fences and exact UUID presence probing](lookup-fences.md). Identifier/UUID clocks cover missing, ambiguous and conflicting bindings, and contributor unions preserve unconsumed work. Both extraction entrypoints enforce the same complete read set. All 169 focused cases and 1,135 normalization regressions pass; the solution builds, formatting and fresh reviews pass. The full API suite passes 1,696 tests with 24 existing tour-contract skips and zero failures.
-- [x] Add [durable recording lookup outcomes and atomic processing handoffs](lookup-enrollment.md), with separate lookup/extraction owners and legacy dispatch. Independent lookup scopes settle shared evidence without repeated fetches, and acknowledgement requires the exact processing preparation and terminal receipt. All 25 focused cases and 1,108 normalization-named regressions pass. The solution builds, formatting and fresh correctness/readability reviews pass. The full API suite passes 1,721 tests with 24 existing tour-contract skips and zero failures.
-- [x] Implement [complete-input recording processing](provider-processing.md) for legacy, Archive and Phish accounts. Freeze initiating handoffs, original membership and per-input facts; preserve conflicting titles and file-scoped credits. All 73 focused checks and 1,165 normalization regressions pass, including raw delivery, subsequent legacy runs, scope stripping, original UUID fences and older interrupted headers. The solution builds, formatting and fresh correctness/readability reviews pass. The full API suite passes 1,778 tests with 24 existing tour-contract skips and zero failures.
-- [x] Add [Local recording processing](local-processing.md) and [complete setlist proposals](setlist-processing.md), with complete input ownership, bounded evidence reads and explicit enrollment. Preserve selected root-account credits, independent setlist associations and all original passage details. All 76 focused cases and 1,241 normalization regressions pass. The solution builds, formatting and fresh correctness/readability reviews pass. The full API suite passes 1,854 tests with 24 existing tour-contract skips and zero failures. Service registration starts no scheduled work.
-- [x] Add [credit reconciliation](credit-reconciliation.md), [complete composition authorship](composition-authorship.md), [durable people-resolution proposals](people-resolution.md) and [venue creation and assignment context](venue-review-context.md). All 93 focused PostgreSQL contract cases and 1,386 normalization regressions pass. The solution builds, formatting and fresh correctness/readability reviews pass. These services retain original evidence and reviewed authority; they activate no automatic matching policy. The full API suite passes 1,947 tests with 24 existing tour-contract skips and zero failures.
-- [x] Add [complete accepted setlist structures](setlist-structure.md), [independent display selection](setlist-selection.md), [recording-independent performances](setlist-performances.md) and [public set reads](setlist-public-reads.md). All 101 focused cases and 1,487 relevant regressions pass, including HTTP pagination, stale proposals after performance creation, recovery and unchanged playback. The solution builds, formatting and fresh correctness/readability reviews pass.
-- [x] Add [correspondence and removal review](setlist-correspondence.md) and [bounded annotation reads](setlist-annotations.md), including exact footnote definitions and safe display text. Review retains original source receipts without freezing unrelated metadata. All 301 focused setlist, decoder and baseline-export checks and 1,538 relevant regressions pass. The solution builds with existing package advisory warnings; fresh correctness/readability reviews cover recovery, old-version revocation and response-size bounds.
-- [x] Implement the [completed-account reader and setlist/file-content consumers](repertoire-consumers.md), preserving original proof, stable identities, complete images, reviewed authority and resumable cleanup. All 115 focused consumer/operator cases pass. The [real recording rehearsal](../../../research/2026-10-17-full-normalization/scale/materialization-local-inputs.md) verifies 257 contents through 225 worker invocations and 2,165 API requests, including 1,409 unchanged legacy responses. The full suite and corrected capacity-retry rerun are recorded in the consumer verification receipt.
-- [x] Verify a [real Jerry setlist](../../../research/2026-10-17-full-normalization/scale/setlist-local-rehearsal.md) from frozen source-only expectations through extraction, repertoire resolution, publication, exact replay, unchanged retry and v3. All 1,699 API requests pass: three sets, 18 occurrences, eight transition markers and 14 Show Facts lines, with exact claim/song/target joins. All 21 set/occurrence UUIDs survive retry; original catalog rows and 257 existing file contents remain unchanged. The source remains unassigned and unselected; no show is created or recording moved.
-- [x] Complete the full-suite rerun on the final real-page decoder and Show Facts reader binaries: 2,838 tests pass, 24 existing tests skip and none fail. The final receipt rechecks 11 source artifacts and all six executed binary hashes. The earlier full-run result remains in its original receipt.
-- [x] Replace raw people-context capacity rejection with complete distinct matching facts and bounded witnesses under the [capacity contract](../../../research/2026-10-17-full-normalization/scale/people-candidate-capacity.md). The earlier 126 matching/policy and 152 database cases pass. A [distinct-owner fixture](../../../research/2026-10-17-full-normalization/scale/evidence/people-distinct-owner-capacity-v1.json) retains all 6,789 observations across 6,788 recording owners and verifies owner-only invalidation and genuine sentinel retraction. Two accounts are service-published; 6,786 are relational capacity copies. The linear owner-clock index passes 25 public cases without SQL or lock-order changes; no speedup is measured.
-- [x] Verify [people pipeline recovery](../../../research/2026-10-17-full-normalization/scale/evidence/people-contribution-pipeline-capacity-v1.json) with an explicit people membership budget of 100 contributors/100,000 stored bindings; Work defaults remain 100/10,000. Exact admitted contributor headers preserve untouched peers and tombstones. All 129 focused/public cases pass, including new processing after two large memberships, interrupted recovery, stale-owner rejection and genuine contributor-only withdrawal.
-- [x] Store repeated people evidence once per immutable checkpoint through the [checkpoint format](checkpoint-format.md), preserving expanded service results, semantic hashes, complete owner observations and the 32 MiB limit. All 147 focused people cases pass, including eight claims, seven queries, two contributors, mixed-format recovery and conservative retirement coverage.
-- [ ] Measure catalog-wide database cost before backfill. The many-claim fixture verifies storage and recovery; it does not establish catalog throughput, peak memory or independently evaluated matching accuracy.
-- [ ] Independently verify and expand held-out labels, then train and compare automatic matching and Luna routing as specified in [evaluation-strategy.md](evaluation-strategy.md). Development labels, extraction throughput and pair comparisons cannot authorize a production policy.
-- [ ] Implement and evaluate multi-candidate automatic resolution, starting with [accepted people and recording credits](people-acceptance.md). Authenticate complete candidate snapshots, preserve managed additions beside ambiguity, and resume identity creation with fresh candidate reads. Existing-match and new-identity decisions need evaluated policy authority; ambiguity and conflicting identity merges enter bulk review.
-- [ ] Implement and evaluate automatic setlist correspondence and removal policies. Complete structures, explicit review authority, recording-independent performances, atomic display selection and bounded public reads are implemented. Clear updates to revised unkeyed source accounts still need evaluated correspondence authority. Automatic policies must establish supported assignments and removals before publication.
-- [ ] Backfill every artist, verify public behavior and recovery, select public evidence excerpts, then rehearse and stage rollout.
+- Finish full-size distinct-person and 1,001-source lifecycle verification, the
+  final-code broad regression run and catalog-wide cost measurements. Retain
+  cancellation, partial progress and recovery evidence; synthetic successes do
+  not establish catalog throughput or peak memory.
+- Complete and independently evaluate matching capabilities for people, venues,
+  compositions and repertoire, plus setlist correspondence/removal. Preserve
+  original facts, stable playback, complete candidate pools and reviewed authority.
+  Qualify creation, actor kind and source-local co-reference separately; source
+  alias matching needs its own evaluated capability and cannot borrow credit accuracy.
+- Follow [the evaluation strategy](evaluation-strategy.md): reconcile exposure and
+  reservations; keep train, tune and untouched test partitions separate; group
+  duplicate recordings and known identities; run distinct artist, identity, time
+  and format suites. Independently check labels and adjudicate uncertainty.
+  Evaluate actual candidate recall separately from conditional matcher errors.
+  Compare rules, logistic regression, boosted trees and selective Luna on the same
+  retained task definitions; measure accepted precision, automatic coverage,
+  review volume, latency, cost and uncertainty. Choose thresholds and routing on
+  tuning data; no numerical release threshold has yet been established.
+- Authenticate evaluation receipts and operator approval through the trusted host,
+  then use the existing versioned policy registry and review/CAS contracts for
+  activation, revocation and rollback. Registration and implementation alone do
+  not activate a policy. Complete all-artist backfill, verify public behavior and
+  recovery, select public evidence excerpts and rehearse staged rollout.
 
 ## Context and current evidence
 

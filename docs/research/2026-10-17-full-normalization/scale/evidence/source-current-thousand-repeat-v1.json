@@ -1,0 +1,32 @@
+{
+  "kind": "source-current-thousand-repeat-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "0cf59772ea06497a473834c795e52149c2337758",
+  "status": "The full 1,000-claim repeated source application passes on the committed production code. Distinct-person, 1,001-source and final broad regression verification remain required.",
+  "verification": {
+    "passed": 1,
+    "testName": "RepeatedManyClaimApplicationsKeepCompleteProofInIndependentlyBoundedStages(1000)",
+    "testDuration": "00:16:02.9008900",
+    "startTime": "2026-10-18T08:28:54.0891860-07:00",
+    "endTime": "2026-10-18T08:44:56.9922570-07:00",
+    "sharedHostCommandWallSeconds": 969.26,
+    "apiAssemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+    "testAssemblySha256": "4b77e66ce79b39101e6239d8a3750e94105ba09db1c96652d052791b6e13b8cb",
+    "claimCount": 1000,
+    "completedApplications": 2,
+    "checks": [
+      "Both genuine extraction/resolution/application sequences reach Complete.",
+      "All 1,000 aliases remain visible.",
+      "Every retained expanded stage body stays within 32 MiB canonical encoding.",
+      "Every stage body reads back with complete ordered structural equality."
+    ]
+  },
+  "qualification": "One synthetic scale fixture with fixture policies. Other large jobs and diagnostic collectors shared this host. This is not production matching accuracy, isolated throughput, CPU or peak-memory evidence. The separate warning-bearing trace has no managed attribution and is not performance evidence.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-repeat-thousand-typed-stage-v1/runtime-v1/manifest.json",
+    "sha256": "d580bb22c41a52733b823cc434d65e824283f27dc0d752d2c3d0cee5c5a4876a",
+    "files": 12
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

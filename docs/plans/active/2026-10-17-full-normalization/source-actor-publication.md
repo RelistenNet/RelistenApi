@@ -243,18 +243,18 @@ and extraction owners. The [three-source regression](../../../research/2026-10-1
 passes; run the same lifecycle with 1,001 sources for full-size verification,
 which remains required.
 
-The
-[capacity evidence](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
-retains the separate large-input baseline runs. The [checkpoint follow-up](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
-now verifies the complete 1,000-claim repeat through both applications and saved
-stage readback. A snapshot after the first application records 3,000 retained
-name-evidence supports.
-The latest 1,000-person baseline failed at its one-hour cancellation limit.
+The [current 1,000-claim repeat](../../../research/2026-10-17-full-normalization/scale/evidence/source-current-thousand-repeat-v1.json)
+passes both applications, retains all aliases and reads every saved stage back
+without losing proof. It took about 16 minutes on the shared host; this does not
+establish isolated throughput. The [capacity baseline](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
+and [earlier checkpoint verification](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
+retain the original runs and the earlier snapshot of 3,000 name-evidence supports.
+The preceding 1,000-person baseline failed at its one-hour cancellation limit.
 The [text-reader follow-up](recording-text-scan.md) records the partial progress,
-retained proofs and a verified coordinate-counting correction. Current target
-reads, full stage storage and per-claim retained scope copies still require cost
-work. The smaller passing cases and pure extraction timings do not establish
-catalog throughput.
+retained proofs and a verified coordinate-counting correction. Full-size
+distinct-person and multi-source tests, final broad regression and representative
+catalog cost checks remain required. The smaller passing cases and pure
+extraction timings do not establish catalog throughput.
 
 Apply migrations 53–58 in order. Migration 57 adds two retained application/stage
 tables and indexes; it does not reinterpret existing accepted authority. Migration
