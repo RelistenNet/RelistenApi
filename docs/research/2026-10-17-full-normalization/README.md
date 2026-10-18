@@ -94,6 +94,14 @@ with exact final C# scoring and unchanged original name-only output. Contact and
 profile agreements remain absent in this cohort; the separately adjudicated
 source-reference questions supply the next development inputs.
 
+The [combined development preparation](training/people-adjudicated-training-v1/README.md)
+now authenticates the original questions and all 61 separately adjudicated pairs,
+keeping source selectors separate from targets. Independent audit confirms 229
+tasks, 318 endpoints, 227 source records and 219 declared identity edges. Exact
+source-reference selection passes its C# contracts; actual combined feature
+export, grouping bridges and duplicate/conflicting-pair handling remain required
+before fitting.
+
 The [local MusicBrainz search receipt](scale/evidence/musicbrainz-search-local-v1.json) verifies retained timeout outcomes and explicit retry across four invocations. No successful page was received. Successful live search verification and evaluated catalog-to-work matching remain open; the [correspondence processor](../../plans/active/2026-10-17-full-normalization/composition-resolution.md) is implemented. Unavailable results are not an empty candidate set.
 
 The [composition development inventory](scale/composition-development-selection.md)

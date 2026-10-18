@@ -161,6 +161,13 @@ epoch still fence omitted facts. Context, lookup and support changes advance tha
 epoch even when the accepted credit row itself does not change. A prior empty
 lookup therefore becomes stale when a new rival appears.
 
+The [capacity audit](../../../research/2026-10-17-full-normalization/scale/people-candidate-capacity.md)
+identifies why this raw-account bound must change before activation. The intended
+people v4 contract supplies complete distinct matching facts and bounded raw
+witnesses while retaining complete owner observations. That implementation and
+its capacity/freshness checks are pending; do not treat omitted witnesses as
+missing semantic facts or silently reuse a v3 policy attestation.
+
 Comparison exposes nonunique contact/profile agreement separately from name,
 artist and canonical-ID features. Unequal shared keys do not prove different
 people. Hint overlap can make a pair comparable; it supplies no automatic matching

@@ -1,0 +1,64 @@
+{
+  "state": "read_only_production_credit_volume_proxy",
+  "observed_at": "2026-10-18T07:51:55.518524Z",
+  "endpoint": "relisten-db-ro.tail09dbf.ts.net:5432",
+  "database": "app",
+  "schema_fields_verified": true,
+  "replica_recovery_observed": true,
+  "transaction_read_only_observed": "on",
+  "sql_writes": 0,
+  "top_exact_literal_label_role_occurrences": 5671,
+  "top_label_recordings": 2995,
+  "top_label_artists": 489,
+  "second_exact_literal_label_role_occurrences": 5483,
+  "second_label_recordings": 3122,
+  "second_label_artists": 270,
+  "charlie_miller_literal_reference": {
+    "recordings": 6788,
+    "artists": 86,
+    "taper_fields": 409,
+    "transferrer_fields": 6621,
+    "exact_literal_label_recordings": 2764,
+    "exact_literal_label_role_occurrences": 2944
+  },
+  "limits": [
+    "Exact labels may name compounds, projects, unknowns or namesakes; these are not canonical identity counts.",
+    "The name-reference regex is a metadata-volume probe, not an identity-matching rule.",
+    "Raw field byte totals are not rendered actor-fact JSON and do not establish actual accepted-context payload size.",
+    "Normalization is not deployed on the queried catalog; current reader limits describe the implementation, not an observed production rejection."
+  ],
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/receipt.json",
+      "bytes": 2455,
+      "sha256": "6b75ee7f53c65c0ee9590af730ed7047dc12aeae5bacf57bb5a5404e40b226bd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/schema.log",
+      "bytes": 187,
+      "sha256": "24c156914d25165cdd3adc0b9e6979615217c0c316c7037caafdc19d07cff1ac"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/exact-labels.sql",
+      "bytes": 1019,
+      "sha256": "99c208fa9d98f0102ecb5b5ca5517207f28d440317bb5d95729d3f4e5297602c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/exact-labels.log",
+      "bytes": 3517,
+      "sha256": "a10364cc6bef3ad45b0d5871d8517068735e359a67c43cc90fe67c4a43acba4e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/role-counts.sql",
+      "bytes": 1025,
+      "sha256": "a057e0956d1ce550140e6bc4451d877d0dc8473ac51281ace578421d34e3cf01"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/role-counts.log",
+      "bytes": 1326,
+      "sha256": "1041a3e70f276068eca9648d136a4a25731605e8e545aa8ab8a17b26fef39f15"
+    }
+  ],
+  "intended_change": "Complete distinct semantic actor facts with bounded raw witnesses, complete owner observations, people-only v4 compatibility, and measured sequential-reading cost.",
+  "implemented": false
+}

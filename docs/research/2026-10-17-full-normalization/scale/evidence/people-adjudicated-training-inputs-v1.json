@@ -1,0 +1,91 @@
+{
+  "state": "prepared_and_authenticated_adjudicated_people_development_inputs",
+  "implementation_commit": "84ce1c0",
+  "counts": {
+    "all_tasks": 229,
+    "source_endpoints": 318,
+    "complete_source_records": 227,
+    "exact_selectors": 367,
+    "declared_identity_edges": 219,
+    "preprojection_components": 93,
+    "same_entity_targets": 115,
+    "different_entities_targets": 26,
+    "unknown_targets": 78
+  },
+  "tests": {
+    "csharp_passed": 119,
+    "optimized_python_passed": 15,
+    "failed": 0
+  },
+  "independent_audit": {
+    "input_pins": 65,
+    "output_artifacts": 5,
+    "source_payloads": 227,
+    "selectors": 367,
+    "original_tasks_preserved": 168,
+    "original_candidate_edges_preserved": 158,
+    "findings": 0
+  },
+  "source_selector_and_target_files_separate": true,
+  "all_endpoints_not_projected": true,
+  "grouping_complete": false,
+  "combined_model_fit_complete": false,
+  "original_labels_and_packets_unchanged": true,
+  "accepted_data_writes": 0,
+  "provider_requests": 0,
+  "model_api_requests": 0,
+  "identity_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/selection-spec.json",
+      "bytes": 800,
+      "sha256": "d3972383911c18089c4640e9ed7fe467d19a301c74ea593d8f50fe9420db95b6"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/manifest.json",
+      "bytes": 18936,
+      "sha256": "373c9089b3b0c16a75248158d4cca34a90b1da6cd8fa3f16a1b17f4f91ba68ca"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/source/records.jsonl",
+      "bytes": 584616,
+      "sha256": "21511523ac49fa33206d2affbe41d58090e14c94b627cedb8e0b046f57558b9e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/source/endpoints.jsonl",
+      "bytes": 225298,
+      "sha256": "c9335702f7f848563974f3d29eff36cef6344378b21f5aeef0a8afdb06637aa8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/source/questions.jsonl",
+      "bytes": 171756,
+      "sha256": "24f066fe97446ac9952a4e48b07ca75874a71eeb1b2409541d1a1336e812d8cf"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/source/grouping.jsonl",
+      "bytes": 21614,
+      "sha256": "78eabd228a2404796df84c9c9d5d4358c9339a161f552cfea04f4857ec1b0447"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/targets/decisions.jsonl",
+      "bytes": 91619,
+      "sha256": "6513b2b783a1f10934e148bd8fdd55808dfa4e1bc8f3e1e7e39d21b5b93270bf"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1-audit/receipt.json",
+      "bytes": 21341,
+      "sha256": "93b7cf991695eaf4e79b6851acedab904cab51895873e1b5fd03a71479826c0d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1-audit/audit.py",
+      "bytes": 16833,
+      "sha256": "8a280656dd69644bc8d74e974dcfcf4859a210471d775c4aece41e9579e18a54"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/verification-v2/receipt.json",
+      "bytes": 4422,
+      "sha256": "d7c2ca5fec2eb87f589ba6ef80bf7d63e4da5a41171fb3144e274f76e09ebd33"
+    }
+  ]
+}
