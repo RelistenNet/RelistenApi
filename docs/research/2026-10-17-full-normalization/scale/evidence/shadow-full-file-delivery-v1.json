@@ -1,0 +1,166 @@
+{
+  "version": "shadow-full-file-delivery-v1",
+  "recordedAt": "2026-10-18T21:47:45.948807+00:00",
+  "state": "audited_full_population_with_verified_correction_preview_indexing",
+  "scope": {
+    "files": 5064097,
+    "songs": 16605,
+    "legacySetlists": 38475,
+    "memberships": 575103,
+    "providerInputs": 1861,
+    "selectedOriginalShards": 105,
+    "logicalDomainOutcomes": 20410606,
+    "snapshotSemantics": "Each original shard retains its own read-only snapshot; no global simultaneous snapshot is asserted.",
+    "publication": "Local experimental view; no accepted catalog identities or production writes."
+  },
+  "producerReceipt": "shadow-full-files-producer-v3.json",
+  "audit": {
+    "artifact": {
+      "path": "/tmp/normalization-shadow-full-files-public-audit-v1/final-audit.json",
+      "sha256": "b95ca76ec88ab548a7e0b1c760ea23e9eb9c2e34d4b8bce4b73c1773f108e165",
+      "bytes": 8137
+    },
+    "counts": {
+      "filesPerFileDomain": 5064097,
+      "fileDomains": 4,
+      "catalogLiteralSpanCitationInstances": 36319601,
+      "legacyMemberships": 575103,
+      "nullSourceFiles": 157656,
+      "currentTailFiles": 21,
+      "failedOutcomes": 0,
+      "coordinateOrSiblingMismatches": 0
+    },
+    "limits": "Preservation and accounting checks do not establish identity accuracy. External provider semantics are distinct from catalog literal/span checks."
+  },
+  "correction": {
+    "partition": {
+      "path": "/tmp/normalization-shadow-empty-title-partition-v1/receipt.json",
+      "sha256": "b15aceefca9eb9e046b773e861e3a27c8edc1d456dd45938900ad909c1695237",
+      "bytes": 13870
+    },
+    "providerPartition": {
+      "path": "/tmp/normalization-shadow-empty-title-partition-v1/provider-empty-title-audit.json",
+      "sha256": "39427686b0b29342f4e21b1c1d69120a431c5c2f85d276c14f4e845e99bae454",
+      "bytes": 6468
+    },
+    "comparison": {
+      "path": "/tmp/normalization-shadow-empty-title-repair-comparison-v1/manifest.json",
+      "sha256": "c78b21828baddb2dc63199830ae98a9e0d82637f7c9d5218373dc078ebf5d36f",
+      "bytes": 4478
+    },
+    "repairRun": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-empty-title-repair-v1/manifest.json",
+      "sha256": "5f9f82ba7450c45e157b3c42449ae2d49c0facceba649e1c052b2bbebc5cff4a",
+      "bytes": 4895
+    },
+    "filteredPatch": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-empty-title-repair-patch-v1/manifest.json",
+      "sha256": "afe9d8e63507d666a6ffb9d214aed0415be4caeffeb021e644299cd86dc3244d",
+      "bytes": 4797
+    },
+    "files": 1619,
+    "artists": 34,
+    "outcomes": 6476,
+    "affectedProviderInputs": 0,
+    "falseLegacySongUuidsRemoved": 34,
+    "knownNonemptyMentionsPreserved": 1387,
+    "unchanged": [
+      "artist/source/show/file ownership",
+      "MP3 playback URL",
+      "raw title and extraction spans",
+      "all nonempty song/work links",
+      "all 1619 performance proposals and statuses"
+    ],
+    "outcomeDeltas": {
+      "repertoire": {
+        "proposed": -1357,
+        "unresolved": 1357
+      },
+      "file_contents": {
+        "proposed": -1357,
+        "unresolved": 1357
+      }
+    },
+    "servingScope": "Only four file-domain patch chunks are admitted. Dictionary/provider context outputs from the smaller replay do not replace full-population results. The immutable base remains v5; selected corrected rows use v6."
+  },
+  "reader": {
+    "url": "http://alecs-macbook-pro.tail09dbf.ts.net:18767/?domain=file_contents",
+    "view": "local-dev/normalization-data/2026-10-18-shadow-full-files-serving-v1",
+    "state": "experimental_preview_indexing",
+    "sourceFilter": "entityKey=source:<sourceUuid>",
+    "availability": "Previously indexed results remain readable when indexing pauses for its disk reserve. Newest completed results and playable files receive priority.",
+    "limits": [
+      "Index coverage is shown separately from the complete computed population.",
+      "Proposals and unresolved cases remain visible; semantic accuracy is not qualified.",
+      "Original recording-label/parser errors outside the empty-key correction remain known issues."
+    ],
+    "implementationCommit": "b24f1af",
+    "minimumFreeBytes": 3892314112,
+    "timeoutBehavior": "HTTP 503 on bounded SQLite read timeout; subsequent requests can recover. Index-only disk pause preserves HTTP availability.",
+    "verification": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-files-reader-execution-v5/verification.json",
+      "sha256": "0fcde8a06a2e12c6930fc2c604469c0c0d2a7725f736aae7beca948d0bb3483d",
+      "bytes": 3779
+    }
+  },
+  "peopleDirectory": {
+    "url": "http://alecs-macbook-pro.tail09dbf.ts.net:18768/?q=Aadam",
+    "sourceRecordings": 292523,
+    "initialCreditedRecordings": 253571,
+    "initialCreditedArtists": 4278,
+    "initialDraftNameGroups": 26281,
+    "semantics": "Exact normalized-name retrieval groups; namesakes and fragmented identities remain possible. Counts concern the production capture, not the separately imported local Jerry/Aadam namespace.",
+    "contract": "tools/RelistenNormalization/people-directory.md",
+    "creditedRecordings": 253722,
+    "creditedArtists": 4284,
+    "draftNameGroups": 26370,
+    "sourceHomes": 292523,
+    "knownLimitation": "Name groups remain provisional; namesakes and fragmented aliases are not fully resolved.",
+    "retainedModelOverlay": {
+      "sources": 2000,
+      "inputMismatches": 0,
+      "localCreditOccurrences": 2530,
+      "modelCreditOccurrences": 2296,
+      "modelTaperCredits": 1233,
+      "modelTransferrerCredits": 1063,
+      "modelOnlyPositiveSources": 151,
+      "addedCreditedArtists": 6,
+      "newApiCalls": 0,
+      "handoff": {
+        "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-luna-credit2000-directory-execution-v1/manifest.json",
+        "sha256": "af292b35b9ef85d0c2560307f6c9e9beb0a4b43a7cec3c00f4093b895522bab0",
+        "bytes": 10673
+      },
+      "boundary": "Shared C# credit validation/projection; source-specific directory overlay preserves captured homes and distinct-source counts."
+    },
+    "implementationCommit": "4cb7f26",
+    "creditMentions": 594825,
+    "contractCases": 7,
+    "httpVerification": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-people-directory-v1/final-http-smoke.json",
+      "sha256": "38f3c34b82d735cdb718da37b494c5b3fc8aec78e7a84d486616665a9e125998",
+      "bytes": 797
+    },
+    "statsBehavior": "Counts are computed within projection transactions and stored once. HTTP stats reads the stored snapshot; the final check returned in 17.7 ms."
+  },
+  "verification": {
+    "focusedAdapterCases": 173,
+    "formattedNewCaseReruns": 18,
+    "caseCountNote": "The 18 are a subset of the 173; these totals overlap other earlier suites.",
+    "adapterVerification": {
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-repertoire-empty-title-v6-verification-v1/runtime-v1/manifest.json",
+      "sha256": "73b56f303d99e3ce83b15241167b29641084ecab80541e5f98dcaf851fefb808",
+      "bytes": 5482
+    },
+    "readerRealSourcePath": "Frames source 00274cc4-c9d0-bb87-0dcd-87588219bd9c: 8 files, selected detail retains source/show/MP3 ownership.",
+    "testingBoundary": "Domain adapters, retained data contracts and actual reader HTTP source selection. No audio playback was performed.",
+    "readerContractCases": 24
+  },
+  "remaining": [
+    "Complete full-file reader indexing.",
+    "Test broader contextual extraction and identity grouping over the usable directory.",
+    "Improve shared venue/composition/setlist lookup across providers.",
+    "Continue native-provider evidence acquisition and independent acceptance qualification.",
+    "Rehearse incremental refresh/backfill and prepare rollout separately from production approval."
+  ]
+}

@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T21:22:34.186711+00:00",
+  "state": "computation_complete_relationship_audit_and_index_pending",
+  "scope": "All captured file ranges plus complete captured song/setlist dictionaries and frozen provider context. Shadow proposals only; no accepted catalog mutations, production policy activation, database/provider/model calls or reader replacement. Separate original shard snapshots remain distinct.",
+  "execution": {
+    "command": [
+      "dotnet",
+      "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+      "shadow-inline",
+      "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/full-files-inputs-v3.json",
+      "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-files-v3"
+    ],
+    "request": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-files-execution-v3/request.json",
+      "bytes": 101936,
+      "sha256": "500d217cf68ac30b79c2ccb8e486b263152ec1c21f56fc8624b64579cfdc5361"
+    },
+    "result": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-files-execution-v3/result.json",
+      "bytes": 1411,
+      "sha256": "e8477ba5937ba0b321eb70763decc5aa41bfe94adcedf29e02210a41c0160306"
+    },
+    "artifacts": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-files-execution-v3/artifacts.json",
+      "bytes": 3827,
+      "sha256": "7907eb441465b41ead326c30f0e71f33e6132625edd8b5670574e48bbb25e4d5"
+    },
+    "reconciliation": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-files-execution-v3/completion-reconciliation.json",
+      "bytes": 4328,
+      "sha256": "006f092552435f46d53cd18b6ffd25893dfd7733dee8a62c7c827aba578e4af4"
+    },
+    "outputManifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-files-v3/manifest.json",
+      "bytes": 212748,
+      "sha256": "4ae1aaa2ebbb95d91c1ee329c9c9317b2f21b5b2eb6169fe17f254364919dc04"
+    },
+    "originalRawManifest": {
+      "bytes": 112903,
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/manifest.json",
+      "sha256": "04eff1257182e525fc8df213ff25966f16ee6aa28ae924cd1dce81452c2d0745"
+    },
+    "selector": {
+      "bytes": 104212,
+      "path": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/full-files-inputs-v3.json",
+      "sha256": "86d14ef64102f1838e98bd54cc4b71c1cfb5668d571424236a901eabb0186d95"
+    },
+    "binaries": [
+      {
+        "bytes": 1366016,
+        "path": "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+        "sha256": "95a0ccc9a7501e6217846a3d46556fe88b0de4852481655f38a715958fa923de"
+      },
+      {
+        "bytes": 10796544,
+        "path": "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenApi.dll",
+        "sha256": "1b664c2697134b06c911802602fe652201e0c05dacbd60c8cbe96e191c7a22dd"
+      },
+      {
+        "bytes": 80295,
+        "path": "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.deps.json",
+        "sha256": "5884f13495d8f8e978696b9dea5ab6b8a6e71d0629b1102ff78770e63c6c8a53"
+      },
+      {
+        "bytes": 369,
+        "path": "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.runtimeconfig.json",
+        "sha256": "dd72603f49fc74ad956017904a955b25d7043d65291c0c7d033a2064e141622a"
+      }
+    ],
+    "exitCode": 0,
+    "elapsedSeconds": 606.1026486660121
+  },
+  "population": {
+    "artists": 4379,
+    "captureShards": 105,
+    "fileShards": 103,
+    "files": 5064097,
+    "songs": 16605,
+    "setlists": 38475,
+    "providerInputs": {
+      "total": 1861,
+      "musicbrainz": 1860,
+      "jerry": 1,
+      "waveManifest": "docs/research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json"
+    },
+    "originalTailQualification": "21 file rows are extra against the earlier metadata roster; original receipt coordinates and status are preserved. No source/venue ranges selected."
+  },
+  "outputs": {
+    "logicalRows": 20410606,
+    "byDomain": {
+      "compositions": 5121038,
+      "file_contents": 5064097,
+      "performances": 5104433,
+      "repertoire": 5080702,
+      "setlists": 40336
+    },
+    "failed": 0,
+    "preparationFailures": 0,
+    "inlineExtractionErrors": 0,
+    "completedGzipChunks": 10622,
+    "compressedBytes": 3499102132,
+    "publicReaderIndexed": false
+  },
+  "verification": {
+    "manifestAndFilesystemReconciliation": "Independent FILE/Python-only review verified selected capture entries, original receipt metadata,105 footer/count inventories,33 provider/domain outcome inventories, artifact hashes and all completed chunk sizes. This is not a row-by-row interpretation or identity-quality audit.",
+    "originalRawManifestUnchanged": true,
+    "capsuleUnchangedAtTerminal": true,
+    "protectedReadersUnchangedAtTerminal": true,
+    "readerPorts": [
+      18765,
+      18766
+    ],
+    "newIndexStarted": false,
+    "automaticRestart": false
+  },
+  "storage": {
+    "cleanup": {
+      "path": "local-dev/normalization-data/2026-10-18-storage-cleanup-v1/summary.json",
+      "bytes": 706,
+      "sha256": "ec511577cf08360586e7be3966e2ef2c2186d0ce537cd778eaaf6a01157116fb"
+    },
+    "cleanupHostRecoveredGiB": 8.46280288696289,
+    "freeBytesAtTerminal": 9104211968,
+    "minimumObservedFreeBytes": 9106391040,
+    "producerFloorBytes": 4294967296,
+    "readerIndexPriorEstimateBytes": 4069000000,
+    "indexCapacityQualification": "The index estimate is from earlier ranges; actual full-output index size is unverified. Index work requires a separate measured headroom/floor check."
+  },
+  "qualityAndRemainingWork": {
+    "knownIssue": "The completed repertoire-v5 run contains an observed trailing-# to blank-dictionary false proposal. Repertoire-v6 correction is source-complete and under executable verification; targeted corrected results are being prepared.",
+    "open": [
+      "independent relationship/title interpretation audit and corrections",
+      "provider/domain coverage reconciliation",
+      "full-file reader index and visibility verification",
+      "changed-input and restart rehearsal",
+      "independent production acceptance qualification"
+    ],
+    "acceptedIdentityAccuracyEstablished": false
+  }
+}
