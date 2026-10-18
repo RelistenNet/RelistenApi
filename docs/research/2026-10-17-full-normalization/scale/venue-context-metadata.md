@@ -66,10 +66,11 @@ recordings. Two recordings retain their original held-out partitions. Another
 candidates already belong to the 51-source strict allowlist, so this run adds no
 eligible source or date context. All 20 optimized synthetic tests pass.
 
-Before using the 118 remaining recordings, classify their original membership
-and duplicate groups against the broader captured snapshot. Do not assign them
-new development partitions merely because they are absent from this annotation
-selection. Keep the 93 source-free show associations separate.
+The subsequent [original-group replay](original-group-replay.md) classifies all
+122 against the broader captured snapshot without assigning new partitions. It
+verifies 29 development tuples, including 27 beyond the strict allowlist. The
+remaining recordings stay held out, context-only or absent from the standalone
+source selection. Keep the 93 source-free show associations separate.
 
 A development classification preserves the original partition and duplicate
 group. It does not authorize a new raw capture. The prefix contains the source

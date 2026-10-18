@@ -1,0 +1,95 @@
+{
+  "schema_version": "original-group-replay-local-v1",
+  "state": "completed_original_group_replay",
+  "replay_receipt": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/original-group-replay-v1/receipt.json",
+    "bytes": 13382,
+    "sha256": "c20ad804d4d2fffe496c672e69685cc8df070f62a14efc16813dde333096c0dc"
+  },
+  "counts": {
+    "authenticated_saved_headers": 18628,
+    "blocked_original_groups": 4,
+    "discovered_sources": 122,
+    "original_physical_records": 104228,
+    "original_resources": 86655,
+    "original_sources": 32593,
+    "source_classifications": {
+      "absent_original_captured_source_frame": 61,
+      "context_only_not_original_source_member": 9,
+      "original_development_tuple_verified": 29,
+      "original_heldout_partition": 23
+    }
+  },
+  "eligible_context": {
+    "recordings": 29,
+    "artists": 21,
+    "already_in_strict_allowlist": 2,
+    "additional_verified_recordings": 27
+  },
+  "reservation_closure": {
+    "blocked_original_groups": 4,
+    "derived_parent_source_evidence_ids": 0,
+    "original_seed_evidence_ids": 26,
+    "unmatched_original_references": 18
+  },
+  "processing": {
+    "full_frozen_payloads_programmatically_decoded": true,
+    "model_requests": 0,
+    "purpose": "Replay only the original exact duplicate/family grouping algorithm",
+    "source_prose_exported": false,
+    "training_performed": false
+  },
+  "python": {
+    "implementation": "cpython",
+    "version": "3.14.6 (main, Jun 10 2026, 10:03:53) [Clang 17.0.0 (clang-1700.6.4.2)]"
+  },
+  "verification": {
+    "optimized_synthetic_tests_passed": 15,
+    "all_output_hashes_authenticated": true,
+    "all_saved_annotation_headers_matched": 18628,
+    "original_partitions_changed": false,
+    "labels_or_policies_changed": false,
+    "production_queries": 0,
+    "paid_requests": 0
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/original-group-replay-v1/receipt.json",
+      "bytes": 13382,
+      "sha256": "c20ad804d4d2fffe496c672e69685cc8df070f62a14efc16813dde333096c0dc"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/original-group-replay-v1/original-resource-metadata.jsonl",
+      "bytes": 47054006,
+      "sha256": "b7c3b967f951951449ca907fe3ad095442a0130b3327678076061e38b0a1df48"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/original-group-replay-v1/reservation-closure.json",
+      "bytes": 2849,
+      "sha256": "b96c3ce70ce7b3502b2aaa14a63c4f7cf1cc763b6c3773ca7ba0c30844584634"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/original-group-replay-v1/source-classifications.jsonl",
+      "bytes": 107578,
+      "sha256": "61723cc37a045c9e74bde113b8199bd0cf5337d6857ac7020d2d35fdabc22e27"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/replay_original_groups.py",
+      "bytes": 20623,
+      "sha256": "355403feb0bdf32223e94fc40921d01d3746d837aaca2913c033f1c8fbfcc069"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_replay_original_groups.py",
+      "bytes": 16537,
+      "sha256": "615911596c372c98169e8653942970cc4883ca4cb7b4d1ec50773ca451b7ed0c"
+    }
+  ],
+  "limits": [
+    "The full frozen capture, including credit strings, was decoded programmatically only inside the offline process to reproduce the original duplicate algorithm. No source prose entered model requests, logs or exported metadata; this is not a zero-payload-decode claim.",
+    "All 86655 original resource groups and all 18628 saved annotation headers were authenticated before publication. The original Python runtime was not recorded; the replay runtime is pinned.",
+    "The 29 eligible sources retain exact original/current source ID and UUID, artist ID and UUID, and show ID. Original show UUIDs are unavailable; current show UUIDs remain discovery observations.",
+    "The 23 held-out, nine context-only and 61 absent standalone sources do not become development inputs. Absence from this captured selection is not catalog-wide absence.",
+    "Full reservation closure follows blocked groups through every member track and stored parent until fixed point. Four groups are blocked; 18 original references remain unmatched in the captured selection. Reservations and first-exposure notes are unchanged.",
+    "The 27 additional eligible recordings are candidates for a separate bounded date-context capture. This replay reads no current database metadata and establishes no venue identity or matching accuracy."
+  ]
+}
