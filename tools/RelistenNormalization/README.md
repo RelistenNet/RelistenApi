@@ -24,7 +24,7 @@ dotnet run --project tools/RelistenNormalization -- luna-credits \
   /path/to/new-output-directory <job-uuid> 32
 ```
 
-Supply `OPENAI_API_KEY` in the process environment. The command does not automatically read `.env.local`. Supply `RELISTEN_NORMALIZATION_DATABASE_URL` for a dedicated local `relisten_normalization_*` PostgreSQL database with migrations 22 and 44 applied. The command accepts only `localhost` or `127.0.0.1`; it does not initialize a database, start the API or change catalog relationships. Keep the key out of arguments, source control, receipts and logs.
+Supply `OPENAI_API_KEY` in the process environment. The command does not automatically read `.env.local`. Supply `RELISTEN_NORMALIZATION_DATABASE_URL` for a dedicated local `relisten_normalization_*` PostgreSQL database with migrations 22, 44 and 45 applied. The command accepts only `localhost` or `127.0.0.1`; it does not initialize a database, start the API or change catalog relationships. Keep the key out of arguments, source control, receipts and logs.
 
 Each job has a durable $25 cap. Reuse its UUID and a new output directory after interruption. The cache hashes the complete rendered request, including model, prompt, schema and generation settings. Cached successes need no key or paid retry. An uncertain request retains its possible cost and has bounded retries. `accounted_usd` includes those conservative reservations as well as measured charges; it is not an invoice total. Current small-request Standard pricing is documented in the [Luna model reference](https://developers.openai.com/api/docs/models/gpt-6-luna); the extractor explicitly requests Standard processing and rejects oversized input before admission.
 

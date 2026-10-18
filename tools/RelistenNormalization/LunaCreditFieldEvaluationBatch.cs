@@ -20,6 +20,7 @@ public sealed class LunaCreditFieldEvaluationBatch
 {
     public const string Version = "luna-credit-fields-v1";
     public const decimal CapUsd = 5m;
+    public const int MaximumTotalAttempts = 200;
     private const int FieldCount = 100;
     private const int MaxFileBytes = 1_048_576;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -79,7 +80,7 @@ public sealed class LunaCreditFieldEvaluationBatch
             selection,
             cancellationToken
         );
-        await cache.CreateJobAsync(jobUuid, CapUsd, cancellationToken);
+        await cache.CreateJobAsync(jobUuid, CapUsd, cancellationToken, MaximumTotalAttempts);
 
         var results = new List<LunaCreditFieldResult>();
         var selectedKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -405,7 +406,7 @@ public sealed class LunaCreditFieldEvaluationBatch
             );
             var job = await connection.QuerySingleAsync<NormalizationExtractionJob>(
                 new CommandDefinition(
-                    "SELECT uuid AS \"Uuid\",cap_usd AS \"CapUsd\",accounted_usd AS \"AccountedUsd\" FROM normalization.extraction_jobs WHERE uuid=@jobUuid",
+                    "SELECT uuid AS \"Uuid\",cap_usd AS \"CapUsd\",accounted_usd AS \"AccountedUsd\",maximum_total_attempts AS \"MaximumTotalAttempts\" FROM normalization.extraction_jobs WHERE uuid=@jobUuid",
                     new { jobUuid },
                     transaction,
                     cancellationToken: ct
@@ -431,17 +432,17 @@ public sealed class LunaCreditFieldEvaluationBatch
                             reserved_usd AS "ReservedUsd",actual_usd AS "ActualUsd",input_tokens AS "InputTokens",
                             output_tokens AS "OutputTokens",provider_request_id AS "ProviderRequestId",reason AS "Reason",
                             failure_stage AS "FailureStage",failed_response_body AS "FailedResponseBody"
-                        FROM normalization.extraction_attempts WHERE request_sha256=ANY(@keys) OR job_uuid=@jobUuid
+                        FROM normalization.extraction_attempts WHERE job_uuid=@jobUuid
                         ORDER BY created_at,uuid LIMIT 201
                         """,
-                        new { keys, jobUuid },
+                        new { jobUuid },
                         transaction,
                         cancellationToken: ct
                     )
                 )
             ).ToArray();
             Require(
-                requests.Length <= FieldCount && attempts.Length <= FieldCount * 2,
+                requests.Length <= FieldCount && attempts.Length <= MaximumTotalAttempts,
                 "Audit bounds exceeded; no truncated receipt is published."
             );
             transaction.Commit();

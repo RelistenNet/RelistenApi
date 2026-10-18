@@ -15,39 +15,99 @@ namespace Relisten.Data;
 /// </summary>
 public sealed class NormalizationExtractionCacheService(DbService db)
 {
+    private const string JobColumns = """
+        uuid AS "Uuid",cap_usd AS "CapUsd",accounted_usd AS "AccountedUsd",
+        maximum_total_attempts AS "MaximumTotalAttempts"
+        """;
+
+    /// <summary>
+    /// Creates or reuses a job. An explicit attempt cap can tighten a legacy uncapped job only
+    /// when its existing attempts fit; omission preserves any cap already installed.
+    /// </summary>
     public Task CreateJobAsync(
         Guid jobUuid,
         decimal capUsd = 25m,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int? maximumTotalAttempts = null
     )
     {
-        if (jobUuid == Guid.Empty || capUsd <= 0)
+        if (jobUuid == Guid.Empty || capUsd <= 0 || maximumTotalAttempts <= 0)
         {
-            throw new ArgumentException("A job UUID and positive USD cap are required.");
+            throw new ArgumentException(
+                "A job UUID, positive USD cap and positive optional attempt cap are required."
+            );
         }
 
         return db.WithWriteConnection(async connection =>
         {
+            using var transaction = connection.BeginTransaction();
             await connection.ExecuteAsync(
                 new CommandDefinition(
-                    "INSERT INTO normalization.extraction_jobs(uuid,cap_usd) VALUES(@jobUuid,@capUsd) ON CONFLICT DO NOTHING",
-                    new { jobUuid, capUsd },
+                    "INSERT INTO normalization.extraction_jobs(uuid,cap_usd,maximum_total_attempts) VALUES(@jobUuid,@capUsd,@maximumTotalAttempts) ON CONFLICT DO NOTHING",
+                    new
+                    {
+                        jobUuid,
+                        capUsd,
+                        maximumTotalAttempts,
+                    },
+                    transaction,
                     cancellationToken: cancellationToken
                 )
             );
-            var existing = await connection.QuerySingleAsync<decimal>(
+            var existing = await connection.QuerySingleAsync<NormalizationExtractionJob>(
                 new CommandDefinition(
-                    "SELECT cap_usd FROM normalization.extraction_jobs WHERE uuid=@jobUuid",
+                    $"SELECT {JobColumns} FROM normalization.extraction_jobs WHERE uuid=@jobUuid FOR UPDATE",
                     new { jobUuid },
+                    transaction,
                     cancellationToken: cancellationToken
                 )
             );
-            if (existing != capUsd)
+            if (existing.CapUsd != capUsd)
             {
                 throw new InvalidOperationException(
                     "Extraction job already exists with a different cap."
                 );
             }
+            if (maximumTotalAttempts is not null)
+            {
+                if (
+                    existing.MaximumTotalAttempts is not null
+                    && existing.MaximumTotalAttempts != maximumTotalAttempts
+                )
+                {
+                    throw new InvalidOperationException(
+                        "Extraction job already exists with a different attempt cap."
+                    );
+                }
+                if (existing.MaximumTotalAttempts is null)
+                {
+                    // Admission also holds this job lock, so no concurrent request can cross the
+                    // proposed cap between counting historical attempts and installing it.
+                    var attempts = await connection.QuerySingleAsync<long>(
+                        new CommandDefinition(
+                            "SELECT count(*) FROM normalization.extraction_attempts WHERE job_uuid=@jobUuid",
+                            new { jobUuid },
+                            transaction,
+                            cancellationToken: cancellationToken
+                        )
+                    );
+                    if (attempts > maximumTotalAttempts)
+                    {
+                        throw new InvalidOperationException(
+                            "Existing extraction attempts exceed the requested job cap."
+                        );
+                    }
+                    await connection.ExecuteAsync(
+                        new CommandDefinition(
+                            "UPDATE normalization.extraction_jobs SET maximum_total_attempts=@maximumTotalAttempts WHERE uuid=@jobUuid",
+                            new { jobUuid, maximumTotalAttempts },
+                            transaction,
+                            cancellationToken: cancellationToken
+                        )
+                    );
+                }
+            }
+            transaction.Commit();
         });
     }
 
@@ -58,7 +118,7 @@ public sealed class NormalizationExtractionCacheService(DbService db)
         db.WithWriteConnection(connection =>
             connection.QuerySingleAsync<NormalizationExtractionJob>(
                 new CommandDefinition(
-                    "SELECT uuid AS \"Uuid\", cap_usd AS \"CapUsd\", accounted_usd AS \"AccountedUsd\" FROM normalization.extraction_jobs WHERE uuid=@jobUuid",
+                    $"SELECT {JobColumns} FROM normalization.extraction_jobs WHERE uuid=@jobUuid",
                     new { jobUuid },
                     cancellationToken: cancellationToken
                 )
@@ -184,15 +244,28 @@ public sealed class NormalizationExtractionCacheService(DbService db)
 
             var job = await connection.QuerySingleAsync<NormalizationExtractionJob>(
                 new CommandDefinition(
-                    """
-                    SELECT uuid AS "Uuid", cap_usd AS "CapUsd", accounted_usd AS "AccountedUsd"
-                    FROM normalization.extraction_jobs WHERE uuid=@jobUuid FOR UPDATE
-                    """,
+                    $"SELECT {JobColumns} FROM normalization.extraction_jobs WHERE uuid=@jobUuid FOR UPDATE",
                     new { jobUuid },
                     transaction,
                     cancellationToken: cancellationToken
                 )
             );
+            if (job.MaximumTotalAttempts is not null)
+            {
+                var totalAttempts = await connection.QuerySingleAsync<long>(
+                    new CommandDefinition(
+                        "SELECT count(*) FROM normalization.extraction_attempts WHERE job_uuid=@jobUuid",
+                        new { jobUuid },
+                        transaction,
+                        cancellationToken: cancellationToken
+                    )
+                );
+                if (totalAttempts >= job.MaximumTotalAttempts)
+                {
+                    transaction.Commit();
+                    return new NormalizationExtractionClaim("job_attempts_exhausted", cacheKey);
+                }
+            }
             if (job.AccountedUsd + reservationUsd > job.CapUsd)
             {
                 transaction.Commit();

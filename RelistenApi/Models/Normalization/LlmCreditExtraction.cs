@@ -23,7 +23,12 @@ public sealed record LunaCreditExtractionResult(
     string? Reason = null
 );
 
-public sealed record NormalizationExtractionJob(Guid Uuid, decimal CapUsd, decimal AccountedUsd);
+public sealed record NormalizationExtractionJob(
+    Guid Uuid,
+    decimal CapUsd,
+    decimal AccountedUsd,
+    int? MaximumTotalAttempts = null
+);
 
 /// <summary>An admitted attempt owns its reservation even if its HTTP outcome becomes uncertain.</summary>
 public sealed record NormalizationExtractionClaim(

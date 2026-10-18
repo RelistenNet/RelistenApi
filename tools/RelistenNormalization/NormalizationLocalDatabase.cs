@@ -21,7 +21,7 @@ internal static class NormalizationLocalDatabase
         )
         {
             throw new ArgumentException(
-                "Set RELISTEN_NORMALIZATION_DATABASE_URL to a dedicated local relisten_normalization_* database with migrations 22 and 44 applied."
+                "Set RELISTEN_NORMALIZATION_DATABASE_URL to a dedicated local relisten_normalization_* database. See the selected mode's schema requirements."
             );
         }
 

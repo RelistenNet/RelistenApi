@@ -63,6 +63,135 @@ public sealed class TestNormalizationExtractionCache
     }
 
     [Test]
+    public async Task ConcurrentDifferentRequestsCannotExceedTheTotalAttemptCap()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 1);
+
+        var claims = await Task.WhenAll(Claim(job, "first-" + job), Claim(job, "second-" + job));
+
+        claims
+            .Select(claim => claim.State)
+            .Should()
+            .BeEquivalentTo("claimed", "job_attempts_exhausted");
+        (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().Be(1);
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.5m);
+        (await Claim(job, "third-" + job)).State.Should().Be("job_attempts_exhausted");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.5m);
+    }
+
+    [Test]
+    public async Task FailedAndExpiredAttemptsStillConsumeTheTotalCap()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 2);
+        var request = "expired-cap-" + job;
+        var first = await Claim(job, request);
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                "UPDATE normalization.extraction_attempts SET lease_until=clock_timestamp()-interval '1 second' WHERE uuid=@Uuid",
+                new { Uuid = first.AttemptUuid }
+            )
+        );
+        var second = await Claim(job, request);
+        second.State.Should().Be("claimed");
+        await cache.FailAsync(second.AttemptUuid!.Value, "timeout");
+
+        (await Claim(job, "different-" + job)).State.Should().Be("job_attempts_exhausted");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(1m);
+        var states = await db.WithWriteConnection(connection =>
+            connection.QueryAsync<string>(
+                "SELECT state FROM normalization.extraction_attempts WHERE job_uuid=@job",
+                new { job }
+            )
+        );
+        states.Should().BeEquivalentTo("uncertain", "failed");
+    }
+
+    [Test]
+    public async Task AFullJobCanReadItsSuccessfulCacheWithoutFurtherAdmissionOrSpend()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 1);
+        var request = "cached-at-cap-" + job;
+        var claim = await Claim(job, request);
+        const string json = "{\"credits\":[]}";
+        await cache.CompleteAsync(claim.AttemptUuid!.Value, new(json, "fixture", 0, 0), 0m);
+
+        var replay = await Claim(job, request);
+
+        replay.State.Should().Be("cached");
+        replay.ResponseJson.Should().Be(json);
+        (await Claim(job, "new-at-cap-" + job)).State.Should().Be("job_attempts_exhausted");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(0m);
+    }
+
+    [Test]
+    public async Task LegacyJobCanAdoptOnlyAFittingFirstCapAndReplayCannotClearOrReplaceIt()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m);
+        (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().BeNull();
+        for (var index = 0; index < 2; index++)
+        {
+            var claim = await Claim(job, $"history-{index}-{job}");
+            await cache.FailAsync(claim.AttemptUuid!.Value, "timeout");
+        }
+        var tooSmall = () => cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 1);
+        await tooSmall.Should().ThrowAsync<InvalidOperationException>();
+        (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().BeNull();
+
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 2);
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 2);
+        await cache.CreateJobAsync(job, 5m);
+        (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().Be(2);
+        var changed = () => cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 3);
+        await changed.Should().ThrowAsync<InvalidOperationException>();
+        var changedMoney = () => cache.CreateJobAsync(job, 6m, maximumTotalAttempts: 2);
+        await changedMoney.Should().ThrowAsync<InvalidOperationException>();
+        (await Claim(job, "no-room-" + job)).State.Should().Be("job_attempts_exhausted");
+        (await cache.GetJobAsync(job)).Should().Be(new NormalizationExtractionJob(job, 5m, 1m, 2));
+    }
+
+    [Test]
+    public async Task FirstCapAdoptionAndConcurrentAdmissionUseTheSameJobLock()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m);
+        await Claim(job, "existing-" + job);
+        var adoption = Adopt();
+        var admission = Claim(job, "racing-" + job);
+        var installed = await adoption;
+        var claim = await admission;
+
+        if (installed)
+        {
+            claim.State.Should().Be("job_attempts_exhausted");
+            (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().Be(1);
+            (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.5m);
+        }
+        else
+        {
+            claim.State.Should().Be("claimed");
+            (await cache.GetJobAsync(job)).MaximumTotalAttempts.Should().BeNull();
+            (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(1m);
+        }
+
+        async Task<bool> Adopt()
+        {
+            try
+            {
+                await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 1);
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+    }
+
+    [Test]
     public async Task ConcurrentIdenticalRequestsHaveOnePaidAdmissionAndSuccessIsReused()
     {
         var job = Guid.NewGuid();

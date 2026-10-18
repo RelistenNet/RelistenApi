@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
 using Relisten.Api.Models.Normalization;
 using Relisten.Data;
+using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
 namespace RelistenApiTests.Normalization;
@@ -286,6 +287,123 @@ public sealed class TestLunaCreditFieldEvaluationBatch
             .Should()
             .Equal(handler.InvalidBody!);
     }
+
+    [Test]
+    public async Task TotalJobExhaustionStopsHttpAndStillExportsTheCompleteOwnJobReceipt()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 5m, maximumTotalAttempts: 200);
+        var claim = await cache.TryClaimAsync(
+            job,
+            "earlier-job-work-" + job,
+            .01m,
+            201,
+            TimeSpan.FromMinutes(3)
+        );
+        await cache.FailAsync(
+            claim.AttemptUuid!.Value,
+            "invalid_response",
+            receipt: new("", "old-fixture", 0, 2),
+            actualUsd: .000001m
+        );
+        await AddHistoricalFailures(job, claim.CacheKey, 199);
+        var before = await cache.GetJobAsync(job);
+        var output = bundle.Output("attempt-cap");
+
+        var report = await Run(job, output);
+
+        report.State.Should().Be("completed_partial");
+        report.States["job_attempts_exhausted"].Should().Be(99);
+        report.PaidAttempts.Should().Be(200);
+        report.Job.MaximumTotalAttempts.Should().Be(200);
+        report.Job.AccountedUsd.Should().Be(before.AccountedUsd);
+        handler.Calls.Should().Be(0);
+        var audit = JsonNode.Parse(
+            await File.ReadAllTextAsync(Path.Combine(output, "receipts.json"))
+        )!;
+        audit["attempts"]!.AsArray().Should().HaveCount(200);
+    }
+
+    [Test]
+    public async Task ForeignRequestHistoryCannotOverflowTheOwnJobAuditBound()
+    {
+        var selected = (await bundle.SelectAsync()).Items[0];
+        var request = LunaRecordingCreditExtractor.RenderRequest(
+            new Dictionary<string, string?> { [selected.Field] = selected.Text },
+            null,
+            new()
+        );
+        var foreignJob = Guid.NewGuid();
+        await cache.CreateJobAsync(foreignJob, 5m);
+        var claim = await cache.TryClaimAsync(
+            foreignJob,
+            request,
+            .01m,
+            203,
+            TimeSpan.FromMinutes(3)
+        );
+        var response = TestLunaRecordingCredits.Credit(
+            selected.Text,
+            "taper",
+            selected.Field,
+            selected.Text
+        );
+        await cache.CompleteAsync(
+            claim.AttemptUuid!.Value,
+            new LunaCreditResponse(response, "foreign-fixture", 0, 2),
+            .000001m
+        );
+        // Other cache users can have longer histories. Keep that retained evidence in PostgreSQL,
+        // but do not charge or export it as this comparison job's paid work.
+        await AddHistoricalFailures(foreignJob, claim.CacheKey, 201);
+        var ownJob = Guid.NewGuid();
+        var output = bundle.Output("foreign-history");
+
+        var report = await Run(ownJob, output);
+
+        report.State.Should().Be("completed");
+        report.PaidAttempts.Should().Be(95);
+        handler.Calls.Should().Be(95);
+        var audit = JsonNode.Parse(
+            await File.ReadAllTextAsync(Path.Combine(output, "receipts.json"))
+        )!;
+        var attempts = audit["attempts"]!.AsArray();
+        attempts.Should().HaveCount(95);
+        attempts.Should().OnlyContain(attempt => attempt!["jobUuid"]!.GetValue<Guid>() == ownJob);
+        var cachedRequest = audit["requests"]!
+            .AsArray()
+            .Should()
+            .ContainSingle(row => row!["cacheKey"]!.GetValue<string>() == claim.CacheKey)
+            .Which!;
+        cachedRequest["responseJson"]!.GetValue<string>().Should().Be(response);
+        (await cache.GetJobAsync(foreignJob)).AccountedUsd.Should().Be(.000202m);
+    }
+
+    private Task AddHistoricalFailures(Guid job, string cacheKey, int count) =>
+        db.WithWriteConnection(async connection =>
+        {
+            using var transaction = connection.BeginTransaction();
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO normalization.extraction_attempts(
+                    uuid,request_sha256,job_uuid,state,lease_until,reserved_usd,actual_usd,
+                    input_tokens,output_tokens,reason,completed_at
+                )
+                SELECT gen_random_uuid(),@cacheKey,@job,'failed',clock_timestamp(),.01,.000001,
+                    0,2,'invalid_response',clock_timestamp()
+                FROM generate_series(1,@count);
+                UPDATE normalization.extraction_jobs SET accounted_usd=accounted_usd+@count*.000001 WHERE uuid=@job;
+                """,
+                new
+                {
+                    job,
+                    cacheKey,
+                    count,
+                },
+                transaction
+            );
+            transaction.Commit();
+        });
 
     [Test]
     public async Task Failed_provider_attempt_retains_reservation_and_successful_cache_recovers()
