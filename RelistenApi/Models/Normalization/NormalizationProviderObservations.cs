@@ -216,5 +216,14 @@ public sealed record ProviderDecodeResult
     public IReadOnlyList<ProviderVenueObservation> Venues { get; init; } = [];
     public IReadOnlyList<ProviderRepertoireObservation> Repertoire { get; init; } = [];
     public IReadOnlyList<ProviderSetlistObservation> Setlists { get; init; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MusicBrainzWorkObservation>? MusicBrainzWorks { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MusicBrainzRecordingObservation>? MusicBrainzRecordings { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MusicBrainzArtistObservation>? MusicBrainzArtists { get; init; }
     public IReadOnlyList<ProviderDecodeIssue> Issues { get; init; } = [];
 }
