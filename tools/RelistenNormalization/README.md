@@ -56,6 +56,11 @@ python3 tools/RelistenNormalization/shadow_reader.py \
   --bind 127.0.0.1 --port 18764
 ```
 
+To reserve capacity for other local work, restart the reader with
+`--pause-indexing`. It keeps the existing cache searchable and reports the pause
+and pending chunks through `/api/stats`. Restart without that flag to continue
+indexing into the same cache. No completed chunks or indexed records are deleted.
+
 Open `http://127.0.0.1:18764/` for that local instance. The current hosted instance
 uses the Tailscale links above. The reader's rebuildable `.shadow-reader-v3.sqlite3`
 stores summaries, filters, entity keys and chunk/line pointers. Detail views read

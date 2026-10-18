@@ -79,16 +79,18 @@ class ShadowIndex:
     LABEL_FIELDS = {"name", "title", "displayText", "label", "literalDate", "performanceLabel", "originalTitle", "wording", "displayName"}
     OUTCOMES = {"proposed", "unresolved", "failed", "not_applicable"}
 
-    def __init__(self, run, minimum_free_bytes=0):
+    def __init__(self, run, minimum_free_bytes=0, pause_indexing=False):
         self.run = Path(run).resolve(strict=True)
         if not self.run.is_dir():
             raise ValueError("The existing run path must be a directory.")
         self.database = self.run / ".shadow-reader-v3.sqlite3"
         self.minimum_free_bytes = minimum_free_bytes
+        self.pause_indexing = pause_indexing
         self._status_lock = threading.Lock()
         self._active_file = None
         self._scan_error = None
-        self._pause_reason = None
+        self._pause_reason = ("Indexing paused by the operator. Existing results remain available."
+                              if pause_indexing else None)
         self._last_scan = None
         self._revision = 0
         self._aggregate_cache = None
@@ -190,6 +192,9 @@ class ShadowIndex:
 
     def scan_once(self):
         """Commit each complete chunk atomically; a bad chunk does not hide later files."""
+        if self.pause_indexing:
+            return
+
         try:
             with self._status_lock:
                 self._pause_reason = None
@@ -627,10 +632,12 @@ def main():
     parser.add_argument("--port", type=int, default=18764)
     parser.add_argument("--minimum-free-bytes", type=int, default=0,
                         help="Pause indexing below this free-space reserve; keep serving existing results")
+    parser.add_argument("--pause-indexing", action="store_true",
+                        help="Serve the existing cache without indexing new chunks; omit on restart to resume")
     args = parser.parse_args()
     if not args.run.is_absolute() or not args.run.is_dir():
         parser.error("--run must name an absolute, existing directory.")
-    index = ShadowIndex(args.run, args.minimum_free_bytes)
+    index = ShadowIndex(args.run, args.minimum_free_bytes, args.pause_indexing)
     stop = threading.Event()
 
     def follow():

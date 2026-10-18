@@ -86,6 +86,42 @@ class TestShadowReader(unittest.TestCase):
         self.assertEqual(self.index.detail(second_id)["record"], second)
         self.assertEqual(self.index.stats()["pendingChunks"], 0)
 
+    def test_operator_pause_keeps_http_results_and_resumes_changed_input_on_restart(self):
+        first = self.record()
+        self.chunk("100", first)
+        self.index.scan_once()
+        identifier = self.index.search({})["items"][0]["id"]
+        changed = self.record(entityKeys=["person:replacement"],
+                              proposal={"people": [{"name": "Corrected Alice"}]})
+        self.chunk("200", changed)
+        paused = ShadowIndex(self.run, pause_indexing=True)
+        paused.scan_once()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(paused))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = "http://127.0.0.1:" + str(server.server_port)
+
+        try:
+            with urlopen(url + "/api/stats", timeout=5) as response:
+                stats = json.load(response)
+            self.assertEqual(stats["indexedRecords"], 1)
+            self.assertEqual(stats["pendingChunks"], 1)
+            self.assertTrue(stats["index"]["pauseReason"])
+            with urlopen(url + "/api/record?id=" + str(identifier), timeout=5) as response:
+                self.assertEqual(json.load(response)["record"], first)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+        resumed = ShadowIndex(self.run)
+        resumed.scan_once()
+        self.assertEqual(resumed.search({})["total"], 1)
+        self.assertEqual(resumed.detail(identifier)["record"], changed)
+        self.assertEqual(resumed.search({"entityKey": "person:shared"})["total"], 0)
+        self.assertEqual(resumed.search({"entityKey": "person:replacement"})["total"], 1)
+        self.assertEqual(resumed.stats()["pendingChunks"], 0)
+
     def test_interrupted_sqlite_read_returns_503_and_a_later_http_query_recovers(self):
         self.chunk("100", *(self.record("source_sample:" + str(number)) for number in range(1000)))
         self.index.scan_once()
