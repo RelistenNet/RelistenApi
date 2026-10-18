@@ -1,0 +1,95 @@
+{
+  "version": "source-actor-policy-v1",
+  "state": "local_policy_contracts_verified",
+  "sourceInputForm": "source_actor_alias_assertion",
+  "retrievalVersionPrefix": "people-actor-retrieval-v3/",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-policy-v1/execution-verification-v1/manifest.json",
+    "bytes": 6897,
+    "sha256": "b10a8d308f040c5f9a83872cc16a21872039ac58eb0e916ff95dee96b6c54bf5"
+  },
+  "testRuns": [
+    {
+      "run": "focused-v1",
+      "counters": {
+        "total": "104",
+        "executed": "104",
+        "passed": "104",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "regression-v1",
+      "counters": {
+        "total": "160",
+        "executed": "160",
+        "passed": "160",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "focused-v2",
+      "counters": {
+        "total": "106",
+        "executed": "106",
+        "passed": "106",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "verification": [
+    "106 final focused checks pass, including policy CAS replacement in a caller-owned repeatable-read snapshot and fixture restriction refusal.",
+    "160 people-resolution/acceptance/candidate regression checks pass before the additive snapshot helper, with unchanged numerical scoring afterward.",
+    "Solution build and repository formatter check pass.",
+    "Fresh independent source correctness/readability/code-simplifier review found no findings."
+  ],
+  "contracts": [
+    "Source capability has a separately hashed exact producer/projection/facts/retrieval/scorer tuple and independent evaluation attestation.",
+    "Credit evaluation or an input-form string cannot qualify source matching.",
+    "Pure source decisions reproduce actual complete comparisons and can only match existing identity, request review or remain unresolved.",
+    "Optional-absent legacy artifact/evaluation hashes and credit scoring/creation remain compatible.",
+    "Snapshot reader bootstraps nothing and preserves instance fixture restrictions."
+  ],
+  "limits": [
+    "All new source-policy evaluation receipts in tests are synthetic and fixture-only; they establish no real matching accuracy.",
+    "No source policy activated, production writes, deployment or new model calls.",
+    "Accepted source assignments/support and full-catalog automatic matching remain required.",
+    "Full test suite and production throughput were not verified by these runs."
+  ]
+}

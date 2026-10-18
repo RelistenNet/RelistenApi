@@ -10,7 +10,7 @@ namespace Relisten.Normalization;
 /// Ranks an authenticated complete candidate pool under an immutable evaluated policy. This
 /// pure result is audit output; the accepted writer separately checks active policy and Work.
 /// </summary>
-public sealed class PeopleResolutionPolicyEvaluator
+public sealed partial class PeopleResolutionPolicyEvaluator
 {
     public const string ScorerVersion =
         "people-actor-context-linear-v3/"
@@ -109,11 +109,7 @@ public sealed class PeopleResolutionPolicyEvaluator
             return Result(PeopleResolutionAction.Unresolved, "inconsistent_candidate_projection");
         }
 
-        var scores = claim
-            .Comparisons.Select(pair => Score(pair, artifact.Scorer))
-            .OrderByDescending(candidate => candidate.Score)
-            .ThenBy(candidate => candidate.PersonUuid)
-            .ToArray();
+        var scores = ScoreCandidates(claim.Comparisons, artifact.Scorer);
         if (scores.Any(candidate => !double.IsFinite(candidate.Score)))
         {
             return Result(PeopleResolutionAction.Unresolved, "non_finite_candidate_score", scores);
@@ -183,49 +179,21 @@ public sealed class PeopleResolutionPolicyEvaluator
             );
         }
 
-        var eligible = scores.Where(candidate => candidate.Eligible).ToArray();
-        var winner = eligible.FirstOrDefault();
-        var rival = eligible.Skip(1).FirstOrDefault();
-        var margin = winner == null || rival == null ? (double?)null : winner.Score - rival.Score;
+        var selected = SelectExistingCandidate(scores, artifact.Scorer);
+        if (selected != null)
+        {
+            return Result(
+                selected.Action,
+                selected.Reason,
+                scores,
+                selected.PersonUuid,
+                selected.WinnerScore,
+                selected.RunnerUpMargin
+            );
+        }
         var conflicting = scores.Where(candidate =>
             candidate.RejectionReasons.Contains("contradictory_facts")
         );
-        // A rejected low-scoring rival does not veto a clear winner. A plausible contradiction
-        // remains reviewable even when the scorer would otherwise choose an eligible identity.
-        if (
-            conflicting.Any(candidate =>
-                candidate.Score >= artifact.Scorer.MatchThreshold
-                && (
-                    winner == null
-                    || winner.Score == candidate.Score
-                    || winner.Score - candidate.Score < artifact.Scorer.MinimumRunnerUpMargin
-                )
-            )
-        )
-        {
-            return Result(PeopleResolutionAction.Review, "relevant_candidate_conflict", scores);
-        }
-        if (winner != null && winner.Score >= artifact.Scorer.MatchThreshold)
-        {
-            if (rival != null && (margin == 0 || margin < artifact.Scorer.MinimumRunnerUpMargin))
-            {
-                return Result(
-                    PeopleResolutionAction.Review,
-                    "ambiguous_candidate_margin",
-                    scores,
-                    score: winner.Score,
-                    margin: margin
-                );
-            }
-            return Result(
-                PeopleResolutionAction.MatchExisting,
-                "evaluated_pool_winner",
-                scores,
-                winner.PersonUuid,
-                winner.Score,
-                margin
-            );
-        }
 
         var creation = artifact.Creation;
         var actor = claim.Proposal.Mention.ActorFacts;
@@ -299,7 +267,8 @@ public sealed class PeopleResolutionPolicyEvaluator
 
     /// <summary>Also applies to empty-claim stages that may retire complete contributor support.</summary>
     internal static bool Supports(PeopleAcceptancePolicyArtifact artifact, string inputForm) =>
-        artifact.ScorerVersion == ScorerVersion
+        inputForm != SourceInputForm
+        && artifact.ScorerVersion == ScorerVersion
         && artifact.RetrievalVersion == RetrievalVersion
         && artifact.CandidateFactsVersion == NormalizationCandidateService.PeopleFactsVersion
         && artifact.ExtractionVersion == NormalizationRecordingExtractor.Version
@@ -309,6 +278,75 @@ public sealed class PeopleResolutionPolicyEvaluator
             artifact.Creation == null
             || artifact.Creation.ClassifierVersion == CreationClassifierVersion
         );
+
+    private static PeopleAcceptanceCandidateScore[] ScoreCandidates(
+        IReadOnlyList<IdentityCandidateComparison> comparisons,
+        PeopleAcceptanceLinearScorer scorer
+    ) =>
+        comparisons
+            .Select(pair => Score(pair, scorer))
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.PersonUuid)
+            .ToArray();
+
+    // Both input contracts use the same arithmetic and rival rules. The caller owns any
+    // creation capability; this phase can only select an existing identity or require review.
+    private static ExistingCandidateDecision? SelectExistingCandidate(
+        IReadOnlyList<PeopleAcceptanceCandidateScore> scores,
+        PeopleAcceptanceLinearScorer scorer
+    )
+    {
+        var eligible = scores.Where(candidate => candidate.Eligible).ToArray();
+        var winner = eligible.FirstOrDefault();
+        var rival = eligible.Skip(1).FirstOrDefault();
+        var margin = winner == null || rival == null ? (double?)null : winner.Score - rival.Score;
+        var conflicting = scores.Where(candidate =>
+            candidate.RejectionReasons.Contains("contradictory_facts")
+        );
+        // A rejected low-scoring rival does not veto a clear winner. A plausible contradiction
+        // remains reviewable even when the scorer would otherwise choose an eligible identity.
+        if (
+            conflicting.Any(candidate =>
+                candidate.Score >= scorer.MatchThreshold
+                && (
+                    winner == null
+                    || winner.Score == candidate.Score
+                    || winner.Score - candidate.Score < scorer.MinimumRunnerUpMargin
+                )
+            )
+        )
+        {
+            return new(PeopleResolutionAction.Review, "relevant_candidate_conflict");
+        }
+        if (winner == null || winner.Score < scorer.MatchThreshold)
+        {
+            return null;
+        }
+        if (rival != null && (margin == 0 || margin < scorer.MinimumRunnerUpMargin))
+        {
+            return new(
+                PeopleResolutionAction.Review,
+                "ambiguous_candidate_margin",
+                WinnerScore: winner.Score,
+                RunnerUpMargin: margin
+            );
+        }
+        return new(
+            PeopleResolutionAction.MatchExisting,
+            "evaluated_pool_winner",
+            winner.PersonUuid,
+            winner.Score,
+            margin
+        );
+    }
+
+    private sealed record ExistingCandidateDecision(
+        PeopleResolutionAction Action,
+        string Reason,
+        Guid? PersonUuid = null,
+        double? WinnerScore = null,
+        double? RunnerUpMargin = null
+    );
 
     private static PeopleAcceptanceCandidateScore Score(
         IdentityCandidateComparison pair,

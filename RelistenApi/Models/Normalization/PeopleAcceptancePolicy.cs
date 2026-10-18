@@ -45,7 +45,9 @@ public sealed record PeopleAcceptancePolicyArtifact(
     IReadOnlyList<string> InputForms,
     PeopleAcceptanceLinearScorer Scorer,
     PeopleAcceptanceCreationCapability? Creation = null,
-    bool FixtureOnly = false
+    bool FixtureOnly = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SourceActorAliasPolicyApplicability? SourceActorAliasApplicability = null
 );
 
 /// <summary>Independent whole-pool labels, including errors, not extraction agreement.</summary>
@@ -71,7 +73,9 @@ public sealed record PeopleAcceptanceEvaluationReceipt(
     PeopleAcceptanceCapabilityEvaluation Matching,
     PeopleAcceptanceCapabilityEvaluation? Creation = null,
     PeopleAcceptanceCapabilityEvaluation? ActorKind = null,
-    bool FixtureOnly = false
+    bool FixtureOnly = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SourceActorAliasPolicyEvaluation? SourceActorAliasEvaluation = null
 );
 
 /// <summary>Registration preserves the artifact and its verified evaluation as one immutable value.</summary>

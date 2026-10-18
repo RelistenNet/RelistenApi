@@ -12,6 +12,14 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 
 Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source assignment, trusted source review and accepted support publication remain unimplemented; no policy is active.
 
+Source matching now requires its own evaluated policy capability, tied to exact
+producer and comparison versions. It cannot reuse credit evaluation to accept
+aliases or create identities. All 106 focused policy and 160 people regression
+checks pass. The source resolver and publisher still need to authenticate saved
+decisions and original observations; no source policy is active. The
+[source contracts](source-actor-alias-contracts.md#evaluated-source-capability-implemented)
+explain qualification, shared snapshot reads and rollback.
+
 The [complete metadata inventory](../../../research/2026-10-17-full-normalization/scale/full-metadata-frame.md) now covers every deployed artist, recording and show in one read-only replica snapshot: 4,379 artists, 292,522 recordings and 215,594 shows. An independent audit reconciles all 582,272 output rows and 69,728 requested track-coordinate results. Use this frame for catalog-wide reservation and sampling preparation. The [complete domain metadata capture](../../../research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md) has finished after 36 synthetic checks, one real PostgreSQL test and ten production query-plan inspections. It retains all 5,064,076 file rows, 216,331 venue records and repertoire relationships in the same snapshot. Offline verification and a separate independent audit both pass across all 6,719,411 metadata rows. Exposure reconciliation and matching evaluation remain required. It grants no untouched evaluation clearance or automatic-publication authority.
 
 Automatic matching is the active implementation step. Storage, processing,

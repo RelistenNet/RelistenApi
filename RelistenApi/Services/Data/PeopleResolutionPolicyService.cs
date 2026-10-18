@@ -18,7 +18,7 @@ namespace Relisten.Data;
 /// calling this service; these methods are not unauthenticated HTTP request handlers.
 /// Activation and revocation share the Work owner lock consumed by accepted publications.
 /// </summary>
-public sealed class PeopleResolutionPolicyService(
+public sealed partial class PeopleResolutionPolicyService(
     DbService db,
     NormalizationWorkService work,
     bool allowFixturePolicies = false
@@ -181,14 +181,29 @@ public sealed class PeopleResolutionPolicyService(
                     cancellationToken: cancellationToken
                 )
             );
-            var state = await ReadStateAsync(c, t, cancellationToken);
-            if (state.Active is { } active)
-            {
-                RequireFixtureHost(c, active.Policy, allowFixturePolicies);
-            }
+            var state = await ReadStateInSnapshotAsync(c, t, cancellationToken);
             await t.CommitAsync(cancellationToken);
             return state;
         });
+    }
+
+    /// <summary>
+    /// Reads policy and owner in the caller's primary repeatable-read transaction, with the
+    /// same fixture restrictions as public reads. Bootstrap before opening that transaction;
+    /// this method neither changes configuration nor owns the transaction's lifetime.
+    /// </summary>
+    internal async Task<PeopleAcceptancePolicyState> ReadStateInSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken ct
+    )
+    {
+        var state = await ReadStateAsync(connection, transaction, ct);
+        if (state.Active is { } active)
+        {
+            RequireFixtureHost(connection, active.Policy, allowFixturePolicies);
+        }
+        return state;
     }
 
     /// <summary>
@@ -482,6 +497,7 @@ public sealed class PeopleResolutionPolicyService(
                 "A policy needs matching immutable hashes and independently approved identity evaluation evidence."
             );
         }
+        ValidateSourceActorQualification(policy, requireCurrentVersions);
         var scorer = a.Scorer;
         if (
             requireCurrentVersions

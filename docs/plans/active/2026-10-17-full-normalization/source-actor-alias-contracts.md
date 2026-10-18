@@ -7,19 +7,16 @@ actor. It is not a canonical identity assignment, recording credit, attendance
 claim or person/group decision.
 
 The assertion types, shared pure/retained extractors, optional recording proposal
-scopes, explicit offline proposal mode and role-free proposal projection exist.
-The [implementation plan](source-actor-aliases.md#progress-and-current-state)
-records executed grammar and cohort verification. Migration 53, typed canonical
-alias outcomes and current alias readers are integrated. The solution builds.
-All 81 focused storage, reader and candidate-selection checks pass, including
-a nonempty upgrade/backfill rehearsal. The broader run passes 313 of 314
-checks; a historical-producer fixture correction is followed by 27 passing
-targeted checks. Migration 54 adds shared trusted-review read proofs, with all
-85 focused and 85 metadata regression checks passing.
+scopes, explicit offline proposal mode and role-free projection exist. Migration
+53 adds alias authority and current readers; migration 54 retains original
+trusted-review read proofs. Source matching has its own evaluated-policy
+capability. The [implementation plan](source-actor-aliases.md#progress-and-current-state)
+records verification and remaining work.
+
 The resolver, source-review entrypoints, complete producer-scope map and accepted
-source publication lifecycle remain required.
-Existing credit/metadata processing, review and API reads supply the authority
-and recovery conventions. No source-actor matching policy is activated.
+source publication lifecycle remain required. Existing credit/metadata
+processing, review and API reads supply the authority and recovery conventions.
+No source-actor matching policy is activated.
 
 ## 1. Current proposal shape and exact source identity
 
@@ -179,6 +176,39 @@ never construct a fake credit to invoke it. This input has no identity creation,
 merge or kind capability. A reviewed assignment can select an existing
 person/group. A handle alone resolves no person-versus-crew question.
 
+### Evaluated source capability (implemented)
+
+`PeopleAcceptancePolicyArtifact.SourceActorAliasApplicability` records the exact
+input form, recording processor, extraction envelope, assertion parser,
+projection, candidate facts, retrieval and numerical scorer versions. The
+separate `PeopleAcceptanceEvaluationReceipt.SourceActorAliasEvaluation` binds
+that tuple to source-specific matching counts and dataset, split, adjudication
+and independent-evaluator evidence. The registry host authenticates the
+referenced evidence. Credit matching counts or an input-form string cannot
+qualify source matching. Registration remains separate from activation.
+
+The pure `EvaluateSourceActorAlias` entrypoint accepts the original role-free
+assertion, artist context, complete v5 candidate snapshot and actual comparison
+inventory. It reproduces every comparison before sharing the existing scorer
+and winner/rival rules. Its only actions are `MatchExisting`, `Review` and
+`Unresolved`. An empty pool cannot create an identity. Source input is refused
+by the credit entrypoint. This decision remains a proposal until the resolver
+and accepted publisher authenticate its source, active policy and original
+observations.
+
+Both optional capability fields are omitted when absent, preserving old
+artifact and evaluation hashes. Unsupported versions or incomplete proof cannot
+qualify current matching. Historical registrations remain readable under their
+original contracts. Before rolling back to a binary that cannot interpret a
+source-capable artifact, switch to a supported evaluated artifact or revoke
+activation, then stop the new source callers. Retain registrations and receipts.
+
+A source preparation reads policy, source evidence and candidate facts in one
+primary repeatable-read snapshot. Bootstrap the policy registry before opening
+that transaction. The internal instance `ReadStateInSnapshotAsync` preserves the
+public reader's fixture restrictions and consumes the caller's transaction;
+it does not bootstrap, commit or refresh original observations.
+
 Trusted source review names the exact source/scoped assertion, expected Work
 editorial revision, expected source review-state revision, selected existing
 identity and its expected revision, action and reason. Use
@@ -235,15 +265,13 @@ This shared contract does not itself implement source-actor review.
 
 ## 4. Additive storage and canonical write outcomes
 
-Phase 2 source implements migration 53 (`AddSourceActorAliasAuthority`) and the
-internal `WriteAutomaticAliasAsync` canonical writer. The nonempty pre-53
-upgrade/backfill rehearsal and 81 focused checks pass. The broader run passes
-313 of 314 checks; a historical-producer fixture correction is followed by 27
-passing targeted checks. Six warm synthetic SQL probes pass; full-service latency
-and production cost remain unmeasured. There is no public managed support
-insertion or source-assignment service in this phase. Object-shaped
-receipt JSON is not an evaluated-policy credential; the later accepted writer
-must authenticate the complete saved stage before using these records.
+Migration 53 (`AddSourceActorAliasAuthority`) and the internal
+`WriteAutomaticAliasAsync` canonical writer implement storage and read
+compatibility. The [implementation plan](source-actor-aliases.md#verified-storage-and-reader-behavior)
+records the nonempty upgrade, reader checks and local query measurements. This
+phase adds no public managed-support insertion or source-assignment service.
+Object-shaped receipt JSON is not an evaluated-policy credential; the accepted
+writer must authenticate the complete saved stage before using these records.
 
 Reuse `normalization.person_aliases` as the canonical assertion store. Add the
 following domain-specific records in one additive migration:

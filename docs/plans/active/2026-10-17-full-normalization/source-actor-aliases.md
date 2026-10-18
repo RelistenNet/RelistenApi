@@ -70,8 +70,13 @@ As of 2026-10-18:
   focused checks pass, including the nonempty 53-to-54 upgrade, stale reads,
   read-only target owners, rollback and exact replay. All 85 metadata regression
   checks also pass. Source-specific review remains the next phase.
-- [ ] Implement immutable source assignment decisions, qualified policy
-  applicability and trusted source review.
+- [x] Require a separately evaluated source capability for role-free matching.
+  All 106 focused policy checks and 160 people regression checks pass. The
+  source branch reproduces complete comparisons and can select only existing
+  identities; credit creation and scoring keep their existing contracts. The
+  policy reader can share the source/candidate transaction without bypassing
+  fixture restrictions. Real evaluation evidence and activation remain required.
+- [ ] Implement immutable source assignment decisions and trusted source review.
 - [ ] Implement accepted support publication, complete source-scope replacement,
   withdrawal, replay, partial progress and stale recovery.
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
