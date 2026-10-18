@@ -67,6 +67,18 @@ public sealed class TestShadowRepertoireAdapter
     }
 
     [Test]
+    public void MissingArtistCannotCreateASharedProvisionalSongIdentity()
+    {
+        var result = new ShadowRepertoireAdapter().Process(Track("Morning", Guid.Empty)).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("unresolved");
+        track.Segments.Single().Song.Should().BeNull();
+        track.Segments.Single().Reason.Should().Be("missing_artist_identity");
+        result.EntityKeys.Should().BeEmpty();
+    }
+
+    [Test]
     public void DuplicateDictionaryTitlesRemainAmbiguousWhileOtherCompoundMentionIsRetained()
     {
         var adapter = new ShadowRepertoireAdapter();

@@ -126,6 +126,37 @@ authority. The [source actor alias plan](../../docs/plans/active/2026-10-17-full
 records current grammar/cohort verification and the required assignment, support,
 review, candidate and withdrawal lifecycle.
 
+## Normalize complete compressed capture shards
+
+Use `shadow-inline` when raw capture shards already contain the source fields and
+file titles. It runs the same local extractors directly, avoiding a second large
+extraction file:
+
+```sh
+dotnet run --project tools/RelistenNormalization -- shadow-inline \
+  local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/manifest.json \
+  local-dev/normalization-data/shadow-full-catalog
+```
+
+A single `.jsonl` or `.jsonl.gz` snapshot is also accepted. Manifest input selects
+its completed shards in order and verifies their gzip bytes and receipts before
+normalization. Each shard retains its original snapshot and footer. The run
+saves its selected inputs in `input-descriptor.json`; `--resume` uses that frozen
+selection even when raw capture has since added shards. Start a new output
+run to select an expanded capture. Changed selected bytes or method versions
+reject resume.
+
+Repeated artist inventories count once. Conflicting artist IDs or UUIDs fail
+preparation rather than assigning songs to a shared unknown artist. Per-row
+extraction failures remain visible while independent domains continue. Source
+and file show relationships use the captured source's actual show ID and UUID;
+a mismatched show context remains unresolved. No database or external request
+runs during this command.
+
+The [population guide](../../docs/research/2026-10-17-full-normalization/scale/shadow-population.md)
+covers capture commands, range completion and parentless files. Full-catalog
+processing and matching quality remain separate acceptance requirements.
+
 ## Bounded Luna credit extraction
 
 The separate `luna-credits` command uses the real Responses API. It compares retained credit inputs from two cohorts: apparent local taper/transferrer successes, and unresolved or missing local credits. Both receive Luna extraction. Stable resource hashes select up to the requested count in each cohort. This diagnostic selection does not estimate catalog accuracy; independently label and judge the outputs before choosing a fallback policy.
@@ -137,6 +168,8 @@ dotnet run --project tools/RelistenNormalization -- luna-credits \
 ```
 
 Supply `OPENAI_API_KEY` in the process environment. The command does not automatically read `.env.local`. Supply `RELISTEN_NORMALIZATION_DATABASE_URL` for a dedicated local `relisten_normalization_*` PostgreSQL database with migrations 22, 44 and 45 applied. The command accepts only `localhost` or `127.0.0.1`; it does not initialize a database, start the API or change catalog relationships. Keep the key out of arguments, source control, receipts and logs.
+
+The source-credit command runs eight independent requests concurrently and shares one request for identical field maps. It writes one result per selected recording, with durable progress and exact selection/results hashes in the completed manifest.
 
 Each job has a durable $25 cap. Reuse its UUID and a new output directory after interruption. The cache hashes the complete rendered request, including model, prompt, schema and generation settings. Cached successes need no key or paid retry. An uncertain request retains its possible cost and has bounded retries. `accounted_usd` includes those conservative reservations as well as measured charges; it is not an invoice total. Current small-request Standard pricing is documented in the [Luna model reference](https://developers.openai.com/api/docs/models/gpt-6-luna); the extractor explicitly requests Standard processing and rejects oversized input before admission.
 

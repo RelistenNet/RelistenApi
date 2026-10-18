@@ -1,0 +1,77 @@
+{
+  "version": "shadow-inline-first-source-range-v1",
+  "state": "completed",
+  "runDirectory": "local-dev/normalization-data/2026-10-18-shadow-first-full-source-shard-v1",
+  "executionDirectory": "local-dev/normalization-data/2026-10-18-shadow-first-full-source-shard-execution-v1",
+  "manifestSha256": "9b275f4f75550ef4b00e3b47fd3a8a9bf53ac3290e4c8c450ae1bd38a2054be3",
+  "request": {
+    "command": [
+      "dotnet",
+      "/private/tmp/relisten-normalization-alias-v2-candidate-verification-v2/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+      "shadow-inline",
+      "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0000-sources-26495-2864970-attempt-001.jsonl.gz",
+      "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-first-full-source-shard-v1"
+    ],
+    "sourceShard": {
+      "actualRows": 50000,
+      "compressed": {
+        "bytes": 30050322,
+        "sha256": "fca1308df9dbeed94fabe0ddad90c7a51ad4ae1a72608297a19cf40e746b1f6a"
+      },
+      "coordinateDriftEntries": 0,
+      "extraRows": 0,
+      "gzipPath": "0000-sources-26495-2864970-attempt-001.jsonl.gz",
+      "missingRows": 0,
+      "receipt": "0000-sources-26495-2864970-attempt-001.receipt.json",
+      "receiptFingerprint": {
+        "bytes": 1591,
+        "sha256": "b452c670945be03cc0ecb6360a8135099326fac4fd2d95797019a65c76758e16"
+      },
+      "shardId": "0000-sources-26495-2864970",
+      "state": "completed",
+      "uuidDriftRows": 0
+    },
+    "toolSha256": "2baece73afb65c835648326aca6d536258e59196effb4cdee5e118c099e63880",
+    "apiSha256": "214c4a0f47f1466e981a34243072a6e34589fab5e29291d8cea5b6a025859dae",
+    "scope": "All50000recordings in first complete full-catalog source range. No file/song/venue ranges in this run; full capture continues separately. No database or external requests in normalization."
+  },
+  "process": {
+    "exitCode": 0,
+    "elapsedSeconds": 34.506
+  },
+  "outputRows": 150000,
+  "counts": [
+    {
+      "provider": "catalog:unattributed",
+      "domain": "people",
+      "processed": 50000,
+      "outcomes": {
+        "proposed": 43906,
+        "unresolved": 6094
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "credits",
+      "processed": 50000,
+      "outcomes": {
+        "proposed": 43903,
+        "unresolved": 6097
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "performances",
+      "processed": 50000,
+      "outcomes": {
+        "proposed": 50000
+      }
+    }
+  ],
+  "behaviorTests": {
+    "passed": 109,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scope": "All 50,000 recordings in the first complete source range; 150,000 domain outcomes and no adapter failures. All 50,000 captured show UUID relationships are proposed. Other raw ranges and full file normalization remain separate pending work. Zero processing failures does not establish matching accuracy."
+}

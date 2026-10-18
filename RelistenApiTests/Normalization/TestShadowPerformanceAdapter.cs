@@ -186,6 +186,52 @@ public sealed class TestShadowPerformanceAdapter
             .And.Contain("show:" + show.ToString("D"));
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void SourceOnlyCaptureUsesItsOwnShowContextAndRejectsAnotherShow(bool wrongShow)
+    {
+        var show = Guid.NewGuid();
+        var source = Guid.NewGuid();
+        var track = Track(11, source, 101, show, "late", 1, "Set", "A Song");
+        var context = track.GetProperty("show_context");
+        if (wrongShow)
+        {
+            context = JsonSerializer.SerializeToElement(
+                new
+                {
+                    id = 102,
+                    uuid = Guid.NewGuid(),
+                    artist_id = Artist.Id,
+                    performance_type = "early",
+                }
+            );
+        }
+        var record = JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "source_sample",
+                row = track.GetProperty("source_context"),
+                show_context = context,
+            }
+        );
+        var result = Observe(record).Process(Input(record)).Single();
+        var home = (ShadowPerformanceHome)result.Proposal!;
+
+        home.SourceUuid.Should().Be(source);
+        if (wrongShow)
+        {
+            result.Outcome.Should().Be("unresolved");
+            home.ShowUuid.Should().BeNull();
+            home.Unresolved.Should().Contain("source_show_context_mismatch");
+        }
+        else
+        {
+            result.Outcome.Should().Be("proposed");
+            home.ShowUuid.Should().Be(show);
+            home.PerformanceType.Should().Be("late");
+        }
+    }
+
     [Test]
     public void AnotherFilesTitleProofFailsOnlyFileInterpretationAndKeepsPlayback()
     {

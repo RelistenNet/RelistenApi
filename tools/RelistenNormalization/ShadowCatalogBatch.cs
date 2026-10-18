@@ -4,12 +4,12 @@ using System.Text.Json;
 namespace Relisten.Normalization.Batch;
 
 /// <summary>
-/// Runs domain adapters over every retained catalog input. This entrypoint has no
-/// application host, canonical writer, database connection or external client.
-/// Each input/domain gets one outcome even when a sibling adapter fails.
+/// Runs domain adapters over retained catalog inputs without a host, database or
+/// external client. Each applicable input/domain receives its own shadow outcome.
 /// </summary>
 public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adapters)
 {
+    /// <summary>Consumes the existing snapshot and its corresponding extraction stream.</summary>
     public async Task RunAsync(
         string snapshotPath,
         string extractionsPath,
@@ -21,209 +21,164 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
     {
         var inputHash = await HashAsync(snapshotPath, ct);
         var extractionHash = await HashAsync(extractionsPath, ct);
-        var extractionManifest = JsonDocument.Parse(
+        using var manifest = JsonDocument.Parse(
             await File.ReadAllTextAsync(
                 Path.Combine(Path.GetDirectoryName(extractionsPath)!, "manifest.json"),
                 ct
             )
         );
-        using (extractionManifest)
+        if (manifest.RootElement.GetProperty("inputSha256").GetString() != inputHash)
         {
-            if (extractionManifest.RootElement.GetProperty("inputSha256").GetString() != inputHash)
-            {
-                throw new InvalidOperationException(
-                    "Extraction and catalog snapshot do not correspond."
-                );
-            }
+            throw new InvalidOperationException(
+                "Extraction and catalog snapshot do not correspond."
+            );
         }
 
         var providerHash =
             providerInputsPath == null ? "none" : await HashAsync(providerInputsPath, ct);
-        var identity = inputHash + "/" + extractionHash + "/" + providerHash;
+        await RunPreparedAsync(
+            new(snapshotPath, providerInputsPath),
+            extractionsPath,
+            outputDirectory,
+            inputHash + "/" + extractionHash + "/" + providerHash,
+            resume,
+            null,
+            ct
+        );
+    }
+
+    /// <summary>
+    /// Extracts each row locally from one snapshot or a completed capture-shard selection.
+    /// The run freezes that selection before indexing. Resume verifies its saved files;
+    /// additional shards in a growing capture require a new output directory.
+    /// </summary>
+    public async Task RunInlineAsync(
+        string snapshotOrCaptureManifestPath,
+        string outputDirectory,
+        bool resume = false,
+        string? providerInputsPath = null,
+        CancellationToken ct = default
+    )
+    {
+        var capture = await ShadowCatalogCapture.OpenAsync(
+            snapshotOrCaptureManifestPath,
+            outputDirectory,
+            resume,
+            providerInputsPath,
+            ct
+        );
+        await RunPreparedAsync(
+            new(capture),
+            null,
+            outputDirectory,
+            "inline/" + capture.Identity,
+            resume,
+            capture,
+            ct
+        );
+    }
+
+    private async Task RunPreparedAsync(
+        ShadowCatalogInputs inputs,
+        string? extractionsPath,
+        string outputDirectory,
+        string identity,
+        bool resume,
+        ShadowCatalogCapture? capture,
+        CancellationToken ct
+    )
+    {
         var methods = adapters.ToDictionary(
             adapter => adapter.GetType().Name,
             adapter => adapter.Version
         );
+        if (capture != null)
+        {
+            methods.Add(
+                nameof(CatalogRowExtraction),
+                string.Join(
+                    "/",
+                    "catalog-row-inline-v1",
+                    RecordingCreditExtractor.Version,
+                    SourceActorAliasExtractor.Version,
+                    TrackTitleExtractor.Version
+                )
+            );
+        }
+
         await using var run = new ShadowCatalogRun(outputDirectory, identity, methods, resume);
-        var inputs = new ShadowCatalogInputs(snapshotPath, providerInputsPath);
+        if (capture != null)
+        {
+            await capture.SaveAsync(outputDirectory);
+        }
+
+        // Persist an empty checkpoint before the potentially long indexing pass.
+        // A cancelled first pass can then rebuild indexes in this same run directory.
         await run.SaveAsync(
             run.CompletedLine,
             "indexing",
             new
             {
-                snapshotPath,
+                snapshotPaths = inputs.SnapshotPaths,
                 extractionsPath,
-                providerInputsPath,
+                capture = capture?.Descriptor,
             },
             CancellationToken.None
         );
         await inputs.ObserveAsync(adapters, extractionsPath, ct);
         var population = new
         {
-            snapshotPath = Path.GetFullPath(snapshotPath),
-            extractionsPath = Path.GetFullPath(extractionsPath),
-            providerInputsPath,
+            snapshotPath = inputs.SnapshotPaths.Count == 1
+                ? Path.GetFullPath(inputs.SnapshotPaths[0])
+                : null,
+            snapshotPaths = inputs.SnapshotPaths,
+            extractionsPath = extractionsPath == null ? null : Path.GetFullPath(extractionsPath),
+            providerInputsPath = inputs.ProviderInputsPath,
+            capture = capture?.Descriptor,
+            extractionMode = extractionsPath == null ? "inline" : "external",
             inputKinds = inputs.InputKinds,
             expectedOutcomes = inputs.ExpectedOutcomes,
             census = inputs.Population,
+            snapshots = inputs.Frames,
             configuredProviderArtists = inputs.ConfiguredProviders,
             preparationFailures = inputs.PreparationFailures,
+            inlineExtractionErrors = inputs.InlineExtractionErrors,
             artists = inputs.Artists.Count,
-            scope = "Complete retained raw inputs. Census/profile totals describe a larger catalog and are not processed raw-input counts.",
+            scope = "All selected retained raw inputs. Each shard has its own snapshot. Census totals can describe a larger catalog.",
         };
         await run.SaveAsync(run.CompletedLine, "running", population, ct);
+        await ProcessRowsAsync(inputs, extractionsPath, run, outputDirectory, population, ct);
+    }
 
-        await using var extractionRows = ShadowCatalogInputs
-            .ReadJsonLinesAsync(extractionsPath, ct)
-            .GetAsyncEnumerator(ct);
+    private async Task ProcessRowsAsync(
+        ShadowCatalogInputs inputs,
+        string? extractionsPath,
+        ShadowCatalogRun run,
+        string outputDirectory,
+        object population,
+        CancellationToken ct
+    )
+    {
         long line = 0;
         var completedLine = run.CompletedLine;
         try
         {
-            await foreach (var record in inputs.ReadRecordsAsync(ct))
+            await foreach (
+                var row in inputs.ReadPreparedAsync(extractionsPath, run.CompletedLine, ct)
+            )
             {
                 line++;
-                var kind = record.GetProperty("kind").GetString()!;
-                JsonElement? extraction = null;
-                JsonElement? extractionError = null;
-                if (kind is "source_sample" or "track_sample")
-                {
-                    if (!await extractionRows.MoveNextAsync())
-                    {
-                        throw new InvalidOperationException(
-                            "Extraction stream ended before its corresponding catalog row."
-                        );
-                    }
-
-                    var extracted = extractionRows.Current;
-                    var extractedUuid =
-                        extracted.GetProperty("kind").GetString() == "extraction_error"
-                            ? extracted
-                                .GetProperty("input")
-                                .GetProperty("row")
-                                .GetProperty("uuid")
-                                .GetGuid()
-                            : extracted.GetProperty("resourceUuid").GetGuid();
-                    if (extractedUuid != record.GetProperty("row").GetProperty("uuid").GetGuid())
-                    {
-                        throw new InvalidOperationException(
-                            "Extraction stream no longer matches catalog input order."
-                        );
-                    }
-
-                    if (extracted.GetProperty("kind").GetString() == "extraction_error")
-                    {
-                        extractionError = extracted;
-                    }
-                    else
-                    {
-                        extraction = extracted;
-                    }
-                }
-
                 if (line <= run.CompletedLine)
                 {
                     continue;
                 }
 
-                var inputResults = new List<ShadowCatalogResult>();
-                foreach (var adapter in adapters)
-                {
-                    var domains = adapter.DomainsFor(kind);
-                    if (domains.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var input = inputs.Project(record, extraction, extractionError);
-                    ShadowCatalogResult[] results;
-                    try
-                    {
-                        if (
-                            inputs.PreparationFailures.TryGetValue(
-                                adapter.GetType().Name,
-                                out var preparationError
-                            )
-                        )
-                        {
-                            throw new InvalidOperationException(
-                                "adapter_index_failed: " + preparationError
-                            );
-                        }
-
-                        results = adapter.Process(input).ToArray();
-                        if (
-                            !results
-                                .Select(result => result.Domain)
-                                .Order()
-                                .SequenceEqual(domains.Order())
-                            || results.Any(result =>
-                                result.InputKey != input.Key
-                                || result.Outcome
-                                    is not (
-                                        "proposed"
-                                        or "unresolved"
-                                        or "failed"
-                                        or "not_applicable"
-                                    )
-                            )
-                        )
-                        {
-                            throw new InvalidOperationException(
-                                "Adapter did not produce exactly one outcome per applicable domain."
-                            );
-                        }
-                    }
-                    catch (Exception error) when (error is not OperationCanceledException)
-                    {
-                        results = domains
-                            .Select(domain =>
-                                ShadowCatalogResult.For(
-                                    input,
-                                    domain,
-                                    "failed",
-                                    adapter.Version,
-                                    null,
-                                    new { record = input.Record },
-                                    error.GetType().Name + ": " + error.Message
-                                )
-                            )
-                            .ToArray();
-                    }
-
-                    inputResults.AddRange(
-                        extractionError == null
-                            ? results
-                            : results.Select(result =>
-                                result with
-                                {
-                                    Evidence = new
-                                    {
-                                        interpretationEvidence = result.Evidence,
-                                        extractionError,
-                                    },
-                                    Reason =
-                                        "local_extraction_error: "
-                                        + ExtractionErrorReason(extractionError.Value)
-                                        + (result.Reason == null ? "" : "; " + result.Reason),
-                                }
-                            )
-                    );
-                }
-
-                await run.WriteInputAsync(inputResults);
+                await run.WriteInputAsync(ProcessAdapters(inputs, row));
                 completedLine = line;
                 if (line % 2000 == 0)
                 {
                     await run.SaveAsync(completedLine, "running", population, ct);
                 }
-            }
-
-            if (await extractionRows.MoveNextAsync())
-            {
-                throw new InvalidOperationException(
-                    "Extraction stream has unmatched trailing rows."
-                );
             }
 
             await run.SaveAsync(
@@ -245,8 +200,92 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         }
     }
 
-    private static string ExtractionErrorReason(JsonElement error) =>
-        error.GetProperty("reason").GetString() ?? "unknown";
+    private List<ShadowCatalogResult> ProcessAdapters(
+        ShadowCatalogInputs inputs,
+        ShadowCatalogInputs.PreparedRow row
+    )
+    {
+        var kind = row.Record.GetProperty("kind").GetString()!;
+        var inputResults = new List<ShadowCatalogResult>();
+        foreach (var adapter in adapters)
+        {
+            var domains = adapter.DomainsFor(kind);
+            if (domains.Count == 0)
+            {
+                continue;
+            }
+
+            var input = inputs.Project(row.Record, row.Extraction, row.ExtractionError);
+            var results = ProcessAdapter(adapter, input, domains, inputs.PreparationFailures);
+            inputResults.AddRange(
+                row.ExtractionError == null
+                    ? results
+                    : results.Select(result =>
+                        result with
+                        {
+                            Evidence = new
+                            {
+                                interpretationEvidence = result.Evidence,
+                                extractionError = row.ExtractionError,
+                            },
+                            Reason =
+                                "local_extraction_error: "
+                                + row.ExtractionError.Value.GetProperty("reason").GetString()
+                                + (result.Reason == null ? "" : "; " + result.Reason),
+                        }
+                    )
+            );
+        }
+        return inputResults;
+    }
+
+    private static ShadowCatalogResult[] ProcessAdapter(
+        IShadowCatalogAdapter adapter,
+        ShadowCatalogInput input,
+        IReadOnlyList<string> domains,
+        IReadOnlyDictionary<string, string> preparationFailures
+    )
+    {
+        try
+        {
+            if (preparationFailures.TryGetValue(adapter.GetType().Name, out var preparationError))
+            {
+                throw new InvalidOperationException("adapter_index_failed: " + preparationError);
+            }
+
+            var results = adapter.Process(input).ToArray();
+            if (
+                !results.Select(result => result.Domain).Order().SequenceEqual(domains.Order())
+                || results.Any(result =>
+                    result.InputKey != input.Key
+                    || result.Outcome
+                        is not ("proposed" or "unresolved" or "failed" or "not_applicable")
+                )
+            )
+            {
+                throw new InvalidOperationException(
+                    "Adapter did not produce exactly one outcome per applicable domain."
+                );
+            }
+            return results;
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            return domains
+                .Select(domain =>
+                    ShadowCatalogResult.For(
+                        input,
+                        domain,
+                        "failed",
+                        adapter.Version,
+                        null,
+                        new { record = input.Record },
+                        error.GetType().Name + ": " + error.Message
+                    )
+                )
+                .ToArray();
+        }
+    }
 
     private static async Task<string> HashAsync(string path, CancellationToken ct)
     {

@@ -29,7 +29,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     > songs = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v1";
+    public string Version => "shadow-repertoire-v2";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -241,6 +241,11 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         if (segment.Kind == TrackContentKind.Unknown)
         {
             return Segment("unresolved", "extractor_reports_unknown_content");
+        }
+
+        if (artistUuid == Guid.Empty)
+        {
+            return Segment("unresolved", "missing_artist_identity");
         }
 
         // Decorated controls can reach the producer's default Song class. Do not

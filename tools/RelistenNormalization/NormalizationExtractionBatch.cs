@@ -32,16 +32,6 @@ public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases 
         "setlist_profile",
     ];
 
-    private static readonly string[] CreditFields =
-    [
-        "taper",
-        "transferrer",
-        "description",
-        "source",
-        "lineage",
-        "taper_notes",
-    ];
-
     /// <summary>
     /// Streams a capture into a new directory. A completed snapshot publishes a manifest
     /// with state completed or completed_partial; item failures keep their input and an
@@ -161,9 +151,7 @@ public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases 
     /// </summary>
     private sealed class ExtractionRun(StreamWriter output, bool includeSourceActorAliases)
     {
-        private readonly RecordingCreditExtractor credits = new();
-        private readonly SourceActorAliasExtractor sourceActors = new();
-        private readonly TrackTitleExtractor titles = new();
+        private readonly CatalogRowExtraction extractor = new(includeSourceActorAliases);
         private readonly Dictionary<long, Guid> artists = new();
         private readonly HashSet<(string Kind, Guid Uuid)> seenResources = new();
         private readonly Dictionary<string, long> kinds = new();
@@ -301,30 +289,13 @@ public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases 
                 throw new FormatException("A resource was sampled more than once.");
             }
 
-            var family = record.TryGetProperty("family", out var value) ? value.GetString() : null;
-            var inputs =
-                kind == "source_sample"
-                    ? CreditFields.ToDictionary(field => field, field => Text(row, field))
-                    : new Dictionary<string, string?> { ["title"] = Text(row, "title") };
-            var creditExtraction = kind == "source_sample" ? credits.Extract(inputs) : null;
-            var titleExtraction =
-                kind == "track_sample" ? titles.Extract(artistUuid, inputs["title"] ?? "") : null;
-            var context = kind == "track_sample" ? TrackContext(record) : null;
-            var result = new NormalizationBatchExtraction(
-                kind,
-                row.GetProperty("id").GetInt64(),
-                resourceUuid,
-                artistId,
-                artistUuid,
-                family,
-                inputs,
-                context,
-                creditExtraction,
-                titleExtraction,
-                includeSourceActorAliases && kind == "source_sample"
-                    ? sourceActors.Extract(inputs)
-                    : null
-            );
+            var result = extractor.Extract(record, artistUuid);
+            var creditExtraction = result.CreditExtraction;
+            var titleExtraction = result.TitleExtraction;
+            if (result.TrackContext is { } context)
+            {
+                CountMissingTrackContext(context);
+            }
             await output.WriteLineAsync(JsonSerializer.Serialize(result, Json));
             outputRecords++;
             extractedRecords++;
@@ -346,25 +317,20 @@ public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases 
             }
         }
 
-        private NormalizationTrackInputContext TrackContext(JsonElement record)
+        private void CountMissingTrackContext(NormalizationTrackInputContext context)
         {
-            var source = ContextUuid(record, "source_context");
-            var set = ContextUuid(record, "set_context");
-            var show = ContextUuid(record, "show_context");
-            if (source is null)
+            if (context.SourceUuid is null)
             {
                 Count(missingTrackContext, "source_context");
             }
-            if (set is null)
+            if (context.SourceSetUuid is null)
             {
                 Count(missingTrackContext, "set_context");
             }
-            if (show is null)
+            if (context.ShowUuid is null)
             {
                 Count(missingTrackContext, "show_context");
             }
-
-            return new(source, set, show);
         }
 
         internal void ValidateCompletion()
@@ -458,14 +424,6 @@ public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases 
                     )
                 )
             );
-
-        private static string? Text(JsonElement row, string field) =>
-            row.TryGetProperty(field, out var value) ? value.GetString() : null;
-
-        private static Guid? ContextUuid(JsonElement record, string name) =>
-            record.TryGetProperty(name, out var context) && context.ValueKind != JsonValueKind.Null
-                ? context.GetProperty("uuid").GetGuid()
-                : null;
 
         private static void Count(Dictionary<string, long> counts, string key)
         {

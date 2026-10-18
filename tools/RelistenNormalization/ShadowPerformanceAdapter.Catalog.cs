@@ -95,14 +95,18 @@ public sealed partial class ShadowPerformanceAdapter
         List<string> problems
     )
     {
-        if (input.Kind == "track_sample" && Object(input.Record, "show_context") is { } local)
+        if (Object(input.Record, "show_context") is { } local)
         {
             var show = ShowHome.Read(local);
             if (show.Id == source?.ShowId)
             {
                 return show;
             }
-            problems.Add("file_show_context_mismatch");
+            problems.Add(
+                input.Kind == "track_sample"
+                    ? "file_show_context_mismatch"
+                    : "source_show_context_mismatch"
+            );
         }
         return source?.ShowId is { } id && !conflictingShows.Contains(id)
             ? shows.GetValueOrDefault(id)

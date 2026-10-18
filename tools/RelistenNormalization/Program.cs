@@ -26,6 +26,11 @@ if (
             && args[0] == "shadow"
             && (args.Length == 4 || args[4] == "--resume")
         )
+        || (
+            args.Length is 3 or 4
+            && args[0] == "shadow-inline"
+            && (args.Length == 3 || args[3] == "--resume")
+        )
         || (args.Length == 5 && args[0] == "luna-credit-cohort")
         || (
             args.Length == 5
@@ -40,6 +45,7 @@ if (
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
+            + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -66,9 +72,9 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
-    if (args[0] == "shadow")
+    if (args[0] is "shadow" or "shadow-inline")
     {
-        await new ShadowCatalogBatch([
+        var shadow = new ShadowCatalogBatch([
             new ShadowPeopleAdapter(),
             new ShadowVenueAdapter(),
             new ShadowRepertoireAdapter(),
@@ -76,17 +82,31 @@ try
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
             ),
             new ShadowPerformanceAdapter(),
-        ]).RunAsync(
-            args[1],
-            args[2],
-            args[3],
-            resume: args.Length == 5,
-            providerInputsPath: Environment.GetEnvironmentVariable(
-                "RELISTEN_SHADOW_PROVIDER_INPUTS"
-            ),
-            ct: cancellation.Token
-        );
-        var manifestPath = Path.Combine(Path.GetFullPath(args[3]), "manifest.json");
+        ]);
+        var providerInputs = Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PROVIDER_INPUTS");
+        var outputDirectory = args[0] == "shadow-inline" ? args[2] : args[3];
+        if (args[0] == "shadow-inline")
+        {
+            await shadow.RunInlineAsync(
+                args[1],
+                outputDirectory,
+                resume: args.Length == 4,
+                providerInputsPath: providerInputs,
+                ct: cancellation.Token
+            );
+        }
+        else
+        {
+            await shadow.RunAsync(
+                args[1],
+                args[2],
+                outputDirectory,
+                resume: args.Length == 5,
+                providerInputsPath: providerInputs,
+                ct: cancellation.Token
+            );
+        }
+        var manifestPath = Path.Combine(Path.GetFullPath(outputDirectory), "manifest.json");
         using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
         Console.WriteLine(
             JsonSerializer.Serialize(

@@ -16,7 +16,12 @@ This execution sequence supersedes the evaluation-first milestone. The [standing
 - [ ] Capture and process the full recording/file population, reconcile provider coverage, and independently audit outputs and systemic failures.
 - [ ] Rehearse incremental input changes and restart locally, then continue production qualification and backfill preparation.
 
-The current integration step is full raw-population capture and replay. Domain quality and model-enrichment work can continue independently over the completed sample.
+The current integration step is full raw-population capture and replay. The first
+complete 50,000-recording source range also completed inline normalization:
+150,000 outcomes, no processing failures and all captured show UUID relationships
+retained. See its [receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json).
+The expanded integration checkpoint passed 109 tests. The full file population
+and independent matching audits remain incomplete. Domain quality and model-enrichment work can continue independently over the completed sample.
 
 ## Run and inspect the completed sample
 

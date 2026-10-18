@@ -16,7 +16,7 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
     private readonly HashSet<long> conflictingShows = [];
     private readonly ShadowRepertoireAdapter repertoire = new();
 
-    public string Version => "shadow-performances-v1";
+    public string Version => "shadow-performances-v2";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind switch
@@ -47,15 +47,15 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
             {
                 ObserveSource(source);
             }
-            if (Object(record, "show_context") is { } show)
+        }
+        if (kind is "source_sample" or "track_sample" && Object(record, "show_context") is { } show)
+        {
+            var value = ShowHome.Read(show);
+            if (shows.TryGetValue(value.Id, out var existing) && existing != value)
             {
-                var value = ShowHome.Read(show);
-                if (shows.TryGetValue(value.Id, out var existing) && existing != value)
-                {
-                    conflictingShows.Add(value.Id);
-                }
-                shows.TryAdd(value.Id, value);
+                conflictingShows.Add(value.Id);
             }
+            shows.TryAdd(value.Id, value);
         }
     }
 
