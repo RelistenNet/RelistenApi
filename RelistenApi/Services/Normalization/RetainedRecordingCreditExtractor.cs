@@ -10,10 +10,13 @@ namespace Relisten.Normalization;
 /// Runs local credit grammar on decoded prose while retaining coordinates in the original
 /// provider input. Repeated array fields and directory accounts are never flattened together.
 /// </summary>
-public sealed class RetainedRecordingCreditExtractor
+public sealed partial class RetainedRecordingCreditExtractor
 {
     public const string Version =
-        "retained-recording-credits-v1/" + RecordingCreditExtractor.Version;
+        "retained-recording-credits-v2/"
+        + RecordingCreditExtractor.Version
+        + "/"
+        + ActorMappingVersion;
     private readonly RecordingCreditExtractor extractor = new();
 
     public RetainedCreditExtraction Extract(
@@ -66,7 +69,17 @@ public sealed class RetainedRecordingCreditExtractor
             {
                 var evidence = Remap(reference, mention.Evidence);
                 document.ValidateEvidence(evidence);
-                credits.Add(new(mention.Name, mention.Role, evidence, mention.OriginalRole));
+                credits.Add(
+                    new(
+                        mention.Name,
+                        mention.Role,
+                        evidence,
+                        mention.OriginalRole,
+                        mention.ActorFacts == null
+                            ? null
+                            : MapActorFacts(reference, mention.ActorFacts, document)
+                    )
+                );
             }
             foreach (var issue in result.Unresolved)
             {

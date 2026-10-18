@@ -244,6 +244,71 @@ public sealed class TestNormalizationRecordingInputGroups
         await proposals.SaveExtractionAsync(batch);
     }
 
+    [TestCase("foreign_revision")]
+    [TestCase("other_recording_field")]
+    [TestCase("file_field")]
+    public async Task NestedActorFactsCannotBorrowAnotherValidInputOrCreditScope(string change)
+    {
+        var batch = await Batch(includeLegacy: true);
+        var credit = batch.Extraction.Credits.First(credit => credit.FileOrigin == null);
+        credit.Mention.ActorFacts.Should().NotBeNull();
+        var facts = credit.Mention.ActorFacts!;
+        var citation = change switch
+        {
+            "foreign_revision" => batch
+                .AdditionalExtractions!.Single()
+                .Extraction.Credits.First()
+                .Mention.Evidence,
+            "other_recording_field" => credit.Mention.Evidence with
+            {
+                JsonPointer = "/metadata/identifier",
+                StartCodePoint = null,
+                EndCodePoint = null,
+                Quote = null,
+            },
+            "file_field" => batch
+                .Extraction.Credits.First(credit => credit.FileOrigin != null)
+                .Mention.Evidence,
+            _ => throw new ArgumentOutOfRangeException(nameof(change)),
+        };
+        var forged = credit with
+        {
+            Mention = credit.Mention with
+            {
+                ActorFacts = facts with
+                {
+                    Contacts =
+                    [
+                        new(
+                            Guid.NewGuid(),
+                            "synthetic@example.test",
+                            "email",
+                            "synthetic@example.test",
+                            [citation]
+                        ),
+                    ],
+                },
+            },
+        };
+        var invalid = batch with
+        {
+            Extraction = batch.Extraction with
+            {
+                Credits = batch
+                    .Extraction.Credits.Select(item => item == credit ? forged : item)
+                    .ToArray(),
+            },
+        };
+
+        var save = () => proposals.SaveExtractionAsync(invalid);
+        await save.Should().ThrowAsync<ArgumentException>();
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeNull();
+        (await proposals.GetAsync(batch.SourceUuid)).Should().BeNull();
+
+        await proposals.SaveExtractionAsync(batch);
+        (await proposals.GetAttemptBatchAsync(batch.AttemptUuid)).Should().BeEquivalentTo(batch);
+    }
+
     [Test]
     public async Task CurrentProcessingCannotSaveAnIncompleteMembershipReceiptOrInventLegacyFetch()
     {

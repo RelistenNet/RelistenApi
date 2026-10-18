@@ -385,6 +385,23 @@ public sealed partial class NormalizationRecordingProposalService
         NormalizationRecordingExtraction extraction
     )
     {
+        // Actor facts cannot escape the original credited clause, even when another
+        // selected root or file field is also a valid input in this extraction group.
+        foreach (
+            var credit in extraction.Credits.Where(credit => credit.Mention.ActorFacts != null)
+        )
+        {
+            if (
+                credit
+                    .Mention.ActorFacts!.Citations()
+                    .Any(citation => !EvidenceWithin(credit.Mention.Evidence, citation))
+            )
+            {
+                throw new ArgumentException(
+                    "Actor facts must cite their original credited clause."
+                );
+            }
+        }
         var claims = extraction
             .Credits.Select(credit => (credit.FileOrigin, credit.Mention.Evidence))
             .Concat(
@@ -453,6 +470,11 @@ public sealed partial class NormalizationRecordingProposalService
     ) =>
         extraction
             .Credits.Select(credit => credit.Mention.Evidence)
+            .Concat(
+                extraction.Credits.SelectMany(credit =>
+                    credit.Mention.ActorFacts?.Citations() ?? []
+                )
+            )
             .Concat(extraction.UnresolvedCredits.Select(issue => issue.Evidence))
             .Concat(extraction.DecodeIssues.Select(issue => issue.Evidence))
             .Concat(

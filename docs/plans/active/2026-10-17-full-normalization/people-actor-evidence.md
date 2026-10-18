@@ -5,10 +5,30 @@ supported actor context from retained recording metadata. Preserve what each
 source actually claims. A shared email, handle, project page or name can retrieve
 candidates and support comparison; equality does not establish canonical identity.
 
-This document proposes the next increment. These actor-fact, query and support
-contracts are **not implemented**. Keep the existing
-[people acceptance](people-acceptance.md) ownership, evaluated-policy authority,
-publication fences and recovery protocol. Playback and public API behavior stay compatible.
+## Implementation status
+
+The extraction slice now adds optional `ActorFacts` to local and retained credit
+mentions. `RecordingActorEvidenceExtractor` retains explicit `aka`/`also known as`
+aliases, joint roles and coordinated actors, attached email-shaped contacts,
+supported profile URLs and explicit parenthesized person/group descriptions.
+Unknown URL namespaces and unattributed hints remain unresolved. All fact kinds
+report nonexhaustive coverage; missing facts do not prove absence. This version
+attaches facts within one original role-bearing clause. Cross-field and independent
+page relationships still require the binding contract below.
+
+Retained mapping preserves raw Unicode code-point citations and namespaces actor
+references by input revision and field location. Proposal storage validates nested
+citations against the original credited clause and its existing account/file scope.
+The raw producer is `recording-credits-v3/recording-actor-evidence-v1`;
+`retained-recording-credits-v2` and `recording-extraction-v4` fingerprint its output
+and coordinate mapping. Old null-omitted terminal JSON remains readable. The
+solution builds, and 219 focused extraction, retained-input, evidence-storage and
+people-resolution tests pass. Fresh correctness and readability reviews are clean.
+
+Candidate queries, accepted contextual indexes, actor-aware scoring and independent
+primary-page capture below remain proposed. This slice enables no policy and writes
+no accepted actor context. Keep the existing [people acceptance](people-acceptance.md)
+ownership, authority and publication fences. Playback and public APIs stay compatible.
 
 ## Evidence and current gaps
 
@@ -18,10 +38,10 @@ corroboration; four retain attachment or person-versus-project ambiguity. These
 are source-grounded development hypotheses, not 38 accepted global identities or
 an independently evaluated launch result. Preserve each family's evidence and uncertainty.
 
-Current `RetainedCreditMention` contains a name, role, supporting span and optional
-role wording. Contact text can survive in its raw quote after the parser removes
-it from the display name. There is no typed alias, profile, contact, actor-kind or
-co-reference fact. The resolver queries one ordinary name and projects no incoming
+Before this extraction increment, `RetainedCreditMention` contained a name, role,
+supporting span and optional role wording. Contact text survived only in the raw
+quote after removal from the display name. Typed actor facts now preserve that
+context. The resolver still queries one ordinary name and projects no incoming
 external identities. Accepted aliases have no handle namespace, and existing
 external-ID rows do not encode provider authority or account ownership.
 

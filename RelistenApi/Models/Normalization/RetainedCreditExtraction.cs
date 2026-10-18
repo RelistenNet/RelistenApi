@@ -8,7 +8,9 @@ public sealed record RetainedCreditMention(
     string Name,
     RecordingCreditRole Role,
     NormalizedEvidenceReference Evidence,
-    string? OriginalRole = null
+    string? OriginalRole = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CreditedActorFacts<NormalizedEvidenceReference>? ActorFacts = null
 );
 
 /// <summary>A file-scoped issue retains its provider origin even when the file has no catalog binding.</summary>

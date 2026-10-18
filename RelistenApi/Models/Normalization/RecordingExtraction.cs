@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -32,7 +33,9 @@ public sealed record CreditMention(
     string Name,
     RecordingCreditRole Role,
     NormalizationTextEvidence Evidence,
-    string? OriginalRole = null
+    string? OriginalRole = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CreditedActorFacts<NormalizationTextEvidence>? ActorFacts = null
 );
 
 /// <summary>An observed uncertainty requiring additional extraction or review.</summary>

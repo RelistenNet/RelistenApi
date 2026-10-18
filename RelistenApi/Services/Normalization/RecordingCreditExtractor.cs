@@ -14,16 +14,16 @@ namespace Relisten.Normalization;
 public sealed class RecordingCreditExtractor
 {
     /// <summary>Persist with extraction output so cached results can be invalidated when grammar changes.</summary>
-    public const string Version = "recording-credits-v2";
+    public const string Version = "recording-credits-v3/" + RecordingActorEvidenceExtractor.Version;
 
     private const string CreditVerbs =
         @"(?:recorded|taped|transferred|mastered|uploaded|collected|matrixed)";
     private static readonly Regex ExplicitCredit = new(
         @"\b(?<role>(?:renamed\s+and\s+tagged|(?:[\p{L}]+ly\s+)?"
             + CreditVerbs
-            + @"(?:\s+and\s+(?:[\p{L}]+ly\s+)?"
+            + @"(?:\s+(?:and|&)\s+(?:[\p{L}]+ly\s+)?"
             + CreditVerbs
-            + @")*)\s+by\b|(?:tapers?|transferrers?|recording\s+engineer|mastering\s+engineer|matrix\s+builder|uploader|collector|musicians?)\b(?=\s*:)|matrix\s+by\b)(?:\s*:\s*|\s+)(?<name>.+?)(?=;|$|\s+(?:(?:and\s+)?(?:[\p{L}]+ly\s+)?"
+            + @")*)\s+by\b|(?:tapers?|transferrers?|recording\s+engineer|mastering\s+engineer|matrix\s+builder|uploader|collector|musicians?)\b(?=\s*:)|matrix\s+by\b)(?:\s*:\s*|\s+)(?<name>.+?)(?=;(?![^()]*\))|$|\s+(?:(?:and\s+)?(?:[\p{L}]+ly\s+)?"
             + CreditVerbs
             + @"\s+by\b|taper\s*:|transferrer\s*:|(?:from|using|via|with)\b))",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
@@ -35,7 +35,7 @@ public sealed class RecordingCreditExtractor
         TimeSpan.FromSeconds(1)
     );
     private const string PersonalSuffix = @"(?:Jr|Sr|II|III|IV|V)\.?";
-    private static readonly Regex NameSeparator = new(
+    internal static readonly Regex NameSeparator = new(
         @"\s*(?:,(?!\s*"
             + PersonalSuffix
             + @"(?=\s*(?:$|[,;&/]|\band\b)))|;|\s+and\s+|&|\s+/\s+)\s*",
@@ -74,14 +74,18 @@ public sealed class RecordingCreditExtractor
             foreach (var line in RecordingText.Lines(field, value))
             {
                 // Bare structured names can contain punctuation; only role prose needs sentence splitting.
-                IEnumerable<string> clauses =
+                IEnumerable<(string Text, int Start)> clauses =
                     structuredRole is not null && !ExplicitCredit.IsMatch(line.Text)
-                        ? [line.Text]
+                        ? [(line.Text, 0)]
                         : CreditClauses(line.Text);
                 foreach (var clause in clauses)
                 {
-                    var creditLine = new RecordingText.Line(clause, line.Evidence);
-                    var explicitCredits = ExplicitCredit.Matches(clause);
+                    var creditLine = new RecordingText.Line(
+                        clause.Text,
+                        line.Evidence,
+                        clause.Start
+                    );
+                    var explicitCredits = ExplicitCredit.Matches(clause.Text);
                     ExtractNamedRoles(
                         creditLine,
                         explicitCredits,
@@ -97,7 +101,7 @@ public sealed class RecordingCreditExtractor
         return new RecordingCreditExtraction(credits, unresolved);
     }
 
-    private static IEnumerable<string> CreditClauses(string text)
+    private static IEnumerable<(string Text, int Start)> CreditClauses(string text)
     {
         var start = 0;
         foreach (Match boundary in Regex.Matches(text, @"\.\s+"))
@@ -106,17 +110,18 @@ public sealed class RecordingCreditExtractor
             if (
                 (word.Length == 1 && char.IsUpper(word[0]))
                 || Regex.IsMatch(word, @"^(?:Dr|Mr|Mrs|Ms|Prof|Jr|Sr|St)$", RegexOptions.IgnoreCase)
+                || Regex.IsMatch(text[..boundary.Index], @"\ba\.k\.a$", RegexOptions.IgnoreCase)
             )
             {
                 // Initials and common name abbreviations do not end a credit sentence.
                 continue;
             }
 
-            yield return text[start..boundary.Index];
+            yield return (text[start..boundary.Index], start);
             start = boundary.Index + boundary.Length;
         }
 
-        yield return text[start..];
+        yield return (text[start..], start);
     }
 
     private static void ExtractNamedRoles(
@@ -142,7 +147,8 @@ public sealed class RecordingCreditExtractor
                     continue;
                 }
 
-                foreach (var role in Roles(match.Groups["role"].Value))
+                var roles = Roles(match.Groups["role"].Value).ToArray();
+                foreach (var role in roles)
                 {
                     AddNames(
                         match.Groups["name"].Value,
@@ -150,7 +156,9 @@ public sealed class RecordingCreditExtractor
                         line.Evidence,
                         credits,
                         unresolved,
-                        match.Groups["role"].Value
+                        match.Groups["role"].Value,
+                        roles,
+                        line.VisibleStart + match.Groups["name"].Index
                     );
                 }
             }
@@ -164,7 +172,14 @@ public sealed class RecordingCreditExtractor
                 "",
                 RegexOptions.IgnoreCase
             );
-            AddNames(text, structuredRole.Value, line.Evidence, credits, unresolved);
+            AddNames(
+                text,
+                structuredRole.Value,
+                line.Evidence,
+                credits,
+                unresolved,
+                visibleStart: line.VisibleStart + line.Text.IndexOf(text, StringComparison.Ordinal)
+            );
         }
     }
 
@@ -205,7 +220,8 @@ public sealed class RecordingCreditExtractor
                     line.Evidence,
                     credits,
                     unresolved,
-                    operation.Trim()
+                    operation.Trim(),
+                    visibleStart: line.VisibleStart + actor.Groups["name"].Index
                 );
             }
         }
@@ -272,15 +288,21 @@ public sealed class RecordingCreditExtractor
         NormalizationTextEvidence evidence,
         List<CreditMention> credits,
         List<RecordingExtractionUnresolved> unresolved,
-        string? originalRole = null
+        string? originalRole = null,
+        IReadOnlyList<RecordingCreditRole>? jointRoles = null,
+        int visibleStart = 0
     )
     {
         var withoutDate = Regex.Replace(text, @"\s*\[\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}\]\s*$", "");
-        // Contact addresses qualify the credit's evidence, not the person's display name.
-        var withoutContact = Regex.Replace(withoutDate, @"\s*\([^)]*@[^)]*\)", "");
-        foreach (var part in NameSeparator.Split(withoutContact))
+        var actors = new RecordingActorEvidenceExtractor().Enrich(
+            withoutDate,
+            evidence,
+            jointRoles ?? [role],
+            visibleStart
+        );
+        foreach (var actor in actors)
         {
-            var name = part.Trim();
+            var name = actor.Name.Trim();
             // Prose sentence punctuation is not a name, but a credited suffix keeps its literal dot.
             if (originalRole is not null && !PersonalSuffixAtEnd.IsMatch(name))
             {
@@ -307,7 +329,10 @@ public sealed class RecordingCreditExtractor
             }
             else if (
                 !credits.Any(credit =>
-                    credit.Name == name && credit.Role == role && credit.Evidence == evidence
+                    credit.Name == name
+                    && credit.Role == role
+                    && credit.Evidence == evidence
+                    && credit.ActorFacts?.ReferenceUuid == actor.ActorFacts.ReferenceUuid
                 )
             )
             {
@@ -316,7 +341,8 @@ public sealed class RecordingCreditExtractor
                         name,
                         role,
                         evidence,
-                        role == RecordingCreditRole.Other ? originalRole : null
+                        role == RecordingCreditRole.Other ? originalRole : null,
+                        actor.ActorFacts
                     )
                 );
             }
@@ -341,7 +367,11 @@ internal static class RecordingText
         TimeSpan.FromSeconds(1)
     );
 
-    internal sealed record Line(string Text, NormalizationTextEvidence Evidence);
+    internal sealed record Line(
+        string Text,
+        NormalizationTextEvidence Evidence,
+        int VisibleStart = 0
+    );
 
     internal static IEnumerable<Line> Lines(string field, string raw)
     {

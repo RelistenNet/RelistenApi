@@ -18,7 +18,7 @@ public sealed partial class NormalizationRecordingExtractor(
 )
 {
     public const string Version =
-        "recording-extraction-v3/"
+        "recording-extraction-v4/"
         + RetainedRecordingCreditExtractor.Version
         + "/"
         + TrackTitleExtractor.Version
