@@ -153,3 +153,9 @@ python3 -B -O docs/research/2026-10-17-full-normalization/scale/scripts/test_cap
 The [read-only capture receipt](evidence/venue-context-local-v1.json) retains both completed replica queries and the metadata-only classification. All 67 venue metadata objects match their frozen originals. Of the 51 strict source slots, two provide authenticated source/show venue references and dates; the other 49 do not reference a selected venue. These are coverage results, not venue identity judgments.
 
 The IDs-only query finds 320 associations involving 122 distinct recordings and 105 shows. Two recordings already belong to the strict capture. The other 120 are absent from the authenticated development-only source index; this does not prove they are absent from the complete sampling frame or eligible for development. Their dates and raw payloads remain unopened by this supplement. Classify their original artist/family metadata and reservations before preparing an expanded raw query. The capture does not change any existing pair label or review.
+
+The subsequent [metadata-only projection](venue-context-metadata.md) classifies all
+122 recordings against the complete annotation selection: two already in the strict
+capture, two held out and 118 absent from that 6,000-source selection. It decodes no
+raw payload and changes no partitions. The 118 still need classification against
+the broader captured snapshot; the 93 source-free show associations remain separate.

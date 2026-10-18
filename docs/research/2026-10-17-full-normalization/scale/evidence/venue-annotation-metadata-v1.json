@@ -1,0 +1,71 @@
+{
+  "schema_version": "venue-annotation-metadata-local-v1",
+  "state": "completed_metadata_projection",
+  "projection_receipt": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/annotation-metadata-v1/receipt.json",
+    "bytes": 10646,
+    "sha256": "98514ac1541cf263e468df01b0cc2f4c78318cd3ecf7e289c0976a90a1f8bf6c"
+  },
+  "counts": {
+    "annotation_headers": 18628,
+    "discovered_sources": 122,
+    "show_only_associations_not_independently_classified": 93,
+    "source_classifications": {
+      "absent_annotation_source_frame": 118,
+      "frozen_development_pending_raw_id_verification": 2,
+      "original_heldout_partition": 2
+    },
+    "source_headers": 6000
+  },
+  "verification": {
+    "optimized_synthetic_tests_passed": 20,
+    "all_output_hashes_authenticated": true,
+    "development_candidates_already_in_strict_allowlist": 2,
+    "new_development_sources_authorized": 0,
+    "original_partitions_changed": false,
+    "raw_payloads_decoded": 0,
+    "production_queries": 0,
+    "paid_requests": 0
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/annotation-metadata-v1/receipt.json",
+      "bytes": 10646,
+      "sha256": "98514ac1541cf263e468df01b0cc2f4c78318cd3ecf7e289c0976a90a1f8bf6c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/annotation-metadata-v1/annotation-metadata.jsonl",
+      "bytes": 10713086,
+      "sha256": "02adb076aa6485ccb8f0bd5fad7f60581e45851fd1646448e27094aae3ac8a65"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/annotation-metadata-v1/source-classifications.jsonl",
+      "bytes": 90588,
+      "sha256": "c0d89a5961dacbe45a8b6a5752046deb54d1efb1e93ecad6d2e47686f90458a3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/context-preparation-v2/source-allowlist.json",
+      "bytes": 18913,
+      "sha256": "9993c411c1edd46edc05d146ffb44ca49af7d4596f65cc6189143f0fb0aa92d5"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/project_annotation_metadata.py",
+      "bytes": 19726,
+      "sha256": "972b937c8e0558ffa972aac779faaa4d69866af1d2d66185cd6d212a38234e77"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_project_annotation_metadata.py",
+      "bytes": 15591,
+      "sha256": "e56c97f19366ce2b4b4ef4c6967b8760cfc7c3a2c9f80b04a54c089ce7c637b9"
+    }
+  ],
+  "limits": [
+    "The adapter reads the six ordered metadata fields and stops immediately after the raw_record colon. Whole-file and physical-row byte hashes include undecoded payload bytes.",
+    "The 118 absent source UUIDs are absent from the 6000-source annotation selection. This does not establish absence from the broader 32593-source snapshot or nested source context.",
+    "Two original held-out recordings remain excluded. Original artist/family partitions and transitive duplicate groups are unchanged.",
+    "The two development candidates were already in the existing 51-source strict allowlist; this run supplies no additional eligible date context.",
+    "Original numeric source IDs are not in the projected prefix. This classification cannot authorize expanded raw capture or substitute for selected-row tuple verification.",
+    "The 93 source-free show associations remain separately counted and not independently classified.",
+    "Existing labels, reviews, baselines and matching policies are unchanged."
+  ]
+}
