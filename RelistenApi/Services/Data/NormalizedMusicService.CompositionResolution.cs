@@ -49,19 +49,57 @@ public sealed partial class NormalizedMusicService
                 var attempt = (
                     await resolutions.ReadForPublicationAsync(c, t, resolutionAttemptUuid, token)
                 )!;
-                var proof = attempt.Proposal!;
-                RequireCompositionProof(attempt, stage);
-                await CompositionResolutionPolicyService.RequireActiveAsync(
-                    c,
-                    t,
-                    proof.Policy!,
-                    token
-                );
-                await RequireCurrentAcceptedClaimAsync(c, t, proof.Claim, token);
-                await ValidateOwnership(c, t, stage.Ticket!.SubjectUuid, stage.Publication, token);
-                await ValidateDependencies(c, t, stage.Ticket, stage.Publication, token);
-                await RequireResolutionEvidence(stage, proof, token);
-                await ApplyCompositionResolutionStageAsync(c, t, stage, proof, workUuid, token);
+                if (stage.Kind == CompositionResolutionStageKind.AcknowledgeDecision)
+                {
+                    NormalizationCompositionResolutionStore.RequireNegativeDecision(attempt, stage);
+                    if (
+                        attempt.ProcessingVersion
+                        != NormalizationCompositionResolutionProcessor.Version
+                    )
+                    {
+                        throw new NormalizationConflictException(
+                            "The negative processor version changed."
+                        );
+                    }
+                    await CompositionResolutionPolicyService.RequireStateAsync(
+                        c,
+                        t,
+                        attempt.Preparation!.PolicyState!,
+                        token
+                    );
+                    await RequireCurrentAcceptedClaimAsync(c, t, attempt.Claim, token);
+                    // Work records these dependencies and this receipt atomically. The empty
+                    // publication leaves accepted music, review authority and epochs untouched.
+                    await ValidateOwnership(
+                        c,
+                        t,
+                        stage.Ticket!.SubjectUuid,
+                        stage.Publication,
+                        token
+                    );
+                }
+                else
+                {
+                    var proof = attempt.Proposal!;
+                    RequireCompositionProof(attempt, stage);
+                    await CompositionResolutionPolicyService.RequireActiveAsync(
+                        c,
+                        t,
+                        proof.Policy!,
+                        token
+                    );
+                    await RequireCurrentAcceptedClaimAsync(c, t, proof.Claim, token);
+                    await ValidateOwnership(
+                        c,
+                        t,
+                        stage.Ticket!.SubjectUuid,
+                        stage.Publication,
+                        token
+                    );
+                    await ValidateDependencies(c, t, stage.Ticket, stage.Publication, token);
+                    await RequireResolutionEvidence(stage, proof, token);
+                    await ApplyCompositionResolutionStageAsync(c, t, stage, proof, workUuid, token);
+                }
                 await resolutions.WriteStagePublishedAsync(
                     c,
                     t,
@@ -72,8 +110,11 @@ public sealed partial class NormalizedMusicService
                 );
             },
             ct,
-            candidateWriteScopes: requested.Kind == CompositionResolutionStageKind.CreateComposition
-                ? [NormalizationCandidateUniverseKey.Compositions]
+            candidateWriteScopes: requested.Kind
+                == CompositionResolutionStageKind.AcknowledgeDecision
+                    ? []
+                : requested.Kind == CompositionResolutionStageKind.CreateComposition
+                    ? [NormalizationCandidateUniverseKey.Compositions]
                 :
                 [
                     NormalizationCandidateUniverseKey.Compositions,

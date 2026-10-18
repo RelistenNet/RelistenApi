@@ -140,7 +140,11 @@ public sealed partial class NormalizationCompositionResolutionProcessor
             null,
             [],
             [],
-            attempt.Preparation!.Policy is { } policy ? [policy.OwnerObservation] : [],
+            attempt.Preparation!.PolicyState is { } state
+                ? [state.OwnerObservation]
+                : throw new NormalizationConflictException(
+                    "The original policy registry observation is missing."
+                ),
             []
         );
         return MergeCompositionReadSets([context.ReadSet, external]);
@@ -199,7 +203,7 @@ public sealed partial class NormalizationCompositionResolutionProcessor
         // Coordination keeps peers intact for this admission, but does not transfer their
         // keys to our contributor. Otherwise removing a peer could never remove its inputs.
         var decision = await ReadCompositionDecisionReadSetAsync(attempt, context, ct);
-        if (!creation)
+        if (stage.Kind == CompositionResolutionStageKind.Link)
         {
             var targetUuid = attempt.Proposal!.CompositionUuid!.Value;
             var targetOwner = context

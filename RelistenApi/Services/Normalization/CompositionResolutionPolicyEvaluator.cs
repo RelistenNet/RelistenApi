@@ -13,7 +13,7 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed class CompositionResolutionPolicyEvaluator
 {
-    public const string ProcessorVersion = "composition-resolution-processor-v1";
+    public const string ProcessorVersion = "composition-resolution-processor-v2";
     public const string FactsVersion = "composition-correspondence-facts-v1";
     public const string FixtureRuleId = "fixture-title-performer-recording-work-v1";
 

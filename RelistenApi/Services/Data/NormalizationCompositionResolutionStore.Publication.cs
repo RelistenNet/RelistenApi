@@ -63,7 +63,10 @@ public sealed partial class NormalizationCompositionResolutionStore
         if (
             attempt.Result != null
             || attempt.Preparation == null
-            || attempt.Proposal == null
+            || (
+                attempt.Proposal == null
+                && kind != CompositionResolutionStageKind.AcknowledgeDecision
+            )
             || stage.Kind != kind
             || stage.Ticket == null
             || stage.Receipt != null
@@ -116,6 +119,65 @@ public sealed partial class NormalizationCompositionResolutionStore
             );
         }
         return stage;
+    }
+
+    internal static void RequireNegativeDecision(
+        CompositionResolutionAttempt attempt,
+        CompositionResolutionStage stage
+    )
+    {
+        var prepared =
+            attempt.Preparation
+            ?? throw new NormalizationConflictException(
+                "A negative stage requires original preparation."
+            );
+        var expected = prepared.UnsupportedDecision;
+        if (expected == null && attempt.Proposal is { } proposal)
+        {
+            if (
+                proposal.AttemptUuid != attempt.AttemptUuid
+                || proposal.Claim != attempt.Claim
+                || proposal.ProcessorVersion != attempt.ProcessingVersion
+                || (
+                    proposal.Decision.Action == CompositionCorrespondenceAction.ProposeAcceptance
+                    && proposal.Policy != null
+                )
+            )
+            {
+                throw new NormalizationConflictException(
+                    "The saved correspondence does not support a negative decision."
+                );
+            }
+            expected = new(
+                proposal.Policy == null
+                    ? CompositionResolutionDisposition.Unresolved
+                    : CompositionResolutionDisposition.Review,
+                proposal.Decision.Reason
+            );
+        }
+        if (
+            expected == null
+            || expected.Disposition
+                is not (
+                    CompositionResolutionDisposition.Unresolved
+                    or CompositionResolutionDisposition.Review
+                )
+            || stage.Kind != CompositionResolutionStageKind.AcknowledgeDecision
+            || stage.NegativeDecision != expected
+            || prepared.PolicyState == null
+            || JsonSerializer.Serialize(prepared.Policy)
+                != JsonSerializer.Serialize(prepared.PolicyState.Active)
+            || stage.DerivedContext == null
+            || JsonSerializer.Serialize(stage.DerivedContext)
+                != JsonSerializer.Serialize(attempt.Proposal?.Context ?? prepared.Context)
+            || JsonSerializer.Serialize(stage.Publication)
+                != JsonSerializer.Serialize(new MusicPublication())
+        )
+        {
+            throw new NormalizationConflictException(
+                "A negative stage must acknowledge its original decision without accepted music changes."
+            );
+        }
     }
 
     internal async Task WriteStagePublishedAsync(

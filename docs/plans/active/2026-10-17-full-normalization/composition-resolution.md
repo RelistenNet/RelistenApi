@@ -9,7 +9,7 @@ This contract adds a durable, bounded MusicBrainz composition resolver. It prese
 - [x] Implement typed attempts, checkpoints, policy registration and source context.
 - [x] Implement bounded search/hydration and authenticated music publication.
 - [x] Independently review correctness and readability; address authenticated publication, contradictory recordings, peer ownership, reviewed corrections and source freshness findings.
-- [ ] Root runs formatting, build and public PostgreSQL/fake-HTTP contracts.
+- [x] Run formatting, build and public PostgreSQL/fake-HTTP contracts, including negative-decision refresh and missing-stamp repair.
 
 ## Existing boundaries
 
@@ -35,6 +35,23 @@ The immutable attempt includes the initial preparation and final expanded local 
 
 ## Freshness, recovery and authority
 
+Review and unresolved decisions publish an empty `AcknowledgeDecision` stage under
+the real repertoire owner before becoming terminal. The stage retains its original
+source, candidate, editorial and policy-registry observations and complete peer
+membership. It changes no accepted music or candidate epochs. The registry has a
+fixed empty Work bootstrap, so an inactive policy is observable before first
+activation. Later evidence, corrections or policy changes can make the owner
+pending; old terminal results remain historical and replay unchanged.
+
+Unsupported literal queries and bounded candidate coverage use the same negative
+stage without inventing truncated claims. Missing owner or catalog freshness stamps
+produce `Stale` without acknowledgment: repairing a registration alone need not
+advance an accepted-data epoch, and a fabricated stamp cannot cover that repair.
+Changed evidence requires a new attempt. The processor version advances for this
+lifecycle; unfinished older attempts stop explicitly, while terminal replay still
+precedes version checks. Existing JSON checkpoint tables need no additional
+migration. Older binaries must not process the new stage kind during rollback.
+
 The original readset includes every used Work dependency family. New page and lookup captures retain their original resource generations, including A→B→A changes. The repertoire owner's complete existing peer/baseline membership and current coordination clocks are captured with facts. Contributed admission preserves those memberships; unrelated keys remain owned by their peers and disappear when those peers are removed. Coordination does not claim to reinterpret their raw source documents. The resolver contributor owns only its actual decision inputs, candidate context, policy and target dependency. Admission and publication reject missing or conflicting stamps rather than dropping them. Candidate epochs fence newly arriving local rivals; owner observations fence editorial-only exclusions and policy changes. External search has no global index-generation clock. An evaluated positive rule may support corroborated correspondence despite that limitation, but cannot claim global absence from returned pages.
 
 Request UUID reuse with changed content conflicts. Exact terminal replay returns the saved outcome before current-version checks. Cancellation or a transient failure retains saved preparation, child commands and completed stages. No HTTP runs in a database transaction. Stage publication, its durable receipt and accepted rows commit together; callback failure rolls them all back. A failed or stale attempt does not delete an earlier accepted link or source extraction. Reviewed corrections retain their authority.
@@ -55,4 +72,4 @@ The resolver uses the existing Work transaction and MusicBrainz command lifecycl
 
 ## Outcomes and remaining work
 
-The implementation builds and passes 256 tests across composition, MusicBrainz, music, Work ownership and contributor compatibility, including all 43 new resolver/rule cases. Independent correctness and readability reviews are clean. The combined checkout also passes 1,827 normalization tests. The next full solution suite remains a separate check. Independently labeled cross-artist composition examples, evaluated positive rules, live successful search-profile verification and policy activation remain required before automatic composition matching or backfill. They are evaluation and rollout work, not a permanent requirement to leave no-MBID claims unresolved.
+The implementation builds and passes the combined 179-case focused run across composition, people and venue resolution, including negative refresh, missing-stamp repair, peer ownership, interrupted publication and historical replay. Fresh correctness and readability reviews are complete. See the [overview](README.md#progress) for current broader verification. Independently labeled cross-artist composition examples, evaluated positive rules, live successful search-profile verification and policy activation remain required before automatic composition matching or backfill. They are evaluation and rollout work, not a permanent requirement to leave no-MBID claims unresolved.

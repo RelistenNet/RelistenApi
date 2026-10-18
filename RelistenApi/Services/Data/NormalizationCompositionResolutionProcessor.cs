@@ -123,6 +123,34 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
                     ct
                 );
             }
+            // Resume an admitted negative stage before acquisition. Unsupported local inputs
+            // have no network phase, but still retain the same interrupted-stage protocol.
+            var pending = attempt.Stages.FirstOrDefault(stage => stage.Receipt == null);
+            if (pending != null)
+            {
+                return await AdvanceStageAsync(attempt, pending, ct);
+            }
+            var acknowledged = attempt.Stages.SingleOrDefault(stage =>
+                stage.Kind == CompositionResolutionStageKind.AcknowledgeDecision
+            );
+            if (acknowledged != null)
+            {
+                return await store.CompleteAsync(
+                    attempt,
+                    acknowledged.NegativeDecision!.Disposition,
+                    acknowledged.NegativeDecision.Reason,
+                    ct
+                );
+            }
+            if (attempt.Preparation.UnsupportedDecision is { } unsupported)
+            {
+                return await PrepareNegativeStageAsync(
+                    attempt,
+                    attempt.Preparation.Context,
+                    unsupported,
+                    ct
+                );
+            }
             if (!AcquisitionComplete(attempt))
             {
                 return await AdvanceAcquisitionAsync(attempt, ct);
@@ -130,11 +158,6 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
             if (attempt.Proposal == null)
             {
                 return await EvaluateAsync(attempt, ct);
-            }
-            var pending = attempt.Stages.FirstOrDefault(stage => stage.Receipt == null);
-            if (pending != null)
-            {
-                return await AdvanceStageAsync(attempt, pending, ct);
             }
             if (attempt.Stages.Any(stage => stage.Kind == CompositionResolutionStageKind.Link))
             {
@@ -166,16 +189,32 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
     )
     {
         var context = await candidates.ReadCompositionResolutionContextAsync(attempt.Claim, ct: ct);
+        var policyState = await policies.ReadStateAsync(ct);
         if (context.LocalTitle == null || context.Issues.Count != 0 || !context.Candidates.Complete)
         {
-            return await store.CompleteAsync(
-                attempt,
-                CompositionResolutionDisposition.Unresolved,
-                "unsupported_or_incomplete_local_claim",
+            // Bounded or unsupported evidence is a durable observation, not an absence of
+            // work. Its real owner and candidate/policy clocks must wake a later attempt.
+            return await store.SavePreparationAsync(
+                attempt.AttemptUuid,
+                new(
+                    context,
+                    new(
+                        MusicBrainzCandidateQueryBuilder.Version,
+                        new(MusicBrainzLookupKind.Work, context.LocalTitle, []),
+                        [],
+                        []
+                    ),
+                    policyState.Active,
+                    policyState,
+                    new(
+                        CompositionResolutionDisposition.Unresolved,
+                        "unsupported_or_incomplete_local_claim"
+                    )
+                ),
                 ct
             );
         }
-        var policy = await policies.ReadActiveAsync(ct);
+        var policy = policyState.Active;
         var seed = new MusicBrainzSearchSeed(MusicBrainzLookupKind.Work, context.LocalTitle, []);
         var variants = MusicBrainzCandidateQueryBuilder.BuildVariants(seed);
         var queries = variants
@@ -206,7 +245,7 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
         }
         return await store.SavePreparationAsync(
             attempt.AttemptUuid,
-            new(context, variants with { Queries = queries.ToArray() }, policy),
+            new(context, variants with { Queries = queries.ToArray() }, policy, policyState),
             ct
         );
     }
@@ -225,22 +264,12 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
                 true
             ))
             .ToArray();
-        if (keys.Length > 16)
-        {
-            return await store.CompleteAsync(
-                attempt,
-                CompositionResolutionDisposition.Review,
-                "local_work_identifier_limit",
-                ct
-            );
-        }
-        // Selection happens only after hydration. This expanded local pool is the first pool
-        // used to choose a target; the earlier preparation remains available as provenance.
-        var context = await candidates.ReadCompositionResolutionContextAsync(
-            attempt.Claim,
-            keys,
-            ct
-        );
+        // The bound is explicit coverage. Preserve the original local snapshot rather than
+        // passing a truncated external identifier list as a complete expanded candidate query.
+        var context =
+            keys.Length > 16
+                ? attempt.Preparation!.Context
+                : await candidates.ReadCompositionResolutionContextAsync(attempt.Claim, keys, ct);
         RequireSameAcceptedClaim(attempt.Preparation!.Context, context);
         facts = facts with
         {
@@ -259,6 +288,16 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
                     []
                 )
                 : new CompositionResolutionPolicyEvaluator().Evaluate(facts, policy.Policy);
+        if (keys.Length > 16)
+        {
+            decision = new(
+                CompositionCorrespondenceAction.NeedsReview,
+                null,
+                "",
+                "local_work_identifier_limit",
+                []
+            );
+        }
         var target = decision.ExternalWorkMbid is { } mbid
             ? ExistingComposition(context, mbid)
             : null;
@@ -325,12 +364,15 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
             || proposal.Policy == null
         )
         {
-            return await store.CompleteAsync(
+            return await PrepareNegativeStageAsync(
                 attempt,
-                proposal.Policy == null
-                    ? CompositionResolutionDisposition.Unresolved
-                    : CompositionResolutionDisposition.Review,
-                proposal.Decision.Reason,
+                proposal.Context!,
+                new(
+                    proposal.Policy == null
+                        ? CompositionResolutionDisposition.Unresolved
+                        : CompositionResolutionDisposition.Review,
+                    proposal.Decision.Reason
+                ),
                 ct
             );
         }
@@ -421,6 +463,59 @@ public sealed partial class NormalizationCompositionResolutionProcessor(
             DerivedContext: context
         );
         return await store.SaveStageAsync(attempt.AttemptUuid, stage, ct);
+    }
+
+    private async Task<CompositionResolutionAttempt> PrepareNegativeStageAsync(
+        CompositionResolutionAttempt attempt,
+        CompositionResolutionContext context,
+        CompositionResolutionNegativeDecision decision,
+        CancellationToken ct
+    )
+    {
+        if (
+            context.Candidates.Issues.Any(issue =>
+                issue.Kind
+                    is CandidateFactsIssueKind.MissingOwner
+                        or CandidateFactsIssueKind.MissingCatalogClock
+            )
+        )
+        {
+            // Registering a missing owner or restoring its catalog clock need not change an
+            // accepted candidate row. An epoch cannot watch the missing stamp on our behalf.
+            return await store.CompleteAsync(
+                attempt,
+                CompositionResolutionDisposition.Stale,
+                "context_freshness_unavailable",
+                ct
+            );
+        }
+        if (
+            context.OwnerMembership?.Owner == null
+            || context.OwnerBindings == null
+            || context.Issues.Contains("owner_input_head_missing")
+            || attempt.Preparation!.PolicyState == null
+        )
+        {
+            return await store.CompleteAsync(
+                attempt,
+                CompositionResolutionDisposition.Stale,
+                "negative_decision_context_missing",
+                ct
+            );
+        }
+        var readSet = await ReadExternalReadSetAsync(attempt, context, ct);
+        return await store.SaveStageAsync(
+            attempt.AttemptUuid,
+            new(
+                StableResolutionUuid(attempt.AttemptUuid, "acknowledge-decision"),
+                CompositionResolutionStageKind.AcknowledgeDecision,
+                new(),
+                readSet,
+                DerivedContext: context,
+                NegativeDecision: decision
+            ),
+            ct
+        );
     }
 
     private async Task<CompositionResolutionAttempt> AdvanceStageAsync(

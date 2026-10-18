@@ -274,7 +274,7 @@ public sealed class TestNormalizationCompositionResolution
                 CompositionResolutionDisposition.Review,
                 CompositionResolutionDisposition.Unresolved
             );
-        resolved.Stages.Should().BeEmpty();
+        RequireAcknowledgedNegative(resolved);
         (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
             .Should()
             .BeEmpty();
@@ -336,7 +336,7 @@ public sealed class TestNormalizationCompositionResolution
         {
             rivalTarget.GetProperty("id").GetString().Should().Be("invalid-work-id");
         }
-        resolved.Stages.Should().BeEmpty();
+        RequireAcknowledgedNegative(resolved);
         (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
             .Should()
             .BeEmpty();
@@ -356,10 +356,302 @@ public sealed class TestNormalizationCompositionResolution
 
         resolved.Result!.Disposition.Should().NotBe(CompositionResolutionDisposition.Applied);
         resolved.Preparation!.Policy.Should().BeNull();
-        resolved.Stages.Should().BeEmpty();
+        RequireAcknowledgedNegative(resolved);
         (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
             .Should()
             .BeEmpty();
+    }
+
+    [Test]
+    public async Task AnInactivePolicyDecisionBecomesPendingWhenTheFirstPolicyIsActivated()
+    {
+        var source = await Claim();
+        var upstream = new Upstream(source);
+        var processor = Processor(upstream);
+        var attempt = await Finish(processor, source.Reference, Guid.NewGuid(), upstream);
+        RequireAcknowledgedNegative(attempt);
+        var stage = attempt.Stages.Single();
+        var subject = new NormalizationSubjectKey("songs", "artist_repertoire", source.ArtistUuid);
+        var owner = (await fixture.Work.GetSubjectAsync(subject))!;
+        (await fixture.Work.GetPendingSubjectsAsync(limit: 1000))
+            .Should()
+            .NotContain(value => value.SubjectUuid == owner.SubjectUuid);
+        attempt.Preparation!.PolicyState!.Active.Should().BeNull();
+        stage
+            .Ticket!.OwnerObservations.Should()
+            .Contain(attempt.Preparation.PolicyState.OwnerObservation);
+        var original = JsonSerializer.Serialize(attempt);
+        var calls = upstream.Calls;
+
+        await ActivatePolicy();
+
+        (await fixture.Work.GetPendingSubjectsAsync(limit: 1000))
+            .Should()
+            .Contain(value => value.SubjectUuid == owner.SubjectUuid);
+        var replay = await processor.ResolveRepertoireAsync(attempt.AttemptUuid, source.Reference);
+        replay.Result!.Replayed.Should().BeTrue();
+        JsonSerializer
+            .Serialize(replay with { Result = replay.Result with { Replayed = false } })
+            .Should()
+            .Be(original);
+        upstream.Calls.Should().Be(calls);
+        var retryUuid = Guid.NewGuid();
+        await processor.RetryAsync(retryUuid, attempt.AttemptUuid);
+        var retried = await Finish(processor, source.Reference, retryUuid, upstream);
+        retried
+            .Result!.Disposition.Should()
+            .Be(CompositionResolutionDisposition.Applied, Audit(retried));
+        retried.PreviousAttemptUuid.Should().Be(attempt.AttemptUuid);
+    }
+
+    [TestCase("candidate")]
+    [TestCase("owner_editorial")]
+    [TestCase("source")]
+    public async Task NegativeDecisionsWatchChangesWithoutChangingAcceptedMusic(string change)
+    {
+        var source = await Claim();
+        await ActivatePolicy();
+        var upstream = new Upstream(source, "title_only");
+        var processor = Processor(upstream);
+        var contextReader = new NormalizationCandidateService(fixture.Db);
+        var before = await contextReader.ReadCompositionResolutionContextAsync(source.Reference);
+        var acceptedBefore = await music.GetRepertoireAsync(source.Reference.RepertoireSongUuid);
+        var attempt = await Finish(processor, source.Reference, Guid.NewGuid(), upstream);
+        RequireAcknowledgedNegative(attempt);
+        var after = await contextReader.ReadCompositionResolutionContextAsync(source.Reference);
+        after.ReadSet.CandidateUniverses.Should().BeEquivalentTo(before.ReadSet.CandidateUniverses);
+        (await music.GetRepertoireAsync(source.Reference.RepertoireSongUuid))
+            .Should()
+            .BeEquivalentTo(acceptedBefore);
+        var owner = attempt.Stages.Single().Ticket!.SubjectUuid;
+        (await fixture.Work.GetPendingSubjectsAsync(limit: 1000))
+            .Should()
+            .NotContain(value => value.SubjectUuid == owner);
+
+        if (change == "candidate")
+        {
+            await Composition(source.Title);
+        }
+        else if (change == "owner_editorial")
+        {
+            await music.ApplyDecisionAsync(
+                Guid.NewGuid(),
+                owner,
+                (await fixture.Work.GetSubjectAsync(owner))!.EditorialRevision,
+                "reject",
+                new()
+                {
+                    RepertoireSongs =
+                    [
+                        acceptedBefore!.Value with
+                        {
+                            ExpectedRevision = acceptedBefore.Revision,
+                        },
+                    ],
+                },
+                "Independent review after an unresolved match",
+                Operator
+            );
+        }
+        else
+        {
+            await AdvanceCapturedInput(
+                attempt
+                    .Stages.Single()
+                    .ReadSet.Inputs.Single(input =>
+                        input.RevisionUuid == source.Input.Reference.InputRevisionUuid
+                    )
+            );
+        }
+
+        (await fixture.Work.GetPendingSubjectsAsync(limit: 1000))
+            .Should()
+            .Contain(value => value.SubjectUuid == owner);
+        var replay = await processor.ResolveRepertoireAsync(attempt.AttemptUuid, source.Reference);
+        replay.Result!.Replayed.Should().BeTrue();
+        (replay.Result with { Replayed = false }).Should().BeEquivalentTo(attempt.Result);
+    }
+
+    [Test]
+    public async Task UnsupportedLiteralSearchSeedsStillEnrollTheirRealRepertoireOwner()
+    {
+        var source = await Claim(literalTitle: false);
+        var upstream = new Upstream(source);
+        var processor = Processor(upstream);
+        var attempt = await Finish(processor, source.Reference, Guid.NewGuid(), upstream);
+
+        attempt.Result!.Reason.Should().Be("unsupported_or_incomplete_local_claim");
+        attempt.Proposal.Should().BeNull();
+        RequireAcknowledgedNegative(attempt);
+        upstream.Calls.Should().Be(0);
+        var stage = attempt.Stages.Single();
+        stage
+            .Ticket!.SubjectUuid.Should()
+            .Be(
+                (
+                    await fixture.Work.GetSubjectAsync(
+                        new NormalizationSubjectKey("songs", "artist_repertoire", source.ArtistUuid)
+                    )
+                )!.SubjectUuid
+            );
+        await AdvanceCapturedInput(
+            stage.ReadSet.Inputs.Single(input =>
+                input.RevisionUuid == source.Input.Reference.InputRevisionUuid
+            )
+        );
+        (await fixture.Work.GetPendingSubjectsAsync(limit: 1000))
+            .Should()
+            .Contain(value => value.SubjectUuid == stage.Ticket.SubjectUuid);
+        (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
+            .Should()
+            .BeEmpty();
+    }
+
+    [TestCase(CandidateFactsIssueKind.MissingOwner)]
+    [TestCase(CandidateFactsIssueKind.MissingCatalogClock)]
+    public async Task MissingFreshnessStampsCannotBecomeAcknowledgedNegativeDecisions(
+        CandidateFactsIssueKind missing
+    )
+    {
+        var source = await Claim();
+        var candidate = await Composition(source.Title);
+        var orphanedEntity = Guid.NewGuid();
+        var originalClock = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<long>(
+                "SELECT generation FROM normalization.catalog_artist_revisions WHERE artist_uuid=@artist",
+                new { artist = source.ArtistUuid }
+            )
+        );
+        var contextReader = new NormalizationCandidateService(fixture.Db);
+        var before = await contextReader.ReadCompositionResolutionContextAsync(source.Reference);
+        var upstream = new Upstream(source);
+        var processor = Processor(upstream);
+        CompositionResolutionAttempt stale;
+
+        // These mutations reproduce historical registration damage while preserving the
+        // accepted source and candidate rows. A repair alone does not advance their epochs.
+        if (missing == CandidateFactsIssueKind.MissingOwner)
+        {
+            await fixture.Db.WithWriteConnection(c =>
+                c.ExecuteAsync(
+                    "UPDATE normalization.work_subjects SET subject_uuid=@orphanedEntity WHERE domain='compositions' AND subject_kind='composition' AND subject_uuid=@candidate",
+                    new { candidate, orphanedEntity }
+                )
+            );
+        }
+        else
+        {
+            await fixture.Db.WithWriteConnection(c =>
+                c.ExecuteAsync(
+                    "DELETE FROM normalization.catalog_artist_revisions WHERE artist_uuid=@artist",
+                    new { artist = source.ArtistUuid }
+                )
+            );
+        }
+        try
+        {
+            var damaged = await contextReader.ReadCompositionResolutionContextAsync(
+                source.Reference
+            );
+            damaged.Candidates.Issues.Should().Contain(issue => issue.Kind == missing);
+            stale = await Finish(processor, source.Reference, Guid.NewGuid(), upstream);
+            stale
+                .Result!.Disposition.Should()
+                .Be(CompositionResolutionDisposition.Stale, Audit(stale));
+            stale.Result.Reason.Should().Be("context_freshness_unavailable");
+            stale.Stages.Should().BeEmpty();
+            upstream.Calls.Should().Be(0);
+        }
+        finally
+        {
+            if (missing == CandidateFactsIssueKind.MissingOwner)
+            {
+                await fixture.Db.WithWriteConnection(c =>
+                    c.ExecuteAsync(
+                        "UPDATE normalization.work_subjects SET subject_uuid=@candidate WHERE domain='compositions' AND subject_kind='composition' AND subject_uuid=@orphanedEntity",
+                        new { candidate, orphanedEntity }
+                    )
+                );
+            }
+            else
+            {
+                await fixture.Db.WithWriteConnection(c =>
+                    c.ExecuteAsync(
+                        "INSERT INTO normalization.catalog_artist_revisions(artist_uuid,generation) VALUES(@artist,@originalClock)",
+                        new { artist = source.ArtistUuid, originalClock }
+                    )
+                );
+            }
+        }
+
+        var repaired = await contextReader.ReadCompositionResolutionContextAsync(source.Reference);
+        repaired
+            .ReadSet.CandidateUniverses.Should()
+            .BeEquivalentTo(before.ReadSet.CandidateUniverses);
+        repaired.Candidates.Issues.Should().NotContain(issue => issue.Kind == missing);
+        var replay = await processor.ResolveRepertoireAsync(stale.AttemptUuid, source.Reference);
+        replay.Result!.Replayed.Should().BeTrue();
+        replay.Stages.Should().BeEmpty();
+        var retryUuid = Guid.NewGuid();
+        await processor.RetryAsync(retryUuid, stale.AttemptUuid);
+        var retry = await Finish(processor, source.Reference, retryUuid, upstream);
+        RequireAcknowledgedNegative(retry);
+        (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
+            .Should()
+            .BeEmpty();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task InterruptedNegativeStagesRecoverOrRejectTheirOriginalClock(
+        bool activatePolicy
+    )
+    {
+        var source = await Claim();
+        var upstream = new Upstream(source);
+        var processor = Processor(upstream);
+        var staged = await UntilAdmitted(processor, source.Reference, Guid.NewGuid(), upstream);
+        var stage = staged.Stages.Single();
+        stage.Kind.Should().Be(CompositionResolutionStageKind.AcknowledgeDecision);
+        var calls = upstream.Calls;
+        if (activatePolicy)
+        {
+            await ActivatePolicy();
+        }
+        var result = await Finish(processor, source.Reference, staged.AttemptUuid, upstream);
+        result
+            .Result!.Disposition.Should()
+            .Be(
+                activatePolicy
+                    ? CompositionResolutionDisposition.Stale
+                    : CompositionResolutionDisposition.Unresolved,
+                Audit(result)
+            );
+        upstream.Calls.Should().Be(calls);
+        result.Preparation.Should().BeEquivalentTo(staged.Preparation);
+        if (!activatePolicy)
+        {
+            RequireAcknowledgedNegative(result);
+            var replay = await music.PublishCompositionResolutionAsync(
+                stage.WorkUuid,
+                result.AttemptUuid
+            );
+            replay.Status.Should().Be(NormalizationPublicationStatus.Published);
+            replay.Replayed.Should().BeTrue();
+        }
+        (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
+            .Should()
+            .BeEmpty();
+    }
+
+    private static void RequireAcknowledgedNegative(CompositionResolutionAttempt attempt)
+    {
+        var stage = attempt.Stages.Should().ContainSingle().Subject;
+        stage.Kind.Should().Be(CompositionResolutionStageKind.AcknowledgeDecision);
+        stage.NegativeDecision!.Disposition.Should().Be(attempt.Result!.Disposition);
+        stage.NegativeDecision.Reason.Should().Be(attempt.Result.Reason);
+        stage.Receipt!.Status.Should().Be(NormalizationPublicationStatus.Published);
+        stage.Publication.Should().BeEquivalentTo(new MusicPublication());
     }
 
     [Test]
@@ -802,8 +1094,11 @@ public sealed class TestNormalizationCompositionResolution
             .Be(accepted.Value.EvaluatedCorrespondenceReceiptUuid!.Value);
     }
 
-    [Test]
-    public async Task RemovingAnUnrelatedPeerRemovesItsResourceAndCatalogKeyFromTheOwnerUnion()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RemovingAnUnrelatedPeerRemovesItsResourceAndCatalogKeyFromTheOwnerUnion(
+        bool negative
+    )
     {
         var source = await Claim();
         var subject = new NormalizationSubjectKey("songs", "artist_repertoire", source.ArtistUuid);
@@ -838,7 +1133,7 @@ public sealed class TestNormalizationCompositionResolution
             expectedInputRevisions: [new(peerInput.Reference.InputRevisionUuid, peerInput.Resource)]
         );
         await ActivatePolicy();
-        var upstream = new Upstream(source);
+        var upstream = new Upstream(source, negative ? "title_only" : null);
         var resolved = await Finish(
             Processor(upstream),
             source.Reference,
@@ -847,9 +1142,19 @@ public sealed class TestNormalizationCompositionResolution
         );
         resolved
             .Result!.Disposition.Should()
-            .Be(CompositionResolutionDisposition.Applied, Audit(resolved));
+            .Be(
+                negative
+                    ? CompositionResolutionDisposition.Review
+                    : CompositionResolutionDisposition.Applied,
+                Audit(resolved)
+            );
         var linkStage = resolved.Stages.Single(stage =>
-            stage.Kind == CompositionResolutionStageKind.Link
+            stage.Kind
+            == (
+                negative
+                    ? CompositionResolutionStageKind.AcknowledgeDecision
+                    : CompositionResolutionStageKind.Link
+            )
         );
         var before = await fixture.Work.GetInputContributionsAsync(subject);
         var resolverContributor = before.Contributions.Single(contribution =>
@@ -963,7 +1268,7 @@ public sealed class TestNormalizationCompositionResolution
                 .Result!.Disposition.Should()
                 .Be(CompositionResolutionDisposition.Review, Audit(resolved));
             resolved.Proposal!.Decision.Reason.Should().Be("reviewed_music_exclusion");
-            resolved.Stages.Should().BeEmpty();
+            RequireAcknowledgedNegative(resolved);
             (await music.GetCompositionLinksAsync(source.Reference.RepertoireSongUuid))
                 .Should()
                 .BeEmpty();
@@ -987,7 +1292,6 @@ public sealed class TestNormalizationCompositionResolution
                 new { uuid = input.ResourceUuid }
             )
         );
-        resource.Provider.Should().Be("musicbrainz.org");
         await new NormalizationEvidenceService(fixture.Db).CaptureInputAsync(
             new(
                 Guid.NewGuid(),
@@ -1088,7 +1392,7 @@ public sealed class TestNormalizationCompositionResolution
             )
         );
 
-    private async Task<ClaimFixture> Claim()
+    private async Task<ClaimFixture> Claim(bool literalTitle = true)
     {
         var source = await fixture.Source();
         var artistMbid = Guid.NewGuid();
@@ -1099,7 +1403,10 @@ public sealed class TestNormalizationCompositionResolution
             )
         );
         var title = "Composition fixture " + Guid.NewGuid().ToString("N");
-        var input = await fixture.Capture(title, "songs");
+        var input = await fixture.Capture(
+            literalTitle ? title : "Original title before normalization",
+            "songs"
+        );
         var song = new RepertoireSongChange
         {
             Uuid = Guid.NewGuid(),
@@ -1135,7 +1442,7 @@ public sealed class TestNormalizationCompositionResolution
         );
     }
 
-    private async Task Composition(string title)
+    private async Task<Guid> Composition(string title)
     {
         var input = await fixture.Capture(title, "compositions");
         var uuid = Guid.NewGuid();
@@ -1161,6 +1468,7 @@ public sealed class TestNormalizationCompositionResolution
                 ],
             }
         );
+        return uuid;
     }
 
     private async Task ActivatePolicy()

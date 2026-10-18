@@ -25,6 +25,7 @@ public sealed class CompositionResolutionPolicyService(
 )
 {
     public const string RegistryVersion = "composition-acceptance-registry-v1";
+    private static readonly Guid BootstrapWorkUuid = new("b754063e-db02-4969-980b-ad7653e203e4");
     public static readonly Guid PolicyKeyUuid = new("4424ebda-f5b0-40d0-bc35-1509c19bc441");
     public static NormalizationSubjectKey Owner =>
         new("compositions", "acceptance_policy", PolicyKeyUuid);
@@ -114,7 +115,8 @@ public sealed class CompositionResolutionPolicyService(
 
     /// <summary>
     /// Reads the active artifact and its original owner observation together on the primary.
-    /// Null means no active policy. Register Owner explicitly through Work before first review.
+    /// Null means no active policy. Use ReadStateAsync when an inactive decision must watch
+    /// the registry owner; this read alone creates no owner or acceptance authority.
     /// </summary>
     public Task<ActiveCompositionAcceptancePolicy?> ReadActiveAsync(
         CancellationToken cancellationToken = default
@@ -141,6 +143,119 @@ public sealed class CompositionResolutionPolicyService(
             await t.CommitAsync(cancellationToken);
             return active;
         });
+
+    /// <summary>
+    /// Establishes an empty registry Work owner once, then reads that owner and the nullable
+    /// active policy together. This gives inactive decisions a real dependency to watch.
+    /// Bootstrap never activates a policy or reinstalls a changed owner configuration.
+    /// </summary>
+    public async Task<CompositionAcceptancePolicyState> ReadStateAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await work.BeginWorkAsync(
+            BootstrapWorkUuid,
+            Owner,
+            RegistryVersion,
+            [],
+            [],
+            cancellationToken: cancellationToken
+        );
+        await work.TryPublishAsync(
+            BootstrapWorkUuid,
+            (_, _, _) => Task.CompletedTask,
+            cancellationToken
+        );
+
+        return await db.WithWriteConnection(async connection =>
+        {
+            var c = (NpgsqlConnection)connection;
+            await using var t = await c.BeginTransactionAsync(
+                IsolationLevel.RepeatableRead,
+                cancellationToken
+            );
+            await c.ExecuteAsync(
+                new CommandDefinition(
+                    "SET TRANSACTION READ ONLY",
+                    transaction: t,
+                    cancellationToken: cancellationToken
+                )
+            );
+            var state = await ReadStateAsync(c, t, cancellationToken);
+            if (state.Active is { } active)
+            {
+                RequireFixtureHost(c, active.Policy, allowFixturePolicies);
+            }
+            await t.CommitAsync(cancellationToken);
+            return state;
+        });
+    }
+
+    /// <summary>Authenticate positive or negative registry observations under Work's owner locks.</summary>
+    internal static async Task RequireStateAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        CompositionAcceptancePolicyState expected,
+        CancellationToken ct
+    )
+    {
+        var current = await ReadStateAsync(c, t, ct);
+        if (JsonSerializer.Serialize(current) != JsonSerializer.Serialize(expected))
+        {
+            throw new NormalizationConflictException(
+                "The prepared composition policy state changed."
+            );
+        }
+        if (current.Active is { } active)
+        {
+            // A negative receipt can observe an unsupported historical artifact. This check
+            // authenticates its identity; it does not grant that artifact acceptance authority.
+            Validate(active.Policy, requireCurrentVersions: false);
+            RequireFixtureHost(c, active.Policy, allowFixture: true);
+        }
+    }
+
+    private static async Task<CompositionAcceptancePolicyState> ReadStateAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        CancellationToken ct
+    )
+    {
+        var owner = await c.QuerySingleOrDefaultAsync<PolicyOwnerRow>(
+            new CommandDefinition(
+                """
+                SELECT uuid AS "SubjectUuid",desired_generation AS "DesiredGeneration",
+                    editorial_revision AS "EditorialRevision",published_work_uuid AS "PublishedWorkUuid",
+                    policy_version AS "PolicyVersion"
+                FROM normalization.work_subjects
+                WHERE domain='compositions' AND subject_kind='acceptance_policy' AND subject_uuid=@PolicyKeyUuid
+                """,
+                new { PolicyKeyUuid },
+                t,
+                cancellationToken: ct
+            )
+        );
+        if (owner == null || owner.PolicyVersion != RegistryVersion)
+        {
+            throw new NormalizationConflictException(
+                "The composition registry requires its supported Work owner configuration."
+            );
+        }
+        var observation = new NormalizationSubjectObservation(
+            owner.SubjectUuid,
+            owner.DesiredGeneration,
+            owner.EditorialRevision,
+            owner.PublishedWorkUuid
+        );
+        var active = await ReadActiveAsync(c, t, ct);
+        if (active != null && active.OwnerObservation != observation)
+        {
+            throw new NormalizationConflictException(
+                "The active policy and registry must share one original owner observation."
+            );
+        }
+        return new(active, observation);
+    }
 
     /// <summary>
     /// Activates, replaces or revokes a registered artifact under a reviewed policy owner.
@@ -407,6 +522,14 @@ public sealed class CompositionResolutionPolicyService(
         Convert
             .ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))
             .ToLowerInvariant();
+
+    private sealed record PolicyOwnerRow(
+        Guid SubjectUuid,
+        long DesiredGeneration,
+        long EditorialRevision,
+        Guid? PublishedWorkUuid,
+        string PolicyVersion
+    );
 
     private class PolicyRow
     {

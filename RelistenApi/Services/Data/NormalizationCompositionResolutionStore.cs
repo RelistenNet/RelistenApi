@@ -319,10 +319,16 @@ public sealed partial class NormalizationCompositionResolutionStore(DbService db
                     return current;
                 }
                 if (
-                    current.Proposal == null
+                    current.Preparation == null
+                    || (
+                        current.Proposal == null
+                        && frozen.Kind != CompositionResolutionStageKind.AcknowledgeDecision
+                    )
                     || current.Stages.Count >= 2
                     || current.Stages.Any(value =>
-                        value.Kind == CompositionResolutionStageKind.Link
+                        value.Kind
+                            is CompositionResolutionStageKind.Link
+                                or CompositionResolutionStageKind.AcknowledgeDecision
                     )
                     || current.Stages.Any(value => value.Kind == frozen.Kind)
                     || current.Stages.Any(value => value.Receipt == null)
@@ -330,6 +336,16 @@ public sealed partial class NormalizationCompositionResolutionStore(DbService db
                 {
                     throw new NormalizationConflictException(
                         "Publication requires a proposal and completion of the preceding distinct owner stage."
+                    );
+                }
+                if (frozen.Kind == CompositionResolutionStageKind.AcknowledgeDecision)
+                {
+                    RequireNegativeDecision(current, frozen);
+                }
+                else if (frozen.NegativeDecision != null)
+                {
+                    throw new NormalizationConflictException(
+                        "Accepted stages cannot carry a negative decision."
                     );
                 }
                 await c.ExecuteAsync(

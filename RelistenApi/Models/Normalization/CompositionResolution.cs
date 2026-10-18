@@ -46,11 +46,25 @@ public sealed record CompositionResolutionContext(
     IReadOnlyList<NormalizationBindingInputReference>? OwnerInputReferences = null
 );
 
-/// <summary>The source context and active evaluated policy are frozen before acquisition begins.</summary>
+/// <summary>The registry owner is observable before its first policy activation.</summary>
+public sealed record CompositionAcceptancePolicyState(
+    ActiveCompositionAcceptancePolicy? Active,
+    NormalizationSubjectObservation OwnerObservation
+);
+
+/// <summary>An unresolved decision acknowledges dependencies without granting music-write authority.</summary>
+public sealed record CompositionResolutionNegativeDecision(
+    CompositionResolutionDisposition Disposition,
+    string Reason
+);
+
+/// <summary>The source context and policy registry state are frozen before acquisition begins.</summary>
 public sealed record CompositionResolutionPreparation(
     CompositionResolutionContext Context,
     MusicBrainzSearchVariants Variants,
-    ActiveCompositionAcceptancePolicy? Policy
+    ActiveCompositionAcceptancePolicy? Policy,
+    CompositionAcceptancePolicyState? PolicyState = null,
+    CompositionResolutionNegativeDecision? UnsupportedDecision = null
 );
 
 public sealed record CompositionSearchPage(
@@ -102,6 +116,7 @@ public enum CompositionResolutionStageKind
 {
     CreateComposition,
     Link,
+    AcknowledgeDecision,
 }
 
 /// <summary>
@@ -115,7 +130,8 @@ public sealed record CompositionResolutionStage(
     CompositionResolutionReadSet ReadSet,
     NormalizationWorkTicket? Ticket = null,
     NormalizationPublicationResult? Receipt = null,
-    CompositionResolutionContext? DerivedContext = null
+    CompositionResolutionContext? DerivedContext = null,
+    CompositionResolutionNegativeDecision? NegativeDecision = null
 );
 
 public enum CompositionResolutionDisposition
