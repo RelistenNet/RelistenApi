@@ -1,9 +1,11 @@
-"""Behavior contracts for immutable output indexing; no server or network is needed."""
+"""Immutable reader contracts using disposable caches and loopback HTTP servers."""
 
 import gzip
 import itertools
 import json
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -58,6 +60,48 @@ class TestShadowReader(unittest.TestCase):
         self.index.scan_once()
         self.assertEqual(self.index.search({})["total"], 2)
         self.assertEqual(self.index.detail(first_id)["record"], first)
+
+    def test_file_reader_configuration_is_operator_owned_and_preserves_exact_entity_keys(self):
+        keys = ["source:00274cc4-c9d0-bb87-0dcd-87588219bd9c",
+                "show:8a8dca64-c99c-1aa2-a731-d0895e60f37f",
+                "file:3984d0c0-d828-3fcf-801b-70b4f7d06f85"]
+        record = self.record(entityKeys=keys)
+        self.chunk("100", record)
+        self.index.scan_once()
+        self.assertIsNone(self.index.stats()["fileReaderUrl"])
+        configured = ShadowIndex(self.run, file_reader_url="https://files.example.test:9443/")
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(configured))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:" + str(server.server_port)
+        try:
+            with urlopen(base + "/api/stats?fileReaderUrl=https://untrusted.example.test") as response:
+                self.assertEqual(json.load(response)["fileReaderUrl"], "https://files.example.test:9443")
+            identifier = configured.search({})["items"][0]["id"]
+            with urlopen(base + "/api/record?id=" + str(identifier)) as response:
+                self.assertEqual(json.load(response)["record"]["entityKeys"], keys)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_invalid_file_reader_origin_fails_before_creating_a_cache_or_serving(self):
+        invalid = ["", "files.example.test", "javascript:alert(1)", "ftp://files.example.test",
+                   "https://user:secret@files.example.test", "https://@files.example.test",
+                   "https://files.example.test/files", "https://files.example.test?", "https://files.example.test#",
+                   "https://files.example.test:invalid", "https://files.example.test:65536",
+                   "https://files.example.test\\evil", "https://files.example.test\n"]
+        for origin in invalid:
+            with self.subTest(origin=origin), self.assertRaises(ValueError):
+                ShadowIndex(self.run, file_reader_url=origin)
+        untouched = self.run / "untouched"
+        untouched.mkdir()
+        result = subprocess.run([sys.executable, str(Path(__file__).with_name("shadow_reader.py")),
+                                 "--run", str(untouched), "--port", "0",
+                                 "--file-reader-url", "https://files.example.test/recordings"],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(list(untouched.iterdir()), [])
         self.assertEqual(self.index.stats()["pendingChunks"], 0)
 
     def test_low_disk_space_defers_new_chunks_without_hiding_existing_results_and_recovers(self):

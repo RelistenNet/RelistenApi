@@ -415,6 +415,17 @@ function renderDetail(data) {
             button.type = 'button';
             button.addEventListener('click', () => followKey(key));
             keys.append(button);
+            if (lastStats?.fileReaderUrl && /^(source|show|file):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) {
+                const url = new URL(lastStats.fileReaderUrl);
+                url.searchParams.set('domain', 'file_contents');
+                url.searchParams.set('entityKey', key);
+                const link = element('a', 'Find playable files');
+                link.href = url.href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.setAttribute('aria-label', 'Find playable files for ' + key);
+                keys.append(link);
+            }
         }
         section.append(keys);
         body.append(section);

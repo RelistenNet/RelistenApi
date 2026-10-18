@@ -75,6 +75,17 @@ remain intact, so rebuilding an older run requires space for the new cache too.
 `/api/stats` reports run coverage and index lag, `/api/records` searches outcomes,
 and `/api/record?id=<id>` returns one result with available playback links.
 
+For a reader that contains credits or venues but no file results, add
+`--file-reader-url http://127.0.0.1:18767` with the origin of an existing file
+reader. Its detail view offers “Find playable files” beside exact `source:`,
+`show:` and `file:` UUID keys. Each link opens that reader with
+`?domain=file_contents&entityKey=<exact-key>`. The destination comes only from
+operator configuration and appears as `fileReaderUrl` in `/api/stats`; it must
+be an HTTP(S) origin with no credentials, query, fragment or path beyond `/`.
+The option defaults to disabled. Links preserve captured ownership and make no
+request until opened. Results depend on the destination reader's indexed files;
+the link does not infer audio or assign a recording to another show.
+
 Use the domain, artist, provider and outcome filters, then open a result to inspect
 its proposal beside native evidence and alternatives. Follow an entity key to
 clear filters and inspect related rows across artists and domains:

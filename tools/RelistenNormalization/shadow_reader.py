@@ -67,6 +67,23 @@ def _change_domain(bits, domain, present):
     return bytes(result).rstrip(b"\0")
 
 
+def file_reader_origin(value):
+    """Accept an operator-owned HTTP(S) origin, never a record-supplied destination."""
+    try:
+        parsed = urlsplit(value)
+        parsed.port  # urlsplit defers port validation until this property is read.
+        valid = (parsed.scheme in {"http", "https"} and parsed.hostname
+                 and parsed.username is None and parsed.password is None
+                 and parsed.path in {"", "/"}
+                 and not any(character.isspace() or ord(character) < 32 or character in "\\?#"
+                             for character in value))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError("File reader URL must be an HTTP(S) origin without credentials, query or fragment.")
+    return parsed.scheme + "://" + parsed.netloc
+
+
 class ShadowIndex:
     """A rebuildable compact cache with one writer and independent WAL readers.
 
@@ -80,7 +97,8 @@ class ShadowIndex:
     LABEL_FIELDS = {"name", "title", "displayText", "label", "literalDate", "performanceLabel", "originalTitle", "wording", "displayName"}
     OUTCOMES = {"proposed", "unresolved", "failed", "not_applicable"}
 
-    def __init__(self, run, minimum_free_bytes=0, pause_indexing=False):
+    def __init__(self, run, minimum_free_bytes=0, pause_indexing=False, file_reader_url=None):
+        self.file_reader_url = file_reader_origin(file_reader_url) if file_reader_url is not None else None
         self.run = Path(run).resolve(strict=True)
         if not self.run.is_dir():
             raise ValueError("The existing run path must be a directory.")
@@ -577,7 +595,8 @@ class ShadowIndex:
         with self._status_lock:
             status = {"activeFile": self._active_file, "lastScan": self._last_scan,
                       "error": self._scan_error, "pauseReason": self._pause_reason}
-        return {"run": str(self.run), "progress": progress, "progressError": progress_error,
+        return {"run": str(self.run), "fileReaderUrl": self.file_reader_url,
+                "progress": progress, "progressError": progress_error,
                 "coverage": coverage, "facets": facets, "indexedRecords": sum(indexed.values()),
                 "pendingChunks": len(discovered-indexed_files),
                 "indexedChunks": sum(item["state"] == "indexed" for item in chunks),
@@ -670,10 +689,12 @@ def main():
                         help="Pause indexing below this free-space reserve; keep serving existing results")
     parser.add_argument("--pause-indexing", action="store_true",
                         help="Serve the existing cache without indexing new chunks; omit on restart to resume")
+    parser.add_argument("--file-reader-url", type=file_reader_origin,
+                        help="HTTP(S) origin of a file reader for source/show/file playback lookup links")
     args = parser.parse_args()
     if not args.run.is_absolute() or not args.run.is_dir():
         parser.error("--run must name an absolute, existing directory.")
-    index = ShadowIndex(args.run, args.minimum_free_bytes, args.pause_indexing)
+    index = ShadowIndex(args.run, args.minimum_free_bytes, args.pause_indexing, args.file_reader_url)
     stop = threading.Event()
 
     def follow():
