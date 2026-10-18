@@ -1,6 +1,7 @@
 """Context proposals preserve observed source ownership and exact witness evidence."""
 
 import hashlib
+import gzip
 from contextlib import closing
 import json
 from pathlib import Path
@@ -12,8 +13,10 @@ from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
 from urllib.error import HTTPError
 
+import test_people_directory as directory_fixtures
+
 from people_context import PeopleContextPreparation, PeopleContextProjection
-from people_directory import PeopleDirectory, encoded, handler_for
+from people_directory import CreditOverlay, PeopleDirectory, encoded, handler_for
 
 
 class TestPeopleContext(unittest.TestCase):
@@ -259,6 +262,117 @@ class TestPeopleContext(unittest.TestCase):
             "recovered_from_failed_batch",
         )
         self.assertEqual(directory.relationships("a", {})["total"], 2)
+
+    def test_credit_replacement_invalidates_only_relationships_using_replaced_source(
+        self,
+    ):
+        fixture = directory_fixtures.TestPeopleDirectory()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        directory = fixture.build(
+            [
+                (source, artist, [fixture.credit(source, artist, name, "taper")])
+                for source, artist, name in [
+                    ("one", "artist-a", "Alex"),
+                    ("two", "artist-b", "Alex Smith"),
+                    ("three", "artist-c", "A Smith"),
+                ]
+            ]
+        )
+        with closing(directory.connect()) as db:
+            credits = {
+                row["source_uuid"]: dict(row)
+                for row in db.execute("SELECT * FROM credits")
+            }
+
+        def actor(source):
+            credit = credits[source]
+            return {
+                "groupId": credit["group_id"],
+                "creditId": credit["id"],
+                "sourceUuid": source,
+                "artistUuid": credit["artist_uuid"],
+            }
+
+        questions = [
+            {
+                "questionId": identifier,
+                "retrievalBasis": "name_variant_candidate",
+                "left": actor(left),
+                "right": actor(right),
+            }
+            for identifier, left, right in [
+                ("affected", "one", "two"),
+                ("retained", "two", "three"),
+            ]
+        ]
+        run = self.root / "context-run"
+        run.mkdir()
+        results = run / "results.jsonl"
+        results.write_text(
+            encoded(
+                {
+                    "input": {"questions": questions},
+                    "result": {
+                        "state": "proposed",
+                        "cacheKey": "cache",
+                        "decisions": [
+                            {
+                                "questionId": q["questionId"],
+                                "relation": "insufficient_evidence",
+                                "reason": "Names alone do not identify people",
+                                "evidence": [],
+                            }
+                            for q in questions
+                        ],
+                    },
+                }
+            )
+            + "\n"
+        )
+        (run / "manifest.json").write_text(
+            encoded(
+                {
+                    "state": "completed",
+                    "jobUuid": "job",
+                    "questions": 2,
+                    "accountedUsd": 0,
+                    "knownActualUsd": 0,
+                    "resultsSha256": hashlib.sha256(results.read_bytes()).hexdigest(),
+                }
+            )
+        )
+        PeopleContextProjection(fixture.database, run).apply()
+        overlay = self.root / "credit-run"
+        (overlay / "credits").mkdir(parents=True)
+        (overlay / "manifest.json").write_text(encoded({"state": "completed"}))
+        selection = overlay / "selection.json"
+        selection.write_text(encoded({"sourceUuids": ["one"]}))
+        credit, facts = fixture.credit("one", "artist-a", "Corrected Name", "taper")
+        with gzip.open(overlay / "credits/1.jsonl.gz", "wt") as stream:
+            stream.write(
+                encoded(
+                    {
+                        "inputKind": "source_sample",
+                        "inputUuid": "one",
+                        "artistUuid": "artist-a",
+                        "artistName": "Artist A",
+                        "proposal": {"credits": [credit]},
+                        "evidence": {"creditExtraction": {"credits": [facts]}},
+                    }
+                )
+                + "\n"
+            )
+        CreditOverlay(overlay, selection, fixture.database, minimum_free=0).apply()
+        self.assertIsNone(directory.relationship("affected"))
+        self.assertEqual(
+            directory.relationship("retained")["question"]["left"]["sourceUuid"], "two"
+        )
+        self.assertEqual(directory.stats()["peopleContext"]["decisions"], 1)
+        self.assertEqual(
+            directory.stats()["peopleContext"]["invalidatedByCreditReplacement"], 1
+        )
+        self.assertEqual(directory.stats()["creditedRecordings"], 3)
 
     def test_changed_source_owner_rejects_whole_projection(self):
         database = self.contextual_run()

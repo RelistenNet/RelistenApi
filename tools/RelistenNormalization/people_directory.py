@@ -331,8 +331,16 @@ class CreditOverlay:
                     "Credit overlay includes a source outside this directory"
                 )
             self.writer._ensure_credit_provenance_columns(db)
+            has_context = (
+                db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name='context_relationships'"
+                ).fetchone()
+                is not None
+            )
             for chunk, line, record in self._records(chunks):
                 self.writer._check_space()
+                if has_context:
+                    self._invalidate_source_context(db, record["inputUuid"])
                 db.execute(
                     "DELETE FROM credits WHERE source_uuid=?", (record["inputUuid"],)
                 )
@@ -341,6 +349,8 @@ class CreditOverlay:
                 )
             self.writer._rebuild_groups(db)
             self.writer._refresh_stats(db)
+            if has_context:
+                self._refresh_context_counts(db)
             metadata = {
                 "version": VERSION,
                 "creditOverlaySources": len(selected),
@@ -371,6 +381,41 @@ class CreditOverlay:
             )
             db.commit()
         return metadata
+
+    @staticmethod
+    def _invalidate_source_context(db, source_uuid):
+        # Relationships refer to exact credit occurrences. Invalidate their source
+        # evidence atomically with replacement; unrelated proposals survive.
+        db.execute(
+            """DELETE FROM context_relationships
+            WHERE left_credit IN (SELECT id FROM credits WHERE source_uuid=?)
+               OR right_credit IN (SELECT id FROM credits WHERE source_uuid=?)""",
+            (source_uuid, source_uuid),
+        )
+
+    @staticmethod
+    def _refresh_context_counts(db):
+        row = db.execute(
+            "SELECT value FROM metadata WHERE key='peopleContext'"
+        ).fetchone()
+        if row:
+            context = json.loads(row[0])
+            context["relations"] = dict(
+                db.execute(
+                    "SELECT relation,count(*) FROM context_relationships GROUP BY relation"
+                )
+            )
+            remaining = sum(context["relations"].values())
+            context["invalidatedByCreditReplacement"] = (
+                context.get("invalidatedByCreditReplacement", 0)
+                + context["decisions"]
+                - remaining
+            )
+            context["decisions"] = remaining
+            db.execute(
+                "UPDATE metadata SET value=? WHERE key='peopleContext'",
+                (encoded(context),),
+            )
 
     def _records(self, chunks):
         for chunk in chunks:
