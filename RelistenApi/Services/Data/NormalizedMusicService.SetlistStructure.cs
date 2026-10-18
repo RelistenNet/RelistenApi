@@ -105,7 +105,7 @@ public sealed partial class NormalizedMusicService
             JsonSerializer.SerializeToNode(second)
         );
 
-    private static async Task ValidateStructureRoute(
+    private static async Task<MusicPublication> ValidateStructureRoute(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         MusicPublication publication,
@@ -128,7 +128,7 @@ public sealed partial class NormalizedMusicService
                 "A structure-managed edition requires a complete structure publication.",
                 ct
             );
-            return;
+            return publication;
         }
         ValidateStructureShape(publication, structure);
         ValidateStructureMembership(structure);
@@ -140,7 +140,8 @@ public sealed partial class NormalizedMusicService
             ct
         );
         await ValidateStructureSources(c, t, structure, reviewed, ct);
-        await ValidateStructureCorrespondence(c, t, structure, reviewed, ct);
+        var normalized = await ValidateStructureCorrespondence(c, t, structure, reviewed, ct);
+        return publication with { SetlistStructure = normalized };
     }
 
     private static void ValidateStructureShape(
@@ -440,5 +441,6 @@ public sealed partial class NormalizedMusicService
             await SaveEdition(c, t, structure.Edition, decision, reviewed, ct);
         }
         await AppendStructureCorrespondence(c, t, structure, revision, ct);
+        await AppendStructureRemovalAuthority(c, t, structure, revision, ct);
     }
 }

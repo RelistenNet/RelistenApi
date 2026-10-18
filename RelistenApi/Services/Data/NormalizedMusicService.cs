@@ -156,7 +156,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
     )
     {
         await LockAndValidateChanges(c, t, publication, reviewed, ct);
-        await ValidateStructureRoute(c, t, publication, reviewed, ct);
+        publication = await ValidateStructureRoute(c, t, publication, reviewed, ct);
         await RestoreSplitIdentities(c, t, publication, reviewed, ct);
         foreach (var song in publication.RepertoireSongs)
         {
@@ -409,13 +409,21 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
             if (
                 property.Name is "Uuid" or "ExpectedRevision" or "Basis"
                 || (change is SetlistEditionChange && property.Name == "Selected")
+                || (change is SetlistStructureChange && property.Name == "RemovalAuthorizations")
             )
             {
                 continue;
             }
             // Selection is display state with its own authority, not a new source claim.
             var value = property.Value;
-            if (change is SetlistStructureChange && property.Name is "Edition" or "Occurrences")
+            if (
+                change is SetlistStructureChange
+                && property.Name
+                    is "Edition"
+                        or "Occurrences"
+                        or "SetCorrespondence"
+                        or "PassageCorrespondence"
+            )
             {
                 var node = System.Text.Json.Nodes.JsonNode.Parse(value.GetRawText())!;
                 var children = node is System.Text.Json.Nodes.JsonArray array
@@ -426,6 +434,7 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
                     child.Remove("ExpectedRevision");
                     child.Remove("Basis");
                     child.Remove("Selected");
+                    child.Remove("AuthorizationUuid");
                 }
                 value = JsonSerializer.SerializeToElement(node);
             }

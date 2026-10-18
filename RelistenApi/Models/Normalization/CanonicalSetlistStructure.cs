@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -17,6 +18,9 @@ public sealed record SetlistStructureChange : MusicChange
     public IReadOnlyList<SetlistSetCorrespondence> SetCorrespondence { get; init; } = [];
     public IReadOnlyList<SetlistPassageCorrespondence> PassageCorrespondence { get; init; } = [];
     public IReadOnlyList<SetlistUnresolvedPassage> UnresolvedPassages { get; init; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<SetlistRemovalAuthorization>? RemovalAuthorizations { get; init; }
 }
 
 /// <summary>A set has identity independently of label and position, including empty or repeated sets.</summary>
@@ -43,13 +47,21 @@ public sealed record SetlistStructureSource(
     NormalizationSetlistAccountProposal Account
 );
 
-public sealed record SetlistSetCorrespondence(int SourceIndex, int SetIndex, Guid SetUuid);
+public sealed record SetlistSetCorrespondence(
+    int SourceIndex,
+    int SetIndex,
+    Guid SetUuid,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        Guid? AuthorizationUuid = null
+);
 
 /// <summary>Explicit component/split mapping may name several occurrences; no title/order identity inference occurs.</summary>
 public sealed record SetlistPassageCorrespondence(
     int SourceIndex,
     Guid ProposalUuid,
-    IReadOnlyList<Guid> OccurrenceUuids
+    IReadOnlyList<Guid> OccurrenceUuids,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        Guid? AuthorizationUuid = null
 );
 
 /// <summary>A retained source passage may remain unmatched without creating a canonical occurrence.</summary>

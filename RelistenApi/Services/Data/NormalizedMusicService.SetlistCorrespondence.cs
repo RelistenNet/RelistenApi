@@ -14,7 +14,7 @@ namespace Relisten.Data;
 
 public sealed partial class NormalizedMusicService
 {
-    private static async Task ValidateStructureCorrespondence(
+    private static async Task<SetlistStructureChange> ValidateStructureCorrespondence(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SetlistStructureChange structure,
@@ -22,6 +22,8 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     )
     {
+        var normalizedSets = new List<SetlistSetCorrespondence>();
+        var normalizedPassages = new List<SetlistPassageCorrespondence>();
         var sets = structure.Sets.ToDictionary(set => set.Uuid);
         var occurrences = structure.Occurrences.ToDictionary(occurrence => occurrence.Uuid);
         var expectedSets = structure
@@ -122,19 +124,20 @@ public sealed partial class NormalizedMusicService
                     "Automatic set metadata must reproduce the supplied source assertion."
                 );
             }
-            await ValidateSetlistTargetReuse(
+            var authority = await ResolveSetlistCorrespondenceAuthority(
                 c,
                 t,
                 structure,
-                "set",
-                set.Uuid,
                 source,
-                map.SetIndex.ToString(CultureInfo.InvariantCulture),
+                new(SetIndex: map.SetIndex),
+                [map.SetUuid],
                 original.Identity?.Identity,
                 reviewed,
                 structure.SetCorrespondence.Count(other => other.SetUuid == set.Uuid) > 1,
+                map.AuthorizationUuid,
                 ct
             );
+            normalizedSets.Add(map with { AuthorizationUuid = authority });
         }
         foreach (var map in structure.PassageCorrespondence)
         {
@@ -142,12 +145,22 @@ public sealed partial class NormalizedMusicService
             var original = source
                 .Account.Passages.Single(passage => passage.ProposalUuid == map.ProposalUuid)
                 .Passage;
-            if (!reviewed && map.OccurrenceUuids.Count > 1)
-            {
-                throw new ArgumentException(
-                    "Splitting a source passage into several accepted occurrences requires reviewed correspondence."
-                );
-            }
+            var passageAuthority = await ResolveSetlistCorrespondenceAuthority(
+                c,
+                t,
+                structure,
+                source,
+                new(ProposalUuid: map.ProposalUuid),
+                map.OccurrenceUuids,
+                original.OccurrenceIdentity?.Identity,
+                reviewed,
+                structure.PassageCorrespondence.Any(other =>
+                    (other.SourceIndex != map.SourceIndex || other.ProposalUuid != map.ProposalUuid)
+                    && other.OccurrenceUuids.Intersect(map.OccurrenceUuids).Any()
+                ),
+                map.AuthorizationUuid,
+                ct
+            );
             foreach (var uuid in map.OccurrenceUuids)
             {
                 var occurrence = occurrences[uuid];
@@ -192,7 +205,11 @@ public sealed partial class NormalizedMusicService
                         || occurrence.OriginalText != original.Title.Value
                         || !occurrence.Evidence.Contains(original.Title.Evidence)
                         || occurrence.SetUuid != setUuid
-                        || (structure.Edition.Ordered && occurrence.Position != original.Ordinal)
+                        || (
+                            structure.Edition.Ordered
+                            && occurrence.ParentOccurrenceUuid == null
+                            && occurrence.Position != original.Ordinal
+                        )
                         || (
                             occurrence.ProviderItemKey != null
                             && occurrence.ProviderItemKey
@@ -205,77 +222,69 @@ public sealed partial class NormalizedMusicService
                         );
                     }
                 }
-                await ValidateSetlistTargetReuse(
-                    c,
-                    t,
-                    structure,
-                    "passage",
-                    uuid,
-                    source,
-                    map.ProposalUuid.ToString("D"),
-                    original.OccurrenceIdentity?.Identity,
-                    reviewed,
-                    structure.PassageCorrespondence.Count(other =>
-                        other.OccurrenceUuids.Contains(uuid)
-                    ) > 1,
-                    ct
-                );
             }
+            normalizedPassages.Add(map with { AuthorizationUuid = passageAuthority });
         }
-        if (!reviewed)
+        await ValidateStructureRemovalAuthorizations(c, t, structure, reviewed, ct);
+        return structure with
         {
-            await Require(
-                c,
-                t,
-                """
-                SELECT NOT EXISTS(SELECT 1 FROM normalization.setlist_sets WHERE uuid=ANY(@sets) AND NOT retracted)
-                    AND NOT EXISTS(SELECT 1 FROM normalization.song_occurrences WHERE uuid=ANY(@passages) AND NOT retracted)
-                """,
-                new
-                {
-                    sets = structure
-                        .Sets.Where(set => set.Retracted)
-                        .Select(set => set.Uuid)
-                        .ToArray(),
-                    passages = structure
-                        .Occurrences.Where(occurrence => occurrence.Retracted)
-                        .Select(occurrence => occurrence.Uuid)
-                        .ToArray(),
-                },
-                "Retiring accepted sets or occurrences requires explicit reviewed removal authority.",
-                ct
-            );
-        }
+            SetCorrespondence = normalizedSets,
+            PassageCorrespondence = normalizedPassages,
+        };
     }
 
-    private static async Task ValidateSetlistTargetReuse(
+    private static async Task<Guid?> ResolveSetlistCorrespondenceAuthority(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SetlistStructureChange structure,
-        string kind,
-        Guid target,
         SetlistStructureSource source,
-        string key,
+        SetlistClaimReference claim,
+        IReadOnlyList<Guid> completeTargets,
         NormalizationResourceKey? identity,
         bool reviewed,
         bool sharedTarget,
+        Guid? declaredAuthorization,
         CancellationToken ct
     )
     {
-        if (reviewed)
+        var kind = claim.SetIndex.HasValue ? "set" : "passage";
+        var key = claim.SetIndex.HasValue
+            ? claim.SetIndex.Value.ToString(CultureInfo.InvariantCulture)
+            : claim.ProposalUuid!.Value.ToString("D");
+        if (reviewed && declaredAuthorization == null)
         {
-            return;
+            return null;
+        }
+        var declared = await ReadDeclaredCorrespondenceAuthorization(
+            c,
+            t,
+            structure.Edition.Uuid,
+            source,
+            claim,
+            completeTargets,
+            declaredAuthorization,
+            ct
+        );
+        if (declared.HasValue)
+        {
+            return declared;
         }
         // Resolve the latest accepted decision before considering a new target. Otherwise a
         // new UUID plus a tombstone could silently replace a stable provider identity. Older
         // reviewed reallocations do not authorize returning to an obsolete target.
         var targets = (
-            await c.QueryAsync<Guid>(
+            await c.QueryAsync<AcceptedSetlistTarget>(
                 new CommandDefinition(
                     """
                     WITH claims AS (
-                        SELECT link.target_uuid,r.revision FROM normalization.setlist_structure_correspondences link
+                        SELECT link.target_uuid,link.authorization_uuid,r.revision,
+                            h.authorization_uuid AS head_uuid,a.action AS head_action
+                        FROM normalization.setlist_structure_correspondences link
                         JOIN normalization.music_revisions r ON r.uuid=link.revision_uuid
+                        LEFT JOIN normalization.setlist_authorization_heads h ON h.edition_uuid=link.edition_uuid
+                            AND h.authorization_key='claim/'||link.source_attempt_uuid::text||'/'||link.input_revision_uuid::text
+                                ||'/'||link.account_index::text||'/'||link.kind||'/'||link.source_key
+                        LEFT JOIN normalization.setlist_authorization_events a ON a.uuid=h.authorization_uuid
                         WHERE link.edition_uuid=@edition AND link.kind=@kind
                         AND ((link.input_revision_uuid=@InputRevisionUuid AND link.account_index=@AccountIndex AND link.source_key=@key
                                 AND EXISTS(SELECT 1 FROM normalization.setlist_processing_attempts old_source
@@ -283,7 +292,10 @@ public sealed partial class NormalizedMusicService
                                     WHERE old_source.attempt_uuid=link.source_attempt_uuid AND old_source.processing_version=new_source.processing_version))
                             OR (@identity::jsonb IS NOT NULL AND link.provider_identity @> @identity::jsonb AND link.provider_identity=@identity::jsonb))
                     )
-                    SELECT DISTINCT target_uuid FROM claims WHERE revision=(SELECT max(revision) FROM claims) LIMIT 2
+                    SELECT target_uuid AS TargetUuid,authorization_uuid AS AuthorizationUuid,
+                        bool_or(head_uuid IS NOT NULL AND (head_action<>'authorize' OR head_uuid IS DISTINCT FROM authorization_uuid)) AS Superseded
+                    FROM claims WHERE revision=(SELECT max(revision) FROM claims)
+                    GROUP BY target_uuid,authorization_uuid LIMIT 101
                     """,
                     new
                     {
@@ -302,19 +314,63 @@ public sealed partial class NormalizedMusicService
         ).ToArray();
         if (targets.Length > 0)
         {
-            if (targets.Length != 1 || targets[0] != target)
+            if (targets.Any(item => item.Superseded))
+            {
+                throw new NormalizationConflictException(
+                    "The historical correspondence was blocked, revoked or superseded; accepted history cannot restore it."
+                );
+            }
+            if (
+                declaredAuthorization.HasValue
+                && targets[0].AuthorizationUuid != declaredAuthorization
+            )
+            {
+                throw new NormalizationConflictException(
+                    "The supplied authorization does not support this accepted correspondence history."
+                );
+            }
+            var targetIds = targets.Select(item => item.TargetUuid).ToHashSet();
+            var authorities = targets.Select(item => item.AuthorizationUuid).Distinct().ToArray();
+            if (
+                !targetIds.SetEquals(completeTargets)
+                || authorities.Length != 1
+                || (completeTargets.Count > 1 && authorities[0] == null)
+            )
             {
                 throw new ArgumentException(
                     "The latest accepted source/provider correspondence requires its stable target UUID, or explicit reviewed reallocation."
                 );
             }
-            return;
+            if (targets[0].AuthorizationUuid is { } authority)
+            {
+                await ValidateInheritedCorrespondenceAuthorization(
+                    c,
+                    t,
+                    structure.Edition.Uuid,
+                    authority,
+                    completeTargets,
+                    ct
+                );
+            }
+            return targets[0].AuthorizationUuid;
         }
         var table = kind == "set" ? "setlist_sets" : "song_occurrences";
+        if (completeTargets.Count > 1)
+        {
+            throw new ArgumentException(
+                "Splitting a source passage into several accepted occurrences requires reviewed correspondence."
+            );
+        }
+        if (declaredAuthorization.HasValue)
+        {
+            throw new NormalizationConflictException(
+                "The supplied correspondence authorization is not active for this exact source claim."
+            );
+        }
         var exists = await c.ExecuteScalarAsync<bool>(
             new CommandDefinition(
-                $"SELECT EXISTS(SELECT 1 FROM normalization.{table} WHERE uuid=@target)",
-                new { target },
+                $"SELECT EXISTS(SELECT 1 FROM normalization.{table} WHERE uuid=ANY(@completeTargets))",
+                new { completeTargets = completeTargets.ToArray() },
                 t,
                 cancellationToken: ct
             )
@@ -325,7 +381,14 @@ public sealed partial class NormalizedMusicService
                 "Reusing an accepted set or occurrence needs retained correspondence, a supplied qualified occurrence/set identity, or explicit review; titles and positions do not establish identity."
             );
         }
+        return null;
     }
+
+    private sealed record AcceptedSetlistTarget(
+        Guid TargetUuid,
+        Guid? AuthorizationUuid,
+        bool Superseded
+    );
 
     private static async Task AppendStructureCorrespondence(
         NpgsqlConnection c,
@@ -349,6 +412,7 @@ public sealed partial class NormalizedMusicService
                 map.SetIndex.ToString(CultureInfo.InvariantCulture),
                 map.SetUuid,
                 source.Account.Account.Sets[map.SetIndex].Identity?.Identity,
+                map.AuthorizationUuid,
                 ct
             );
         }
@@ -371,6 +435,7 @@ public sealed partial class NormalizedMusicService
                     map.ProposalUuid.ToString("D"),
                     target,
                     identity,
+                    map.AuthorizationUuid,
                     ct
                 );
             }
@@ -388,14 +453,15 @@ public sealed partial class NormalizedMusicService
         string key,
         Guid target,
         NormalizationResourceKey? identity,
+        Guid? authorizationUuid,
         CancellationToken ct
     ) =>
         c.ExecuteAsync(
             new CommandDefinition(
                 """
                 INSERT INTO normalization.setlist_structure_correspondences(revision_uuid,source_index,source_attempt_uuid,input_revision_uuid,
-                    account_index,kind,source_key,target_uuid,edition_uuid,provider_identity)
-                VALUES(@revision,@sourceIndex,@ProposalAttemptUuid,@InputRevisionUuid,@AccountIndex,@kind,@key,@target,@edition,@identity::jsonb)
+                    account_index,kind,source_key,target_uuid,edition_uuid,provider_identity,authorization_uuid)
+                VALUES(@revision,@sourceIndex,@ProposalAttemptUuid,@InputRevisionUuid,@AccountIndex,@kind,@key,@target,@edition,@identity::jsonb,@authorizationUuid)
                 """,
                 new
                 {
@@ -408,6 +474,7 @@ public sealed partial class NormalizedMusicService
                     key,
                     target,
                     edition,
+                    authorizationUuid,
                     identity = identity == null ? null : JsonSerializer.Serialize(identity),
                 },
                 t,
