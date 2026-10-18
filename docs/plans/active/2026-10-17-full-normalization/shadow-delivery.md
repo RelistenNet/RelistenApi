@@ -2,7 +2,7 @@
 
 ## Purpose and current decision
 
-Build something Alec can browse and exercise: proposed normalized venues, songs/compositions, credited people, performances, setlists and playable file relationships across the catalog. The first completed run processes every raw record in the retained sample covering 4,379 artists. Raw capture of the full 292,522 recordings and 5,064,076 files has started and remains in progress. Preserve the exact manifests and reconcile different snapshots. All seven configured importers and Archive intake/collections must appear in the provider ledger, with applicability and available evidence stated.
+Build something Alec can browse and exercise: proposed normalized venues, songs/compositions, credited people, performances, setlists and playable file relationships across the catalog. The first completed run processes every raw record in the retained sample covering 4,379 artists. The full raw capture is now complete: 292,523 recordings and 5,064,097 files across 118 shards. Each shard has its own read-only snapshot; these counts are not one simultaneous historical snapshot. Preserve the exact manifests and reconcile different snapshots. All seven configured importers and Archive intake/collections must appear in the provider ledger, with applicability and available evidence stated.
 
 A shadow catalog stores proposed results in separate local artifacts or a disposable database. It activates no production acceptance policy. This permits complete computation and inspection while publication performance and release accuracy work continue. Missing source facts remain unresolved; a missing implementation is an engineering gap to finish.
 
@@ -16,7 +16,18 @@ This execution sequence supersedes the evaluation-first milestone. The [standing
 - [ ] Capture and process the full recording/file population, reconcile provider coverage, and independently audit outputs and systemic failures.
 - [ ] Rehearse incremental input changes and restart locally, then continue production qualification and backfill preparation.
 
-The current integration step is full raw-population capture and replay. The first
+The current integration step is full raw-population replay. Capture is complete;
+the full replay stopped at its free-space floor. It exposed repeated dictionary
+citations copied from setlist memberships into each matching file. The correction
+retains one actual witness per distinct literal spelling and preserves every
+membership in its original setlist result. A replay with all 16,605 songs, 38,475
+setlists and 50,000 files passed independent ownership, title and citation checks.
+All 575,103 memberships remain intact. See the
+[dictionary-context receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-dictionary-context-v1.json).
+That completed replay is a bounded verification run; all 5.06 million files still
+need processing with the corrected implementation and sufficient storage.
+
+The first
 complete 50,000-recording source range also completed inline normalization:
 150,000 outcomes, no processing failures and all captured show UUID relationships
 retained. See its [receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json).

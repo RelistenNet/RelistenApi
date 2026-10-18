@@ -53,7 +53,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     > songs = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v3";
+    public string Version => "shadow-repertoire-v4";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -264,12 +264,9 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         // Literal dictionary wording preserves an existing identity even when the producer
         // calls that wording a control label. Punctuation-normalized correspondence alone
         // cannot override an explicit content label (for example Banter, versus Banter).
+        var literalTitle = LiteralTitleKey(title);
         var literalDictionaryMatch = candidates.Any(candidate =>
-            string.Equals(
-                candidate.Song.Name.Normalize(NormalizationForm.FormC).Trim(),
-                trimmedTitle.Normalize(NormalizationForm.FormC),
-                StringComparison.OrdinalIgnoreCase
-            )
+            candidate.Evidence.Any(evidence => LiteralTitleKey(evidence.Quote) == literalTitle)
         );
         if (literalDictionaryMatch)
         {
@@ -405,7 +402,9 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             .Values.OrderBy(song => song.Uuid)
             .Select(song => new ShadowRepertoireCandidate(
                 KnownSong(artistUuid, song.Uuid, song.Name),
-                song.Evidence.ToArray(),
+                song.Witnesses.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => pair.Value)
+                    .ToArray(),
                 matcher.CompareRepertoire(claim, new(song.Uuid, artistUuid, [new(song.Name)], []))
             ))
             .ToArray();
@@ -421,17 +420,54 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             songs.Add(key, matches);
         }
         var uuid = row.GetProperty("uuid").GetGuid();
+        var evidence = new ShadowRepertoireDictionaryEvidence(inputKey, pointer, name);
         if (!matches.TryGetValue(uuid, out var song))
         {
-            song = new(uuid, name, []);
-            matches.Add(uuid, song);
+            matches.Add(uuid, new(uuid, evidence));
         }
-        var evidence = new ShadowRepertoireDictionaryEvidence(inputKey, pointer, name);
-        if (!song.Evidence.Contains(evidence))
+        else
         {
-            song.Evidence.Add(evidence);
+            song.AddWitness(evidence);
         }
     }
+
+    private static bool PreferWitness(
+        ShadowRepertoireDictionaryEvidence candidate,
+        ShadowRepertoireDictionaryEvidence current
+    )
+    {
+        // A dictionary row is the direct title assertion. Repeated setlist memberships
+        // retain their own complete results; copying every occurrence into each file's
+        // identity proof made the full catalog output grow with files × occurrences.
+        var candidateIsDictionary = candidate.InputKey.StartsWith(
+            "song_sample:",
+            StringComparison.Ordinal
+        );
+        var currentIsDictionary = current.InputKey.StartsWith(
+            "song_sample:",
+            StringComparison.Ordinal
+        );
+        if (candidateIsDictionary != currentIsDictionary)
+        {
+            return candidateIsDictionary;
+        }
+
+        var inputOrder = StringComparer.Ordinal.Compare(candidate.InputKey, current.InputKey);
+        if (inputOrder != 0)
+        {
+            return inputOrder < 0;
+        }
+        var pointerOrder = StringComparer.Ordinal.Compare(
+            candidate.JsonPointer,
+            current.JsonPointer
+        );
+        return pointerOrder != 0
+            ? pointerOrder < 0
+            : StringComparer.Ordinal.Compare(candidate.Quote, current.Quote) < 0;
+    }
+
+    private static string LiteralTitleKey(string title) =>
+        title.Normalize(NormalizationForm.FormC).Trim().ToUpperInvariant();
 
     private static ShadowRepertoireSong KnownSong(Guid artistUuid, Guid songUuid, string title) =>
         new(KnownEntityKey(songUuid), artistUuid, songUuid, title, "captured_artist_dictionary");
@@ -474,9 +510,32 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         return result.ToString();
     }
 
-    private sealed record CapturedSong(
-        Guid Uuid,
-        string Name,
-        List<ShadowRepertoireDictionaryEvidence> Evidence
-    );
+    private sealed class CapturedSong(Guid uuid, ShadowRepertoireDictionaryEvidence witness)
+    {
+        public Guid Uuid { get; } = uuid;
+        public string Name => preferredWitness.Quote;
+        public Dictionary<string, ShadowRepertoireDictionaryEvidence> Witnesses { get; } =
+            new(StringComparer.Ordinal) { [LiteralTitleKey(witness.Quote)] = witness };
+
+        private ShadowRepertoireDictionaryEvidence preferredWitness = witness;
+
+        public void AddWitness(ShadowRepertoireDictionaryEvidence candidate)
+        {
+            // Punctuation-distinct spellings retain their own proof, so preferring a direct
+            // display name cannot erase a literal membership's control-label override.
+            var literalTitle = LiteralTitleKey(candidate.Quote);
+            if (
+                !Witnesses.TryGetValue(literalTitle, out var current)
+                || PreferWitness(candidate, current)
+            )
+            {
+                Witnesses[literalTitle] = candidate;
+            }
+
+            if (PreferWitness(candidate, preferredWitness))
+            {
+                preferredWitness = candidate;
+            }
+        }
+    }
 }

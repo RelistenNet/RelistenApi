@@ -18,6 +18,12 @@ public sealed record ShadowRepertoireDictionaryEvidence(
     string Quote
 );
 
+/// <summary>
+/// A candidate with one actual witness per literal title spelling, ignoring canonical
+/// Unicode, surrounding whitespace and case differences. Direct dictionary rows supply
+/// the preferred display name; punctuation-distinct membership spellings retain their own
+/// proof. Repeated occurrences remain in setlist accounts rather than every matching file.
+/// </summary>
 public sealed record ShadowRepertoireCandidate(
     ShadowRepertoireSong Song,
     IReadOnlyList<ShadowRepertoireDictionaryEvidence> Evidence,

@@ -142,6 +142,154 @@ public sealed class TestShadowRepertoireAdapter
             .Be("/unordered_memberships/0/song/name");
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void RepeatedMembershipsUseTheDirectDictionaryWitnessRegardlessOfObservationOrder(
+        bool dictionaryFirst
+    )
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var songUuid = Guid.NewGuid();
+        var dictionary = Song(songUuid, "Reprise");
+        if (dictionaryFirst)
+        {
+            adapter.Observe(dictionary);
+        }
+        var setlist = Memberships(songUuid, 1200);
+        adapter.Observe(setlist);
+        if (!dictionaryFirst)
+        {
+            adapter.Observe(dictionary);
+        }
+
+        var track = (ShadowRepertoireTrack)adapter.Process(Track("Reprise")).Single().Proposal!;
+
+        var candidate = track.Segments.Single().ComparisonDiagnostics.Single();
+        candidate.Song.LegacySongUuid.Should().Be(songUuid);
+        candidate
+            .Evidence.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(
+                new ShadowRepertoireDictionaryEvidence(
+                    "song_sample:" + songUuid.ToString("D"),
+                    "/row/name",
+                    "Reprise"
+                )
+            );
+        track.WholeFileDictionaryCandidates.Single().Evidence.Should().Equal(candidate.Evidence);
+    }
+
+    [Test]
+    public void CompactMembershipWitnessDoesNotRemoveRepeatedSetlistMemberships()
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var songUuid = Guid.NewGuid();
+        var setlist = Memberships(songUuid, 1200);
+        adapter.Observe(setlist);
+
+        var track = (ShadowRepertoireTrack)adapter.Process(Track("Reprise")).Single().Proposal!;
+        var membershipResult = new ShadowPerformanceAdapter()
+            .Process(new(setlist, null, new(1, ArtistUuid, "Artist", []), "catalog:unattributed"))
+            .Single(result => result.Domain == "setlists");
+
+        track
+            .Segments.Single()
+            .ComparisonDiagnostics.Single()
+            .Evidence.Should()
+            .ContainSingle()
+            .Which.JsonPointer.Should()
+            .Be("/unordered_memberships/0/song/name");
+        var account = (ShadowSetlistAccount)membershipResult.Proposal!;
+        account
+            .Memberships.Should()
+            .HaveCount(1200)
+            .And.OnlyContain(member => member.LegacySongUuid == songUuid);
+        account.Ordered.Should().BeFalse();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void LiteralMembershipAliasSurvivesThePreferredDirectDictionaryWitness(
+        bool dictionaryFirst
+    )
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var songUuid = Guid.NewGuid();
+        var dictionary = Song(songUuid, "Stage Banter!");
+        var memberships = Memberships(songUuid, 1200, "Stage Banter");
+        foreach (
+            var record in dictionaryFirst
+                ? new[] { dictionary, memberships }
+                : new[] { memberships, dictionary }
+        )
+        {
+            adapter.Observe(record);
+        }
+
+        foreach (var title in new[] { "Stage Banter", "Stage Banter!" })
+        {
+            var result = adapter.Process(Track(title)).Single();
+            var track = (ShadowRepertoireTrack)result.Proposal!;
+            var candidate = track.Segments.Single().ComparisonDiagnostics.Single();
+
+            result.Outcome.Should().Be("proposed");
+            result.EntityKeys.Should().Equal(ShadowRepertoireAdapter.KnownEntityKey(songUuid));
+            candidate.Song.Name.Should().Be("Stage Banter!");
+            candidate.Song.LegacySongUuid.Should().Be(songUuid);
+            candidate.Evidence.Should().HaveCount(2);
+            candidate
+                .Evidence.Should()
+                .Contain(
+                    new ShadowRepertoireDictionaryEvidence(
+                        "song_sample:" + songUuid.ToString("D"),
+                        "/row/name",
+                        "Stage Banter!"
+                    )
+                );
+            candidate
+                .Evidence.Should()
+                .Contain(
+                    new ShadowRepertoireDictionaryEvidence(
+                        "setlist_sample:"
+                            + memberships
+                                .GetProperty("row")
+                                .GetProperty("uuid")
+                                .GetGuid()
+                                .ToString("D"),
+                        "/unordered_memberships/0/song/name",
+                        "Stage Banter"
+                    )
+                );
+        }
+    }
+
+    [Test]
+    public void CaseWhitespaceAndCanonicalUnicodeVariantsShareOneLiteralWitness()
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var songUuid = Guid.NewGuid();
+        adapter.Observe(Memberships(songUuid, 1200, "  CAFE\u0301 SONG  "));
+        adapter.Observe(Song(songUuid, "Café Song"));
+
+        var track = (ShadowRepertoireTrack)adapter.Process(Track("café song")).Single().Proposal!;
+        var candidate = track.Segments.Single().ComparisonDiagnostics.Single();
+
+        candidate.Song.LegacySongUuid.Should().Be(songUuid);
+        candidate.Song.Name.Should().Be("Café Song");
+        candidate
+            .Evidence.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Be(
+                new ShadowRepertoireDictionaryEvidence(
+                    "song_sample:" + songUuid.ToString("D"),
+                    "/row/name",
+                    "Café Song"
+                )
+            );
+    }
+
     [Test]
     public void UnresolvedProducerKeepsSupportedCompoundMentionsWithoutClaimingWholeFileResolution()
     {
@@ -451,6 +599,28 @@ public sealed class TestShadowRepertoireAdapter
                     name,
                     artist_id = 1,
                 },
+            }
+        );
+
+    private static JsonElement Memberships(Guid songUuid, int count, string title = "Reprise") =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "setlist_sample",
+                row = new { uuid = Guid.NewGuid(), artist_id = 1 },
+                unordered_memberships = Enumerable
+                    .Range(0, count)
+                    .Select(_ => new
+                    {
+                        song_id = 1,
+                        song = new
+                        {
+                            uuid = songUuid,
+                            artist_id = 1,
+                            name = title,
+                        },
+                    })
+                    .ToArray(),
             }
         );
 

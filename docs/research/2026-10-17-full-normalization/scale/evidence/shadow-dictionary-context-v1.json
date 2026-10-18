@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T20:25:24.051335+00:00",
+  "scope": "Real dictionary-context replay and compact song-title evidence; no canonical identity acceptance or production writes.",
+  "verification": {
+    "tests": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-dictionary-witness-verification-v1/shadow-dictionary-witness.trx",
+      "sha256": "3c6ea883b958950d271ce37aa079e64b92eca7c8bb32b6c3678f525e5d1ef8af"
+    },
+    "passed": 49,
+    "failed": 0,
+    "sourceOverlay": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-dictionary-witness-verification-v1/source-overlay.json",
+      "sha256": "6e8784dc9a1f47aa3aed507aa1dd127fbb1cc87fb6a6e070ed76543bb546293e"
+    }
+  },
+  "realReplay": {
+    "inputs": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/dictionary-context-benchmark-inputs-v2.json",
+      "sha256": "2e401f89f82463d34e418d29237f3a61652a1f126dcbbae2e7dda04d6c9943ad"
+    },
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-dictionary-context-v2/manifest.json",
+      "sha256": "be56e539618880f24384dcc161dff54372f1996356494bac0ef03047bedd4269"
+    },
+    "execution": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-dictionary-context-execution-v2/request.json",
+      "sha256": "014bdd3be3f36498f1f7230f18f4e9b5d3601fcfc316295ca1736adca60338ab"
+    },
+    "result": {
+      "exitCode": 0,
+      "elapsedSeconds": 13.091061959043145,
+      "stopReason": null,
+      "freeBytesAfter": 4194770944
+    },
+    "files": 50000,
+    "dictionarySongs": 16605,
+    "setlists": 38475,
+    "unorderedMemberships": 575103,
+    "outcomes": 348635,
+    "failed": 0,
+    "gzipBytes": 57863413,
+    "independentAudit": {
+      "path": "/tmp/normalization-shadow-dictionary-context-benchmark-v1/manifest.json",
+      "sha256": "d2c2dc08cfa0d6ba0bdd5d843be69cea0ed0df5f84fccc5eb4ea3265fe99eefb"
+    }
+  },
+  "exposedRegression": {
+    "trackUuid": "2474208a-c0fc-936e-9688-b53240fcdfd4",
+    "repertoireBytesBefore": 180436,
+    "repertoireBytesAfter": 4650,
+    "fileContentsBytesBefore": 181258,
+    "fileContentsBytesAfter": 5472,
+    "dictionaryReferenceOccurrencesBefore": 1176,
+    "dictionaryReferenceOccurrencesAfter": 2,
+    "semanticComparison": "Same complete target result except method versions and repeated dictionary citation arrays. Two references are the same compact candidate proof in the segment and whole-file views.",
+    "allFileCoordinateMismatches": 0,
+    "membershipMismatches": 0
+  },
+  "decision": "Retain one actual witness per distinct literal spelling, with direct dictionary rows preferred. Keep punctuation-distinct aliases, all legacy UUID candidates, original memberships and literal title evidence. New adapter version rejects resume of old output.",
+  "storage": {
+    "failedFullRun": "local-dev/normalization-data/2026-10-18-shadow-full-population-v2",
+    "failedExecution": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-population-execution-v2/result.json",
+      "sha256": "44a86d9061e0361b481cd3eed56691c7b961fb4606656876bf31a04a1f863450"
+    },
+    "state": "Stopped at original 4 GiB free-space floor; not a completed full-population result.",
+    "approvedCleanupReceipt": {
+      "path": "/tmp/normalization-capsule-cleanup-approved-v1/manifest.json",
+      "sha256": "4eb63f8538c99b5ab685a864f941f91f8046450b4edd691211b59e60618ae2b1"
+    },
+    "approvedFoldersRemoved": 21,
+    "measuredHostFreeBytesRecovered": 1687552,
+    "additionalCleanup": "Separate failed-run chunk proposal awaits explicit approval; no deletion is included in this receipt."
+  }
+}
