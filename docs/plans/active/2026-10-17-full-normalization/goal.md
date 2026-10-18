@@ -52,6 +52,14 @@ Write for Alec and for engineers who know Relisten but have not followed this co
 
 Apply Zinsser, McPhee, Strunk and White, ASD-STE100, Virginia Tufte and Forsyth selectively for clarity, structure, economy, syntax and voice. Use conclusion-first reasoning, context/action/result explanations and progress/plans/problems updates when useful; do not force a template or invent rationale. PR descriptions should explain the final change, relevant verification and operational considerations to a reader outside this thread.
 
+## When Alec's input is needed
+
+Ask promptly when a concrete product decision, missing fact, access, storage or spending decision requires Alec's judgment. Give the relevant evidence, your recommended option and the practical consequence of waiting. Use the available user-input interface and make the pending question visible in the status update. Do not bury it in a report or keep researching around a decision that only Alec can make. Keep routine implementation choices and large labeling jobs with the agent.
+
+Stop work that depends on the answer; continue genuinely independent useful work. Silence is not an answer or approval. Do not repeat the same question, invent assumptions to bypass it, or create extra verification work to keep the goal busy.
+
+Use the goal tool's actual blocked-state contract: when the same blocker has persisted for at least three consecutive goal turns and no meaningful progress is possible without Alec's input or an external change, mark the goal `blocked`, report the returned status and stop goal work. Ask on the first occurrence; the three-turn rule is not a reason to postpone the question or manufacture three attempts. Before that threshold, keep the question explicit and perform only useful independent work. After a blocked goal is resumed, reassess the blocker under the tool's fresh audit rules. Use `paused` only when Alec explicitly asks to pause, and never mark unfinished work complete to escape a blocker.
+
 ## Goal tracking
 
 The implementation thread is `01a14720-eb42-71c1-8b3d-84c8eff0c3cd`. It owns the active execution goal. This file is the persistent objective amendment and must be linked from that goal when its interface supports objective edits. If the interface only supports goal status changes, retain the unfinished active goal and apply this amendment to its execution; do not mark an unfinished goal complete just to replace its text. Report the interface limitation accurately.
