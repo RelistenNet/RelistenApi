@@ -20,6 +20,7 @@ import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 VERSION = "retained-venue-directory-v1"
+NATIVE_VERSION = "native-venue-overlay-v2"
 FLOOR = 4.5 * 1024**3
 
 
@@ -247,7 +248,7 @@ class NativeVenueOverlayBuilder:
         if self.database.exists():
             with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)) as existing:
                 version = existing.execute("SELECT value FROM metadata WHERE key='version'").fetchone()
-                if version is None or json.loads(version[0]) != "native-venue-overlay-v1":
+                if version is None or json.loads(version[0]) not in ("native-venue-overlay-v1", NATIVE_VERSION):
                     raise ValueError("Native update target is not a native overlay")
         staging = self.database.with_name(self.database.name + ".building")
         # Exclusive staging ownership prevents competing writers. A failed update
@@ -263,9 +264,11 @@ class NativeVenueOverlayBuilder:
                     CREATE TABLE domain_inputs(domain TEXT,uuid TEXT,provider TEXT,PRIMARY KEY(domain,provider,uuid));
                     CREATE TABLE accounts(uuid TEXT PRIMARY KEY,parent_uuid TEXT,observation_key TEXT,
                         summary TEXT,chunk TEXT,line INTEGER);
-                    CREATE TABLE files(native_key TEXT PRIMARY KEY,parent_uuid TEXT,recording_origin TEXT,
+                    CREATE TABLE recording_accounts(id INTEGER PRIMARY KEY,parent_uuid TEXT,origin TEXT,
+                        UNIQUE(parent_uuid,origin));
+                    CREATE TABLE files(native_key TEXT PRIMARY KEY,recording_id INTEGER,
                         ordinal INTEGER,label TEXT,chunk TEXT,line INTEGER);
-                    CREATE INDEX file_recordings ON files(parent_uuid,recording_origin);
+                    CREATE INDEX file_recordings ON files(recording_id);
                 """)
                 self._project_domain(db, staging, "venues", self._venues)
                 self._project_domain(db, staging, "file_contents", self._files)
@@ -277,7 +280,7 @@ class NativeVenueOverlayBuilder:
                                 parents=db.execute("SELECT count(*) FROM parents").fetchone()[0],
                                 files=db.execute("SELECT count(*) FROM files").fetchone()[0],
                                 outcomes=dict(db.execute("SELECT outcome,count(*) FROM parents GROUP BY outcome")))
-                VenueDirectoryBuilder._metadata(db, version="native-venue-overlay-v1", sourceRun=str(self.run),
+                VenueDirectoryBuilder._metadata(db, version=NATIVE_VERSION, sourceRun=str(self.run),
                     sourceManifestSha256=file_hash(manifest_path), coverage=coverage, buildState="completed")
                 db.commit()
                 self._budget(staging)
@@ -343,13 +346,21 @@ class NativeVenueOverlayBuilder:
                 account["observationKey"], encoded(summary), str(path.relative_to(self.run)), line))
 
     def _files(self, db, record, path, line):
-        db.execute("DELETE FROM files WHERE parent_uuid=?", (record["inputUuid"],))
+        parent = record["inputUuid"]
+        db.execute("DELETE FROM files WHERE recording_id IN (SELECT id FROM recording_accounts WHERE parent_uuid=?)", (parent,))
+        db.execute("DELETE FROM recording_accounts WHERE parent_uuid=?", (parent,))
+        # A recording origin can contain long original evidence quotes. Store it
+        # once per input/account, rather than once in every file and wide index.
+        recordings = {}
         for child in (record.get("proposal") or {}).get("files", []):
             file = child["file"]
             label = (file.get("title") or {}).get("value") or (file.get("filename") or {}).get("value") or child["entityKey"]
-            db.execute("INSERT INTO files VALUES(?,?,?,?,?,?,?)", (child["entityKey"], record["inputUuid"],
-                self.origin_key(child["recordingOrigin"]), child["fileOrdinal"], label,
-                str(path.relative_to(self.run)), line))
+            origin = self.origin_key(child["recordingOrigin"])
+            if origin not in recordings:
+                recordings[origin] = db.execute("INSERT INTO recording_accounts(parent_uuid,origin) VALUES(?,?)",
+                                                (parent, origin)).lastrowid
+            db.execute("INSERT INTO files VALUES(?,?,?,?,?,?)", (child["entityKey"], recordings[origin],
+                child["fileOrdinal"], label, str(path.relative_to(self.run)), line))
         if db.execute("SELECT count(*) FROM files").fetchone()[0] > 100000:
             raise ValueError("Native overlay exceeds its file bound")
 
@@ -566,10 +577,13 @@ class VenueDirectory:
         file_offset, file_limit = self.page({"offset": parameters.get("fileOffset", 0), "limit": parameters.get("fileLimit", 40)})
         files, total_files = [], 0
         if origins:
-            where = " WHERE parent_uuid=? AND recording_origin IN (" + ",".join("?" for _ in origins) + ")"
+            join = " FROM native.files f JOIN native.recording_accounts r ON r.id=f.recording_id"
+            where = " WHERE r.parent_uuid=? AND r.origin IN (" + ",".join("?" for _ in origins) + ")"
             values = [parent_uuid, *origins]
-            total_files = db.execute("SELECT count(*) FROM native.files" + where, values).fetchone()[0]
-            files = [dict(row) for row in db.execute("SELECT * FROM native.files" + where + " ORDER BY ordinal LIMIT ? OFFSET ?", values + [file_limit, file_offset])]
+            total_files = db.execute("SELECT count(*)" + join + where, values).fetchone()[0]
+            files = [dict(row) for row in db.execute(
+                "SELECT f.native_key,r.parent_uuid,r.origin recording_origin,f.ordinal,f.label,f.chunk,f.line"
+                + join + where + " ORDER BY f.ordinal LIMIT ? OFFSET ?", values + [file_limit, file_offset])]
             for file in files:
                 file["url"] = self.native_url + "?" + urlencode({"view": "files", "entityKey": file["native_key"]})
         return files, total_files, file_offset, file_limit

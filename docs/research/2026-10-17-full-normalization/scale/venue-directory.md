@@ -7,8 +7,10 @@ they do not become canonical venues or join catalog records by matching names,
 provider numeric IDs or Local numeric IDs.
 
 This addition is implemented and tested against synthetic retained outcomes.
-The actual native run is ready for a separate bounded projection and reader
-integration check; this document does not claim that cutover has happened.
+The first actual 34,139-file projection reached the 32 MiB staging cap and
+published nothing. Recording-origin interning corrects that representation; an
+actual retry and reader integration check remain separate verification. This
+document does not claim that cutover has happened.
 
 ## Project and serve
 
@@ -22,14 +24,21 @@ python3 tools/RelistenNormalization/venue_directory.py native \
 
 Only completed `venues` and `file_contents` chunks are read. The builder retains
 compact search fields, file keys and original chunk/line/ordinal locators. It
-copies neither the legacy database nor provider bodies. Bounds are 10,000 input
+copies neither the legacy database nor provider bodies. Exact recording origins
+are interned once per provider input/account; file rows reference that private
+integer key. The join still compares the complete original canonical origin and
+parent UUID, including original evidence coordinates and quotes. Interning does
+not collapse accounts by name, resource key or catalog ID. Bounds are 10,000 input
 results per domain, 10,000 venue observations, 100,000 files and 32 MiB of staging
-database/journal, with a 4.5 GiB free-space reserve. These bounds cover the current
-670 venue inputs and 34,139 native files; they are not full-catalog limits.
+database/journal, with a 4.5 GiB free-space reserve. The current 670 venue inputs
+and 34,139 files fit the count bounds; the actual retry must establish that the
+interned database fits the size bound. These are not full-catalog limits.
 
 An update writes an exclusive `.building` file and replaces the native overlay
-atomically only after completion and budget checks. An ordinary failure removes
-that staging file and preserves the previous overlay. Latest logical parent
+atomically only after completion and budget checks. The interned representation is
+`native-venue-overlay-v2`; rebuild an older native overlay before serving it with
+this reader. The native command can atomically replace its earlier v1 format. An
+ordinary failure removes that staging file and preserves the previous overlay. Latest logical parent
 counts per provider/domain must match the completed manifest. A missing domain,
 chunk or parent is an incomplete input, not a withdrawal. A process crash can leave
 the staging file; inspect it before removing it and retrying. The command refuses
@@ -96,11 +105,12 @@ exact recording-origin relationship.
 
 ## Verification
 
-Twenty focused Python tests pass. New cases cover shared search without numeric
+Twenty-one focused Python tests pass. New cases cover shared search without numeric
 joins, original root citations, history prose and alternative localities, exact
 recording-origin file links through the actual `ShadowIndex` child API, native
 file pagination, a root without recording links, catalog UUID anchors, retraction,
-failed-update atomicity after partial projection and
+failed-update atomicity after partial projection, 5,000 files sharing one long
+original recording origin within the unchanged storage cap, and
 refusal to overwrite the legacy database. The original twelve legacy cases
 remain unchanged in behavior. Run them with:
 

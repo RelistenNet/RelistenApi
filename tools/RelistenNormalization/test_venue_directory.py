@@ -423,6 +423,32 @@ class TestVenueDirectory(unittest.TestCase):
             NativeVenueOverlayBuilder(self.native_run, self.database, 0).build()
         self.assertEqual(file_hash(self.database), before)
 
+    def test_native_many_files_share_one_exact_recording_origin_within_storage_bound(self):
+        self.build()
+        record, file_record = self.native_fixture()
+        origin = record["proposal"]["venues"][0]["recordingLinks"][0]["recording"]
+        origin["evidence"]["quote"] = "original recording evidence " * 180
+        template = file_record["proposal"]["files"][0]
+        template["recordingOrigin"] = origin
+        file_record["proposal"]["files"] = [
+            {**template, "entityKey": "native_file:bulk:" + str(index), "fileOrdinal": index}
+            for index in range(5000)]
+        directory = self.native_overlay([(record, file_record)])
+        self.assertLess(self.overlay.stat().st_size, 32 * 1024**2)
+        row = directory.search({"kind": "native_observation"})["rows"][0]
+        page = directory.detail(row["uuid"], {"fileOffset": "4999", "fileLimit": "1"})
+        self.assertEqual(page["filesTotal"], 5000)
+        self.assertEqual(page["files"][0]["native_key"], "native_file:bulk:4999")
+        self.assertEqual(json.loads(page["files"][0]["recording_origin"]), origin)
+        self.assertIn("native_file%3Abulk%3A4999", page["files"][0]["url"])
+        # A different original quote is a different account, even when all
+        # resource fields and the provider input are identical.
+        changed = json.loads(json.dumps(record))
+        changed["proposal"]["venues"][0]["recordingLinks"][0]["recording"]["evidence"]["quote"] += "?"
+        write_gzip(self.native_run / "venues" / "200.jsonl.gz", [changed])
+        NativeVenueOverlayBuilder(self.native_run, self.overlay, 0).build()
+        self.assertEqual(directory.detail(row["uuid"], {})["filesTotal"], 0)
+
     def test_native_uuid_anchors_and_file_pagination_do_not_expand_to_other_catalog_sources(self):
         self.build()
         record, files = self.native_fixture(anchor=uid(101))
