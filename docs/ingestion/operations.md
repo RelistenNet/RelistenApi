@@ -205,6 +205,72 @@ capture dictionaries, discover extraction accounts or establish full backfill
 coverage. Durable catalog pages and the all-artist coverage check remain separate
 work.
 
+
+### Setlist and recording-content commands
+
+Use `--normalize-setlists` or `--normalize-recording-contents` on a writable
+catalog with migrations through 52. Each command consumes one **completed**
+repertoire resolution attempt. Extraction proposals and partial repertoire
+publication are not complete inputs. Finish the repertoire attempt first, then
+save its UUID with the new consumer attempt UUID.
+
+```sh
+dotnet run --project RelistenIngestionWorker -- \
+  --normalize-setlists process --attempt "$setlist_attempt_uuid" \
+  --repertoire-attempt "$completed_setlist_repertoire_attempt_uuid"
+dotnet run --project RelistenIngestionWorker -- \
+  --normalize-recording-contents process --attempt "$content_attempt_uuid" \
+  --repertoire-attempt "$completed_recording_repertoire_attempt_uuid"
+```
+
+These are explicit writer commands. Setlist processing can publish an accepted
+edition, its sets and occurrences. Recording-content processing can publish
+accepted file segments while leaving occurrence and audio offsets unknown. Each
+recording still belongs to one performance. The commands do not select a preferred
+setlist, move playback, fetch provider data, call Luna, or start workers or
+schedules. They require no Redis or Temporal connection. Keep production execution
+disabled until evaluation and rollout are verified.
+
+The two commands support the same six operations:
+
+- `process --attempt UUID --repertoire-attempt UUID` starts or resumes the exact
+  retained request. Reuse both UUIDs after interruption.
+- `retry --attempt NEW_UUID --registration UUID` saves a new attempt under the
+  existing source lineage. It selects a completed current repertoire result once;
+  replay retains that selection.
+- `get --attempt UUID` returns the saved outcome and publication status. Setlist
+  summaries retain the edition UUID selected by that attempt's preparation and
+  show observer-retirement progress. The edition UUID is null before preparation
+  or for an unbound observer; publication status identifies whether it was published.
+  Canonical publication can
+  finish before retirement; the attempt remains pending until its required phases
+  settle.
+- `decisions --attempt UUID` lists decision identifiers, dispositions and reasons.
+  Recording-content decisions also identify the content row and withdrawals.
+- `pending` lists source registrations whose consumed facts need reevaluation.
+- `recovery` lists unfinished and eligible stale attempts that can resume or retry.
+
+The three page operations accept `--limit` from 1 through 200, default 100, and
+`--after UUID` from the preceding `next_cursor`. They inspect saved work and do
+not advance it. Source images, claim wording and evidence quotes are excluded
+from stdout. The commands accept no JSON image or caller-supplied match decision.
+
+JSON receipts go to stdout and diagnostics to stderr. Exit 0 means the operation
+completed; inspect accepted, retained, review and unresolved counts separately.
+Exit 2 means the attempt is pending or stale. Resume pending work with the same
+saved operation and attempt UUID. For stale work, inspect its reason and optional
+`retry_requirement` before allocating a new retry. A permanent source or capacity
+rejection requires a changed source, processor version or supported limit profile;
+polling unchanged inputs cannot fix it. `get` returns exit 1 with `not_found` for
+an unknown attempt. Invalid or failed requests return 1; cancellation returns 130.
+A process can stop after a commit but before printing its receipt, so retained
+publication and retirement records remain authoritative.
+
+No discovery loop or schedule is enabled by these commands. Catalog-wide
+selection, bounded source acquisition and backfill coverage remain separate
+operator work. See the [consumer contract](../plans/active/2026-10-17-full-normalization/repertoire-consumers.md)
+for source ownership, stable correspondence, explicit withdrawal and recovery.
+
 ## Configuration
 
 | Setting | Use |
