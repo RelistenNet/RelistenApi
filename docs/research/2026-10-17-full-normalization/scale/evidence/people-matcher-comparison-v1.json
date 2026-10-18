@@ -1,0 +1,134 @@
+{
+  "state": "completed_real_people_model_comparison",
+  "csharp_contracts": {
+    "passed": 19,
+    "failed": 0
+  },
+  "python_contracts": {
+    "passed": 24,
+    "failed": 0
+  },
+  "all_tasks": 168,
+  "identity_questions": 89,
+  "candidate_edges": 158,
+  "split_components": 82,
+  "resolved_draft_edges": 81,
+  "unknown_edges": 77,
+  "actual_csharp_rules": {
+    "needs_evidence": 115,
+    "not_candidate": 43
+  },
+  "diagnostic_draft_disagreements": {
+    "logistic": 6,
+    "boosted_tree": 6
+  },
+  "all_six_disagreements": "Explicit source-local aliases absent from the name/artist projection; not a cross-recording accuracy estimate.",
+  "public_runtime_parity": {
+    "scored": 155,
+    "unsupported_skips": 3,
+    "maximum_absolute_error": 0.0,
+    "tolerance": 1e-12
+  },
+  "identity_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "provider_requests": 0,
+  "model_api_requests": 0,
+  "database_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/build.log",
+      "bytes": 29056,
+      "sha256": "b88dd1c504ccd9eed570aa215ff330526dafa2cd0b0a85e2897e5080674f68f9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/contracts.log",
+      "bytes": 3623,
+      "sha256": "e35e6a1ad4cbdd3770fb4571bebd0bcff58fdf509bfd09ea75eefff9fa3e3d95"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/python-tests.log",
+      "bytes": 5329,
+      "sha256": "7805b60cadd43fefbaa4ff625802e72b85ca77071984ce0c8711f646b3c26f3c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/baseline.log",
+      "bytes": 3438,
+      "sha256": "ab3171857ef17becf3f8f29380908a78459c2092c819aaf53bb19209ec701a17"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/training.log",
+      "bytes": 1021,
+      "sha256": "9b2f9ed59011c840b2d4e711b94e1c8a3ddd254d1e26fa7af9d3344d68b846e0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/parity-build.log",
+      "bytes": 10129,
+      "sha256": "44c0ba17cf847b06f0f254e349358939eb974edca51e055deab15705d07fee6c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/parity-execution.log",
+      "bytes": 342,
+      "sha256": "b594d9396bc4ab31c3a2539d6678f0ff08cc9949e1cc208a7a12449a335de993"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/model-verification-v1/sources.json",
+      "bytes": 3417,
+      "sha256": "a3ee692f283bfabd6c479f65222e198b03c506d3b5a974d1458a006ccc3d235e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/csharp-pair-baseline-v1/manifest.json",
+      "bytes": 3437,
+      "sha256": "809ca28be6e545a302a0375e7aacb0026879ab875102eab5a0e9f252a344537d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/people-matcher-runtime-v1/binaries.json",
+      "bytes": 16358,
+      "sha256": "6afe155624aa0b56d8d73bfe319b9d660f950930116bf6596c025dbdb4c5872d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/logistic-boosted-with-baseline-v1/report.json",
+      "bytes": 9568,
+      "sha256": "393aaa9b4d843f6e03d65122e6269c44010090a37052b331e3e6a9b1ade8a477"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/logistic-boosted-with-baseline-v1/models.json",
+      "bytes": 1735720,
+      "sha256": "19b2f76a2a6a92313fcf3d929a6cd4180aaf3c0277523a1a2b9a756969f45c28"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-csharp-parity-v1/receipt.json",
+      "bytes": 1744,
+      "sha256": "5d679019d67ae8b2edabdd0cce3262d84ae3a5022ea82752cf4e2e01f42a98c3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-csharp-parity-v1/scores.jsonl",
+      "bytes": 64544,
+      "sha256": "9412a918ba949b548d73bb837d90c8606d62312b17bd298d2c5b17cedeb2774f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-score-verification-v1/receipt.json",
+      "bytes": 1545,
+      "sha256": "ac17b9a55b2e8ccecd09ee5f511ec85f44963a17d6f9926b9c7d07d597932699"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-score-verification-v1/verify.py",
+      "bytes": 4365,
+      "sha256": "d5a8beb91a30630d46b4b38b2482dff29b078d839a28f0d7611fb9ccfa574fe3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-parity-tools-v1/freeze-manifest.json",
+      "bytes": 1116,
+      "sha256": "c04c7330db3141e81f364c0129a8225a3ffe13fb3ae79fce6166a99de4f2c238"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-parity-tools-v1/Program.cs",
+      "bytes": 10358,
+      "sha256": "80e46278584cfaebec4712feb2064d97ae18f64b3d5a46254ed32f35bf6448bd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/trained-parity-tools-v1/PeopleTrainedParity.csproj",
+      "bytes": 376,
+      "sha256": "64805a2af45a93da23e10b23e1ea0c0da5645f385291761a807a018d7099b78a"
+    }
+  ]
+}

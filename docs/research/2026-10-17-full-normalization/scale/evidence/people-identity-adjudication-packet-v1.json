@@ -1,0 +1,115 @@
+{
+  "state": "built_and_authenticated_unlabeled_development_packet",
+  "counts": {
+    "artists": 66,
+    "completed_identity_labels": 0,
+    "discovery_hypotheses_checked": 38,
+    "discovery_spans_checked": 979,
+    "eligible_originals_authenticated": 2184,
+    "hypotheses": 11,
+    "pair_questions": 55,
+    "recording_duplicate_groups": 80,
+    "recordings": 82
+  },
+  "independent_first_reviews": "completed_in_separate_immutable_files",
+  "adjudication": "completed_in_separate_immutable_files",
+  "identity_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "contract_tests": {
+    "passed": 17,
+    "failed": 0,
+    "python_optimization_enabled": true
+  },
+  "retained_initial_failure": "Enriched visible-text receipt included authenticated recipe metadata; required path/bytes/SHA256 projection corrected and covered by three new regressions.",
+  "provider_requests": 0,
+  "model_requests": 0,
+  "database_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1-verification/build-failed-v1.log",
+      "bytes": 1259,
+      "sha256": "4a84bc718df8a6771953494f394d4c7e257253a0f03f9ff3b7641777359c69fa"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1-verification/build-v2.log",
+      "bytes": 569,
+      "sha256": "88ca9b9483566f209d116093804911f81e5aa1c01d15d767be56f1090094b7c8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1-verification/validation-v1.log",
+      "bytes": 347,
+      "sha256": "47ecce671943ee7faf8f3a7e6cdb86a5277688aba4249e34bc4da934a51996bd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1-verification/tests-v2.log",
+      "bytes": 3158,
+      "sha256": "fcd6496cb82715a415af952f32c2e1a86ea77a2304a7c6ed1fac0b59c6ddb63c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/manifest.json",
+      "bytes": 7740,
+      "sha256": "1255af35db5b6d1a26710c784dc4ba7332b44509a7cd00666433eb2c53f573b9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/evidence.jsonl",
+      "bytes": 285227,
+      "sha256": "b94290102ab816ce0caa54f75f032e19b120ba15dc2a5104c4604944bbede1c4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/questions.jsonl",
+      "bytes": 185133,
+      "sha256": "9004782f5073d6cd0a137d1e6de9c802cf545f0b5d4ccfd8e1598418bf06d14c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/operator-provenance.json",
+      "bytes": 10062,
+      "sha256": "e51e46b4cd41733f1cbaa872c649a3b30c546536e634c12c9eb89dc5eafc3123"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/primary/excerpts.json",
+      "bytes": 776,
+      "sha256": "8c9fc0693e9b4cb2bbcd2f43c30ff5a942aba4ca4bb8851d80f24e270dad47c8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/primary/http-receipt.json",
+      "bytes": 1738,
+      "sha256": "651a647450e4cfa86d55afd8bab64de69e35c88237ffbd69bb5ebdeb815d0952"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/REVIEW.md",
+      "bytes": 2798,
+      "sha256": "147eea8214e52eafa26e1ea5d7fa74ef674999bb47c307e97877f77da37cce7d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/primary/sonicarchives-homepage.html",
+      "bytes": 53030,
+      "sha256": "f810096bdcdd1c3f33fbd009e055ff3c1d6ffc1140ada1510531e19237a5d4d7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-v1/primary/sonicarchives-visible-text.txt",
+      "bytes": 1020,
+      "sha256": "cd1f52cd6b4d0380fbb6e5742b406d74843213d94c0a82de30e413e42043df5a"
+    },
+    {
+      "path": "tools/RelistenNormalization/people-identity-packet/people_identity_packet.py",
+      "bytes": 26864,
+      "sha256": "20ac70e6b999b03049141852127334a31426ebc048071d650663aaa7d0e3a5c2"
+    },
+    {
+      "path": "tools/RelistenNormalization/people-identity-packet/test_people_identity_packet.py",
+      "bytes": 16202,
+      "sha256": "cd6890033c2846eb0fb503f4b669d700490afa72b95bb7f79556f62f594a9ef6"
+    },
+    {
+      "path": "tools/RelistenNormalization/people-identity-packet/README.md",
+      "bytes": 15274,
+      "sha256": "8186fb0c0fb9538bd14ba38996d29eb9599c9ab64e292f658fe8a1b771cb8be2"
+    },
+    {
+      "path": "tools/RelistenNormalization/people-identity-packet/tool-manifest.json",
+      "bytes": 729,
+      "sha256": "850cbf62de2b9602b74f5c44f35978e4c93c82928ffecc384a9291b8822fac67"
+    }
+  ],
+  "review_results_receipt": "docs/research/2026-10-17-full-normalization/scale/evidence/people-identity-adjudication-v1.json"
+}

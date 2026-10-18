@@ -75,4 +75,25 @@ The separate [people development bundle](training/people-development-v1/README.m
 
 The [cross-artist identity discovery](scale/evidence/people-identity-discovery-v2.json) expands that development evidence to 38 family hypotheses across 207 recordings and 172 artists. The [actor-facts development bundle](training/actor-facts-development-v1/README.md) adds 543 whole-field annotations and a separately frozen 43-field answer-blind review. Disagreements and partial coverage remain recorded; adjudication is pending. Exact contact/profile attachment and person/project distinctions remain separate from identity truth. The [actor-evidence guide](../../plans/active/2026-10-17-full-normalization/people-actor-evidence.md) describes implemented extraction and the accepted contextual matching still required.
 
+The [cross-artist credited-actor review](training/people-identity-adjudication-v1/README.md)
+adds separate agent adjudication of 55 questions across 82 recordings and 66
+artists: 54 same-actor links across ten hypotheses and one unresolved question.
+Six separate controls yield two same-actor and four different-actor answers; only
+two negatives span recordings. Original source-only packets and labels remain
+unchanged. Actual validation checks 1,044 exact citations, and all 60 packet,
+control and review-validator tests pass. These are development judgments.
+
+The [first real people model comparison](training/people-matcher-comparison-v1/README.md)
+compares rules, logistic regression and boosted trees on the original candidate
+pools. Both models miss six explicit aliases absent from their name/artist
+features. The final logistic model matches public C# scores exactly on all 155
+supported comparisons. Next, add source-supported actor relationships and the
+separate adjudicated targets, then repeat the comparison with broader evidence.
+
 The [local MusicBrainz search receipt](scale/evidence/musicbrainz-search-local-v1.json) verifies retained timeout outcomes and explicit retry across four invocations. No successful page was received. Successful live search verification and evaluated catalog-to-work matching remain open; the [correspondence processor](../../plans/active/2026-10-17-full-normalization/composition-resolution.md) is implemented. Unavailable results are not an empty candidate set.
+
+The [composition development inventory](scale/composition-development-selection.md)
+finds that only two of the 74 cross-artist composition questions meet both
+existing development partitions. Their four repertoire rows have no writer or
+global work fields. Broader correspondence evidence is required before training
+and evaluating composition matching.

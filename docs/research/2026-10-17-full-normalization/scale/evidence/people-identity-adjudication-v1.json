@@ -1,0 +1,280 @@
+{
+  "accepted_identity_writes": 0,
+  "artifacts": [
+    {
+      "bytes": 22146,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/receipt.json",
+      "sha256": "2c76f0574080f3f8929b1b30dd0ec6ae905c11e496634a3fa58d9d127bbc54e0"
+    },
+    {
+      "bytes": 7625,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/validation-receipt.json",
+      "sha256": "7b02090338ccf0ade07d99c5fec22fed4028bb3340a1211a9245caba5d1e9e3d"
+    },
+    {
+      "bytes": 7740,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/packet-manifest.json",
+      "sha256": "1255af35db5b6d1a26710c784dc4ba7332b44509a7cd00666433eb2c53f573b9"
+    },
+    {
+      "bytes": 140317,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/reader-a/first-answers.jsonl",
+      "sha256": "7829c304a3852f8ad31eb08a6a516117231bffdcf1bba1714d941d20829512b2"
+    },
+    {
+      "bytes": 2369,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/reader-a/freeze-receipt.json",
+      "sha256": "6d67dfb5a5b73777ffcc068c1254ec82aa9b74ded2433fe7044578d706059e76"
+    },
+    {
+      "bytes": 292346,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/reader-b/first-answers.jsonl",
+      "sha256": "454409fdfeb065c07275ca0080c548d9c157934f586d9af884fbf75d06a995ce"
+    },
+    {
+      "bytes": 2144,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/reader-b/freeze-receipt.json",
+      "sha256": "58265fee9a0c852cb866e7ddea37679f8a2a1595eb9db1f9fd7f1fedc71e3c7e"
+    },
+    {
+      "bytes": 149742,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/adjudication-v1/adjudications.jsonl",
+      "sha256": "f626641e4be9f6a37e7a941076e407c4122c43d1c858ff9d607f3a8cf9d53882"
+    },
+    {
+      "bytes": 6770,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/adjudication-v1/freeze-receipt.json",
+      "sha256": "7ee03286ea1415517fcdcf344f347df12eb41683753b20b9c960d10fd28c37f7"
+    },
+    {
+      "bytes": 7108,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/validation-receipt.json",
+      "sha256": "3aa3ed49d22e8fd845d693f06aa1b3178fd6a426b68ec31c7e6d19834474b432"
+    },
+    {
+      "bytes": 7425,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/packet-manifest.json",
+      "sha256": "9fad481fb0b986dfeaeb7bff9f5b3b25b28e73becc345383d12492f313455a69"
+    },
+    {
+      "bytes": 20763,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/reader-a/first-answers.jsonl",
+      "sha256": "cb3abb947e9ea7b27b747da60f32b493105659cf0b4dfd8a5171033c50a4afef"
+    },
+    {
+      "bytes": 1963,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/reader-a/freeze-receipt.json",
+      "sha256": "7283e7587997d314262e0dec279783996f0e1ad9b86a8fe5bf1baebc5b11c86b"
+    },
+    {
+      "bytes": 26418,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/reader-b/first-answers.jsonl",
+      "sha256": "0e7840e07445ddf93968af54255160a846b114cabec6d78495e7432d619190a6"
+    },
+    {
+      "bytes": 1923,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/reader-b/freeze-receipt.json",
+      "sha256": "21d7819cf91ab4ab6a7b7c2b00c3382bff96c8b85b3b1cb7b71158d82405e8bb"
+    },
+    {
+      "bytes": 23913,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/adjudication-v1/adjudications.jsonl",
+      "sha256": "d67afa384343d5cf0db5ee840906522d0f8525f2abbb3297b80fa70abeaa434c"
+    },
+    {
+      "bytes": 5148,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/controls/adjudication-v1/freeze-receipt.json",
+      "sha256": "eafcbbfa946b2080e333d99588ed1025d300add29e8280e56828ad49df3e4925"
+    },
+    {
+      "bytes": 729,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/packet/tool-manifest.json",
+      "sha256": "850cbf62de2b9602b74f5c44f35978e4c93c82928ffecc384a9291b8822fac67"
+    },
+    {
+      "bytes": 26864,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/packet/people_identity_packet.py",
+      "sha256": "20ac70e6b999b03049141852127334a31426ebc048071d650663aaa7d0e3a5c2"
+    },
+    {
+      "bytes": 16202,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/packet/test_people_identity_packet.py",
+      "sha256": "cd6890033c2846eb0fb503f4b669d700490afa72b95bb7f79556f62f594a9ef6"
+    },
+    {
+      "bytes": 15274,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/packet/README.md",
+      "sha256": "8186fb0c0fb9538bd14ba38996d29eb9599c9ab64e292f658fe8a1b771cb8be2"
+    },
+    {
+      "bytes": 734,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/controls/tool-manifest.json",
+      "sha256": "53254a6654ecd2169d6d1a345b96148521cd8b449fdca50b68619ce6c78e1f4e"
+    },
+    {
+      "bytes": 18665,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/controls/people_identity_controls.py",
+      "sha256": "d8869c7af4e0bdbedc04a91d0f1e6676f6bbe0b34bdc0778d5371df860a433fe"
+    },
+    {
+      "bytes": 11450,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/controls/test_people_identity_controls.py",
+      "sha256": "c75977b99f7ee2adb2340f40efdad84296f563f413a8b236334a0b5279ca797b"
+    },
+    {
+      "bytes": 9185,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/controls/README.md",
+      "sha256": "abb9017e99518dfeadd3f9120aeea4afc176d8ce667c20d43ca229a7d51e0564"
+    },
+    {
+      "bytes": 25918,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/reviews/review_people_identity_packet.py",
+      "sha256": "5a517b1db67487bb8e29bd4e8f5420e5092174efcc96a003459ec7394b359dca"
+    },
+    {
+      "bytes": 34072,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/reviews/test_review_people_identity_packet.py",
+      "sha256": "ac40576a7d9f3153d5cdd24482e03211e8253eb02e5b6d3c1c7c14660031297c"
+    },
+    {
+      "bytes": 12588,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/tools/reviews/README.md",
+      "sha256": "5b2776c26f0d482ad9dae94142ef9656dc62a080be14bbd36c38e7d5def8f514"
+    },
+    {
+      "bytes": 3158,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/relisten-people-identity-packet-tests-v2.log",
+      "sha256": "fcd6496cb82715a415af952f32c2e1a86ea77a2304a7c6ed1fac0b59c6ddb63c"
+    },
+    {
+      "bytes": 2312,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/relisten-people-controls-tests-v1.log",
+      "sha256": "487284ec5ee9eccdb6ef1d8fb8635f75cdaceb997e82f6adfcb1d8146ea424be"
+    },
+    {
+      "bytes": 6358,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/relisten-people-review-validation-tests-v3.log",
+      "sha256": "c2e4a44fb7647c4e12c6f3e8ef036653b3dd4b07d0b3b1e4c89af56760a8c3ed"
+    },
+    {
+      "bytes": 1757,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/relisten-people-adjudication-validation-v3.log",
+      "sha256": "cc27ce41c41ac15c289c94f1b765e0fc59d71eeb6a833d1b6cc6cb38faefbb15"
+    },
+    {
+      "bytes": 1966,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/relisten-people-controls-adjudication-validation-v1.log",
+      "sha256": "66aa8ac33504791503cd274ecc229c1982cce3faa5c771e01e18b5f086403761"
+    },
+    {
+      "bytes": 80,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/logs/retained-initial-locator-failure.log",
+      "sha256": "624914bb8ce0ca04ca9f5aec475c9c5fbb57c7d433e732bc3d70a6c05f89bcac"
+    },
+    {
+      "bytes": 12869,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/prepare-evidence.py",
+      "sha256": "68d469135434154195b6e1d547df52121218126ce6dcc73ec116f17167f7a25f"
+    }
+  ],
+  "contract_tests": [
+    {
+      "failed": 0,
+      "log_sha256": "fcd6496cb82715a415af952f32c2e1a86ea77a2304a7c6ed1fac0b59c6ddb63c",
+      "passed": 17,
+      "suite": "packet"
+    },
+    {
+      "failed": 0,
+      "log_sha256": "487284ec5ee9eccdb6ef1d8fb8635f75cdaceb997e82f6adfcb1d8146ea424be",
+      "passed": 12,
+      "suite": "controls"
+    },
+    {
+      "failed": 0,
+      "log_sha256": "c2e4a44fb7647c4e12c6f3e8ef036653b3dd4b07d0b3b1e4c89af56760a8c3ed",
+      "passed": 31,
+      "suite": "reviews"
+    }
+  ],
+  "identity_accuracy_established": false,
+  "independent_human_adjudication": false,
+  "limits": [
+    "These are correlated development questions and credited-actor judgments, not accepted canonical people or independently sampled identities.",
+    "Ten positive hypotheses broaden development evidence; two cross-recording negatives do not establish general matching precision.",
+    "Exact citations, reviewer declarations and adjudication establish a retained review record, not historical identity truth or release accuracy.",
+    "The controls include two local co-credit distinctions and two cross-recording distinctions; do not count all four as cross-recording negatives.",
+    "Original training labels and packet bytes remain frozen. New adjudicated files are separate evidence, not an automatic training or publication import."
+  ],
+  "model_requests": 0,
+  "original_labels_and_packets_unchanged": true,
+  "packets": {
+    "controls": {
+      "adjudicated_class_counts": {
+        "different_entities": 4,
+        "insufficient_evidence": 0,
+        "same_entity": 2
+      },
+      "agreements_changed_during_adjudication": 0,
+      "by_question_kind": {
+        "cross_source_contrast": {
+          "different_entities": 2,
+          "insufficient_evidence": 0,
+          "same_entity": 0
+        },
+        "cross_source_linkage": {
+          "different_entities": 0,
+          "insufficient_evidence": 0,
+          "same_entity": 2
+        },
+        "local_co_credit_distinctness": {
+          "different_entities": 2,
+          "insufficient_evidence": 0,
+          "same_entity": 0
+        }
+      },
+      "cross_recording_negative_questions": 2,
+      "disagreement_outcomes": {
+        "followed_reader_a": 0,
+        "followed_reader_b": 0,
+        "neither_first_decision": 0
+      },
+      "exact_citation_references_checked": 125,
+      "first_review_agreements": 6,
+      "first_review_disagreements": 0,
+      "packet_schema_version": "people-identity-distinctness-controls:1",
+      "questions": 6
+    },
+    "discovery": {
+      "adjudicated_class_counts": {
+        "different_entities": 0,
+        "insufficient_evidence": 1,
+        "same_entity": 54
+      },
+      "agreements_changed_during_adjudication": 0,
+      "disagreement_outcomes": {
+        "followed_reader_a": 0,
+        "followed_reader_b": 2,
+        "neither_first_decision": 0
+      },
+      "exact_citation_references_checked": 919,
+      "first_review_agreements": 53,
+      "first_review_disagreements": 2,
+      "packet_schema_version": "people-identity-development-packet:1",
+      "positive_hypotheses": 10,
+      "questions": 55
+    }
+  },
+  "policy_activation_permitted": false,
+  "provider_requests": 0,
+  "review_kind": "Two preserved answer-blind agent first reviews and a separate agent adjudication over every question.",
+  "state": "agent_adjudicated_development_identity_evidence",
+  "total_exact_citation_references_checked": 1044,
+  "untouched_release_evaluation": false,
+  "verification": {
+    "freeze_output_hashes_match": 6,
+    "original_label_mention_candidate_sentinels_unchanged": 5,
+    "packet_artifact_hashes_unchanged": 11,
+    "validation_original_and_retained_input_pairs": 20
+  }
+}

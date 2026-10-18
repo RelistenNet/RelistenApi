@@ -1,0 +1,44 @@
+{
+  "state": "completed_development_metadata_selection",
+  "usage": "development_only",
+  "composition_questions": 74,
+  "family_partitions": {
+    "development": 22,
+    "validation": 7,
+    "test": 3,
+    "cross_partition_review_only": 42
+  },
+  "development_questions_excluded_by_artist_partition": 20,
+  "additional_reserved_family_exclusions": 0,
+  "selected_questions": 2,
+  "selected_repertoire_rows": 4,
+  "selected_artists": 4,
+  "raw_records_decoded": 4,
+  "writer_or_global_work_fields_present": false,
+  "identity_labels_added": 0,
+  "policy_activation_permitted": false,
+  "provider_requests": 0,
+  "database_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-compositions-v1/selection-v1/receipt.json",
+      "bytes": 1746,
+      "sha256": "0ea119b29402804ecb8c0099129fe06e3212c573ce8c5a940115697e5fd17006"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-compositions-v1/selection-v1/evidence.jsonl",
+      "bytes": 3029,
+      "sha256": "a66b0d7ff0abefa3dee510d61dd371952e9dbea99f9ab882de89679ddb6b6f3d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-compositions-v1/selection-v1/tasks.jsonl",
+      "bytes": 1068,
+      "sha256": "349da0da86f531613c3f07fd713cffa594364766d385d009e9b1c9c86ddc20d3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-compositions-v1/selection-v1/selector.py",
+      "bytes": 6176,
+      "sha256": "8d3dd093a935de24e3c8f6bf0da6d10b91e25e3994fec2c65f5cf821b6848c6d"
+    }
+  ]
+}
