@@ -153,7 +153,8 @@ public sealed partial class ShadowPerformanceAdapter
         Guid Uuid,
         long ArtistId,
         long? ShowId,
-        string? LiteralDate
+        string? LiteralDate,
+        string? UpstreamIdentifier = null
     )
     {
         internal static SourceHome Read(JsonElement row) =>
@@ -162,7 +163,8 @@ public sealed partial class ShadowPerformanceAdapter
                 row.GetProperty("uuid").GetGuid(),
                 row.GetProperty("artist_id").GetInt64(),
                 Number(row, "show_id"),
-                Text(row, "display_date")
+                Text(row, "display_date"),
+                Text(row, "upstream_identifier")
             );
     }
 

@@ -98,14 +98,8 @@ public sealed partial class ShadowPerformanceAdapter
                     recording.Origin.Item,
                     recording.LiteralDate?.Value,
                     recording.Origin,
-                    AssociatePerformance(
-                        input,
-                        recording.LiteralDate?.Value,
-                        recording.Origin,
-                        recording.LiteralDate,
-                        recording.Venue,
-                        recording.Text
-                    )
+                    AssociateRecordingPerformance(input, revision, recording),
+                    recording
                 ))
             )
             .Distinct()

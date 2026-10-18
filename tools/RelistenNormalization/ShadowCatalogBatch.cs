@@ -78,6 +78,38 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         );
     }
 
+    /// <summary>
+    /// Extracts and normalizes ordinary JSONL rows without requiring replica snapshot
+    /// framing. Input bytes and extractor versions identify the resumable run.
+    /// </summary>
+    /// <remarks>
+    /// This entrypoint does not certify database snapshot provenance. Retain the
+    /// export's original evidence separately, and use separate runs for catalogs
+    /// whose numeric artist, source or show IDs have different meanings.
+    /// </remarks>
+    public async Task RunRowsInlineAsync(
+        string snapshotPath,
+        string outputDirectory,
+        bool resume = false,
+        string? providerInputsPath = null,
+        CancellationToken ct = default
+    )
+    {
+        var inputHash = await HashAsync(snapshotPath, ct);
+        var providerHash =
+            providerInputsPath == null ? "none" : await HashAsync(providerInputsPath, ct);
+
+        await RunPreparedAsync(
+            new(snapshotPath, providerInputsPath),
+            null,
+            outputDirectory,
+            "rows-inline/" + inputHash + "/" + providerHash,
+            resume,
+            null,
+            ct
+        );
+    }
+
     private async Task RunPreparedAsync(
         ShadowCatalogInputs inputs,
         string? extractionsPath,
@@ -92,7 +124,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             adapter => adapter.GetType().Name,
             adapter => adapter.Version
         );
-        if (capture != null)
+        if (extractionsPath == null)
         {
             methods.Add(
                 nameof(CatalogRowExtraction),
@@ -144,7 +176,9 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             preparationFailures = inputs.PreparationFailures,
             inlineExtractionErrors = inputs.InlineExtractionErrors,
             artists = inputs.Artists.Count,
-            scope = "All selected retained raw inputs. Each shard has its own snapshot. Census totals can describe a larger catalog.",
+            scope = capture == null
+                ? "All rows from a byte-pinned ordinary JSONL export. This run does not certify replica snapshot provenance. Keep catalog namespaces separate."
+                : "All selected retained raw inputs. Each shard has its own snapshot. Census totals can describe a larger catalog.",
         };
         await run.SaveAsync(run.CompletedLine, "running", population, ct);
         await ProcessRowsAsync(inputs, extractionsPath, run, outputDirectory, population, ct);

@@ -33,6 +33,8 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
     public string Version =>
         "shadow-composition-v3/repertoire="
         + repertoireInterpretation.Version
+        + "/decoder="
+        + NormalizationProviderDecoder.Version
         + "/primary="
         + (evidence.ManifestSha256 ?? "none");
 

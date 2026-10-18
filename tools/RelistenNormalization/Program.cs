@@ -11,7 +11,7 @@ if (
             && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
-        || (args.Length == 3 && args[0] == "shadow-compositions-acquire")
+        || (args.Length == 3 && args[0] is "shadow-compositions-acquire" or "retained-http-inputs")
         || (
             args.Length == 4
             && args[0]
@@ -29,7 +29,7 @@ if (
         )
         || (
             args.Length is 3 or 4
-            && args[0] == "shadow-inline"
+            && args[0] is "shadow-inline" or "shadow-rows"
             && (args.Length == 3 || args[3] == "--resume")
         )
         || (args.Length == 5 && args[0] == "luna-credit-cohort")
@@ -47,11 +47,13 @@ if (
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization shadow-compositions-acquire <request.json> <output-directory>\n"
+            + "       RelistenNormalization retained-http-inputs <request.json> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
             + "       RelistenNormalization people-view-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization people-adjudicated-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -74,12 +76,31 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
-    if (args[0] is "shadow" or "shadow-inline")
+    if (args[0] == "retained-http-inputs")
+    {
+        var request =
+            JsonSerializer.Deserialize<RetainedHttpProviderInputsRequest>(
+                await File.ReadAllBytesAsync(args[1], cancellation.Token),
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            ) ?? throw new InvalidDataException("A retained HTTP input request is required.");
+        var result = await new RetainedHttpProviderInputs().PrepareAsync(
+            request,
+            args[2],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))
+        );
+        return 0;
+    }
+
+    if (args[0] is "shadow" or "shadow-inline" or "shadow-rows")
     {
         var shadow = new ShadowCatalogBatch([
             new ShadowPeopleAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
-                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256")
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL")
             ),
             new ShadowVenueAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_VENUE_GEOGRAPHY")
@@ -91,8 +112,18 @@ try
             new ShadowPerformanceAdapter(),
         ]);
         var providerInputs = Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PROVIDER_INPUTS");
-        var outputDirectory = args[0] == "shadow-inline" ? args[2] : args[3];
-        if (args[0] == "shadow-inline")
+        var outputDirectory = args[0] == "shadow" ? args[3] : args[2];
+        if (args[0] == "shadow-rows")
+        {
+            await shadow.RunRowsInlineAsync(
+                args[1],
+                outputDirectory,
+                resume: args.Length == 4,
+                providerInputsPath: providerInputs,
+                ct: cancellation.Token
+            );
+        }
+        else if (args[0] == "shadow-inline")
         {
             await shadow.RunInlineAsync(
                 args[1],

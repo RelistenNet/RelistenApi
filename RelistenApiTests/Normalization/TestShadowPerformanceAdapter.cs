@@ -795,6 +795,337 @@ public sealed class TestShadowPerformanceAdapter
         contents.Playback.Mp3Url.Should().Be("https://example.test/live.mp3");
     }
 
+    [Test]
+    public void RetainedRecordingBindingSelectsItsActualLateShowAndKeepsNativeFiles()
+    {
+        var (catalog, record) = RetainedRecording();
+        var otherShow = CatalogShow(101, Guid.NewGuid(), type: "early");
+        var adapter = Observe(otherShow, catalog);
+        var withoutBinding = System.Text.Json.Nodes.JsonNode.Parse(record.GetRawText())!;
+        withoutBinding.AsObject().Remove("catalog_binding");
+        withoutBinding.AsObject().Remove("retained_http");
+        ProviderAssociation(adapter, JsonSerializer.SerializeToElement(withoutBinding))
+            .Reason.Should()
+            .Be("ambiguous_catalog_performance");
+
+        var results = adapter.Process(Input(record)).ToArray();
+        var outcome = results.Single(value => value.Domain == "performances");
+        var performance = ((ShadowProviderPerformance[])outcome.Proposal!).Single();
+        var association = performance.Association!;
+        var binding = record
+            .GetProperty("catalog_binding")
+            .Deserialize<RetainedHttpCatalogBinding>(Json)!;
+        ProviderAssociation(Observe(catalog), JsonSerializer.SerializeToElement(withoutBinding))
+            .ShowUuid.Should()
+            .Be(binding.ShowUuid);
+
+        outcome.Outcome.Should().Be("proposed");
+        association.ShowUuid.Should().Be(binding.ShowUuid);
+        association.Basis.Should().Be("retained_historical_catalog_source");
+        association.CatalogBinding.Should().Be(binding);
+        association
+            .Discriminators.Should()
+            .BeEmpty("catalog provenance is not a native body field");
+        association.Candidates.Single().PerformanceType.Should().Be("late");
+        performance.Recording!.Files.Single().Title!.Value.Should().Be("A Song");
+        performance.Recording.Files.Single().Position!.Value.Should().Be(1);
+        performance.Recording.Files.Single().SetLabel!.Value.Should().Be("S1");
+        performance
+            .Recording.Files.Single()
+            .SongIdentities.Single()
+            .Identity.ProviderKey.Should()
+            .Be("5");
+        performance.Recording.Text.Single().Text.Value.Should().Be("Recorded by Fixture Taper");
+        performance
+            .Recording.Text.Single()
+            .Text.Evidence.JsonPointer.Should()
+            .Be("/data/taper_notes");
+        var revision = record.GetProperty("input").Deserialize<NormalizationInputRevision>(Json)!;
+        using var retained = NormalizationRetainedDocument.Open(revision);
+        retained.ValidateEvidence(performance.Recording.Files.Single().Title!.Evidence);
+        performance
+            .Recording.Files.Single()
+            .Title!.Evidence.JsonPointer.Should()
+            .Be("/data/tracks/0/title");
+        results.Single(value => value.Domain == "setlists").Outcome.Should().Be("not_applicable");
+    }
+
+    [TestCase("expected_source_uuid")]
+    [TestCase("source_uuid")]
+    [TestCase("source_artist")]
+    [TestCase("source_identifier")]
+    [TestCase("show_uuid")]
+    [TestCase("show_artist")]
+    [TestCase("show_id")]
+    [TestCase("indexed_source_uuid")]
+    [TestCase("indexed_source_artist")]
+    [TestCase("indexed_source_identifier")]
+    [TestCase("indexed_show_uuid")]
+    [TestCase("indexed_show_artist")]
+    [TestCase("provenance_input_uuid")]
+    public void ConflictingRetainedBindingCannotFallThroughToTheDatesOnlyShow(string conflict)
+    {
+        var (catalog, record) = RetainedRecording();
+        var captured = System.Text.Json.Nodes.JsonNode.Parse(catalog.GetRawText())!;
+        var wrapper = System.Text.Json.Nodes.JsonNode.Parse(record.GetRawText())!;
+        switch (conflict)
+        {
+            case "expected_source_uuid":
+                wrapper["catalog_binding"]!["expectedSourceUuid"] = Guid.NewGuid();
+                wrapper["retained_http"]!["catalogBinding"] = wrapper[
+                    "catalog_binding"
+                ]!.DeepClone();
+                break;
+            case "source_uuid":
+                wrapper["source_context"]!["uuid"] = Guid.NewGuid();
+                break;
+            case "source_artist":
+                wrapper["source_context"]!["artist_id"] = 2;
+                break;
+            case "source_identifier":
+                wrapper["source_context"]!["upstream_identifier"] = "another-recording";
+                break;
+            case "show_uuid":
+                wrapper["show_context"]!["uuid"] = Guid.NewGuid();
+                break;
+            case "show_artist":
+                wrapper["show_context"]!["artist_id"] = 2;
+                break;
+            case "show_id":
+                wrapper["show_context"]!["id"] = 103;
+                break;
+            case "indexed_source_uuid":
+                captured["row"]!["uuid"] = Guid.NewGuid();
+                break;
+            case "indexed_source_artist":
+                captured["row"]!["artist_id"] = 2;
+                break;
+            case "indexed_source_identifier":
+                captured["row"]!["upstream_identifier"] = "another-recording";
+                break;
+            case "indexed_show_uuid":
+                captured["show_context"]!["uuid"] = Guid.NewGuid();
+                break;
+            case "indexed_show_artist":
+                captured["show_context"]!["artist_id"] = 2;
+                break;
+            case "provenance_input_uuid":
+                wrapper["retained_http"]!["inputRevisionUuid"] = Guid.NewGuid();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(conflict));
+        }
+
+        var adapter = Observe(JsonSerializer.SerializeToElement(captured));
+        var result = adapter
+            .Process(Input(JsonSerializer.SerializeToElement(wrapper)))
+            .Single(value => value.Domain == "performances");
+        var association = ((ShadowProviderPerformance[])result.Proposal!).Single().Association!;
+
+        result.Outcome.Should().Be("unresolved");
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().NotBeNullOrEmpty();
+        association.Candidates.Should().BeEmpty();
+        association.CatalogBinding.Should().NotBeNull();
+    }
+
+    [TestCase("unresolved")]
+    [TestCase("missing_show")]
+    [TestCase("invalid")]
+    public void ExplicitUnresolvedOrInvalidRecordingBindingDoesNotUseDateFallback(string state)
+    {
+        var (catalog, record) = RetainedRecording();
+        var wrapper = System.Text.Json.Nodes.JsonNode.Parse(record.GetRawText())!;
+        if (state == "invalid")
+        {
+            wrapper["catalog_binding"] = null;
+        }
+        else
+        {
+            wrapper["catalog_binding"]!["showUuid"] = null;
+            wrapper["catalog_binding"]!["showReason"] = "missing_or_conflicting_catalog_show";
+            wrapper["show_context"] = null;
+            if (state == "unresolved")
+            {
+                wrapper["catalog_binding"]!["status"] = "unresolved";
+                wrapper["catalog_binding"]!["reason"] = "missing_catalog_source";
+                wrapper["catalog_binding"]!["sourceUuid"] = null;
+                wrapper["source_context"] = null;
+            }
+            wrapper["retained_http"]!["catalogBinding"] = wrapper["catalog_binding"]!.DeepClone();
+        }
+
+        var association = ProviderAssociation(
+            Observe(catalog),
+            JsonSerializer.SerializeToElement(wrapper)
+        );
+
+        association.ShowUuid.Should().BeNull();
+        association
+            .Reason.Should()
+            .Be(
+                state == "invalid" ? "invalid_retained_catalog_binding"
+                : state == "unresolved" ? "missing_catalog_source"
+                : "missing_or_conflicting_catalog_show"
+            );
+        association.Candidates.Should().BeEmpty();
+    }
+
+    [Test]
+    public void CorrectedProviderDateStaysVisibleWithoutMovingExistingPlayback()
+    {
+        var (catalog, record) = RetainedRecording(providerDate: "1970-02-04");
+        var source = catalog.GetProperty("row").GetProperty("uuid").GetGuid();
+        var show = catalog.GetProperty("show_context").GetProperty("uuid").GetGuid();
+        var track = Track(11, source, 102, show, "late", 1, "First set", "A Song");
+        var trackNode = System.Text.Json.Nodes.JsonNode.Parse(track.GetRawText())!;
+        trackNode["source_context"]!["upstream_identifier"] = "17";
+        track = JsonSerializer.SerializeToElement(trackNode);
+        var adapter = Observe(catalog, track, CatalogShow(103, Guid.NewGuid(), "1970-02-04"));
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().Be(show);
+        association.LiteralDate.Should().Be("1970-02-04");
+        association.ObservedDate!.Value.Should().Be("1970-02-04");
+        association.ObservedDate.Evidence.JsonPointer.Should().Be("/data/date");
+        association.Reason.Should().Be("provider_date_conflicts_with_catalog_assignment");
+        association.Candidates.Single().LiteralDate.Should().Be("1970-02-03");
+        var contents = (ShadowFileContents)
+            adapter
+                .Process(Input(track))
+                .Single(value => value.Domain == "file_contents")
+                .Proposal!;
+        contents.Playback.SourceUuid.Should().Be(source);
+        contents.Playback.ShowUuid.Should().Be(show);
+        contents
+            .Playback.FileUuid.Should()
+            .Be(track.GetProperty("row").GetProperty("uuid").GetGuid());
+        contents.Playback.Mp3Url.Should().Be("https://example.test/live.mp3");
+        var home = (ShadowPerformanceHome)
+            adapter
+                .Process(Input(catalog))
+                .Single(value => value.Domain == "performances")
+                .Proposal!;
+        home.ShowUuid.Should().Be(show);
+        home.Unresolved.Should().BeEmpty();
+    }
+
+    private static (JsonElement Catalog, JsonElement Record) RetainedRecording(
+        string providerDate = "1970-02-03"
+    )
+    {
+        var source = new
+        {
+            id = 11,
+            uuid = Guid.NewGuid(),
+            artist_id = Artist.Id,
+            show_id = 102,
+            display_date = "1970-02-03",
+            upstream_identifier = "17",
+        };
+        var show = new
+        {
+            id = 102,
+            uuid = Guid.NewGuid(),
+            artist_id = Artist.Id,
+            display_date = "1970-02-03",
+            performance_type = "late",
+        };
+        var body = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                success = true,
+                data = new
+                {
+                    id = 17,
+                    date = providerDate,
+                    taper_notes = "Recorded by Fixture Taper",
+                    tracks = new[]
+                    {
+                        new
+                        {
+                            id = 23,
+                            show_id = 17,
+                            title = "A Song",
+                            position = 1,
+                            set = "S1",
+                            song_ids = new[] { 5 },
+                            mp3 = "https://example.test/provider.mp3",
+                        },
+                    },
+                },
+            }
+        );
+        var revision = new NormalizationInputRevision
+        {
+            Uuid = Guid.NewGuid(),
+            Resource = new("phish.in", "show", "17"),
+            CaptureVersion = "phishin-show-response-v1",
+            MediaType = "application/json",
+            Payload = body,
+            Sha256 = Convert.ToHexStringLower(SHA256.HashData(body)),
+        };
+        var artifact = new RetainedHttpArtifact(
+            "/retained/catalog/manifest.json",
+            1,
+            new string('a', 64)
+        );
+        var binding = new RetainedHttpCatalogBinding(
+            "bound",
+            null,
+            source.uuid,
+            source.uuid,
+            show.uuid,
+            null,
+            artifact,
+            "/retained/catalog/sources.jsonl.gz",
+            3
+        );
+        var provenance = new RetainedHttpProviderProvenance(
+            revision.Uuid,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.Parse("2020-01-01T00:00:00Z"),
+            "https://phish.in/api/v1/shows/17.json",
+            200,
+            artifact,
+            artifact,
+            artifact,
+            1,
+            new("/retained/http/response.json", body.LongLength, revision.Sha256),
+            binding
+        );
+        var record = JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "provider_input",
+                provider = "phish.in",
+                row = new
+                {
+                    uuid = revision.Uuid,
+                    artist_id = Artist.Id,
+                    artist_uuid = Artist.Uuid,
+                },
+                input = revision,
+                retained_http = provenance,
+                catalog_binding = binding,
+                source_context = source,
+                show_context = show,
+            },
+            Json
+        );
+        return (
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    kind = "source_sample",
+                    row = source,
+                    show_context = show,
+                }
+            ),
+            record
+        );
+    }
+
     private static ShadowPerformanceAssociation ProviderAssociation(
         ShadowPerformanceAdapter adapter,
         JsonElement record

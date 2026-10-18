@@ -10,7 +10,7 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed partial class NormalizationProviderDecoder
 {
-    public const string Version = "provider-observations-v7";
+    public const string Version = "provider-observations-v8";
 
     /// <summary>
     /// Requires a known provider/resource/capture-version contract. Unsupported versions
@@ -41,6 +41,7 @@ public sealed partial class NormalizationProviderDecoder
             ("archive.org", "item_metadata", "archive-item-response-v1") => DecodeArchive,
             ("phish.in", "catalog", "raw-http:1") => DecodePhishCatalog,
             ("phish.in", "show", "phishin-show-object-v1") => DecodePhishShow,
+            ("phish.in", "show", "phishin-show-response-v1") => DecodePhishShowResponse,
             ("jerrygarcia.com", "mirror_show_page", "jerry-mirror-html:1") => DecodeJerry,
             ("local", "metadata_root", "local-http-json-v1") => DecodeLocalRoot,
             ("local", "directory_metadata", "local-http-json-v1") => DecodeLocalDirectory,

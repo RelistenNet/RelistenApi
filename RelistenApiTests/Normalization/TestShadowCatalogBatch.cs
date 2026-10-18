@@ -8,7 +8,7 @@ using Relisten.Normalization.Batch;
 namespace RelistenApiTests.Normalization;
 
 [TestFixture]
-public sealed class TestShadowCatalogBatch
+public sealed partial class TestShadowCatalogBatch
 {
     private string directory = null!;
 

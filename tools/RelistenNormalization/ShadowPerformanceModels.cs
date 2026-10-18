@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -72,19 +73,25 @@ public sealed record ShadowSetlistAccount(
     ShadowPerformanceAssociation? Association = null
 );
 
-/// <summary>Provider recording/account identity without a fabricated catalog show UUID.</summary>
+/// <summary>
+/// Provider recording/account identity with its original recording facts when available.
+/// Native files and their positions remain provider observations, not canonical occurrences.
+/// </summary>
 public sealed record ShadowProviderPerformance(
     string EntityKey,
     NormalizationResourceKey Identity,
     string? LiteralDate,
     ProviderObservationOrigin Origin,
-    ShadowPerformanceAssociation? Association = null
+    ShadowPerformanceAssociation? Association = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ProviderRecordingObservation? Recording = null
 );
 
 /// <summary>
 /// A shadow proposal to connect an account to an existing show. Candidates retain catalog
 /// UUIDs and conflicts; only ShowUuid selects a target. No source assignment is changed.
 /// Provider dates, origin and discriminator citations retain their original support.
+/// CatalogBinding supplies historical catalog provenance separately from native body citations.
 /// </summary>
 public sealed record ShadowPerformanceAssociation(
     Guid? ShowUuid,
@@ -95,7 +102,9 @@ public sealed record ShadowPerformanceAssociation(
     ProviderObservationOrigin? Origin,
     ObservedValue<string>? ObservedDate,
     IReadOnlyList<ShadowPerformanceDiscriminator> Discriminators,
-    IReadOnlyList<ShadowPerformanceCandidate> Candidates
+    IReadOnlyList<ShadowPerformanceCandidate> Candidates,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        RetainedHttpCatalogBinding? CatalogBinding = null
 );
 
 public sealed record ShadowPerformanceDiscriminator(

@@ -102,16 +102,33 @@ public sealed partial class NormalizationProviderDecoder
         };
     }
 
-    private static ProviderDecodeResult DecodePhishShow(ProviderObservationReader reader)
+    private static ProviderDecodeResult DecodePhishShow(ProviderObservationReader reader) =>
+        DecodePhishShowObject(reader, reader.Root, "");
+
+    private static ProviderDecodeResult DecodePhishShowResponse(ProviderObservationReader reader)
     {
-        var show = reader.Root;
+        // The response contract retains the complete original HTTP envelope. Object
+        // captures retain their old root coordinates; no body rewriting bridges the two.
+        if (!PhishCatalogData(reader, out var show))
+        {
+            return reader.Result();
+        }
+        return DecodePhishShowObject(reader, show, "/data");
+    }
+
+    private static ProviderDecodeResult DecodePhishShowObject(
+        ProviderObservationReader reader,
+        JsonElement show,
+        string pointer
+    )
+    {
         if (show.ValueKind != JsonValueKind.Object)
         {
-            reader.Issue("expected_object", "");
+            reader.Issue("expected_object", pointer);
             return reader.Result();
         }
 
-        var identity = PhishIdentity(reader, show, "id", "", "show", required: true);
+        var identity = PhishIdentity(reader, show, "id", pointer, "show", required: true);
         if (identity == null)
         {
             return reader.Result();
@@ -119,7 +136,7 @@ public sealed partial class NormalizationProviderDecoder
 
         if (identity.Identity != reader.Input.Resource)
         {
-            reader.Issue("resource_identity_mismatch", "/id");
+            reader.Issue("resource_identity_mismatch", pointer + "/id");
             return reader.Result();
         }
 
@@ -134,38 +151,45 @@ public sealed partial class NormalizationProviderDecoder
                 venue = PhishVenue(
                     reader,
                     venueValue,
-                    "/venue",
+                    pointer + "/venue",
                     reader.Origin(
                         reader.Input.Resource,
-                        "/venue",
+                        pointer + "/venue",
                         ProviderObservationScope.ResourceItem
                     ),
-                    PhishIdentity(reader, venueValue, "id", "/venue", "venue", required: true)
+                    PhishIdentity(
+                        reader,
+                        venueValue,
+                        "id",
+                        pointer + "/venue",
+                        "venue",
+                        required: true
+                    )
                 );
             }
             else
             {
-                reader.Issue("expected_object", "/venue");
+                reader.Issue("expected_object", pointer + "/venue");
             }
         }
 
         var text = new List<ProviderTextObservation>(
             reader.TextFields(
                 show,
-                "",
+                pointer,
                 new Dictionary<string, string> { ["taper_notes"] = "taper_notes" }
             )
         );
-        PhishTags(reader, show, text);
-        var files = PhishFiles(reader, show, identity.Identity.ProviderKey);
+        PhishTags(reader, show, text, pointer);
+        var files = PhishFiles(reader, show, identity.Identity.ProviderKey, pointer);
         var recording = new ProviderRecordingObservation
         {
             Origin = reader.Origin(
                 reader.Input.Resource,
-                "",
+                pointer,
                 ProviderObservationScope.ResourceItem
             ),
-            LiteralDate = reader.String(show, "date", ""),
+            LiteralDate = reader.String(show, "date", pointer),
             Venue = venue,
             Text = text,
             Files = files,
@@ -240,18 +264,19 @@ public sealed partial class NormalizationProviderDecoder
     private static IReadOnlyList<ProviderFileObservation> PhishFiles(
         ProviderObservationReader reader,
         JsonElement show,
-        string showKey
+        string showKey,
+        string showPointer
     )
     {
         if (!show.TryGetProperty("tracks", out var tracks))
         {
-            reader.Issue("missing_tracks", "");
+            reader.Issue("missing_tracks", showPointer);
             return [];
         }
 
         if (tracks.ValueKind != JsonValueKind.Array)
         {
-            reader.Issue("expected_array", "/tracks");
+            reader.Issue("expected_array", showPointer + "/tracks");
             return [];
         }
 
@@ -259,7 +284,7 @@ public sealed partial class NormalizationProviderDecoder
         var index = 0;
         foreach (var track in tracks.EnumerateArray())
         {
-            var pointer = "/tracks/" + index++.ToString(CultureInfo.InvariantCulture);
+            var pointer = showPointer + "/tracks/" + index++.ToString(CultureInfo.InvariantCulture);
             if (track.ValueKind != JsonValueKind.Object)
             {
                 reader.Issue("expected_object", pointer);
@@ -336,7 +361,8 @@ public sealed partial class NormalizationProviderDecoder
     private static void PhishTags(
         ProviderObservationReader reader,
         JsonElement show,
-        List<ProviderTextObservation> text
+        List<ProviderTextObservation> text,
+        string showPointer
     )
     {
         if (!show.TryGetProperty("tags", out var tags))
@@ -346,14 +372,14 @@ public sealed partial class NormalizationProviderDecoder
 
         if (tags.ValueKind != JsonValueKind.Array)
         {
-            reader.Issue("expected_array", "/tags");
+            reader.Issue("expected_array", showPointer + "/tags");
             return;
         }
 
         var index = 0;
         foreach (var tag in tags.EnumerateArray())
         {
-            var pointer = "/tags/" + index++.ToString(CultureInfo.InvariantCulture);
+            var pointer = showPointer + "/tags/" + index++.ToString(CultureInfo.InvariantCulture);
             if (tag.ValueKind != JsonValueKind.Object)
             {
                 reader.Issue("expected_object", pointer);

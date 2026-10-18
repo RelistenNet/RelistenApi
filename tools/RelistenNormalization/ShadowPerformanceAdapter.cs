@@ -16,7 +16,11 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
     private readonly HashSet<long> conflictingShows = [];
     private readonly ShadowRepertoireAdapter repertoire = new();
 
-    public string Version => "shadow-performances-v3/" + repertoire.Version;
+    public string Version =>
+        "shadow-performances-v4/"
+        + repertoire.Version
+        + "/decoder="
+        + NormalizationProviderDecoder.Version;
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind switch
