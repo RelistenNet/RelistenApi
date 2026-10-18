@@ -1,0 +1,119 @@
+{
+  "artifacts": [
+    {
+      "bytes": 10681,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/README.md",
+      "sha256": "f05e07d79f95465bea7c2bbe9bf339cd249417e955007c18b000138763dd1da5"
+    },
+    {
+      "bytes": 863356,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/citations.jsonl",
+      "sha256": "fb1324d84e84c7d0fa54e5a9b6df00cf4adefa13f931e138926a2c6223ecf527"
+    },
+    {
+      "bytes": 402453,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/field-index.jsonl",
+      "sha256": "2a7a3bdd8dbc60902f70ae41e5960f88308ede326b28db6b4c542fbc9695f74f"
+    },
+    {
+      "bytes": 33900,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/independent-review-comparison.jsonl",
+      "sha256": "b4e4156681802001c0823ad0102a3617d2530385f7d1df6a5ac310aba3770209"
+    },
+    {
+      "bytes": 3737,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/independent-review-receipt.json",
+      "sha256": "cf14d9bdf8766f7485d6b4e974d1a38047081318090e663f685061dec2584d81"
+    },
+    {
+      "bytes": 106173,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/independent-review.jsonl",
+      "sha256": "99580009a11f95bc5ee70ae32847f291e6ccf8ba2469e9f8434267cfd24f0349"
+    },
+    {
+      "bytes": 2206691,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/labels.jsonl",
+      "sha256": "4fd5fe8eb60435d522163a60adeadd2542bf2f7047538d338b5f7fdcf9fcd428"
+    },
+    {
+      "bytes": 8872,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/manifest.json",
+      "sha256": "8bcd34756f911984e05d6970a92a1350a5af154c7f28edc648f83cffad034569"
+    },
+    {
+      "bytes": 101320,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/source-index.jsonl",
+      "sha256": "12851b84a383ff0ea21e90d5d41e131934487985d7a4633db491f92954ad212b"
+    },
+    {
+      "bytes": 10634,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/test_validate_bundle.py",
+      "sha256": "89c499c191052ce83b0e8214f8990faaf09626b0b28221c2428cf9bee10d24d3"
+    },
+    {
+      "bytes": 27010,
+      "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/validate_bundle.py",
+      "sha256": "30fb0908acbab3fa8b395b18635b958816e0dff84c19c51e1b0e356dbd122cc2"
+    }
+  ],
+  "checks": [
+    {
+      "command": "python3 -O docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/validate_bundle.py",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 -O docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/test_validate_bundle.py",
+      "exit_code": 0,
+      "result": "passed",
+      "tests": 18
+    }
+  ],
+  "counts": {
+    "actor_references": 547,
+    "actors": 535,
+    "aliases": 12,
+    "citations": 1628,
+    "complete_fields_by_kind": {
+      "Aliases": 331,
+      "Contacts": 375,
+      "Context": 372,
+      "Profiles": 380,
+      "Relationships": 330
+    },
+    "contacts": 240,
+    "context": 532,
+    "kind_positive": 0,
+    "profiles": 44,
+    "relationships": {
+      "DistinctActors": 7,
+      "ExplicitAlias": 12,
+      "JointRoles": 90
+    },
+    "source_records": 207,
+    "tasks": 543,
+    "unresolved_by_kind": {
+      "Aliases": 68,
+      "Contacts": 15,
+      "Context": 55,
+      "Profiles": 145,
+      "Relationships": 34
+    },
+    "values": 244
+  },
+  "fresh_review": {
+    "fixes": [
+      "Require original evidence for nonempty role claims.",
+      "Require excluded profile literals to appear in exact source citations.",
+      "Hash nested note strings in compact review exports."
+    ],
+    "reviewer": "Codex /root/normalization_local_capture",
+    "scope": "Read-only review of validator, tests, README and manifest; independently recomputed all 43 compact answers from frozen original review and checked manifest hashes. Tests were run by annotation author, not rerun by independent reviewer.",
+    "status": "clean_after_fixes"
+  },
+  "launch_accuracy_claim": false,
+  "observed_at_utc": "2026-10-18T02:19:07.043603+00:00",
+  "original_draft_labels_unchanged": true,
+  "original_first_answers_unchanged": true,
+  "schema_version": "actor-facts-validation-receipt-v1",
+  "status": "frozen_drafts_independent_subset_reviewed_adjudication_pending"
+}

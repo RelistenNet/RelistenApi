@@ -1,0 +1,355 @@
+{
+  "schema_version": "musicbrainz-search-local-probe-v1",
+  "status": "timeout_retry_receipts_verified_successful_search_profile_open",
+  "implementation_worktree_commit": "bb3840f5131633187bc2342d09a93ee52803997e",
+  "artifact_base": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-17-musicbrainz-search-v1",
+  "database": "relisten_normalization_20261017_musicbrainz",
+  "scope": {
+    "root_supplied_limits": {
+      "new_search_commands": 3,
+      "http_attempts": 6
+    },
+    "observed_invocations": 4,
+    "distinct_search_commands": 3,
+    "distinct_durable_transport_attempts": 4,
+    "search_kinds": [
+      "work",
+      "artist",
+      "recording"
+    ],
+    "public_outcomes": {
+      "pending": 4
+    },
+    "timeout_attempts": 4,
+    "successful_http_statuses": 0,
+    "received_complete_http_bodies": 0,
+    "successful_search_captures": 0,
+    "observed_search_hits": null,
+    "observed_search_hits_note": "No successful page exists; unavailable results are not an empty candidate set."
+  },
+  "filesystem_reconciliation": {
+    "manifest_artifact_entries_verified": 30,
+    "all_manifest_bytes_and_sha256_match": true,
+    "all_four_stdout_reports_match_manifests": true,
+    "same_executables_across_all_runs": true,
+    "manifest_assembly_hashes_match_reviewed_worktree_binaries": true,
+    "all_three_original_literal_citations_verified": true,
+    "all_twelve_frozen_child_uuid_and_descriptor_hashes_verified": true,
+    "work_resume_preserves_request_plan_command_and_prior_response_bytes": true,
+    "work_resume_appends_distinct_attempt_uuid_with_ordinal_two": true,
+    "no_search_body_input_capture_or_decoded_artifact_fabricated": true,
+    "all_receipts_leave_external_universe_seed_authority_and_hydration_false": true,
+    "method": "Independent Python filesystem/hash/JSON/span/identity reconciliation only; no .NET, HTTP or database connection."
+  },
+  "versions": {
+    "batch": "musicbrainz-search-batch-v1",
+    "queryBuilder": "musicbrainz-literal-search-v1",
+    "acquisitions": [
+      "musicbrainz-search-acquisition-v1/musicbrainz-literal-search-v1"
+    ],
+    "decoder": "provider-observations-v5",
+    "toolAssembly": {
+      "version": "1.0.0.0",
+      "sha256": "96eceb12e83daff3e9f3e8842b53136218a2d5b9e84e4fb2d722641035de9b2e"
+    },
+    "apiAssembly": {
+      "version": "1.0.0.0",
+      "sha256": "794bba2e0a81fe0afc4c1a223e388a67b0dfd75e0855b69da196f873f9fc09d9"
+    }
+  },
+  "runs": [
+    {
+      "directory": "work-run-01",
+      "manifest": {
+        "bytes": 1752,
+        "sha256": "6c7d990b08a0e9cb86215144b5e2400de561a10735e67ae0a615c2afae283e15"
+      },
+      "plan_uuid": "1f2935d4-6396-4bfc-9e0d-34706504b722",
+      "kind": "work",
+      "public_state": "pending",
+      "query_resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "work-search",
+        "providerKey": "f314d99a951f59efa33294fe3b3394c02a4404c7874668305b7a3408dfb44298"
+      },
+      "executed_command_uuid": "67725ef9-8b57-55d7-c262-869f3e59e8df",
+      "cumulative_command_attempts": 1,
+      "frozen_page_count": 4,
+      "observed_end": false,
+      "query_window_complete": false
+    },
+    {
+      "directory": "work-run-02",
+      "manifest": {
+        "bytes": 2070,
+        "sha256": "722947cc0a2c2ffb932e39c64bd6be1af03d5b5ebb2b0a4486fa134026fc1d65"
+      },
+      "plan_uuid": "1f2935d4-6396-4bfc-9e0d-34706504b722",
+      "kind": "work",
+      "public_state": "pending",
+      "query_resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "work-search",
+        "providerKey": "f314d99a951f59efa33294fe3b3394c02a4404c7874668305b7a3408dfb44298"
+      },
+      "executed_command_uuid": "67725ef9-8b57-55d7-c262-869f3e59e8df",
+      "cumulative_command_attempts": 2,
+      "frozen_page_count": 4,
+      "observed_end": false,
+      "query_window_complete": false
+    },
+    {
+      "directory": "artist-run-01",
+      "manifest": {
+        "bytes": 1754,
+        "sha256": "f632ec1e97cc8316f42f733b4a6543f9cfb83eae663ae2b17ca470dd7ca6146d"
+      },
+      "plan_uuid": "7eebf632-349c-42df-bab5-3ee9b1519532",
+      "kind": "artist",
+      "public_state": "pending",
+      "query_resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "artist-search",
+        "providerKey": "69ee75832c7a5105fd51c9b4b78d9951e9b6c06dcfbb7af22097ce26d677033b"
+      },
+      "executed_command_uuid": "865f8b8a-9ef5-0a2d-de30-dc0ef1489e41",
+      "cumulative_command_attempts": 1,
+      "frozen_page_count": 4,
+      "observed_end": false,
+      "query_window_complete": false
+    },
+    {
+      "directory": "recording-run-01",
+      "manifest": {
+        "bytes": 1756,
+        "sha256": "307f774bb66dd250f2055f1466ba797ea50f72f42335c47381b1c86ad17deab9"
+      },
+      "plan_uuid": "e373a88e-bd8d-48d7-8d8e-e8675ddd33fe",
+      "kind": "recording",
+      "public_state": "pending",
+      "query_resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "recording-search",
+        "providerKey": "8e6d1eb0a11233be1ba9a52db4d6cd454ad3ce533752727aa5d318eeb4cbb8bd"
+      },
+      "executed_command_uuid": "d6a8ba18-5434-8346-9beb-2075803de227",
+      "cumulative_command_attempts": 1,
+      "frozen_page_count": 4,
+      "observed_end": false,
+      "query_window_complete": false
+    }
+  ],
+  "source_literals": [
+    {
+      "input_revision_uuid": "a2567ba7-a74b-4b41-b608-129ad696cf86",
+      "resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "work",
+        "providerKey": "6671bffb-f9cc-3ea9-96e4-91cdc8d746a6"
+      },
+      "capture_version": "musicbrainz-work-json-v1",
+      "payload_bytes": 4591,
+      "payload_sha256": "5c4de99ff9b63531d444d030a3a514f48f2ec8e9348709285c1d5f21012b1229",
+      "literal_pointer": "/title",
+      "literal_code_points": 15,
+      "literal_utf8_sha256": "1ce2d29ffa4e682a885a47850531a48e1bbd7f99e04164df291efd9fe70bab73",
+      "exact_source_literal_verified": true
+    },
+    {
+      "input_revision_uuid": "b1e1c89f-3c10-4dce-b570-12791d70a482",
+      "resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "artist",
+        "providerKey": "592a3b6d-c42b-4567-99c9-ecf63bd66499"
+      },
+      "capture_version": "musicbrainz-artist-json-v1",
+      "payload_bytes": 2240,
+      "payload_sha256": "8fe62a7e9941d402b4feb880f0a5f80ec83d1c283d1efd856d86c222b637342f",
+      "literal_pointer": "/name",
+      "literal_code_points": 11,
+      "literal_utf8_sha256": "e3adec688b84aec22bb00496cb9750087eaa8131d6002ebf8960e1df79922101",
+      "exact_source_literal_verified": true
+    },
+    {
+      "input_revision_uuid": "3f0f4fa0-6187-44fa-8ad8-748f4700dab5",
+      "resource": {
+        "provider": "musicbrainz.org",
+        "resourceType": "recording",
+        "providerKey": "0f18e773-491e-490d-9b6d-bb96bf15eae5"
+      },
+      "capture_version": "musicbrainz-recording-work-json-v1",
+      "payload_bytes": 914,
+      "payload_sha256": "4e7a08c9f2de02b8ad805866f6777f7374c9aca6c04f610a701fbbb1d658a541",
+      "literal_pointer": "/title",
+      "literal_code_points": 15,
+      "literal_utf8_sha256": "1ce2d29ffa4e682a885a47850531a48e1bbd7f99e04164df291efd9fe70bab73",
+      "exact_source_literal_verified": true
+    }
+  ],
+  "attempts": [
+    {
+      "attempt_uuid": "bc21d485-a3fd-48c9-9de0-ca20b28cfd2c",
+      "command_uuid": "67725ef9-8b57-55d7-c262-869f3e59e8df",
+      "ordinal": 1,
+      "phase": "Retryable",
+      "reason": "request_timeout",
+      "expected_generation": 0,
+      "completed_at": "2026-10-18T02:13:39.085298+00:00",
+      "http_deadline": "2026-10-18T02:13:44.063934+00:00",
+      "lease_until": "2026-10-18T02:13:54.063934+00:00",
+      "response_metadata_sha256": "4ac3b3e7f85f5c0d8245f98d8bec0798151b9fbdee2a0d83e42f428cfafc86c3",
+      "response_metadata_bytes": 253,
+      "status_code": null,
+      "headers_received": false,
+      "body_complete": false,
+      "body_bytes": null,
+      "body_sha256": null,
+      "admission_eligible": true
+    },
+    {
+      "attempt_uuid": "c364bfaa-bc67-4a0e-a32e-6e894daac898",
+      "command_uuid": "67725ef9-8b57-55d7-c262-869f3e59e8df",
+      "ordinal": 2,
+      "phase": "Retryable",
+      "reason": "request_timeout",
+      "expected_generation": 0,
+      "completed_at": "2026-10-18T02:14:31.755382+00:00",
+      "http_deadline": "2026-10-18T02:14:36.726668+00:00",
+      "lease_until": "2026-10-18T02:14:46.726668+00:00",
+      "response_metadata_sha256": "c81250acc04f40c824e51a2774fb24e1ed99d4c9e465f8ee0c8532853d50a4b9",
+      "response_metadata_bytes": 253,
+      "status_code": null,
+      "headers_received": false,
+      "body_complete": false,
+      "body_bytes": null,
+      "body_sha256": null,
+      "admission_eligible": true
+    },
+    {
+      "attempt_uuid": "def88937-4e97-4d17-95ef-4642d37705e7",
+      "command_uuid": "865f8b8a-9ef5-0a2d-de30-dc0ef1489e41",
+      "ordinal": 1,
+      "phase": "Retryable",
+      "reason": "request_timeout",
+      "expected_generation": 0,
+      "completed_at": "2026-10-18T02:15:11.342009+00:00",
+      "http_deadline": "2026-10-18T02:15:16.319985+00:00",
+      "lease_until": "2026-10-18T02:15:26.319985+00:00",
+      "response_metadata_sha256": "0fecef595802664dc4befd1fe97d569ca8f0735621ae7175e29f66102794ad4d",
+      "response_metadata_bytes": 253,
+      "status_code": null,
+      "headers_received": false,
+      "body_complete": false,
+      "body_bytes": null,
+      "body_sha256": null,
+      "admission_eligible": true
+    },
+    {
+      "attempt_uuid": "b820c838-ef19-4c23-8209-b47c3d490dc9",
+      "command_uuid": "d6a8ba18-5434-8346-9beb-2075803de227",
+      "ordinal": 1,
+      "phase": "Retryable",
+      "reason": "request_timeout",
+      "expected_generation": 0,
+      "completed_at": "2026-10-18T02:16:10.15178+00:00",
+      "http_deadline": "2026-10-18T02:16:15.134409+00:00",
+      "lease_until": "2026-10-18T02:16:25.134409+00:00",
+      "response_metadata_sha256": "72dd964ed1afe36c72fa9ec3d36926b1eb540ef06e80c920e8f06abc226ebefd",
+      "response_metadata_bytes": 252,
+      "status_code": null,
+      "headers_received": false,
+      "body_complete": false,
+      "body_bytes": null,
+      "body_sha256": null,
+      "admission_eligible": true
+    }
+  ],
+  "root_supplied_database_snapshots": {
+    "independent_database_query_performed": false,
+    "snapshot": "database-snapshot.json",
+    "search_counts": "database-search-counts.json",
+    "search_fetch_count": "database-search-fetch-count.json",
+    "search_resource_types": [
+      "work-search",
+      "recording-search",
+      "artist-search"
+    ],
+    "reported_search_resources": 0,
+    "reported_search_revisions": 0,
+    "reported_search_fetches": 0,
+    "normalization_tables": [
+      "input_fetches",
+      "input_resources",
+      "input_revisions",
+      "musicbrainz_attempts",
+      "musicbrainz_commands",
+      "musicbrainz_gate",
+      "musicbrainz_responses"
+    ],
+    "accepted_normalization_catalog_tables_present": false,
+    "limits": "Counts and table inventory are root-supplied read-only query snapshots. This review independently verifies their exact files and consistency with exports, not live database state."
+  },
+  "top_level_artifacts": {
+    "artist-invocation-01.json": {
+      "bytes": 256,
+      "sha256": "acfe6d61fd70ffa72f3b012d82cce7b3279041421b13a76c0dfb5288043a05b7"
+    },
+    "artist-request.json": {
+      "bytes": 533,
+      "sha256": "0d6bdd6fe833f0218f47b0870f9303b7ae2e60e4c03eafdc2e05eb28762d8b1f"
+    },
+    "database-search-counts.json": {
+      "bytes": 377,
+      "sha256": "44bb213d2706312977bcc2743265a1b332d8528b36afc2e1c8e9500889788d55"
+    },
+    "database-search-fetch-count.json": {
+      "bytes": 130,
+      "sha256": "f3e71a66d209bfbda35a5bf2513d48ffaaf23c73c686273487da40f251d76f0d"
+    },
+    "database-snapshot.json": {
+      "bytes": 4580,
+      "sha256": "1e90f6b002824d8f5d31b4fdac9624265a1d72a070fd565dde123cc4cb260750"
+    },
+    "migration-47-result.txt": {
+      "bytes": 56,
+      "sha256": "072ad27e37df9f6160eb57de2471c67dae05cac2784097274f2749644bd8fe87"
+    },
+    "migration-47.sql": {
+      "bytes": 625,
+      "sha256": "c3f85e5afff3df50b7f5e476a90f47ba4e27877994748ebbd1f8669458cb63a4"
+    },
+    "recording-invocation-01.json": {
+      "bytes": 259,
+      "sha256": "82b8c8469713bc6e1cf26d7056dcb8680fa6df87c3b999b3ad1bce1c786bb65b"
+    },
+    "recording-request.json": {
+      "bytes": 544,
+      "sha256": "cc6e659a1a796a4c1a43274adb2118a804480a62f333819f0a024ba129e96a29"
+    },
+    "setup.json": {
+      "bytes": 560,
+      "sha256": "0e17e800fbdfdac4193ad15eb204a333aacc2c814525a5b8b71a693df85f2a11"
+    },
+    "work-invocation-01.json": {
+      "bytes": 254,
+      "sha256": "5ab8acb3d45ba2fb4ad28135bf1c67a7aa74f7d4a46f550bd1c165411d6cf604"
+    },
+    "work-invocation-02.json": {
+      "bytes": 254,
+      "sha256": "c5a8b471d3ca003250a72d17847810831dcf700f73ba1cfd94f63929f3805391"
+    },
+    "work-request.json": {
+      "bytes": 534,
+      "sha256": "651e1453243f791a2a3d62900861badbd2136688a6e41b5b4319a65a269dcaed"
+    }
+  },
+  "verification_limits": [
+    "The four durable attempts time out before headers are available. They supply no server status, response body, search result, count, score or live decoder-shape verification.",
+    "Admission eligible=true records timely retention under the permit; it is not representation acceptance or evidence of a successful response.",
+    "No external negative result, candidate completeness, catalog-to-work bridge, person identity, hydration or automatic acceptance is established.",
+    "Source query words are grounded in three existing MusicBrainz lookup inputs. They are not authenticated Relisten catalog-to-recording/work correspondences.",
+    "Filesystem timestamps/deadlines are not unconditional wire-level send evidence or exactly-once network proof; the cause of the remote timeout is unknown.",
+    "The root-supplied zero counts refer only to the isolated local database and listed search resource types. No production database inspection or mutation is part of this review.",
+    "Successful live search response/profile verification remains OPEN and requires a separately bounded resumed or new probe; no further provider call was made for this receipt."
+  ]
+}

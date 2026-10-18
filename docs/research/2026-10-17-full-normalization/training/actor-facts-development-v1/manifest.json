@@ -1,0 +1,194 @@
+{
+  "annotation_aid": {
+    "bytes": 19073,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/annotate_fields.py",
+    "sha256": "b0e1502af221563ab4238f11b509a04fa2ccab60417ac2ad54dbc26a872f5660"
+  },
+  "contract_snapshots": [
+    {
+      "bytes": 4508,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/contract-snapshot/CreditedActorFacts.cs",
+      "sha256": "92daf5ca1947324aa9c4571d808d2e212581f628a4bb126aebc73ed4c62de207"
+    },
+    {
+      "bytes": 1438,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/contract-snapshot/RecordingExtraction.cs",
+      "sha256": "43d80f467aa4dde5ea5cf409a50f499a4de6d46fec9e94ca35649339decae157"
+    }
+  ],
+  "counts": {
+    "actor_references": 547,
+    "actors": 535,
+    "aliases": 12,
+    "citations": 1628,
+    "complete_fields_by_kind": {
+      "Aliases": 331,
+      "Contacts": 375,
+      "Context": 372,
+      "Profiles": 380,
+      "Relationships": 330
+    },
+    "contacts": 240,
+    "context": 532,
+    "kind_positive": 0,
+    "profiles": 44,
+    "relationships": {
+      "DistinctActors": 7,
+      "ExplicitAlias": 12,
+      "JointRoles": 90
+    },
+    "source_records": 207,
+    "tasks": 543,
+    "unresolved_by_kind": {
+      "Aliases": 68,
+      "Contacts": 15,
+      "Context": 55,
+      "Profiles": 145,
+      "Relationships": 34
+    },
+    "values": 244
+  },
+  "coverage_policy": {
+    "kind": "All actor kinds unknown; zero positive kind facts and zero complete Kind fields. This corpus cannot evaluate person/group classification accuracy.",
+    "long_prose": "Positive facts retained; all kinds partial unless a whole-field audit is explicitly recorded. Unknown/unlabeled facts cannot become negatives.",
+    "lookup_keys": "Expected key refs are annotation conventions; initial replay should compare literal/reference attachment and source scope, not treat these keys as verified identifiers.",
+    "manual_whole_field_audits": [
+      {
+        "kinds": [
+          "Aliases",
+          "Contacts",
+          "Profiles"
+        ],
+        "reason": "Entire field inspected: credited named poster/profile claims and recording-resource URLs are explicit; no contact is asserted.",
+        "task_id": "actor-field:a6f4e765eb8b304e21245136482a32d9dfa8e3adc1efccfa117fe0af5bb0e4ab"
+      }
+    ]
+  },
+  "evaluation_eligible": false,
+  "files": {
+    "citations.jsonl": {
+      "bytes": 863356,
+      "sha256": "fb1324d84e84c7d0fa54e5a9b6df00cf4adefa13f931e138926a2c6223ecf527"
+    },
+    "field-index.jsonl": {
+      "bytes": 402453,
+      "sha256": "2a7a3bdd8dbc60902f70ae41e5960f88308ede326b28db6b4c542fbc9695f74f"
+    },
+    "independent-review-comparison.jsonl": {
+      "bytes": 33900,
+      "sha256": "b4e4156681802001c0823ad0102a3617d2530385f7d1df6a5ac310aba3770209"
+    },
+    "independent-review-receipt.json": {
+      "bytes": 3737,
+      "sha256": "cf14d9bdf8766f7485d6b4e974d1a38047081318090e663f685061dec2584d81"
+    },
+    "independent-review.jsonl": {
+      "bytes": 106173,
+      "sha256": "99580009a11f95bc5ee70ae32847f291e6ccf8ba2469e9f8434267cfd24f0349"
+    },
+    "labels.jsonl": {
+      "bytes": 2206691,
+      "sha256": "4fd5fe8eb60435d522163a60adeadd2542bf2f7047538d338b5f7fdcf9fcd428"
+    },
+    "source-index.jsonl": {
+      "bytes": 101320,
+      "sha256": "12851b84a383ff0ea21e90d5d41e131934487985d7a4633db491f92954ad212b"
+    }
+  },
+  "frozen_discovery_inventory": {
+    "bytes": 430960,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/family-inventory.jsonl",
+    "sha256": "5b82cc8e70bf76700c3d6b12b1531c78a40eca1be4279b935e787f4f84f8ff4d"
+  },
+  "frozen_discovery_receipt": {
+    "bytes": 10685,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/discovery-receipt.json",
+    "sha256": "1d3c302d98eb566c6edac6a22d6d131c7a6cc427de555c3570dfaf592408e802"
+  },
+  "independent_review": {
+    "answer_blind": true,
+    "comparison_script": {
+      "bytes": 6582,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/compare_review.py",
+      "sha256": "03209a2e915c4b223643ccac0232b90d2c5eba76b84ad9b123df3d604692eda6"
+    },
+    "first_answer_receipt": {
+      "bytes": 3298,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-judgments-receipt.json",
+      "sha256": "e7d9448dc0f0f03d6f157eece500baffd0145d47bdbc69f86f53736c557e9057"
+    },
+    "first_answers": {
+      "bytes": 96885,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-judgments.jsonl",
+      "sha256": "64653e940e2e8cd97fea0928859faa1016676fcaef2bf4a2b8ed66bd520d2639"
+    },
+    "selection_receipt": {
+      "bytes": 16947,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-selection-receipt.json",
+      "sha256": "84d29e7ebb6d659dee293fc122b482abbeb2c4ec38d8ad2cdf9c785aa9ad024f"
+    },
+    "status": "first_answers_frozen_comparison_recorded_adjudication_pending"
+  },
+  "internal_grouping": {
+    "before_scored_fact_filtering": true,
+    "components": 38,
+    "input_tasks": 543,
+    "maximum_component_fields": 58
+  },
+  "limits": [
+    "Original 168-question people labels and 38-family discovery inventory remain frozen; all selected source metadata meets both development partitions after reservations.",
+    "Potentially exposed source:3717752 and its full retained family are excluded. Known exposed references track:33689437 and track:7018353 are tracks, mapped through metadata when present. No seed answer/rationale or held-out source text was read.",
+    "Field-local actor/reference IDs are annotation IDs, not canonical people or cross-recording identity truth. Matching value hashes do not establish identity.",
+    "Explicit alias positives cover one alias pair repeated across sources. Repetitions are correlated; this cannot establish broad extraction or launch accuracy.",
+    "External primary-page self-introductions are not projected into original recording fields. Unsigned first-person speech remains unresolved.",
+    "No complete Kind coverage; unknown kind is excluded from binary person/nonperson scoring. Unresolved reference or role mapping stays visible.",
+    "Do not use annotation IDs, value hashes, discovery families, or grouping keys as model features. Group all shared recording/family/hypothesis contexts before development splits."
+  ],
+  "operations": {
+    "commits": 0,
+    "database_calls": 0,
+    "dotnet_runs": 0,
+    "network_calls": 0,
+    "paid_api_calls": 0
+  },
+  "original_sources": {
+    "bytes": 576249,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/original-sources.jsonl",
+    "sha256": "d5546b8fc564bfc6bccbd07dc06b09154efbd6d0e21631cd16005e475523aa3e"
+  },
+  "policy_activation_permitted": false,
+  "private_values": {
+    "bytes": 54546,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/values.jsonl",
+    "sha256": "c84c7c54cf82203a9baab81780702d13e126e5edd15694e24d76a07efee92c9b"
+  },
+  "reservation_index": {
+    "bytes": 955704,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/reserved-reference-index.json",
+    "sha256": "f4f1d8c43d886800d4d0e8ef2d14c438a8f1ab92904ed0be53ef6436ebf32331"
+  },
+  "reviewer": {
+    "id": "Codex /root/venue_development_labels",
+    "method": "Read source contracts and retained source contexts; use a corpus-specific literal inventory and manually reviewed attribution templates. This is development draft annotation, not independent human adjudication.",
+    "runtime_extractor_code_or_outputs_read": false
+  },
+  "schema_version": "actor-facts-development-v1",
+  "source_annotation_evidence_sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0",
+  "source_scope": {
+    "artists": 172,
+    "discovery_family_hypotheses": 38,
+    "field_kinds": {
+      "description": 121,
+      "source": 1,
+      "taper": 205,
+      "taper_notes": 42,
+      "transferrer": 174
+    },
+    "positive_scope": "Recording/transfer contributor expressions and their field-local actor/reference context. Unrelated performer/composition/venue promotion is outside positive contributor scope.",
+    "selection": "Every original field cited by a frozen discovery occurrence, structured-credit citation, or person-context citation; no other source fields were added.",
+    "source_records": 207,
+    "whole_fields": 543
+  },
+  "status": "draft_frozen_independent_subset_reviewed_adjudication_pending",
+  "usage": "development_only"
+}

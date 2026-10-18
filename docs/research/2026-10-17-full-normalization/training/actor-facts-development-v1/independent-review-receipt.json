@@ -1,0 +1,63 @@
+{
+  "blind_boundary": {
+    "draft_labels_manifest_readme_annotation_aid_read": false,
+    "external_enrichment_used": false,
+    "frozen_before_comparison": true,
+    "heldout_reserved_seed_text_read": false,
+    "runtime_extractor_code_outputs_or_predictions_read_during_task": false
+  },
+  "blind_input": {
+    "bytes": 45862,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-input.jsonl",
+    "sha256": "ac65b4f9773b90d8bc2764bd23b647a8944181ee5394e1de98ea2668d37b53e8"
+  },
+  "compact_review": {
+    "bytes": 106173,
+    "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/independent-review.jsonl",
+    "sha256": "99580009a11f95bc5ee70ae32847f291e6ccf8ba2469e9f8434267cfd24f0349"
+  },
+  "comparison": {
+    "bytes": 33900,
+    "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/independent-review-comparison.jsonl",
+    "sha256": "b4e4156681802001c0823ad0102a3617d2530385f7d1df6a5ac310aba3770209"
+  },
+  "counts": {
+    "aligned_actors_with_facet_differences": 10,
+    "draft_actors_in_packet": 43,
+    "exact_anchor_aligned": 40,
+    "facet_difference_counts": {
+      "contacts": 2,
+      "profiles": 1,
+      "roles": 10
+    },
+    "fields_with_anchor_differences": 9,
+    "fields_with_coverage_differences": 32,
+    "review_actor_entries": 49,
+    "whole_fields_reviewed": 43
+  },
+  "first_answer_receipt": {
+    "bytes": 3298,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-judgments-receipt.json",
+    "sha256": "e7d9448dc0f0f03d6f157eece500baffd0145d47bdbc69f86f53736c557e9057"
+  },
+  "first_answers": {
+    "bytes": 96885,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-actor-facts-v1/blind-review-judgments.jsonl",
+    "sha256": "64653e940e2e8cd97fea0928859faa1016676fcaef2bf4a2b8ed66bd520d2639"
+  },
+  "frozen_labels": {
+    "bytes": 2206691,
+    "path": "docs/research/2026-10-17-full-normalization/training/actor-facts-development-v1/labels.jsonl",
+    "sha256": "4fd5fe8eb60435d522163a60adeadd2542bf2f7047538d338b5f7fdcf9fcd428"
+  },
+  "limitations": [
+    "43 development fields; source contexts correlated and prior seven-context exposure disclosed.",
+    "Whole-field coverage and role-mapping disagreements remain visible; neither draft nor independent response is presumed correct.",
+    "Original source quotes, contacts and name wordings are replaced with hashes in the compact review; exact originals remain ignored.",
+    "No runtime output comparison, identity acceptance, or launch accuracy claim."
+  ],
+  "method": "Compare exact original actor-anchor spans, literal contact/profile values (repeated href/display occurrences collapsed by literal hash), aliases, role sets, context kinds and coverage. Anchor differences are not automatically semantic disagreements. Profile provider/key conventions and relationship evidence boundaries require separate source interpretation; no accuracy score or adjudication is inferred.",
+  "prior_exposure": "Previously reviewed seven person-context discovery families and their eligible cited originals; some original fields may recur. Previously worked on recording-credit parser grammar and Luna tooling earlier in the wider project. Actor-fact draft labels and current runtime actor-fact outputs were unseen. No runtime extractor code or predictions were opened during this annotation task. Earlier source/site knowledge was not used to add assertions absent from the individual field.",
+  "schema_version": "actor-facts-review-comparison-v1",
+  "status": "drafts_and_first_answers_preserved_adjudication_pending"
+}
