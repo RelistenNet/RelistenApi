@@ -5,7 +5,7 @@ does not index files, normalize music, or promote shadow proposals into identiti
 Each source uses one read-only index snapshot; different runs have independent
 snapshot times. Later sources replace the display witness for the same scoped key.
 The default byte budget is 256 MiB; an explicit measured build may select up to
-384 MiB. The caller supplies a higher free-space floor when concurrent jobs need it.
+1 GiB. The caller supplies a higher free-space floor when concurrent jobs need it.
 """
 
 from contextlib import closing
@@ -25,7 +25,7 @@ from shadow_reader import _has_domain, _pack_text, _unpack_text
 
 VERSION = "music-catalogue-v2"
 DEFAULT_MAXIMUM_BYTES = 256 * 1024**2
-MAXIMUM_BYTES = 384 * 1024**2
+MAXIMUM_BYTES = 1024**3
 MINIMUM_FREE_BYTES = int(4.5 * 1024**3)
 MAXIMUM_LINE_BYTES = 16 * 1024**2
 PREFIXES = (b"repertoire:", b"composition:musicbrainz:", b"setlist:", b"setlist_account:")
@@ -65,7 +65,7 @@ class MusicCatalogueBuilder:
         self.database = Path(database).resolve()
         self.minimum_free_bytes = minimum_free_bytes
         if not 4096 <= maximum_bytes <= MAXIMUM_BYTES:
-            raise ValueError("The projection cap must be between one SQLite page and 384 MiB.")
+            raise ValueError("The projection cap must be between one SQLite page and 1 GiB.")
         self.maximum_bytes = maximum_bytes
 
     def build(self):
