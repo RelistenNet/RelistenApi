@@ -94,6 +94,23 @@
     .error {
       color: #ffb2a5;
     }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .filters label {
+      display: grid;
+      gap: 6px;
+      flex: 1 1 220px;
+      min-width: 0;
+    }
+    .filters select {
+      width: 100%;
+    }
+    .person-name {
+      font-size: 1.2rem;
+      font-weight: 650;
+    }
     #status {
       min-height: 25px;
     }
@@ -123,19 +140,9 @@
     ><a id="files-link" href="#">Files and songs</a
     ><a id="core-link" href="#">All normalization results</a>
   </nav>
-  <p class="badge">LOCAL EXPERIMENT · DRAFT NAME GROUPS</p>
-  <h1>Tapers and transferrers</h1>
-  <p>
-    Find recording credits and explicit source aliases across artists. Matching
-    names appear together so you can browse the recordings and inspect the
-    evidence. Namesakes can share a group; different aliases can still have
-    separate groups.
-  </p>
-  <p id="coverage" class="counts"></p>
-  <details>
-    <summary>How these groups work and known issues</summary>
-    <ul id="issues"></ul>
-  </details>
+  <p class="badge">RECORDING CREDITS</p>
+  <h1 id="directory-title">Tapers and transferrers</h1>
+  <p id="directory-intro">Search tapers and transferrers by name or alias.</p>
   <form id="search">
     <input
       id="query"
@@ -143,13 +150,21 @@
       placeholder="Aadam Jacobs, Charlie Miller, Rob Berger…"
     /><button>Search</button>
   </form>
+  <details>
+    <summary>Coverage and how the directory works</summary>
+    <p id="coverage" class="counts"></p>
+    <ul id="issues"></ul>
+  </details>
   <div id="status" aria-live="polite"></div>
   <main id="results"></main>
   <div id="pagination" class="controls"></div>
   <script>
     const $ = (id) => document.getElementById(id),
-      count = (n) => Number(n).toLocaleString();
+      count = (n) => Number(n).toLocaleString(),
+      quantity = (n, singular, plural = singular + "s") =>
+        count(n) + " " + (Number(n) === 1 ? singular : plural);
     let sourceActorsSupported = false;
+    let pageRequest = null;
     function node(tag, text, cls) {
       let n = document.createElement(tag);
       if (text !== undefined) n.textContent = text;
@@ -171,69 +186,437 @@
       load();
     }
     async function get(url) {
-      let r = await fetch(url);
+      let r = await fetch(url, { signal: pageRequest?.signal });
       if (!r.ok) throw Error("Request failed (" + r.status + ").");
       return r.json();
     }
-    function pages(total, offset, limit, params) {
-      $("pagination").replaceChildren();
-      if (offset > 0)
-        $("pagination").append(
+    function pages(total, offset, limit, params, options = {}) {
+      const container = options.container || $("pagination");
+      const offsetKey = options.offsetKey || "offset";
+      container.replaceChildren();
+      if (offset > 0) {
+        container.append(
           pageButton("Previous", () =>
-            setLocation({ ...params, offset: Math.max(0, offset - limit) }),
+            setLocation({
+              ...params,
+              [offsetKey]: Math.max(0, offset - limit),
+            }),
           ),
         );
-      if (offset + limit < total)
-        $("pagination").append(
+      }
+      if (offset + limit < total) {
+        container.append(
           pageButton("Next", () =>
-            setLocation({ ...params, offset: offset + limit }),
+            setLocation({ ...params, [offsetKey]: offset + limit }),
           ),
         );
+      }
     }
     async function load() {
+      pageRequest?.abort();
+      const request = new AbortController();
+      pageRequest = request;
       let p = Object.fromEntries(new URLSearchParams(location.search));
+      $("directory-title").hidden = !!p.person;
+      $("directory-intro").hidden = !!p.person;
       $("query").value = p.q || "";
       $("results").replaceChildren();
       $("pagination").replaceChildren();
       $("status").textContent = "Loading…";
+      $("status").className = "";
       try {
         if (p.context) {
           $("status").textContent = "";
           await relationships("", Number(p.offset || 0));
-        } else if (p.id) await detail(p);
+        } else if (p.person) await sharedPerson(p);
+        else if (p.id) await detail(p);
         else await search(p);
       } catch (e) {
+        if (request.signal.aborted) return;
         $("status").textContent = e.message;
         $("status").className = "error";
       }
     }
-    async function search(p) {
-      let data = await get("/api/people?" + new URLSearchParams(p));
-      $("status").textContent =
-        count(data.total) +
-        " draft name groups" +
-        (p.q ? " matching “" + p.q + "”" : "") +
-        ".";
-      for (let g of data.groups) {
-        let card = node("article", undefined, "card");
+    function personCard(person) {
+      const card = node("article", undefined, "card");
+      card.append(
+        node("p", "PROVISIONAL PERSON", "badge"),
+        link(
+          person.displayName,
+          "?" + new URLSearchParams({ person: person.id }),
+        ),
+        node(
+          "p",
+          quantity(person.recordingCount, "supported recording") +
+            " across " +
+            quantity(person.artistCount, "artist") +
+            " · " +
+            quantity(person.creditCount, "credit mention"),
+          "counts",
+        ),
+      );
+      card.querySelector("a").className = "person-name";
+      const names = [...new Set([...person.names, ...person.aliases])];
+      if (names.length)
         card.append(
-          link(g.display_name, "?" + new URLSearchParams({ id: g.id })),
+          node("p", "Credited names and aliases: " + names.join(" · ")),
+        );
+      return card;
+    }
+
+    async function search(p) {
+      const data = await get("/api/people?" + new URLSearchParams(p));
+      const supported = Array.isArray(data.personHypotheses);
+      $("status").textContent = supported
+        ? quantity(
+            data.personHypothesesTotal,
+            "provisional person",
+            "provisional people",
+          ) +
+          (p.q ? " matching “" + p.q + "”" : "") +
+          "."
+        : count(data.total) +
+          " raw name groups" +
+          (p.q ? " matching “" + p.q + "”" : "") +
+          ".";
+      if (supported) {
+        const section = node("section");
+        section.append(node("h2", "Person profiles"));
+        for (const person of data.personHypotheses)
+          section.append(personCard(person));
+        if (!data.personHypotheses.length)
+          section.append(
+            node(
+              "p",
+              "No supported person profile matches. Browse the original name groups below.",
+            ),
+          );
+        const controls = node("div", undefined, "controls");
+        pages(
+          data.personHypothesesTotal,
+          data.personHypothesesOffset,
+          data.personHypothesesLimit,
+          p,
+          { container: controls, offsetKey: "personOffset" },
+        );
+        section.append(controls);
+        $("results").append(section);
+      }
+      const raw = node(supported ? "details" : "section");
+      if (supported) {
+        raw.open = !!p.raw || !data.personHypotheses.length;
+        raw.append(
+          node("summary", "Raw name groups (" + count(data.total) + ")"),
+        );
+      } else raw.append(node("h2", "Raw name groups"));
+      raw.append(
+        node(
+          "p",
+          "Browse original recording credits and role-free alias observations. A raw name group can include namesakes.",
+        ),
+      );
+      for (const group of data.groups) {
+        const card = node("article", undefined, "card");
+        card.append(
+          link(group.display_name, "?" + new URLSearchParams({ id: group.id })),
           node(
             "p",
-            count(g.recording_count) +
+            count(group.recording_count) +
               " catalog recordings · " +
-              count(g.artist_count) +
+              count(group.artist_count) +
               " catalog artists · " +
-              count(g.credit_count) +
+              count(group.credit_count) +
               " catalog credit mentions" +
-              (g.native_actor_count ? " · " + count(g.native_actor_count) + " native actor observations · " + count(g.native_credit_count) + " native role mentions" : "") +
-              (sourceActorsSupported && g.source_actor_count ? " · " + count(g.source_actor_count) + " source alias observations across " + count(g.source_recording_count) + " recordings and " + count(g.source_artist_count) + " artists" : ""),
+              (group.native_actor_count
+                ? " · " +
+                  count(group.native_actor_count) +
+                  " native actor observations · " +
+                  count(group.native_credit_count) +
+                  " native role mentions"
+                : "") +
+              (sourceActorsSupported && group.source_actor_count
+                ? " · " +
+                  count(group.source_actor_count) +
+                  " source alias observations across " +
+                  count(group.source_recording_count) +
+                  " recordings and " +
+                  count(group.source_artist_count) +
+                  " artists"
+                : ""),
             "counts",
           ),
         );
-        $("results").append(card);
+        raw.append(card);
       }
-      pages(data.total, data.offset, data.limit, p);
+      const controls = node("div", undefined, "controls");
+      pages(data.total, data.offset, data.limit, p, { container: controls });
+      raw.append(controls);
+      $("results").append(raw);
+    }
+
+    function comparisonWitnesses(comparison) {
+      const details = node("details");
+      const body = node("div");
+      let loaded = false,
+        loading = false;
+      details.append(
+        node("summary", "Inspect exact witnesses and playable recordings"),
+        body,
+      );
+      details.ontoggle = async () => {
+        if (!details.open || loaded || loading) return;
+        loading = true;
+        body.replaceChildren(node("p", "Loading source evidence…"));
+        try {
+          const detail = await get(
+            comparison.evidenceUrl ||
+              "/api/relationship?" + new URLSearchParams({ id: comparison.id }),
+          );
+          body.replaceChildren();
+          for (const side of ["left", "right"]) {
+            const actor = detail.question[side];
+            body.append(
+              node("h3", actor.name + " · " + actor.artistName),
+              node(
+                "p",
+                [
+                  actor.literalDate || "Date unavailable",
+                  actor.roles.join(", "),
+                ].join(" · "),
+              ),
+              link(
+                "Open this recording’s playable files",
+                actor.playableFilesUrl,
+              ),
+              document.createTextNode(" · "),
+              link("Original source evidence", actor.sourceEvidenceUrl),
+            );
+            for (const excerpt of actor.evidence) {
+              body.append(
+                node(
+                  "p",
+                  excerpt.field +
+                    " · code points " +
+                    excerpt.startCodePoint +
+                    "–" +
+                    excerpt.endCodePoint,
+                  "muted",
+                ),
+                node("blockquote", excerpt.quote),
+              );
+            }
+            if (actor.actorFacts)
+              body.append(
+                node("pre", JSON.stringify(actor.actorFacts, null, 2)),
+              );
+          }
+          loaded = true;
+        } catch (error) {
+          body.replaceChildren(
+            node("p", error.message + " Close and reopen to retry.", "error"),
+          );
+        } finally {
+          loading = false;
+        }
+      };
+      return details;
+    }
+
+    function comparisonSection(title, comparisons) {
+      const section = node("details");
+      section.append(
+        node("summary", title + " (" + count(comparisons.length) + ")"),
+      );
+      let loaded = false;
+      section.ontoggle = () => {
+        if (!section.open || loaded) return;
+        loaded = true;
+        for (const comparison of comparisons) {
+          const card = node("article", undefined, "card");
+          card.append(
+            node("h3", comparison.leftName + " ↔ " + comparison.rightName),
+            node("p", comparison.reason),
+          );
+          for (const evidence of comparison.evidence) {
+            card.append(
+              node("p", evidence.side + " · " + evidence.field, "muted"),
+              node("blockquote", evidence.quote),
+            );
+          }
+          card.append(comparisonWitnesses(comparison));
+          section.append(card);
+        }
+      };
+      return section;
+    }
+
+    function recordingFilters(person, parameters) {
+      const controls = node("div", undefined, "controls filters");
+      for (const filter of [
+        {
+          key: "artist",
+          label: "Artist",
+          all: "All artists",
+          items: person.artists,
+          value: (item) => item.uuid,
+          name: (item) => item.name,
+        },
+        {
+          key: "role",
+          label: "Recording role",
+          all: "All recording roles",
+          items: person.roles,
+          value: (item) => item.role,
+          name: (item) => roleLabel(item.role),
+        },
+      ]) {
+        const label = node("label", filter.label);
+        const select = node("select");
+        select.setAttribute(
+          "aria-label",
+          "Filter supported recordings by " + filter.label.toLowerCase(),
+        );
+        const all = node("option", filter.all);
+        all.value = "";
+        select.append(all);
+        for (const item of filter.items) {
+          const option = node(
+            "option",
+            filter.name(item) +
+              " (" +
+              quantity(item.recordingCount, "recording") +
+              ")",
+          );
+          option.value = filter.value(item);
+          select.append(option);
+        }
+        select.value = parameters[filter.key] || "";
+        select.onchange = () =>
+          setLocation({ ...parameters, [filter.key]: select.value, offset: 0 });
+        label.append(select);
+        controls.append(label);
+      }
+      return controls;
+    }
+
+    async function sharedPerson(p) {
+      const { person: identifier, ...filters } = p;
+      const person = await get(
+        "/api/shared-person?" +
+          new URLSearchParams({ ...filters, id: identifier }),
+      );
+      $("status").textContent = "";
+      const header = node("section");
+      header.append(
+        link("← Search people", "?"),
+        node("p", "PROVISIONAL PERSON", "badge"),
+        node("h1", person.displayName),
+        node(
+          "p",
+          quantity(person.recordingCount, "supported recording") +
+            " across " +
+            quantity(person.artistCount, "artist") +
+            " · " +
+            quantity(person.creditCount, "credit mention"),
+          "counts",
+        ),
+      );
+      const names = [...new Set([...person.names, ...person.aliases])];
+      if (names.length)
+        header.append(
+          node("p", "Credited names and aliases: " + names.join(" · ")),
+        );
+      header.append(
+        link(
+          "Raw name observations",
+          "?" + new URLSearchParams({ q: person.displayName, raw: 1 }),
+        ),
+      );
+      header.append(
+        recordingFilters(person, p),
+        node(
+          "p",
+          quantity(person.total, "supported recording") +
+            (person.total === 1 ? " matches" : " match") +
+            " these filters.",
+          "counts",
+        ),
+      );
+      const grouping = node("details");
+      grouping.append(
+        node("summary", "How recordings are grouped"),
+        node("p", person.membershipRule),
+        node("p", "Several roles on the same recording count once."),
+        comparisonSection("Supporting comparisons", person.support),
+      );
+      if (person.conflicts.length)
+        grouping.append(
+          comparisonSection("Conflicting comparisons", person.conflicts),
+        );
+      if (person.insufficientEvidence.length)
+        grouping.append(
+          comparisonSection(
+            "Comparisons without enough evidence",
+            person.insufficientEvidence,
+          ),
+        );
+      if (person.relatedSupport?.length)
+        grouping.append(
+          comparisonSection(
+            "Other supported comparisons",
+            person.relatedSupport,
+          ),
+        );
+      if (person.overlappingHypotheses?.length) {
+        const alternatives = node("details");
+        const list = node("ul");
+        alternatives.append(
+          node(
+            "summary",
+            "Alternative person profiles (" +
+              count(person.overlappingHypotheses.length) +
+              ")",
+          ),
+        );
+        for (const alternative of person.overlappingHypotheses) {
+          const item = node("li");
+          item.append(
+            link(
+              alternative.displayName,
+              "?" + new URLSearchParams({ person: alternative.id }),
+            ),
+            document.createTextNode(
+              " · " +
+                quantity(alternative.recordingCount, "supported recording") +
+                " across " +
+                quantity(alternative.artistCount, "artist"),
+            ),
+          );
+          list.append(item);
+        }
+        alternatives.append(list);
+        grouping.append(alternatives);
+      }
+      $("results").append(header);
+      if (!person.recordings.length)
+        $("results").append(
+          node("p", "No supported recording credits match these filters."),
+        );
+      for (const recording of person.recordings)
+        $("results").append(recordingCard(recording));
+      $("results").append(grouping);
+      pages(person.total, person.offset, person.limit, p);
+    }
+
+    function roleLabel(role) {
+      return (
+        {
+          taper: "Taper",
+          transferrer: "Transferrer",
+          mastering_engineer: "Mastering engineer",
+          other: "Other",
+        }[role] || role.replaceAll("_", " ")
+      );
     }
     async function relationships(group, offset = 0, previous = null) {
       let data = await get(
@@ -299,62 +682,7 @@
           );
         }
         card.append(actions);
-        let evidence = node("details");
-        evidence.append(
-          node("summary", "Inspect exact witnesses and playback"),
-        );
-        evidence.ontoggle = async () => {
-          if (!evidence.open || evidence.dataset.loaded) return;
-          evidence.dataset.loaded = "true";
-          try {
-            let detail = await get(
-              "/api/relationship?" + new URLSearchParams({ id: r.id }),
-            );
-            for (let side of ["left", "right"]) {
-              let actor = detail.question[side];
-              evidence.append(
-                node("h3", actor.name + " · " + actor.artistName),
-                node(
-                  "p",
-                  [
-                    actor.literalDate || "Date unavailable",
-                    actor.roles.join(", "),
-                  ].join(" · "),
-                ),
-                link(
-                  "Open this recording’s playable files",
-                  actor.playableFilesUrl,
-                ),
-                document.createTextNode(" · "),
-                link("Original source evidence", actor.sourceEvidenceUrl),
-              );
-              for (let excerpt of actor.evidence)
-                evidence.append(
-                  node(
-                    "p",
-                    excerpt.field +
-                      " · code points " +
-                      excerpt.startCodePoint +
-                      "–" +
-                      excerpt.endCodePoint,
-                    "muted",
-                  ),
-                  node("blockquote", excerpt.quote),
-                );
-              if (actor.actorFacts) {
-                let facts = node(
-                  "pre",
-                  JSON.stringify(actor.actorFacts, null, 2),
-                );
-                facts.style.whiteSpace = "pre-wrap";
-                evidence.append(facts);
-              }
-            }
-          } catch (error) {
-            evidence.append(node("p", error.message, "error"));
-          }
-        };
-        card.append(evidence);
+        card.append(comparisonWitnesses(r));
         section.append(card);
       }
       let controls = node("div", undefined, "controls");
@@ -496,6 +824,7 @@
     }
 
     async function detail(p) {
+      const request = pageRequest;
       let d = await get("/api/person?" + new URLSearchParams(p));
       $("status").textContent = "";
       let header = node("section");
@@ -579,89 +908,99 @@
           "counts",
         ),
       );
+      if (Array.isArray(d.personHypotheses) && d.personHypotheses.length) {
+        const shared = node("section");
+        shared.append(
+          node("h3", "Supported person pages for credits in this name group"),
+        );
+        for (const person of d.personHypotheses)
+          shared.append(personCard(person));
+        header.append(shared);
+      }
       $("results").append(header);
       await relationships(p.id);
+      if (request !== pageRequest || request.signal.aborted) return;
       nativeObservations(d, p);
       sourceObservations(d, p);
-      for (let r of d.recordings) {
-        let card = node("article", undefined, "card"),
-          names = [
-            ...new Set(
-              r.credits.map(
-                (c) => c.artist_name || c.artist_uuid || "Unknown artist",
-              ),
-            ),
-          ];
-        card.append(
-          node("h3", names.join(" · ")),
-          node(
-            "p",
-            performanceLabel(r.capturedHome),
-          ),
-          link("Open playable files →", r.playableFilesUrl),
-          node("p", "Source " + r.sourceUuid, "muted"),
-        );
-        if (r.capturedHome) {
-          const home = r.capturedHome;
-          const assignment = node("details");
-          assignment.append(
-            node("summary", "Captured show assignment"),
-            node("p", "Show " + (home.showUuid || "unavailable"), "muted"),
-          );
-          for (const issue of home.unresolved) {
-            assignment.append(
-              node(
-                "p",
-                typeof issue === "string" ? issue : JSON.stringify(issue),
-              ),
-            );
-          }
-          card.append(assignment);
-        }
-        for (let c of r.credits) {
-          let section = node("details"),
-            summary = node(
-              "summary",
-              c.name +
-                " · " +
-                c.role +
-                " · " +
-                (c.interpretation_basis === "retained_luna_extraction"
-                  ? "Luna proposal"
-                  : "Local parser"),
-            );
-          section.append(summary);
-          if (c.evidence)
-            section.append(
-              node("blockquote", c.evidence.quote),
-              node(
-                "p",
-                "Source field: " +
-                  c.evidence.field +
-                  " · code points " +
-                  c.evidence.startCodePoint +
-                  "–" +
-                  c.evidence.endCodePoint,
-                "counts",
-              ),
-            );
-          for (let a of c.aliases)
-            section.append(
-              node("p", "Explicit alias: " + a.wording),
-              node(
-                "blockquote",
-                (a.evidence || []).map((e) => e.quote).join("\n"),
-              ),
-            );
-          section.append(
-            link("Inspect source extraction", c.sourceEvidenceUrl),
-          );
-          card.append(section);
-        }
-        $("results").append(card);
-      }
+      for (const recording of d.recordings)
+        $("results").append(recordingCard(recording));
       pages(d.total, d.offset, d.limit, p);
     }
+    function recordingCard(r) {
+      let card = node("article", undefined, "card"),
+        names = [
+          ...new Set(
+            r.credits.map(
+              (c) => c.artist_name || c.artist_uuid || "Unknown artist",
+            ),
+          ),
+        ];
+      card.append(
+        node("h3", names.join(" · ")),
+        node("p", performanceLabel(r.capturedHome)),
+        link("Open playable files →", r.playableFilesUrl),
+      );
+      const assignment = node("details");
+      assignment.append(
+        node("summary", "Recording source and captured show"),
+        node("p", "Source " + r.sourceUuid, "muted"),
+      );
+      if (r.capturedHome) {
+        const home = r.capturedHome;
+        assignment.append(
+          node("p", "Show " + (home.showUuid || "unavailable"), "muted"),
+        );
+        for (const issue of home.unresolved) {
+          assignment.append(
+            node(
+              "p",
+              typeof issue === "string" ? issue : JSON.stringify(issue),
+            ),
+          );
+        }
+      }
+      card.append(assignment);
+      for (let c of r.credits) {
+        let section = node("details"),
+          summary = node(
+            "summary",
+            c.name +
+              " · " +
+              roleLabel(c.role) +
+              " · " +
+              (c.interpretation_basis === "retained_luna_extraction"
+                ? "Luna proposal"
+                : "Local parser"),
+          );
+        section.append(summary);
+        if (c.evidence)
+          section.append(
+            node("blockquote", c.evidence.quote),
+            node(
+              "p",
+              "Source field: " +
+                c.evidence.field +
+                " · code points " +
+                c.evidence.startCodePoint +
+                "–" +
+                c.evidence.endCodePoint,
+              "counts",
+            ),
+          );
+        for (let a of c.aliases)
+          section.append(
+            node("p", "Explicit alias: " + a.wording),
+            node(
+              "blockquote",
+              (a.evidence || []).map((e) => e.quote).join("\n"),
+            ),
+          );
+        section.append(link("Inspect source extraction", c.sourceEvidenceUrl));
+        card.append(section);
+      }
+      return card;
+    }
+
     $("search").onsubmit = (e) => {
       e.preventDefault();
       setLocation({ q: $("query").value });
