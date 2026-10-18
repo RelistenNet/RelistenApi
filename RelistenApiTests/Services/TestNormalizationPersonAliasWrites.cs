@@ -8,7 +8,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>Canonical alias outcomes do not grant source authority or erase editorial exclusions.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationPersonAliasWrites
+public sealed partial class TestNormalizationPersonAliasWrites
 {
     private NormalizationDomainFixture fixture = null!;
     private NormalizedPeopleService people = null!;

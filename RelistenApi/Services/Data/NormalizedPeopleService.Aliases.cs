@@ -20,7 +20,8 @@ public sealed partial class NormalizedPeopleService
 
     /// <summary>
     /// Writes canonical assertions only. The caller authenticates publication evidence and
-    /// holds People/Compositions candidate scopes and the original person owner in Work.
+    /// holds People/Compositions candidate scopes, the shared identity lock and the original
+    /// person owner in Work. Source publication also authenticates its full target read set.
     /// Support attachment/retirement requires a separate authenticated publication step.
     /// </summary>
     internal static async Task<CanonicalPersonAliasWriteOutcome> WriteAutomaticAliasAsync(
@@ -61,19 +62,29 @@ public sealed partial class NormalizedPeopleService
             );
         }
 
-        // Review owns the normalized-name claim across UUIDs and citations. The raw
-        // history remains authoritative even after all managed support has disappeared.
+        // A redirect joins editorial meaning without moving original alias ownership. Search
+        // the complete current component so writing at either end or another retired original
+        // cannot bypass review. Raw history still protects a claim after support disappears.
+        // Candidate write scopes serialize canonical reviews; the identity lock stabilizes
+        // topology. Duplicate checks and inserts below stay at the original stored owner.
         var reviewed = (
             await connection.QueryAsync<ReviewedAliasClaim>(
                 new CommandDefinition(
                     $"""
-                    SELECT uuid AS "Uuid",({SameAliasCitation}) AS "SameCitation"
-                    FROM normalization.person_aliases
-                    WHERE person_uuid=@PersonUuid AND basis='reviewed' AND (name_key=@NameKey OR uuid=@Uuid)
+                    WITH RECURSIVE component(uuid) AS (
+                        VALUES(@PersonUuid::uuid)
+                        UNION
+                        SELECT CASE WHEN r.retired_uuid=c.uuid THEN r.survivor_uuid ELSE r.retired_uuid END
+                        FROM component c JOIN normalization.person_redirects r
+                            ON r.retired_uuid=c.uuid OR r.survivor_uuid=c.uuid
+                    )
+                    SELECT a.uuid AS "Uuid",({SameAliasCitation}) AS "SameCitation"
+                    FROM normalization.person_aliases a JOIN component c ON c.uuid=a.person_uuid
+                    WHERE a.basis='reviewed' AND (a.name_key=@NameKey OR a.uuid=@Uuid)
                     UNION ALL
-                    SELECT uuid AS "Uuid",({SameAliasCitation}) AS "SameCitation"
-                    FROM normalization.person_aliases_history
-                    WHERE person_uuid=@PersonUuid AND (name_key=@NameKey OR uuid=@Uuid)
+                    SELECT a.uuid AS "Uuid",({SameAliasCitation}) AS "SameCitation"
+                    FROM normalization.person_aliases_history a JOIN component c ON c.uuid=a.person_uuid
+                    WHERE a.name_key=@NameKey OR a.uuid=@Uuid
                     """,
                     args,
                     transaction,

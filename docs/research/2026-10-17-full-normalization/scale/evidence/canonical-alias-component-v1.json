@@ -1,0 +1,84 @@
+{
+  "version": "canonical-alias-component-v1",
+  "state": "automatic_write_protection_verified_visibility_followup_required",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/canonical-alias-component-v1/execution-verification-v1/manifest.json",
+    "bytes": 5504,
+    "sha256": "03ed76815cc04a50d572191ce8ae1fd4262095b809095fb57952104e56609f89"
+  },
+  "testRuns": [
+    {
+      "run": "baseline-v1",
+      "counters": {
+        "total": "6",
+        "executed": "6",
+        "passed": "0",
+        "failed": "6",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "focused-v1",
+      "counters": {
+        "total": "16",
+        "executed": "16",
+        "passed": "16",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "regression-v1",
+      "counters": {
+        "total": "101",
+        "executed": "101",
+        "passed": "101",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "behavior": [
+    "Reviewed natural claims protect automatic writes through both merge ends and retired siblings.",
+    "Changed source citations remain pending rather than acquiring independent alias support.",
+    "Exact duplicate checks and new alias rows retain the original stored person UUID.",
+    "Reversing a merge restores independent identity context."
+  ],
+  "remaining": [
+    "Already accepted same-name aliases on other merged originals still need reviewed exclusion visibility; additive58 source design in progress.",
+    "No source acceptance policy activated, full-suite run, production writes or deployment."
+  ]
+}

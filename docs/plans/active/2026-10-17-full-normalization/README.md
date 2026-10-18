@@ -12,6 +12,14 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 
 Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source assignment, trusted source review and accepted support publication remain unimplemented; no policy is active.
 
+Canonical alias writes now respect reviewed claims across all identities joined
+by current merges, while preserving original alias ownership and merge reversal.
+All 16 alias-write and 101 metadata/candidate checks pass. A related correction
+is still required for aliases accepted on another original before the merge;
+write protection alone does not remove that existing visibility. The
+[source-actor plan](source-actor-aliases.md) tracks that follow-up alongside
+accepted source publication.
+
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
 aliases or create identities. All 106 focused policy and 160 people regression

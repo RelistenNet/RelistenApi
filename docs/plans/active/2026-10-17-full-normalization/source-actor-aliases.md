@@ -66,6 +66,13 @@ As of 2026-10-18:
   correcting that fixture to preserve absent alias data is followed by 27
   passing targeted checks. The broader and full suites have not been rerun
   after that correction.
+- [x] Protect canonical alias writes across current person merges. All 16 alias
+  publication checks and 101 metadata/candidate regressions pass, including
+  rejection at either merge end, retired siblings, changed-source pending
+  assertions and independent behavior after merge reversal.
+- [ ] Apply reviewed-name exclusions to aliases that were already accepted on
+  other merged originals. Preserve same-owner explicit restoration and merge
+  reversal without moving or rewriting those original assertions.
 - [x] Add original read proofs to the shared trusted-review transaction. All 85
   focused checks pass, including the nonempty 53-to-54 upgrade, stale reads,
   read-only target owners, rollback and exact replay. All 85 metadata regression

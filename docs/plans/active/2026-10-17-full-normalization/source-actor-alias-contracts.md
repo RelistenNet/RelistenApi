@@ -235,8 +235,18 @@ may retire old source support while retaining the review record.
 
 Canonical metadata review is independent. Existing `PersonMetadataDecision`
 protects a person's normalized-name claim across citations, sources and new
-UUIDs. Source assignment review cannot override that veto or retract an
-independently reviewed canonical alias.
+UUIDs. Automatic writes check all original identities connected by current
+merges, including retired siblings. Exact duplicates and new rows retain their
+original stored owner. Reversing a merge restores independent identity context.
+Source assignment review cannot override canonical review or retract an
+independently reviewed alias.
+
+Write protection does not itself hide another original's already accepted
+alias. The remaining visibility correction must apply the component's reviewed
+exclusions to current reads, preserve explicit restoration and recompute after
+merge reversal. It must retain raw assertions, support and history. Keep source
+acceptance inactive until that correction and the accepted publisher pass their
+lifecycle checks.
 
 ### Shared review proof (implemented in migration 54)
 
