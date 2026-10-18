@@ -70,6 +70,9 @@ The [adjudicated training preparation](people-adjudicated-training/README.md)
 combines the original questions with separately reviewed pairs while keeping
 source selectors and identity targets in different files. Preparation does not
 produce matcher features or complete the grouping needed for fitting.
+The [adjudicated source exporter](people-adjudicated-baseline.md) reads those
+source selectors without opening the target file. It exports actual comparisons,
+all endpoint diagnostics and source-local grouping bridges for the trainer.
 
 The separate [cross-artist review packet tool](people-identity-packet/README.md)
 prepares 55 unanswered source-backed identity questions and validates complete

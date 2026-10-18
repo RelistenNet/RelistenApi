@@ -1,0 +1,20 @@
+{
+  "version": "people-adjudicated-baseline-v1",
+  "projectionVersion": "people-adjudicated-source-endpoints-v1",
+  "actorFeaturesVersion": "people-actor-context-features-v1",
+  "featureOrder": ["name_token_similarity", "exact_name", "artist_overlap", "contact_agreement", "profile_agreement"],
+  "consumedSourceFiles": ["source/records.jsonl", "source/endpoints.jsonl", "source/questions.jsonl", "source/grouping.jsonl"],
+  "pairFields": ["taskId", "taskKind", "focusEndpointId", "candidateEndpointId", "focusEvidenceId", "candidateEvidenceId", "sameRecording", "declaredCandidateCount", "features", "comparison", "projectionSupported", "projectionIssue"],
+  "unsupportedPair": {"features": null, "comparison": null, "projectionSupported": false, "meaning": "projection unavailable; never a negative identity label"},
+  "endpointFields": ["endpointId", "evidenceId", "artistUuid", "status", "projectionIssue", "selectors", "variants", "mentionKind"],
+  "bridgeFields": ["reference", "endpointIds", "taskIds"],
+  "scopedReferenceFields": ["evidenceId", "field", "referenceUuid"],
+  "groupFields": ["taskIds"],
+  "outputFiles": ["baseline.jsonl", "endpoints.jsonl", "groups.jsonl", "source-bridges.jsonl"],
+  "completionMarker": "manifest.json",
+  "actorNameMentionMetadata": ["name", null],
+  "actorNameRouting": "selector kind supplies the name route; original mentionKind metadata is preserved",
+  "targetsRead": false,
+  "policyActivationPermitted": false,
+  "canonicalIdentitySupplied": false
+}

@@ -8,7 +8,7 @@ if (
     !(
         (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
         || (args.Length == 5 && args[0] == "luna-credits")
-        || (args.Length == 4 && args[0] == "musicbrainz-acquire")
+        || (args.Length == 4 && args[0] is "musicbrainz-acquire" or "people-adjudicated-baseline")
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
         || (
@@ -26,6 +26,7 @@ if (
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
+            + "       RelistenNormalization people-adjudicated-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization people-pair-baseline <repository-root> <bundle-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization people-source-context-baseline <repository-root> <bundle-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization actor-fields <fields.jsonl> <export-receipt.json> <frozen-bundle-directory> <new-output-directory>\n"
@@ -44,6 +45,22 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "people-adjudicated-baseline")
+    {
+        var adjudicated = await new PeopleAdjudicatedBaselineBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                adjudicated,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return 0;
+    }
     if (args[0] == "people-pair-baseline")
     {
         var baseline = await new PeoplePairBaselineBatch().RunAsync(
