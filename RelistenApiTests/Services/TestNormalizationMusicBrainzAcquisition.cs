@@ -700,8 +700,18 @@ public sealed class TestNormalizationMusicBrainzAcquisition
         );
 
         var failed = await Service(upstream).AcquireAsync(Guid.NewGuid(), lookup.Request);
+        var timing =
+            failed.State == MusicBrainzAcquisitionState.Failed
+                ? null
+                : await MusicBrainzTimingDiagnostics.ReadAsync(fixture.Db, failed.CommandUuid);
 
-        failed.State.Should().Be(MusicBrainzAcquisitionState.Failed);
+        failed
+            .State.Should()
+            .Be(
+                MusicBrainzAcquisitionState.Failed,
+                "original response timing receipts: {0}",
+                timing
+            );
         if (fault is "encoding" or "mixed_encoding")
         {
             failed.Result!.Reason.Should().Be("unsupported_content_encoding");

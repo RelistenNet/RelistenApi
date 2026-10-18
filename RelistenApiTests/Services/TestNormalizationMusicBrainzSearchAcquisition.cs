@@ -502,9 +502,21 @@ public sealed class TestNormalizationMusicBrainzSearchAcquisition
         cached.Attempts.Should().BeEmpty();
         peerHandler.Calls.Should().Be(0);
         await ReadyGate();
-        (await lookupService.ResumeAsync(waitingLookup.CommandUuid))
+        var resumedLookup = await lookupService.ResumeAsync(waitingLookup.CommandUuid);
+        var timing =
+            resumedLookup.State == MusicBrainzAcquisitionState.Completed
+                ? null
+                : await MusicBrainzTimingDiagnostics.ReadAsync(
+                    fixture.Db,
+                    waitingLookup.CommandUuid
+                );
+        resumedLookup
             .State.Should()
-            .Be(MusicBrainzAcquisitionState.Completed);
+            .Be(
+                MusicBrainzAcquisitionState.Completed,
+                "original response timing receipts: {0}",
+                timing
+            );
         lookupHandler.Calls.Should().Be(1);
     }
 
