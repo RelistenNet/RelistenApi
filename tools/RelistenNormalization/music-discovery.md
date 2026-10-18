@@ -2,7 +2,9 @@
 
 `music_discovery.py` serves an artist repertoire, composition, setlist and playable-recording browser. It reads a small discovery catalogue and follows exact entity keys into the existing shadow readers. It does not normalize titles, create accepted identities, change playback references or build another file index.
 
-The catalogue includes each distinct indexed repertoire key with its observed title and basis. Captured artist dictionaries and title-derived proposals remain distinguishable. Equal titles retain separate artist-scoped keys. A file result can contain several segments or several candidate songs; opening the recording shows those alternatives and preserves its original performance home. Source title segments do not establish audio timings.
+The catalogue includes each distinct indexed repertoire key with its observed title and basis. Captured artist dictionaries and title-derived proposals remain distinguishable. Equal titles retain separate artist-scoped keys. A file result can contain several segments or several candidate songs; opening the exact file shows those alternatives and preserves its source scope and authenticated performance home, when one exists. Source title segments do not establish audio timings.
+
+Native provider files contribute the existing repertoire interpretations in each child’s title mentions, including all candidate songs. The projection reuses those keys and bases; it does not match titles again or turn a keyless unknown into a song. Each child retains its immutable native key, recording/file origin, filename and exact title citations. Multiple files with the same title remain distinct children. The child ordinal is an array locator, not musical order, timing or an occurrence identity.
 
 A composition appears only when a retained composition mention contains an actual supported work link. A qualified MusicBrainz work key can join repertoire songs across artists and scopes. Search candidates and competing work keys never create those links. A mention with several alternative repertoire keys does not choose one for the composition association.
 
@@ -10,14 +12,15 @@ Ordered setlists render source sets, passages, labels, markers and notes. Empty 
 
 ## Build and serve
 
-Run from the repository root. Each `--source` supplies a scope, existing run directory and private reader origin. Reuse the `catalogue` scope for core and full-file production-catalogue results. Use `local` for local collections; a coincident local UUID never merges those identities.
+Run from the repository root. Each `--source` supplies a scope, existing run directory and private reader origin. Reuse the `catalogue` scope for core and full-file production-catalogue results. Use `local` for local collections; a coincident local UUID never merges those identities. A native run containing production providers and separate local collection coordinates must use its own explicit scope, such as `native`. Equal matched repertoire keys are reused inside that scope without joining it to `catalogue` or `local`. The UI labels all three namespaces separately.
 
 ```sh
 python3 tools/RelistenNormalization/music_discovery.py build \
   --database local-dev/normalization-data/music-discovery/catalogue.sqlite3 \
   --source catalogue /absolute/core-run http://host:18765 \
   --source catalogue /absolute/full-file-serving-run http://host:18767 \
-  --source local /absolute/local-collections-run http://host:18766
+  --source local /absolute/local-collections-run http://host:18766 \
+  --source native /absolute/native-provider-run http://host:18771
 
 python3 tools/RelistenNormalization/music_discovery.py serve \
   --database local-dev/normalization-data/music-discovery/catalogue.sqlite3 \
@@ -25,7 +28,7 @@ python3 tools/RelistenNormalization/music_discovery.py serve \
   --host 0.0.0.0 --port 18769
 ```
 
-Keep this server on a private interface. Result bodies can contain retained source prose. The browser proxies only configured readers; it accepts source IDs and bounded coordinates, not arbitrary destination URLs. Playback URLs come from the existing reader's HTTP(S) allowlist.
+Keep this server on a private interface. Result bodies can contain retained source prose. The browser proxies only configured readers; it accepts source IDs and bounded coordinates, not arbitrary destination URLs. Native child audio uses only the existing reader’s authenticated `catalogPlayback` result. A retained HTTP(S) provider locator is a separately labeled external link, never an audio control or proof of a catalogue home. Native parent bodies are available for provenance but their pooled playback URLs are not rendered as child playback.
 
 An optional serve-time `--reader` adds a relationship-only reader before its titles have been projected. The UI labels that missing title-discovery coverage explicitly. Once the catalogue includes the same scoped run, it uses that projected source instead.
 
@@ -45,11 +48,13 @@ The catalogue is a snapshot. File searches use each reader's current exact-key m
 
 All routes are read-only and return JSON except `/`, which serves the UI.
 
-- `/api/stats` returns catalogue counts, source snapshots and a string `generation`.
+- `/api/stats` returns catalogue counts, source snapshots and a string `generation` and backend capability `native_file_queries: true`. The UI requires that capability before calling child routes, so an older process serving the new HTML keeps its legacy behavior during cutover. Projected sources include `native_files` (indexed children), `native_file_parents` (indexed provider-input accounts, including zero-file accounts), and `file_query_mode` (`native`, `mixed` or `records`). These counts describe the index at build time; they do not certify complete computation or live indexing. Old caches without child tables remain readable with zero native counts.
 - `/api/artists`, `/api/songs`, `/api/works`, `/api/setlists` return paged `items`, `total`, `limit` and `offset`. `q` is a literal case-insensitive substring, never a normalization or identity decision. Songs and setlists can filter `artist` UUID and `scope`; artist search can filter scope.
 - `/api/song?scope=…&key=…`, `/api/work?key=…`, `/api/setlist?scope=…&key=…` return the retained identity descriptor and source witness. Song/work details include paged supported associations, with `works_total` / `songs_total`, the corresponding limit and offset. The same `limit` and `offset` parameters page those relationships.
 - `/api/related?source=…&generation=…&key=…&domain=file_contents` performs an exact entity-key query in a configured reader. Other allowed domains are `setlists`, `compositions` and `repertoire`. Pagination is per source.
-- `/api/record?source=…&generation=…&id=…` returns the original reader's retained body and available playback URLs.
+- `/api/record?source=…&generation=…&id=…` returns the original reader’s retained parent body. The UI renders legacy playback here; native input accounts link to individual children instead.
+- `/api/files?source=…&generation=…&key=…` queries exact child entity-key memberships through the configured reader. `limit` and `offset` page native files, not parent accounts or performances. A parent containing another matching sibling cannot cause a nonmatching child to appear.
+- `/api/file?source=…&generation=…&parentId=…&nativeFileKey=…` opens one exact retained child. It returns the original typed file, mentions and evidence, separately authenticated catalogue playback, and a separately labeled provider locator. A missing child returns 404; the proxy never substitutes a sibling.
 
 A stale generation returns 409 and requires reload. Unknown identities return 404. Reader failures return 503 without discarding the completed catalogue. Search and relationship pages are capped at 100 entries.
 
@@ -60,9 +65,11 @@ cd tools/RelistenNormalization
 python3 -m unittest -v test_music_catalogue.py test_music_discovery.py
 ```
 
-The tests build real small shadow reader caches and exercise scope separation, logical replay and withdrawal, captured versus provisional identities, supported links versus rivals, same-title alternatives, ordered versus unordered setlists, immutable witness refusal, bounded replacement failure, HTTP playback provenance, exact-key retrieval, unavailable reader recovery and stale-generation refusal.
+The tests build real small shadow reader caches and exercise scope separation, logical replay and withdrawal, captured versus provisional identities, supported links versus rivals, same-title alternatives, ordered versus unordered setlists, immutable witness refusal, bounded replacement failure, HTTP playback provenance, exact-key native child retrieval and pagination, Unicode citations, ambiguous mentions, logical child removal, zero-file accounts, unavailable reader recovery and stale-generation refusal.
 
 ## Current private rehearsal
+
+Native integration is source-complete and awaits a controlled replacement build and server cutover. The existing live image remains unchanged during code verification. The native provider reader has 4,690 input accounts and 34,139 child files at its completed indexed snapshot; these are source accounts and files, not unique songs or performances. Adding that bounded native subset does not satisfy the broader 963,476-key full-reader title projection. Builds still require the normal free-space floor and publish only a complete replacement; do not start one merely because the final database might fit if the temporary replacement would cross the floor.
 
 The first completed core/local image contains 4,626 scoped artist entries, 19,407 song keys, five supported work keys and 38,517 setlist accounts in 43,565,056 bytes. Full-reader relationships are available independently of the broader title augmentation. The full reader contains 963,476 repertoire keys and 32 qualified work keys at the measured indexed snapshot. Augmentation paused at its 4.7 GiB free-space floor during staging; no partial replacement was published. Its title coverage remains explicitly unprojected until a complete replacement succeeds after capacity becomes available. These counts describe discovery entries, not independent songs, people or performances.
 

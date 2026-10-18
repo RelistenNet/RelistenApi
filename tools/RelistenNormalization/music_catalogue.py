@@ -23,7 +23,7 @@ import uuid
 from shadow_reader import _has_domain, _pack_text, _unpack_text
 
 
-VERSION = "music-catalogue-v1"
+VERSION = "music-catalogue-v2"
 DEFAULT_MAXIMUM_BYTES = 256 * 1024**2
 MAXIMUM_BYTES = 384 * 1024**2
 MINIMUM_FREE_BYTES = int(4.5 * 1024**3)
@@ -156,6 +156,7 @@ class MusicCatalogueBuilder:
                     "visibility": "indexed_current_records_only", "snapshot_at": time.time(),
                     "indexed_chunks": db.execute("SELECT count(*) FROM chunks WHERE state='indexed'").fetchone()[0],
                     "current_records": db.execute("SELECT count(*) FROM records").fetchone()[0]}
+            info.update(self._file_query_coverage(db))
             self._select_artists(db, output, source.scope)
             self._select_entities(db, output)
             self._select_work_links(db, output)
@@ -175,6 +176,30 @@ class MusicCatalogueBuilder:
             actual = {row[1] for row in db.execute("PRAGMA table_info(" + table + ")")}
             if not columns <= actual:
                 raise ValueError("The existing reader index lacks the compact music lookup schema.")
+
+    @staticmethod
+    def _file_query_coverage(db):
+        # Old reader caches remain usable without a native child table. These counts
+        # describe this index snapshot; they do not certify the producer population.
+        coverage = {"native_files": 0, "native_file_parents": 0, "file_query_mode": "records"}
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_files'").fetchone():
+            return coverage
+        coverage["native_files"] = db.execute("""
+            SELECT count(*) FROM native_files f JOIN records r ON r.id=f.parent_id
+            JOIN chunks c ON c.id=r.chunk_id WHERE c.state='indexed'
+        """).fetchone()[0]
+        parents = db.execute("""
+            SELECT count(*) total,sum(k.value='provider_input') native
+            FROM records r JOIN domains d ON d.id=r.domain_id
+            JOIN headers h ON h.id=r.header_id JOIN terms k ON k.id=h.kind_id
+            JOIN chunks c ON c.id=r.chunk_id
+            WHERE d.name='file_contents' AND c.state='indexed'
+        """).fetchone()
+        coverage["native_file_parents"] = parents["native"] or 0
+        if coverage["native_files"] == 0:
+            return coverage
+        coverage["file_query_mode"] = "native" if parents["native"] == parents["total"] else "mixed"
+        return coverage
 
     @staticmethod
     def _select_artists(source, output, scope):
@@ -357,6 +382,12 @@ def _songs(record):
             values.append((proposal, "dictionary"))
         track = proposal.get("titleInterpretation") if record["domain"] == "file_contents" else proposal
         values.extend(_segments(track))
+        if record["domain"] == "file_contents":
+            # Native files already carry the shared repertoire interpretation. Reuse
+            # its existing keys, alternatives and basis; never reinterpret raw titles.
+            for file in proposal.get("files", []):
+                interpretations = [mention["interpretation"] for mention in file.get("mentions", [])]
+                values.extend(_segments({"segments": interpretations}))
     for account in _accounts(record):
         for member in account.get("memberships", []):
             if member.get("songEntityKey"):

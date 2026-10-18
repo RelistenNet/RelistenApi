@@ -48,6 +48,9 @@ class MusicDiscovery:
 
     def stats(self):
         result = self.catalogue.stats()
+        # Old processes also serve this HTML from disk. Advertise child routes
+        # independently of projection metadata during a controlled cutover.
+        result["native_file_queries"] = True
         sources = result["sources"]
         for reader in self.readers:
             if not any((source["scope"], source["run"]) == (reader["scope"], reader["run"]) for source in sources):
@@ -60,14 +63,32 @@ class MusicDiscovery:
 
     def related(self, query):
         source = self._source(query)
-        key = query.get("key", "")
-        if not key.startswith(("repertoire:", "composition:", "show:", "source:", "file:", "setlist:", "setlist_account:")) or len(key) > 300:
-            raise ValueError("Choose an exact music entity key.")
+        key = self._music_key(query)
         domain = query.get("domain", "file_contents")
         if domain not in RELATION_DOMAINS:
             raise ValueError("Unknown music relationship domain.")
         filters = {"entityKey": key, "domain": domain, **page(query)}
         return self._read(source, "/api/records?" + urlencode(filters))
+
+    def files(self, query):
+        source = self._source(query)
+        key = self._music_key(query)
+        return self._read(source, "/api/files?" + urlencode({"entityKey": key, **page(query)}))
+
+    def file(self, query):
+        source = self._source(query)
+        parent = int(query.get("parentId", "0"))
+        key = query.get("nativeFileKey", "")
+        if parent < 1 or not key.startswith("native_file:") or len(key) > 300:
+            raise ValueError("Choose an exact native file and its retained parent.")
+        return self._read(source, "/api/file?" + urlencode({"parentId": parent, "nativeFileKey": key}))
+
+    @staticmethod
+    def _music_key(query):
+        key = query.get("key", "")
+        if not key.startswith(("repertoire:", "composition:", "show:", "source:", "file:", "native_file:", "setlist:", "setlist_account:")) or len(key) > 300:
+            raise ValueError("Choose an exact music entity key.")
+        return key
 
     def record(self, query):
         source = self._source(query)
@@ -134,6 +155,10 @@ def handler_for(discovery):
                     result = discovery.related(query)
                 elif route.path == "/api/record":
                     result = discovery.record(query)
+                elif route.path == "/api/files":
+                    result = discovery.files(query)
+                elif route.path == "/api/file":
+                    result = discovery.file(query)
                 else:
                     return self.send_json(404, {"error": "Unknown music discovery route."})
                 if result is None:
@@ -144,6 +169,8 @@ def handler_for(discovery):
             except KeyError:
                 return self.send_json(404, {"error": "This music identity is not in the catalogue snapshot."})
             except HTTPError as error:
+                if route.path == "/api/file" and error.code == 404:
+                    return self.send_json(404, {"error": "This exact native child is not in the current reader index."})
                 # Do not log or copy original provider prose from an error body.
                 return self.send_json(503, {"error": f"The original reader returned HTTP {error.code}; its index may be updating."})
             except (URLError, TimeoutError, OSError):

@@ -62,6 +62,98 @@ class TestMusicCatalogue(unittest.TestCase):
     def catalogue(self):
         return MusicCatalogue(self.output)
 
+    @staticmethod
+    def native_file(ordinal, title, interpretations):
+        key = "native_file:fixture-" + str(ordinal)
+        songs = [song for interpretation in interpretations
+                 for song in ([interpretation["song"]] if interpretation.get("song") else [])
+                 + interpretation.get("candidateSongs", [])]
+        return {"fileOrdinal": ordinal, "entityKey": key, "inputRevisionUuid": "native-revision",
+                "file": {"title": {"value": title}, "filename": {"value": str(ordinal) + ".flac"}},
+                "titleInterpretation": {"originalTitle": title},
+                "mentions": [{"interpretation": interpretation} for interpretation in interpretations],
+                "entityKeys": [key, *(song["entityKey"] for song in songs)],
+                "outcome": "proposed", "catalogPlayback": None}
+
+    def native_record(self, *files, key="provider_input:one", artist_name="Artist One"):
+        record = self.record("file_contents", key, {"files": list(files)},
+                             [entity for file in files for entity in file["entityKeys"]], artist_name=artist_name)
+        record["inputKind"] = "provider_input"
+        return record
+
+    def test_native_only_interpretations_discover_unicode_derived_and_candidate_songs(self):
+        derived = self.song("repertoire:native-derived", "Zoë’s 🌟 Jam", "title_derived")
+        rivals = [self.song("repertoire:native-rival-a", "Uncertain α"),
+                  self.song("repertoire:native-rival-b", "Uncertain β")]
+        child = self.native_file(0, "Zoë’s 🌟 Jam > Unknown", [
+            {"song": derived, "candidateSongs": [], "outcome": "proposed"},
+            {"song": None, "candidateSongs": rivals, "outcome": "unresolved"},
+            {"song": None, "candidateSongs": [], "outcome": "unresolved", "reason": "unknown_song"}])
+        self.chunk("file_contents", "100", self.native_record(child))
+
+        stats = self.build()
+
+        self.assertEqual(stats["version"], "music-catalogue-v2")
+        self.assertEqual(stats["counts"]["songs"], 3)
+        self.assertEqual(self.catalogue().song("catalogue", derived["entityKey"])["title"], "Zoë’s 🌟 Jam")
+        self.assertEqual(self.catalogue().song("catalogue", derived["entityKey"])["basis"], "title_derived")
+        self.assertEqual(self.catalogue().song("catalogue", rivals[0]["entityKey"])["status"], "candidate")
+        self.assertEqual(self.catalogue().songs(q="unknown")["total"], 0)
+        source = stats["sources"][0]
+        self.assertEqual((source["native_files"], source["native_file_parents"], source["file_query_mode"]),
+                         (1, 1, "native"))
+
+    def test_native_song_discovery_does_not_stop_at_a_thousand_mentions(self):
+        interpretations = [{"song": self.song("repertoire:native-" + str(index), "Native song " + str(index)),
+                            "candidateSongs": [], "outcome": "proposed"} for index in range(1005)]
+        self.chunk("file_contents", "100", self.native_record(self.native_file(0, "Long native recording", interpretations)))
+
+        stats = self.build()
+
+        self.assertEqual(stats["counts"]["songs"], 1005)
+        self.assertEqual(self.catalogue().song("catalogue", "repertoire:native-1004")["title"], "Native song 1004")
+
+    def test_native_replay_withdrawal_and_scope_collision_preserve_current_membership(self):
+        key = "repertoire:native-same"
+        first = self.native_file(0, "Catalogue title", [{"song": self.song(key, "Catalogue title")}])
+        self.chunk("file_contents", "100", self.native_record(first))
+        self.index.scan_once()
+        local_run, local_index = self.source_run("native-local")
+        local = self.native_file(0, "Local title", [{"song": self.song(key, "Local title")}])
+        self.chunk("file_contents", "100", self.native_record(local, artist_name="Local artist"), run=local_run)
+        local_index.scan_once()
+        sources = [Source("catalogue", self.run, "http://127.0.0.1:1"),
+                   Source("local", local_run, "http://127.0.0.1:2")]
+        self.build(sources)
+        self.assertEqual(self.catalogue().songs()["total"], 2)
+        self.assertEqual(self.catalogue().song("local", key)["title"], "Local title")
+        replacement = self.native_file(0, "Replacement", [{"song": self.song("repertoire:replacement", "Replacement")}])
+        self.chunk("file_contents", "200", self.native_record(replacement))
+        self.build(sources)
+        self.assertIsNone(self.catalogue().song("catalogue", key))
+        self.assertIsNotNone(self.catalogue().song("local", key))
+        self.assertIsNotNone(self.catalogue().song("catalogue", "repertoire:replacement"))
+        self.chunk("file_contents", "300", self.native_record())
+        self.chunk("file_contents", "050", self.native_record(first))
+        stats = self.build(sources)
+        self.assertIsNone(self.catalogue().song("catalogue", "repertoire:replacement"))
+        self.assertIsNone(self.catalogue().song("catalogue", key))
+        self.assertIsNotNone(self.catalogue().song("local", key))
+        self.assertEqual((stats["sources"][0]["native_files"], stats["sources"][0]["native_file_parents"],
+                          stats["sources"][0]["file_query_mode"]), (0, 1, "records"))
+
+    def test_mixed_reader_metadata_counts_empty_native_accounts_and_legacy_rows_separately(self):
+        child = self.native_file(0, "Native", [{"song": self.song("repertoire:native", "Native")}])
+        legacy = self.record("file_contents", "track:legacy", {"titleInterpretation": {"segments": []}}, [])
+        self.chunk("file_contents", "100", self.native_record(child),
+                   self.native_record(key="provider_input:empty"), legacy)
+
+        stats = self.build()
+
+        source = stats["sources"][0]
+        self.assertEqual((source["native_files"], source["native_file_parents"], source["file_query_mode"]),
+                         (1, 2, "mixed"))
+
     def test_dictionary_title_derived_and_candidate_only_keys_keep_exact_scoped_facts(self):
         known = self.song("repertoire:known", "Dictionary title", legacy="legacy-song")
         derived = self.song("repertoire:derived", "New title", "title_derived")
@@ -244,12 +336,18 @@ class TestMusicCatalogue(unittest.TestCase):
         key = "repertoire:one"
         path = self.chunk("repertoire", "100", self.record("repertoire", "song:1", self.song(key, "Stable"), [key]))
         self.index.scan_once()
+        # A genuinely older compact cache predates native child lookup tables.
+        with closing(sqlite3.connect(self.index.database)) as db:
+            db.executescript("""DROP TRIGGER native_files_insert; DROP TRIGGER native_files_delete;
+                DROP TABLE native_file_entities; DROP TABLE native_file_search; DROP TABLE native_files;""")
         old_index = self.run / ".shadow-reader-v2.sqlite3"
         self.index.database.rename(old_index)
         before = hashlib.sha256(old_index.read_bytes()).hexdigest()
         sources = [Source("catalogue", self.run, "http://127.0.0.1:1")]
         stats = MusicCatalogueBuilder(sources, self.output, minimum_free_bytes=0).build()
         self.assertEqual(stats["sources"][0]["indexVersion"], 2)
+        self.assertEqual((stats["sources"][0]["native_files"], stats["sources"][0]["native_file_parents"],
+                          stats["sources"][0]["file_query_mode"]), (0, 0, "records"))
         self.assertEqual(hashlib.sha256(old_index.read_bytes()).hexdigest(), before)
         completed = self.output.read_bytes()
         with gzip.open(path, "wt") as stream:

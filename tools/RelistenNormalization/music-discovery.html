@@ -323,6 +323,7 @@
           <option value="">All scopes</option>
           <option value="catalogue">Captured catalogue</option>
           <option value="local">Local collections</option>
+          <option value="native">Native provider files</option>
         </select>
       </form>
       <nav class="tabs" id="tabs" aria-label="Music search">
@@ -356,9 +357,9 @@
       const sourceOf = (row) =>
         stats.sources.find((s) => String(s.id) === String(row.witness_run));
       const scopeLabel = (scope) =>
-        scope === "local"
-          ? "Local collections · separate identity scope"
-          : "Captured catalogue";
+        ({local: "Local collections · separate identity scope",
+          native: "Native provider run · separate identity scope",
+          catalogue: "Captured catalogue"})[scope] || scope;
       function badge(row) {
         const basis = row.basis || row.status || "";
         return `<span class="tag ${basis === "title_derived" ? "warning" : "supported"}">${esc(basis.replaceAll("_", " "))}</span>`;
@@ -420,6 +421,15 @@
       async function relationships(container, scope, key, domain, token) {
         const sources = stats.sources.filter((s) => s.scope === scope);
         for (const source of sources) {
+          if (domain === "file_contents" && stats.native_file_queries && source.native_files > 0) {
+            const native = document.createElement("section");
+            native.className = "source-section";
+            container.append(native);
+            await nativeFileRelationships(native, source, key, token);
+            if (source.file_query_mode === "native") {
+              continue;
+            }
+          }
           const section = document.createElement("section");
           section.className = "source-section";
           container.append(section);
@@ -467,6 +477,132 @@
           await load(0);
         }
       }
+      async function nativeFileRelationships(section, source, key, token) {
+        const load = async (offset) => {
+          section.innerHTML = '<p class="loading">Looking up exact native child files…</p>';
+          try {
+            const result = await api(
+              "/api/files?" + query({
+                source: source.id,
+                generation: stats.generation,
+                key,
+                limit: 20,
+                offset,
+              }),
+            );
+            if (token !== generation) {
+              return;
+            }
+            section.innerHTML = `<h3>${esc(source.run.split("/").pop())} <span class="tag">${result.total.toLocaleString()} native child files</span></h3><p class="muted">Exact source-scoped title relationships, including unresolved alternatives. File counts are not performance counts.</p>`;
+            const stack = document.createElement("div");
+            stack.className = "stack";
+            section.append(stack);
+            for (const row of result.items) {
+              const item = document.createElement("article");
+              item.className = "card";
+              item.innerHTML = `<div class="row"><div><strong>${esc(row.label || row.filename || row.nativeFileKey)}</strong><p class="muted">${esc(row.provider)} · ${esc(row.outcome)}</p></div><button>Open file</button></div>`;
+              item.querySelector("button").onclick = () => openNativeFile(item, source, row, token);
+              stack.append(item);
+            }
+            if (!result.items.length) {
+              section.insertAdjacentHTML("beforeend", '<p class="muted">No current indexed child has this exact key.</p>');
+            }
+            if (result.total > result.limit) {
+              section.append(pagination(result, load));
+            }
+          } catch (e) {
+            if (token === generation) {
+              section.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+            }
+          }
+        };
+        await load(0);
+      }
+      function renderPlayback(panel, urls) {
+        for (const url of urls) {
+          const audio = document.createElement("audio");
+          audio.className = "audio";
+          audio.controls = true;
+          audio.preload = "none";
+          audio.src = url;
+          audio.onplay = () => {
+            document.querySelectorAll("audio").forEach((other) => {
+              if (other !== audio) {
+                other.pause();
+              }
+            });
+          };
+          panel.append(audio);
+          const a = document.createElement("a");
+          a.href = url;
+          a.textContent = "Open authenticated catalogue audio";
+          a.target = "_blank";
+          a.rel = "noopener";
+          panel.append(a);
+        }
+      }
+      function renderSegments(panel, segments, scope) {
+        for (const segment of segments) {
+          const choices = [
+            ...new Map([
+              ...(segment.song ? [segment.song] : []),
+              ...(segment.candidateSongs || []),
+            ].map((song) => [song.entityKey, song])).values(),
+          ];
+          panel.insertAdjacentHTML("beforeend", `<p>${esc(segment.title || segment.kind)} <span class="tag ${segment.song ? "supported" : "warning"}">${esc(segment.outcome || segment.reason || "unresolved")}</span> ${choices.map((song) => `<a href="${link("song", {scope, key: song.entityKey})}">${esc(song.name)}</a>`).join(" · ")}</p>`);
+        }
+        panel.insertAdjacentHTML("beforeend", '<p class="muted">Title mentions are source interpretations, not verified audio timing, file order or occurrence alignment.</p>');
+      }
+      async function openNativeFile(container, source, row, token) {
+        let panel = container.querySelector(".details");
+        if (panel) {
+          panel.hidden = !panel.hidden;
+          return;
+        }
+        panel = document.createElement("div");
+        panel.className = "details";
+        panel.innerHTML = '<p class="loading">Loading exact retained child…</p>';
+        container.append(panel);
+        try {
+          const detail = await api(
+            "/api/file?" + query({
+              source: source.id,
+              generation: stats.generation,
+              parentId: row.parentId,
+              nativeFileKey: row.nativeFileKey,
+            }),
+          );
+          if (token !== generation) {
+            return;
+          }
+          const child = detail.file,
+            file = child.file || {};
+          panel.innerHTML = `<p><strong>Source title:</strong> ${esc(file.title?.value || "Not reported")}</p><p><strong>Filename:</strong> ${esc(file.filename?.value || "Not reported")}</p><p class="key">${esc(child.entityKey)}</p><p class="muted">Retained child locator ${esc(child.fileOrdinal)}; this is not musical order.</p><p class="key">${child.catalogShowUuid ? "show " + esc(child.catalogShowUuid) + "<br>" : ""}${child.catalogSourceUuid ? "recording " + esc(child.catalogSourceUuid) : "No authenticated catalogue recording home"}</p>`;
+          renderPlayback(panel, detail.playback || []);
+          if (!(detail.playback || []).length) {
+            panel.insertAdjacentHTML("beforeend", '<p class="muted">No authenticated catalogue playback for this child.</p>');
+          }
+          if (detail.providerFileUrl) {
+            const a = document.createElement("a");
+            a.href = detail.providerFileUrl;
+            a.textContent = "Open retained provider locator (separate from catalogue playback)";
+            a.target = "_blank";
+            a.rel = "noopener";
+            panel.append(a);
+          }
+          renderSegments(panel, (child.mentions || []).map((mention) => mention.interpretation), source.scope);
+          const raw = document.createElement("details");
+          raw.innerHTML = "<summary>Exact native origin, title citations and alternatives</summary>";
+          const pre = document.createElement("pre");
+          pre.textContent = JSON.stringify(detail, null, 2);
+          raw.append(pre);
+          panel.append(raw);
+        } catch (e) {
+          if (token === generation) {
+            panel.innerHTML = `<p class="error">${esc(e.message)}</p>`;
+          }
+        }
+      }
       async function openRecord(container, source, id, token) {
         let panel = container.querySelector(".details");
         if (panel) {
@@ -488,48 +624,20 @@
             p = record.proposal || {},
             home = p.home || {};
           panel.innerHTML = `<p>${esc(home.literalDate || "")} ${esc(home.performanceLabel || home.performanceType || "")}</p><p class="key">${home.showUuid ? "show " + esc(home.showUuid) + "<br>" : ""}${home.sourceUuid ? "recording " + esc(home.sourceUuid) : ""}</p>`;
-          for (const url of detail.playback || []) {
-            const audio = document.createElement("audio");
-            audio.className = "audio";
-            audio.controls = true;
-            audio.preload = "none";
-            audio.src = url;
-            audio.onplay = () =>
-              document.querySelectorAll("audio").forEach((a) => {
-                if (a !== audio) a.pause();
-              });
-            panel.append(audio);
-            const a = document.createElement("a");
-            a.href = url;
-            a.textContent = "Open original audio";
-            a.target = "_blank";
-            a.rel = "noopener";
-            panel.append(a);
-          }
-          const interpretation = p.titleInterpretation;
-          if (interpretation) {
-            panel.insertAdjacentHTML(
-              "beforeend",
-              `<p><strong>Original file title:</strong> ${esc(interpretation.originalTitle)}</p>`,
-            );
-            for (const segment of interpretation.segments || []) {
-              const choices = [
-                ...new Map(
-                  [
-                    ...(segment.song ? [segment.song] : []),
-                    ...(segment.candidateSongs || []),
-                  ].map((song) => [song.entityKey, song]),
-                ).values(),
-              ];
-              panel.insertAdjacentHTML(
-                "beforeend",
-                `<p>${esc(segment.title || segment.kind)} <span class="tag ${segment.song ? "supported" : "warning"}">${esc(segment.outcome || segment.reason || "unresolved")}</span> ${choices.map((s) => `<a href="${link("song", { scope: source.scope, key: s.entityKey })}">${esc(s.name)}</a>`).join(" · ")}</p>`,
-              );
+          if (Array.isArray(p.files)) {
+            panel.insertAdjacentHTML("beforeend", `<p>${p.files.length.toLocaleString()} native children in this source account. Choose an individual file to inspect its title and authenticated playback.</p>`);
+            const browse = document.createElement("a");
+            browse.href = source.reader_url + "/?" + query({view: "files", parentId: id});
+            browse.target = "_blank";
+            browse.rel = "noopener";
+            browse.textContent = "Browse this account’s native files in source reader →";
+            panel.append(browse);
+          } else {
+            renderPlayback(panel, detail.playback || []);
+            if (p.titleInterpretation) {
+              panel.insertAdjacentHTML("beforeend", `<p><strong>Original file title:</strong> ${esc(p.titleInterpretation.originalTitle)}</p>`);
+              renderSegments(panel, p.titleInterpretation.segments || [], source.scope);
             }
-            panel.insertAdjacentHTML(
-              "beforeend",
-              '<p class="muted">Title segments are source interpretations, not verified audio timings. This file retains its original performance home.</p>',
-            );
           }
           if (record.domain === "setlists") {
             const accounts = Array.isArray(p) ? p : [p];
@@ -610,7 +718,7 @@
           const files = document.createElement("section");
           files.className = "section";
           files.innerHTML =
-            '<h3>Playable recordings and shows</h3><p class="muted">Exact repertoire-key relationships in each existing reader. Results can include medleys or unresolved alternatives; open the original interpretation.</p>';
+            '<h3>Files, recordings and shows</h3><p class="muted">Exact repertoire-key relationships in each scoped reader. Results can include medleys or unresolved alternatives; inspect the source interpretation. Native scopes do not merge local and production catalogue identities.</p>';
           $("content").append(files);
           await relationships(
             files,
@@ -839,11 +947,11 @@
               .map((source) =>
                 source.title_discovery_projected === false
                   ? `${(source.run || "").split("/").pop()}: live relationship queries; titles not projected`
-                  : `${(source.run || "").split("/").pop()}: ${(source.current_records || 0).toLocaleString()} current index records at build (v${source.indexVersion})`,
+                  : `${(source.run || "").split("/").pop()}: ${(source.current_records || 0).toLocaleString()} current index records at build (v${source.indexVersion}); ${(source.native_files || 0).toLocaleString()} native children / ${(source.native_file_parents || 0).toLocaleString()} native input accounts`,
               )
               .join(" / ");
             $("coverage").textContent =
-              `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild.`;
+              `Discovery snapshot · ${counts}. ${snapshots}. These are independent indexed snapshots, not the complete computed population. File searches query live readers; new song titles appear after a catalogue rebuild. Native file coverage does not complete the broader full-reader title projection.`;
           }
           if (["song", "work", "setlist"].includes(kind))
             await detail(kind, params, token);
