@@ -10,6 +10,15 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 
 ## Progress
 
+Prepared input expectations can now pin the exact resource generation, preventing
+old decisions from becoming admissible merely because corrected metadata returns
+to its earlier bytes. All 91 focused Work, binding and contribution checks pass,
+including concurrent updates and historical replay. The [binding
+contract](catalog-binding.md#fence-repeated-input-revisions) explains how consumers
+keep original evidence separate from current observations. Source matching and
+publication must supply these preconditions before automatic acceptance can be
+enabled.
+
 Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source assignment, trusted source review and accepted support publication remain unimplemented; no policy is active.
 
 Canonical alias writes now respect reviewed claims across all identities joined

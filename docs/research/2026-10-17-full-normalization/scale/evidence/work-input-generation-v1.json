@@ -1,0 +1,66 @@
+{
+  "version": "work-input-generation-v1",
+  "state": "focused_contracts_verified_consumers_pending",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/work-input-generation-v1/execution-verification-v1/manifest.json",
+    "sha256": "d8fda68af2c8560c54c2b21464daa887c8cae9b21116b0eb76d30dae517b48b8",
+    "bytes": 4104
+  },
+  "testRuns": [
+    {
+      "file": "work-input-generation-focused-v1.trx",
+      "counters": {
+        "total": "27",
+        "executed": "27",
+        "passed": "25",
+        "failed": "2",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "work-input-generation-regression-v2.trx",
+      "counters": {
+        "total": "91",
+        "executed": "91",
+        "passed": "91",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "behavior": [
+    "Optional positive input generation is checked with revision and resource under existing locks before admission writes.",
+    "Direct and contributed stale admissions roll back; fresh preparation and exact committed replay remain valid.",
+    "Historical null-omitted JSON and old request hashes retain revision-only compatibility.",
+    "Shared peers cannot silently weaken generation expectations."
+  ],
+  "initialFailure": "Two concurrency-test cleanup failures attempted rollback after release. Explicit release state fixes the fixture; the 91-case rerun passes. Production logic was unchanged.",
+  "review": "Fresh independent correctness and readability review found no issues.",
+  "remaining": [
+    "New source resolver and publisher must populate their current observations correctly.",
+    "Full-suite rerun, evaluated automatic policy, catalog backfill and rollout remain required.",
+    "No migration, production writes or deployment."
+  ]
+}

@@ -23,6 +23,13 @@ public sealed partial class NormalizationWorkService
             ArgumentException.ThrowIfNullOrWhiteSpace(input.Resource.Provider);
             ArgumentException.ThrowIfNullOrWhiteSpace(input.Resource.ResourceType);
             ArgumentException.ThrowIfNullOrWhiteSpace(input.Resource.ProviderKey);
+            if (input.Generation is < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(expected),
+                    "Expected input generations must be positive when supplied."
+                );
+            }
             if (input.InputRevisionUuid == Guid.Empty || !ownedResources.Contains(input.Resource))
             {
                 throw new ArgumentException(
@@ -34,7 +41,7 @@ public sealed partial class NormalizationWorkService
         if (normalized.GroupBy(input => input.Resource).Any(group => group.Count() > 1))
         {
             throw new ArgumentException(
-                "One input resource cannot require conflicting revisions.",
+                "One input resource cannot require conflicting revisions or generations.",
                 nameof(expected)
             );
         }
@@ -114,15 +121,17 @@ public sealed partial class NormalizationWorkService
         {
             return;
         }
-        // LockInputs already holds these resources. Check each key/revision pair together:
-        // a revision from another owned resource cannot satisfy an expectation accidentally.
+        // LockInputs holds these resource rows through admission. A revision may recur after
+        // correction or an equal-content refresh; a supplied generation fences that observation
+        // as well. Legacy revision-only references retain their original weaker contract.
         var matches = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(
                 """
                 SELECT count(*) FROM normalization.input_resources r
-                JOIN jsonb_to_recordset(@expected::jsonb) AS e("Provider" text,"ResourceType" text,"ProviderKey" text,"InputRevisionUuid" uuid)
+                JOIN jsonb_to_recordset(@expected::jsonb) AS e("Provider" text,"ResourceType" text,"ProviderKey" text,"InputRevisionUuid" uuid,"Generation" bigint)
                     ON r.provider=e."Provider" AND r.resource_type=e."ResourceType" AND r.provider_key=e."ProviderKey"
                     AND r.current_revision_uuid=e."InputRevisionUuid"
+                    AND (e."Generation" IS NULL OR r.generation=e."Generation")
                 """,
                 new
                 {
@@ -133,6 +142,7 @@ public sealed partial class NormalizationWorkService
                             input.Resource.ResourceType,
                             input.Resource.ProviderKey,
                             input.InputRevisionUuid,
+                            input.Generation,
                         })
                     ),
                 },
@@ -143,7 +153,7 @@ public sealed partial class NormalizationWorkService
         if (matches != expected.Length)
         {
             throw new NormalizationConflictException(
-                "Input revisions changed after they were read; reload the binding before starting normalization work."
+                "Input revisions or generations changed after they were read; reload the binding before starting normalization work."
             );
         }
     }

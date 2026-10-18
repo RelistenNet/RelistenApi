@@ -99,6 +99,31 @@ domain write callback. A new attempt must reload the affected evidence and
 bindings and use a new work UUID. An exact retry reuses its original UUID and
 request; replay returns its saved result.
 
+### Fence repeated input revisions
+
+`NormalizationBindingInputReference` also accepts an optional positive
+`Generation`. A resource can return to an older immutable revision after a
+correction, so its revision UUID alone cannot prove that a saved decision still
+describes the current observation. New decision preparations must read revision
+and generation together in their original snapshot and pass both to admission.
+Work compares them under the existing resource locks before changing owner or
+contributor state. A mismatch rolls back admission. Reload the preparation before
+retrying; do not replace its saved observations with newer stamps.
+
+Historical two-argument references keep revision-only checks. A null generation
+is absent from JSON, preserving earlier request hashes and exact admitted replay.
+A contributed batch must agree on both revision and generation for every shared
+resource; mixing a legacy reference with a generation-pinned reference rejects
+the batch rather than weakening its precondition. Consumers must prepare the
+complete current input union consistently, without rewriting historical binding
+references or their supporting evidence.
+
+A rejection or withdrawal may cite an older field. Keep that original evidence
+and separately fence the current heads read to authorize the correction. Positive
+interpretation of an extraction must first establish that its original inputs
+still match the current snapshot. This is a caller responsibility in addition to
+Work's admission checks. No migration or change to input-lock order is required.
+
 Legacy, Archive, Phish and Local recording lookups return the catalog fences
 their resolvers consumed, including unresolved outcomes. The
 [recording lookup coordinator](lookup-enrollment.md) retains legacy and supported

@@ -140,6 +140,8 @@ A split creates new identities and explicitly lists the relationships to move. T
 
 Each normalization subject (for example a recording's credits or an imported venue assignment) has a durable desired generation and current editorial revision. Every admitted input fetch atomically advances its resource generation. A subject retains the resource generations last published; a durable pending-work query finds changed resources without an eager fan-out job. Policy, input binding and editorial changes advance the subject generation. Dependencies retain their last consumed generation, editorial revision and published result; shared identity changes are pending wherever those watermarks differ. Never depend on Redis expiry or Temporal history to remember invalidation.
 
+Prepared work can pin `NormalizationBindingInputReference.Generation` as well as its immutable revision. Admission checks both under resource locks, including when old bytes become current again. The optional value is omitted from historical JSON and preserves revision-only replay. Shared batch inputs must agree exactly; a stronger observation cannot be silently replaced by a legacy reference. Keep original evidence separate from current-head preconditions for historical rejection or withdrawal. The [binding contract](../plans/active/2026-10-17-full-normalization/catalog-binding.md#fence-repeated-input-revisions) defines caller responsibilities.
+
 Typed writers also enforce the subject's ownership. The registry UUID identifies the work record; its domain, kind and entity UUID identify what that record may change:
 
 | Domain and subject kind | Entity UUID and responsibility |
