@@ -1,0 +1,65 @@
+{
+  "state": "verified_first_publication_contract_expectations",
+  "implementation_commit": "fd249fa",
+  "input_receipt": "recording-repertoire-local-v1.json",
+  "database": "relisten_normalization_materialization_20261018",
+  "migration": 51,
+  "transaction_read_only": "on",
+  "selected_recordings": 25,
+  "artists": 17,
+  "claims": 284,
+  "claim_kinds": {
+    "song": 251,
+    "unknown": 25,
+    "nonmusic": 8
+  },
+  "files": 281,
+  "supported_files": 256,
+  "expected_contents": 257,
+  "expected_content_kinds": {
+    "song": 250,
+    "nonmusic": 7
+  },
+  "unresolved_files": 25,
+  "unresolved_claims": 27,
+  "verification": {
+    "all_claims_covered_once": true,
+    "accepted_slots_unique": true,
+    "positive_song_targets_distinct": 250,
+    "source_artifacts_authenticated": 4,
+    "independent_fresh_review": "clean"
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-expectations-v1/expectations.json",
+      "bytes": 67114,
+      "sha256": "29ebf66dd1170dadc1fadc6d5eae7ddad34539cfae79a3a81ccc5f3b12ddedc7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-expectations-v1/input-facts.json",
+      "bytes": 105814,
+      "sha256": "9ecba63de8094705ea314231eb18835939c39616f0f6fbfc85bfe3baed530671"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-expectations-v1/input-facts.sql",
+      "bytes": 2308,
+      "sha256": "70aef6e0591c9ee6eecd0583b8365149550e4047e583b4969fa0714a9eb180db"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-expectations-v1/prepare-expectations.py",
+      "bytes": 5763,
+      "sha256": "01950cf98d4660758428d610d5dd65fb9c14967aaca891f0ac75adb17351ef21"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-expectations-v1/receipt.json",
+      "bytes": 1215,
+      "sha256": "6fee37d1bc4a18f2c7e34a5012234e0cba733f44a9ba278ea44c7d605f044809"
+    }
+  ],
+  "limits": [
+    "Read-only local input analysis; consumer publication has not run.",
+    "Counts establish contract coverage, not extraction or identity accuracy.",
+    "Unknown file contents preserve the complete file image; existing playback remains available.",
+    "No provider or model request, production write or policy activation."
+  ]
+}

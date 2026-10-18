@@ -48,3 +48,20 @@ rows retain their exact fingerprints. All 12 legacy relation fingerprints and th
 original rehearsal database also remain unchanged. There are still no accepted
 file contents or setlists. The completed accounts supply real inputs for consumer
 publication; this run does not yet verify their new song-to-file results over HTTP.
+
+## Expected file-content coverage
+
+A separate read-only [coverage check](evidence/recording-content-expectations-v1.json)
+freezes the expected first publication before running the consumer. The complete
+284 claims cover 281 files: 251 song claims, eight nonmusic claims and 25 unknown
+claims. Each claim appears exactly once in the accepted or unresolved partition.
+
+The expected result is 257 contents across 256 files: 250 song contents and seven
+nonmusic contents. Twenty-five files remain unresolved. One otherwise-supported
+song claim and one nonmusic claim share files with unknown contents, so the whole
+file image stays unresolved. This preserves the complete-image contract while
+leaving existing playback available. These are expectations from retained claims
+and repertoire decisions, not observations of consumer publication or evidence of
+matching accuracy. The command rehearsal must compare its actual first image
+against these exact file, position, kind and song coordinates before checking
+retries and v3 reads.
