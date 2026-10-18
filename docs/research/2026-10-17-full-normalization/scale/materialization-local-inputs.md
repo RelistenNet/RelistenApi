@@ -63,12 +63,11 @@ with newly allocated attempts.
 
 ## Remaining verification
 
-This copy contains no retained real ordered-setlist source and no accepted
-setlist. The [setlist and file-content consumers](../../../plans/active/2026-10-17-full-normalization/repertoire-consumers.md)
-have service-level publication and recovery coverage. A real setlist rehearsal
-must retain a supported provider account, freeze its order and annotations,
-then verify extraction, repertoire decisions, publication and v3 reads.
-Legacy song-membership joins cannot reconstruct missing source order.
+The separate [real Jerry setlist rehearsal](setlist-local-rehearsal.md) now
+verifies a retained provider account through extraction, repertoire decisions,
+publication and v3. Its new copy preserves this recording rehearsal and all
+257 accepted file contents. Source-only expectations establish the order and
+annotations; legacy song-membership joins do not supply missing source order.
 
 The [consumer verification record](evidence/repertoire-consumer-contracts-v1.json)
 retains the full regression result and corrected capacity-retry rerun. Independent identity evaluation, production policy

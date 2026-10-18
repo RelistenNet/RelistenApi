@@ -69,7 +69,10 @@ A separate two-input [Luna connectivity receipt](evidence/luna-connectivity.json
 ## Local publication rehearsals
 
 The [repertoire rehearsal](repertoire-local-rehearsal.md) publishes 209 imported
-songs and checks compatibility through the API. A separate
-[recording-input preparation](materialization-local-inputs.md) retains a published,
-replayable page of 25 recordings across 17 artists for the setlist and file-content
-consumers. The latter preparation publishes no accepted file contents or setlists.
+songs and checks compatibility through the API. The [recording rehearsal](materialization-local-inputs.md)
+then publishes 257 contents across 256 files from 25 recordings, with exact replay,
+fresh retries and 2,165 successful API requests. The separate [Jerry setlist
+rehearsal](setlist-local-rehearsal.md) verifies three sets and 18 occurrences through
+1,699 API requests, preserving source notes, exact assignments and existing
+catalog responses. These runs verify publication and recovery; independently
+evaluated identity matching remains required.

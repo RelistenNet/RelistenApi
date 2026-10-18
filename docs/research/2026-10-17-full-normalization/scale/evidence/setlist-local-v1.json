@@ -1,0 +1,194 @@
+{
+  "state": "completed_real_setlist_source_to_v3_rehearsal",
+  "implementation_commits": [
+    "d9ccdd8",
+    "8cf200c"
+  ],
+  "database": "relisten_normalization_setlist_20261018",
+  "migration": 52,
+  "source": {
+    "provider": "jerrygarcia.com",
+    "resource_type": "mirror_show_page",
+    "provider_key": "grateful_dead/1995-07-02-deer-creek-music-center-noblesville-in-usa",
+    "bytes": 77369,
+    "sha256": "0538513070936b6586e18a6e37be4cca40c9b10e5ede09a09aeb8393ff3f905f",
+    "initial_acquisition_requests": 2,
+    "note": "One mirror listing and one exact show-page response, retained before decoding."
+  },
+  "source_expectations": {
+    "frozen_before_decoder_execution": true,
+    "sets": 3,
+    "ordered_passages": 18,
+    "song_links": 11,
+    "transition_markers": 8,
+    "show_fact_lines": 14,
+    "exact_citation_occurrences": 70,
+    "distinct_cited_spans": 38
+  },
+  "publication": {
+    "producer_attempt_uuid": "48ff805f-2579-4a7a-88ab-b0e95af541dc",
+    "repertoire_attempt_uuid": "48fc7cf7-e5d3-4607-8329-c08b8d2c66d2",
+    "materializer_attempt_uuid": "8c0c2f80-fabb-41d3-b061-c2af560e13de",
+    "unchanged_retry_attempt_uuid": "e824ab7a-b119-4316-890b-ec55ed8eee97",
+    "edition_uuid": "6dc0679c-97d4-58de-b95d-c06911c7bcfb",
+    "repertoire_provisional_claims": 18,
+    "sets": 3,
+    "occurrences": 18,
+    "worker_invocations": 38,
+    "exact_extraction_replay": true,
+    "exact_repertoire_replay": true,
+    "exact_materializer_replay": true,
+    "fresh_unchanged_materializer_retry": true,
+    "exact_retry_replay": true,
+    "same_21_set_and_occurrence_targets_across_retry": true,
+    "all_current_accepted_entity_revisions_one": true,
+    "show_uuid": null,
+    "selected": false
+  },
+  "public_verification": {
+    "http_requests": 1699,
+    "http_200_responses": 1699,
+    "response_bytes": 10990154,
+    "legacy_json_responses_unchanged": 1409,
+    "existing_track_content_json_responses_unchanged": 256,
+    "annotation_groups": 22,
+    "song_details": 18,
+    "small_page_limit": 3,
+    "exact_claim_to_song_and_source_to_target_joins": true,
+    "accepted_and_legacy_rows_unchanged_during_gets": true,
+    "owned_api_stopped": true,
+    "owned_redis_removed": true
+  },
+  "preservation": {
+    "legacy_relation_fingerprints_unchanged": 12,
+    "original_accepted_music_relations_preserved_as_identical_subsets": 4,
+    "original_track_contents_unchanged": 257,
+    "legacy_shows_unchanged": true,
+    "active_repertoire_policy_selections": 0,
+    "active_correspondence_policy_selections": 0
+  },
+  "contract_regressions": {
+    "decoder_and_terminal_compatibility": 166,
+    "downstream_processor_consumer_and_cli": 203,
+    "annotation_and_real_decoder": 14,
+    "new_decoder_test_failed_before_fix": true,
+    "new_annotation_test_failed_before_fix": true,
+    "final_full_suite_rerun": "pending"
+  },
+  "scope": {
+    "provider_requests_after_retention": 0,
+    "model_requests": 0,
+    "media_requests": 0,
+    "production_writes": 0,
+    "identity_matching_accuracy_established": false,
+    "source_discrepancy": "Ordered Brokedown Palace and separate Broken Arrow note retained without repair.",
+    "performance_assignment": "Unresolved existing provider account; no show created or selected. Existing recordings remain at their catalog homes."
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/provider-capture-v1/receipt.json",
+      "bytes": 2600,
+      "sha256": "5f35cdffd7ac60b9fed04a4a976da9762693923332587c109fc7970d3689f90f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/source-expectations-v1/manifest.json",
+      "bytes": 1749,
+      "sha256": "3c55d70e7c4342ab6b9d3d1e7c98c6ccb1e552f7e8706b8557ca621823d74984"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/baseline-copy-v1/receipt.json",
+      "bytes": 3248,
+      "sha256": "ad446cd26f677722d545f4a4b52856cb061e4ad82c5393213fc6f0d6b28e0080"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decode-verification-v2/manifest.json",
+      "bytes": 3483,
+      "sha256": "402fc95472bcae850c66af9834cbb90e0ac756c5866347087522063692e14dfe"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/processing-invocation-plan-v1.json",
+      "bytes": 457,
+      "sha256": "5086511d6cfa231111ad420c0de0bf5eb39069e3ed7ce895893164f2cd437488"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/processing-start-v1.stdout.json",
+      "bytes": 885,
+      "sha256": "808c21879dc0c94978281918366f115d708f2cbae217cf7da497f9ddcdd61bd7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/processing-replay-v1.stdout.json",
+      "bytes": 884,
+      "sha256": "b950e68a7c9dde885b03b635026ec64aa32ecb9d2cdf3fa872850954b0965feb"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/setlist-publication-v1/receipt.json",
+      "bytes": 49825,
+      "sha256": "a51325e593d3e7b3bd0f523ab952cc2ece0e7f50a030edfdb1968bfd10c04db7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/source-export-v1/receipt.json",
+      "bytes": 2560,
+      "sha256": "9156d580c70ae32a05a8a080029e7bbc166a6fea1bf77c2172f7451ff55d2ebb"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/preservation-v1/receipt.json",
+      "bytes": 2423,
+      "sha256": "6ac81258e11a675694ba09178a36745fd16d183bdf75814a1d5132b0a83d19d3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/setlist-api-v1/receipt.json",
+      "bytes": 598036,
+      "sha256": "a08785c6a2a59802d336956336f752029775f16964be83219fe759844b1ffd86"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decoder-verification-v1/source-v6.json",
+      "bytes": 3177,
+      "sha256": "3a5879324ab59c26ee65025562a9d91cf268b0aec3c5f2ac921079a707f7fb79"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decoder-verification-v1/binaries-v6.json",
+      "bytes": 2195,
+      "sha256": "684c73bf91f23d35eea251b68cd81a51a906f85041b8e933080646ed15139ee4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decoder-verification-v1/decoder-red-v2.log",
+      "bytes": 4576,
+      "sha256": "63275b0f399f3d566f43be2b20ec9d9460a723a5fa050c9318af19a8d8269985"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decoder-verification-v1/decoder-green-v2.log",
+      "bytes": 17526,
+      "sha256": "92c8a812b2dd9a07d2e6ea264b505acaead7a47717dbe490e3b417d8d73442ff"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/decoder-verification-v1/process-consumer-regressions-v1.log",
+      "bytes": 20351,
+      "sha256": "1dcbb82d77063cbad151308f69038a7681ac170324b438d07b9d0256d46f45cd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/reader-verification-v1/sources.json",
+      "bytes": 1155,
+      "sha256": "7cd24ebf7f4860d2f67f81ba8b14ad3111b7023d39e37a32bf00ea13a52fb650"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/reader-verification-v1/binaries.json",
+      "bytes": 2171,
+      "sha256": "ac100125592b5a4ef25da4a519b7684551b55e3a9f68af92f108d5f11c1f3c58"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/reader-verification-v1/red-v1.log",
+      "bytes": 4693,
+      "sha256": "348e6345f45f0a3694bd12a4f05859b97e440579296400557e6fe9bc2e70e0d3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/reader-verification-v1/green-v1.log",
+      "bytes": 2888,
+      "sha256": "197aeb73f008db41df6ebd57759bdc65c66bba705c7fb16e6b3f5a78c9275ebd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/tools-v1/manifest.json",
+      "bytes": 58766,
+      "sha256": "6aa703e3a21234977c099fb2dca26a39eb673e114efa72c077ed477112b5187a"
+    }
+  ]
+}
