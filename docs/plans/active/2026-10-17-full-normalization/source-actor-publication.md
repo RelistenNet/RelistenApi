@@ -117,6 +117,39 @@ A partial or contradictory certificate refuses recovery. Pending stages and
 first publication always retain full validation; audit reads still return the
 complete original stage.
 
+## Prepare one person's stage
+
+Authenticate the complete original source and current trusted reviews once in a
+read-only repeatable-read transaction. Process historical withdrawals and trusted
+assignments before machine additions.
+
+For machine additions, find the first current winner in source order. Use its
+original proposed person only to group likely related claims, then refresh those
+claims against current pools. Add only claims whose current winner is the selected
+person. A missing original hint stays a singleton. Retain all queried pools and
+owners, including negative results and other winners examined in that group.
+
+Keep every original input, field and assertion in the saved stage. Deferred
+claims have no current pool or selected person; they are not final unsupported
+results. Only a pass that exhausts all remaining eligible machine claims may
+compute readiness, process every previous person's map and classify completion.
+A later stage starts a new snapshot. A saved stage always resumes its original
+proof before any fresh preparation.
+
+Historical withdrawal discovery can be deferred only when a source-wide query
+finds no review rows and an actual source-owner observation fences that absence.
+Do not filter the query to current fields or negative reviews. Any review,
+including accepted reassignment on removed text, keeps the full historical scan;
+a missing owner does too. A concurrent first review invalidates the prepared
+stage through its existing owner fence.
+
+An independent valid person may now commit before a later unrelated candidate,
+target or old-map failure. This preserves useful partial progress. Complete
+source/review authentication remains upfront, and a terminal Complete result
+still requires the exhausted pass and all previous maps. The
+[verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json)
+records the public tests and remaining large-input measurements.
+
 ## Replace and withdraw source support
 
 For an ordinary complete field update, publish supported new names first. Retire

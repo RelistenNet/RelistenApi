@@ -310,9 +310,13 @@ Reassignment retires old support before exposing a new identity link. Redirects
 retain the original owner instead of pretending the survivor is a new
 assignment. A crash before commit changes nothing; a crash between person stages
 reports the committed subset. Exact replay returns saved outcomes. Before each
-new person stage, re-evaluate remaining assertions against current pools under
-the same still-active pinned policy and save a new preparation. Never add fresh
-stamps to an admitted old decision.
+new person stage, re-evaluate its machine claims against current pools under
+the same still-active pinned policy. The original selected person only groups
+likely related claims; it grants no authority. Keep complete original inputs
+for deferred claims, and exhaust current evaluation before finalizing the
+application. The [publication guide](source-actor-publication.md#prepare-one-persons-stage)
+explains preparation order and useful partial progress after a later unrelated
+failure. Never add fresh stamps to an admitted old decision.
 
 The phase is complete when genuine service tests cover at least 1,001 distinct
 source supports on one producer contribution, concurrent scope updates,

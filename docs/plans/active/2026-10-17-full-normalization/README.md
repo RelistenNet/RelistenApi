@@ -41,6 +41,13 @@ catalog throughput. The [checkpoint verification receipt](../../../research/2026
 records the exact scope; distinct-person cost, merged-alias visibility and the
 full-suite rerun remain required.
 
+Source publication now prepares the next person's current claims without
+reevaluating every deferred person first. Complete original evidence and review
+authority stay upfront; original winners are grouping hints only. All 198
+service checks and two small lifecycle cases pass, including eight new behavior
+checks. The [cohort verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json)
+records the accepted partial-progress behavior and remaining full-size cost work.
+
 Canonical alias writes now respect reviewed claims across all identities joined
 by current merges, while preserving original alias ownership and merge reversal.
 All 16 alias-write and 101 metadata/candidate checks pass. A related correction

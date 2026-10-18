@@ -102,7 +102,7 @@ public sealed partial class SourceActorAliasApplicationService(
                 if (application.Plan == null)
                 {
                     var source = await InSnapshot(
-                        (c, t) => ReadSourceAsync(c, t, proposal, ct, evaluateMachine: false),
+                        (c, t) => ReadTrustedSourceAsync(c, t, proposal, ct),
                         ct
                     );
                     application = await store.SavePlanAsync(

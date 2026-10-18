@@ -12,13 +12,12 @@ namespace Relisten.Data;
 
 public sealed partial class SourceActorAliasApplicationService
 {
-    private async Task<PreparedSource> ReadSourceAsync(
+    private async Task<PreparedSource> ReadTrustedSourceAsync(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorResolutionBatch proposal,
         CancellationToken ct,
-        bool evaluateMachine = true,
-        SourceActorAliasApplication? application = null
+        SourceActorAliasApplicationIndex? committed = null
     )
     {
         var extraction = await SourceActorResolutionStore.ReadPublishedExtractionAsync(
@@ -49,19 +48,11 @@ public sealed partial class SourceActorAliasApplicationService
             Correspondences = correspondence.Count == 0 ? null : correspondence,
         };
         var current = await SourceIsCurrent(c, t, extraction, ct);
-        var attempted =
-            application
-                ?.Stages.Where(stage => stage.Receipt != null)
-                .SelectMany(stage =>
-                    stage.Receipt!.Names.Select(name => (Stage: stage, Name: name))
-                )
-                .GroupBy(value => value.Name.Claim)
-                .ToDictionary(group => group.Key, group => group.ToArray())
-            ?? [];
-        var supportIds = attempted
-            .Values.SelectMany(value => value)
-            .Where(value => value.Name.SupportUuid.HasValue)
-            .Select(value => value.Name.SupportUuid!.Value)
+        committed ??= new SourceActorAliasApplicationIndex([]);
+        var supportIds = committed
+            .Claims.Values.SelectMany(value => value.Outcomes)
+            .Where(value => value.SupportUuid.HasValue)
+            .Select(value => value.SupportUuid!.Value)
             .Distinct()
             .ToArray();
         var activeSupports = (
@@ -79,10 +70,6 @@ public sealed partial class SourceActorAliasApplicationService
             )
         ).ToHashSet();
         var carried = new List<SourceActorAliasClaimReceiptReference>();
-        var policy = default(ActivePeopleAcceptancePolicy);
-        var pinned = proposal.Preparation.PolicyState.Active;
-        var pools = new List<NormalizationCandidateFactsSnapshot<PersonCandidateFacts>>();
-        var cache = new Dictionary<string, int>(StringComparer.Ordinal);
         var targets = new Dictionary<Guid, SourceActorReviewTarget>();
         var planned = new List<SourceActorAliasPlannedClaim>();
         var preparedInputs = new List<SourceActorResolutionInput>();
@@ -91,7 +78,6 @@ public sealed partial class SourceActorAliasApplicationService
             proposal.ExtractionAttemptUuid,
             proposal.ProcessingVersion
         );
-        PeopleAcceptancePolicyState? policyState = null;
         for (var inputIndex = 0; inputIndex < inputs.Length; inputIndex++)
         {
             var input = inputs[inputIndex];
@@ -130,20 +116,14 @@ public sealed partial class SourceActorAliasApplicationService
                         scopeIndex,
                         assertionIndex
                     );
-                    if (current && attempted.TryGetValue(claimReference, out var prior))
+                    if (current && committed.Claims.TryGetValue(claimReference, out var prior))
                     {
-                        var stages = prior
-                            .Select(value => value.Stage)
-                            .DistinctBy(stage => stage.StageUuid)
-                            .ToArray();
-                        var accepted = stages
-                            .Single()
-                            .Acceptances.Single(value => value.Claim == claimReference);
+                        var accepted = prior.Acceptance;
                         if (
                             !CanCarrySourceClaim(accepted, coordinates, reviews)
-                            || prior.Any(value =>
-                                value.Name.SupportUuid.HasValue
-                                && !activeSupports.Contains(value.Name.SupportUuid.Value)
+                            || prior.Outcomes.Any(value =>
+                                value.SupportUuid.HasValue
+                                && !activeSupports.Contains(value.SupportUuid.Value)
                             )
                         )
                         {
@@ -151,8 +131,8 @@ public sealed partial class SourceActorAliasApplicationService
                                 "A committed source claim's authority changed; start a new application for the new decision."
                             );
                         }
-                        var carriedPerson = stages.Single().OriginalPersonUuid;
-                        carried.Add(new(claimReference, stages.Single().StageUuid, carriedPerson));
+                        var carriedPerson = prior.Stage.OriginalPersonUuid;
+                        carried.Add(new(claimReference, prior.Stage.StageUuid, carriedPerson));
                         planned.Add(
                             new(
                                 claimReference,
@@ -177,7 +157,6 @@ public sealed partial class SourceActorAliasApplicationService
                         .Where(value => value.Current.Coordinates == coordinates)
                         .ToArray();
                     var artist = input.OriginalInput.Binding.Recording.Value!.ArtistUuid;
-                    int? slot = null;
                     // Exact human authority authenticates the whole original field, even when
                     // the same retained revision was extracted again under another attempt ID.
                     var human =
@@ -225,56 +204,14 @@ public sealed partial class SourceActorAliasApplicationService
                                     .Distinct()
                                     .Count() == 1
                         );
-                    // Human-only passes never observe the machine registry or candidate pool.
-                    // A machine pass uses the original policy, freshly active in this same RR.
-                    if (
-                        evaluateMachine
-                        && current
-                        && exact == null
-                        && derived.Length == 0
-                        && !reviews.Reviews.Any(value => SameField(value.Coordinates, coordinates))
-                        && pinned != null
-                    )
-                    {
-                        policyState ??= await policies.ReadStateInSnapshotAsync(c, t, ct);
-                        if (
-                            policyState.Active == null
-                            || !Same(policyState.Active.Policy, pinned.Policy)
-                        )
-                        {
-                            throw new NormalizationConflictException(
-                                "The pinned source matching policy is no longer active."
-                            );
-                        }
-                        policy = policyState.Active;
-                        var query = PeopleActorProjection.Project(assertion, artist).Query;
-                        if (query != null)
-                        {
-                            var key = PeopleActorProjection.QueryFingerprint(query);
-                            if (!cache.TryGetValue(key, out var found))
-                            {
-                                found = pools.Count;
-                                pools.Add(
-                                    await candidates.FindPeopleFactsInSnapshotAsync(
-                                        c,
-                                        t,
-                                        query,
-                                        ct: ct
-                                    )
-                                );
-                                cache.Add(key, found);
-                            }
-                            slot = found;
-                        }
-                    }
                     var claim = decisions.Compare(
                         coordinates,
                         assertion,
                         assertionIndex,
                         artist,
-                        slot,
-                        slot.HasValue ? pools[slot.Value] : null,
-                        policyState ?? proposal.Preparation.PolicyState,
+                        null,
+                        null,
+                        proposal.Preparation.PolicyState,
                         reviews
                     );
                     if (!supportedReview)
@@ -309,11 +246,7 @@ public sealed partial class SourceActorAliasApplicationService
                         };
                     }
                     claims.Add(claim);
-                    var selected =
-                        claim.Decision.Action == SourceActorResolutionAction.MatchExisting
-                        || authority && claim.Decision.PersonUuid.HasValue
-                            ? claim.Decision.PersonUuid
-                            : null;
+                    var selected = authority ? claim.Decision.PersonUuid : null;
                     if (selected is Guid person && !targets.ContainsKey(person))
                     {
                         targets.Add(
@@ -341,8 +274,8 @@ public sealed partial class SourceActorAliasApplicationService
             extraction,
             preparedInputs.ToArray(),
             reviews,
-            pools.ToArray(),
-            policy,
+            [],
+            null,
             targets.Values.ToArray(),
             planned.ToArray(),
             current,

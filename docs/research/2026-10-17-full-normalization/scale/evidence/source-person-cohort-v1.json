@@ -1,0 +1,61 @@
+{
+  "version": "source-person-cohort-v1",
+  "state": "public_contracts_and_small_scale_verified_large_scale_pending",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-person-cohort-v1/execution-verification-v1/manifest.json",
+    "sha256": "95a604948f39b6092f31150f957fb2ee832826a9d17be692925cc3ef3d057e18"
+  },
+  "testRuns": [
+    {
+      "run": "source-person-cohort-baseline-v2",
+      "passed": 4,
+      "failed": 4,
+      "note": "Old eager scheduling reads deferred pools and refuses an unrelated old map before an independent valid addition."
+    },
+    {
+      "run": "source-person-cohort-targeted-v1",
+      "passed": 8,
+      "failed": 0,
+      "note": "These eight new cases also pass in the broader service run below."
+    },
+    {
+      "run": "source-person-cohort-services-v1",
+      "passed": 198,
+      "failed": 0,
+      "notExecuted": 1,
+      "note": "The TRX contains 198 Passed and one NotExecuted UnitTestResult. Its raw summary notExecuted counter is zero; the private manifest preserves that counter. This receipt counts individual results."
+    },
+    {
+      "run": "source-person-cohort-small-scale-v1",
+      "passed": 2,
+      "failed": 0,
+      "people": 8,
+      "claimsInRepeatedOnePersonApplication": 50
+    }
+  ],
+  "uniquePassingCasesAfterChange": 200,
+  "behavior": [
+    "Authenticate complete original source and current trusted review evidence once per read-only preparation snapshot.",
+    "Original selected person is only a grouping hint. Every published machine claim obtains a current winner; keep every queried negative-prefix and other-winner pool and owner observation.",
+    "Retain complete original inputs and assertions for deferred claims. Only an exhausted current pass can reach readiness, full previous-map processing and terminal completion.",
+    "Defer historical withdrawal discovery only when a source-wide query finds no review rows and the actual source-owner observation fences that absence. Missing owners or any review, including removed fields and accepted reassignment, keep the full scan.",
+    "Saved stages resume their exact proof and ticket before selecting a new group. No public API, schema, processing version, policy, Work hash or capacity changes."
+  ],
+  "changedFailureOrder": "A valid independent person stage can commit before a later unrelated candidate, target or old-map refusal. It cannot make an unexamined application Complete. The old-map refusal prefix has a direct public regression.",
+  "coverage": [
+    "Nonadjacent same-person claims still batch together.",
+    "Stale original hints and divergent current winners cannot supply acceptance authority.",
+    "Consumed negative-prefix owners stay fenced; genuinely deferred owners remain independent when all other consumed stamps stay unchanged.",
+    "A reviewed removed field still forces historical withdrawal discovery before additions.",
+    "Complete original scope/stage proof and original Work tickets survive resume."
+  ],
+  "remaining": [
+    "Direct later machine/target-capacity exception timing test",
+    "1,000 distinct people, full repeated 1,000-claim run and 1,001-source lifecycle on the changed preparation path",
+    "Repeated full-proof, finalization-map and original-scope storage cost",
+    "Migration 58, full suite and independent matching evaluation before catalog backfill/rollout"
+  ],
+  "review": "Fresh independent correctness and separate readability reviews found no issues.",
+  "productionWrites": 0,
+  "automaticPoliciesActivated": 0
+}

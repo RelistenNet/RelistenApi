@@ -34,42 +34,53 @@ public sealed partial class SourceActorAliasApplicationService
             return map;
         }
 
-        // Trusted decisions are prepared independently of machine policy/pools. Only if no
-        // trusted/withdrawal stage remains do we consume current matching state for machines.
-        var source = await ReadSourceAsync(
-            c,
-            t,
-            proposal,
-            ct,
-            evaluateMachine: false,
-            application: application
-        );
-        var oldPeople = await ReadPreviouslyPublishedPeople(c, t, application.SourceUuid, ct);
-        foreach (var person in oldPeople)
-        {
-            var map = await MapFor(person);
-            var enriched = await IncludeHistoricalReviews(
-                c,
-                t,
-                source,
-                map.Map,
-                application.SourceUuid,
-                ct
+        // Original evidence and all current source review decisions are authenticated before
+        // any positive work. Both trusted and machine phases use this same RR preparation.
+        var committed = new SourceActorAliasApplicationIndex(application.Stages);
+        var source = await ReadTrustedSourceAsync(c, t, proposal, ct, committed);
+        Guid[]? oldPeople = null;
+        var scanHistoricalReviews =
+            source.Reviews.OwnerObservation == null
+            || await c.QuerySingleAsync<bool>(
+                new CommandDefinition(
+                    "SELECT EXISTS(SELECT 1 FROM normalization.source_actor_alias_review_state WHERE source_uuid=@SourceUuid)",
+                    new { application.SourceUuid },
+                    t,
+                    cancellationToken: ct
+                )
             );
-            var withdrawal = await Withdrawals(c, t, enriched, map.Map, person, ct);
-            if (withdrawal.Count > 0)
+        // Field-local absence cannot rule out a review on removed historical text. Only
+        // source-wide absence, fenced by the actual source owner, skips withdrawal discovery.
+        // Unrelated old-map corruption may then be refused after an independent addition.
+        if (scanHistoricalReviews)
+        {
+            oldPeople = await ReadPreviouslyPublishedPeople(c, t, application.SourceUuid, ct);
+            foreach (var person in oldPeople)
             {
-                return await PreparePersonStage(
+                var map = await MapFor(person);
+                var enriched = await IncludeHistoricalReviews(
                     c,
                     t,
-                    application,
-                    enriched,
-                    person,
-                    map,
-                    withdrawal,
-                    [],
+                    source,
+                    map.Map,
+                    application.SourceUuid,
                     ct
                 );
+                var withdrawal = await Withdrawals(c, t, enriched, map.Map, person, ct);
+                if (withdrawal.Count > 0)
+                {
+                    return await PreparePersonStage(
+                        c,
+                        t,
+                        application,
+                        enriched,
+                        person,
+                        map,
+                        withdrawal,
+                        [],
+                        ct
+                    );
+                }
             }
         }
         if (!source.Current)
@@ -84,32 +95,50 @@ public sealed partial class SourceActorAliasApplicationService
                 []
             );
         }
-        var trusted = UnwrittenClaims(application, source)
+        var trusted = UnwrittenClaims(committed, source)
             .FirstOrDefault(value => value.OriginalPersonUuid.HasValue);
         if (trusted != null)
         {
             var person = trusted.OriginalPersonUuid!.Value;
             var map = await MapFor(person);
-            var deltas = await Additions(c, t, application, source, person, ct);
+            var deltas = await Additions(c, t, application, source, committed, person, ct);
             return await PreparePersonStage(c, t, application, source, person, map, deltas, [], ct);
         }
-        source = await ReadSourceAsync(
-            c,
-            t,
+        var machine = await new MachineCohortRefresh(
+            candidates,
+            policies,
+            decisions,
             proposal,
-            ct,
-            evaluateMachine: true,
-            application: application
-        );
-        var machine = UnwrittenClaims(application, source)
-            .FirstOrDefault(value => value.OriginalPersonUuid.HasValue);
-        if (machine != null)
+            source
+        ).ReadAsync(c, t, committed, ct);
+        switch (machine)
         {
-            var person = machine.OriginalPersonUuid!.Value;
-            var map = await MapFor(person);
-            var deltas = await Additions(c, t, application, source, person, ct);
-            return await PreparePersonStage(c, t, application, source, person, map, deltas, [], ct);
+            case SelectedMachinePerson selected:
+                source = selected.Source;
+                var person = selected.PersonUuid;
+                var map = await MapFor(person);
+                var deltas = await Additions(c, t, application, source, committed, person, ct);
+                return await PreparePersonStage(
+                    c,
+                    t,
+                    application,
+                    source,
+                    person,
+                    map,
+                    deltas,
+                    [],
+                    ct
+                );
+            case ExhaustedMachineClaims exhausted:
+                source = exhausted.Source;
+                break;
+            default:
+                throw new InvalidOperationException("Unsupported machine preparation result.");
         }
+
+        // An incomplete cohort never reaches this phase. Current exhaustion still cannot
+        // complete the application without checking every previous person's complete map.
+        oldPeople ??= await ReadPreviouslyPublishedPeople(c, t, application.SourceUuid, ct);
         var readiness = await BuildReadiness(c, t, application, source, ct);
         foreach (var person in oldPeople)
         {
@@ -369,21 +398,16 @@ public sealed partial class SourceActorAliasApplicationService
     }
 
     private static IEnumerable<SourceActorAliasPlannedClaim> UnwrittenClaims(
-        SourceActorAliasApplication application,
+        SourceActorAliasApplicationIndex committed,
         PreparedSource source
-    ) =>
-        source.Claims.Where(claim =>
-            !application
-                .Stages.Where(stage => stage.Receipt != null)
-                .SelectMany(stage => stage.Receipt!.Names)
-                .Any(outcome => outcome.Claim == claim.Claim)
-        );
+    ) => source.Claims.Where(claim => !committed.Claims.ContainsKey(claim.Claim));
 
     private async Task<IReadOnlyList<SourceActorAliasStageDelta>> Additions(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorAliasApplication application,
         PreparedSource source,
+        SourceActorAliasApplicationIndex committed,
         Guid person,
         CancellationToken ct
     )
@@ -391,7 +415,7 @@ public sealed partial class SourceActorAliasApplicationService
         var stage = StableUuid(application.AttemptUuid, "stage/" + application.Stages.Count);
         var result = new List<SourceActorAliasStageDelta>();
         foreach (
-            var planned in UnwrittenClaims(application, source)
+            var planned in UnwrittenClaims(committed, source)
                 .Where(value => value.OriginalPersonUuid == person)
         )
         {
