@@ -157,7 +157,7 @@ public sealed partial class TestShadowCatalogBatch
                 fixture.Output,
                 resume: true
             );
-        await changed.Should().ThrowAsync<InvalidOperationException>();
+        await changed.Should().ThrowAsync<InvalidDataException>();
         ReadResults(fixture.Output).Should().HaveCount(3);
     }
 

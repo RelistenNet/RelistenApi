@@ -10,6 +10,10 @@ namespace Relisten.Normalization.Batch;
 public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adapters)
 {
     /// <summary>Consumes the existing snapshot and its corresponding extraction stream.</summary>
+    /// <exception cref="InvalidDataException">
+    /// The extraction receipt or resumed run belongs to different input bytes or method versions.
+    /// Use a new output directory for changed inputs; existing outcomes remain intact.
+    /// </exception>
     public async Task RunAsync(
         string snapshotPath,
         string extractionsPath,
@@ -29,7 +33,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         );
         if (manifest.RootElement.GetProperty("inputSha256").GetString() != inputHash)
         {
-            throw new InvalidOperationException(
+            throw new InvalidDataException(
                 "Extraction and catalog snapshot do not correspond."
             );
         }

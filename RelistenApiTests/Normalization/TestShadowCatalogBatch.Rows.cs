@@ -73,7 +73,7 @@ public sealed partial class TestShadowCatalogBatch
                 providerInputsPath: providers
             );
 
-        await changed.Should().ThrowAsync<InvalidOperationException>();
+        await changed.Should().ThrowAsync<InvalidDataException>();
         ReadResults(fixture.Output)
             .Select(result => result.GetRawText())
             .Should()

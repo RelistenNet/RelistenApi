@@ -48,7 +48,7 @@ internal sealed class ShadowCatalogRun : IAsyncDisposable
                     .SequenceEqual(methods.OrderBy(pair => pair.Key))
             )
             {
-                throw new InvalidOperationException(
+                throw new InvalidDataException(
                     "Resume requires the same complete inputs and adapter versions."
                 );
             }
