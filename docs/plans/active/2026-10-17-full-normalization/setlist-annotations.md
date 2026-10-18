@@ -46,7 +46,10 @@ restart pagination. Provider input updates alone do not change this traversal.
 ## Typed details and exact support
 
 `notes` contains finite note kinds: `info`, `source_credit_note`, `pre_show`,
-`post_show`, `footnote`, `setlist_notes`, `tour_note`, `marker` and `notes`.
+`post_show`, `footnote`, `setlist_notes`, `show_facts`, `tour_note`, `marker` and
+`notes`. Jerry’s `show_facts` note retains the provider’s account-level Show Facts
+prose. It does not add song occurrences or resolve differences between that prose
+and the ordered song list.
 Unsupported future kinds are identified as `unsupported` with
 `detail_status: unsupported_kind`; their raw field names are not an alternate
 unstructured API.

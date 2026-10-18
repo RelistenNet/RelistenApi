@@ -180,6 +180,104 @@ public sealed class TestNormalizationSetlistAnnotations
     }
 
     [Test]
+    public async Task RealJerryShowFactsRemainCitedAccountNotesInTheServiceAndHttpResponse()
+    {
+        var context = await JerrySnapshot();
+        var groups = new List<NormalizedSetlistAnnotationGroup>();
+        string? cursor = null;
+        do
+        {
+            var page = (await reads.ListSetlistAnnotationsAsync(context.Edition, 7, cursor))!;
+            groups.AddRange(page.items);
+            cursor = page.next_cursor;
+        } while (cursor != null);
+
+        var account = groups.Single(group => group.scope == "account");
+        var sourceNote = context.Account.Text.Single(note => note.Field == "show_facts");
+        var note = account.notes!.Should().ContainSingle().Which;
+        note.kind.Should().Be("show_facts");
+        note.detail_status.Should().Be("available");
+        note.text.Should().Be(sourceNote.PlainText);
+        note.text!.Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(14);
+        note.text.Should().Contain("Final \"Broken Arrow\".");
+        note.text.Should().Contain("Second show scheduled for the following night was cancelled.");
+        note.text.Should().NotContain("<br").And.NotContain("<p>").And.NotContain("</p>");
+        note.evidence.input_revision_uuid.Should().Be(context.Input.Uuid);
+        note.evidence.json_pointer.Should().Be(sourceNote.Text.Evidence.JsonPointer);
+        note.evidence.start_code_point.Should().Be(sourceNote.Text.Evidence.StartCodePoint);
+        note.evidence.end_code_point.Should().Be(sourceNote.Text.Evidence.EndCodePoint);
+        note.evidence.quote.Should().Be(sourceNote.Text.Value);
+        note.evidence.quote.Should().Contain("<br />");
+        note.evidence.evidence_status.Should().Be("current");
+
+        groups.Count.Should().Be(22);
+        groups.Where(group => group.scope == "set").Should().HaveCount(3);
+        var passages = groups.Where(group => group.scope == "passage").ToArray();
+        passages
+            .Select(group => group.passage_title!.text)
+            .Should()
+            .Equal(context.Account.Passages.Select(passage => passage.Title.Value));
+        passages
+            .Should()
+            .HaveCount(18)
+            .And.OnlyContain(group => group.correspondence == "unresolved");
+        passages[4].passage_title!.text.Should().Be("Brokedown Palace");
+        // Retaining provider prose does not turn its conflicting Broken Arrow claim into a
+        // new musical passage or an accepted identity assignment.
+        (await reads.ListOccurrencesAsync(context.Edition))!
+            .items.Should()
+            .BeEmpty();
+
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        builder.Services.AddSingleton(reads);
+        builder
+            .Services.AddControllers()
+            .AddApplicationPart(typeof(NormalizationMusicController).Assembly)
+            .AddNewtonsoftJson();
+        await using var app = builder.Build();
+        app.MapControllers();
+        await app.StartAsync();
+        using var client = new HttpClient
+        {
+            BaseAddress = new Uri(
+                app.Services.GetRequiredService<IServer>()
+                    .Features.Get<IServerAddressesFeature>()!
+                    .Addresses.Single()
+            ),
+        };
+        using var response = await client.GetAsync(
+            $"/api/v3/normalization/setlists/{context.Edition}/annotations?limit=50"
+        );
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var items = JObject.Parse(await response.Content.ReadAsStringAsync())["items"]!.ToArray();
+        items.Should().HaveCount(22);
+        var publicNote = items.Single(item => item["scope"]!.Value<string>() == "account")[
+            "notes"
+        ]!.Single()!;
+        publicNote["kind"]!.Value<string>().Should().Be("show_facts");
+        publicNote["detail_status"]!.Value<string>().Should().Be("available");
+        publicNote["text"]!.Value<string>().Should().Be(note.text);
+        publicNote["evidence"]!["quote"]!.Value<string>().Should().Be(sourceNote.Text.Value);
+        items.Where(item => item["scope"]!.Value<string>() == "passage").Should().HaveCount(18);
+        await app.StopAsync();
+    }
+
+    [Test]
+    public async Task UnknownNoteKindsRemainUnsupportedEvenWithDecodedText()
+    {
+        var context = await Snapshot(noteField: "future_provider_note");
+        var note = (await reads.ListSetlistAnnotationsAsync(context.Edition))!
+            .items[0]
+            .notes!.Single(note => note.kind == "unsupported");
+        note.detail_status.Should().Be("unsupported_kind");
+        note.text.Should().BeNull();
+        note.evidence.input_revision_uuid.Should().Be(context.Input.Uuid);
+        note.evidence.json_pointer.Should().Be("/data/prenotes");
+    }
+
+    [Test]
     public async Task OversizedTextAndCorrespondenceRemainVisibleWithoutPartialOrUnboundedDetails()
     {
         var text = await Snapshot(largeNote: true);
@@ -367,7 +465,8 @@ public sealed class TestNormalizationSetlistAnnotations
         int passageCount = 2,
         string? noteText = null,
         int duplicateDefinitions = 0,
-        int repeatedReferences = 0
+        int repeatedReferences = 0,
+        string? noteField = null
     )
     {
         var source = await fixture.Source();
@@ -473,6 +572,17 @@ public sealed class TestNormalizationSetlistAnnotations
                     .ToArray(),
             };
         }
+        if (noteField != null)
+        {
+            account = account with
+            {
+                Text = account
+                    .Text.Select(text =>
+                        text.Field == "prenotes" ? text with { Field = noteField } : text
+                    )
+                    .ToArray(),
+            };
+        }
         var proposal = new NormalizationSetlistAccountProposal(
             account,
             account
@@ -539,8 +649,106 @@ public sealed class TestNormalizationSetlistAnnotations
             }
             payload = value.ToJsonString();
         }
-        await fixture.Db.WithWriteConnection(async c =>
+        await StoreSnapshot(structure, payload, includeStructure);
+        return new(edition.Uuid, structure, input, account, set, proposal.Passages, targets);
+    }
+
+    private async Task<SnapshotContext> JerrySnapshot()
+    {
+        var source = await fixture.Source();
+        var artist = await fixture.Db.WithWriteConnection(c =>
+            c.ExecuteScalarAsync<Guid>("SELECT uuid FROM artists WHERE id=@ArtistId", source)
+        );
+        var raw = await File.ReadAllBytesAsync(
+            Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "Fixtures",
+                "Jerry",
+                "1995-07-02-real-show-excerpt.html"
+            )
+        );
+        var input = (
+            await evidence.CaptureInputAsync(
+                new(
+                    Guid.NewGuid(),
+                    new(
+                        "jerrygarcia.com",
+                        "mirror_show_page",
+                        "grateful_dead/1995-07-02-deer-creek-music-center-noblesville-in-usa"
+                    ),
+                    raw,
+                    "text/html; charset=utf-8",
+                    "jerry-mirror-html:1",
+                    0,
+                    DateTimeOffset.UtcNow
+                )
+            )
+        ).Revision;
+        var account = new NormalizationProviderDecoder().Decode(input).Setlists.Single();
+        var proposal = new NormalizationSetlistAccountProposal(
+            account,
+            account
+                .Passages.Select(passage => new NormalizationSetlistPassageProposal(
+                    Guid.NewGuid(),
+                    passage
+                ))
+                .ToArray()
+        );
+        var attempt = await new NormalizationSetlistProposalService(
+            fixture.Db
+        ).GetOrCreateAttemptAsync(
+            Guid.NewGuid(),
+            new(new(input.Uuid, input.Resource), account.Origin.Item),
+            NormalizationSetlistProcessor.Version
+        );
+        var edition = new SetlistEditionChange
         {
+            Uuid = Guid.NewGuid(),
+            ArtistUuid = artist,
+            LiteralDate = account.LiteralDate!.Value,
+            Ordered = account.Ordered,
+            Provider = account.Origin.Item.Provider,
+            ResourceType = account.Origin.Item.ResourceType,
+            ProviderKey = account.Origin.Item.ProviderKey,
+        };
+        var sets = account
+            .Sets.Select(set => new SetlistStructureSet
+            {
+                Uuid = Guid.NewGuid(),
+                Position = set.Ordinal,
+                Label = set.Label!.Value,
+            })
+            .ToArray();
+        var structure = new SetlistStructureChange
+        {
+            Uuid = Guid.NewGuid(),
+            Edition = edition,
+            Sources = [new(attempt.AttemptUuid, input.Uuid, 0, proposal)],
+            Sets = sets,
+            SetCorrespondence = sets.Select(
+                    (set, index) => new SetlistSetCorrespondence(0, index, set.Uuid)
+                )
+                .ToArray(),
+            UnresolvedPassages = proposal
+                .Passages.Select(passage => new SetlistUnresolvedPassage(
+                    0,
+                    passage.ProposalUuid,
+                    "No canonical song assignment in this read fixture"
+                ))
+                .ToArray(),
+        };
+        await StoreSnapshot(structure, JsonSerializer.Serialize(structure));
+        return new(edition.Uuid, structure, input, account, sets[0].Uuid, proposal.Passages, []);
+    }
+
+    private Task StoreSnapshot(
+        SetlistStructureChange structure,
+        string payload,
+        bool includeStructure = true
+    ) =>
+        fixture.Db.WithWriteConnection(async c =>
+        {
+            var edition = structure.Edition;
             var editionRevision = await Revision(
                 c,
                 edition.Uuid,
@@ -549,12 +757,13 @@ public sealed class TestNormalizationSetlistAnnotations
                 JsonSerializer.Serialize(edition)
             );
             await c.ExecuteAsync(
-                "INSERT INTO normalization.setlist_editions(uuid,artist_uuid,literal_date,ordered,provider,resource_type,provider_key,selected,revision_uuid) VALUES(@Uuid,@ArtistUuid,@LiteralDate,false,@Provider,@ResourceType,@ProviderKey,false,@revision)",
+                "INSERT INTO normalization.setlist_editions(uuid,artist_uuid,literal_date,ordered,provider,resource_type,provider_key,selected,revision_uuid) VALUES(@Uuid,@ArtistUuid,@LiteralDate,@Ordered,@Provider,@ResourceType,@ProviderKey,false,@revision)",
                 new
                 {
                     edition.Uuid,
                     edition.ArtistUuid,
                     edition.LiteralDate,
+                    edition.Ordered,
                     edition.Provider,
                     edition.ResourceType,
                     edition.ProviderKey,
@@ -575,32 +784,42 @@ public sealed class TestNormalizationSetlistAnnotations
                     revision,
                 }
             );
-            await c.ExecuteAsync(
-                "INSERT INTO normalization.setlist_sets(uuid,edition_uuid,position,label,revision_uuid) VALUES(@set,@edition,1,'First',@revision)",
-                new
-                {
-                    set,
-                    edition = edition.Uuid,
-                    revision,
-                }
-            );
-            foreach (
-                var mapping in new[]
-                {
+            foreach (var set in structure.Sets)
+            {
+                await c.ExecuteAsync(
+                    "INSERT INTO normalization.setlist_sets(uuid,edition_uuid,position,label,revision_uuid) VALUES(@Uuid,@edition,@Position,@Label,@revision)",
                     new
                     {
-                        kind = "set",
-                        key = "0",
-                        target = set,
-                    },
-                }.Concat(
-                    targets.Select(target => new
+                        set.Uuid,
+                        edition = edition.Uuid,
+                        set.Position,
+                        set.Label,
+                        revision,
+                    }
+                );
+            }
+            // Each read fixture retains one source account; correspondence remains explicit.
+            var source = structure.Sources[0];
+            foreach (
+                var mapping in structure
+                    .SetCorrespondence.Select(mapping => new
                     {
-                        kind = "passage",
-                        key = proposal.Passages[0].ProposalUuid.ToString("D"),
-                        target,
+                        kind = "set",
+                        key = mapping.SetIndex.ToString(
+                            System.Globalization.CultureInfo.InvariantCulture
+                        ),
+                        target = mapping.SetUuid,
                     })
-                )
+                    .Concat(
+                        structure.PassageCorrespondence.SelectMany(mapping =>
+                            mapping.OccurrenceUuids.Select(target => new
+                            {
+                                kind = "passage",
+                                key = mapping.ProposalUuid.ToString("D"),
+                                target,
+                            })
+                        )
+                    )
             )
             {
                 await c.ExecuteAsync(
@@ -608,8 +827,8 @@ public sealed class TestNormalizationSetlistAnnotations
                     new
                     {
                         revision,
-                        attempt = attempt.AttemptUuid,
-                        input = input.Uuid,
+                        attempt = source.ProposalAttemptUuid,
+                        input = source.InputRevisionUuid,
                         mapping.kind,
                         mapping.key,
                         mapping.target,
@@ -618,8 +837,6 @@ public sealed class TestNormalizationSetlistAnnotations
                 );
             }
         });
-        return new(edition.Uuid, structure, input, account, set, proposal.Passages, targets);
-    }
 
     private static Task<Guid> Revision(
         System.Data.IDbConnection c,

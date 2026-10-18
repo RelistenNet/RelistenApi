@@ -464,6 +464,7 @@ public sealed partial class NormalizationReadService
                 "postnotes" => "post_show",
                 "footnote" or "footnotes" => "footnote",
                 "setlist_notes" => "setlist_notes",
+                "show_facts" => "show_facts",
                 "tour" => "tour_note",
                 "annotation_marker" => "marker",
                 "notes" => "notes",
