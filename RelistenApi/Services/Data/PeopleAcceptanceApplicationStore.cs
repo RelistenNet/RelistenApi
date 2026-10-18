@@ -196,6 +196,10 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
     // The owner generation describes a UNION of keys, not their allocation to contributors.
     // Match the complete admitted revision vector: replacements advance once; untouched peers
     // and empty tombstones retain their prior revisions. Admission may precede publication.
+    // Credit review advances the owner's generation without replacing these contributions.
+    // The complete vector narrows admission history; ordinary Work may retain those headers.
+    // Authenticate the owning application, exact contributed request and full fact ticket too.
+    // Ambiguous authenticated history is unsupported, never "latest".
     // Historical payloads without both arrays cannot prove this identity and remain unsupported.
     internal Task<PeopleAcceptanceStage?> GetConfiguredStageAsync(
         Guid sourceUuid,
@@ -204,10 +208,14 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
     ) =>
         db.WithWriteConnection<PeopleAcceptanceStage?>(async c =>
         {
-            var json = await c.QuerySingleOrDefaultAsync<string>(
+            var rows = await c.QueryAsync<ConfiguredCreditAdmission>(
                 new CommandDefinition(
                     """
-                    SELECT a.stage::text FROM normalization.people_acceptance_stages a
+                    SELECT a.work_uuid AS "WorkUuid",a.stage::text AS "StageJson",
+                        a.ticket::text AS "AttachedTicketJson",application.version AS "Version",
+                        r.ticket::text AS "TicketJson",r.request_hash AS "RequestHash",s.uuid AS "OwnerUuid"
+                    FROM normalization.people_acceptance_stages a
+                    JOIN normalization.people_acceptance_applications application ON application.attempt_uuid=a.application_uuid
                     JOIN normalization.work_runs r ON r.uuid=a.work_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
                     CROSS JOIN LATERAL (
@@ -230,8 +238,10 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                                 ) ELSE stored.payload->'Contributions' END
                             END AS replacements
                     ) AS checkpoint
-                    WHERE s.domain='people' AND s.subject_kind='recording' AND s.subject_uuid=@sourceUuid
-                        AND (r.ticket->>'DesiredGeneration')::bigint=@generation
+                    WHERE application.source_uuid=@sourceUuid
+                        AND s.domain='people' AND s.subject_kind='recording' AND s.subject_uuid=@sourceUuid
+                        AND (r.ticket->>'DesiredGeneration')::bigint<=@generation
+                        AND r.ticket->>'PolicyVersion'=s.policy_version
                         AND checkpoint.prior_headers IS NOT NULL AND checkpoint.replacements IS NOT NULL
                         AND NOT EXISTS (
                             SELECT 1
@@ -252,7 +262,6 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                             ) AS admitted ON observed."Contributor"=admitted.contributor
                             WHERE observed."Revision" IS DISTINCT FROM admitted.revision
                         )
-                    ORDER BY a.work_uuid LIMIT 1
                     """,
                     new
                     {
@@ -272,8 +281,58 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     cancellationToken: ct
                 )
             );
-            return json == null ? null : PeopleCheckpointCodec.ReadStage(json);
+            PeopleAcceptanceStage? matched = null;
+            foreach (var row in rows)
+            {
+                ct.ThrowIfCancellationRequested();
+                var stage = PeopleCheckpointCodec.ReadStage(row.StageJson);
+                var ticket = JsonSerializer.Deserialize<NormalizationWorkTicket>(row.TicketJson)!;
+                if (
+                    stage.PersonUuid != null
+                    || stage.WorkUuid != row.WorkUuid
+                    || ticket.WorkUuid != row.WorkUuid
+                    || ticket.SubjectUuid != row.OwnerUuid
+                    || ticket.PolicyVersion != row.Version
+                    || row.AttachedTicketJson != null
+                        && !Same(
+                            ticket,
+                            JsonSerializer.Deserialize<NormalizationWorkTicket>(
+                                row.AttachedTicketJson
+                            )
+                        )
+                    || !NormalizationWorkService.MatchesContributedBatchRequest(
+                        row.RequestHash,
+                        new("people", "recording", sourceUuid),
+                        row.Version,
+                        stage.Contributions,
+                        stage.ExpectedConfigurationGeneration,
+                        stage.ExpectedContributions
+                    )
+                )
+                {
+                    continue;
+                }
+                PeopleAcceptanceReadSet.RequireTicket(stage, ticket, sourceUuid, row.Version);
+                if (matched != null)
+                {
+                    // A retained vector must identify one authenticated replacement. A
+                    // timestamp or arbitrary stage UUID cannot settle conflicting ownership.
+                    return null;
+                }
+                matched = stage;
+            }
+            return matched;
         });
+
+    private sealed record ConfiguredCreditAdmission(
+        Guid WorkUuid,
+        string StageJson,
+        string? AttachedTicketJson,
+        string Version,
+        string TicketJson,
+        string RequestHash,
+        Guid OwnerUuid
+    );
 
     internal Task<NormalizationWorkTicket?> ReadPublishedTicketAsync(
         Guid workUuid,

@@ -10,6 +10,17 @@ This plan is for a Relisten engineer and the reviewer/operator who will deploy a
 
 ## Progress
 
+Recording-credit refresh now preserves reviewed decisions while continuing to
+process independent taper/transferrer claims. Both proposal and accepted-credit
+configuration recovery authenticate the original contributed Work request,
+including recovery before checkpoint or ticket attachment. All 183 affected
+people, contribution and input-generation regression checks pass. The
+[recovery verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-configuration-recovery-v1.json)
+records the reproduced failures and passing controls. The [proposal
+contract](people-resolution.md#original-receipts-and-recovery) and
+[accepted-credit contract](people-acceptance.md#recover-configured-inputs-after-credit-review)
+explain the distinct owner-generation rules.
+
 Prepared input expectations can now pin the exact resource generation, preventing
 old decisions from becoming admissible merely because corrected metadata returns
 to its earlier bytes. All 91 focused Work, binding and contribution checks pass,

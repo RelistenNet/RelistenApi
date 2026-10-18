@@ -132,8 +132,10 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
 
     // A complete consumer may replace its own earlier binding keys, but must not erase
     // bindings installed by another protocol under the same contributor. Configuration
-    // generation identifies the union only. Contributor revisions identify the admitted
-    // allocation, including untouched tombstones; no facts or owner clocks are refreshed.
+    // generation identifies the union only. Contributor revisions narrow the original
+    // admission, including untouched tombstones, but ordinary Work can retain those headers.
+    // Authenticate the original contributed request and complete ticket before replacing it;
+    // no facts or owner clocks are refreshed.
     // Missing/null historical membership arrays are unsupported, not an empty initial membership.
     internal Task<NormalizationPeopleResolutionPreparation?> GetConfiguredPreparationAsync(
         Guid sourceUuid,
@@ -142,10 +144,13 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
     ) =>
         db.WithWriteConnection<NormalizationPeopleResolutionPreparation?>(async c =>
         {
-            var json = await c.QuerySingleOrDefaultAsync<string>(
+            var rows = await c.QueryAsync<ConfiguredResolutionAdmission>(
                 new CommandDefinition(
                     """
-                    SELECT a.preparation::text FROM normalization.people_resolution_attempts a
+                    SELECT a.attempt_uuid AS "AttemptUuid",a.processing_version AS "ProcessingVersion",
+                        a.preparation::text AS "PreparationJson",r.ticket::text AS "TicketJson",
+                        r.request_hash AS "RequestHash",s.uuid AS "OwnerUuid"
+                    FROM normalization.people_resolution_attempts a
                     JOIN normalization.work_runs r ON r.uuid=a.attempt_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
                     CROSS JOIN LATERAL (
@@ -161,7 +166,8 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                             CASE WHEN jsonb_typeof(stored.payload->'Inputs')='array'
                                 THEN stored.payload->'Inputs' END AS replacements
                     ) AS checkpoint
-                    WHERE s.domain='people' AND s.subject_kind='recording_resolution' AND s.subject_uuid=@sourceUuid
+                    WHERE a.source_uuid=@sourceUuid AND s.domain='people'
+                        AND s.subject_kind='recording_resolution' AND s.subject_uuid=@sourceUuid
                         AND (r.ticket->>'DesiredGeneration')::bigint=@generation
                         AND checkpoint.prior_headers IS NOT NULL AND checkpoint.replacements IS NOT NULL
                         AND NOT EXISTS (
@@ -183,7 +189,6 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                             ) AS admitted ON observed."Contributor"=admitted.contributor
                             WHERE observed."Revision" IS DISTINCT FROM admitted.revision
                         ) AND a.preparation IS NOT NULL
-                    ORDER BY a.created_at DESC,a.attempt_uuid DESC LIMIT 1
                     """,
                     new
                     {
@@ -203,8 +208,47 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     cancellationToken: ct
                 )
             );
-            return json == null ? null : PeopleCheckpointCodec.ReadPreparation(json);
+            NormalizationPeopleResolutionPreparation? matched = null;
+            foreach (var row in rows)
+            {
+                ct.ThrowIfCancellationRequested();
+                var preparation = PeopleCheckpointCodec.ReadPreparation(row.PreparationJson);
+                var ticket = JsonSerializer.Deserialize<NormalizationWorkTicket>(row.TicketJson)!;
+                if (
+                    ticket.WorkUuid != row.AttemptUuid
+                    || ticket.SubjectUuid != row.OwnerUuid
+                    || ticket.PolicyVersion != row.ProcessingVersion
+                    || !NormalizationPeopleResolutionReadSet.IsComplete(ticket, preparation)
+                    || !NormalizationWorkService.MatchesContributedBatchRequest(
+                        row.RequestHash,
+                        NormalizationPeopleResolutionProcessor.Owner(sourceUuid),
+                        row.ProcessingVersion,
+                        NormalizationPeopleResolutionReadSet.Contributions(preparation),
+                        preparation.ExpectedConfigurationGeneration,
+                        preparation.ExpectedContributions
+                    )
+                )
+                {
+                    continue;
+                }
+                if (matched != null)
+                {
+                    // Contradictory admission proofs cannot be resolved by row order or age.
+                    return null;
+                }
+                matched = preparation;
+            }
+            return matched;
         });
+
+    private sealed record ConfiguredResolutionAdmission(
+        Guid AttemptUuid,
+        string ProcessingVersion,
+        string PreparationJson,
+        string TicketJson,
+        string RequestHash,
+        Guid OwnerUuid
+    );
 
     /// <summary>First preparation wins; a concurrent caller resumes that original instead of replacing its facts.</summary>
     public Task<NormalizationPeopleResolutionAttempt> SavePreparationAsync(

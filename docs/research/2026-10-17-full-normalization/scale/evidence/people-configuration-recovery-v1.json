@@ -1,0 +1,175 @@
+{
+  "version": "people-configuration-recovery-v1",
+  "state": "verified",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-configuration-recovery-v1/execution-verification-v1/manifest.json",
+    "sha256": "be04516e501e8d594eb81ad992556904f80a1cd5104a2d83a5f25b837ed1753e"
+  },
+  "testRuns": [
+    {
+      "run": "credit-review-configuration-baseline-v1",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "0",
+        "failed": "3",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "note": "Old implementation: all three real accept/reject/retract cases fail with unsupported_recording_owner_inputs."
+    },
+    {
+      "run": "credit-review-configuration-fixed-v1",
+      "counters": {
+        "total": "107",
+        "executed": "107",
+        "passed": "107",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "people-proposal-provenance-baseline-v1",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "2",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "note": "Old implementation accepts ordinary Work as configuration provenance; both genuine admission recovery controls pass."
+    },
+    {
+      "run": "people-proposal-fixed-accepted-baseline-v1",
+      "counters": {
+        "total": "33",
+        "executed": "33",
+        "passed": "30",
+        "failed": "3",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "note": "All 30 proposal cases pass. Three new accepted-provenance fixtures stop at the assertion library default recursion depth; corrected with strict ordered comparisons of the full immutable graph."
+    },
+    {
+      "run": "accepted-credit-provenance-baseline-v2",
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "2",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "note": "Corrected fixtures against old accepted implementation reproduce the ownership bug; both genuine pre-attachment admission controls pass."
+    },
+    {
+      "run": "people-configuration-recovery-focused-v1",
+      "counters": {
+        "total": "9",
+        "executed": "9",
+        "passed": "9",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "people-configuration-recovery-regression-v1",
+      "counters": {
+        "total": "183",
+        "executed": "183",
+        "passed": "183",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      },
+      "note": "All 183 affected cases pass, including people proposal/acceptance, contributions, input generations, expectations and bindings. The 6,788-owner capacity fixture uses two real sentinels and relational capacity copies; it does not measure production throughput or matching accuracy."
+    }
+  ],
+  "behavior": [
+    "Accepted-credit review can advance owner clocks without losing original contributor allocation; independent transferrer claims can refresh while reviewed taper UUID, state, revision and evidence remain unchanged.",
+    "Proposal and accepted-credit configuration recovery require genuine contributed admission with original request, complete ticket and allocation; ordinary Work with otherwise identical facts cannot supply ownership.",
+    "Genuine admission remains recoverable before proposal checkpoint or accepted-stage ticket attachment.",
+    "Proposal ownership keeps exact generation equality; accepted-credit recovery permits earlier generation under unchanged current processing policy and complete allocation.",
+    "No schema, request hash format, codec or admission behavior changes."
+  ],
+  "review": "Independent actual MAIN correctness and separate readability/code-simplifier reviews found no issues.",
+  "remaining": [
+    "Accepted source-alias support publication and merged-alias visibility lifecycle.",
+    "Full-suite verification, independent matching accuracy evaluation, catalog cost, backfill and rollout.",
+    "No active automatic policy, production writes or deployment."
+  ]
+}

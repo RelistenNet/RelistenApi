@@ -146,6 +146,32 @@ preserved and prevent an unsupported complete replacement. Never infer that the
 initiating extraction is the owner's entire input set. Callback validation checks
 the exact saved application and complete ticket union, not a subset of dependencies.
 
+### Recover configured inputs after credit review
+
+Reviewing a taper credit advances the accepted recording owner's desired and
+editorial revisions without replacing its contributor bindings. A later clear
+transferrer action must still be able to use that configuration. Do not require
+the earlier admission ticket to have today's desired generation.
+
+These bindings say which retained resources, dependencies and fact scopes each
+input producer owns. Match every producer's admitted revision, including
+unchanged peers and retained empty headers.
+
+Recognize only a prior-or-current admission under the same current Work policy
+(the application processing version), with the complete admitted contributor
+revision vector and exact binding allocation.
+Authenticate its actual contributed Work request and complete ticket; matching
+keys and revision headers alone do not establish ownership. Admission may
+precede ticket attachment, so a saved attached ticket or published result cannot
+be a prerequisite for recovery. Ambiguous ownership remains unsupported.
+
+The new application reads current facts and admits its own original observations.
+It preserves the reviewed taper's UUID, state, revision and evidence while
+independently refreshing the transferrer's support. It does not restamp or
+republish the old stage. Earlier terminal failures retain their results; retry
+with a fresh proposal and application ID after this correction. No migration is
+required.
+
 ## Publish additions and retire only complete support
 
 An inactive or unsupported policy, or a supported evaluation with no accepted credit

@@ -10,7 +10,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>Complete published extraction feeds durable candidate proposals without accepted matching authority.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationPeopleResolution
+public sealed partial class TestNormalizationPeopleResolution
 {
     private NormalizationDomainFixture fixture = null!;
     private NormalizedPeopleService people = null!;

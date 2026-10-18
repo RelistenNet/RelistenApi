@@ -75,6 +75,21 @@ complete membership receipt and preparation before contributed admission. Retain
 the extraction owner as a causal dependency; candidate owners are observed facts.
 Do not create dependency cycles by making every compared person a causal parent.
 
+Configuration recovery must authenticate the original contributed Work request,
+its complete ticket and the complete contributor allocation before replacing
+inputs. Matching an attempt UUID, generation and contributor revisions alone is
+insufficient: ordinary Work can carry the same observations without owning that
+allocation. Refuse multiple authenticated matches rather than selecting the most
+recent attempt. A genuine admission remains usable before proposal checkpoint
+storage, so interruption at that point can recover.
+
+Proposal configuration still requires the exact current proposal-owner generation.
+Reviewing an accepted recording credit changes the separate accepted-credit owner;
+it does not advance this proposal owner. The [accepted-credit recovery
+contract](people-acceptance.md#recover-configured-inputs-after-credit-review)
+explains why that consumer permits an earlier admitted owner generation while
+requiring unchanged contributor allocation.
+
 Save the immutable proposal checkpoint, then publish its pointer and terminal
 receipt through the Work service transaction. Cancellation and unexpected failure
 leave recoverable attempts. Stale or unsupported work preserves the prior proposal
