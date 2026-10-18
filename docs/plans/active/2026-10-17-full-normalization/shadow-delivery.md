@@ -2,7 +2,7 @@
 
 ## Purpose and current decision
 
-Build something Alec can browse and exercise: proposed normalized venues, songs/compositions, credited people, performances, setlists and playable file relationships across the complete captured catalog. Start with the retained snapshot covering 4,379 artists, 292,522 recordings and 5,064,076 files; preserve the exact manifests and reconcile any different snapshot used. All seven configured importers and Archive intake/collections must appear in the provider ledger, with applicability and available evidence stated.
+Build something Alec can browse and exercise: proposed normalized venues, songs/compositions, credited people, performances, setlists and playable file relationships across the catalog. The first completed run processes every raw record in the retained sample covering 4,379 artists. Raw capture of the full 292,522 recordings and 5,064,076 files has started and remains in progress. Preserve the exact manifests and reconcile different snapshots. All seven configured importers and Archive intake/collections must appear in the provider ledger, with applicability and available evidence stated.
 
 A shadow catalog stores proposed results in separate local artifacts or a disposable database. It activates no production acceptance policy. This permits complete computation and inspection while publication performance and release accuracy work continue. Missing source facts remain unresolved; a missing implementation is an engineering gap to finish.
 
@@ -11,12 +11,72 @@ This execution sequence supersedes the evaluation-first milestone. The [standing
 ## Progress
 
 - [x] 2026-10-18: Alec directed full-catalog shadow delivery, parallel domain integration, larger model jobs and consolidated testing; the plan and standing objective are amended.
-- [ ] Start the runnable population pass and retain its command, source snapshot and run location.
-- [ ] Expose browsable real outputs from each domain and applicable provider while the pass continues.
-- [ ] Complete population accounting, independent output audits and fixes for systemic failures.
+- [x] Complete the retained-sample pass and retain its command, input hashes, method versions and output location.
+- [x] Expose the eight integrated domains in a reader with proposals, native evidence, related records and playback links.
+- [ ] Capture and process the full recording/file population, reconcile provider coverage, and independently audit outputs and systemic failures.
 - [ ] Rehearse incremental input changes and restart locally, then continue production qualification and backfill preparation.
 
-Keep one current integration step active. Domain agents can work concurrently. Record actual run IDs, counts and reader location as they become available; no shadow command or completed run is claimed by this plan.
+The current integration step is full raw-population capture and replay. Domain quality and model-enrichment work can continue independently over the completed sample.
+
+## Run and inspect the completed sample
+
+Open the [live shadow reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/).
+The retained run at `local-dev/normalization-data/2026-10-18-shadow-catalog-v1/`
+contains **258,987 domain outcomes and zero failures**. It processes all 32,593
+recordings, 34,861 files, 17,073 venues, 1,696 repertoire songs and 432 legacy
+setlists in the raw sample, plus one retained Jerry Garcia provider input.
+An input can contribute several domain outcomes. Counts do not represent distinct
+canonical identities or completion of the full catalog. The shared integration
+checkpoint passed 69 tests.
+The checked-in [first-run receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-catalog-first-run-v1.json)
+retains the run's population and verification summary.
+
+From the repository root, reproduce the input/evidence settings in a new output
+directory:
+
+```sh
+RELISTEN_SHADOW_PROVIDER_INPUTS="$PWD/local-dev/normalization-data/2026-10-18-shadow-provider-inputs-v1/inputs.jsonl" \
+RELISTEN_SHADOW_COMPOSITION_EVIDENCE="$PWD/local-dev/normalization-data/2026-10-18-composition120-primary-adjudication-v1/manifest.json#sha256=c27c3135c51ff3364bf18425e435ce2ae46cbd8e08eb561e5b5c951ee023799f" \
+dotnet run --project tools/RelistenNormalization -- shadow \
+  local-dev/normalization-data/2026-10-17-cross-artist/snapshot.jsonl \
+  local-dev/normalization-data/2026-10-18-shadow-catalog-extraction-v1/extractions.jsonl \
+  local-dev/normalization-data/shadow-catalog-replay
+```
+
+The run manifest stores the snapshot/extraction/provider input hashes, adapter
+versions and provider/domain accounting. The execution request at
+`local-dev/normalization-data/2026-10-18-shadow-catalog-execution-v1/request.json`
+records the actual command, assembly hashes and evidence settings. Computation
+uses retained data and local code, with no database or paid-model calls.
+
+Completed per-domain gzip chunks are immutable. Checkpoints advance after chunks
+are flushed; `--resume` requires the same input hashes and method versions. A
+replayed prefix can remain on disk, but the latest `(domain, inputKey)` result
+defines the logical outcome. The reader ignores unfinished `.writing` files. Its
+rebuildable SQLite index holds summaries and chunk/line pointers; full proposal
+and evidence bodies remain in their original chunks. See the [tool guide](../../../../tools/RelistenNormalization/README.md#browse-and-reproduce-the-shadow-catalog)
+for reader startup and HTTP routes.
+
+Use the reader's filters and detail view to inspect these relationships:
+
+- `venues`: open [Bowery Ballroom across White Denim and Ted Leo and the Pharmacists](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=venues&entityKey=venue%3A8cd9a5eaf90ebe8add9f89d95c6e47db)
+  and inspect the shared `venue:` key.
+  Proposed metadata and shared references still require physical-premises,
+  locality and historical-interval resolution.
+- `repertoire`: follow a song's keys into `file_contents` and `performances` to
+  inspect its catalog home and available playback URL.
+- `people` and `credits`: search a name and inspect its original taper/transferrer
+  evidence and competing identity proposals.
+- `setlists`: open [Jerry Garcia's ordered account](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=setlists&provider=jerrygarcia.com)
+  for three ordered sets and 18 passages.
+  The 432 legacy setlists retain unresolved ordering.
+- `compositions`: open the [three cited proposals](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=compositions&outcome=proposed). Broader
+  cross-artist composition matching remains incomplete.
+
+The coverage panel separates runner progress from indexed visibility. Provider
+labels preserve unattributed catalog rows and playback hosts; configured artist
+providers alone do not establish importer provenance. Full capture, remaining
+provider/domain evidence and independent relationship audits are still open.
 
 ## Execution and ownership
 
@@ -71,4 +131,4 @@ Completed evaluation found format-specific credit gains, people features that ca
 
 ## Outcomes and retrospective
 
-The delivery plan is amended. The full shadow pass, integrated reader and acceptance evidence remain to be implemented/run by the active normalization thread. Record completed outputs and the next integration gap here as execution proceeds.
+The retained-sample pass and integrated reader are complete. The next population deliverable is raw capture and shadow replay of all recordings and files. Composition evidence, physical venue history, legacy setlist order, importer provenance and independent audits remain active quality work; production acceptance qualification follows those results.

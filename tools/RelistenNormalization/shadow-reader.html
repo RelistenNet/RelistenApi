@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Relisten · Normalization reader</title>
+<style>
+:root{font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172b27;background:#f4f6f1;--paper:#fff;--line:#d8e0d8;--muted:#56665e;--accent:#145f4b;--soft:#e5efe9;--danger:#9c322e}
+
+*{box-sizing:border-box}
+body{margin:0}
+button,input,select{font:inherit}
+button,a,input,select{touch-action:manipulation}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #b88622;outline-offset:3px}
+button{border:1px solid var(--line);border-radius:.6rem;padding:.65rem .9rem;background:var(--paper);color:inherit}
+button:hover{border-color:var(--accent)}
+a{color:var(--accent)}
+h1,h2,h3,p{margin:0}
+h1{font-size:clamp(1.55rem,5vw,2.15rem);line-height:1.2;font-weight:650;letter-spacing:-.04em}
+h2{font-size:1.15rem}
+small,.muted{color:var(--muted)}
+header{padding:1.5rem 0 1rem}
+main{max-width:1160px;margin:auto;padding:0 max(1rem,env(safe-area-inset-left)) 3rem}
+header p{margin-top:.55rem;max-width:65ch}
+.eyebrow{font-size:.75rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:.5rem}
+.status{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin:1.25rem 0}
+.metric{padding:.7rem 1rem;background:var(--paper);border:1px solid var(--line);border-radius:.7rem;min-width:0}
+.metric strong{display:block;font-size:1.4rem}
+.metric small{display:block}
+.notice{padding:.75rem 1rem;border:1px solid var(--line);border-radius:.65rem;background:var(--soft);overflow-wrap:anywhere}
+.error{border-color:var(--danger);color:var(--danger)}
+details.progress{margin:1rem 0;padding:.85rem 1rem;background:var(--paper);border:1px solid var(--line);border-radius:.75rem}
+summary{cursor:pointer;font-weight:600}
+summary small{font-weight:400}
+.scroll-table{overflow:auto;max-height:24rem;margin-top:.75rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem;white-space:nowrap}
+th,td{text-align:left;padding:.55rem;border-bottom:1px solid var(--line)}
+th{position:sticky;top:0;background:var(--paper)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;background:var(--paper);padding:1rem;border:1px solid var(--line);border-radius:.85rem;margin:1.25rem 0}
+label{display:grid;gap:.3rem;font-size:.8rem;font-weight:650;min-width:0}
+input,select{width:100%;min-width:0;color:inherit;background:var(--paper);border:1px solid var(--line);border-radius:.5rem;padding:.65rem;font-weight:400}
+.search{grid-column:span 2}
+.form-actions{display:flex;gap:.6rem;align-items:end;flex-wrap:wrap}
+.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.results-heading{display:flex;justify-content:space-between;align-items:center;gap:1rem;margin:1.25rem 0 .75rem}
+.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem}
+.result{text-align:left;width:100%;min-width:0;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
+.result-title{font-weight:650;font-size:1.05rem;overflow-wrap:anywhere}
+.result-subtitle{font-size:.85rem;overflow-wrap:anywhere}
+.tags{display:flex;gap:.4rem;flex-wrap:wrap}
+.tag{font-size:.7rem;background:var(--soft);padding:.15rem .45rem;border-radius:.3rem;overflow-wrap:anywhere}
+.tag.failed{color:var(--danger)}
+.reason{font-size:.8rem;color:var(--muted);overflow-wrap:anywhere}
+.pagination{display:flex;justify-content:center;align-items:center;gap:.75rem;margin:1rem 0}
+.pagination button:disabled{opacity:.4;cursor:default}
+[hidden]{display:none!important}
+dialog{color:inherit;background:var(--paper);border:1px solid var(--line);border-radius:1rem;padding:0;width:min(980px,96vw);max-width:96vw;max-height:92dvh;overflow:auto}
+dialog::backdrop{background:#0a211ccc;backdrop-filter:blur(2px)}
+.detail-header{position:sticky;top:0;z-index:1;background:var(--paper);display:flex;gap:1rem;justify-content:space-between;align-items:start;padding:1rem;border-bottom:1px solid var(--line)}
+.detail-header>div{min-width:0}
+.detail-header h2{overflow-wrap:anywhere}
+.detail-header button{flex-shrink:0}
+.detail-body{padding:1rem;min-width:0}
+.detail-body>section{margin-bottom:1.25rem}
+.detail-meta{font-size:.8rem;overflow-wrap:anywhere;margin-top:.4rem}
+pre{font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--soft);padding:1rem;border-radius:.6rem;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;max-width:100%;max-height:65dvh;overflow:auto}
+.keys{display:flex;gap:.4rem;flex-wrap:wrap}
+.keys button{font:11px/1.4 ui-monospace,monospace;padding:.4rem .5rem;word-break:break-all;text-align:left;max-width:100%}
+.playback{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
+.playback a{font-size:.85rem;overflow-wrap:anywhere}
+audio{display:block;width:100%;margin:.75rem 0}
+.interpretation{display:grid;gap:.6rem}
+.field{border:1px solid var(--line);border-radius:.55rem;padding:.7rem;min-width:0}
+.field-name{font-size:.75rem;color:var(--muted);font-weight:600}
+.field-value{overflow-wrap:anywhere}
+.field details pre{margin-bottom:0}
+.empty{padding:2rem 1rem;text-align:center;border:1px dashed var(--line);border-radius:.75rem;color:var(--muted)}
+footer{margin-top:2rem;font-size:.8rem;color:var(--muted)}
+
+@media(max-width:650px){main{padding-top:.25rem}
+form{grid-template-columns:repeat(2,minmax(0,1fr));padding:.85rem}
+.search,.entity-filter,.form-actions{grid-column:1/-1}
+.results{grid-template-columns:minmax(0,1fr)}
+header{padding-top:1rem}
+.status{gap:.5rem}
+.metric{padding:.6rem .8rem;flex:1 1 120px}
+.metric strong{font-size:1.15rem}
+dialog{width:100%;max-width:100%;height:100dvh;max-height:100dvh;border-radius:0;border:0;margin:0}
+.detail-header{padding-top:max(1rem,env(safe-area-inset-top))}
+.detail-body{padding-bottom:max(1rem,env(safe-area-inset-bottom))}
+.detail-header h2{font-size:1.05rem}
+}
+
+@media(prefers-color-scheme:dark){:root{color:#e4ebe4;background:#13201c;--paper:#1c2b25;--line:#36483f;--muted:#a6b9ae;--accent:#82d0b1;--soft:#273c31;--danger:#ffaaa2}
+.primary{color:#13201c}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline-color:#e4b85e}
+}
+
+</style>
+</head>
+<body>
+<main>
+<header><p class="eyebrow">Relisten · Actual shadow output</p><h1>Normalization reader</h1><p class="muted">Explore proposed identities, recording credits and performance data. Each result keeps the original evidence. Proposals have not changed the public catalog.</p></header>
+<div id="status" class="status" aria-live="polite"></div>
+<div id="notice" class="notice">Waiting for completed output chunks. Indexing runs in the background.</div>
+<details class="progress"><summary>Coverage by provider and domain <small id="coverage-summary"></small></summary><p class="muted" style="font-size:.85rem;margin-top:.5rem">Expected and processed counts come from the runner checkpoint. Indexed counts are unique results currently visible here. The retained run may cover less than the catalog census.</p><div class="scroll-table"><table><thead><tr><th>Provider / domain</th><th class="num">Expected</th><th class="num">Processed</th><th class="num">Remaining</th><th class="num">Indexed</th><th class="num">Index lag</th></tr></thead><tbody id="coverage"></tbody></table></div></details>
+<form id="filters">
+<label class="search">Search names and titles<input id="q" name="q" type="search" placeholder="Song, venue, taper, title…" autocomplete="off"></label>
+<label>Artist<select id="artist" name="artist"><option value="">All artists</option></select></label>
+<label>Domain<select id="domain" name="domain"><option value="">All domains</option></select></label>
+<label>Provider<select id="provider" name="provider"><option value="">All providers</option></select></label>
+<label>Outcome<select id="outcome" name="outcome"><option value="">All outcomes</option></select></label>
+<label class="entity-filter">Entity key<input id="entityKey" name="entityKey" placeholder="Follow an identity across artists" autocomplete="off"></label>
+<div class="form-actions"><button class="primary" type="submit">Search results</button><button id="reset" type="button">Clear filters</button></div>
+</form>
+<div class="results-heading"><h2 id="result-count">Results</h2><small id="page-range"></small></div>
+<div id="results" class="results" aria-live="polite"></div>
+<div class="pagination"><button id="previous" disabled>Previous</button><small id="page"></small><button id="next" disabled>Next</button></div>
+<footer>Details load directly from immutable output chunks. Search indexes compact names and titles, not full descriptions. Audio loads only when you choose Play.</footer>
+</main>
+<dialog id="detail" aria-labelledby="detail-title"><div class="detail-header"><div><h2 id="detail-title">Result</h2><p id="detail-meta" class="detail-meta muted"></p></div><button id="close-detail" aria-label="Close result">Close</button></div><div id="detail-body" class="detail-body"></div></dialog>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const fields = ['q', 'artist', 'domain', 'provider', 'outcome', 'entityKey'];
+const pageSize = 40;
+let offset = 0;
+let total = 0;
+let lastRevision = null;
+let searchRequest = 0;
+let detailRequest = 0;
+let lastStats = null;
+
+function element(tag, text, className) {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+}
+
+function number(value) {
+    return value === null || value === undefined ? '—' : Number(value).toLocaleString();
+}
+
+function words(value) {
+    return String(value).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+}
+
+async function api(path) {
+    const response = await fetch(path, {cache: 'no-store'});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Reader request failed.');
+    return data;
+}
+
+function parameters() {
+    const result = new URLSearchParams();
+    for (const field of fields) {
+        const value = $(field).value.trim();
+        if (value) result.set(field, value);
+    }
+    return result;
+}
+
+function restoreFilters() {
+    const query = new URLSearchParams(location.search);
+    for (const field of fields) {
+        const value = query.get(field);
+        if (!value) continue;
+        if ($(field).tagName === 'SELECT') $(field).append(new Option(value, value));
+        $(field).value = value;
+    }
+}
+
+function fillSelect(id, items, label) {
+    const selected = $(id).value;
+    const options = [new Option(label, '')];
+    for (const item of items) options.push(new Option(item.label || item.value, item.value));
+    if (selected && !items.some(item => item.value === selected)) {
+        options.push(new Option(selected, selected));
+    }
+    $(id).replaceChildren(...options);
+    $(id).value = selected;
+}
+
+function metric(label, value) {
+    const box = element('div', undefined, 'metric');
+    box.append(element('strong', value), element('small', label));
+    return box;
+}
+
+function renderProgress(data) {
+    const progress = data.progress || {};
+    const lag = data.coverage.reduce((sum, row) => sum + row.indexLag, 0);
+    $('status').replaceChildren(
+        metric('Runner', words(progress.state || 'waiting')),
+        metric('Visible results', number(data.indexedRecords)),
+        metric('Checkpoint index lag', number(lag))
+    );
+    let note = progress.state === 'indexing'
+        ? 'The runner is preparing global indexes. Completed results will appear as they are written.'
+        : data.index.activeFile ? 'Indexing ' + data.index.activeFile : 'Following completed output chunks.';
+    if (data.pendingChunks) note += ' ' + number(data.pendingChunks) + ' chunks are waiting to be indexed.';
+    if (data.coverage.some(row => row.aheadOfCheckpoint)) {
+        note += ' Some complete chunks are ahead of the latest runner checkpoint.';
+    }
+    if (data.failedChunks) {
+        note += ' ' + number(data.failedChunks) + ' chunks could not be indexed: ';
+        note += data.chunks.map(chunk => chunk.path + ' — ' + chunk.error).join('; ');
+        if (data.failedChunks > data.chunks.length) note += ' (First ' + data.chunks.length + ' shown.)';
+    }
+    if (data.index.error) note += ' Index scan: ' + data.index.error;
+    if (data.progressError) note += ' Progress file: ' + data.progressError;
+    $('notice').textContent = note;
+    $('notice').classList.toggle('error', Boolean(data.failedChunks || data.index.error || data.progressError));
+    $('coverage-summary').textContent = '· ' + data.coverage.length + ' provider/domain groups';
+    $('coverage').replaceChildren(...data.coverage.map(row => {
+        const tr = element('tr');
+        tr.append(element('td', row.provider + ' / ' + row.domain));
+        for (const value of [row.expected, row.processed, row.remaining, row.indexed, row.indexLag]) {
+            tr.append(element('td', number(value), 'num'));
+        }
+        return tr;
+    }));
+    fillSelect('domain', data.facets.domain, 'All domains');
+    fillSelect('provider', data.facets.provider, 'All providers');
+    fillSelect('outcome', data.facets.outcome, 'All outcomes');
+    fillSelect('artist', data.facets.artists, 'All artists');
+}
+
+async function refreshStats() {
+    try {
+        const data = await api('/api/stats');
+        lastStats = data;
+        renderProgress(data);
+        // A replay can replace evidence without changing the logical row count.
+        const revision = data.indexRevision + ':' + data.indexedRecords;
+        if (lastRevision !== revision) {
+            lastRevision = revision;
+            await search(false);
+        }
+    } catch (error) {
+        $('notice').textContent = error.message;
+        $('notice').classList.add('error');
+    }
+}
+
+function resultCard(item) {
+    const card = element('button', undefined, 'result');
+    card.type = 'button';
+    const tags = element('div', undefined, 'tags');
+    tags.append(element('span', words(item.domain), 'tag'), element('span', words(item.outcome), 'tag ' + item.outcome));
+    card.append(tags, element('span', item.label, 'result-title'),
+        element('span', item.artist_name + ' · ' + item.provider, 'result-subtitle'));
+    if (item.reason) card.append(element('span', words(item.reason), 'reason'));
+    card.addEventListener('click', () => openDetail(item));
+    return card;
+}
+
+async function search(reset = true) {
+    if (reset) offset = 0;
+    const request = ++searchRequest;
+    const query = parameters();
+    history.replaceState(null, '', query.size ? '?' + query.toString() : location.pathname);
+    query.set('limit', pageSize);
+    query.set('offset', offset);
+    try {
+        const data = await api('/api/records?' + query);
+        if (request !== searchRequest) return;
+        total = data.total;
+        if (total && offset >= total) {
+            offset = Math.floor((total - 1) / pageSize) * pageSize;
+            return search(false);
+        }
+        $('result-count').textContent = number(total) + ' results';
+        $('page-range').textContent = total ? number(offset + 1) + '–' + number(offset + data.items.length) : '';
+        $('page').textContent = total ? 'Page ' + number(Math.floor(offset / pageSize) + 1) : '';
+        $('previous').disabled = offset === 0;
+        $('next').disabled = offset + pageSize >= total;
+        $('results').replaceChildren(...data.items.map(resultCard));
+        if (!data.items.length) {
+            const message = lastStats && lastStats.indexedRecords
+                ? 'No results match these filters.' : 'Completed results will appear while indexing continues.';
+            $('results').append(element('p', message, 'empty'));
+        }
+    } catch (error) {
+        if (request !== searchRequest) return;
+        $('results').replaceChildren(element('p', error.message, 'notice error'));
+    }
+}
+
+function jsonDetails(title, value) {
+    const details = element('details');
+    details.append(element('summary', title));
+    let loaded = false;
+    details.addEventListener('toggle', () => {
+        if (details.open && !loaded) {
+            details.append(element('pre', JSON.stringify(value, null, 2)));
+            loaded = true;
+        }
+    });
+    return details;
+}
+
+function interpretation(value) {
+    if (!value || typeof value !== 'object') {
+        return element('p', value === null ? 'No proposal was produced.' : String(value), 'muted');
+    }
+    const container = element('div', undefined, 'interpretation');
+    for (const [key, child] of Object.entries(value)) {
+        const box = element('div', undefined, 'field');
+        if (child && typeof child === 'object') {
+            const count = Array.isArray(child) ? ' · ' + number(child.length) + ' items' : '';
+            box.append(jsonDetails(words(key) + count, child));
+        } else {
+            box.append(element('div', words(key), 'field-name'),
+                element('div', child === null ? 'Unknown' : String(child), 'field-value'));
+        }
+        container.append(box);
+    }
+    return container;
+}
+
+function followKey(key) {
+    for (const field of fields) $(field).value = '';
+    $('entityKey').value = key;
+    $('detail').close();
+    search();
+    $('filters').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function alternatives(value, path = '', found = []) {
+    if (value && typeof value === 'object') {
+        for (const [key, child] of Object.entries(value)) {
+            const next = path ? path + '.' + key : key;
+            if (['alternatives', 'candidates', 'relationships', 'links', 'candidateSongs', 'retainedCandidates'].includes(key)
+                && Array.isArray(child) && child.length) {
+                found.push({path: next, items: child});
+            } else if (child && typeof child === 'object') {
+                alternatives(child, next, found);
+            }
+        }
+    }
+    return found;
+}
+
+function playbackSection(urls) {
+    const section = element('section');
+    section.append(element('h3', 'Playback'));
+    for (const [index, url] of urls.entries()) {
+        const row = element('div', undefined, 'playback');
+        const button = element('button', 'Play recording' + (urls.length > 1 ? ' ' + (index + 1) : ''));
+        button.type = 'button';
+        button.addEventListener('click', () => {
+            let audio = row.querySelector('audio');
+            if (!audio) {
+                audio = element('audio');
+                audio.controls = true;
+                audio.preload = 'none';
+                audio.src = url;
+                row.append(audio);
+            }
+            audio.play().catch(() => {});
+        });
+        const link = element('a', 'Open audio');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        row.append(button, link);
+        section.append(row);
+    }
+    return section;
+}
+
+function renderDetail(data) {
+    const record = data.record;
+    const body = $('detail-body');
+    body.replaceChildren();
+    $('detail-meta').textContent = record.artistName + ' · ' + record.domain + ' · ' + record.outcome + ' · ' + record.provider;
+    if (record.reason) body.append(element('p', record.reason, 'notice'));
+    if (data.playback.length) body.append(playbackSection(data.playback));
+    const proposed = element('section');
+    proposed.append(element('h3', 'Proposed interpretation'), interpretation(record.proposal));
+    body.append(proposed);
+    const related = alternatives(record.proposal);
+    if (related.length) {
+        const section = element('section');
+        section.append(element('h3', 'Alternatives and relationships'));
+        for (const value of related) section.append(jsonDetails(value.path + ' · ' + number(value.items.length), value.items));
+        body.append(section);
+    }
+    if (record.entityKeys.length) {
+        const section = element('section');
+        section.append(element('h3', 'Follow entities across artists'),
+            element('p', 'A shared key joins related shadow results. It does not assert an accepted identity.', 'muted'));
+        const keys = element('div', undefined, 'keys');
+        for (const key of record.entityKeys) {
+            const button = element('button', key);
+            button.type = 'button';
+            button.addEventListener('click', () => followKey(key));
+            keys.append(button);
+        }
+        section.append(keys);
+        body.append(section);
+    }
+    const evidence = element('section');
+    evidence.append(jsonDetails('Original evidence and citations', record.evidence));
+    body.append(evidence);
+    const exact = element('section');
+    exact.append(jsonDetails('Complete original result', record));
+    body.append(exact);
+}
+
+async function openDetail(item) {
+    const request = ++detailRequest;
+    $('detail-title').textContent = item.label;
+    $('detail-meta').textContent = item.artist_name + ' · ' + item.domain + ' · ' + item.outcome;
+    $('detail-body').replaceChildren(element('p', 'Loading original proposal and evidence…', 'muted'));
+    if (!$('detail').open) $('detail').showModal();
+    try {
+        const data = await api('/api/record?id=' + item.id);
+        if (request !== detailRequest || !$('detail').open) return;
+        renderDetail(data);
+    } catch (error) {
+        if (request !== detailRequest || !$('detail').open) return;
+        $('detail-body').replaceChildren(element('p', error.message, 'notice error'));
+    }
+}
+
+$('filters').addEventListener('submit', event => { event.preventDefault(); search(); });
+for (const field of ['artist', 'domain', 'provider', 'outcome']) {
+    $(field).addEventListener('change', () => search());
+}
+$('reset').addEventListener('click', () => {
+    for (const field of fields) $(field).value = '';
+    search();
+});
+$('previous').addEventListener('click', () => {
+    offset = Math.max(0, offset - pageSize);
+    search(false);
+    $('result-count').scrollIntoView({behavior: 'smooth'});
+});
+$('next').addEventListener('click', () => {
+    offset += pageSize;
+    search(false);
+    $('result-count').scrollIntoView({behavior: 'smooth'});
+});
+$('close-detail').addEventListener('click', () => $('detail').close());
+$('detail').addEventListener('close', () => {
+    detailRequest++;
+    for (const audio of $('detail').querySelectorAll('audio')) audio.pause();
+});
+restoreFilters();
+search(false);
+refreshStats();
+setInterval(() => { if (!document.hidden) refreshStats(); }, 5000);
+</script>
+</body>
+</html>

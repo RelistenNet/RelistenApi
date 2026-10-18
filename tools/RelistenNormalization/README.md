@@ -1,4 +1,93 @@
-# Local extraction from retained captures
+# Normalization over retained captures
+
+## Browse and reproduce the shadow catalog
+
+The [shadow reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) shows the
+completed retained-sample run. It contains **258,987 domain outcomes with zero
+failures** from 32,593 recordings, 34,861 files, 17,073 venues, 1,696 repertoire
+songs and 432 legacy setlists, plus one retained Jerry Garcia provider input.
+An input can produce several domain outcomes; these counts are not distinct
+normalized identities. Full raw capture of 292,522 recordings and 5,064,076 files
+has started and is still running; those full-population outputs are not yet part
+of this completed sample run.
+
+The run lives in
+`local-dev/normalization-data/2026-10-18-shadow-catalog-v1/`.
+Its `manifest.json` reconciles every expected provider/domain outcome;
+`progress.json` and `checkpoint.json` retain progress and restart state.
+The execution request in
+`local-dev/normalization-data/2026-10-18-shadow-catalog-execution-v1/request.json`
+records the executed command, assembly hashes and evidence settings. The checked-in
+[first-run receipt](../../docs/research/2026-10-17-full-normalization/scale/evidence/shadow-catalog-first-run-v1.json)
+summarizes the actual population and verification.
+
+To reproduce these inputs in a new directory, run from the repository root:
+
+```sh
+RELISTEN_SHADOW_PROVIDER_INPUTS="$PWD/local-dev/normalization-data/2026-10-18-shadow-provider-inputs-v1/inputs.jsonl" \
+RELISTEN_SHADOW_COMPOSITION_EVIDENCE="$PWD/local-dev/normalization-data/2026-10-18-composition120-primary-adjudication-v1/manifest.json#sha256=c27c3135c51ff3364bf18425e435ce2ae46cbd8e08eb561e5b5c951ee023799f" \
+dotnet run --project tools/RelistenNormalization -- shadow \
+  local-dev/normalization-data/2026-10-17-cross-artist/snapshot.jsonl \
+  local-dev/normalization-data/2026-10-18-shadow-catalog-extraction-v1/extractions.jsonl \
+  local-dev/normalization-data/shadow-catalog-replay
+```
+
+The snapshot, extraction receipt and optional provider inputs must already exist.
+`extract-source-actors`, documented below, produces the recording/file extraction
+used by the shadow runner. Without `RELISTEN_SHADOW_COMPOSITION_EVIDENCE`, the
+composition adapter retains unresolved outcomes without those cited links.
+The shadow command uses local code and retained evidence; it makes no database,
+provider or paid-model calls and changes no production identities.
+
+Outputs are immutable per-domain `*.jsonl.gz` chunks. Only completed chunks become
+visible; unfinished `*.writing` files remain outside the index. To continue an
+interrupted run, repeat the same command and directory with `--resume`. Resume
+requires the same snapshot, extraction and provider-input hashes and adapter
+version strings. The composition method also includes its evidence manifest hash.
+Checkpoints follow flushed chunks. A replay can retain duplicate physical rows;
+the latest `(domain, inputKey)` result defines the logical outcome. Changed inputs
+or methods require a new run.
+
+Start a local reader over an existing run with:
+
+```sh
+python3 tools/RelistenNormalization/shadow_reader.py \
+  --run "$PWD/local-dev/normalization-data/2026-10-18-shadow-catalog-v1" \
+  --bind 127.0.0.1 --port 18764
+```
+
+Open `http://127.0.0.1:18764/` for that local instance. The current hosted instance
+uses the Tailscale link above. The reader's rebuildable `.shadow-reader.sqlite3`
+stores summaries, filters, entity keys and chunk/line pointers. Detail views read
+the original immutable chunk; the index does not copy proposal or evidence bodies.
+`/api/stats` reports run coverage and index lag, `/api/records` searches outcomes,
+and `/api/record?id=<id>` returns one result with available playback links.
+
+Use the domain, artist, provider and outcome filters, then open a result to inspect
+its proposal beside native evidence and alternatives. Follow an entity key to
+clear filters and inspect related rows across artists and domains:
+
+- Open [Bowery Ballroom across White Denim and Ted Leo and the Pharmacists](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=venues&entityKey=venue%3A8cd9a5eaf90ebe8add9f89d95c6e47db),
+  then inspect either result and its shared `venue:` key.
+  Venue metadata is proposed. City labels, coordinates and provider references
+  still require physical-premises and history resolution.
+- Search a song in `repertoire`, then follow its keys into `file_contents` and
+  `performances` to inspect the file, catalog home and available playback URL.
+- Search a credited name in `people` or `credits` to inspect source-local names
+  and taper/transferrer evidence. Shared keys are proposals, not accepted people.
+- Open [Jerry Garcia's ordered setlist](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=setlists&provider=jerrygarcia.com): the retained provider account preserves
+  three ordered sets and 18 passages. All 432 legacy setlists remain unresolved
+  for ordered occurrences.
+- Open the [three supported composition proposals](http://alecs-macbook-pro.tail09dbf.ts.net:18764/?domain=compositions&outcome=proposed)
+  and their citations. Composition coverage remains incomplete; equal titles do
+  not establish a shared authored work.
+
+`catalog:unattributed` preserves missing importer provenance. `playback:` labels
+identify the captured audio host; an artist's configured providers alone do not
+identify which importer produced a row. The [shadow delivery plan](../../docs/plans/active/2026-10-17-full-normalization/shadow-delivery.md)
+tracks the remaining full-population capture, provider coverage and audits.
+
+## Credit and file-title extraction
 
 Run the recording-credit and file-title extractors over a scale capture without starting the API or ingestion worker:
 

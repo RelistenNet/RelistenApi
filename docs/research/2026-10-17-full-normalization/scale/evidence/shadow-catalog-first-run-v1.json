@@ -1,0 +1,377 @@
+{
+  "version": "shadow-catalog-first-integrated-run-v1",
+  "state": "completed",
+  "completedAt": "2026-10-18T19:19:20.104088+00:00",
+  "runDirectory": "local-dev/normalization-data/2026-10-18-shadow-catalog-v1",
+  "executionDirectory": "local-dev/normalization-data/2026-10-18-shadow-catalog-execution-v1",
+  "manifestSha256": "ee3a1040cc53476061a4818d7db8b95e0efcefb7dac9a750522b5c1858df6851",
+  "command": [
+    "dotnet",
+    "/private/tmp/relisten-normalization-shadow-verification-v1/checkout/tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll",
+    "shadow",
+    "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-17-cross-artist/snapshot.jsonl",
+    "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-catalog-extraction-v1/extractions.jsonl",
+    "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/2026-10-18-shadow-catalog-v1"
+  ],
+  "toolSha256": "cb73939cbdbb948dde4a28aa44c956decf7477abe25ea9f41f5f61e84c577c23",
+  "apiSha256": "a6dec04c64c5341d8b5a6f7a3de1f2f7dfc451731dfe5f38522c3f000880779c",
+  "inputIdentity": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4/398104699bac6781714a295b469a5161b55d704db61da3be244643622584ae35/11b199943fed672ca8adb66b5c5f4f0df9e15067438e0a9f7e8fc8e898b6d0db",
+  "methods": {
+    "ShadowPeopleAdapter": "shadow-people-v1",
+    "ShadowVenueAdapter": "shadow-venue-physical-history-v1",
+    "ShadowRepertoireAdapter": "shadow-repertoire-v1",
+    "ShadowCompositionAdapter": "shadow-composition-v1/primary=c27c3135c51ff3364bf18425e435ce2ae46cbd8e08eb561e5b5c951ee023799f",
+    "ShadowPerformanceAdapter": "shadow-performances-v1"
+  },
+  "inputKinds": {
+    "snapshot": 1,
+    "schema": 1,
+    "indexes": 1,
+    "artist": 4379,
+    "source_profile": 4358,
+    "track_profile": 4362,
+    "venue_profile": 4362,
+    "song_profile": 53,
+    "setlist_profile": 54,
+    "source_sample": 32593,
+    "track_sample": 34861,
+    "venue_sample": 17073,
+    "song_sample": 1696,
+    "setlist_sample": 432,
+    "totals": 1,
+    "snapshot_complete": 1,
+    "provider_input": 1
+  },
+  "outputRows": 258987,
+  "domains": {
+    "people": {
+      "processed": 32593,
+      "outcomes": {
+        "proposed": 27790,
+        "unresolved": 4803
+      }
+    },
+    "credits": {
+      "processed": 32593,
+      "outcomes": {
+        "proposed": 27790,
+        "unresolved": 4803
+      }
+    },
+    "performances": {
+      "processed": 67887,
+      "outcomes": {
+        "unresolved": 19557,
+        "proposed": 48330
+      }
+    },
+    "repertoire": {
+      "processed": 36557,
+      "outcomes": {
+        "proposed": 31715,
+        "not_applicable": 576,
+        "unresolved": 4266
+      }
+    },
+    "compositions": {
+      "processed": 36990,
+      "outcomes": {
+        "unresolved": 36517,
+        "not_applicable": 470,
+        "proposed": 3
+      }
+    },
+    "file_contents": {
+      "processed": 34861,
+      "outcomes": {
+        "proposed": 30599,
+        "unresolved": 4262
+      }
+    },
+    "venues": {
+      "processed": 17073,
+      "outcomes": {
+        "proposed": 14188,
+        "unresolved": 2885
+      }
+    },
+    "setlists": {
+      "processed": 433,
+      "outcomes": {
+        "unresolved": 432,
+        "proposed": 1
+      }
+    }
+  },
+  "providerDomainCounts": [
+    {
+      "provider": "catalog:unattributed",
+      "domain": "people",
+      "processed": 32593,
+      "outcomes": {
+        "proposed": 27790,
+        "unresolved": 4803
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "credits",
+      "processed": 32593,
+      "outcomes": {
+        "proposed": 27790,
+        "unresolved": 4803
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "performances",
+      "processed": 33009,
+      "outcomes": {
+        "unresolved": 19412,
+        "proposed": 13597
+      }
+    },
+    {
+      "provider": "playback:archive.org",
+      "domain": "repertoire",
+      "processed": 34843,
+      "outcomes": {
+        "proposed": 30007,
+        "not_applicable": 576,
+        "unresolved": 4260
+      }
+    },
+    {
+      "provider": "playback:archive.org",
+      "domain": "compositions",
+      "processed": 34843,
+      "outcomes": {
+        "unresolved": 34373,
+        "not_applicable": 470
+      }
+    },
+    {
+      "provider": "playback:archive.org",
+      "domain": "performances",
+      "processed": 34843,
+      "outcomes": {
+        "proposed": 34717,
+        "unresolved": 126
+      }
+    },
+    {
+      "provider": "playback:archive.org",
+      "domain": "file_contents",
+      "processed": 34843,
+      "outcomes": {
+        "proposed": 30583,
+        "unresolved": 4260
+      }
+    },
+    {
+      "provider": "playback:phish.in",
+      "domain": "repertoire",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 8
+      }
+    },
+    {
+      "provider": "playback:phish.in",
+      "domain": "compositions",
+      "processed": 8,
+      "outcomes": {
+        "unresolved": 8
+      }
+    },
+    {
+      "provider": "playback:phish.in",
+      "domain": "performances",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 8
+      }
+    },
+    {
+      "provider": "playback:phish.in",
+      "domain": "file_contents",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 8
+      }
+    },
+    {
+      "provider": "playback:www.panicstream.com",
+      "domain": "repertoire",
+      "processed": 2,
+      "outcomes": {
+        "proposed": 2
+      }
+    },
+    {
+      "provider": "playback:www.panicstream.com",
+      "domain": "compositions",
+      "processed": 2,
+      "outcomes": {
+        "unresolved": 2
+      }
+    },
+    {
+      "provider": "playback:www.panicstream.com",
+      "domain": "performances",
+      "processed": 2,
+      "outcomes": {
+        "unresolved": 2
+      }
+    },
+    {
+      "provider": "playback:www.panicstream.com",
+      "domain": "file_contents",
+      "processed": 2,
+      "outcomes": {
+        "proposed": 2
+      }
+    },
+    {
+      "provider": "playback:audio.relisten.net",
+      "domain": "repertoire",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 6,
+        "unresolved": 2
+      }
+    },
+    {
+      "provider": "playback:audio.relisten.net",
+      "domain": "compositions",
+      "processed": 8,
+      "outcomes": {
+        "unresolved": 8
+      }
+    },
+    {
+      "provider": "playback:audio.relisten.net",
+      "domain": "performances",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 8
+      }
+    },
+    {
+      "provider": "playback:audio.relisten.net",
+      "domain": "file_contents",
+      "processed": 8,
+      "outcomes": {
+        "proposed": 6,
+        "unresolved": 2
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "venues",
+      "processed": 17073,
+      "outcomes": {
+        "proposed": 14188,
+        "unresolved": 2885
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "repertoire",
+      "processed": 1696,
+      "outcomes": {
+        "proposed": 1692,
+        "unresolved": 4
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "compositions",
+      "processed": 2112,
+      "outcomes": {
+        "unresolved": 2109,
+        "proposed": 3
+      }
+    },
+    {
+      "provider": "phantasytour.com",
+      "domain": "compositions",
+      "processed": 16,
+      "outcomes": {
+        "unresolved": 16
+      }
+    },
+    {
+      "provider": "phantasytour.com",
+      "domain": "performances",
+      "processed": 16,
+      "outcomes": {
+        "unresolved": 16
+      }
+    },
+    {
+      "provider": "phantasytour.com",
+      "domain": "setlists",
+      "processed": 16,
+      "outcomes": {
+        "unresolved": 16
+      }
+    },
+    {
+      "provider": "catalog:unattributed",
+      "domain": "setlists",
+      "processed": 416,
+      "outcomes": {
+        "unresolved": 416
+      }
+    },
+    {
+      "provider": "jerrygarcia.com",
+      "domain": "compositions",
+      "processed": 1,
+      "outcomes": {
+        "unresolved": 1
+      }
+    },
+    {
+      "provider": "jerrygarcia.com",
+      "domain": "performances",
+      "processed": 1,
+      "outcomes": {
+        "unresolved": 1
+      }
+    },
+    {
+      "provider": "jerrygarcia.com",
+      "domain": "setlists",
+      "processed": 1,
+      "outcomes": {
+        "proposed": 1
+      }
+    }
+  ],
+  "preparationFailures": {},
+  "reader": {
+    "tailscaleUrl": "http://alecs-macbook-pro.tail09dbf.ts.net:18764/",
+    "indexedRows": 258987,
+    "indexedChunks": 142,
+    "failedChunks": 0,
+    "browserVerified": true,
+    "phoneViewportCssPixels": {
+      "width": 390,
+      "height": 844
+    },
+    "horizontalOverflowPixels": 0,
+    "exampleSearch": {
+      "query": "tonedeaf",
+      "domain": "people",
+      "results": 304
+    }
+  },
+  "verification": {
+    "behaviorTestsPassed": 69,
+    "readerTestsPassed": 13,
+    "buildErrors": 0
+  },
+  "scope": "All retained raw sample inputs plus one ordered Jerry provider capture. This is not the full production catalog. Proposal counts do not establish identity accuracy. Composition has three supported proposals; legacy setlist order remains unknown."
+}
