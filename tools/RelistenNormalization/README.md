@@ -73,6 +73,9 @@ produce matcher features or complete the grouping needed for fitting.
 The [adjudicated source exporter](people-adjudicated-baseline.md) reads those
 source selectors without opening the target file. It exports actual comparisons,
 all endpoint diagnostics and source-local grouping bridges for the trainer.
+The [combined training comparison](people-adjudicated-trainer/README.md) joins
+the separate targets after grouping, counts repeated actor pairs once and
+reports conflicting or unsupported examples without turning them into negatives.
 
 The separate [cross-artist review packet tool](people-identity-packet/README.md)
 prepares 55 unanswered source-backed identity questions and validates complete
