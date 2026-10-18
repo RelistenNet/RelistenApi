@@ -29,3 +29,19 @@ Supply `OPENAI_API_KEY` in the process environment. The command does not automat
 Each job has a durable $25 cap. Reuse its UUID and a new output directory after interruption. The cache hashes the complete rendered request, including model, prompt, schema and generation settings. Cached successes need no key or paid retry. An uncertain request retains its possible cost and has bounded retries. `accounted_usd` includes those conservative reservations as well as measured charges; it is not an invoice total. Current small-request Standard pricing is documented in the [Luna model reference](https://developers.openai.com/api/docs/models/gpt-6-luna); the extractor explicitly requests Standard processing and rejects oversized input before admission.
 
 The command validates the complete local extraction receipt before any paid call. It saves `selection.json`, then flushes each result to `results.jsonl`. A completed attempt publishes `manifest.json` with states, cache reuse, input hash and spend. Classified unresolved requests produce `completed_partial`. Cancellation or an unexpected failure leaves an inspectable prefix without a completed manifest. Results remain proposals; this command cannot accept a global person or taper/transferrer match.
+
+## Actual venue pair baseline
+
+Export the current C# `IdentityCandidateMatcher.CompareVenues` results for a retained venue development bundle:
+
+```sh
+dotnet run --project tools/RelistenNormalization -- venue-pair-baseline \
+  docs/research/2026-10-17-full-normalization/training/venues-development-v1 \
+  /path/to/new-venue-baseline-output
+```
+
+This command runs offline. It reads only task/evidence correspondence and retained venue names into the matcher. It supplies no policy and accepts no identity. Raw location labels, coordinates, dates, kind and provider IDs do not become resolved geographic or identity facts. An empty supported-location collection means those facts are unavailable, not that a venue lacks a location.
+
+`baseline.jsonl` preserves each `task_id`, ordered `evidence_ids`, and the actual comparison with features, rules, candidate status and disposition. Label decisions, primary-source rationales and split links are excluded from matching. The linked labels, evidence and split-link files are fingerprinted against their exact manifest entries; split links are never interpreted as matcher evidence.
+
+The completed `manifest.json` records the projection version, original bundle/file hashes, executed API and runner assembly hashes, and output hash/count. Inputs have byte, row and name bounds. A failed or cancelled run publishes no completed manifest; an output prefix can remain as `baseline.partial.jsonl`. Retry in a new directory. These comparisons support development experiments against the real implementation; they do not measure production accuracy or activate automatic matching.

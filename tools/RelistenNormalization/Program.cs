@@ -8,11 +8,15 @@ using Relisten.Normalization;
 using Relisten.Normalization.Batch;
 
 if (
-    !((args.Length == 3 && args[0] == "extract") || (args.Length == 5 && args[0] == "luna-credits"))
+    !(
+        (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
+        || (args.Length == 5 && args[0] == "luna-credits")
+    )
 )
 {
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
+            + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>"
     );
     return 2;
@@ -27,6 +31,16 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "venue-pair-baseline")
+    {
+        var baseline = await new VenuePairBaselineBatch().RunAsync(
+            args[1],
+            args[2],
+            cancellation.Token
+        );
+        Console.WriteLine(JsonSerializer.Serialize(baseline));
+        return 0;
+    }
     if (args[0] == "luna-credits")
     {
         if (!Guid.TryParse(args[3], out var jobUuid) || !int.TryParse(args[4], out var perCohort))
@@ -96,7 +110,12 @@ try
     return report.State == "completed" ? 0 : 1;
 }
 catch (Exception exception)
-    when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+    when (exception
+            is IOException
+                or InvalidDataException
+                or UnauthorizedAccessException
+                or ArgumentException
+    )
 {
     Console.Error.WriteLine(exception.Message);
     return 1;
