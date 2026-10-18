@@ -6,6 +6,11 @@ Build a production normalization layer for Grateful Dead, Phish, Taper's Section
 
 Required domains are artist repertoire, cross-artist compositions, people and recording credits, physical venues and their history, show performances, ordered setlist occurrences and recording-file contents. Recording provenance in this release means identifying tapers and transferrers across artists. Full capture/transfer/derivation/matrix ancestry and audio-family reconstruction are outside the release scope. Provenance, review, correction history, stable identities and incremental processing apply to every domain. Execution can proceed in dependent stages; none of these domains is an optional follow-up.
 
+Automatic matching is the active implementation step. Storage, processing,
+reviewed publication and additive API reads work locally. Independent accuracy
+evaluation, catalog-scale cost checks, full backfill and rollout remain required.
+No automatic matching policy is active.
+
 This plan is for a Relisten engineer and the reviewer/operator who will deploy and troubleshoot the system. The [domain contracts](../../../design/2026-10-17-normalization-contracts.md) define identities, responsibilities and additive APIs. The [research record](../../../research/2026-10-17-full-normalization/README.md) owns the data audit; the [evaluation corpus](../../../research/2026-10-17-full-normalization/evaluation/README.md) retains examples and labels. Progress below distinguishes implemented local services from the automatic resolver, evaluation, backfill and rollout still required.
 
 ## Progress
@@ -56,13 +61,15 @@ complete owner observations; oversized bodies take the ordinary full read. All
 and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-facts-snapshot-reader-v1.json)
 explain the bounds. Full-size cost measurements remain required.
 
-Canonical alias writes now respect reviewed claims across all identities joined
-by current merges, while preserving original alias ownership and merge reversal.
-All 16 alias-write and 101 metadata/candidate checks pass. A related correction
-is still required for aliases accepted on another original before the merge;
-write protection alone does not remove that existing visibility. The
-[source-actor plan](source-actor-aliases.md) tracks that follow-up alongside
-accepted source publication.
+Canonical alias writes and current reads now respect reviewed claims across
+merged identities. [Migration 58](canonical-alias-review-visibility.md) hides
+preexisting aliases when another merged original still excludes that name.
+Same-original restoration and merge reversal preserve original assertions,
+support and history. The [verification
+receipt](../../../research/2026-10-17-full-normalization/scale/evidence/canonical-alias-review-visibility-v1.json)
+records 28 final focused checks, 336 broader checks and 168 final synthetic query
+plans, with their distinct execution scope. Full-suite and full-size publication
+checks remain required.
 
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
@@ -76,9 +83,7 @@ explain qualification, shared snapshot reads and rollback.
 
 The [complete metadata inventory](../../../research/2026-10-17-full-normalization/scale/full-metadata-frame.md) now covers every deployed artist, recording and show in one read-only replica snapshot: 4,379 artists, 292,522 recordings and 215,594 shows. An independent audit reconciles all 582,272 output rows and 69,728 requested track-coordinate results. Use this frame for catalog-wide reservation and sampling preparation. The [complete domain metadata capture](../../../research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md) has finished after 36 synthetic checks, one real PostgreSQL test and ten production query-plan inspections. It retains all 5,064,076 file rows, 216,331 venue records and repertoire relationships in the same snapshot. Offline verification and a separate independent audit both pass across all 6,719,411 metadata rows. Exposure reconciliation and matching evaluation remain required. It grants no untouched evaluation clearance or automatic-publication authority.
 
-Automatic matching is the active implementation step. Storage, processing,
-reviewed publication and additive API reads work locally. The
-[people comparison](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md)
+The [people comparison](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md)
 now retains 322 independently attributed source views and 295 view-pair
 comparisons across all 219 declared relationships. Grouping produces 100 eligible
 relationship units: 74 positive and 26 negative judgments, including 27 positive

@@ -13,10 +13,10 @@ trusted-review read proofs. Source matching has its own evaluated-policy
 capability. The [implementation plan](source-actor-aliases.md#progress-and-current-state)
 records verification and remaining work.
 
-The resolver, source-review entrypoints, complete producer-scope map and accepted
-source publication lifecycle remain required. Existing credit/metadata
-processing, review and API reads supply the authority and recovery conventions.
-No source-actor matching policy is activated.
+Source resolution, trusted review and source-owned support publication use the
+existing Work ownership and recovery contracts. Full-size cost checks,
+independent matching evaluation and rollout remain required. No source-actor
+matching policy is active.
 
 ## 1. Current proposal shape and exact source identity
 
@@ -242,11 +242,13 @@ Source assignment review cannot override canonical review or retract an
 independently reviewed alias.
 
 Write protection does not itself hide another original's already accepted
-alias. The remaining visibility correction must apply the component's reviewed
-exclusions to current reads, preserve explicit restoration and recompute after
-merge reversal. It must retain raw assertions, support and history. Keep source
-acceptance inactive until that correction and the accepted publisher pass their
-lifecycle checks.
+alias. [Migration 58](canonical-alias-review-visibility.md) applies each original's
+reviewed exclusion across the current component. Only a current reviewed
+acceptance on that same original restores its claim. Reversal recomputes the
+components without moving assertions, support or history. Its migration, HTTP,
+concurrency, broader behavior and synthetic query checks pass; the linked guide
+records the exact execution scope. Keep source acceptance inactive until full-size
+publication, full-suite, independent matching evaluation and rollout checks pass.
 
 ### Shared review proof (implemented in migration 54)
 

@@ -87,33 +87,23 @@ public sealed class TestNormalizationReads
         var key = "Redirect " + Guid.NewGuid().ToString("N");
         var retired = await Person(key + " old");
         var survivor = await Person(key + " new");
-        var resource = new NormalizationResourceKey("test", "aliases", Guid.NewGuid().ToString());
-        var input = await new NormalizationEvidenceService(db).CaptureInputAsync(
-            new NormalizationInputCapture(
-                Guid.NewGuid(),
-                resource,
-                Encoding.UTF8.GetBytes("{\"name\":\"Handle\"}"),
-                "application/json",
-                "v1",
-                0,
-                DateTimeOffset.UtcNow
+        using var domain = new NormalizationDomainFixture();
+        var input = await domain.Capture($"Old handle; {key}", "people");
+        // Reads need a supported assertion, not just a row in the raw evidence table.
+        (
+            await domain.PublishPeople(
+                new NormalizedPeopleService(domain.Db, domain.Work),
+                input,
+                new(
+                    [],
+                    [new(Guid.NewGuid(), retired, "Old handle", input.Reference)],
+                    [new(retired, "test", "handle", key, input.Reference)],
+                    []
+                )
             )
-        );
-        await Sql(
-            """
-            INSERT INTO normalization.person_aliases(uuid,person_uuid,wording,name_key,input_revision_uuid,json_pointer)
-            VALUES(@alias,@retired,'Old handle','old handle',@revision,'/name');
-            INSERT INTO normalization.person_external_identities(person_uuid,provider,resource_type,provider_key,input_revision_uuid,json_pointer)
-            VALUES(@retired,'test','handle',@key,@revision,'/name');
-            """,
-            new
-            {
-                alias = Guid.NewGuid(),
-                retired,
-                revision = input.Revision.Uuid,
-                key,
-            }
-        );
+        )
+            .Status.Should()
+            .Be(NormalizationPublicationStatus.Published);
         await Sql(
             "INSERT INTO normalization.person_redirects VALUES(@retired,@survivor,@decision)",
             new

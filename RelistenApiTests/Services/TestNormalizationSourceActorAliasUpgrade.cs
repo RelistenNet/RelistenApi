@@ -18,7 +18,7 @@ namespace RelistenApiTests.Services;
 /// operator adjudication, or identity truth. Public replay is verified by the final binary.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationSourceActorAliasUpgrade
+public sealed partial class TestNormalizationSourceActorAliasUpgrade
 {
     // This deliberately stops at 52 even after the shared test bootstrap advances.
     // The fixed sequence mirrors the source-pinned catalog bootstrap, not a 53 schema

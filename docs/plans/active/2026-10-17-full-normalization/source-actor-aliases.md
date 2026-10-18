@@ -70,13 +70,16 @@ As of 2026-10-18:
   publication checks and 101 metadata/candidate regressions pass, including
   rejection at either merge end, retired siblings, changed-source pending
   assertions and independent behavior after merge reversal.
-- [ ] Apply reviewed-name exclusions to aliases that were already accepted on
-  other merged originals. Preserve same-owner explicit restoration and merge
-  reversal without moving or rewriting those original assertions.
+- [x] Apply reviewed-name exclusions to aliases already accepted on other merged
+  originals. [Migration 58](canonical-alias-review-visibility.md) preserves
+  same-original explicit restoration and merge reversal without moving assertions,
+  support or history. Focused migration, HTTP, managed-support and concurrency
+  checks pass, along with affected broader regressions and synthetic query probes.
+  The linked guide distinguishes the final index checks from the broader run.
 - [x] Add original read proofs to the shared trusted-review transaction. All 85
   focused checks pass, including the nonempty 53-to-54 upgrade, stale reads,
   read-only target owners, rollback and exact replay. All 85 metadata regression
-  checks also pass. Source-specific review remains the next phase.
+  checks also pass. Source-specific review is implemented below.
 - [x] Require a separately evaluated source capability for role-free matching.
   All 106 focused policy checks and 160 people regression checks pass. The
   source branch reproduces complete comparisons and can select only existing
@@ -102,11 +105,13 @@ As of 2026-10-18:
   All 106 publisher, owner-read and nonempty 56-to-57 upgrade checks pass within
   the combined 198-case run. Six follow-up replay and smaller-scale cases also
   pass. The first 1,000-claim publication commits all 3,000 name-evidence
-  supports. Its repeat now reaches the resolver's checkpoint size limit after
-  the structural-proof query repair. The
-  [capacity baseline](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
-  retains the interrupted run and measured query cost. Full large-case
-  verification remains required after repair; no source policy is active.
+  supports. The [v2 checkpoint verification](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
+  records a passing full repeated 1,000-claim application after repairing its
+  checkpoint storage. The [current cohort](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json)
+  and [snapshot-reader](../../../research/2026-10-17-full-normalization/scale/evidence/people-facts-snapshot-reader-v1.json)
+  changes have separate focused checks. Full-size distinct-person, repeated-claim
+  and 1,001-source verification remain required on that final path; no source
+  policy is active.
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
   bounds, and enable it through the normal evaluated rollout process.
 
@@ -116,8 +121,8 @@ rehearsal preserves existing IDs, revisions, review history and candidate clocks
 The source resolver and trusted review services are locally implemented through
 migrations 55 and 56. Configuration recovery authenticates the original
 contributed request and refuses ambiguous ownership. Complete accepted support
-publication is locally implemented in migration 57. Larger capacity, cost and
-merged-alias visibility verification remain required. No matching policy is activated.
+publication is locally implemented in migration 57. Larger capacity, database cost and
+final regression verification remain required. No matching policy is activated.
 
 ### Verified storage and reader behavior
 
@@ -403,8 +408,10 @@ accepted support publisher pass their focused local lifecycle checks. The
 nonempty migration-57 rehearsal preserves existing canonical UUIDs, independent
 native support and Work/review receipts, then publishes through the new service.
 Scale verification must cover both many sources supporting one person and a
-source naming many people. Component-wide visibility for aliases accepted before
-a merge, independent matching evaluation and rollout remain required.
+source naming many people. Migration 58 verifies component-wide visibility for
+aliases accepted before a merge through public, migration and synthetic query
+checks. Full-suite, catalog-scale cost, independent matching evaluation and
+rollout checks remain required.
 
 Rollback must stop new source-actor acceptance while retaining tables, original
 proof and support history. Keep the current-alias predicate deployed or use a

@@ -1,0 +1,76 @@
+{
+  "version": "canonical-alias-review-visibility-v1",
+  "state": "focused_broad_and_query_contracts_verified_fullscale_and_fullsuite_pending",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/canonical-alias-visibility-v1/runtime-v1/manifest.json",
+    "sha256": "9bbe6cad66abf518630210b8d229171e40e6dfa4a43cf14a90ffc8063c64bb88"
+  },
+  "verification": {
+    "broaderCases": 336,
+    "broaderScope": "Corrected read fixture, before adding the second history index to migration 58.",
+    "finalFocusedCases": 28,
+    "finalFocusedScope": "Final two-index migration 58: 17 new visibility, migration, HTTP and concurrency cases, plus 11 existing public-read cases. All 28 also appear in the broader 336-case run.",
+    "uniquePassingCases": 336,
+    "finalSyntheticQueryPlans": 168,
+    "queryProbes": [
+      {
+        "file": "alias-plans-64-v3.json",
+        "plans": 84,
+        "seedSettings": {
+          "HistoricalNegatives": 64,
+          "UnrelatedPeople": 64
+        },
+        "historyRowsRetained": 71,
+        "maximumWarmQueryExecutionMilliseconds": 1.823,
+        "migrationSha256": "2a412652c738e5945005b0ffbb91abf636d591d088dbcf66a57c198e60019fe0",
+        "ownedDatabaseDropped": true
+      },
+      {
+        "file": "alias-plans-2048-v2.json",
+        "plans": 84,
+        "seedSettings": {
+          "HistoricalNegatives": 2048,
+          "UnrelatedPeople": 2048
+        },
+        "historyRowsRetained": 2055,
+        "maximumWarmQueryExecutionMilliseconds": 2.176,
+        "migrationSha256": "2a412652c738e5945005b0ffbb91abf636d591d088dbcf66a57c198e60019fe0",
+        "ownedDatabaseDropped": true
+      }
+    ]
+  },
+  "behavior": [
+    "An unresolved reviewed exclusion on an original person hides same-name aliases across its current merged component.",
+    "A current reviewed acceptance restores only that same original; another original cannot override its exclusion.",
+    "Merge reversal recomputes visibility without moving original UUIDs, assertions, support or review history.",
+    "Actual nonempty upgrades preserve raw authority, advance People and Compositions once and leave Venue candidate generations unchanged.",
+    "Candidate scopes lock before history DDL, preserving public review lock order.",
+    "Live read-only snapshots keep original visibility; new snapshots and HTTP person search/fetch observe committed corrections."
+  ],
+  "queryCost": {
+    "historyExample": {
+      "phase": "schema58_same_original_restored",
+      "query": "matching_name_counts",
+      "baselineHistorySharedHitBlocks": 332,
+      "finalHistorySharedHitBlocks": 38,
+      "historyLoops": 13,
+      "heapFetches": 18
+    },
+    "interpretation": "The added name-first history index matches actual read predicates. Retaining the owner-first index preserves the writer access path. Shared-buffer observations are not a latency or catalog throughput guarantee.",
+    "limits": [
+      "Warm synthetic shared-host/server runs with distinct disposable databases and generated identities; not a paired latency benchmark.",
+      "The large fixture has 2,048 distinct rejected wordings on one component owner and 2,048 unrelated people.",
+      "Global candidate/resolution/support scans remain; common-name histories across owners, large merged components and writer cost are not established.",
+      "The standalone legacy count predicate does not test actual migration 57 routing for a missing certificate."
+    ]
+  },
+  "fixtureCorrection": "The old merge-read fixture inserted an unsupported alias directly. It now uses public publication with real original-owner input support and text containing the alias/key; the public read expectations are unchanged.",
+  "review": "Independent source correctness, separate readability/simplifier review, and independent final artifact comparison found no issues.",
+  "remaining": [
+    "Run the full ordinary suite on final migration 58.",
+    "Verify full-size publication for distinct people, repeated claims and the 1,001-source lifecycle.",
+    "Complete independent matching evaluation, catalog-scale cost checks, backfill and rollout."
+  ],
+  "productionWrites": 0,
+  "productionPolicyActivations": 0
+}
