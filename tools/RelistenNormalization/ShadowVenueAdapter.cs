@@ -21,7 +21,22 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
     private readonly Dictionary<string, bool> providerConsistency = new(StringComparer.Ordinal);
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-venue-physical-history-v1";
+    private readonly ShadowVenueGeography? geography;
+
+    public string Version =>
+        "shadow-venue-physical-history-v2/geography=" + (geography?.EvidenceIdentity ?? "none");
+
+    /// <param name="geographyManifest">Optional pinned offline GeoNames manifest. Null preserves parsed locality labels.</param>
+    public ShadowVenueAdapter(string? geographyManifest = null)
+    {
+        geography = geographyManifest == null ? null : ShadowVenueGeography.Load(geographyManifest);
+    }
+
+    /// <summary>Use an already authenticated offline reference index.</summary>
+    public ShadowVenueAdapter(ShadowVenueGeography geography)
+    {
+        this.geography = geography;
+    }
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "venue_sample" or "venue" or "imported_venue" ? Domains : [];
@@ -32,7 +47,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         {
             return;
         }
-        var venue = ShadowVenueObservation.Read(record.GetProperty("row"));
+        var venue = ShadowVenueObservation.Read(record.GetProperty("row"), geography);
         if (venues.TryGetValue(venue.Uuid, out var previous))
         {
             // Repeated legacy UUIDs may carry different snapshots. Keep their
@@ -60,7 +75,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         {
             yield break;
         }
-        var venue = ShadowVenueObservation.Read(input.Row);
+        var venue = ShadowVenueObservation.Read(input.Row, geography);
         var grouping = Place(venue);
         var candidates = AlternativeIds(venue);
         var alternatives = candidates
@@ -91,6 +106,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             !venue.HasName
             || venue.MultiplePlaces
             || venue.Locality.BrowseKey == null
+            || venue.Locality.Geography is { ProposedGeographicKey: null }
             || conflictingRows.Contains(venue.Uuid)
                 ? "unresolved"
                 : "proposed";
@@ -98,6 +114,8 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             !venue.HasName ? "missing_usable_venue_name"
             : conflictingRows.Contains(venue.Uuid) ? "conflicting_snapshots_for_legacy_uuid"
             : venue.MultiplePlaces ? "multiple_places_in_legacy_row"
+            : venue.Locality.Geography is { ProposedGeographicKey: null } geographic
+                ? geographic.Status
             : venue.Locality.BrowseKey == null ? "locality_requires_interpretation"
             : grouping.Basis == "retained_venue_row" ? "physical_identity_requires_more_evidence"
             : null;
@@ -105,6 +123,10 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         if (venue.Locality.BrowseKey != null)
         {
             entityKeys.Add(venue.Locality.BrowseKey);
+        }
+        if (venue.Locality.Geography?.ProposedGeographicKey is { } geographicKey)
+        {
+            entityKeys.Add(geographicKey);
         }
         if (venue.ProviderGroup != null)
         {
@@ -178,7 +200,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
                 venue.CanProposePhysicalGroup && !conflictingRows.Contains(venue.Uuid)
             )
             && members.Select(venue => venue.NameKey).Distinct().Count() == 1
-            && members.Select(venue => venue.Locality.BrowseKey).Distinct().Count() == 1
+            && members.Select(venue => venue.Locality.PhysicalConstraintKey).Distinct().Count() == 1
             && members.Select(venue => venue.Scope).Distinct().Count() == 1
             && members
                 .Where(venue => venue.Locality.Address != null)
@@ -223,9 +245,10 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         var otherPlace = Place(other);
         var relationship =
             otherPlace.Key == placeKey ? "proposed_same_physical_place"
-            : source.Locality.BrowseKey == null || other.Locality.BrowseKey == null
+            : source.Locality.PhysicalConstraintKey == null
+            || other.Locality.PhysicalConstraintKey == null
                 ? "locality_unknown"
-            : source.Locality.BrowseKey != other.Locality.BrowseKey
+            : source.Locality.PhysicalConstraintKey != other.Locality.PhysicalConstraintKey
                 ? "different_locality_or_location_history"
             : source.Scope != other.Scope ? "room_stage_or_site_scope_unresolved"
             : source.Locality.Address != null
@@ -258,10 +281,15 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         {
             "physical_identity_not_accepted",
             "current_name_validity_dates_unknown",
+            "historical_geographic_boundaries_unknown",
         };
         if (venue.Locality.BrowseKey == null)
         {
             result.Add("locality_unresolved");
+        }
+        if (venue.Locality.Geography is { ProposedGeographicKey: null } geographic)
+        {
+            result.Add(geographic.Status);
         }
         if (venue.MultiplePlaces)
         {
@@ -300,6 +328,10 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         if (venue.Locality.BrowseKey == null || venue.MultiplePlaces)
         {
             result.Add("parse_unstructured_locality_or_multiple_places");
+        }
+        if (venue.Locality.Geography is { ProposedGeographicKey: null })
+        {
+            result.Add("resolve_gazetteer_ambiguity_or_missing_geographic_evidence");
         }
         if (venue.PastNames.Count > 0)
         {

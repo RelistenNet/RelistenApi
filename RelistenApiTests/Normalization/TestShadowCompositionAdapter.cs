@@ -459,6 +459,233 @@ public sealed class TestShadowCompositionAdapter
         proposal.CatalogWorkIdentityAssigned.Should().BeFalse();
     }
 
+    [Test]
+    public void HydratedRecordingPathsJoinCrossArtistWorksAndKeepDifferentNamesakesSeparate()
+    {
+        var first = Artist(1, "Original performer");
+        var cover = Artist(2, "Cover performer");
+        var namesake = Artist(3, "Different performer");
+        var firstMbid = Guid.NewGuid();
+        var coverMbid = Guid.NewGuid();
+        var namesakeMbid = Guid.NewGuid();
+        var sharedWork = Guid.NewGuid();
+        var differentWork = Guid.NewGuid();
+        var writer = Guid.NewGuid();
+        var songs = new[]
+        {
+            Song(first, "Shared Song"),
+            Song(cover, "Shared Song"),
+            Song(namesake, "Shared Song"),
+        };
+        var adapter = new ShadowCompositionAdapter();
+        adapter.Observe(ArtistContext(first, firstMbid));
+        adapter.Observe(ArtistContext(cover, coverMbid));
+        adapter.Observe(ArtistContext(namesake, namesakeMbid));
+        foreach (var song in songs)
+        {
+            adapter.Observe(song.Record);
+        }
+        adapter.Observe(ProviderRecording(first, firstMbid, "Shared Song", sharedWork).Record);
+        adapter.Observe(ProviderRecording(cover, coverMbid, "Shared Song", sharedWork).Record);
+        adapter.Observe(
+            ProviderRecording(namesake, namesakeMbid, "Shared Song", differentWork).Record
+        );
+        adapter.Observe(
+            ProviderRevision(
+                first,
+                "work",
+                sharedWork,
+                "musicbrainz-work-json-v1",
+                new
+                {
+                    id = sharedWork,
+                    title = "Original Work Title",
+                    relations = new[]
+                    {
+                        new Dictionary<string, object>
+                        {
+                            ["type"] = "composer",
+                            ["direction"] = "backward",
+                            ["target-type"] = "artist",
+                            ["artist"] = new { id = writer, name = "Reported composer" },
+                        },
+                    },
+                }
+            ).Record
+        );
+
+        var results = songs.Select(song => adapter.Process(song).Single()).ToArray();
+        results
+            .Select(result => result.Outcome)
+            .Should()
+            .OnlyContain(outcome => outcome == "proposed");
+        results[0].EntityKeys.Should().Contain(ShadowCompositionAdapter.WorkKey(sharedWork));
+        results[1].EntityKeys.Should().Contain(ShadowCompositionAdapter.WorkKey(sharedWork));
+        results[2].EntityKeys.Should().Contain(ShadowCompositionAdapter.WorkKey(differentWork));
+        results[2].EntityKeys.Should().NotContain(ShadowCompositionAdapter.WorkKey(sharedWork));
+        var path = Proposal(results[1]).Mentions.Single().ProviderCorrespondences!.Single();
+        path.WriterRoles.Single()
+            .Target!.Identity.Identity.ProviderKey.Should()
+            .Be(writer.ToString("D"));
+        path.Recording.ArtistCredits!.Single()
+            .Artist!.Identity.Identity.ProviderKey.Should()
+            .Be(coverMbid.ToString("D"));
+        path.RemainingGaps.Should().Contain("canonical_author_people_unassigned");
+        Proposal(results[1]).PublicationPermitted.Should().BeFalse();
+        Proposal(results[1])
+            .Mentions.Single()
+            .Links.Single()
+            .MatchingDiagnostics.PolicyVersion.Should()
+            .BeNull();
+    }
+
+    [Test]
+    public void CompetingRecordingWorksRemainUnresolvedAndTitleOnlyDoesNotLinkAnotherArtist()
+    {
+        var artist = Artist(1, "Performer");
+        var other = Artist(2, "Same name");
+        var mbid = Guid.NewGuid();
+        var song = Song(artist, "Shared Song");
+        var otherSong = Song(other, "Shared Song");
+        var adapter = new ShadowCompositionAdapter();
+        adapter.Observe(ArtistContext(artist, mbid));
+        adapter.Observe(ArtistContext(other, Guid.NewGuid()));
+        adapter.Observe(song.Record);
+        adapter.Observe(otherSong.Record);
+        adapter.Observe(ProviderRecording(artist, mbid, "Shared Song", Guid.NewGuid()).Record);
+        adapter.Observe(ProviderRecording(artist, mbid, "Shared Song", Guid.NewGuid()).Record);
+
+        var result = adapter.Process(song).Single();
+        result.Outcome.Should().Be("unresolved");
+        var mention = Proposal(result).Mentions.Single();
+        mention.CompetingWorkKeys.Should().HaveCount(2);
+        mention.ProviderCorrespondences.Should().HaveCount(2);
+        mention.Links.Should().BeEmpty();
+        adapter.Process(otherSong).Single().Outcome.Should().Be("unresolved");
+    }
+
+    [Test]
+    public void ConflictingCatalogArtistIdsCannotSilentlyChooseAProviderWork()
+    {
+        var artist = Artist(1, "Performer");
+        var mbid = Guid.NewGuid();
+        var song = Song(artist, "Shared Song");
+        var adapter = new ShadowCompositionAdapter();
+        adapter.Observe(song.Record);
+        adapter.Observe(ArtistContext(artist, Guid.NewGuid()));
+        adapter.Observe(ArtistContext(artist, mbid));
+        adapter.Observe(ProviderRecording(artist, mbid, "Shared Song", Guid.NewGuid()).Record);
+        adapter.Process(song).Single().Outcome.Should().Be("unresolved");
+    }
+
+    [Test]
+    public void UnsupportedProviderIndexDoesNotPoisonOtherCompositionInputs()
+    {
+        var artist = Artist(1, "Performer");
+        var mbid = Guid.NewGuid();
+        var song = Song(artist, "Shared Song");
+        var valid = ProviderRecording(artist, mbid, "Shared Song", Guid.NewGuid());
+        var invalid = ProviderRevision(
+            artist,
+            "recording",
+            Guid.NewGuid(),
+            "unsupported-capture-v99",
+            new { title = "Unsupported" }
+        );
+        var adapter = new ShadowCompositionAdapter();
+        adapter.Observe(ArtistContext(artist, mbid));
+        adapter.Observe(song.Record);
+        adapter.Observe(valid.Record);
+        Action observe = () => adapter.Observe(invalid.Record);
+        observe.Should().NotThrow();
+        adapter.Process(invalid).Single().Outcome.Should().Be("failed");
+        adapter.Process(song).Single().Outcome.Should().Be("proposed");
+    }
+
+    private static JsonElement ArtistContext(ShadowCatalogArtist artist, Guid musicBrainzId) =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "artist",
+                row = new
+                {
+                    id = artist.Id,
+                    uuid = artist.Uuid,
+                    name = artist.Name,
+                    musicbrainz_id = musicBrainzId,
+                },
+            }
+        );
+
+    private static ShadowCatalogInput ProviderRecording(
+        ShadowCatalogArtist artist,
+        Guid mbid,
+        string title,
+        Guid work
+    ) =>
+        ProviderRevision(
+            artist,
+            "recording",
+            Guid.NewGuid(),
+            "musicbrainz-recording-work-json-v1",
+            new Dictionary<string, object>
+            {
+                ["title"] = title,
+                ["artist-credit"] = new[]
+                {
+                    new { name = artist.Name, artist = new { id = mbid, name = artist.Name } },
+                },
+                ["relations"] = new[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["type"] = "performance",
+                        ["direction"] = "forward",
+                        ["target-type"] = "work",
+                        ["work"] = new { id = work, title = "Reported work" },
+                    },
+                },
+            }
+        );
+
+    private static ShadowCatalogInput ProviderRevision(
+        ShadowCatalogArtist artist,
+        string kind,
+        Guid id,
+        string version,
+        object body
+    )
+    {
+        var value = JsonSerializer.SerializeToElement(body);
+        var fields = value
+            .EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value.Clone());
+        fields["id"] = JsonSerializer.SerializeToElement(id);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(fields);
+        var revision = new NormalizationInputRevision
+        {
+            Uuid = Guid.NewGuid(),
+            Resource = new("musicbrainz.org", kind, id.ToString("D")),
+            CaptureVersion = version,
+            MediaType = "application/json",
+            Payload = bytes,
+            Sha256 = Hash(bytes),
+        };
+        return new(
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    kind = "provider_input",
+                    row = new { uuid = revision.Uuid, artist_id = artist.Id },
+                    input = revision,
+                }
+            ),
+            null,
+            artist,
+            "musicbrainz.org"
+        );
+    }
+
     private static ShadowCompositionProposal Proposal(ShadowCatalogResult result) =>
         (ShadowCompositionProposal)result.Proposal!;
 

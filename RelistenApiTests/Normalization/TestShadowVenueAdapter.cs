@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
 using Relisten.Api.Models.Normalization;
@@ -306,6 +308,396 @@ public sealed class TestShadowVenueAdapter
             .Select(result => Proposal(result).ProposedPlaceKey)
             .Should()
             .Equal(second.Select(result => Proposal(result).ProposedPlaceKey));
+    }
+
+    [Test]
+    public void GazetteerAliasesShareGeographyWithoutMergingNamesakePremises()
+    {
+        var first = Venue("The Hall", "New York, NY", artist: 1);
+        var second = Venue("The Hall", "NYC, New York", artist: 2);
+        var adapter = Observe(Geography(), first, second);
+
+        var left = Result(adapter, first);
+        var right = Result(adapter, second);
+        var locality = Proposal(left).Locality.Geography!;
+
+        locality.ProposedGeographicKey.Should().Be("geonames:5128581");
+        left.EntityKeys.Should().Contain(locality.ProposedGeographicKey);
+        right.EntityKeys.Should().Contain(locality.ProposedGeographicKey);
+        locality.Place!.FeatureCode.Should().Be("PPL");
+        locality.HistoricalValidityKnown.Should().BeFalse();
+        Proposal(left).ProposedPlaceKey.Should().NotBe(Proposal(right).ProposedPlaceKey);
+        Proposal(left)
+            .Alternatives.Single()
+            .Relationship.Should()
+            .Be("same_name_locality_premises_unresolved");
+        Proposal(right).Locality.OriginalWording.Should().Be("NYC, New York");
+    }
+
+    [Test]
+    public void QualifiedProviderVenueUsesResolvedAliasesButConflictingCitiesStaySeparate()
+    {
+        var first = Venue("The Hall", "New York, NY", "setlistfm:1234abcd", artist: 1);
+        var alias = Venue("The Hall", "NYC, NY", "setlistfm:1234abcd", artist: 2);
+        var adapter = Observe(Geography(), first, alias);
+
+        Proposal(Result(adapter, first))
+            .ProposedPlaceKey.Should()
+            .Be(Proposal(Result(adapter, alias)).ProposedPlaceKey);
+
+        var elsewhere = Venue(
+            "The Hall",
+            "Montréal, Quebec, Canada",
+            "setlistfm:1234abcd",
+            artist: 3
+        );
+        adapter.Observe(elsewhere);
+        Proposal(Result(adapter, first))
+            .ProposedPlaceKey.Should()
+            .NotBe(Proposal(Result(adapter, alias)).ProposedPlaceKey);
+        Proposal(Result(adapter, first))
+            .ProtectedUnknowns.Should()
+            .Contain("provider_venue_name_location_or_scope_conflict");
+    }
+
+    [Test]
+    public void GazetteerDoesNotRankAmbiguousNamesOrDiscardUnknownRegionConstraints()
+    {
+        var ambiguous = Venue("A Hall", "Springfield, USA");
+        var constrained = Venue("A Hall", "Springfield, IL");
+        var wrongRegion = Venue("A Hall", "Springfield, California");
+        var unknownRegion = Venue("A Hall", "Springfield, Made-up Region, USA");
+        var missingCountry = Venue("A Hall", "Springfield");
+        var absent = Venue("A Hall", "Unlisted Town, IL");
+        var adapter = Observe(
+            Geography(),
+            ambiguous,
+            constrained,
+            wrongRegion,
+            unknownRegion,
+            missingCountry,
+            absent
+        );
+
+        var candidates = Proposal(Result(adapter, ambiguous)).Locality.Geography!;
+        candidates.Status.Should().Be("ambiguous_gazetteer_candidates");
+        candidates.CandidateCount.Should().Be(2);
+        candidates.ProposedGeographicKey.Should().BeNull();
+        Result(adapter, ambiguous).Outcome.Should().Be("unresolved");
+        Proposal(Result(adapter, constrained))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .Be("geonames:101");
+        Proposal(Result(adapter, wrongRegion)).Locality.Geography!.CandidateCount.Should().Be(0);
+        Proposal(Result(adapter, unknownRegion)).Locality.Geography!.CandidateCount.Should().Be(0);
+        Proposal(Result(adapter, missingCountry))
+            .Locality.Geography!.Status.Should()
+            .Be("country_required");
+        Proposal(Result(adapter, absent))
+            .Locality.Geography!.Status.Should()
+            .Be("no_exact_gazetteer_candidate");
+    }
+
+    [Test]
+    public void GeographicProposalsPreserveDistrictsDiacriticsAndUnknownHistory()
+    {
+        var first = Venue("A Hall", "Montréal, QC");
+        var alias = Venue("A Hall", "Montreal, Quebec, Canada");
+        var district = Venue("A Hall", "Brooklyn, New York");
+        var city = Venue("A Hall", "New York, NY");
+        var adapter = Observe(Geography(), first, alias, district, city);
+
+        Proposal(Result(adapter, first))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .Be(Proposal(Result(adapter, alias)).Locality.Geography!.ProposedGeographicKey);
+        var borough = Proposal(Result(adapter, district)).Locality.Geography!;
+        borough.Place!.FeatureCode.Should().Be("PPLX");
+        borough
+            .ProposedGeographicKey.Should()
+            .NotBe(Proposal(Result(adapter, city)).Locality.Geography!.ProposedGeographicKey);
+        borough.HistoricalValidityKnown.Should().BeFalse();
+    }
+
+    [Test]
+    public void ExplicitGeographyCannotHideConflictingOrUnrecognizedLocationEvidence()
+    {
+        JsonElement Explicit(string country, string location) =>
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    kind = "venue_sample",
+                    row = new
+                    {
+                        uuid = Guid.NewGuid(),
+                        artist_id = 1,
+                        name = "A Hall",
+                        city = "New York",
+                        country,
+                        location,
+                    },
+                }
+            );
+        var conflicting = Explicit("US", "New York, Ontario, Canada");
+        var unrecognized = Explicit("Unrecognized Country", "New York, NY");
+        var adapter = Observe(Geography(), conflicting, unrecognized);
+
+        Result(adapter, conflicting).Outcome.Should().Be("unresolved");
+        Proposal(Result(adapter, conflicting))
+            .Locality.Geography!.Status.Should()
+            .Be("conflicting_catalog_geography");
+        Result(adapter, unrecognized).Outcome.Should().Be("unresolved");
+        Proposal(Result(adapter, unrecognized))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .BeNull();
+    }
+
+    [Test]
+    public void KnownCompactRegionFormatsResolveButExtraComponentsRemainUnknown()
+    {
+        var compact = Venue("A Hall", "New York NY");
+        var combined = Venue("A Hall", "New York, NY USA");
+        var extra = Venue("A Hall", "Springfield, MA, Illinois, USA");
+        var adapter = Observe(Geography(), compact, combined, extra);
+
+        Proposal(Result(adapter, compact))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .Be("geonames:5128581");
+        Proposal(Result(adapter, combined))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .Be("geonames:5128581");
+        Proposal(Result(adapter, extra))
+            .Locality.OriginalWording.Should()
+            .Be("Springfield, MA, Illinois, USA");
+        Proposal(Result(adapter, extra))
+            .Locality.Geography!.ProposedGeographicKey.Should()
+            .BeNull();
+        Result(adapter, extra).Outcome.Should().Be("unresolved");
+    }
+
+    [Test]
+    public void ACanonicalCityNameCannotOverrideAnotherPlacesExactAlias()
+    {
+        var geography = new ShadowVenueGeography(
+            new[]
+            {
+                new ShadowGazetteerPlace(
+                    101,
+                    "Springfield",
+                    "US",
+                    "IL",
+                    "Illinois",
+                    "PPL",
+                    39.7,
+                    -89.6,
+                    ["Springfield"],
+                    ["IL", "Illinois"]
+                ),
+                new ShadowGazetteerPlace(
+                    103,
+                    "Another Springfield",
+                    "US",
+                    "IL",
+                    "Illinois",
+                    "PPLX",
+                    39.8,
+                    -89.6,
+                    ["Another Springfield", "Springfield"],
+                    ["IL", "Illinois"]
+                ),
+            },
+            "alias-collision-fixture"
+        );
+        var row = Venue("A Hall", "Springfield, IL");
+        var adapter = Observe(geography, row);
+
+        var proposal = Proposal(Result(adapter, row)).Locality.Geography!;
+        proposal.Status.Should().Be("ambiguous_gazetteer_candidates");
+        proposal.Candidates.Select(place => place.GeonameId).Should().Equal(101L, 103L);
+        proposal.ProposedGeographicKey.Should().BeNull();
+    }
+
+    [Test]
+    public void PinnedGazetteerRejectsChangedBytesAndChangesMethodIdentityOnRefresh()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "relisten-geography-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using (
+                var archive = ZipFile.Open(
+                    Path.Combine(directory, "cities500.zip"),
+                    ZipArchiveMode.Create
+                )
+            )
+            {
+                using var writer = new StreamWriter(archive.CreateEntry("cities500.txt").Open());
+                writer.WriteLine(
+                    string.Join(
+                        '\t',
+                        new[]
+                        {
+                            "5128581",
+                            "New York City",
+                            "New York City",
+                            "NYC,New York",
+                            "40.7",
+                            "-74.0",
+                            "P",
+                            "PPL",
+                            "US",
+                            "",
+                            "NY",
+                            "",
+                            "",
+                            "",
+                            "1",
+                            "",
+                            "1",
+                            "America/New_York",
+                            "2026-10-18",
+                        }
+                    )
+                );
+            }
+            File.WriteAllText(
+                Path.Combine(directory, "admin1CodesASCII.txt"),
+                "US.NY\tNew York\tNew York\t5128638\n"
+            );
+            File.WriteAllText(
+                Path.Combine(directory, "readme.txt"),
+                "Synthetic offline fixture; not acquired reference data."
+            );
+            string WriteManifest(string revision)
+            {
+                var path = Path.Combine(directory, "manifest.json");
+                File.WriteAllText(
+                    path,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            version = "shadow-geonames-cities500-v1",
+                            revision,
+                            files = new[]
+                            {
+                                "cities500.zip",
+                                "admin1CodesASCII.txt",
+                                "readme.txt",
+                            }.Select(name => new
+                            {
+                                path = name,
+                                bytes = new FileInfo(Path.Combine(directory, name)).Length,
+                                sha256 = Convert.ToHexStringLower(
+                                    SHA256.HashData(
+                                        File.ReadAllBytes(Path.Combine(directory, name))
+                                    )
+                                ),
+                            }),
+                        }
+                    )
+                );
+                return path
+                    + "#sha256="
+                    + Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));
+            }
+            var first = new ShadowVenueAdapter(WriteManifest("first"));
+            var venue = Venue("A Hall", "NYC, NY");
+            first.Observe(venue);
+            Proposal(Result(first, venue))
+                .Locality.Geography!.ProposedGeographicKey.Should()
+                .Be("geonames:5128581");
+            var nextPin = WriteManifest("next");
+            new ShadowVenueAdapter(nextPin).Version.Should().NotBe(first.Version);
+            File.AppendAllText(Path.Combine(directory, "admin1CodesASCII.txt"), "changed");
+            var loadChangedInput = () => new ShadowVenueAdapter(nextPin);
+            loadChangedInput.Should().Throw<InvalidDataException>();
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private static ShadowVenueGeography Geography() =>
+        new(
+            new[]
+            {
+                new ShadowGazetteerPlace(
+                    5128581,
+                    "New York City",
+                    "US",
+                    "NY",
+                    "New York",
+                    "PPL",
+                    40.7,
+                    -74,
+                    ["New York City", "New York", "NYC", "NYC"],
+                    ["NY", "New York"]
+                ),
+                new ShadowGazetteerPlace(
+                    5110302,
+                    "Brooklyn",
+                    "US",
+                    "NY",
+                    "New York",
+                    "PPLX",
+                    40.6,
+                    -73.9,
+                    ["Brooklyn"],
+                    ["NY", "New York"]
+                ),
+                new ShadowGazetteerPlace(
+                    6077243,
+                    "Montréal",
+                    "CA",
+                    "10",
+                    "Quebec",
+                    "PPL",
+                    45.5,
+                    -73.6,
+                    ["Montréal", "Montreal"],
+                    ["10", "Quebec"]
+                ),
+                new ShadowGazetteerPlace(
+                    101,
+                    "Springfield",
+                    "US",
+                    "IL",
+                    "Illinois",
+                    "PPL",
+                    39.7,
+                    -89.6,
+                    ["Springfield"],
+                    ["IL", "Illinois"]
+                ),
+                new ShadowGazetteerPlace(
+                    102,
+                    "Springfield",
+                    "US",
+                    "MA",
+                    "Massachusetts",
+                    "PPL",
+                    42.1,
+                    -72.6,
+                    ["Springfield"],
+                    ["MA", "Massachusetts"]
+                ),
+            },
+            "synthetic-geography-fixture-v1"
+        );
+
+    private static ShadowVenueAdapter Observe(
+        ShadowVenueGeography geography,
+        params JsonElement[] records
+    )
+    {
+        var adapter = new ShadowVenueAdapter(geography);
+        foreach (var record in records)
+        {
+            adapter.Observe(record);
+        }
+        return adapter;
     }
 
     private static ShadowVenueAdapter Observe(params JsonElement[] records)

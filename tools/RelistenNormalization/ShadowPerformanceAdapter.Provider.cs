@@ -33,10 +33,27 @@ public sealed partial class ShadowPerformanceAdapter
             using var document = NormalizationRetainedDocument.Open(revision);
             foreach (var account in decoded.Setlists)
             {
+                ValidatePerformanceEvidence(
+                    document,
+                    account.Origin,
+                    account.LiteralDate,
+                    account.Venue,
+                    account.Text
+                );
                 foreach (var passage in account.Passages)
                 {
                     document.ValidateEvidence(passage.Title.Evidence);
                 }
+            }
+            foreach (var recording in decoded.Recordings)
+            {
+                ValidatePerformanceEvidence(
+                    document,
+                    recording.Origin,
+                    recording.LiteralDate,
+                    recording.Venue,
+                    recording.Text
+                );
             }
         }
         catch (Exception error)
@@ -65,18 +82,30 @@ public sealed partial class ShadowPerformanceAdapter
             )
             .ToArray();
         var performances = decoded
-            .Setlists.Select(account => new ShadowProviderPerformance(
-                ProviderAccountKey(account.Origin.Item),
-                account.Origin.Item,
-                account.LiteralDate?.Value,
-                account.Origin
-            ))
+            .Setlists.Select(
+                (account, index) =>
+                    new ShadowProviderPerformance(
+                        ProviderAccountKey(account.Origin.Item),
+                        account.Origin.Item,
+                        account.LiteralDate?.Value,
+                        account.Origin,
+                        accounts[index].Association
+                    )
+            )
             .Concat(
                 decoded.Recordings.Select(recording => new ShadowProviderPerformance(
                     ProviderAccountKey(recording.Origin.Item),
                     recording.Origin.Item,
                     recording.LiteralDate?.Value,
-                    recording.Origin
+                    recording.Origin,
+                    AssociatePerformance(
+                        input,
+                        recording.LiteralDate?.Value,
+                        recording.Origin,
+                        recording.LiteralDate,
+                        recording.Venue,
+                        recording.Text
+                    )
                 ))
             )
             .Distinct()
@@ -89,21 +118,32 @@ public sealed partial class ShadowPerformanceAdapter
             revision.CaptureVersion,
             decoded.DecoderVersion,
             decoded.Issues,
-            catalog_performance_assignment = "not_inferred",
+            catalog_performance_assignment = "shadow_proposal_only",
         };
         return
         [
             ShadowCatalogResult.For(
                 input,
                 "performances",
-                performances.Length == 0 ? "not_applicable" : "unresolved",
+                performances.Length == 0 ? "not_applicable"
+                    : performances.All(value => value.Association?.ShowUuid != null) ? "proposed"
+                    : "unresolved",
                 Version,
                 performances,
                 evidence,
                 performances.Length == 0
                     ? "provider_input_has_no_performance_account"
-                    : "missing_catalog_performance_link",
-                performances.Select(value => value.EntityKey).Distinct().ToArray()
+                    : performances
+                        .FirstOrDefault(value => value.Association?.ShowUuid == null)
+                        ?.Association?.Reason,
+                performances
+                    .SelectMany(value =>
+                        value.Association?.PerformanceEntityKey is { } key
+                            ? new[] { value.EntityKey, key }
+                            : new[] { value.EntityKey }
+                    )
+                    .Distinct()
+                    .ToArray()
             ),
             ShadowCatalogResult.For(
                 input,
@@ -187,17 +227,56 @@ public sealed partial class ShadowPerformanceAdapter
                     passage.Title.Value
                 ))
                 .ToArray();
+        var association = AssociatePerformance(
+            input,
+            account.LiteralDate?.Value,
+            account.Origin,
+            account.LiteralDate,
+            account.Venue,
+            account.Text
+        );
         return new(
             accountKey,
             null,
-            null,
+            association.ShowUuid,
             account.LiteralDate?.Value,
-            ProviderAccountKey(account.Origin.Item),
+            association.PerformanceEntityKey ?? ProviderAccountKey(account.Origin.Item),
             account.Ordered,
             memberships,
             occurrences,
-            account
+            account,
+            association
         );
+    }
+
+    private static void ValidatePerformanceEvidence(
+        NormalizationRetainedDocument document,
+        ProviderObservationOrigin origin,
+        ObservedValue<string>? date,
+        ProviderVenueObservation? venue,
+        IReadOnlyList<ProviderTextObservation> text
+    )
+    {
+        document.ValidateEvidence(origin.Evidence);
+        if (date != null)
+        {
+            document.ValidateEvidence(date.Evidence);
+        }
+        if (venue != null)
+        {
+            foreach (var name in venue.Names)
+            {
+                document.ValidateEvidence(name.Evidence);
+            }
+            if (venue.City != null)
+            {
+                document.ValidateEvidence(venue.City.Evidence);
+            }
+        }
+        foreach (var observation in text)
+        {
+            document.ValidateEvidence(observation.Text.Evidence);
+        }
     }
 
     private static string ProviderAccountKey(NormalizationResourceKey identity) =>

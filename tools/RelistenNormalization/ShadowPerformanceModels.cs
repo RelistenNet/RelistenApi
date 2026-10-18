@@ -68,7 +68,8 @@ public sealed record ShadowSetlistAccount(
     bool Ordered,
     IReadOnlyList<ShadowSetlistMembership> Memberships,
     IReadOnlyList<ShadowSetlistOccurrence> Occurrences,
-    ProviderSetlistObservation? ProviderAccount
+    ProviderSetlistObservation? ProviderAccount,
+    ShadowPerformanceAssociation? Association = null
 );
 
 /// <summary>Provider recording/account identity without a fabricated catalog show UUID.</summary>
@@ -76,5 +77,40 @@ public sealed record ShadowProviderPerformance(
     string EntityKey,
     NormalizationResourceKey Identity,
     string? LiteralDate,
-    ProviderObservationOrigin Origin
+    ProviderObservationOrigin Origin,
+    ShadowPerformanceAssociation? Association = null
+);
+
+/// <summary>
+/// A shadow proposal to connect an account to an existing show. Candidates retain catalog
+/// UUIDs and conflicts; only ShowUuid selects a target. No source assignment is changed.
+/// Provider dates, origin and discriminator citations retain their original support.
+/// </summary>
+public sealed record ShadowPerformanceAssociation(
+    Guid? ShowUuid,
+    string? PerformanceEntityKey,
+    string Basis,
+    string? Reason,
+    string? LiteralDate,
+    ProviderObservationOrigin? Origin,
+    ObservedValue<string>? ObservedDate,
+    IReadOnlyList<ShadowPerformanceDiscriminator> Discriminators,
+    IReadOnlyList<ShadowPerformanceCandidate> Candidates
+);
+
+public sealed record ShadowPerformanceDiscriminator(
+    string Kind,
+    string Value,
+    NormalizedEvidenceReference Evidence
+);
+
+public sealed record ShadowPerformanceCandidate(
+    Guid ShowUuid,
+    long ShowId,
+    string? LiteralDate,
+    string PerformanceType,
+    string? PerformanceLabel,
+    string? PerformanceKey,
+    long? VenueId,
+    bool ConflictingContext
 );

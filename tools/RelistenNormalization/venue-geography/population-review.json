@@ -1,0 +1,588 @@
+{
+  "version": "venue-geography-population-review-v1",
+  "scope": "Development metadata coverage. No physical identity labels or matching accuracy estimate. The probe parser differs from the C# adapter; runtime counts must be measured separately.",
+  "baselineRun": "local-dev/normalization-data/2026-10-18-shadow-complete-core-ranges-v1",
+  "baselineVenueOutcomes": {
+    "processed": 216332,
+    "proposed": 186288,
+    "unresolved": 30044,
+    "grouping": {
+      "retained_venue_row": 199315,
+      "qualified_provider_venue_name_and_locality": 16799,
+      "exact_name_street_address_and_locality": 218
+    },
+    "reason": {
+      "physical_identity_requires_more_evidence": 169271,
+      "locality_requires_interpretation": 29204,
+      "missing_usable_venue_name": 489,
+      "multiple_places_in_legacy_row": 351
+    }
+  },
+  "metadataProbe": {
+    "reportSha256": "1585477d2f72775ded2c47bd5ce00957822905f63ce81863f402d810a15fb938",
+    "manifestSnapshotSha256": "3fc842dfa91dd378c6d8129d8635a014e7887d11e02852c862b0a7c71cb0f5d0",
+    "inputPins": [
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0000-sources-26495-2864970-attempt-001.jsonl.gz",
+        "sha256": "fca1308df9dbeed94fabe0ddad90c7a51ad4ae1a72608297a19cf40e746b1f6a",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0001-sources-2864970-3234047-attempt-001.jsonl.gz",
+        "sha256": "5f05f1a1bd07bb8dd680cc453deccbcaea8e65fd15e2a09dd8e5564825c837ec",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0002-sources-3234047-3541624-attempt-001.jsonl.gz",
+        "sha256": "1b0ce22c8b499a809e67736652187c790553127db624df643805f4dfd5d38c0c",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0003-sources-3541624-3664985-attempt-001.jsonl.gz",
+        "sha256": "d52e6a9d88114ae890a5ef3a1a5908f1df332365363a3df6a91964a4f03721e5",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0004-sources-3664985-3739075-attempt-001.jsonl.gz",
+        "sha256": "931f616d1ca70b7e9fd8964f614fb3f1cf1d3ef3f407f11abe97af72f31b0c2e",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0005-sources-3739075-4292635-attempt-001.jsonl.gz",
+        "sha256": "6eaab55fa39544cc490b7338cbd7c5085679c9f848fb75496d4d98a1548cb3c2",
+        "rows": 42522,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0006-sources-4292635-4292873-attempt-001.jsonl.gz",
+        "sha256": "0bfd3e69ac42e9b92c3173819313cf9892c07a0681eb1451a4a0352edfbaa081",
+        "rows": 1,
+        "extraRows": 1
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0007-venues-3383-75945-attempt-001.jsonl.gz",
+        "sha256": "871f4260501c42a880c684f51aa7bb1b068de1facf9b7cb0316150db5170a98a",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0008-venues-75945-151108-attempt-001.jsonl.gz",
+        "sha256": "9876bc1834967d72f0ba302ce27fb99c95912363bbb263812b044985884627cd",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0009-venues-151108-206082-attempt-001.jsonl.gz",
+        "sha256": "c94ef20ec2b8adadf498c54f702840c4d564aeb39491b5dcc3fcf33f671c4bb2",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0010-venues-206082-256190-attempt-001.jsonl.gz",
+        "sha256": "f65b2d2c662463256a184dec1a522df04a903610e2d4eab48e63dd6f9c8d961c",
+        "rows": 50000,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0011-venues-256190-272626-attempt-001.jsonl.gz",
+        "sha256": "eca96e488da8449b73a857e47b446bb6b27a0eb2dd67ba7cdd129a4bdc925f89",
+        "rows": 16331,
+        "extraRows": 0
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/0012-venues-272626-272627-attempt-001.jsonl.gz",
+        "sha256": "a3cceb849c9cf53512f50f7218dee474d5da40ca61f56955cf6dfdc813958867",
+        "rows": 1,
+        "extraRows": 1
+      }
+    ],
+    "geonamesPins": [
+      {
+        "path": "local-dev/normalization-data/2026-10-18-geonames-cities500-v1/cities500.zip",
+        "sha256": "56c9e2dc0344e2bbeb82c97ed43e0d65120e92d957283fe61d7eec79279245ce"
+      },
+      {
+        "path": "local-dev/normalization-data/2026-10-18-geonames-cities500-v1/admin1CodesASCII.txt",
+        "sha256": "1da92a6323a5fec3176f3f743bf4cf4040fd56a876da55e46fbca23c863aa60a"
+      }
+    ],
+    "population": {
+      "venue_rows": 216332,
+      "source_rows": 292523,
+      "sources_without_direct_venue": 1,
+      "sources_with_show_venue_fallback": 0,
+      "source_show_venue_disagreements": 71819,
+      "source_direct_unbound_venue": 0,
+      "source_effective_unbound_venue": 0,
+      "source_without_effective_venue": 1,
+      "distinct_source_artists": 4358,
+      "differing_venue_id_locality_comparison": {
+        "same_resolved_locality": 50278,
+        "one_or_both_unresolved": 19628,
+        "different_resolved_localities": 1913
+      }
+    },
+    "venueStatus": {
+      "resolved_constrained": 164164,
+      "no_alias_match": 18886,
+      "unrecognized_country": 1134,
+      "constraint_conflict_or_absent_city": 6391,
+      "ambiguous_alias": 8089,
+      "missing_locality": 10735,
+      "unrecognized_suffix": 5106,
+      "unique_without_country": 822,
+      "unrecognized_admin": 629,
+      "missing_city": 81,
+      "too_many_components": 243,
+      "multiple_places": 52
+    },
+    "sourceDirectStatus": {
+      "resolved_constrained": 228138,
+      "no_alias_match": 21937,
+      "unrecognized_country": 1048,
+      "constraint_conflict_or_absent_city": 9198,
+      "ambiguous_alias": 10606,
+      "missing_locality": 16558,
+      "unrecognized_suffix": 2822,
+      "unique_without_country": 964,
+      "unrecognized_admin": 684,
+      "missing_city": 219,
+      "too_many_components": 306,
+      "multiple_places": 42
+    },
+    "formattingFamilies": [
+      {
+        "family": "city_us_region",
+        "venue_rows": 171895,
+        "resolved_constrained": 151953
+      },
+      {
+        "family": "city_only",
+        "venue_rows": 11580,
+        "resolved_constrained": 0
+      },
+      {
+        "family": "missing_or_unknown",
+        "venue_rows": 10735,
+        "resolved_constrained": 0
+      },
+      {
+        "family": "city_country",
+        "venue_rows": 7154,
+        "resolved_constrained": 5514
+      },
+      {
+        "family": "city_admin_country",
+        "venue_rows": 5902,
+        "resolved_constrained": 3675
+      },
+      {
+        "family": "city_plus_one",
+        "venue_rows": 5106,
+        "resolved_constrained": 0
+      },
+      {
+        "family": "city_canadian_region",
+        "venue_rows": 2486,
+        "resolved_constrained": 2058
+      },
+      {
+        "family": "city_combined_admin_country",
+        "venue_rows": 1098,
+        "resolved_constrained": 964
+      },
+      {
+        "family": "four_or_more_components",
+        "venue_rows": 243,
+        "resolved_constrained": 0
+      },
+      {
+        "family": "country_only",
+        "venue_rows": 81,
+        "resolved_constrained": 0
+      },
+      {
+        "family": "compound_or_multi_place",
+        "venue_rows": 52,
+        "resolved_constrained": 0
+      }
+    ],
+    "opportunities": {
+      "resolved_localities": 5116,
+      "cross_artist_exact_name_locality_groups": 15401,
+      "cross_artist_exact_name_locality_rows": 121059,
+      "cross_artist_exact_name_locality_source_recordings": 178441,
+      "cross_artist_qualified_provider_groups": 3229,
+      "cross_artist_qualified_provider_rows": 13285,
+      "provider_same_name_and_unique_locality_groups": 2506,
+      "provider_conflicting_or_unresolved_groups": 723,
+      "examples": [
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "San Francisco",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 232,
+          "artists": 134,
+          "source_recordings": 346
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Tucson",
+            "country": "US",
+            "admin1": "AZ",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 5,
+          "artists": 4,
+          "source_recordings": 7
+        },
+        {
+          "name": "riviera theatre",
+          "locality": {
+            "name": "Chicago",
+            "country": "US",
+            "admin1": "IL",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 72,
+          "artists": 45,
+          "source_recordings": 82
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Boulder",
+            "country": "US",
+            "admin1": "CO",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 301,
+          "artists": 227,
+          "source_recordings": 598
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Charlotte",
+            "country": "US",
+            "admin1": "NC",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 44,
+          "artists": 35,
+          "source_recordings": 82
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Redwood City",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 3,
+          "artists": 3,
+          "source_recordings": 5
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "Boulder",
+            "country": "US",
+            "admin1": "CO",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 181,
+          "artists": 140,
+          "source_recordings": 304
+        },
+        {
+          "name": "bowery ballroom",
+          "locality": {
+            "name": "New York City",
+            "country": "US",
+            "admin1": "NY",
+            "feature": "PPL"
+          },
+          "venue_rows": 188,
+          "artists": 132,
+          "source_recordings": 239
+        },
+        {
+          "name": "madison square garden",
+          "locality": {
+            "name": "New York City",
+            "country": "US",
+            "admin1": "NY",
+            "feature": "PPL"
+          },
+          "venue_rows": 80,
+          "artists": 41,
+          "source_recordings": 888
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "Oakland",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 45,
+          "artists": 31,
+          "source_recordings": 77
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "St. Louis",
+            "country": "US",
+            "admin1": "MO",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 22,
+          "artists": 17,
+          "source_recordings": 53
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "Atlanta",
+            "country": "US",
+            "admin1": "GA",
+            "feature": "PPLA"
+          },
+          "venue_rows": 22,
+          "artists": 19,
+          "source_recordings": 116
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "Pomona",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPL"
+          },
+          "venue_rows": 18,
+          "artists": 15,
+          "source_recordings": 26
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Miami Beach",
+            "country": "US",
+            "admin1": "FL",
+            "feature": "PPL"
+          },
+          "venue_rows": 9,
+          "artists": 9,
+          "source_recordings": 0
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Denver",
+            "country": "US",
+            "admin1": "CO",
+            "feature": "PPLA"
+          },
+          "venue_rows": 35,
+          "artists": 24,
+          "source_recordings": 55
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Atlanta",
+            "country": "US",
+            "admin1": "GA",
+            "feature": "PPLA"
+          },
+          "venue_rows": 25,
+          "artists": 20,
+          "source_recordings": 118
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Oakland",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 12,
+          "artists": 9,
+          "source_recordings": 16
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Silver Spring",
+            "country": "US",
+            "admin1": "MD",
+            "feature": "PPL"
+          },
+          "venue_rows": 13,
+          "artists": 12,
+          "source_recordings": 19
+        },
+        {
+          "name": "riviera theatre",
+          "locality": {
+            "name": "Buffalo",
+            "country": "US",
+            "admin1": "NY",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 2,
+          "artists": 1,
+          "source_recordings": 1
+        },
+        {
+          "name": "riviera theatre",
+          "locality": {
+            "name": "North Tonawanda",
+            "country": "US",
+            "admin1": "NY",
+            "feature": "PPL"
+          },
+          "venue_rows": 2,
+          "artists": 2,
+          "source_recordings": 4
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Detroit",
+            "country": "US",
+            "admin1": "MI",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 5,
+          "artists": 3,
+          "source_recordings": 3
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "St. Louis",
+            "country": "US",
+            "admin1": "MO",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 9,
+          "artists": 7,
+          "source_recordings": 13
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Philadelphia",
+            "country": "US",
+            "admin1": "PA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 23,
+          "artists": 20,
+          "source_recordings": 58
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Detroit",
+            "country": "US",
+            "admin1": "MI",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 9,
+          "artists": 7,
+          "source_recordings": 20
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Miami",
+            "country": "US",
+            "admin1": "FL",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 2,
+          "artists": 2,
+          "source_recordings": 2
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Pomona",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPL"
+          },
+          "venue_rows": 6,
+          "artists": 6,
+          "source_recordings": 6
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "New Orleans",
+            "country": "US",
+            "admin1": "LA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 5,
+          "artists": 4,
+          "source_recordings": 6
+        },
+        {
+          "name": "fox theatre",
+          "locality": {
+            "name": "Denver",
+            "country": "US",
+            "admin1": "CO",
+            "feature": "PPLA"
+          },
+          "venue_rows": 5,
+          "artists": 5,
+          "source_recordings": 5
+        },
+        {
+          "name": "the fillmore",
+          "locality": {
+            "name": "Minneapolis",
+            "country": "US",
+            "admin1": "MN",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 2,
+          "artists": 2,
+          "source_recordings": 2
+        },
+        {
+          "name": "fox theater",
+          "locality": {
+            "name": "Redwood City",
+            "country": "US",
+            "admin1": "CA",
+            "feature": "PPLA2"
+          },
+          "venue_rows": 2,
+          "artists": 2,
+          "source_recordings": 2
+        }
+      ]
+    }
+  }
+}

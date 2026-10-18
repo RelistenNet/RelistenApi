@@ -16,7 +16,7 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
     private readonly HashSet<long> conflictingShows = [];
     private readonly ShadowRepertoireAdapter repertoire = new();
 
-    public string Version => "shadow-performances-v2";
+    public string Version => "shadow-performances-v3";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind switch
@@ -37,6 +37,10 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
         }
         repertoire.Observe(record);
         var kind = Text(record, "kind");
+        if (kind == "show_sample")
+        {
+            ObserveShow(row);
+        }
         if (kind == "source_sample")
         {
             ObserveSource(row);
@@ -50,12 +54,7 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
         }
         if (kind is "source_sample" or "track_sample" && Object(record, "show_context") is { } show)
         {
-            var value = ShowHome.Read(show);
-            if (shows.TryGetValue(value.Id, out var existing) && existing != value)
-            {
-                conflictingShows.Add(value.Id);
-            }
-            shows.TryAdd(value.Id, value);
+            ObserveShow(show);
         }
     }
 
@@ -170,33 +169,34 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
             })
             .ToArray();
         var key = "setlist:" + input.Uuid.ToString("D");
+        var association = AssociatePerformance(input, Text(input.Row, "date"));
         var account = new ShadowSetlistAccount(
             key,
             input.Uuid,
-            null,
+            association.ShowUuid,
             Text(input.Row, "date"),
-            null,
+            association.PerformanceEntityKey,
             false,
             members,
             [],
-            null
+            null,
+            association
         );
         return
         [
             ShadowCatalogResult.For(
                 input,
                 "performances",
-                "unresolved",
+                association.ShowUuid.HasValue ? "proposed" : "unresolved",
                 Version,
-                new
-                {
-                    setlist_uuid = input.Uuid,
-                    literal_date = Text(input.Row, "date"),
-                    show_uuid = (Guid?)null,
-                },
-                new { basis = "legacy_setlist_account" },
-                "missing_catalog_performance_link",
-                [key]
+                association,
+                new { basis = "legacy_setlist_account", setlist_uuid = input.Uuid },
+                association.Reason,
+                association
+                    .Candidates.Select(value => "show:" + value.ShowUuid.ToString("D"))
+                    .Prepend(key)
+                    .Distinct()
+                    .ToArray()
             ),
             ShadowCatalogResult.For(
                 input,
@@ -214,6 +214,11 @@ public sealed partial class ShadowPerformanceAdapter : IShadowCatalogAdapter
                 members
                     .Select(value => value.SongEntityKey)
                     .OfType<string>()
+                    .Concat(
+                        association.PerformanceEntityKey is { } performance
+                            ? new[] { performance }
+                            : []
+                    )
                     .Prepend(key)
                     .Distinct()
                     .ToArray()

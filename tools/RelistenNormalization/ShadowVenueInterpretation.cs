@@ -36,8 +36,15 @@ public sealed record ShadowVenueLocality(
     string? Address,
     string? AddressEvidenceField,
     string Basis,
-    string? BrowseKey
-);
+    string? BrowseKey,
+    ShadowGeographyResolution? Geography = null
+)
+{
+    // A spelling-based browse label remains useful when no authority was supplied.
+    // Once a gazetteer is supplied, ambiguity cannot establish a physical group.
+    public string? PhysicalConstraintKey =>
+        Geography == null ? BrowseKey : Geography.ProposedGeographicKey;
+}
 
 /// <summary>Legacy coordinates can be city centroids; their presence is not premises evidence.</summary>
 public sealed record ShadowVenueCoordinates(
@@ -109,11 +116,13 @@ internal sealed record ShadowVenueObservation(
     public bool CanProposePhysicalGroup =>
         HasName
         && !MultiplePlaces
-        && Locality.BrowseKey != null
+        && Locality.PhysicalConstraintKey != null
         && Scope is not ("festival" or "event" or "unknown");
 
     public string? NameLocalityKey =>
-        HasName && Locality.BrowseKey != null ? NameKey + "\n" + Locality.BrowseKey : null;
+        HasName && Locality.PhysicalConstraintKey != null
+            ? NameKey + "\n" + Locality.PhysicalConstraintKey
+            : null;
 
     public string? AddressGroup =>
         NameLocalityKey != null
@@ -173,7 +182,10 @@ internal sealed record ShadowVenueObservation(
                 )
         );
 
-    public static ShadowVenueObservation Read(JsonElement row)
+    public static ShadowVenueObservation Read(
+        JsonElement row,
+        ShadowVenueGeography? geography = null
+    )
     {
         var name = ShadowVenueText.Text(row, "name");
         var location = ShadowVenueText.Text(row, "location");
@@ -181,6 +193,11 @@ internal sealed record ShadowVenueObservation(
         var upstream = ShadowVenueText.Text(row, "upstream_identifier");
         var multiple =
             ShadowVenueText.MultiplePlaces(name) || ShadowVenueText.MultiplePlaces(location);
+        var locality = ShadowVenueText.Locality(row, name, location, multiple);
+        if (geography != null)
+        {
+            locality = locality with { Geography = geography.Resolve(locality) };
+        }
         return new(
             row.GetProperty("uuid").GetGuid(),
             row.TryGetProperty("artist_id", out var artist) && artist.TryGetInt64(out var id)
@@ -192,7 +209,7 @@ internal sealed record ShadowVenueObservation(
             upstream,
             ShadowVenueText.Key(name),
             ShadowVenueText.ExplicitScope(row, name),
-            ShadowVenueText.Locality(row, name, location, multiple),
+            locality,
             ShadowVenueText.Coordinates(row),
             ShadowVenueText.History(past),
             ShadowVenueText.ProviderReference(upstream),
@@ -331,7 +348,9 @@ internal static class ShadowVenueText
             : "street_address";
         var city = Text(row, "city");
         var region = Text(row, "region") ?? Text(row, "state");
-        var country = Country(Text(row, "country_code") ?? Text(row, "country"));
+        var countryText = Text(row, "country_code") ?? Text(row, "country");
+        var country = Country(countryText);
+        var unrecognized = !string.IsNullOrWhiteSpace(countryText) && country == null;
         var geographyConflict = false;
         var basis = city == null ? "parsed_catalog_location" : "explicit_catalog_geography";
         string[] parts = IsUnknown(location)
@@ -351,17 +370,41 @@ internal static class ShadowVenueText
             address = match.Value;
             addressField = "name";
         }
-        if (city == null && !multiple && parts.Length > 0)
+        // A missing comma before an explicit upper-case US/Canadian region is
+        // common in Archive metadata. Do not split arbitrary trailing words.
+        if (
+            parts.Length == 1
+            && Regex.Match(parts[0], @"^(?<city>.+)\s+(?<region>[A-Z]{2})$")
+                is { Success: true } compact
+            && (
+                UsRegions.ContainsKey(Key(compact.Groups["region"].Value))
+                || CanadianRegions.ContainsKey(Key(compact.Groups["region"].Value))
+            )
+        )
         {
-            city = parts.Length == 1 && Country(parts[0]) != null ? null : parts[0];
-            if (city == null)
+            parts = [compact.Groups["city"].Value, compact.Groups["region"].Value];
+        }
+        if (parts.Length == 2 && AdministrativeCountrySuffix(parts[1]) is { } combined)
+        {
+            parts = [parts[0], combined.Region, combined.Country];
+        }
+        // Extra components may be districts, addresses or contradictory regions.
+        // Retain the wording, but do not discard them to manufacture a locality.
+        unrecognized |= parts.Length > 3;
+        if (!multiple && parts.Length > 0)
+        {
+            var parsedCity = parts.Length == 1 && Country(parts[0]) != null ? null : parts[0];
+            string? parsedRegion = null;
+            string? parsedCountry = null;
+            if (parsedCity == null)
             {
-                country ??= Country(parts[0]);
+                parsedCountry = Country(parts[0]);
             }
-            if (parts.Length >= 3)
+            else if (parts.Length >= 3)
             {
-                region ??= string.IsNullOrWhiteSpace(parts[^2]) ? null : parts[^2];
-                country ??= Country(parts[^1]);
+                parsedRegion = string.IsNullOrWhiteSpace(parts[^2]) ? null : parts[^2];
+                parsedCountry = Country(parts[^1]);
+                unrecognized |= parsedCountry == null && !string.IsNullOrWhiteSpace(parts[^1]);
             }
             else if (parts.Length == 2)
             {
@@ -370,17 +413,39 @@ internal static class ShadowVenueText
                     || CanadianRegions.ContainsKey(Key(parts[1]))
                 )
                 {
-                    region ??= parts[1];
+                    parsedRegion = parts[1];
                 }
                 else
                 {
-                    country ??= Country(parts[1]);
+                    parsedCountry = Country(parts[1]);
+                    if (
+                        parsedCountry == null
+                        || Key(parts[1]) is "england" or "scotland" or "wales" or "northern ireland"
+                    )
+                    {
+                        parsedRegion = parts[1];
+                    }
                 }
             }
+            geographyConflict |= city != null && parsedCity != null && Key(city) != Key(parsedCity);
+            geographyConflict |=
+                country != null && parsedCountry != null && country != parsedCountry;
+            if (region != null && parsedRegion != null)
+            {
+                string RegionKey(string value) =>
+                    UsRegions.GetValueOrDefault(Key(value))
+                    ?? CanadianRegions.GetValueOrDefault(Key(value))
+                    ?? Key(value);
+                geographyConflict |= RegionKey(region) != RegionKey(parsedRegion);
+            }
+            city ??= parsedCity;
+            region ??= parsedRegion;
+            country ??= parsedCountry;
         }
         if (
             region != null
             && UsRegions.TryGetValue(Key(region), out var state)
+            && !unrecognized
             && country is null or "US"
         )
         {
@@ -390,6 +455,7 @@ internal static class ShadowVenueText
         else if (
             region != null
             && CanadianRegions.TryGetValue(Key(region), out var province)
+            && !unrecognized
             && country is null or "CA"
         )
         {
@@ -405,7 +471,7 @@ internal static class ShadowVenueText
         }
         city = IsUnknown(city) || multiple ? null : city?.Trim();
         var browse =
-            city != null && country != null && !geographyConflict
+            city != null && country != null && !geographyConflict && !unrecognized
                 ? ShadowCatalogIdentity.Key(
                     "venue_locality",
                     JsonSerializer.Serialize(new[] { country, Key(region), Key(city) })
@@ -419,11 +485,36 @@ internal static class ShadowVenueText
             address,
             addressField,
             geographyConflict ? "conflicting_catalog_geography"
+                : unrecognized ? "unrecognized_catalog_geography"
                 : browse == null ? "unresolved_locality"
                 : basis,
             browse
         );
     }
+
+    private static (string Region, string Country)? AdministrativeCountrySuffix(string text)
+    {
+        foreach (var suffix in new[] { " United States", " USA", " US", " Canada" })
+        {
+            if (!text.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var region = text[..^suffix.Length].Trim();
+            var country = Country(suffix.Trim())!;
+            var regions = country == "US" ? UsRegions : CanadianRegions;
+            if (regions.ContainsKey(Key(region)))
+            {
+                return (region, country);
+            }
+        }
+        return null;
+    }
+
+    internal static string AdministrativeKey(string value, string country) =>
+        country == "US" ? UsRegions.GetValueOrDefault(Key(value)) ?? Key(value)
+        : country == "CA" ? CanadianRegions.GetValueOrDefault(Key(value)) ?? Key(value)
+        : Key(value);
 
     public static bool IsPremisesAddress(string? address) =>
         address != null && Street.IsMatch(address);

@@ -119,7 +119,9 @@ internal sealed class ShadowCatalogRun : IAsyncDisposable
             FileAccess.Write,
             FileShare.Read
         );
-        var compressed = new GZipStream(stream, CompressionLevel.Fastest);
+        // Full file runs repeat evidence across domains. Prefer the smaller retained
+        // output: readers still consume ordinary gzip, and checkpoints remain unchanged.
+        var compressed = new GZipStream(stream, CompressionLevel.Optimal);
         return new(
             new StreamWriter(compressed, new System.Text.UTF8Encoding(false)),
             path + ".writing",

@@ -11,6 +11,7 @@ if (
             && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
+        || (args.Length == 3 && args[0] == "shadow-compositions-acquire")
         || (
             args.Length == 4
             && args[0]
@@ -50,6 +51,7 @@ if (
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
+            + "       RelistenNormalization shadow-compositions-acquire <request.json> <output-directory>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
             + "       RelistenNormalization people-view-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization people-adjudicated-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -79,7 +81,9 @@ try
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256")
             ),
-            new ShadowVenueAdapter(),
+            new ShadowVenueAdapter(
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_VENUE_GEOGRAPHY")
+            ),
             new ShadowRepertoireAdapter(),
             new ShadowCompositionAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
@@ -215,9 +219,13 @@ try
         );
         return actorReport.State == "completed" ? 0 : 1;
     }
-    if (args[0] is "musicbrainz-acquire" or "musicbrainz-search")
+    if (args[0] is "musicbrainz-acquire" or "musicbrainz-search" or "shadow-compositions-acquire")
     {
-        if (!Guid.TryParse(args[3], out var commandUuid) || commandUuid == Guid.Empty)
+        var commandUuid = Guid.Empty;
+        if (
+            args[0] != "shadow-compositions-acquire"
+            && (!Guid.TryParse(args[3], out commandUuid) || commandUuid == Guid.Empty)
+        )
         {
             throw new ArgumentException("Use a nonempty MusicBrainz command or plan UUID.");
         }
@@ -242,6 +250,27 @@ try
                 UserAgent = "RelistenNormalization.Operator/1.0 (https://relisten.net)",
             }
         );
+        if (args[0] == "shadow-compositions-acquire")
+        {
+            var compositionAcquisition = await new ShadowCompositionAcquisitionBatch(
+                new ShadowCompositionAcquisitionClient(service, evidence)
+            ).RunAsync(args[1], args[2], cancellation.Token);
+            Console.WriteLine(
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        compositionAcquisition.State,
+                        compositionAcquisition.ReservedServiceCalls,
+                        retainedInputs = compositionAcquisition.Inputs.Count,
+                        plannedCommands = compositionAcquisition.Commands.Count,
+                        issues = compositionAcquisition.Issues.Count,
+                        compositionAcquisition.PublicationPermitted,
+                    },
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                )
+            );
+            return compositionAcquisition.State == "plan_exhausted" ? 0 : 1;
+        }
         if (args[0] == "musicbrainz-search")
         {
             var search = await new MusicBrainzSearchBatch(service, store, evidence).RunAsync(

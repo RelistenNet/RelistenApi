@@ -29,11 +29,11 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
 
     // The batch checkpoints adapter versions. Changing admitted evidence must reject a
     // resumption rather than mixing already-written rows with a different proof wave.
-    public string Version => "shadow-composition-v1/primary=" + (evidence.ManifestSha256 ?? "none");
+    public string Version => "shadow-composition-v2/primary=" + (evidence.ManifestSha256 ?? "none");
 
     /// <param name="primaryEvidencePath">
-    /// Optional caller-selected &lt;manifest-path&gt;#sha256=&lt;digest&gt;. Null admits no external
-    /// facts. Each future evidence wave can supply another pinned packet without song-specific code.
+    /// Optional caller-selected &lt;manifest-path&gt;#sha256=&lt;digest&gt;. Null omits the source-reviewed
+    /// primary packet. Retained provider inputs are independently admitted through Observe.
     /// </param>
     public ShadowCompositionAdapter(string? primaryEvidencePath = null)
     {
@@ -53,6 +53,8 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
 
     public void Observe(JsonElement record)
     {
+        ObserveCompositionContext(record);
+
         if (
             !record.TryGetProperty("row", out var row)
             || !record.TryGetProperty("kind", out var kind)
@@ -140,6 +142,7 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
                 evidenceManifestSha256 = evidence.ManifestSha256,
                 admittedSourceCorrespondences = evidence.Proofs.Count,
                 observedMusicRecords,
+                failedProviderInputs = providerIndexFailures.Count,
                 proofScope = "Source-supported composition drafts. Artist repertoire, audio identity, author-person identity, and publication remain separate.",
             },
             reason,
@@ -414,7 +417,29 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
             };
         }
 
-        var works = matching.Select(proof => proof.WorkMbid).Distinct().ToArray();
+        var providerCorrespondences = ProviderCorrespondences(input, title);
+        var providerWorks = providerCorrespondences
+            .Select(value => value.WorkMbid)
+            .Distinct()
+            .ToArray();
+        if (matching.Length == 0 && providerCorrespondences.Count > 0)
+        {
+            return ResolveProviderCorrespondence(
+                input,
+                title,
+                kind,
+                pointer,
+                localEvidence,
+                repertoireKeys,
+                providerCorrespondences,
+                retainedCandidates
+            );
+        }
+        var works = matching
+            .Select(proof => proof.WorkMbid)
+            .Concat(providerWorks)
+            .Distinct()
+            .ToArray();
         if (works.Length != 1)
         {
             var partition =
@@ -433,6 +458,7 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
             ) with
             {
                 RetainedCandidates = retainedCandidates,
+                ProviderCorrespondences = providerCorrespondences,
             };
         }
 
@@ -561,7 +587,8 @@ public sealed record ShadowCompositionMention(
     IReadOnlyList<ShadowCompositionWorkLink> Links,
     IReadOnlyList<string> CompetingWorkKeys,
     string Reason,
-    IReadOnlyList<ShadowCompositionCandidate>? RetainedCandidates = null
+    IReadOnlyList<ShadowCompositionCandidate>? RetainedCandidates = null,
+    IReadOnlyList<ShadowCompositionProviderCorrespondence>? ProviderCorrespondences = null
 );
 
 /// <summary>Discovery facts are inspectable without creating a catalog work link.</summary>
@@ -579,12 +606,13 @@ public sealed record ShadowCompositionWorkLink(
     string Title,
     string CorrespondenceBasis,
     string SourceClaimId,
-    string EvidenceManifestSha256,
+    string? EvidenceManifestSha256,
     JsonElement PrimaryEvidence,
     JsonElement PrimaryWriterClaims,
     JsonElement? ProviderWriterRoleAssertions,
     IdentityCandidateComparison MatchingDiagnostics,
     string Rationale,
     string CompetingIdentityAssessment,
-    IReadOnlyList<string> RemainingGaps
+    IReadOnlyList<string> RemainingGaps,
+    ShadowCompositionProviderCorrespondence? ProviderEvidence = null
 );

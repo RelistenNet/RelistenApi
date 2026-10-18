@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
@@ -457,6 +456,426 @@ public sealed class TestShadowPerformanceAdapter
             );
     }
 
+    [Test]
+    public void ProviderAccountLinksToUniqueExistingShowAndKeepsAllSetsAndRepeats()
+    {
+        var show = Guid.NewGuid();
+        var revision = ProviderInput();
+        var record = ProviderRecord(revision);
+        var adapter = Observe(CatalogShow(101, show), record);
+        var results = adapter.Process(Input(record)).ToArray();
+        var performance = (
+            (ShadowProviderPerformance[])
+                results.Single(value => value.Domain == "performances").Proposal!
+        ).Single();
+        var account = (
+            (ShadowSetlistAccount[])results.Single(value => value.Domain == "setlists").Proposal!
+        ).Single();
+
+        results.Should().OnlyContain(value => value.Outcome == "proposed");
+        account.ShowUuid.Should().Be(show);
+        account.PerformanceEntityKey.Should().Be("show:" + show.ToString("D"));
+        performance.Association.Should().Be(account.Association);
+        account.Association!.Basis.Should().Be("unique_exact_artist_date");
+        account.Association.ObservedDate!.Value.Should().Be("03-02-1970");
+        account.Association.ObservedDate.Evidence.InputRevisionUuid.Should().Be(revision.Uuid);
+        account.Association.Origin!.Evidence.InputRevisionUuid.Should().Be(revision.Uuid);
+        account.Occurrences.Should().HaveCount(3);
+        account.Occurrences.Select(value => value.EntityKey).Should().OnlyHaveUniqueItems();
+        account.ProviderAccount!.Sets.Should().HaveCount(2);
+        results
+            .Should()
+            .OnlyContain(value => value.EntityKeys.Contains("show:" + show.ToString("D")));
+    }
+
+    [TestCase(2, "1970-02-03")]
+    [TestCase(1, "1970-02-04")]
+    public void MatchingRequiresTheCatalogArtistAndCompatibleDate(long artistId, string date)
+    {
+        var record = ProviderRecord(ProviderInput());
+        var adapter = Observe(CatalogShow(101, Guid.NewGuid(), date, artistId: artistId));
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("no_compatible_catalog_performance");
+        association.Candidates.Should().BeEmpty();
+    }
+
+    [Test]
+    public void SetLabelsCannotChooseBetweenEarlyAndLatePerformances()
+    {
+        var record = ProviderRecord(ProviderInput(setName: "Late show"));
+        var early = CatalogShow(101, Guid.NewGuid(), type: "early");
+        var late = CatalogShow(102, Guid.NewGuid(), type: "late");
+        var association = ProviderAssociation(Observe(early, late), record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("ambiguous_catalog_performance");
+        association.Candidates.Should().HaveCount(2);
+        association.Discriminators.Should().BeEmpty();
+    }
+
+    [Test]
+    public void ExplicitAccountBillingSelectsLateAndRetainsTheProviderCitation()
+    {
+        var late = Guid.NewGuid();
+        var revision = ProviderInput(billing: "Late show");
+        var record = ProviderRecord(revision);
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), type: "early"),
+            CatalogShow(102, late, type: "late")
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().Be(late);
+        association
+            .Candidates.Select(value => value.ShowUuid)
+            .Should()
+            .Contain(late)
+            .And.HaveCount(2);
+        association
+            .Discriminators.Should()
+            .ContainSingle(value =>
+                value.Kind == "performance_billing"
+                && value.Value == "Late show"
+                && value.Evidence.InputRevisionUuid == revision.Uuid
+            );
+    }
+
+    [TestCase("Possibly late show")]
+    [TestCase("Early and late shows")]
+    [TestCase("Not the early show")]
+    public void UncertainOrCombinedBillingDoesNotSelectOnePerformance(string billing)
+    {
+        var record = ProviderRecord(ProviderInput(billing: billing));
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), type: "early"),
+            CatalogShow(102, Guid.NewGuid(), type: "late")
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("ambiguous_provider_performance_label");
+        association.Discriminators.Should().NotBeEmpty();
+    }
+
+    [Test]
+    public void UnknownBillingDoesNotBecomeLateByEliminatingTheKnownEarlyShow()
+    {
+        var record = ProviderRecord(ProviderInput(billing: "Late show"));
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), type: "early"),
+            CatalogShow(102, Guid.NewGuid())
+        );
+
+        ProviderAssociation(adapter, record).ShowUuid.Should().BeNull();
+    }
+
+    [Test]
+    public void ACombinedCatalogLabelCannotSupplyPositiveLateBilling()
+    {
+        var record = ProviderRecord(ProviderInput(billing: "Late show"));
+        var combined = System.Text.Json.Nodes.JsonNode.Parse(
+            CatalogShow(102, Guid.NewGuid()).GetRawText()
+        )!;
+        combined["show_context"]!["performance_label"] = "Early & Late Show";
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), type: "early"),
+            JsonSerializer.SerializeToElement(combined)
+        );
+
+        ProviderAssociation(adapter, record).ShowUuid.Should().BeNull();
+    }
+
+    [Test]
+    public void NarrativeMentionOfAnotherPerformanceDoesNotEstablishThisAccountsBilling()
+    {
+        var record = ProviderRecord(
+            ProviderInput(billing: "This recording starts after the early show")
+        );
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), type: "early"),
+            CatalogShow(102, Guid.NewGuid(), type: "late")
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("ambiguous_provider_performance_label");
+    }
+
+    [Test]
+    public void OffsetBearingCatalogDateUsesThePrintedCalendarDay()
+    {
+        var show = Guid.NewGuid();
+        var record = ProviderRecord(ProviderInput());
+        var adapter = Observe(
+            CatalogShow(101, show, "1970-02-03T00:30:00+14:00"),
+            CatalogShow(102, Guid.NewGuid(), "1970-02-02")
+        );
+
+        ProviderAssociation(adapter, record).ShowUuid.Should().Be(show);
+    }
+
+    [Test]
+    public void DirectProviderEngagementKeySurvivesDateCorrection()
+    {
+        var show = Guid.NewGuid();
+        var record = ProviderRecord(ProviderInput());
+        var key = new Relisten.Api.Models.PerformanceEngagementIdentity.Provider(
+            "setlist.fm",
+            "setlist",
+            "account-one"
+        ).PerformanceKey;
+        var adapter = Observe(
+            CatalogShow(101, show, "1970-02-04", performanceKey: key),
+            CatalogShow(102, Guid.NewGuid())
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().Be(show);
+        association.Basis.Should().Be("existing_provider_performance_key");
+        association.LiteralDate.Should().Be("03-02-1970");
+        association.Candidates.Single().LiteralDate.Should().Be("1970-02-04");
+    }
+
+    [Test]
+    public void AProviderKeyOnAnotherArtistCannotFallThroughToADateGuess()
+    {
+        var record = ProviderRecord(ProviderInput());
+        var key = new Relisten.Api.Models.PerformanceEngagementIdentity.Provider(
+            "setlist.fm",
+            "setlist",
+            "account-one"
+        ).PerformanceKey;
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), artistId: 2, performanceKey: key),
+            CatalogShow(102, Guid.NewGuid())
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("provider_performance_artist_conflict");
+    }
+
+    [Test]
+    public void ConflictingCapturedShowIdentityCannotChooseTheFirstOrLastUuid()
+    {
+        var record = ProviderRecord(ProviderInput());
+        var adapter = Observe(CatalogShow(101, Guid.NewGuid()), CatalogShow(101, Guid.NewGuid()));
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("conflicting_catalog_performance_context");
+        association
+            .Candidates.Should()
+            .HaveCount(2)
+            .And.OnlyContain(value => value.ConflictingContext);
+    }
+
+    [Test]
+    public void PartialProviderDateUsesComponentsWithoutInventingADay()
+    {
+        var show = Guid.NewGuid();
+        var record = ProviderRecord(ProviderInput(date: "1970-02-xx"));
+        var adapter = Observe(
+            CatalogShow(101, show),
+            CatalogShow(102, Guid.NewGuid(), "1970-01-01")
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().Be(show);
+        association.LiteralDate.Should().Be("1970-02-xx");
+        association.Basis.Should().Be("unique_compatible_artist_date");
+        adapter.Observe(CatalogShow(103, Guid.NewGuid(), "1970-02-04"));
+        ProviderAssociation(adapter, record).ShowUuid.Should().BeNull();
+    }
+
+    [TestCase("1970-xx-xx", "03-02-1970")]
+    [TestCase("1970-02-xx", "1970-02-xx")]
+    public void CompatiblePartialCatalogDatePreservesItsOriginalLiteral(
+        string catalogDate,
+        string providerDate
+    )
+    {
+        var show = Guid.NewGuid();
+        var record = ProviderRecord(ProviderInput(date: providerDate));
+        var association = ProviderAssociation(Observe(CatalogShow(101, show, catalogDate)), record);
+
+        association.ShowUuid.Should().Be(show);
+        association.Candidates.Single().LiteralDate.Should().Be(catalogDate);
+        association.LiteralDate.Should().Be(providerDate);
+    }
+
+    [TestCase("unknown")]
+    [TestCase("xxxx-xx-xx")]
+    [TestCase("1970-02-30")]
+    [TestCase("30-02-1970")]
+    public void MissingOrInvalidDateCannotChooseTheArtistsOnlyShow(string date)
+    {
+        var record = ProviderRecord(ProviderInput(date: date));
+        var association = ProviderAssociation(Observe(CatalogShow(101, Guid.NewGuid())), record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("missing_or_unsupported_performance_date");
+        association.LiteralDate.Should().Be(date);
+    }
+
+    [Test]
+    public void VenueNamesRetainEvidenceWithoutExcludingPossibleAliases()
+    {
+        var show = Guid.NewGuid();
+        var record = ProviderRecord(ProviderInput(venueName: "Second Hall"));
+        var adapter = Observe(
+            CatalogShow(101, Guid.NewGuid(), venueId: 11),
+            CatalogShow(102, show, venueId: 12),
+            CatalogVenue(11, "First Hall"),
+            CatalogVenue(12, "Second Hall")
+        );
+        var association = ProviderAssociation(adapter, record);
+
+        association.ShowUuid.Should().BeNull();
+        association.Reason.Should().Be("ambiguous_catalog_performance");
+        association
+            .Discriminators.Should()
+            .ContainSingle(value => value.Kind == "venue_name" && value.Value == "Second Hall");
+        association.Candidates.Should().HaveCount(2);
+    }
+
+    [Test]
+    public void LegacyAccountCanLinkToAnExistingShowWithoutRecoveringLostOrder()
+    {
+        var show = Guid.NewGuid();
+        var record = JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "setlist_sample",
+                row = new
+                {
+                    id = 8,
+                    uuid = Guid.NewGuid(),
+                    artist_id = 1,
+                    date = "1970-02-03",
+                },
+                unordered_memberships = Array.Empty<object>(),
+            }
+        );
+        var adapter = Observe(CatalogShow(101, show), record);
+        var results = adapter.Process(Input(record)).ToArray();
+        var account = (ShadowSetlistAccount)
+            results.Single(value => value.Domain == "setlists").Proposal!;
+
+        account.ShowUuid.Should().Be(show);
+        account.Ordered.Should().BeFalse();
+        account.Occurrences.Should().BeEmpty();
+        results.Single(value => value.Domain == "performances").Outcome.Should().Be("proposed");
+        results
+            .Single(value => value.Domain == "setlists")
+            .Reason.Should()
+            .Be("legacy_memberships_do_not_retain_order");
+    }
+
+    [Test]
+    public void AConflictingSourceSetCannotReplaceTheFilesCapturedPlaybackHome()
+    {
+        var source = Guid.NewGuid();
+        var show = Guid.NewGuid();
+        var track = Track(11, source, 101, show, "early", 1, "Set", "A Song");
+        var node = System.Text.Json.Nodes.JsonNode.Parse(track.GetRawText())!;
+        node["set_context"]!["source_id"] = 12;
+        track = JsonSerializer.SerializeToElement(node);
+        var result = Observe(track)
+            .Process(Input(track, Extract(track)))
+            .Single(value => value.Domain == "file_contents");
+        var contents = (ShadowFileContents)result.Proposal!;
+
+        contents.Playback.SourceUuid.Should().Be(source);
+        contents.Playback.ShowUuid.Should().Be(show);
+        contents.Home.SourceSetUuid.Should().BeNull();
+        contents.Home.Unresolved.Should().Contain("source_set_context_mismatch");
+        contents.Playback.Mp3Url.Should().Be("https://example.test/live.mp3");
+    }
+
+    private static ShadowPerformanceAssociation ProviderAssociation(
+        ShadowPerformanceAdapter adapter,
+        JsonElement record
+    ) =>
+        (
+            (ShadowProviderPerformance[])
+                adapter
+                    .Process(Input(record))
+                    .Single(value => value.Domain == "performances")
+                    .Proposal!
+        )
+            .Single()
+            .Association!;
+
+    private static JsonElement ProviderRecord(NormalizationInputRevision revision) =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "provider_input",
+                provider = revision.Resource.Provider,
+                row = new
+                {
+                    uuid = revision.Uuid,
+                    artist_id = Artist.Id,
+                    artist_uuid = Artist.Uuid,
+                },
+                input = revision,
+            },
+            Json
+        );
+
+    private static JsonElement CatalogShow(
+        long id,
+        Guid uuid,
+        string date = "1970-02-03",
+        string type = "unknown",
+        long artistId = 1,
+        string? performanceKey = null,
+        long? venueId = null
+    ) =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "source_sample",
+                row = new
+                {
+                    id = id + 10000,
+                    uuid = Guid.NewGuid(),
+                    artist_id = artistId,
+                    show_id = id,
+                    display_date = date,
+                },
+                show_context = new
+                {
+                    id,
+                    uuid,
+                    artist_id = artistId,
+                    display_date = date,
+                    performance_type = type,
+                    performance_key = performanceKey,
+                    venue_id = venueId,
+                },
+            }
+        );
+
+    private static JsonElement CatalogVenue(long id, string name) =>
+        JsonSerializer.SerializeToElement(
+            new
+            {
+                kind = "venue_sample",
+                row = new
+                {
+                    id,
+                    uuid = Guid.NewGuid(),
+                    artist_id = 1,
+                    name,
+                    location = "",
+                },
+            }
+        );
+
     private static ShadowPerformanceAdapter Observe(params JsonElement[] records)
     {
         var adapter = new ShadowPerformanceAdapter();
@@ -557,14 +976,53 @@ public sealed class TestShadowPerformanceAdapter
         );
     }
 
-    private static NormalizationInputRevision ProviderInput(string version = "setlist-fm-http-v1")
+    private static NormalizationInputRevision ProviderInput(
+        string version = "setlist-fm-http-v1",
+        string date = "03-02-1970",
+        string? billing = null,
+        string setName = "First",
+        string? venueName = null
+    )
     {
-        var payload = Encoding.UTF8.GetBytes(
-            """
-            {"page":1,"itemsPerPage":20,"total":1,"setlist":[{"id":"account-one","eventDate":"03-02-1970",
-              "sets":{"set":[{"name":"First","song":[{"name":"A Song"},{"name":"A Song"}]},
-                {"encore":1,"song":[{"name":"Another Song"}]}]}}]}
-            """
+        var payload = JsonSerializer.SerializeToUtf8Bytes(
+            new
+            {
+                page = 1,
+                itemsPerPage = 20,
+                total = 1,
+                setlist = new[]
+                {
+                    new
+                    {
+                        id = "account-one",
+                        eventDate = date,
+                        info = billing,
+                        venue = venueName == null
+                            ? null
+                            : new { id = "venue-one", name = venueName },
+                        sets = new
+                        {
+                            set = new object[]
+                            {
+                                new
+                                {
+                                    name = setName,
+                                    song = new[]
+                                    {
+                                        new { name = "A Song" },
+                                        new { name = "A Song" },
+                                    },
+                                },
+                                new { encore = 1, song = new[] { new { name = "Another Song" } } },
+                            },
+                        },
+                    },
+                },
+            },
+            new JsonSerializerOptions(Json)
+            {
+                DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            }
         );
         return new()
         {

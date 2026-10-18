@@ -2,16 +2,16 @@
 
 ## Browse and reproduce the shadow catalog
 
-The [shadow reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) shows the
-completed retained-sample run. It contains **258,987 domain outcomes with zero
-failures** from 32,593 recordings, 34,861 files, 17,073 venues, 1,696 repertoire
-songs and 432 legacy setlists, plus one retained Jerry Garcia provider input.
-An input can produce several domain outcomes; these counts are not distinct
-normalized identities. Full raw capture of 292,522 recordings and 5,064,076 files
-has started and is still running; those full-population outputs are not yet part
-of this completed sample run.
+The [full recording/venue reader](http://alecs-macbook-pro.tail09dbf.ts.net:18765/)
+shows 1,242,539 outcomes from all retained 292,523 recordings, 216,332 venues,
+16,605 repertoire songs and 38,475 legacy setlists, plus one ordered provider
+input. The [sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) adds
+Luna interpretations for 2,000 recordings to its 258,987 outcomes. Both runs
+completed without processing failures. An input can produce several outcomes;
+these counts are not distinct normalized identities or matching-accuracy results.
+Full capture and replay of roughly 5.1 million files remain in progress.
 
-The run lives in
+The original sample run lives in
 `local-dev/normalization-data/2026-10-18-shadow-catalog-v1/`.
 Its `manifest.json` reconciles every expected provider/domain outcome;
 `progress.json` and `checkpoint.json` retain progress and restart state.
@@ -57,7 +57,7 @@ python3 tools/RelistenNormalization/shadow_reader.py \
 ```
 
 Open `http://127.0.0.1:18764/` for that local instance. The current hosted instance
-uses the Tailscale link above. The reader's rebuildable `.shadow-reader.sqlite3`
+uses the Tailscale links above. The reader's rebuildable `.shadow-reader-v2.sqlite3`
 stores summaries, filters, entity keys and chunk/line pointers. Detail views read
 the original immutable chunk; the index does not copy proposal or evidence bodies.
 `/api/stats` reports run coverage and index lag, `/api/records` searches outcomes,
@@ -156,6 +156,49 @@ runs during this command.
 The [population guide](../../docs/research/2026-10-17-full-normalization/scale/shadow-population.md)
 covers capture commands, range completion and parentless files. Full-catalog
 processing and matching quality remain separate acceptance requirements.
+
+### Shared geographic identities
+
+Set `RELISTEN_SHADOW_VENUE_GEOGRAPHY` to an offline GeoNames manifest followed by
+`#sha256=<manifest-hash>`. The [geographic intake guide](venue-geography/README.md)
+covers the public reference download, attribution and pinned files. The adapter
+records the reference digest in its method version. Exact aliases, country and
+region constraints can propose a shared `geonames:<ID>` locality. Missing towns,
+conflicting constraints and multiple candidates remain unresolved. A locality
+does not identify a physical venue; premises still need provider or address
+evidence. The runner makes no geographic network requests.
+
+### Acquire composition evidence across the repertoire
+
+`shadow-compositions-acquire <request.json> <output-directory>` reads pinned
+catalog snapshots and retained MusicBrainz inputs, then advances bounded durable
+MusicBrainz commands. It uses the existing acquisition service, rate admission,
+cache and retry receipts. It needs a dedicated local normalization database with
+migrations 22 and 44; it does not initialize that database or start the API.
+Supply its URL through `RELISTEN_NORMALIZATION_DATABASE_URL`.
+
+The request contains `catalogSnapshots` and `retainedInputs` arrays of
+`{path, sha256}` objects, optional `originalCommands` in the same file-reference
+format, and `limits`. Paths resolve relative to the request file unless absolute.
+Snapshots are ordinary captured JSONL or gzip JSONL. Each retained-input file is
+a complete `NormalizationInputRevision`, including its original payload encoded
+as base64. The optional command file is an array of
+`ShadowCompositionAcquisitionCommand` values. Reuse original command UUIDs and
+requests to preserve failed or pending acquisitions.
+
+Limits name the maximum service calls, conservative new-response allowance,
+duration and retained payload bytes. Each reserved service call consumes the
+full 8 MiB response allowance even when cache reuse sends no request. Retained
+payload bytes exclude JSON/base64, checkpoints and disk overhead. These are run
+bounds; reaching one does not mean the external candidate universe is complete.
+
+The planner searches recordings with performer constraints and works by title.
+It hydrates returned alternatives and explicit recording-to-work relationships.
+A repertoire artist is never assumed to be a composer. The output retains typed
+inputs, commands, receipts and unresolved issues in `checkpoint.json` and
+`input-<UUID>.json` files. Repeating the same request and output resumes its fixed
+deadline and bounds. Provider calls and completed responses remain recoverable
+in the local database. Acquisition itself accepts no canonical identities.
 
 ## Bounded Luna credit extraction
 

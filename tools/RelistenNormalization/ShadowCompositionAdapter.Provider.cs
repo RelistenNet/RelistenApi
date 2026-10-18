@@ -15,6 +15,18 @@ public sealed partial class ShadowCompositionAdapter
     /// </summary>
     private ShadowCatalogResult ProcessProvider(ShadowCatalogInput input)
     {
+        if (providerIndexFailures.TryGetValue(input.Uuid, out var indexFailure))
+        {
+            return ShadowCatalogResult.For(
+                input,
+                "compositions",
+                "failed",
+                Version,
+                null,
+                new { inputRevisionUuid = input.Uuid, errorType = indexFailure },
+                "invalid_retained_provider_input"
+            );
+        }
         try
         {
             var revision =

@@ -172,7 +172,9 @@ public sealed partial class ShadowPerformanceAdapter
         long ArtistId,
         string? LiteralDate,
         string PerformanceType,
-        string? PerformanceLabel
+        string? PerformanceLabel,
+        string? PerformanceKey,
+        long? VenueId
     )
     {
         internal static ShowHome Read(JsonElement row) =>
@@ -182,7 +184,9 @@ public sealed partial class ShadowPerformanceAdapter
                 row.GetProperty("artist_id").GetInt64(),
                 Text(row, "display_date") ?? Text(row, "date"),
                 Text(row, "performance_type") ?? "unknown",
-                Text(row, "performance_label")
+                Text(row, "performance_label"),
+                Text(row, "performance_key"),
+                Number(row, "venue_id")
             );
     }
 }
