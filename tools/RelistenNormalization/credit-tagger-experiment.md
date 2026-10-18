@@ -69,3 +69,143 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
 ```
 
 The tests cover Unicode separators and astral codepoints, legal BIO transitions, overlapping roles, unknown and explicit-exclusion masking, grouping, JSON weight round trips, phrase/name anchoring, and interrupted fitting. They verify the experiment's contracts, not extraction accuracy.
+
+## Matched rules, trained models and cached Luna
+
+`matched_credit_experiment.py` extends this experiment with a second trained model
+and a common comparison against current rules and retained Luna results. It reads
+exactly the same 100 original fields. It starts no provider, API or database work.
+The earlier perceptron run and all frozen labels remain unchanged.
+
+The two learners use the existing raw token windows, shapes, affixes and field
+features. The perceptron learns sequence weights. `LogisticBioTagger` fits sparse
+per-role logistic emissions with legal BIO decoding; it is not a CRF. Its vocabulary
+and coefficients are fitted within each training fold. A role absent from a fold
+has an explicit constant-outside model. An unfinished optimizer fails the run.
+Restored JSON models decode without scikit-learn. Weights and vocabulary can contain
+original name tokens, so keep model artifacts in ignored storage.
+
+Group **all 100 fields before filtering** by artist, duplicate-input family, known
+recording family and exact normalized names. Then exclude incomplete/unknown fields,
+the original receipt exclusion and the additive Josh whole-field sensitivity mask
+from both fitting and scoring. The Josh mask also removes its supported transfer
+credit; it does not convert the disputed taper role into a negative. Merely masking
+old predictions would leave that disputed label in other folds' training data.
+Models saved by this command are the actual fold models used for out-of-fold
+predictions, not models fitted on the entire scored corpus.
+
+The 543-field actor bundle is a separate attachment diagnostic corpus. Its Context
+coverage does not establish exhaustive name-token labels, and its unknown actorless
+fields cannot supply negative sequences. It is not implicitly added to this fit.
+
+### Prepare authenticated inputs
+
+First retain a **separate key-free** `luna-credit-fields` export from the current
+compiled rules, as described in [the field-comparison guide](luna-credit-fields.md).
+That is a separate operator step; this Python command never starts it. Successful
+Luna outcomes must have equal successful cache replays. Missing cached outcomes
+remain unavailable even when their error objects contain local fallback data.
+
+Retain the code receipt beside that export. Use the existing JSON contract:
+`local_extractor_version`, `luna_extractor_version` and `files`, where each file
+has `path` and `sha256`. For this study the versions are
+`recording-credits-v4/recording-actor-evidence-v1` and `luna-recording-credits-v2`.
+Archive these eight files under the receipt's code root before another build can
+replace them:
+
+- `RelistenApi/Services/Normalization/RecordingCreditExtractor.cs`
+- `RelistenApi/Services/Normalization/RecordingActorEvidenceExtractor.cs`
+- `RelistenApi/Services/Normalization/LunaRecordingCreditExtractor.cs`
+- `RelistenApi/Services/Normalization/LunaRecordingCreditClient.cs`
+- `RelistenApi/Services/Data/NormalizationExtractionCacheService.cs`
+- `tools/RelistenNormalization/LunaCreditFieldEvaluationBatch.cs`
+- `tools/RelistenNormalization/bin/Debug/net10.0/RelistenApi.dll`
+- `tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll`
+
+The adapter verifies source/archive fingerprints and the saved export's DLL hashes.
+This binds the declared source snapshot and binaries; it does not independently
+prove compilation from source. It also authenticates the frozen labels, original
+fields, exclusion receipt, reservation index, selection and complete exported
+results/audit bytes. Every successful Luna answer must bind to the retained request
+for that one field, without added context, and to its cached response. No label
+answer is passed to a learner as an input feature.
+
+Use the existing locked environment under
+`local-dev/normalization-data/venue-matcher-environment-v1/`; no installation is
+needed. If running from another checkout, use the absolute path to that environment.
+Replace the comparison/code locations and hash placeholders below with the retained
+export and receipt. Hash arguments must come from the reviewed artifact copies.
+`--source-root` locates the reservation index pinned by its receipt;
+`--code-root` locates the archived source and binaries.
+
+```sh
+/path/to/primary-checkout/local-dev/normalization-data/venue-matcher-environment-v1/bin/python -B \
+  tools/RelistenNormalization/matched_credit_experiment.py \
+  --labels /path/to/primary-checkout/docs/research/2026-10-17-full-normalization/training/credits-development-v1/labels.jsonl \
+  --receipt /path/to/primary-checkout/docs/research/2026-10-17-full-normalization/training/credits-development-v1/receipt.json \
+  --fields /path/to/primary-checkout/local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/fields.jsonl \
+  --labels-sha256 5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12 \
+  --comparison /path/to/new-key-free-export \
+  --comparison-sha256 "REPLACE_WITH_MANIFEST_SHA256" \
+  --code-receipt /path/to/current-code-receipt.json \
+  --code-root /path/to/archived-code \
+  --code-sha256 "REPLACE_WITH_CODE_RECEIPT_SHA256" \
+  --exclusions /path/to/primary-checkout/docs/research/2026-10-17-full-normalization/training/credits-luna-development-v1/label-sensitivity-v2.json \
+  --exclusions-sha256 "REPLACE_WITH_EXCLUSION_RECEIPT_SHA256" \
+  --reservation-receipt /path/to/primary-checkout/docs/research/2026-10-17-full-normalization/training/people-development-v1/reservation-receipt.json \
+  --source-root /path/to/primary-checkout \
+  --output /path/to/new-ignored-output
+```
+
+### Read the result
+
+The primary metric is a field-level set of **exact literal gold name versus emitted
+display name, plus role**, limited to Taper and Transferrer. No entity decoding,
+whitespace folding or identity normalization makes names agree. Boundary diagnostics
+use explicit model/actor anchors over original Unicode code points. A supporting
+phrase is not searched for a convenient name span. Raw/display differences and
+correct raw anchors with differing display names remain separate diagnostics.
+
+`full_resolved_priority` retains the entire resolved denominator and each method's
+available field/assertion denominator. `shared_luna_available_priority` compares all
+four methods only where Luna has usable output. With the currently retained labels
+and final key-free cache coverage, the expected denominators are 84 fields/68
+assertions and 83 fields/67 assertions, respectively; the command computes them
+from authenticated inputs. It does not force data to fit those totals. Unavailable
+Luna results never become empty predictions or hidden successes.
+Local unresolved clauses also remain in each field's diagnostics and in aggregate
+outcome counts, even when its emitted name/role set is empty.
+
+Other-role and boundary diagnostics remain visible. Luna's all-role score is marked
+not evaluated because its schema supports only the two priority roles. Incomplete
+and excluded fields retain predictions and known-positive recovery; extra output in
+those fields is unscored. Exact-name grouping is a leakage precaution, not verified
+identity grouping. These drafts cannot establish unseen-identity, temporal,
+provider-format or release accuracy, and they authorize no routing or policy change.
+
+A run writes `splits.json`, `models-fold-N.json`, `predictions.jsonl`, the artifact
+hashes and a pending report. It rechecks every input/source snapshot after writing
+artifacts, then publishes `report.json` without overwriting an existing file. Failure
+or interruption leaves diagnostics without a completed report. Recovery uses a new
+output directory. The pending report remains as the publication checkpoint; only
+`report.json` marks completion. The original labels and retained exports are read-only.
+
+Run the synthetic behavior checks in the locked environment:
+
+```sh
+PYTHONPATH=tools/RelistenNormalization /path/to/locked-environment/bin/python -B -O \
+  -m unittest test_credit_tagger_experiment test_credit_logistic_model test_matched_credit_experiment
+```
+
+These tests fit synthetic inputs only. They verify masks in fitting, grouping through
+an excluded field, fold-local vocabulary, Unicode/HTML spans, unsupported/unavailable
+outcomes, source and label leakage, retained-response binding, late input changes
+and preservation of existing outputs. They do not estimate real-data accuracy.
+
+### Matched development result
+
+The [retained matched run](../../docs/research/2026-10-17-full-normalization/training/credits-development-v1/matched-experiment-v1.json) completed all five grouped folds. On the 83 jointly available resolved fields, the draft labels contain 67 taper/transferrer assertions. The current rules recover 60 with four extra predictions and seven misses. The perceptron recovers 40 with ten extra predictions and 27 misses; logistic regression recovers 36 with 16 extra predictions and 31 misses. Luna recovers 64 with three extra predictions and three misses.
+
+Luna corrects three whole-field rule errors and introduces no error in a previously correct field on that shared denominator. Both methods have errors in three fields. The full resolved population contains 84 fields and 68 assertions; Luna is unavailable for one of those fields. Sixteen incomplete or excluded fields remain outside fitting and complete scoring.
+
+These results keep the current rules as the local baseline. They do not establish that small models cannot help: the training population is small, contains few transfer credits and remains based on draft labels. Expand independently checked prose and format coverage before selecting weights or fallback routing. The key-free export adds no requests or spend; the existing extraction job remains at 200 admitted attempts and $0.0146575 in configured accounting.

@@ -3,7 +3,8 @@
 
 Each role has a constrained BIO sequence head, so one name can have several roles.
 Weights are ordinary JSON, and predictions cite original Unicode codepoint offsets.
-This module has no production writer, API client, external dependency or identity model.
+This module has no production writer, API client or identity model. Logistic fitting
+uses the locked scikit-learn environment; perceptron fitting and JSON inference do not.
 """
 
 from __future__ import annotations
@@ -300,6 +301,163 @@ class BioTagger:
                     else:
                         del self.weights[tag][feature]
         return self
+
+
+class LogisticBioTagger:
+    """Per-role logistic emissions with legal BIO decoding over raw token features.
+
+    Fitting imports scikit-learn lazily; restored JSON models need only Python.
+    The caller owns fold selection. Only complete, resolved training examples are
+    accepted, and the vocabulary is fitted solely on those examples.
+    """
+
+    VERSION = "credit-bio-logistic-development-v1"
+
+    def __init__(self):
+        self.vocabulary = []
+        self.weights = {}
+        self.intercepts = {}
+        self.metadata = None
+
+    def fit(self, examples: list[Example], role: str, *, seed=17, max_iterations=2000):
+        import warnings
+        import sklearn
+        from sklearn.exceptions import ConvergenceWarning
+        from sklearn.feature_extraction import DictVectorizer
+        from sklearn.linear_model import LogisticRegression
+
+        feature_rows, labels = [], []
+        for example in examples:
+            if not example.complete:
+                raise ValueError("Logistic training requires complete resolved fields")
+            field = example.label["field_path"].rsplit("/", 1)[-1]
+            raw_tokens = tokenize(example.text)
+            raw_features = token_features(raw_tokens, field)
+            if example.tokens != raw_tokens or example.features != raw_features:
+                raise ValueError("Logistic features must come only from original text and field")
+            feature_rows.extend(dict.fromkeys(features, 1.0) for features in raw_features)
+            labels.extend(gold_tags(example, role))
+
+        metadata = {
+            "role": role, "seed": seed, "solver": "lbfgs", "C": 1.0,
+            "tolerance": 1e-6, "max_iterations": max_iterations,
+            "sklearn_version": sklearn.__version__, "training_fields": len(examples),
+            "training_tokens": len(labels), "training_class_counts": dict(Counter(labels)),
+        }
+        if not labels:
+            vocabulary, weights, intercepts = [], {"O": {}}, {"O": 0.0}
+            metadata["training_state"] = "no_tokens"
+        else:
+            vectorizer = DictVectorizer(sparse=True, sort=True)
+            matrix = vectorizer.fit_transform(feature_rows)
+            vocabulary = vectorizer.get_feature_names_out().tolist()
+            classes = sorted(set(labels))
+            if len(classes) == 1:
+                weights, intercepts = {classes[0]: {}}, {classes[0]: 0.0}
+                metadata["training_state"] = "constant_class"
+            else:
+                classifier = LogisticRegression(
+                    solver="lbfgs", C=1.0, tol=1e-6,
+                    max_iter=max_iterations, random_state=seed,
+                )
+                # An unfinished optimizer is a failed fold, not a weaker model to publish.
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", ConvergenceWarning)
+                    try:
+                        classifier.fit(matrix, labels)
+                    except ConvergenceWarning as error:
+                        raise RuntimeError("Logistic credit model did not converge") from error
+                classes = classifier.classes_.tolist()
+                coefficients = classifier.coef_.tolist()
+                biases = classifier.intercept_.tolist()
+                if len(classes) == 2:
+                    # sklearn exports one log-odds row for binary models. Symmetric
+                    # logits reproduce its probabilities and preserve Viterbi scores.
+                    coefficients = [[-value / 2 for value in coefficients[0]],
+                                    [value / 2 for value in coefficients[0]]]
+                    biases = [-biases[0] / 2, biases[0] / 2]
+                weights = {tag: {feature: value for feature, value in zip(vocabulary, row) if value}
+                           for tag, row in zip(classes, coefficients)}
+                intercepts = dict(zip(classes, biases))
+                metadata["training_state"] = "fitted"
+                metadata["iterations"] = classifier.n_iter_.tolist()
+
+        # Publish model state only after successful fitting, so failures do not expose
+        # partially fitted vocabularies or coefficients to the experiment writer.
+        self.vocabulary, self.weights = vocabulary, weights
+        self.intercepts, self.metadata = intercepts, metadata
+        return self
+
+    def decode(self, features):
+        if self.metadata is None:
+            raise ValueError("Logistic model has not been fitted or restored")
+        if not features:
+            return []
+        scores, paths = {"<start>": 0.0}, {"<start>": []}
+        for token in features:
+            next_scores, next_paths = {}, {}
+            for tag in TAGS:
+                if tag not in self.weights:
+                    continue
+                previous_tags = [previous for previous in scores
+                                 if tag != "I" or previous in ("B", "I")]
+                if not previous_tags:
+                    continue
+                previous = max(previous_tags, key=scores.get)
+                emission = self.intercepts[tag] + sum(self.weights[tag].get(feature, 0.0) for feature in token)
+                next_scores[tag] = scores[previous] + emission
+                next_paths[tag] = paths[previous] + [tag]
+            scores, paths = next_scores, next_paths
+        return paths[max(scores, key=scores.get)]
+
+    def to_json(self):
+        """Return a JSON-safe model artifact, including learned raw feature vocabulary."""
+        if self.metadata is None:
+            raise ValueError("Logistic model has not been fitted or restored")
+        return {
+            "version": self.VERSION, "tokenizer_version": TOKENIZER_VERSION,
+            "features_version": FEATURES_VERSION, "vocabulary": list(self.vocabulary),
+            "classes": [tag for tag in TAGS if tag in self.weights],
+            "weights": {tag: dict(row) for tag, row in self.weights.items()},
+            "intercepts": dict(self.intercepts), "metadata": dict(self.metadata),
+        }
+
+    @classmethod
+    def from_json(cls, artifact):
+        """Restore the exact emission scores and legal decoder from a JSON artifact."""
+        import math
+
+        if (artifact["version"] != cls.VERSION
+                or artifact["tokenizer_version"] != TOKENIZER_VERSION
+                or artifact["features_version"] != FEATURES_VERSION):
+            raise ValueError("Unsupported logistic credit model version")
+        vocabulary = artifact["vocabulary"]
+        classes = artifact["classes"]
+        if (len(vocabulary) != len(set(vocabulary)) or not classes
+                or len(classes) != len(set(classes)) or not set(classes) <= set(TAGS)
+                or not set(classes) & {"O", "B"}
+                or set(artifact["weights"]) != set(classes)
+                or set(artifact["intercepts"]) != set(classes)):
+            raise ValueError("Invalid logistic model vocabulary or classes")
+        known_features = set(vocabulary)
+        for tag in classes:
+            row = artifact["weights"][tag]
+            if (not row.keys() <= known_features
+                    or not all(math.isfinite(value) for value in row.values())
+                    or not math.isfinite(artifact["intercepts"][tag])):
+                raise ValueError("Invalid logistic model emission weights")
+        model = cls()
+        model.vocabulary = list(vocabulary)
+        model.weights = {tag: dict(artifact["weights"][tag]) for tag in classes}
+        model.intercepts = dict(artifact["intercepts"])
+        model.metadata = dict(artifact["metadata"])
+        return model
+
+
+def fit_logistic_models(examples, roles, *, seed=17, max_iterations=2000):
+    """Fit independent heads on the caller's training fold, including absent roles."""
+    return {role: LogisticBioTagger().fit(examples, role, seed=seed, max_iterations=max_iterations)
+            for role in roles}
 
 
 def predict(models: dict[str, BioTagger], example: Example):

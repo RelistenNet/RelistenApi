@@ -1,0 +1,260 @@
+{
+  "schema_version": "matched-credit-development-receipt-v1",
+  "state": "completed_development_only",
+  "artifact_base": "local-dev/normalization-data/2026-10-17-matched-credit-v1",
+  "production_authorized": false,
+  "inputs": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/current-code-receipt.json",
+      "bytes": 1779,
+      "sha256": "f958afedc9bdd88d2dbc91918a44d861f77f439400c046241d96e727843b1354"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/current-extraction/manifest.json",
+      "bytes": 57131,
+      "sha256": "b9246be95b5253cc785577d53fe021effc9d36845809e4b68f9f8aa9595b3548"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/model-execution-terminal.json",
+      "bytes": 3394,
+      "sha256": "869288146096209221b2c45322cefc1f2fc26e5a0b8426c880f8c00c121d556c"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/report.json",
+      "bytes": 51200,
+      "sha256": "e963d5f933b9cefd9caebc30ca0177e1d08dd844cabea9fc80be304915ac930e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/artifacts.json",
+      "bytes": 1054,
+      "sha256": "77440c1384297b322a336d678ca3c2ed59411e6fe9722bf634240f45ca2aab67"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/splits.json",
+      "bytes": 17362,
+      "sha256": "a64d137f770dcfe5702cc6ca44f4303eef7bc97933906f4a7626e7cbbb59546d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/predictions.jsonl",
+      "bytes": 88742,
+      "sha256": "78159fb3c0f755a2aebb1c3717fb17d2139ec22767818c0ba55dba435f59ac42"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/models-fold-0.json",
+      "bytes": 6432651,
+      "sha256": "cdaed400017c21d35e790e052efcc6e8a11630473c48c210060d529887b01324"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/models-fold-1.json",
+      "bytes": 5376888,
+      "sha256": "210136d5e23ddd7556bc799baf6199365fa90b7c699d202d164262ce1ec01700"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/models-fold-2.json",
+      "bytes": 5977164,
+      "sha256": "452b2e4ab1ac13dcca5296ef6b50c23c93170a01467029637412395a3aec1b61"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/models-fold-3.json",
+      "bytes": 6744816,
+      "sha256": "df56948f3a4baca1ab3b577c3a2cecb524f52e6d4550bf62628fe28dc2da9f14"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-matched-credit-v1/models-v1/models-fold-4.json",
+      "bytes": 6430287,
+      "sha256": "f4f33cb5f5227b6a3394a448e9ff8af1782895e1d3f0abea319a5a4bd466f9fe"
+    }
+  ],
+  "fields": 100,
+  "resolved_fields": 84,
+  "group_components": 72,
+  "versions": {
+    "features": "token-window-3-shape-affix-field-v1",
+    "local": "recording-credits-v4/recording-actor-evidence-v1",
+    "logistic": "credit-bio-logistic-development-v1",
+    "luna": "luna-recording-credits-v2",
+    "perceptron": "credit-bio-perceptron-development-v1",
+    "tokenizer": "unicode-word-or-punctuation-v1"
+  },
+  "environment": {
+    "executable": "/Users/alecgorge/code/relisten/RelistenApi/local-dev/normalization-data/venue-matcher-environment-v1/bin/python",
+    "packages": {
+      "cloudpickle": "3.1.2",
+      "joblib": "1.6.0",
+      "narwhals": "2.27.1",
+      "numpy": "2.5.4",
+      "scikit-learn": "1.9.1",
+      "scipy": "1.18.1",
+      "threadpoolctl": "3.7.0"
+    },
+    "python": "3.14.6"
+  },
+  "full_resolved_priority": {
+    "local": {
+      "available_fields": 84,
+      "exact_fields": 77,
+      "f1": 0.9090909090909091,
+      "false_negative": 8,
+      "false_positive": 4,
+      "gold_assertions": 68,
+      "precision": 0.9375,
+      "recall": 0.8823529411764706,
+      "true_positive": 60,
+      "unavailable_fields": 0
+    },
+    "logistic": {
+      "available_fields": 84,
+      "exact_fields": 57,
+      "f1": 0.6,
+      "false_negative": 32,
+      "false_positive": 16,
+      "gold_assertions": 68,
+      "precision": 0.6923076923076923,
+      "recall": 0.5294117647058824,
+      "true_positive": 36,
+      "unavailable_fields": 0
+    },
+    "luna": {
+      "available_fields": 83,
+      "exact_fields": 80,
+      "f1": 0.9552238805970149,
+      "false_negative": 3,
+      "false_positive": 3,
+      "gold_assertions": 67,
+      "precision": 0.9552238805970149,
+      "recall": 0.9552238805970149,
+      "true_positive": 64,
+      "unavailable_fields": 1
+    },
+    "perceptron": {
+      "available_fields": 84,
+      "exact_fields": 59,
+      "f1": 0.6779661016949152,
+      "false_negative": 28,
+      "false_positive": 10,
+      "gold_assertions": 68,
+      "precision": 0.8,
+      "recall": 0.5882352941176471,
+      "true_positive": 40,
+      "unavailable_fields": 0
+    }
+  },
+  "shared_luna_available_priority": {
+    "fields": 83,
+    "gold_assertions": 67,
+    "methods": {
+      "local": {
+        "available_fields": 83,
+        "exact_fields": 77,
+        "f1": 0.916030534351145,
+        "false_negative": 7,
+        "false_positive": 4,
+        "gold_assertions": 67,
+        "precision": 0.9375,
+        "recall": 0.8955223880597015,
+        "true_positive": 60,
+        "unavailable_fields": 0
+      },
+      "logistic": {
+        "available_fields": 83,
+        "exact_fields": 57,
+        "f1": 0.6050420168067226,
+        "false_negative": 31,
+        "false_positive": 16,
+        "gold_assertions": 67,
+        "precision": 0.6923076923076923,
+        "recall": 0.5373134328358209,
+        "true_positive": 36,
+        "unavailable_fields": 0
+      },
+      "luna": {
+        "available_fields": 83,
+        "exact_fields": 80,
+        "f1": 0.9552238805970149,
+        "false_negative": 3,
+        "false_positive": 3,
+        "gold_assertions": 67,
+        "precision": 0.9552238805970149,
+        "recall": 0.9552238805970149,
+        "true_positive": 64,
+        "unavailable_fields": 0
+      },
+      "perceptron": {
+        "available_fields": 83,
+        "exact_fields": 59,
+        "f1": 0.6837606837606838,
+        "false_negative": 27,
+        "false_positive": 10,
+        "gold_assertions": 67,
+        "precision": 0.8,
+        "recall": 0.5970149253731343,
+        "true_positive": 40,
+        "unavailable_fields": 0
+      }
+    }
+  },
+  "shared_whole_field_changes": {
+    "both_correct": 77,
+    "luna_corrects_local": 3,
+    "luna_breaks_local": 0,
+    "both_have_errors": 3
+  },
+  "grouping_audits": [
+    {
+      "artists_overlap": 0,
+      "duplicate_families_overlap": 0,
+      "exact_lexical_names_overlap": 0,
+      "recording_families_overlap": 0
+    },
+    {
+      "artists_overlap": 0,
+      "duplicate_families_overlap": 0,
+      "exact_lexical_names_overlap": 0,
+      "recording_families_overlap": 0
+    },
+    {
+      "artists_overlap": 0,
+      "duplicate_families_overlap": 0,
+      "exact_lexical_names_overlap": 0,
+      "recording_families_overlap": 0
+    },
+    {
+      "artists_overlap": 0,
+      "duplicate_families_overlap": 0,
+      "exact_lexical_names_overlap": 0,
+      "recording_families_overlap": 0
+    },
+    {
+      "artists_overlap": 0,
+      "duplicate_families_overlap": 0,
+      "exact_lexical_names_overlap": 0,
+      "recording_families_overlap": 0
+    }
+  ],
+  "provider_outcomes": {
+    "extracted": 97,
+    "no_text": 1,
+    "unresolved": 2
+  },
+  "job_before_and_after": {
+    "admitted_attempts": 200,
+    "accounted_usd": "0.0146575",
+    "cap_usd": "5",
+    "maximum_total_attempts": 200,
+    "api_key_removed": true,
+    "new_paid_attempts": 0
+  },
+  "limits": [
+    "Draft development labels, with prior model/parser exposure; no untouched evaluation or identity accuracy claim.",
+    "Only complete resolved fields train or supply negative/scored labels. Excluded and unknown fields retain predictions and known positives only.",
+    "Folds group artists, duplicate/recording families and exact names, not verified complete alias identities. Separate unseen-identity, temporal and format suites remain required.",
+    "All-role diagnostics include roles Luna's two-role schema does not support and are not a fair Luna comparison.",
+    "Boundary misses can reflect unavailable explicit anchors or raw/display differences. They are separate from exact emitted-name/role results; no string-based anchor repair is performed.",
+    "Unavailable Luna results are not empty predictions and their embedded local fallback is not scored as Luna. This command changes no fallback routing or policy.",
+    "Code receipts bind the declared source snapshot and saved-run DLL hashes; they do not independently prove source-to-binary compilation.",
+    "The 543-field actor corpus was not used for fitting; its attachment coverage is not exhaustive BIO/name-role annotation.",
+    "The two trained models do not outperform the current rules on these drafts. Improve labeled coverage before selecting production weights; no routing or acceptance policy changed."
+  ]
+}
