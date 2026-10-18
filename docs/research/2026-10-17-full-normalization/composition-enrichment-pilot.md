@@ -1,0 +1,61 @@
+# Retained MusicBrainz development pilot
+
+The pilot retained two explicit **external recording-to-work bridges** and work-level author relationships. It did not establish a bridge from a Relisten recording or repertoire row to either external recording. Search titles, writer resemblance and result rank remain candidate retrieval evidence.
+
+The [manifest](composition-enrichment-pilot-manifest.json) records 11 ordinary API attempts: ten HTTP 200 responses and one HTTP 503. Exact response bodies, request metadata and response headers remain in the ignored directory [local-dev/normalization-data/2026-10-17-composition-work-evidence-v1](../../../local-dev/normalization-data/2026-10-17-composition-work-evidence-v1/). Every body, request receipt and response receipt has a SHA-256 in the manifest. Twenty selected scalar assertions were checked against their exact JSON Pointers before writing it.
+
+All requests belong to development acquisition. Queries used only the existing development references for *Johnny B. Goode* / Chuck Berry and *Not Fade Away* / Buddy Holly and Norman Petty, including the development shared-work Grateful Dead context. No reserved-case inputs were inspected. No database writes, runtime code changes, paid requests, accepted identity links or resolved pair labels were created. The earlier [readiness audit](composition-readiness.md) remains a separate frozen record of the pre-acquisition inputs.
+
+## What the responses establish
+
+Response numbers below address `requests/NNN-body.json` under the raw directory; hashes and complete URLs are in the manifest. These are provider assertions with exact support, not independent historical adjudication.
+
+- **Johnny B. Goode bridge:** response 002 `/id` identifies recording `0f18e773-491e-490d-9b6d-bb96bf15eae5`. `/relations/0/type` is `performance`, and `/relations/0/work/id` points to work `6671bffb-f9cc-3ea9-96e4-91cdc8d746a6`. Response 003 `/iswcs/0` reports `T-070.939.624-6`. Its `/relations/0` attributes the composer role and `/relations/1` the lyricist role to Chuck Berry, external artist `592a3b6d-c42b-4567-99c9-ecf63bd66499`, typed `Person`. Preserve both roles; do not reduce them to an inferred generic credit.
+- **Not Fade Away bridge:** response 009 `/relations/0/work/id` links recording `1e36a0d0-b920-495c-8650-ceefcd5bca8f` to work `6394bda2-57a6-3578-badc-f3043d4f0ba8`. Response 005 reports ISWC `T-070.153.023-5` and generic writer relationships to Buddy Holly (`d352f5dd-3023-4565-a7bb-52396bf8821d`) and Norman Petty (`068538c3-e73e-44b3-a3c0-990dd5f029dc`). Both embedded author entities are typed `Person`. Those generic relationships do not distinguish music from lyrics.
+- **A group performer remains separate:** response 009 `/artist-credit/0/artist/id` identifies Grateful Dead as the recording's performer. Response 011 `/id` and `/type` independently identify `6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6` as `Group`. Neither response makes that group a writer of the work. No group-author example was acquired.
+- **Same-title alternatives remain unresolved:** responses 006 and 007 identify work records `d4fcb7e6-d9c5-45bb-ad7b-665de2a13b39` and `160191af-b343-4ee7-92de-cd05fd67d2d8`, both titled *Not Fade Away*, with no returned author relationships or ISWCs. Different MBIDs alone do not prove different compositions; duplicate records and missing metadata remain possible. These are useful ambiguous candidates, not hard-negative labels.
+- **Failure supplies no negative identity evidence:** response 010 is a retained HTTP 503 from the Buddy Holly artist lookup. Its error body reports a busy server, and headers identify the global rate-limit zone with `Retry-After: 0`. It does not establish a missing artist or an empty alias list. The partial author information already present in response 005 remains evidence from that work response; the failed lookup adds no person facts.
+
+The first five Johnny B. Goode recording search results all scored 100, while the reported count was 327. The Grateful Dead recording search likewise returned five score-100 results from a reported count of 487. Recording lookups selected an MBID for inspection, not as a catalog match. The work search reported five results, including reprise/fuzzy title variants. Even a fully returned search page supplies no universal uniqueness or authorship guarantee.
+
+## Request discipline and limits
+
+The [official API contract](https://musicbrainz.org/doc/MusicBrainz_API) and [rate rules](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting) require a meaningful User-Agent and at most one request per second. The pilot sent `RelistenNormalizationEvidenceAudit/0.1 (https://relisten.net)`, used GET without authentication, and enforced at least 1.25 seconds between attempt starts. The measured minimum was 1.250536 seconds. There were no automatic retries or redirects; the failed request was retained rather than retried. A separate subsequent request completed successfully. Acquisition stopped at 11 attempts, below the authorized maximum of 12.
+
+Responses totaled 279,920 bytes. Each response was bounded at 8 MiB. The work search alone returned 243,322 bytes because it embedded many performance relationships; a small result count does not imply a small response. The capture helper and raw manifest are retained beside the bytes. These limits describe this pilot, not measured production capacity or a deployment plan.
+
+## Proposed resource and capture contract
+
+The following resources and versions are **proposed additions**, not callable routes in the current decoder. The existing `NormalizationResourceKey`, `NormalizationProviderInputService.FetchAsync`, `NormalizationProviderResponse<T>` and `NormalizationEvidenceService.CaptureInputAsync` provide the retention boundary.
+
+- `("musicbrainz.org", "work", "<lowercase MBID D>")`, capture `musicbrainz-work-json-v1`: fixed JSON work lookup with `inc=artist-rels aliases`.
+- `("musicbrainz.org", "recording", "<lowercase MBID D>")`, capture `musicbrainz-recording-work-json-v1`: fixed JSON recording lookup with `inc=work-rels artist-credits`.
+- `("musicbrainz.org", "artist", "<lowercase MBID D>")`, capture `musicbrainz-artist-json-v1`: fixed JSON artist lookup with `inc=aliases`.
+- `("musicbrainz.org", "search", "<canonical JSON tuple>")`, capture `musicbrainz-search-json-v1`: the tuple contains entity kind, exact query, limit and offset. Preserve query syntax and choose one documented serializer/escaping contract. Include request-profile changes in a new capture version; never let a narrow response silently replace a fuller profile under the same version.
+
+Validate the requested MBID and root response identity before successful retention. Decode exactly retained bytes, not a reconstructed object. Read the resource generation before HTTP; use the existing capture CAS so a slow response remains retained but cannot replace a newer current input. Captures commit outside downstream publication transactions. Reuse valid retained inputs rather than polling every pending owner and continually advancing equal-byte generations.
+
+The current evidence fetch model stores observation time and an opaque provider revision, but not complete HTTP URL/status/header metadata. Do not overload `ProviderRevision` with a JSON receipt. A runtime adapter must preserve request-profile provenance and any required HTTP receipt at fetch scope; the pilot already retains those receipts separately. An error response such as 503 must not enter the successful artist/work decoder or become accepted absence. The coordinator must retain completed peer captures and expose retry/attention for failed required inputs without advancing a complete-publication watermark.
+
+For production acquisition, coordinate the provider rate across all callers sharing the egress IP; a per-owner delay is insufficient. Any broader commercial/deployment use must follow the provider's current service terms. This pilot authorizes no recurring polling or backfill.
+
+## Proposed typed observations
+
+Add a cohesive `NormalizationProviderDecoder.MusicBrainz.cs` and typed models in `NormalizationMusicBrainzObservations.cs`, with optional result members that preserve existing serialized observations when absent. These names describe the next implementation; none was added by this pilot.
+
+1. **Work observation:** root origin, qualified work identity, title, aliases/disambiguation, observed ISWCs and typed work relationships. Each credit retains role/type UUID, direction, relationship attributes and exact source-credit/target-credit wording. Unknown relationship kinds remain explicit. Project writer, composer, lyricist and arranger separately; do not classify every artist relationship as authorship. Raw registry attributes remain namespaced source assertions rather than guessed global identifiers.
+2. **Recording-work observation:** separate qualified recording and work identities, the performance relationship/type UUID, direction and attributes, with citations to the exact relation object and IDs. Preserve partial/medley/other attributes when supplied. This is an external recording assertion, not a file, canonical occurrence or catalog source assignment.
+3. **External artist observation:** source MBID, names/aliases and observed `Person`, `Group` or unknown type. An upstream resource type named `artist` does not mean a row in Relisten's `artists` table. Resolved author identities belong to normalized people, including supported groups; never copy an external MBID or catalog artist UUID into `PersonUuid` by convention. Embedded work-response artist facts and standalone artist lookups retain their own source scopes and observation times.
+4. **Search-page observation:** exact query/resource, reported count, offset, returned candidates and pagination state. Search members are candidate projections, not authoritative full work records. Incomplete pages and failed lookups must remain visible. A complete page for one query is not a complete external candidate universe.
+
+Use exact `NormalizedEvidenceReference` locators only after the raw bytes have an actual evidence-store input revision UUID. The pilot citations use response number, SHA-256 and JSON Pointer; they do not invent database revision IDs.
+
+The [relationship documentation](https://musicbrainz.org/relationships/artist-work) distinguishes writer, composer, lyricist and arranger. It does not assert that every work's relationship list is exhaustive. All pilot works therefore have unknown complete authorship: retain supported partial credits, but do not set `CompleteAuthorship=true` from the returned list. A qualified work-identity route can remain available when an explicit source bridge supports it; the title-and-complete-authorship route remains unavailable for these inputs.
+
+## Coupled resolver work and verification
+
+Implement the adapter, pure decoder and observation models first; then build the evidence-backed multi-candidate resolver around the existing owner observations, candidate epochs and original input clocks. An explicit MusicBrainz recording-to-work relationship is useful only after the repertoire/recording claim has its own supported connection to that external recording. None was established in this pilot. New external arrivals cannot be detected by an unchanged local input clock until the provider is refreshed; do not claim transactionally complete external negatives from these point-in-time public API responses.
+
+Required public-boundary checks include root-ID mismatch and unsupported capture profile; distinct composer/lyricist/generic writer roles; person/group and catalog-artist separation; performance/partial/medley attributes; missing versus empty relationships; unknown completeness; bounded search pages and oversized bodies; 503 without false absence; retained capture surviving downstream rollback; stale generation CAS; same-title alternatives left unresolved; and refusal to accept a catalog link from title, author resemblance or search rank alone.
+
+Independent development labels and separate adjudicated evaluation families remain required before automatic acceptance. The retained pilot demonstrates available source fields and failure behavior; it supplies no accuracy result or acceptance policy.

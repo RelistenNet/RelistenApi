@@ -1,0 +1,467 @@
+{
+  "schema_version": "musicbrainz-composition-development-pilot-v1",
+  "partition": "development_acquisition",
+  "seed_development_references": [
+    "reference:bobdylan:not-fade-away",
+    "reference:bobdylan:johnny-b-goode"
+  ],
+  "scope": "Retained external source assertions; no accepted catalog matching or complete-authorship labels.",
+  "raw_root": "local-dev/normalization-data/2026-10-17-composition-work-evidence-v1",
+  "user_agent": "RelistenNormalizationEvidenceAudit/0.1 (https://relisten.net)",
+  "http_method": "GET",
+  "maximum_api_attempts": 12,
+  "actual_api_attempts": 11,
+  "automatic_retries": 0,
+  "redirect_following": false,
+  "minimum_start_interval_seconds": 1.250536,
+  "per_response_byte_limit": 8388608,
+  "total_response_bytes": 279920,
+  "http_status_counts": {
+    "200": 10,
+    "503": 1
+  },
+  "capture_helper_sha256": "3f9ccbe3a13971842da01293e535561fd664504c35fa593862270d6cea0cc1ef",
+  "requests": [
+    {
+      "ordinal": 1,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/recording/?query=recording%3A%22Johnny+B.+Goode%22+AND+artist%3A%22Chuck+Berry%22&limit=5&offset=0&fmt=json",
+      "route": "recording/",
+      "parameters": {
+        "query": "recording:\"Johnny B. Goode\" AND artist:\"Chuck Berry\"",
+        "limit": "5",
+        "offset": "0",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:23:43.087703+00:00",
+      "completed_at_utc": "2026-10-18T00:23:43.838507+00:00",
+      "status": 200,
+      "body_path": "requests/001-body.json",
+      "body_bytes": 14297,
+      "body_sha256": "8bff216aaffbad27e38163cd8f51d6ba2d0900ae9f1d096d71d27f4dbd622984",
+      "complete_body": true,
+      "receipt_path": "requests/001-receipt.json",
+      "receipt_sha256": "4a78f930c5ba0c230f915aecc99d7f73279c7cca1c74e13080d2318b78e0f199",
+      "request_path": "requests/001-request.json",
+      "request_sha256": "f766864636c270e8e7af0f54f15637b6c250a07f14ad22ffe77573f79e039643"
+    },
+    {
+      "ordinal": 2,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/recording/0f18e773-491e-490d-9b6d-bb96bf15eae5?inc=work-rels+artist-credits&fmt=json",
+      "route": "recording/0f18e773-491e-490d-9b6d-bb96bf15eae5",
+      "parameters": {
+        "inc": "work-rels artist-credits",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:23:53.566154+00:00",
+      "completed_at_utc": "2026-10-18T00:23:54.218782+00:00",
+      "status": 200,
+      "body_path": "requests/002-body.json",
+      "body_bytes": 914,
+      "body_sha256": "2e270f0733a68d11fe083367ed8264405768e6d15514c4baaa94c05e1cf85155",
+      "complete_body": true,
+      "receipt_path": "requests/002-receipt.json",
+      "receipt_sha256": "769be5fc60dd9778dc212499dcb497678d27113eb574482f0e8a86bee61863d4",
+      "request_path": "requests/002-request.json",
+      "request_sha256": "9731980fdabd52c778219164aefbceb08ee7e19b8462de59b106ca9dbd1f4871"
+    },
+    {
+      "ordinal": 3,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/work/6671bffb-f9cc-3ea9-96e4-91cdc8d746a6?inc=artist-rels+aliases&fmt=json",
+      "route": "work/6671bffb-f9cc-3ea9-96e4-91cdc8d746a6",
+      "parameters": {
+        "inc": "artist-rels aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:23:59.430442+00:00",
+      "completed_at_utc": "2026-10-18T00:24:00.189047+00:00",
+      "status": 200,
+      "body_path": "requests/003-body.json",
+      "body_bytes": 4591,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "complete_body": true,
+      "receipt_path": "requests/003-receipt.json",
+      "receipt_sha256": "a0ed164cd16bde0ab7d55d018bb93cb650da9725964c32a33e6993d035b455ef",
+      "request_path": "requests/003-request.json",
+      "request_sha256": "9a52bbca7d2ca3745370a66aa1bcd8bab0448b3d381518eab2b7cf039ed6255b"
+    },
+    {
+      "ordinal": 4,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/work/?query=work%3A%22Not+Fade+Away%22&limit=10&offset=0&fmt=json",
+      "route": "work/",
+      "parameters": {
+        "query": "work:\"Not Fade Away\"",
+        "limit": "10",
+        "offset": "0",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:24:03.806365+00:00",
+      "completed_at_utc": "2026-10-18T00:24:05.258503+00:00",
+      "status": 200,
+      "body_path": "requests/004-body.json",
+      "body_bytes": 243322,
+      "body_sha256": "9a74bb500a1a8d74317e24d44bbbad4411d2fd9d759ac54988cf76568f9ed631",
+      "complete_body": true,
+      "receipt_path": "requests/004-receipt.json",
+      "receipt_sha256": "c21d5727b652377363754664096ee1675eab2d2ffcbb10173b2d815fea931058",
+      "request_path": "requests/004-request.json",
+      "request_sha256": "f687a2a3579441c7902ac4e55a14fd22a6a153dbc769374ade269e81b6cb7495"
+    },
+    {
+      "ordinal": 5,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/work/6394bda2-57a6-3578-badc-f3043d4f0ba8?inc=artist-rels+aliases&fmt=json",
+      "route": "work/6394bda2-57a6-3578-badc-f3043d4f0ba8",
+      "parameters": {
+        "inc": "artist-rels aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:24:37.123926+00:00",
+      "completed_at_utc": "2026-10-18T00:24:37.733951+00:00",
+      "status": 200,
+      "body_path": "requests/005-body.json",
+      "body_bytes": 3697,
+      "body_sha256": "70a964344b5b14fbb32bd6ed466e2ee126c3bda61d3c48c09eb1cc25516c5b1b",
+      "complete_body": true,
+      "receipt_path": "requests/005-receipt.json",
+      "receipt_sha256": "691ee8dd5f43fa2aea06372ff86ccd907d27ab7863315b0626873f9e43d50cb9",
+      "request_path": "requests/005-request.json",
+      "request_sha256": "e4d754fcfb0b0522e6a0280030927a1663d71e9df6920762b2ba20ff0a550e47"
+    },
+    {
+      "ordinal": 6,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/work/d4fcb7e6-d9c5-45bb-ad7b-665de2a13b39?inc=artist-rels+aliases&fmt=json",
+      "route": "work/d4fcb7e6-d9c5-45bb-ad7b-665de2a13b39",
+      "parameters": {
+        "inc": "artist-rels aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:24:38.375905+00:00",
+      "completed_at_utc": "2026-10-18T00:24:40.364236+00:00",
+      "status": 200,
+      "body_path": "requests/006-body.json",
+      "body_bytes": 238,
+      "body_sha256": "2939f90fa55ef4305cc5847b91858e24fb14e30de49ffcc8d6a14273ed53879e",
+      "complete_body": true,
+      "receipt_path": "requests/006-receipt.json",
+      "receipt_sha256": "832dd55b813d4375fdfd7f01575eff12e3cc6cab897b16a77f020baac7d1dd28",
+      "request_path": "requests/006-request.json",
+      "request_sha256": "83b329888959e1c00c8843da9902339258b774ac4e00d4d6d51028c50ac55619"
+    },
+    {
+      "ordinal": 7,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/work/160191af-b343-4ee7-92de-cd05fd67d2d8?inc=artist-rels+aliases&fmt=json",
+      "route": "work/160191af-b343-4ee7-92de-cd05fd67d2d8",
+      "parameters": {
+        "inc": "artist-rels aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:24:40.424501+00:00",
+      "completed_at_utc": "2026-10-18T00:24:41.011631+00:00",
+      "status": 200,
+      "body_path": "requests/007-body.json",
+      "body_bytes": 244,
+      "body_sha256": "68bbc7777856abc98b90021bf5831abe5f0a72744b50ade65af22e2c942da15e",
+      "complete_body": true,
+      "receipt_path": "requests/007-receipt.json",
+      "receipt_sha256": "b5e76945603f62a7f4ae8ce202b91168617260c47562b7dd9cb684031b45d71e",
+      "request_path": "requests/007-request.json",
+      "request_sha256": "79899d7fadc0776c8bcf0ebaeee25de4a0c1f45d6a3f51b5d9ec86fd3af07ff9"
+    },
+    {
+      "ordinal": 8,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/recording/?query=recording%3A%22Not+Fade+Away%22+AND+artist%3A%22Grateful+Dead%22&limit=5&offset=0&fmt=json",
+      "route": "recording/",
+      "parameters": {
+        "query": "recording:\"Not Fade Away\" AND artist:\"Grateful Dead\"",
+        "limit": "5",
+        "offset": "0",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:24:47.188641+00:00",
+      "completed_at_utc": "2026-10-18T00:24:47.801603+00:00",
+      "status": 200,
+      "body_path": "requests/008-body.json",
+      "body_bytes": 10360,
+      "body_sha256": "d649a599002921f763801b567abd1eb61171cb8e8e16376af0434f20f7cc9461",
+      "complete_body": true,
+      "receipt_path": "requests/008-receipt.json",
+      "receipt_sha256": "2553b1034d9e9cd26409939f5f5d4367bb817babde4b34baf0bc53ab5ecf2f6a",
+      "request_path": "requests/008-request.json",
+      "request_sha256": "05766db22f71da75c87aa5832138d80b6ba88888e95d5cbb92ae0e867edb6e71"
+    },
+    {
+      "ordinal": 9,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/recording/1e36a0d0-b920-495c-8650-ceefcd5bca8f?inc=work-rels+artist-credits&fmt=json",
+      "route": "recording/1e36a0d0-b920-495c-8650-ceefcd5bca8f",
+      "parameters": {
+        "inc": "work-rels artist-credits",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:25:09.828964+00:00",
+      "completed_at_utc": "2026-10-18T00:25:10.446590+00:00",
+      "status": 200,
+      "body_path": "requests/009-body.json",
+      "body_bytes": 1049,
+      "body_sha256": "6c12896620cfeb700a19e7fb7075bb71ae9c14dcc6047cc6daa6afe67d686dee",
+      "complete_body": true,
+      "receipt_path": "requests/009-receipt.json",
+      "receipt_sha256": "052d8b847002431f008ca741ccbba98e8673c9eb3ea322aa7828e8e976671a98",
+      "request_path": "requests/009-request.json",
+      "request_sha256": "49af362c5318281b0b5051b2b802c81a4032bbf364a6084a57e618558faabe3d"
+    },
+    {
+      "ordinal": 10,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/artist/d352f5dd-3023-4565-a7bb-52396bf8821d?inc=aliases&fmt=json",
+      "route": "artist/d352f5dd-3023-4565-a7bb-52396bf8821d",
+      "parameters": {
+        "inc": "aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:25:11.079500+00:00",
+      "completed_at_utc": "2026-10-18T00:25:11.643791+00:00",
+      "status": 503,
+      "body_path": "requests/010-body.json",
+      "body_bytes": 83,
+      "body_sha256": "33767dc9cc0ca702c142c290a0c6cd36949b89d483c79adc2115f80fd59850c4",
+      "complete_body": true,
+      "receipt_path": "requests/010-receipt.json",
+      "receipt_sha256": "cfa47bad202b757fa0d7cce511243dd5a25755732688e4b88fa75d1440f289c9",
+      "request_path": "requests/010-request.json",
+      "request_sha256": "37e6674802eb4e383d0dce3640f395af16cbb4edd5437382c6dfed0b2aa67259"
+    },
+    {
+      "ordinal": 11,
+      "method": "GET",
+      "url": "https://musicbrainz.org/ws/2/artist/6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6?inc=aliases&fmt=json",
+      "route": "artist/6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6",
+      "parameters": {
+        "inc": "aliases",
+        "fmt": "json"
+      },
+      "started_at_utc": "2026-10-18T00:25:12.337064+00:00",
+      "completed_at_utc": "2026-10-18T00:25:12.937958+00:00",
+      "status": 200,
+      "body_path": "requests/011-body.json",
+      "body_bytes": 1125,
+      "body_sha256": "000375ba7a2d6a0477b3391fe17f2a6a6f4f131d583274c091569cbe341df2e9",
+      "complete_body": true,
+      "receipt_path": "requests/011-receipt.json",
+      "receipt_sha256": "6843ea81bdb561fd0f17fdd2e877317bd9ed4b8d52dfcabf2a7254fcad078213",
+      "request_path": "requests/011-request.json",
+      "request_sha256": "3af118ba853c50ab8722c80952488534d6508278ef750d33546498ac9a7b62ee"
+    }
+  ],
+  "assertions": [
+    {
+      "id": "johnny-recording-id",
+      "response": 2,
+      "body_sha256": "2e270f0733a68d11fe083367ed8264405768e6d15514c4baaa94c05e1cf85155",
+      "json_pointer": "/id",
+      "value": "0f18e773-491e-490d-9b6d-bb96bf15eae5",
+      "assertion_scope": "external recording identity only"
+    },
+    {
+      "id": "johnny-recording-to-work-type",
+      "response": 2,
+      "body_sha256": "2e270f0733a68d11fe083367ed8264405768e6d15514c4baaa94c05e1cf85155",
+      "json_pointer": "/relations/0/type",
+      "value": "performance",
+      "assertion_scope": "MusicBrainz recording-to-work performance assertion"
+    },
+    {
+      "id": "johnny-recording-to-work",
+      "response": 2,
+      "body_sha256": "2e270f0733a68d11fe083367ed8264405768e6d15514c4baaa94c05e1cf85155",
+      "json_pointer": "/relations/0/work/id",
+      "value": "6671bffb-f9cc-3ea9-96e4-91cdc8d746a6",
+      "assertion_scope": "external work identity; no Relisten repertoire link accepted"
+    },
+    {
+      "id": "johnny-work-iswc",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/iswcs/0",
+      "value": "T-070.939.624-6",
+      "assertion_scope": "provider-reported ISWC"
+    },
+    {
+      "id": "johnny-composer-role",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/relations/0/type",
+      "value": "composer",
+      "assertion_scope": "MusicBrainz work-artist role"
+    },
+    {
+      "id": "johnny-composer-id",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/relations/0/artist/id",
+      "value": "592a3b6d-c42b-4567-99c9-ecf63bd66499",
+      "assertion_scope": "external artist identity, not a catalog artist UUID"
+    },
+    {
+      "id": "johnny-composer-name",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/relations/0/artist/name",
+      "value": "Chuck Berry",
+      "assertion_scope": "source name"
+    },
+    {
+      "id": "johnny-composer-kind",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/relations/0/artist/type",
+      "value": "Person",
+      "assertion_scope": "source entity type; canonical identity unresolved"
+    },
+    {
+      "id": "johnny-lyricist-role",
+      "response": 3,
+      "body_sha256": "c5ff2fd8b6f9d749597659cdb4e9916fe3c6b6097e0841f0fdddad17e4c33443",
+      "json_pointer": "/relations/1/type",
+      "value": "lyricist",
+      "assertion_scope": "distinct from composer; no complete author-set assertion"
+    },
+    {
+      "id": "nfa-recording-to-work",
+      "response": 9,
+      "body_sha256": "6c12896620cfeb700a19e7fb7075bb71ae9c14dcc6047cc6daa6afe67d686dee",
+      "json_pointer": "/relations/0/work/id",
+      "value": "6394bda2-57a6-3578-badc-f3043d4f0ba8",
+      "assertion_scope": "external performance bridge"
+    },
+    {
+      "id": "nfa-writer-role",
+      "response": 5,
+      "body_sha256": "70a964344b5b14fbb32bd6ed466e2ee126c3bda61d3c48c09eb1cc25516c5b1b",
+      "json_pointer": "/relations/0/type",
+      "value": "writer",
+      "assertion_scope": "generic writer, no composer/lyricist split inferred"
+    },
+    {
+      "id": "nfa-writer-holly",
+      "response": 5,
+      "body_sha256": "70a964344b5b14fbb32bd6ed466e2ee126c3bda61d3c48c09eb1cc25516c5b1b",
+      "json_pointer": "/relations/0/artist/id",
+      "value": "d352f5dd-3023-4565-a7bb-52396bf8821d",
+      "assertion_scope": "external author identity"
+    },
+    {
+      "id": "nfa-writer-petty",
+      "response": 5,
+      "body_sha256": "70a964344b5b14fbb32bd6ed466e2ee126c3bda61d3c48c09eb1cc25516c5b1b",
+      "json_pointer": "/relations/1/artist/id",
+      "value": "068538c3-e73e-44b3-a3c0-990dd5f029dc",
+      "assertion_scope": "external author identity"
+    },
+    {
+      "id": "nfa-work-iswc",
+      "response": 5,
+      "body_sha256": "70a964344b5b14fbb32bd6ed466e2ee126c3bda61d3c48c09eb1cc25516c5b1b",
+      "json_pointer": "/iswcs/0",
+      "value": "T-070.153.023-5",
+      "assertion_scope": "provider-reported ISWC"
+    },
+    {
+      "id": "gd-recording-performer",
+      "response": 9,
+      "body_sha256": "6c12896620cfeb700a19e7fb7075bb71ae9c14dcc6047cc6daa6afe67d686dee",
+      "json_pointer": "/artist-credit/0/artist/id",
+      "value": "6faa7ca7-0d99-4a5e-bfa6-1fd5037520c6",
+      "assertion_scope": "external recording performer, not a work author"
+    },
+    {
+      "id": "gd-group-type",
+      "response": 11,
+      "body_sha256": "000375ba7a2d6a0477b3391fe17f2a6a6f4f131d583274c091569cbe341df2e9",
+      "json_pointer": "/type",
+      "value": "Group",
+      "assertion_scope": "external artist lookup; no author role asserted"
+    },
+    {
+      "id": "same-title-alternative-one",
+      "response": 6,
+      "body_sha256": "2939f90fa55ef4305cc5847b91858e24fb14e30de49ffcc8d6a14273ed53879e",
+      "json_pointer": "/title",
+      "value": "Not Fade Away",
+      "assertion_scope": "unresolved alternative, not an adjudicated distinct-work label"
+    },
+    {
+      "id": "same-title-alternative-one-id",
+      "response": 6,
+      "body_sha256": "2939f90fa55ef4305cc5847b91858e24fb14e30de49ffcc8d6a14273ed53879e",
+      "json_pointer": "/id",
+      "value": "d4fcb7e6-d9c5-45bb-ad7b-665de2a13b39",
+      "assertion_scope": "external work record distinct ID only"
+    },
+    {
+      "id": "same-title-alternative-two",
+      "response": 7,
+      "body_sha256": "68bbc7777856abc98b90021bf5831abe5f0a72744b50ade65af22e2c942da15e",
+      "json_pointer": "/title",
+      "value": "Not Fade Away",
+      "assertion_scope": "unresolved alternative"
+    },
+    {
+      "id": "missing-author-lookup",
+      "response": 10,
+      "body_sha256": "33767dc9cc0ca702c142c290a0c6cd36949b89d483c79adc2115f80fd59850c4",
+      "json_pointer": "/error",
+      "value": "The MusicBrainz web server is currently busy. Please try again later.",
+      "assertion_scope": "transient failure, not missing-person evidence"
+    }
+  ],
+  "limitations": [
+    "Search rank and title/author resemblance do not link a Relisten repertoire row to a work.",
+    "Different work MBIDs alone do not establish that two records represent different compositions.",
+    "No source asserts exhaustive authorship; CompleteAuthorship remains unknown/false.",
+    "Group performer evidence is not group authorship; no group-author example was acquired.",
+    "Buddy Holly artist lookup returned 503; aliases from that request remain unavailable.",
+    "Search responses are point-in-time provider assertions, not transactional snapshots or eternal negative universes."
+  ],
+  "actions": {
+    "catalog_writes": 0,
+    "normalization_database_writes": 0,
+    "runtime_code_edits": 0,
+    "paid_calls": 0,
+    "policy_activation": false,
+    "resolved_pair_labels_created": 0
+  },
+  "search_pages": [
+    {
+      "response": 1,
+      "reported_count": 327,
+      "offset": 0,
+      "returned": 5,
+      "has_more_by_reported_count": true,
+      "semantic_uniqueness_proven": false
+    },
+    {
+      "response": 4,
+      "reported_count": 5,
+      "offset": 0,
+      "returned": 5,
+      "has_more_by_reported_count": false,
+      "semantic_uniqueness_proven": false
+    },
+    {
+      "response": 8,
+      "reported_count": 487,
+      "offset": 0,
+      "returned": 5,
+      "has_more_by_reported_count": true,
+      "semantic_uniqueness_proven": false
+    }
+  ]
+}
