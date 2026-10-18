@@ -22,7 +22,7 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-VERSION = "people-name-directory-v1"
+VERSION = "people-name-directory-v2"
 
 
 def name_key(name):
@@ -160,6 +160,9 @@ class DirectoryBuilder:
                 [(key, encoded(value)) for key, value in metadata.items()],
             )
             db.commit()
+        metadata.update(
+            SourceHomeEnrichment(self.run, self.output, self.minimum_free).enrich()
+        )
         return metadata
 
     def _check_space(self):
@@ -214,6 +217,86 @@ class DirectoryBuilder:
                     line,
                 ),
             )
+
+
+class SourceHomeEnrichment:
+    """Add captured recording homes without rebuilding credits or changing ownership.
+
+    Existing readers can keep serving during this explicit enrichment phase. The
+    final transaction adds all homes and its coverage metadata together. Later
+    retained source outcomes replace earlier homes, including unresolved outcomes.
+    Dates remain the original literals: no completion of partial or unknown dates.
+    """
+
+    def __init__(self, run, database, minimum_free=4.5 * 1024**3):
+        self.run = Path(run).resolve()
+        self.database = Path(database).resolve()
+        self.minimum_free = minimum_free
+
+    def enrich(self):
+        manifest_sha = hashlib.sha256(
+            (self.run / "manifest.json").read_bytes()
+        ).hexdigest()
+        with sqlite3.connect(self.database) as db:
+            expected = db.execute(
+                "SELECT value FROM metadata WHERE key='sourceManifestSha256'"
+            ).fetchone()
+            if expected is None or json.loads(expected[0]) != manifest_sha:
+                raise ValueError(
+                    "Recording homes must come from the same completed core run"
+                )
+            db.execute("""CREATE TABLE IF NOT EXISTS source_homes(
+                source_uuid TEXT PRIMARY KEY, show_uuid TEXT, literal_date TEXT,
+                performance_type TEXT, performance_label TEXT, outcome TEXT,
+                unresolved TEXT NOT NULL, basis TEXT, chunk TEXT, line INTEGER)""")
+            chunks = sorted((self.run / "performances").glob("*.jsonl.gz"))
+            results = 0
+            for chunk in chunks:
+                if shutil.disk_usage(self.database.parent).free < self.minimum_free:
+                    raise RuntimeError(
+                        "Recording home enrichment stopped to preserve the host disk reserve"
+                    )
+                with gzip.open(chunk, "rt", encoding="utf-8") as stream:
+                    for line, text in enumerate(stream, 1):
+                        record = json.loads(text)
+                        if record.get("inputKind") != "source_sample":
+                            continue
+                        proposal = record.get("proposal") or {}
+                        source_uuid = record["inputUuid"]
+                        if proposal.get("sourceUuid") not in (None, source_uuid):
+                            raise ValueError(
+                                "Captured recording home has a different source UUID"
+                            )
+                        db.execute(
+                            "INSERT OR REPLACE INTO source_homes VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (
+                                source_uuid,
+                                proposal.get("showUuid"),
+                                proposal.get("literalDate"),
+                                proposal.get("performanceType"),
+                                proposal.get("performanceLabel"),
+                                record.get("outcome"),
+                                encoded(proposal.get("unresolved", [])),
+                                record.get("evidence", {}).get("basis"),
+                                str(chunk.relative_to(self.run)),
+                                line,
+                            ),
+                        )
+                        results += 1
+            metadata = {
+                "version": VERSION,
+                "sourceHomeResults": results,
+                "sourceHomes": db.execute(
+                    "SELECT count(*) FROM source_homes"
+                ).fetchone()[0],
+                "sourceHomeChunks": len(chunks),
+            }
+            db.executemany(
+                "INSERT OR REPLACE INTO metadata VALUES(?,?)",
+                [(key, encoded(value)) for key, value in metadata.items()],
+            )
+            db.commit()
+        return metadata
 
 
 class PeopleDirectory:
@@ -353,25 +436,45 @@ class PeopleDirectory:
                         self.core_url
                         + "?"
                         + urlencode(
-                            {"domain": "credits", "entity": credit["person_key"]}
+                            {"domain": "credits", "entityKey": credit["person_key"]}
                         )
                     )
                 result["recordings"].append(
                     {
                         "sourceUuid": source_uuid,
+                        "capturedHome": self._home(db, source_uuid),
                         "credits": credits,
                         "playableFilesUrl": self.files_url
                         + "?"
                         + urlencode(
                             {
                                 "domain": "file_contents",
-                                "entity": "source:" + source_uuid,
+                                "entityKey": "source:" + source_uuid,
                             }
                         ),
                     }
                 )
             result.update(offset=offset, limit=limit)
             return result
+
+    @staticmethod
+    def _home(db, source_uuid):
+        row = db.execute(
+            "SELECT * FROM source_homes WHERE source_uuid=?", (source_uuid,)
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "showUuid": row["show_uuid"],
+            "literalDate": row["literal_date"],
+            "performanceType": row["performance_type"],
+            "performanceLabel": row["performance_label"],
+            "outcome": row["outcome"],
+            "unresolved": json.loads(row["unresolved"]),
+            "basis": row["basis"],
+            "chunk": row["chunk"],
+            "line": row["line"],
+        }
 
 
 def handler_for(directory):
@@ -423,6 +526,9 @@ def main():
     build = sub.add_parser("build")
     build.add_argument("--run", required=True)
     build.add_argument("--database", required=True)
+    homes = sub.add_parser("enrich-homes")
+    homes.add_argument("--run", required=True)
+    homes.add_argument("--database", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
     serve.add_argument("--files-url", required=True)
@@ -432,6 +538,10 @@ def main():
     args = parser.parse_args()
     if args.command == "build":
         print(encoded(DirectoryBuilder(args.run, args.database).build()), flush=True)
+    elif args.command == "enrich-homes":
+        print(
+            encoded(SourceHomeEnrichment(args.run, args.database).enrich()), flush=True
+        )
     else:
         directory = PeopleDirectory(args.database, args.files_url, args.core_url)
         print(

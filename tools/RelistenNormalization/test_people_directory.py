@@ -7,6 +7,9 @@ import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlsplit
+
+from shadow_reader import ShadowIndex
 from urllib.request import urlopen
 from http.server import ThreadingHTTPServer
 
@@ -119,7 +122,7 @@ class TestPeopleDirectory(unittest.TestCase):
         )
         self.assertTrue(
             detail["recordings"][0]["playableFilesUrl"].endswith(
-                "domain=file_contents&entity=source%3Asource-1"
+                "domain=file_contents&entityKey=source%3Asource-1"
             )
         )
         second = directory.detail(group["id"], {"offset": "1", "limit": "1"})
@@ -201,6 +204,109 @@ class TestPeopleDirectory(unittest.TestCase):
                 urlopen(base + path)
             self.assertEqual(result.exception.code, status)
             result.exception.close()
+
+    def test_recording_home_preserves_partial_dates_labels_and_source_roles(self):
+        (self.root / "performances").mkdir()
+        home = {
+            "inputKind": "source_sample",
+            "inputUuid": "source",
+            "outcome": "unresolved",
+            "proposal": {
+                "sourceUuid": "source",
+                "showUuid": "stable-show",
+                "literalDate": "1968-??-??",
+                "performanceType": "late",
+                "performanceLabel": "Late show",
+                "unresolved": ["partial_recording_date"],
+            },
+            "evidence": {"basis": "captured_catalog_assignment"},
+        }
+        with gzip.open(self.root / "performances" / "1.jsonl.gz", "wt") as stream:
+            stream.write(json.dumps(home) + "\n")
+        directory = self.build(
+            [
+                (
+                    "source",
+                    "artist",
+                    [
+                        self.credit("source", "artist", "Rob Berger", "taper"),
+                        self.credit("source", "artist", "Rob Berger", "transferrer"),
+                    ],
+                ),
+            ]
+        )
+        detail = directory.detail(group_id(name_key("Rob Berger")), {})
+        self.assertEqual(detail["recording_count"], 1)
+        recording = detail["recordings"][0]
+        self.assertEqual(recording["sourceUuid"], "source")
+        self.assertEqual(len(recording["credits"]), 2)
+        self.assertEqual(recording["capturedHome"]["literalDate"], "1968-??-??")
+        self.assertEqual(recording["capturedHome"]["performanceLabel"], "Late show")
+        self.assertEqual(recording["capturedHome"]["showUuid"], "stable-show")
+        self.assertEqual(
+            recording["capturedHome"]["unresolved"], ["partial_recording_date"]
+        )
+        self.assertEqual(recording["capturedHome"]["outcome"], "unresolved")
+
+    def test_generated_links_filter_the_actual_shadow_reader_to_the_selected_source(
+        self,
+    ):
+        directory = self.build(
+            [
+                (
+                    source,
+                    "artist",
+                    [self.credit(source, "artist", "Shared Name", "taper")],
+                )
+                for source in ("one", "two")
+            ]
+        )
+        run = self.root / "reader"
+        run.mkdir()
+        for domain in ("credits", "file_contents"):
+            (run / domain).mkdir()
+            with gzip.open(run / domain / "1.jsonl.gz", "wt") as stream:
+                for source in ("one", "two"):
+                    is_file = domain == "file_contents"
+                    input_uuid = "file-" + source if is_file else source
+                    kind = "track_sample" if is_file else "source_sample"
+                    record = {
+                        "domain": domain,
+                        "inputKey": kind + ":" + input_uuid,
+                        "inputKind": kind,
+                        "inputUuid": input_uuid,
+                        "artistUuid": "artist",
+                        "artistName": "Artist",
+                        "provider": "catalog",
+                        "outcome": "proposed",
+                        "reason": None,
+                        "method": "contract-fixture",
+                        "entityKeys": [
+                            "source:" + source
+                            if is_file
+                            else "person:" + source + ":taper"
+                        ],
+                        "proposal": {"sourceUuid": source},
+                        "evidence": {},
+                    }
+                    stream.write(json.dumps(record) + "\n")
+        reader = ShadowIndex(run)
+        reader.scan_once()
+        recording = directory.detail(group_id(name_key("Shared Name")), {"limit": "1"})[
+            "recordings"
+        ][0]
+        for link in (
+            recording["playableFilesUrl"],
+            recording["credits"][0]["sourceEvidenceUrl"],
+        ):
+            filters = {
+                key: values[-1]
+                for key, values in parse_qs(urlsplit(link).query).items()
+            }
+            response = reader.search(filters)
+            self.assertEqual(response["total"], 1)
+            result = reader.detail(response["items"][0]["id"])["record"]
+            self.assertEqual(result["proposal"]["sourceUuid"], recording["sourceUuid"])
 
 
 if __name__ == "__main__":

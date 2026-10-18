@@ -322,9 +322,38 @@
           ];
         card.append(
           node("h3", names.join(" · ")),
+          node(
+            "p",
+            [
+              r.capturedHome?.literalDate || "Date unavailable",
+              r.capturedHome?.performanceLabel ||
+                (r.capturedHome?.performanceType !== "unknown"
+                  ? r.capturedHome?.performanceType
+                  : null),
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          ),
           link("Open playable files →", r.playableFilesUrl),
           node("p", "Source " + r.sourceUuid, "muted"),
         );
+        if (r.capturedHome) {
+          const home = r.capturedHome;
+          const assignment = node("details");
+          assignment.append(
+            node("summary", "Captured show assignment"),
+            node("p", "Show " + (home.showUuid || "unavailable"), "muted"),
+          );
+          for (const issue of home.unresolved) {
+            assignment.append(
+              node(
+                "p",
+                typeof issue === "string" ? issue : JSON.stringify(issue),
+              ),
+            );
+          }
+          card.append(assignment);
+        }
         for (let c of r.credits) {
           let section = node("details"),
             summary = node("summary", c.name + " · " + c.role);
