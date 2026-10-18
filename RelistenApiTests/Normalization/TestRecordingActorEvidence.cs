@@ -188,6 +188,133 @@ public sealed class TestRecordingActorEvidence
         AssertCitations(raw, actor);
     }
 
+    [TestCase("IV", "(avery@example.test)")]
+    [TestCase("Jr.", "(avery@example.test)")]
+    [TestCase("IV", "<avery@example.test>")]
+    public void PersonalSuffixBeforeContactStaysWithItsCreditedActor(
+        string suffix,
+        string attachment
+    )
+    {
+        var raw = $"Recorded by Avery Reed, {suffix} {attachment}, Morgan Vale";
+
+        var result = Extract("description", raw);
+
+        result
+            .Credits.Select(credit => credit.Name)
+            .Should()
+            .Equal($"Avery Reed, {suffix}", "Morgan Vale");
+        var actor = Facts(result.Credits[0]);
+        actor.Anchor.Quote.Should().Be($"Avery Reed, {suffix}");
+        actor.Contacts.Should().ContainSingle().Which.Literal.Should().Be("avery@example.test");
+        actor.Kind.Should().BeNull();
+        Facts(result.Credits[1]).Contacts.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitations(raw, Facts(credit));
+        }
+    }
+
+    [TestCase("<river@example.test>", "river@example.test")]
+    [TestCase("<river&#64;example.test>", "river&#64;example.test")]
+    [TestCase("&lt;river@example.test&gt;", "river@example.test")]
+    public void AngleContactSurvivesHtmlWithoutLosingOriginalUnicodeCoordinates(
+        string attachment,
+        string literal
+    )
+    {
+        var raw = $"🎵<div>Recorded by <b>Renée&nbsp;River, IV</b> {attachment}</div>";
+
+        var result = Extract("description", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Renée River, IV");
+        credit.Evidence.Quote.Should().Contain(attachment);
+        var actor = Facts(credit);
+        actor.Anchor.Quote.Should().Be("Renée&nbsp;River, IV");
+        var contact = actor.Contacts.Should().ContainSingle().Which;
+        contact.Literal.Should().Be(literal);
+        contact.LookupKey.Should().Be("river@example.test");
+        contact.Evidence.Should().Contain(evidence => evidence.Quote == literal);
+        actor.Kind.Should().BeNull();
+        actor.Unresolved.Should().BeEmpty();
+        AssertCitations(raw, actor);
+        AssertCitation(raw, credit.Evidence);
+    }
+
+    [Test]
+    public void SharedAngleContactOutsideTheCreditClauseRemainsUnattributed()
+    {
+        const string raw = "Recorded by Alice Vale and Bob Reed; contact: <shared@example.test>";
+
+        var result = Extract("description", raw);
+
+        result.Credits.Select(credit => credit.Name).Should().Equal("Alice Vale", "Bob Reed");
+        foreach (var actor in result.Credits.Select(Facts))
+        {
+            actor.Contacts.Should().BeEmpty();
+            actor
+                .Unresolved.Should()
+                .Contain(issue =>
+                    issue.Reason == "unattributed_contact"
+                    && issue.Evidence.Any(evidence => evidence.Quote == "shared@example.test")
+                );
+            AssertCitations(raw, actor);
+        }
+    }
+
+    [TestCase("br")]
+    [TestCase("div")]
+    [TestCase("p")]
+    public void AngleContactLocalPartDoesNotBecomeAnHtmlBlockBoundary(string localPart)
+    {
+        var raw =
+            $"<div>Taped by Alice Vale <{localPart}@example.test></div><div>Transferred by Bob Reed</div>";
+
+        var result = Extract("description", raw);
+
+        result.Credits.Select(credit => credit.Name).Should().Equal("Alice Vale", "Bob Reed");
+        Facts(result.Credits[0])
+            .Contacts.Should()
+            .ContainSingle()
+            .Which.Literal.Should()
+            .Be($"{localPart}@example.test");
+        Facts(result.Credits[1]).Contacts.Should().BeEmpty();
+        foreach (var credit in result.Credits)
+        {
+            AssertCitations(raw, Facts(credit));
+        }
+    }
+
+    [TestCase("<span data-contact=\"river@example.test\">Renée River</span>")]
+    [TestCase("<span at example.test>Renée River</span>")]
+    [TestCase("<person>Renée River</person>")]
+    [TestCase("Renée River <river@example.test extra>")]
+    public void TagsAndIncompleteAngleContactsDoNotBecomeContactAttachments(string raw)
+    {
+        var result = Extract("taper", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Renée River");
+        Facts(credit).Contacts.Should().BeEmpty();
+        AssertCitations(raw, Facts(credit));
+    }
+
+    [Test]
+    public void NamedMailtoHtmlAnchorKeepsItsExistingActorAttachment()
+    {
+        const string raw = "<a href=\"mailto:river@example.test\"><b>Renée River</b></a>";
+
+        var result = Extract("taper", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Renée River");
+        var contact = Facts(credit).Contacts.Should().ContainSingle().Which;
+        contact.Literal.Should().Be("mailto:river@example.test");
+        contact.LookupKey.Should().Be("river@example.test");
+        AssertCitations(raw, Facts(credit));
+    }
+
     [TestCase("contact Bob Reed: bob@example.test", "unattributed_contact", "bob@example.test")]
     [TestCase(
         "Bob Reed profile: https://archive.org/details/@bob",

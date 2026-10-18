@@ -22,6 +22,8 @@ public sealed record RecordingActorCredit(
 /// </summary>
 public sealed class RecordingActorEvidenceExtractor
 {
+    // This version identifies the fact/ID format. The enclosing credit producer also pins the
+    // role and attachment grammar when cached output is reproduced or accepted.
     public const string Version = "recording-actor-evidence-v1";
     private const RegexOptions Options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(1);
@@ -109,7 +111,7 @@ public sealed class RecordingActorEvidenceExtractor
         NormalizationTextEvidence Evidence(int start, int length) =>
             phraseStart < 0 ? enclosing : map.Evidence(phraseStart + partStart + start, length);
 
-        foreach (var group in Parentheses(text))
+        foreach (var group in AttachmentGroups(text))
         {
             var body = text.Substring(group.Start + 1, group.Length - 2);
             var alias = Alias.Match(body);
@@ -309,7 +311,7 @@ public sealed class RecordingActorEvidenceExtractor
         var unresolved = actor.Issues.ToList();
         foreach (var hint in hints)
         {
-            // Parenthesized attachments or an HTML link whose label is this exact actor provide
+            // Bounded contact attachments or an HTML link whose label is this exact actor provide
             // local attachment evidence. Nearby standalone URLs and contacts do not.
             bool Attached(PreparedActor candidate) =>
                 !candidate.MappingUnavailable
@@ -593,7 +595,7 @@ public sealed class RecordingActorEvidenceExtractor
     private static IEnumerable<(string Text, int Start)> SplitActors(string text)
     {
         var start = 0;
-        var groups = Parentheses(text).ToArray();
+        var groups = AttachmentGroups(text).ToArray();
         var urls = Url.Matches(text).Cast<Match>().ToArray();
         var directAlias = Alias.Match(Mask(text, groups));
         foreach (Match separator in RecordingCreditExtractor.NameSeparator.Matches(text))
@@ -632,6 +634,42 @@ public sealed class RecordingActorEvidenceExtractor
             else if (text[i] == ')' && depth > 0 && --depth == 0)
             {
                 yield return (start, i - start + 1);
+            }
+        }
+    }
+
+    // An email enclosed in angle brackets is source text, even in a field that also contains
+    // HTML. Require the entire interior to be a contact so ordinary tags and attributes stay HTML.
+    internal static bool IsAngleContact(string text)
+    {
+        if (text.Length < 3 || text[0] != '<' || text[^1] != '>')
+        {
+            return false;
+        }
+        var body = WebUtility.HtmlDecode(text[1..^1]);
+        if (!body.Contains('@') || body.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+        var contact = Contact.Match(body);
+        return contact.Success && contact.Index == 0 && contact.Length == body.Length;
+    }
+
+    private static IEnumerable<(int Start, int Length)> AttachmentGroups(string text)
+    {
+        var parentheses = Parentheses(text).ToArray();
+        foreach (var group in parentheses)
+        {
+            yield return group;
+        }
+        foreach (Match angle in Regex.Matches(text, @"<[^>]*>", RegexOptions.None, Timeout))
+        {
+            if (
+                IsAngleContact(angle.Value)
+                && !parentheses.Any(group => Contains(group, angle.Index, angle.Length))
+            )
+            {
+                yield return (angle.Index, angle.Length);
             }
         }
     }
@@ -707,7 +745,12 @@ public sealed class RecordingActorEvidenceExtractor
             var visible = new StringBuilder();
             for (var i = 0; i < raw.Length; )
             {
-                if (raw[i] == '<' && raw.IndexOf('>', i) is var tagEnd && tagEnd >= 0)
+                if (
+                    raw[i] == '<'
+                    && raw.IndexOf('>', i) is var tagEnd
+                    && tagEnd >= 0
+                    && !IsAngleContact(raw[i..(tagEnd + 1)])
+                )
                 {
                     i = tagEnd + 1;
                     continue;

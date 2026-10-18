@@ -436,17 +436,22 @@ public sealed class TestNormalizationRecordingProcessor
             .BeNull();
     }
 
-    [TestCase(false)]
-    [TestCase(true)]
+    [TestCase(false, false)]
+    [TestCase(true, false)]
+    [TestCase(false, true)]
+    [TestCase(true, true)]
     public async Task OlderUnfinishedAttemptsEndExplicitlyWithoutAdmittingTheirUnfencedPreparation(
-        bool admitted
+        bool admitted,
+        bool previousCreditGrammar
     )
     {
         var source = await Source();
-        var oldVersion = NormalizationRecordingProcessor.Version.Replace(
-            "processing-v4/",
-            "processing-v1/"
-        );
+        var oldVersion = previousCreditGrammar
+            ? NormalizationRecordingProcessor.Version.Replace(
+                "recording-credits-v4/",
+                "recording-credits-v3/"
+            )
+            : NormalizationRecordingProcessor.Version.Replace("processing-v4/", "processing-v1/");
         var prepared = await Prepare(
             Guid.NewGuid(),
             source.SourceUuid,
@@ -488,14 +493,22 @@ public sealed class TestNormalizationRecordingProcessor
             .Be(NormalizationRecordingProcessingDisposition.Published);
     }
 
-    [Test]
-    public async Task OlderTerminalAttemptKeepsItsExactReplayAcrossTheVersionChange()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task OlderTerminalAttemptKeepsItsExactReplayAcrossTheVersionChange(
+        bool previousCreditGrammar
+    )
     {
         var sourceUuid = Guid.NewGuid();
         var attempt = await proposals.GetOrCreateAttemptAsync(
             Guid.NewGuid(),
             sourceUuid,
-            "catalog-recording-processing-v1/old"
+            previousCreditGrammar
+                ? NormalizationRecordingProcessor.Version.Replace(
+                    "recording-credits-v4/",
+                    "recording-credits-v3/"
+                )
+                : "catalog-recording-processing-v1/old"
         );
         var completed = await proposals.CompleteAsync(
             attempt,

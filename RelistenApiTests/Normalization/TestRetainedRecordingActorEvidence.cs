@@ -89,6 +89,38 @@ public sealed class TestRetainedRecordingActorEvidence
         one.ReferenceUuid.Should().NotBe(two.ReferenceUuid);
     }
 
+    [Test]
+    public void JsonHtmlSuffixAndAngleContactKeepTheirOriginalRetainedFieldAndStableReferences()
+    {
+        var input = Input(
+            """{"metadata":{"identifier":"actor-test","description":["🎵<div>Recorded by <b>Renée&nbsp;River, IV</b> <river&#64;example.test></div>"]},"files":[]}""",
+            "application/json"
+        );
+
+        var result = Extract(input);
+        var replay = Extract(input);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Renée River, IV");
+        credit.Evidence.JsonPointer.Should().Be("/metadata/description/0");
+        credit.Evidence.Quote.Should().Contain("<river&#64;example.test>");
+        var facts = credit.ActorFacts!;
+        facts.Version.Should().Be("recording-actor-evidence-v1");
+        facts.Anchor.Quote.Should().Be("Renée&nbsp;River, IV");
+        var contact = facts.Contacts.Should().ContainSingle().Which;
+        contact.Literal.Should().Be("river&#64;example.test");
+        contact.LookupKey.Should().Be("river@example.test");
+        facts.Kind.Should().BeNull();
+        replay.Credits.Single().ActorFacts.Should().BeEquivalentTo(facts);
+        using var document = NormalizationRetainedDocument.Open(input);
+        foreach (var citation in facts.Citations())
+        {
+            citation.InputRevisionUuid.Should().Be(input.Uuid);
+            citation.JsonPointer.Should().Be("/metadata/description/0");
+            document.ValidateEvidence(citation);
+        }
+    }
+
     private static RetainedCreditExtraction Extract(NormalizationInputRevision input) =>
         new RetainedRecordingCreditExtractor().Extract(
             input,

@@ -50,9 +50,37 @@ Proposal storage validates every nested citation against its original credited
 clause and existing account/file scope. It does not turn a valid quote into
 semantic identity authority.
 
-The raw producer is `recording-credits-v3/recording-actor-evidence-v1`.
+The raw producer is `recording-credits-v4/recording-actor-evidence-v1`.
 `retained-recording-credits-v2` and `recording-extraction-v4` fingerprint its output
 and coordinate mapping. A recorded version is part of the evidence contract.
+
+## Credit grammar and retained compatibility
+
+Credit grammar v4 keeps a personal suffix such as `, IV` or `, Jr.` with the named
+actor when a contact attachment follows it. It also preserves a complete email-shaped
+literal inside angle brackets, including in an HTML field. The contact literal omits
+the brackets; enclosing evidence preserves the original brackets, markup and entities.
+Citation offsets still select the original Unicode code points. Ordinary HTML tags
+and uncertain or shared contacts keep their existing treatment.
+
+The actor-fact format and source-local ID algorithm remain `recording-actor-evidence-v1`.
+The complete producer version includes the credit grammar and retained coordinate
+mapping. Changing the grammar therefore changes new extraction/proposal versions
+without rewriting accepted actor context or canonical identities. Existing accepted
+v1 actor facts remain readable.
+
+Completed attempts retain their exact saved replay. An unfinished recording attempt
+from a previous producer ends with `processing_version_changed`; a fresh attempt
+uses the current grammar. A previously published extraction remains audit data, but it cannot
+newly publish accepted actor context under the current producer: admission reports
+`unsupported_extraction_version`. Acceptance reproduces the original extraction
+using its authenticated retained input; it must not compare an old producer receipt
+against newly parsed output. Reevaluate and register a policy for the new extraction
+version before enabling automatic acceptance. Do not relabel an old policy artifact.
+
+Keep the [frozen development replay](../../../research/2026-10-17-full-normalization/training/actor-facts-replay-v1/README.md)
+and its labels unchanged. Run the new producer into a separate output directory so
+the original evidence and any extraction differences remain inspectable.
 
 ## Derive and authenticate one complete query
 

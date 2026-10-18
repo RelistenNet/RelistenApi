@@ -14,7 +14,7 @@ namespace Relisten.Normalization;
 public sealed class RecordingCreditExtractor
 {
     /// <summary>Persist with extraction output so cached results can be invalidated when grammar changes.</summary>
-    public const string Version = "recording-credits-v3/" + RecordingActorEvidenceExtractor.Version;
+    public const string Version = "recording-credits-v4/" + RecordingActorEvidenceExtractor.Version;
 
     private const string CreditVerbs =
         @"(?:recorded|taped|transferred|mastered|uploaded|collected|matrixed)";
@@ -38,7 +38,7 @@ public sealed class RecordingCreditExtractor
     internal static readonly Regex NameSeparator = new(
         @"\s*(?:,(?!\s*"
             + PersonalSuffix
-            + @"(?=\s*(?:$|[,;&/]|\band\b)))|;|\s+and\s+|&|\s+/\s+)\s*",
+            + @"(?=\s*(?:$|[,;&/(<]|\band\b)))|;|\s+and\s+|&|\s+/\s+)\s*",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1)
     );
@@ -378,6 +378,12 @@ internal static class RecordingText
         var start = 0;
         foreach (Match boundary in Boundaries.Matches(raw))
         {
+            // A local part such as "br" can resemble a block tag. Preserve the same complete
+            // angle contact here as in inline markup stripping and raw-coordinate mapping.
+            if (RecordingActorEvidenceExtractor.IsAngleContact(boundary.Value))
+            {
+                continue;
+            }
             var line = Read(field, raw, start, boundary.Index);
             if (line is not null)
             {
@@ -394,10 +400,16 @@ internal static class RecordingText
         }
     }
 
+    internal static string WithoutMarkup(string raw) =>
+        Tags.Replace(
+            raw,
+            match => RecordingActorEvidenceExtractor.IsAngleContact(match.Value) ? match.Value : ""
+        );
+
     private static Line? Read(string field, string raw, int start, int end)
     {
         var quote = raw[start..end];
-        var text = WebUtility.HtmlDecode(Tags.Replace(quote, "")).Trim();
+        var text = WebUtility.HtmlDecode(WithoutMarkup(quote)).Trim();
         if (text.Length == 0)
         {
             return null;
