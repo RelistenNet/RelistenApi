@@ -8,7 +8,7 @@ using Relisten.Data;
 namespace RelistenApiTests.Services;
 
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationOwnerObservations
+public sealed partial class TestNormalizationOwnerObservations
 {
     private NormalizationDomainFixture fixture = null!;
 
@@ -176,23 +176,11 @@ public sealed class TestNormalizationOwnerObservations
     }
 
     [Test]
-    public async Task MissingOwnerOrMissingCandidateCoverageCannotBeAdmitted()
+    public async Task MissingObservedOwnerCannotBeAdmitted()
     {
         var target = Subject();
         var unknown = () => Begin(target, [new(Guid.NewGuid(), 0, 0, null)]);
         await unknown.Should().ThrowAsync<ArgumentException>();
-        var owner = await Seed();
-        var original = await Observe(owner.SubjectUuid);
-        var noPool = () =>
-            fixture.Work.BeginWorkAsync(
-                Guid.NewGuid(),
-                target,
-                "observation-v1",
-                [],
-                [],
-                expectedOwnerObservations: [original]
-            );
-        await noPool.Should().ThrowAsync<ArgumentException>().WithMessage("*candidate universes*");
         (await fixture.Work.GetSubjectAsync(target)).Should().BeNull();
     }
 

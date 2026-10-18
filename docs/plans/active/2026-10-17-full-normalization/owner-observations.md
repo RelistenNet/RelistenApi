@@ -1,4 +1,4 @@
-# Observe candidate owners without creating work cycles
+# Observe factual owners without creating work cycles
 
 A recording's accepted credits depend on a person's identity. Matching that
 person can also read those credits as artist context. Both reads need freshness
@@ -12,10 +12,14 @@ set, separate from the causal dependencies required by typed references.
 ## Admit and publish the original observations
 
 `BeginWorkAsync` and `BeginContributedWorkAsync` accept the trailing optional
-`expectedOwnerObservations` parameter. Nonempty observations require consumed
-candidate universes from the same facts projection. The domain reader owns the
-choice of scopes; an owner's domain alone cannot determine which of its facts
-were consumed.
+`expectedOwnerObservations` parameter. Known-owner observations and candidate
+pool membership are independent reads. A trusted decision can observe its selected
+person and source owners without searching for candidates. Such a read needs no
+invented candidate epoch. A matching projection must still supply every candidate
+universe it actually consumes to fence new rivals and changed membership. The
+domain reader owns this complete read set; an owner's domain alone cannot identify
+which facts were consumed. Publication declares its candidate write scopes
+separately from these read dependencies.
 
 Admission locks the sorted union of the primary owner, causal dependencies and
 observed owners, after catalog clocks, candidate scopes and input resources.
@@ -62,10 +66,12 @@ also completes unchanged, its new receipt must not alone make the person
 pending again. Accepted matching changes still advance candidate generations;
 review and configuration changes still advance editorial or desired revisions.
 
-This distinction applies only to the declared, epoch-covered facts projection.
-Do not add new matching facts without transactional invalidation for their
-current rows and relationship membership. Exact in-flight checks remain strict;
-the durable pending query does not needlessly schedule settled facts.
+A receipt-only change does not schedule a published observer, including one
+without a candidate pool. Consumers must select clocks that invalidate the
+semantic facts and relationship membership they use. Known target observations
+do not replace the epochs required by a matching projection. Exact in-flight
+owner checks remain strict; the durable pending query lets unchanged processing
+settle.
 
 ## Verify and deploy
 
@@ -79,6 +85,11 @@ self-observation, each stale stamp, editorial-only changes, receipt-only pending
 behavior, contribution unions, baseline adoption, rollback and retry. Typed
 facts-reader tests must additionally prove that their selected projection and
 all clocks share one snapshot.
+
+The [pool-independent owner verification](../../../research/2026-10-17-full-normalization/scale/evidence/owner-observations-without-pools-v1.json)
+records all 29 passing owner-observation cases, including unchanged admission
+replay and stale-owner checks with no candidate search. It retains the earlier
+failing baseline separately from the corrected combined run.
 
 Apply migration 31 before consuming these tickets. Before enabling automatic
 matching, drain older work that lacks the required read set. Stop normalization

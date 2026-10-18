@@ -1,0 +1,36 @@
+{
+  "version": "owner-observations-without-pools-v1",
+  "state": "verified",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/owner-observations-without-pools-v1/execution-verification-v1/manifest.json",
+    "sha256": "4eeb66e8b020aa6a2eba31cdaba3fcdb410d4bc88b890f94a4b24fb45d39e2c1"
+  },
+  "testRuns": [
+    {
+      "run": "owner-observation-no-pool-baseline-v1",
+      "passed": 1,
+      "failed": 8,
+      "note": "The old implementation rejects valid known-owner factual reads without a candidate pool."
+    },
+    {
+      "run": "source-actor-publication-core-v3",
+      "passed": 89,
+      "failed": 0,
+      "ownerObservationCases": 29,
+      "note": "Combined public service and real nonempty56-to57 upgrade verification. Large source-alias scale cases and migration58 visibility case excluded."
+    }
+  ],
+  "behavior": [
+    "Known-owner reads can omit candidate pools they did not search. Matching readers still supply every pool actually consumed.",
+    "Admission and publication retain exact desired, editorial and publication-receipt owner checks, complete lock union and contributed allocation.",
+    "Unrelated candidate changes stale a reader that consumed that pool, while a reviewed target factual read can publish.",
+    "Original contributed admission and committed publication replay unchanged; editorial changes make published observers pending."
+  ],
+  "review": "Independent actual-source correctness and separate readability review found no issues.",
+  "compatibility": "No schema, request hash, ticket format or lock-order change.",
+  "remaining": [
+    "Full suite, source-alias capacity and catalog-cost verification.",
+    "Independent automatic matching accuracy evaluation and rollout.",
+    "No active automatic policy or production writes."
+  ]
+}

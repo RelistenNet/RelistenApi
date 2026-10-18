@@ -61,14 +61,9 @@ public sealed partial class NormalizationWorkService
                 "Supply original owner observations for the complete binding union."
             );
         }
-        // Pools fence new rivals and relationship membership, including credit owners absent
-        // from this list. The typed facts projection must select every scope it actually reads.
-        if (expected.Length > 0 && (bindings.CandidateUniverses?.Length ?? 0) == 0)
-        {
-            throw new ArgumentException(
-                "Owner observations require consumed candidate universes from the same facts snapshot."
-            );
-        }
+        // Known-owner facts and candidate-pool membership are independent reads. Typed
+        // candidate projections must declare every consumed pool to fence new rivals;
+        // a reviewed target can observe owners without inventing a search dependency.
         if (expected.Length == 0)
         {
             return;
