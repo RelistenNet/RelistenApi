@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T20:56:34.693941+00:00",
+  "scope": "Ordinary local catalog only:701sources,7826files,236songs,40setlists. Proposals and literal provider assertions, not acceptance, full production coverage, audio-recording equality or publication.",
+  "request": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-execution-v3/request.json",
+    "bytes": 9308,
+    "sha256": "dd4484769f8c377ba5306708e6c17ec9194055004292ed677acf7234c6d8f4ee"
+  },
+  "executionResult": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-execution-v3/result.json",
+    "bytes": 660,
+    "sha256": "4b9ef82118e2adee5a0af2613b7694d291339ec60744558d5eb22099892ef8c4"
+  },
+  "runManifest": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-v3/manifest.json",
+    "bytes": 6603,
+    "sha256": "b82213d7abc67ff9e116093f8f4f3b24ce0eec1c2114ac2f527e61a3bcd691b1"
+  },
+  "comparison": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-execution-v3/comparison.json",
+    "bytes": 2050,
+    "sha256": "3447d79e98fff759abe9e2d348325a37dd0c98a6de2b80c81c5d925d3b40d762"
+  },
+  "changedCompositionEvidence": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-execution-v3/changed-compositions.jsonl",
+    "bytes": 49846,
+    "sha256": "3c16d3125c57d5ea90dbf19214b1486a3431033e2f3ae4a54b3179fd2c000c60"
+  },
+  "elapsedSeconds": 7.471249209018424,
+  "exitCode": 0,
+  "outputRows": 39906,
+  "newProviderSubjects": 1325,
+  "newCatalogCompositionProposals": 11,
+  "changedCatalogSubjectKinds": {
+    "setlist_sample": 3,
+    "song_sample": 2,
+    "track_sample": 6
+  },
+  "previousCatalogProposalsUnchanged": 3,
+  "otherCatalogDomainChanges": 0,
+  "checkedPlaybackFiles": 7826,
+  "citations": {
+    "exactProviderPointers": 245357,
+    "exactQualifiedProviderIdentities": 42346,
+    "exactObservedProviderValues": 147119,
+    "exactProviderUnicodeSpans": 18,
+    "changedDictionaryOrSetlistTitlePointers": 56,
+    "changedFileTitleSpans": 6
+  },
+  "citationsOutsideProviderWave": [],
+  "explicitWorkTargetsWithoutLookup": [
+    "50288013-333d-3fe2-95c2-7911f34ae40f"
+  ],
+  "reader": {
+    "replacement": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-local-reader-execution-v3/replacement.json",
+      "bytes": 1010,
+      "sha256": "24ce60051548040ff0b0e93551ee95182a952dfaafa2964980276d0ccc6a7a5e"
+    },
+    "stats": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-local-reader-execution-v3/phone-stats.json",
+      "bytes": 36419,
+      "sha256": "709febde76fc22786fcd9fe8460ff2de96b87cc1f7301ee64954037c98b7abc5"
+    },
+    "url": "http://alecs-macbook-pro.tail09dbf.ts.net:18766/",
+    "indexedResults": 39906,
+    "indexLag": 0,
+    "failedChunks": 0,
+    "queriesVerified": [
+      "Jerry Garcia Band file interpretations",
+      "Aadam Jacobs credits",
+      "Crazy Fingers composition proposals"
+    ]
+  },
+  "qualification": "Local shadow proposals with literal retained citations. No production writes, policy activation, current-generation assertion or full-population accuracy claim.",
+  "independentReview": {
+    "path": "/tmp/normalization-local-provider-wave-v3-independent-review-v1/manifest.json",
+    "bytes": 2262,
+    "sha256": "e9804f32b77b2c5c6d4b56be19d423b18c36e4157c84435464b1cb332529a73a",
+    "conclusion": "No remaining observed output-integrity failure in bounded delta/citation/playback checks; reader replacement cleared. Not production qualification."
+  }
+}

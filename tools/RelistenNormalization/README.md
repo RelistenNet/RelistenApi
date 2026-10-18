@@ -87,7 +87,7 @@ clear filters and inspect related rows across artists and domains:
 `catalog:unattributed` preserves missing importer provenance. `playback:` labels
 identify the captured audio host; an artist's configured providers alone do not
 identify which importer produced a row. The [shadow delivery plan](../../docs/plans/active/2026-10-17-full-normalization/shadow-delivery.md)
-tracks the remaining full-population capture, provider coverage and audits.
+tracks the remaining full-file processing, provider coverage and audits.
 
 ## Credit and file-title extraction
 

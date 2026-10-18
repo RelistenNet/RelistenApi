@@ -46,9 +46,9 @@ files.
 The [Jerry/Aadam reader](http://alecs-macbook-pro.tail09dbf.ts.net:18766/)
 processes 701 local recordings and 7,826 files in a separate catalog namespace.
 It includes 348 recordings from six Jerry projects and 299 selected Aadam Jacobs
-recordings across 252 artists. All 35,931 outcomes are indexed. The independent
-audit verified every file's playback and ownership coordinates, all 236
-dictionary songs and 404 unordered memberships. Local numeric IDs must never
+recordings across 252 artists. All 39,906 outcomes are indexed, including 5,583
+separate provider-context results. The independent audit verified every file's
+playback and ownership coordinates, all 236 dictionary songs and 404 unordered memberships. Local numeric IDs must never
 be combined with production IDs.
 
 The audit exposed unsupported title-derived identities. The corrected run
@@ -67,9 +67,10 @@ captured source index. Native file facts remain distinct from catalog file
 assignments and ordered setlist passages.
 
 The global people diagnostic indexed all 292,523 recordings and scored every
-candidate in its selected complete pools. Its 14 actor rankings tied: repeated
-recording witnesses still need distinct-person resolution and independent
-identity evaluation before automatic acceptance. The physical-venue and
+candidate in its selected complete pools. Its 14 source-witness rankings tied.
+The input does not establish which witnesses belong to one person. Connect these results to the existing identity
+creation and accepted-candidate contracts, with independent identity evaluation
+before automatic acceptance. The physical-venue and
 composition rules are implemented and tested. Broader physical-location evidence
 and independent qualification remain necessary.
 
@@ -81,8 +82,13 @@ work lookups. The retained recording relationships name 127 work IDs; one target
 has no full lookup. Search results and unhydrated rivals remain evidence, without
 an accepted catalog assignment. Later responses require a new replay selection.
 The [provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
-pins the exact frozen manifest and input bytes. The current phone reader still
-uses the earlier 535-response MusicBrainz wave.
+pins the exact frozen manifest and input bytes. The phone reader now includes
+this wave. The new replay changed 11 catalog composition results from unresolved
+to proposed for two Grateful Dead works, “Crazy Fingers” and “Queen Jane
+Approximately.” The independent audit traced every new catalog link through its
+performer, recording and work evidence. Every file retained its original title,
+ownership and playback coordinates. See the
+[replay receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-local-provider-wave-v2-replay-v1.json).
 
 A separate 2,000-record Luna wave completed in 425 seconds with $0.278385
 accounted in its ledger: 1,952 validated extraction results and 48 unresolved
