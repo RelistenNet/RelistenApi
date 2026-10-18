@@ -1,6 +1,6 @@
 # Materialize repertoire decisions into setlists and file contents
 
-Status: proposed implementation contract. The repertoire resolver and accepted music writers exist. The consumers, authenticated consumption reader and automatic correspondence authority described here are not implemented. No production policy is activated by this plan.
+Status: the authenticated completed-account reader is implemented. The setlist and file-content consumers and automatic correspondence authority remain under implementation. No production policy is activated by this plan.
 
 The next increment turns completed repertoire decisions into accepted setlist structures and file-content assertions. It preserves existing song, show, source and track UUIDs. New set, occurrence and content UUIDs are allocated once in saved preparation. A set belongs to an edition; a recording belongs to one performance. Neither title order nor a set boundary creates another performance.
 
@@ -54,6 +54,8 @@ The caller supplies its primary read-only repeatable-read transaction. The reade
 - The exact compatible recording/setlist extraction batch and original producer ticket.
 - Canonical repertoire targets with current accepted revisions, artist scope and retained assertion provenance. Repertoire redirects are followed without rewriting stored association coordinates.
 - The original producer read set, the repertoire acknowledgment's causal publication stamp, and current accepted identity-owner observations needed by the consumer.
+
+The implemented reader has 18 contract cases, including partial publication, changed source heads, unpublished generations, historical accepted citations, redirects and publication reauthentication. Its 100,000-entry aggregate redirect-path limit and complete snapshot budget also account for repeated canonical payloads in the serialized result. `CompletedRepertoireConsumptionPendingException` distinguishes an unfinished newer acknowledgment from stale source proof. Publication uses `RequireCompletedConsumptionAsync` in the existing locked transaction; it does not open a replacement snapshot.
 
 Require a completed resolver result, the matching registration current pointer, a successful acknowledgment stage and an actual published Work receipt. Verify full claim coverage and exact joins back to title `ProposalUuid` plus segment coordinates, or setlist `(InputRevisionUuid, AccountIndex, ProposalUuid)`. Claim UUIDs, proposal UUIDs and repertoire UUIDs are not accepted occurrence/content identities. Reject a request whose source kind or known artist scope contradicts the selected consumer. A completed all-negative account may have a null artist and no targets; retain that valid unresolved snapshot for enrollment rather than treating absence as contradictory ownership.
 
