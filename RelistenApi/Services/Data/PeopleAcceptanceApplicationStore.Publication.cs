@@ -80,10 +80,35 @@ public sealed partial class PeopleAcceptanceApplicationStore
         PeopleAcceptanceReadSet.RequireTicket(stage, stage.Ticket, app.SourceUuid, app.Version);
         // Original resource generations fence A→B→A input changes; equal retained bytes alone
         // are not permission to replace the proposal's original provider observation.
-        if (!stage.Ticket.Inputs.ToHashSet().SetEquals(app.Plan.Proposal.Ticket.Inputs))
+        var originalRevisions = app
+            .Plan.Proposal.Ticket.Inputs.Select(input => input.RevisionUuid)
+            .ToHashSet();
+        if (
+            !stage
+                .Ticket.Inputs.Where(input => originalRevisions.Contains(input.RevisionUuid))
+                .ToHashSet()
+                .SetEquals(app.Plan.Proposal.Ticket.Inputs)
+        )
         {
             throw new NormalizationConflictException(
                 "Acceptance must retain the proposal's original input generations."
+            );
+        }
+        await RequireDecisionPeerReceiptAsync(c, t, stage, ct);
+        if (
+            stage.DecisionOnly
+            && (
+                stage.PolicyState == null
+                || !Same(stage.PolicyState, app.Plan.PolicyState)
+                || !Same(stage.PolicyState.Active, stage.Policy)
+                || !(stage.Ticket.OwnerObservations ?? []).Contains(
+                    stage.PolicyState.OwnerObservation
+                )
+            )
+        )
+        {
+            throw new NormalizationConflictException(
+                "Decision acknowledgment requires its original registry state."
             );
         }
         if (stage.Reconciliation is { } reconciliation)
@@ -117,6 +142,32 @@ public sealed partial class PeopleAcceptanceApplicationStore
             }
         }
         return stage;
+    }
+
+    private static async Task RequireDecisionPeerReceiptAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        PeopleAcceptanceStage stage,
+        CancellationToken ct
+    )
+    {
+        if (stage.PeerTicket is not { } peer)
+        {
+            return;
+        }
+        var ticket = stage.Ticket!;
+        var savedPeer = await ReadPublishedTicket(c, t, peer.WorkUuid, ticket.SubjectUuid, ct);
+        if (
+            !stage.DecisionOnly
+            || ticket.PreviousPublishedWorkUuid != peer.WorkUuid
+            || savedPeer == null
+            || !Same(savedPeer, peer)
+        )
+        {
+            throw new NormalizationConflictException(
+                "Decision peers require their immutable published owner receipt."
+            );
+        }
     }
 
     internal async Task WriteStagePublishedAsync(

@@ -164,7 +164,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
             .Reason.Should()
             .Be("unsupported_creation_actor_evidence");
         application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Review);
-        application.Result.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
     }
 
     [Test]
@@ -186,8 +186,8 @@ public sealed partial class TestNormalizationPeopleAcceptance
             .Plan!.Decisions.Single()
             .Reason.Should()
             .Be("unsupported_creation_actor_evidence");
-        application.Result!.Publications.Should().BeEmpty();
-        application.Result.Disposition.Should().Be(PeopleAcceptanceDisposition.Review);
+        AssertDecisionAcknowledged(application);
+        application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Review);
     }
 
     [Test]

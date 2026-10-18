@@ -40,7 +40,7 @@ public sealed partial class NormalizedPeopleService
                     personUuid,
                     ct
                 );
-                await PeopleResolutionPolicyService.RequireActiveAsync(c, t, stage.Policy, ct);
+                await PeopleResolutionPolicyService.RequireActiveAsync(c, t, stage.Policy!, ct);
                 var publication = stage.Identity!;
                 var creation = stage
                     .Decisions.Where(decision =>
@@ -112,7 +112,7 @@ public sealed partial class NormalizedPeopleService
                     workUuid,
                     ct
                 );
-                await PeopleResolutionPolicyService.RequireActiveAsync(c, t, stage.Policy, ct);
+                await PeopleResolutionPolicyService.RequireActiveAsync(c, t, stage.Policy!, ct);
                 var reconciliation = stage.Reconciliation!;
                 if (
                     reconciliation
@@ -150,6 +150,56 @@ public sealed partial class NormalizedPeopleService
         );
     }
 
+    /// <summary>
+    /// Acknowledges an unresolved or review decision without changing accepted credits or
+    /// identities. Its Work inputs keep the recording eligible after evidence or policy changes.
+    /// </summary>
+    public async Task<NormalizationPublicationResult> PublishResolutionDecisionAsync(
+        Guid workUuid,
+        Guid applicationAttemptUuid,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var applications = new PeopleAcceptanceApplicationStore(db);
+        await RequireResolutionStageRequest(
+            applications,
+            applicationAttemptUuid,
+            workUuid,
+            null,
+            cancellationToken,
+            decisionOnly: true
+        );
+        return await work.TryPublishAsync(
+            workUuid,
+            async (c, t, ct) =>
+            {
+                var stage = await applications.RequireCreditStageAsync(
+                    c,
+                    t,
+                    applicationAttemptUuid,
+                    workUuid,
+                    ct
+                );
+                if (!stage.DecisionOnly || stage.Identity != null || stage.Reconciliation != null)
+                {
+                    throw new ArgumentException(
+                        "Decision acknowledgment cannot publish accepted data."
+                    );
+                }
+                await PeopleResolutionPolicyService.RequireStateAsync(c, t, stage.PolicyState!, ct);
+                await applications.WriteStagePublishedAsync(
+                    c,
+                    t,
+                    applicationAttemptUuid,
+                    workUuid,
+                    [],
+                    ct
+                );
+            },
+            cancellationToken
+        );
+    }
+
     // Work terminal replay does not invoke its callback. Bind the public request first so an
     // unrelated completed Work UUID cannot be presented as this application's publication.
     private static async Task RequireResolutionStageRequest(
@@ -157,7 +207,8 @@ public sealed partial class NormalizedPeopleService
         Guid applicationAttemptUuid,
         Guid workUuid,
         Guid? personUuid,
-        CancellationToken ct
+        CancellationToken ct,
+        bool decisionOnly = false
     )
     {
         var application =
@@ -168,7 +219,11 @@ public sealed partial class NormalizedPeopleService
             stage == null
             || stage.Ticket == null
             || stage.PersonUuid != personUuid
-            || (personUuid.HasValue ? stage.Identity == null : stage.Reconciliation == null)
+            || stage.DecisionOnly != decisionOnly
+            || (
+                !decisionOnly
+                && (personUuid.HasValue ? stage.Identity == null : stage.Reconciliation == null)
+            )
         )
         {
             throw new NormalizationConflictException(

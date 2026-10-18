@@ -38,7 +38,8 @@ public sealed partial class NormalizationPeopleResolutionApplier(
         + "/"
         + NormalizationRecordingExtractor.Version
         + "/retirement-coverage-v1/"
-        + RecordingCreditDecodeIssues.Version;
+        + RecordingCreditDecodeIssues.Version
+        + "/negative-decision-enrollment-v1";
     private readonly NormalizationEvidenceService evidence = new(db);
     private readonly NormalizationProviderDecoder decoder = new();
 
@@ -138,25 +139,8 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 ct
             );
         }
-        var active = await policies.ReadActiveAsync(ct);
-        if (active == null)
-        {
-            return await store.CompleteAsync(
-                application,
-                PeopleAcceptanceDisposition.Unresolved,
-                "acceptance_policy_inactive",
-                ct
-            );
-        }
-        if (!PeopleResolutionPolicyEvaluator.Supports(active.Policy.Artifact, "retained_credit"))
-        {
-            return await store.CompleteAsync(
-                application,
-                PeopleAcceptanceDisposition.Unresolved,
-                "unsupported_policy_applicability",
-                ct
-            );
-        }
+        // A negative outcome must consume the same original evidence as an accepted write.
+        // Enrolling newer provider clocks would acknowledge work that was never evaluated.
         await RevalidateOriginalInputsAsync(proposal, ct);
         var authenticated = await ReadDerivedFactsAsync(proposal.Preparation, ct);
         if (!PeopleAcceptanceApplicationStore.Same(authenticated, proposal.Preparation))
@@ -165,10 +149,25 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 "Proposal facts do not match their authenticated original snapshots."
             );
         }
-        var decisions = Evaluate(application.AttemptUuid, authenticated, active);
+        var policyState = await policies.ReadStateAsync(ct);
+        var active = policyState.Active;
+        var negativeReason =
+            active == null ? "acceptance_policy_inactive"
+            : !PeopleResolutionPolicyEvaluator.Supports(active.Policy.Artifact, "retained_credit")
+                ? "unsupported_policy_applicability"
+            : null;
+        if (negativeReason != null)
+        {
+            return await store.SavePlanAsync(
+                application.AttemptUuid,
+                new(proposal, active, [], policyState, negativeReason),
+                ct
+            );
+        }
+        var decisions = Evaluate(application.AttemptUuid, authenticated, active!);
         return await store.SavePlanAsync(
             application.AttemptUuid,
-            new(proposal, active, decisions),
+            new(proposal, active, decisions, policyState),
             ct
         );
     }
@@ -186,6 +185,19 @@ public sealed partial class NormalizationPeopleResolutionApplier(
         var creditStage = application.Stages.SingleOrDefault(stage => !stage.PersonUuid.HasValue);
         if (creditStage != null)
         {
+            if (creditStage.DecisionOnly)
+            {
+                return await store.CompleteAsync(
+                    application,
+                    creditStage.Decisions.Any(value =>
+                        value.Action == PeopleResolutionAction.Review
+                    )
+                        ? PeopleAcceptanceDisposition.Review
+                        : PeopleAcceptanceDisposition.Unresolved,
+                    application.Plan!.NegativeReason ?? "no_accepted_credit_actions",
+                    ct
+                );
+            }
             var outcomes = creditStage.Receipt!.Credits;
             var disposition = PeopleAcceptanceDisposition.Applied;
             if (
@@ -218,6 +230,18 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 ct
             );
         }
+        if (application.Plan!.NegativeReason != null)
+        {
+            var acknowledgment = await PrepareDecisionStageAsync(application, ct);
+            return acknowledgment == null
+                ? await store.CompleteAsync(
+                    application,
+                    PeopleAcceptanceDisposition.Unresolved,
+                    "unsupported_recording_owner_inputs",
+                    ct
+                )
+                : await store.SaveStageAsync(application.AttemptUuid, acknowledgment, ct);
+        }
         var facts =
             application.Stages.Count == 0
                 ? application.Plan!.Proposal.Preparation
@@ -229,7 +253,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 : Evaluate(
                     application.AttemptUuid,
                     facts,
-                    application.Plan!.Policy,
+                    application.Plan!.Policy!,
                     application.Stages,
                     application.Plan.Decisions
                 );
@@ -262,24 +286,6 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 application,
                 PeopleAcceptanceDisposition.Unresolved,
                 "unsupported_recording_owner_inputs",
-                ct
-            );
-        }
-        if (
-            !credit.Reconciliation!.Contributors.Any(input =>
-                input.Credits.Count != 0 || input.CompleteScopes.Count != 0
-            )
-        )
-        {
-            var disposition = decisions.Any(decision =>
-                decision.Action == PeopleResolutionAction.Review
-            )
-                ? PeopleAcceptanceDisposition.Review
-                : PeopleAcceptanceDisposition.Unresolved;
-            return await store.CompleteAsync(
-                application,
-                disposition,
-                "no_accepted_credit_actions",
                 ct
             );
         }
@@ -320,13 +326,20 @@ public sealed partial class NormalizationPeopleResolutionApplier(
             }
             stage = application.Stages.Single(value => value.WorkUuid == stage.WorkUuid);
         }
-        var publication = stage.PersonUuid.HasValue
-            ? await people.PublishResolutionIdentityAsync(
-                stage.WorkUuid,
-                application.AttemptUuid,
-                stage.PersonUuid.Value,
-                ct
-            )
+        var publication =
+            stage.DecisionOnly
+                ? await people.PublishResolutionDecisionAsync(
+                    stage.WorkUuid,
+                    application.AttemptUuid,
+                    ct
+                )
+            : stage.PersonUuid.HasValue
+                ? await people.PublishResolutionIdentityAsync(
+                    stage.WorkUuid,
+                    application.AttemptUuid,
+                    stage.PersonUuid.Value,
+                    ct
+                )
             : await people.PublishResolutionCreditsAsync(
                 stage.WorkUuid,
                 application.AttemptUuid,

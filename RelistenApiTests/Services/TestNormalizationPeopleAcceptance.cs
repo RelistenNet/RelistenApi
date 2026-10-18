@@ -557,7 +557,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
         var application = await applier.ApplyRecordingAsync(Guid.NewGuid(), current.AttemptUuid);
 
         application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Unresolved);
-        application.Result.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
         (await people.ReadCreditContextAsync(source.SourceUuid))
             .Credits.Should()
             .ContainSingle()
@@ -608,7 +608,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
         var application = await applier.ApplyRecordingAsync(Guid.NewGuid(), current.AttemptUuid);
 
         application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Unresolved);
-        application.Result.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
         (await people.ReadCreditContextAsync(source.SourceUuid))
             .Credits.Should()
             .ContainSingle()
@@ -619,7 +619,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
     }
 
     [Test]
-    public async Task EmptyContributorBindingsDoNotWithdrawAcceptedSupportOrAdvanceItsPublication()
+    public async Task EmptyContributorBindingsPreserveAcceptedSupportAndAcknowledgeTheUnresolvedDecision()
     {
         var name = UniqueName();
         var alice = await Person(name);
@@ -646,10 +646,10 @@ public sealed partial class TestNormalizationPeopleAcceptance
         var application = await applier.ApplyRecordingAsync(Guid.NewGuid(), current.AttemptUuid);
 
         application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Unresolved);
-        application.Result.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
         (await fixture.Work.GetSubjectAsync(owner))!
             .PublishedWorkUuid.Should()
-            .Be(previous.Owner.PublishedWorkUuid);
+            .Be(application.Stages.Single().WorkUuid);
         (await people.ReadCreditContextAsync(source.SourceUuid))
             .Credits.Should()
             .ContainSingle()
@@ -768,7 +768,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
         var application = await applier.ApplyRecordingAsync(Guid.NewGuid(), resolution.AttemptUuid);
 
         application.Plan!.Decisions.Single().Reason.Should().Be("unbound_file_scope");
-        application.Result!.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
         (await people.ReadCreditContextAsync(source.SourceUuid)).Credits.Should().BeEmpty();
     }
 
@@ -789,11 +789,12 @@ public sealed partial class TestNormalizationPeopleAcceptance
                 ApplicationAudit(accepted)
             );
         await SetActivePolicy(null);
+        resolution = await Resolve(source);
 
         var application = await applier.ApplyRecordingAsync(Guid.NewGuid(), resolution.AttemptUuid);
 
         application.Result!.Disposition.Should().Be(PeopleAcceptanceDisposition.Unresolved);
-        application.Result.Publications.Should().BeEmpty();
+        AssertDecisionAcknowledged(application);
         (await people.ReadCreditContextAsync(source.SourceUuid))
             .Credits.Single()
             .Credit.PersonUuid.Should()
@@ -822,7 +823,8 @@ public sealed partial class TestNormalizationPeopleAcceptance
         double matchThreshold = 1.5,
         bool allowCreation = false,
         double contactWeight = 0,
-        double profileWeight = 0
+        double profileWeight = 0,
+        string inputForm = "retained_credit"
     )
     {
         var artifact = new PeopleAcceptancePolicyArtifact(
@@ -834,7 +836,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
             NormalizationCandidateService.FactsVersion,
             NormalizationRecordingExtractor.Version,
             NormalizedPeopleService.CreditContextVersion,
-            ["retained_credit"],
+            [inputForm],
             new(0, 1, 1, 1, matchThreshold, 0.5, contactWeight, profileWeight),
             allowCreation
                 ? new(PeopleResolutionPolicyEvaluator.CreationClassifierVersion, 0.25)

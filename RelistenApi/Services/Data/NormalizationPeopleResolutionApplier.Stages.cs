@@ -68,18 +68,6 @@ public sealed partial class NormalizationPeopleResolutionApplier
         {
             return null;
         }
-        if (membership.Contributions.Any(HasFacts))
-        {
-            var configured = await store.GetConfiguredStageAsync(
-                application.SourceUuid,
-                membership.Owner!.DesiredGeneration,
-                ct
-            );
-            if (configured == null || !OwnsConfiguredBindings(membership, configured.Contributions))
-            {
-                return null;
-            }
-        }
         var byProposal = decisions.ToDictionary(decision => decision.ProposalUuid);
         var coverage = await ReadRetirementCoverageAsync(
             application.SourceUuid,
@@ -115,6 +103,23 @@ public sealed partial class NormalizationPeopleResolutionApplier
                     .ToArray()
             ))
             .ToArray();
+        var hasAcceptedActions = replacements.Any(value =>
+            value.Credits.Count != 0 || value.CompleteScopes.Count != 0
+        );
+        // An acknowledgment owns no accepted rows, so peer contributions may stay in the
+        // recording owner unchanged. Reconciliation retains the stricter ownership check.
+        if (hasAcceptedActions && membership.Contributions.Any(HasFacts))
+        {
+            var configured = await store.GetConfiguredStageAsync(
+                application.SourceUuid,
+                membership.Owner!.DesiredGeneration,
+                ct
+            );
+            if (configured == null || !OwnsConfiguredBindings(membership, configured.Contributions))
+            {
+                return null;
+            }
+        }
         var selectedPeople = decisions
             .Where(decision => decision.Action == PeopleResolutionAction.MatchExisting)
             .Select(decision => decision.PersonUuid!.Value)
@@ -149,23 +154,58 @@ public sealed partial class NormalizationPeopleResolutionApplier
                 "Each accepted person requires its observed registered identity owner."
             );
         }
-        return Stage(
+        var stage = Stage(
             application,
             facts,
             decisions,
             membership,
             null,
             null,
-            new(
-                application.SourceUuid,
-                application.Plan!.Proposal.ExtractionAttemptUuid,
-                replacements
-            ),
+            hasAcceptedActions
+                ? new(
+                    application.SourceUuid,
+                    application.Plan!.Proposal.ExtractionAttemptUuid,
+                    replacements
+                )
+                : null,
             observations
         ) with
         {
             ScopeCoverage = coverage,
+            DecisionOnly = !hasAcceptedActions,
         };
+        return stage.DecisionOnly ? await PrepareDecisionPeersAsync(stage, membership, ct) : stage;
+    }
+
+    private async Task<PeopleAcceptanceStage?> PrepareDecisionStageAsync(
+        PeopleAcceptanceApplication application,
+        CancellationToken ct
+    )
+    {
+        var proposal = application.Plan!.Proposal;
+        await RevalidateOriginalInputsAsync(proposal, ct);
+        var membership = await work.GetInputContributionsAsync(
+            new("people", "recording", application.SourceUuid),
+            cancellationToken: ct
+        );
+        if (membership.UnmanagedBaseline != null)
+        {
+            return null;
+        }
+        var stage = Stage(
+            application,
+            proposal.Preparation,
+            [],
+            membership,
+            null,
+            null,
+            null,
+            []
+        ) with
+        {
+            DecisionOnly = true,
+        };
+        return await PrepareDecisionPeersAsync(stage, membership, ct);
     }
 
     private static PeopleAcceptanceStage Stage(
@@ -199,7 +239,8 @@ public sealed partial class NormalizationPeopleResolutionApplier
             PeopleAcceptanceReadSet.Contributions(
                 facts,
                 proposalStamp,
-                application.Plan.Policy,
+                application.Plan.PolicyState?.OwnerObservation
+                    ?? application.Plan.Policy!.OwnerObservation,
                 membership,
                 dependencies
             ),
@@ -211,7 +252,8 @@ public sealed partial class NormalizationPeopleResolutionApplier
                 ))
                 .ToArray(),
             identity,
-            reconciliation
+            reconciliation,
+            PolicyState: application.Plan.PolicyState
         );
     }
 

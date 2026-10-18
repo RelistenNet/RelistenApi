@@ -6,7 +6,7 @@ credit writers. Automatic matching across artists is the outcome.
 
 The [proposal processor](people-resolution.md) retains complete extraction
 contributors, candidate facts and reviewed context. `NormalizationPeopleResolutionApplier`
-connects those proposals to guarded accepted-data publication. Its decisions remain policy-free, with `AutomaticAcceptanceAuthorized`
+connects those proposals to guarded accepted-data publication. Proposal decisions remain policy-free, with `AutomaticAcceptanceAuthorized`
 always false. Existing immutable proposal receipts keep that meaning.
 
 ## Ownership and entrypoints
@@ -27,6 +27,7 @@ PeopleResolutionPolicyService.RegisterEvaluatedPolicyAsync(
 PeopleResolutionPolicyService.ApplyDecisionAsync(
     PeopleAcceptancePolicyDecision decision, string authenticatedOperator, CT);
 PeopleResolutionPolicyService.ReadActiveAsync(CT); // active artifact + owner observation
+PeopleResolutionPolicyService.ReadStateAsync(CT); // nullable artifact + real registry owner
 
 NormalizationPeopleResolutionApplier.ApplyRecordingAsync(
     Guid applicationAttemptUuid, Guid resolutionAttemptUuid, CT);
@@ -84,6 +85,12 @@ Production activation requires adequate independent evaluation and verified auth
 not a new human approval for every label or policy revision. Record reviewer
 provenance and uncertainty; Codex may supply development judgments.
 
+An inactive registry is still an observable dependency. `ReadStateAsync` establishes
+one fixed empty Work owner, without activating a policy, then reads its nullable
+artifact and exact owner stamp together. First activation can therefore make an
+earlier inactive-policy decision pending. Replaying the bootstrap never restores an
+old configuration or overwrites a review.
+
 ## Set-level decisions
 
 Use pure `PeopleResolutionPolicyEvaluator.Evaluate` with the complete authenticated
@@ -139,6 +146,30 @@ initiating extraction is the owner's entire input set. Callback validation check
 the exact saved application and complete ticket union, not a subset of dependencies.
 
 ## Publish additions and retire only complete support
+
+An inactive or unsupported policy, or a supported evaluation with no accepted credit
+actions, publishes a decision-only stage through
+`NormalizedPeopleService.PublishResolutionDecisionAsync(workUuid, applicationAttemptUuid, ct)`.
+This stage records an authenticated Work acknowledgment and receipt; it writes no
+accepted identity or credit and advances no candidate epoch. Source, candidate,
+editorial and policy changes make the recording owner pending again. A historical
+application keeps its original result; reprocessing uses a new application and a
+current proposal when the original facts changed.
+
+Decision-only stages preserve independent contributors. Their coordination facts
+come from the owner's last published immutable ticket and must cover its exact
+current membership. The full original resource generations remain required even
+when changed bytes later return to the same input revision. Unpublished or stale
+peer configurations remain pending and produce a stale application. A later
+acknowledgment drops removed peer keys rather than inheriting them into this
+resolver's contribution. Positive credit reconciliation retains its stricter
+ownership checks.
+
+The additive plan and stage fields require the new applier version. Terminal older
+applications replay unchanged; unfinished older applications stop with
+`processing_version_changed`. No schema migration is needed. Pause accepted people
+writers before binary rollback to an implementation that cannot interpret these
+decision-only stages, and retain all plans, receipts and accepted history.
 
 Add `NormalizedPeopleService.PublishResolutionIdentityAsync(workUuid, applicationAttemptUuid,
 personUuid, ct)` and `PublishResolutionCreditsAsync(workUuid, applicationAttemptUuid, ct)`.
@@ -238,10 +269,4 @@ interrupted application or discard its creation receipt. Resume with the same
 application UUID on a compatible processor; a changed processing version retains
 history and returns an explicit unresolved outcome.
 
-The local focused run passes 145 public-service, evaluator, writer and
-reconciliation checks. It includes missing-show credit evidence, complete clearing,
-unknown-field preservation, interrupted creation and transactional rollback. The broader
-API/service run passes 2,007 tests with 24 existing tour-contract skips and zero
-failures. The full merged API suite passes 2,247 tests with the same 24 existing
-skips and no failures. These fixtures use synthetic
-evaluated policies in disposable databases; no runtime policy is active.
+The combined focused run passes 179 people, composition and venue cases. People checks cover the new negative-decision refresh path, inactive/unsupported policy changes, interrupted acknowledgment, independent peer removal, A-to-B-to-A input generations and older-version replay, alongside accepted credit and creation behavior. The solution builds with existing package advisory warnings. See the [overview](README.md#progress) for the latest broader verification. These fixtures use synthetic evaluated policies in disposable databases; no runtime matching policy is active.

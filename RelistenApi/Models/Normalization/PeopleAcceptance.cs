@@ -3,22 +3,29 @@ using System.Collections.Generic;
 
 namespace Relisten.Api.Models.Normalization;
 
-/// <summary>Accepted actions and their original policy proof, separate from policy-free resolution proposals.</summary>
+/// <summary>
+/// Accepted actions or a negative decision and its original registry observation. Policy is null
+/// only when the registry was inactive. Added optional fields preserve historical JSON receipts;
+/// unfinished applications require the current processing version before they can advance.
+/// </summary>
 public sealed record PeopleAcceptancePlan(
     NormalizationPeopleResolutionBatch Proposal,
-    ActivePeopleAcceptancePolicy Policy,
-    IReadOnlyList<PeopleAcceptanceClaimDecision> Decisions
+    ActivePeopleAcceptancePolicy? Policy,
+    IReadOnlyList<PeopleAcceptanceClaimDecision> Decisions,
+    PeopleAcceptancePolicyState? PolicyState = null,
+    string? NegativeReason = null
 );
 
 /// <summary>
 /// An immutable preparation per publication. Later creations and credits reread candidate facts
 /// after earlier identity writes; original extraction and proposal receipts never change.
 /// Ticket is attached once after admission and is not a refreshed version of this preparation.
+/// A decision-only stage publishes a Work watermark and receipt without changing accepted rows.
 /// </summary>
 public sealed record PeopleAcceptanceStage(
     Guid WorkUuid,
     Guid? PersonUuid,
-    ActivePeopleAcceptancePolicy Policy,
+    ActivePeopleAcceptancePolicy? Policy,
     NormalizationPeopleResolutionPreparation Facts,
     IReadOnlyList<PeopleAcceptanceClaimDecision> Decisions,
     IReadOnlyList<NormalizationPreparedInputContribution> Contributions,
@@ -28,7 +35,10 @@ public sealed record PeopleAcceptanceStage(
     RecordingCreditReconciliation? Reconciliation,
     NormalizationWorkTicket? Ticket = null,
     PeopleAcceptanceStageReceipt? Receipt = null,
-    IReadOnlyList<PeopleAcceptanceScopeCoverage>? ScopeCoverage = null
+    IReadOnlyList<PeopleAcceptanceScopeCoverage>? ScopeCoverage = null,
+    PeopleAcceptancePolicyState? PolicyState = null,
+    bool DecisionOnly = false,
+    NormalizationWorkTicket? PeerTicket = null
 );
 
 public sealed record PeopleAcceptanceCreditWriteOutcome(

@@ -217,6 +217,31 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
             return json == null ? null : JsonSerializer.Deserialize<PeopleAcceptanceStage>(json);
         });
 
+    internal Task<NormalizationWorkTicket?> ReadPublishedTicketAsync(
+        Guid workUuid,
+        Guid subjectUuid,
+        CancellationToken ct
+    ) => db.WithWriteConnection(c => ReadPublishedTicket(c, null, workUuid, subjectUuid, ct));
+
+    private static async Task<NormalizationWorkTicket?> ReadPublishedTicket(
+        IDbConnection c,
+        NpgsqlTransaction? t,
+        Guid workUuid,
+        Guid subjectUuid,
+        CancellationToken ct
+    )
+    {
+        var json = await c.QuerySingleOrDefaultAsync<string>(
+            new CommandDefinition(
+                "SELECT ticket::text FROM normalization.work_runs WHERE uuid=@workUuid AND subject_uuid=@subjectUuid AND state='published'",
+                new { workUuid, subjectUuid },
+                t,
+                cancellationToken: ct
+            )
+        );
+        return json == null ? null : JsonSerializer.Deserialize<NormalizationWorkTicket>(json);
+    }
+
     internal Task<PeopleAcceptanceApplication> CompleteAsync(
         PeopleAcceptanceApplication expected,
         PeopleAcceptanceDisposition disposition,

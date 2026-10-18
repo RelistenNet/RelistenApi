@@ -25,6 +25,7 @@ public sealed class PeopleResolutionPolicyService(
 )
 {
     public const string RegistryVersion = "people-acceptance-registry-v1";
+    private static readonly Guid BootstrapWorkUuid = new("2e7b805a-0b0b-4c11-bd75-cbf9b1d71341");
     public static readonly Guid PolicyKeyUuid = new("31570f30-e313-4fb7-8d95-7291a59f7531");
     public static NormalizationSubjectKey Owner =>
         new("people", "acceptance_policy", PolicyKeyUuid);
@@ -141,6 +142,123 @@ public sealed class PeopleResolutionPolicyService(
             await t.CommitAsync(cancellationToken);
             return active;
         });
+
+    /// <summary>
+    /// Reads the registry owner even when no policy is active. A fixed empty Work publication
+    /// establishes that owner once; it never activates an artifact or reinstalls a changed
+    /// configuration. An activation racing bootstrap can stale its empty publication. The
+    /// subsequent primary snapshot still returns the actual owner and nullable active pointer.
+    /// </summary>
+    public async Task<PeopleAcceptancePolicyState> ReadStateAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await work.BeginWorkAsync(
+            BootstrapWorkUuid,
+            Owner,
+            RegistryVersion,
+            [],
+            [],
+            cancellationToken: cancellationToken
+        );
+        await work.TryPublishAsync(
+            BootstrapWorkUuid,
+            (_, _, _) => Task.CompletedTask,
+            cancellationToken
+        );
+
+        return await db.WithWriteConnection(async connection =>
+        {
+            var c = (NpgsqlConnection)connection;
+            await using var t = await c.BeginTransactionAsync(
+                IsolationLevel.RepeatableRead,
+                cancellationToken
+            );
+            await c.ExecuteAsync(
+                new CommandDefinition(
+                    "SET TRANSACTION READ ONLY",
+                    transaction: t,
+                    cancellationToken: cancellationToken
+                )
+            );
+            var state = await ReadStateAsync(c, t, cancellationToken);
+            if (state.Active is { } active)
+            {
+                RequireFixtureHost(c, active.Policy, allowFixturePolicies);
+            }
+            await t.CommitAsync(cancellationToken);
+            return state;
+        });
+    }
+
+    /// <summary>
+    /// Authenticate a saved positive or negative registry observation under the Work owner
+    /// locks. No new bootstrap or configuration change is allowed inside publication.
+    /// </summary>
+    internal static async Task RequireStateAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        PeopleAcceptancePolicyState expected,
+        CancellationToken ct
+    )
+    {
+        var current = await ReadStateAsync(c, t, ct);
+        if (!PeopleAcceptanceApplicationStore.Same(current, expected))
+        {
+            throw new NormalizationConflictException(
+                "The prepared people acceptance policy state changed."
+            );
+        }
+        if (current.Active is { } active)
+        {
+            // A negative enrollment may acknowledge an unsupported historical policy. Exact
+            // state authentication does not grant its rule positive publication authority.
+            Validate(active.Policy, requireCurrentVersions: false);
+            RequireFixtureHost(c, active.Policy, allowFixture: true);
+        }
+    }
+
+    private static async Task<PeopleAcceptancePolicyState> ReadStateAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        CancellationToken ct
+    )
+    {
+        var owner = await c.QuerySingleOrDefaultAsync<PolicyOwnerRow>(
+            new CommandDefinition(
+                """
+                SELECT uuid AS "SubjectUuid",desired_generation AS "DesiredGeneration",
+                    editorial_revision AS "EditorialRevision",published_work_uuid AS "PublishedWorkUuid",
+                    policy_version AS "PolicyVersion"
+                FROM normalization.work_subjects
+                WHERE domain='people' AND subject_kind='acceptance_policy' AND subject_uuid=@PolicyKeyUuid
+                """,
+                new { PolicyKeyUuid },
+                t,
+                cancellationToken: ct
+            )
+        );
+        if (owner == null || owner.PolicyVersion != RegistryVersion)
+        {
+            throw new NormalizationConflictException(
+                "The people acceptance registry requires its supported Work owner configuration."
+            );
+        }
+        var observation = new NormalizationSubjectObservation(
+            owner.SubjectUuid,
+            owner.DesiredGeneration,
+            owner.EditorialRevision,
+            owner.PublishedWorkUuid
+        );
+        var active = await ReadActiveAsync(c, t, ct);
+        if (active != null && active.OwnerObservation != observation)
+        {
+            throw new NormalizationConflictException(
+                "The active policy and registry owner must share one original observation."
+            );
+        }
+        return new(active, observation);
+    }
 
     /// <summary>
     /// Activates, replaces or revokes a registered artifact under a reviewed policy owner.
@@ -449,6 +567,14 @@ public sealed class PeopleResolutionPolicyService(
         Convert
             .ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))
             .ToLowerInvariant();
+
+    private sealed record PolicyOwnerRow(
+        Guid SubjectUuid,
+        long DesiredGeneration,
+        long EditorialRevision,
+        Guid? PublishedWorkUuid,
+        string PolicyVersion
+    );
 
     private class PolicyRow
     {

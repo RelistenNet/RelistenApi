@@ -89,6 +89,12 @@ public sealed record ActivePeopleAcceptancePolicy(
     NormalizationSubjectObservation OwnerObservation
 );
 
+/// <summary>Registry observation retained even before the first policy activation.</summary>
+public sealed record PeopleAcceptancePolicyState(
+    ActivePeopleAcceptancePolicy? Active,
+    NormalizationSubjectObservation OwnerObservation
+);
+
 /// <summary>Trusted CAS review command. Null ArtifactUuid revokes automatic publication.</summary>
 public sealed record PeopleAcceptancePolicyDecision(
     Guid OperationUuid,
