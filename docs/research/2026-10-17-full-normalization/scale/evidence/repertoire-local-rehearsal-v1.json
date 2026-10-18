@@ -1,0 +1,200 @@
+{
+  "schema_version": "repertoire-local-rehearsal-v1",
+  "state": "completed",
+  "implementation_commits": [
+    "914a994",
+    "f540f69"
+  ],
+  "local_database": "relisten_normalization_repertoire_20261018",
+  "migration": 51,
+  "catalog": {
+    "artists": 268,
+    "shows": 607,
+    "recordings": 701,
+    "tracks": 7826
+  },
+  "dictionary_results": {
+    "phish": 110,
+    "grateful_dead": 99,
+    "jerry_garcia_band": 0
+  },
+  "verification": {
+    "full_local_api_tests_passed": 2696,
+    "full_local_api_tests_failed": 0,
+    "existing_tour_tests_skipped": 24,
+    "full_suite_duration": "9m52s",
+    "focused_cases_passed": 66,
+    "worker_resolve_and_exact_replay_commands": 37,
+    "worker_fresh_retry_commands": 16,
+    "canonical_v3_requests": 424,
+    "legacy_v3_responses_equal_to_saved_baseline": 1406,
+    "legacy_v2_responses_equal_to_saved_baseline": 3,
+    "retained_response_hashes_authenticated": 1833,
+    "legacy_relation_fingerprints_unchanged": 12,
+    "accepted_identity_relationship_revision_tables_unchanged_on_retry": 4,
+    "retained_input_heads_unchanged_on_retry": 3,
+    "new_song_identities_on_retry": 0,
+    "active_inferred_repertoire_policies": 0,
+    "production_writes": 0,
+    "paid_model_requests": 0,
+    "api_and_private_redis_stopped": true
+  },
+  "canonical_visibility": {
+    "songs": 209,
+    "basis": "provider_assertion",
+    "imported_uuid_mappings": 209,
+    "song_show_pages_empty": 209,
+    "list_pages": 6
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/preparation-receipt.json",
+      "bytes": 2854,
+      "sha256": "fd50e81a68e053612dc0425b3d87c2879b9425b498a0accff17d00fa65ab1db7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/migration51.json",
+      "bytes": 51,
+      "sha256": "44adb717a132490cf184898ddfafb0464b729e6078c250c044775e245fcfc4aa"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/capture-execution-v1.json",
+      "bytes": 2434,
+      "sha256": "3f66eb0738cf2327b6d16f927593c1ace1fa38207cbae1e012fd2703b12ea5dd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/captured-dictionaries-v1/captures.json",
+      "bytes": 1471,
+      "sha256": "fe21a6510b7d88fb176b8e812ddfc75fae017905ed20549585df54ed4b1233e3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/worker-repertoire-v1/receipt.json",
+      "bytes": 23655,
+      "sha256": "52c4b7afd1859bfeb01642d1261ef8dda69ae3fdc7ab543b91f50e214b59327d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/retry-repertoire-v1/receipt.json",
+      "bytes": 4431,
+      "sha256": "a7f55d4be958acea9297c9566d3567d1158a2059649677978bb9fb7440480510"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/receipt.json",
+      "bytes": 563990,
+      "sha256": "968bc3ee0ee32e7ca896bd49ffb079e820315ab07cd637557ed80df3e38f276c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/application-before.json",
+      "bytes": 955,
+      "sha256": "f8042b045b9d96fe4fe9560dc82f313ea5fa7296ab2483f745ba7bf78649c0a0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/application-after.json",
+      "bytes": 955,
+      "sha256": "1a67a30fbc617fb3205e9bdfa3cb9bfb5abe79c6fed9f32aacb931d0c212e0d4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/extra-before.json",
+      "bytes": 664,
+      "sha256": "7bcebe0978ff85ed654f8a372831d56bca1eac74161911b98d669709182e5778"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/extra-after.json",
+      "bytes": 664,
+      "sha256": "7bcebe0978ff85ed654f8a372831d56bca1eac74161911b98d669709182e5778"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/canonical-before.json",
+      "bytes": 54828,
+      "sha256": "9eefc0dd3dc83cddf6a3412f1c889bd8a3507af23bfc1c68f957587f46ad5d3c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/canonical-after.json",
+      "bytes": 54828,
+      "sha256": "9eefc0dd3dc83cddf6a3412f1c889bd8a3507af23bfc1c68f957587f46ad5d3c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/retry-repertoire-v1/before.json",
+      "bytes": 901,
+      "sha256": "041c67ba2acdc2fd7cc692547a58eb158a6a1ac2cd80b660b649c93bda926754"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/retry-repertoire-v1/after.json",
+      "bytes": 901,
+      "sha256": "041c67ba2acdc2fd7cc692547a58eb158a6a1ac2cd80b660b649c93bda926754"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/full-suite.log",
+      "bytes": 14217,
+      "sha256": "d5a12a3b6bf1f169943ce6db02e64dc8b5b702df2983b6716f6e6d45951ce9cf"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/focused-tests.log",
+      "bytes": 680,
+      "sha256": "bd8158a8681495c39dd823fd53749bf2cc197de4a434c77c7d0bc9f23be365dc"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/prepare-local-copy.py",
+      "bytes": 4823,
+      "sha256": "b41c46edb1de3f6a4e744ba3d4913ec240bdc819f0fbbed4db07fb34548292a9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/migrate-clone.py",
+      "bytes": 1645,
+      "sha256": "acd5f58c2150e05d3b95368e078f2b0e39ba0fcc93cb8de1599635c73f013c93"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/CaptureDictionaries.cs.txt",
+      "bytes": 3308,
+      "sha256": "f5c812f8e15a04938a44faa428fbcd69ca452e960b4e52e0e09bb591c6459957"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/CaptureDictionaries.csproj.txt",
+      "bytes": 376,
+      "sha256": "64805a2af45a93da23e10b23e1ea0c0da5645f385291761a807a018d7099b78a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/capture-public-service.py",
+      "bytes": 2335,
+      "sha256": "d3be6c5530d5724c95488b272ba6bb8904ab74142bf7842354887f73fc82b42b"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/worker-repertoire-v1/rehearse-worker.py",
+      "bytes": 3182,
+      "sha256": "4524f613b05b15cc744059a49fc0819ba951cebddaf0c4a0e761315904f36fb2"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/api-v3-repertoire-v2/rehearse-api.py",
+      "bytes": 8800,
+      "sha256": "0b2e3bd1fdc09790be32b51242e03ce9ea020993c4549c25ffa20fb4a48917ba"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/retry-repertoire-v1/rehearse-retry.py",
+      "bytes": 4475,
+      "sha256": "811a2527a974b437ab8c0dddd04756f454dcd4f74813e6dddd0de83ab0a9655c"
+    },
+    {
+      "path": "RelistenApi/bin/net10.0/RelistenApi.dll",
+      "bytes": 8197632,
+      "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
+    },
+    {
+      "path": "RelistenIngestionWorker/bin/Debug/net10.0/RelistenApi.dll",
+      "bytes": 8197632,
+      "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
+    },
+    {
+      "path": "RelistenApiTests/bin/Debug/net10.0/RelistenApi.dll",
+      "bytes": 8197632,
+      "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
+    }
+  ],
+  "limits": [
+    "The dictionaries are the stored local cohorts: 110 Phish songs and 99 Grateful Dead songs, not complete live provider catalogs. JGB verifies a known empty dictionary; this run does not normalize its recording titles.",
+    "Provider dictionary assertions establish imported repertoire entries, not evaluated cross-source equivalence or global composition identity. Production inferred policies remain inactive.",
+    "Song/show pages are empty because setlist and file-content consumers remain to be implemented. Existing playable recordings remain available through legacy routes.",
+    "The 1409 legacy comparisons use unchanged saved migration 50 HTTP responses; the tested database is migration 51 with 209 accepted songs. The earlier verifier empty-state guard and manifests were not changed.",
+    "All 1833 complete-walk response hashes were reauthenticated. Three responses exercise v2 saved-link compatibility; the remaining 1830 are v3.",
+    "Catalog media references were compared as data. No remote media availability, matching accuracy, training results or production rollout is established.",
+    "The copy uses a read-only logical dump and a restore into a new local database."
+  ]
+}

@@ -1,8 +1,8 @@
 # Artist repertoire resolution
 
-Status: implemented locally with migration 51. All 44 core contracts and 22 worker-command cases pass against PostgreSQL and actual worker processes; the solution builds. Broader regression verification is in progress. No production matching policy is activated. This contract covers every artist, including artists with no imported dictionary. It does not change legacy song, show, recording or playback UUIDs.
+Status: implemented locally with migration 51. All 44 core contracts and 22 worker-command cases pass against PostgreSQL and actual worker processes; the solution builds. The full local API suite passes 2,696 tests with no failures and 24 existing tour-contract skips. No production matching policy is activated. This contract covers every artist, including artists with no imported dictionary. It does not change legacy song, show, recording or playback UUIDs.
 
-The resolver turns exact dictionary members, recording-title mentions and setlist passages into artist-scoped repertoire decisions. It can create visible `title_derived` provisional entries without claiming that they identify global compositions. File-content and accepted-setlist processors consume its decisions in subsequent increments.
+The resolver turns exact dictionary members, recording-title mentions and setlist passages into artist-scoped repertoire decisions. It can create visible `title_derived` provisional entries without claiming that they identify global compositions. The [setlist and file-content consumers](repertoire-consumers.md) define how subsequent processors consume its completed decisions.
 
 ## Existing contracts to reuse
 
