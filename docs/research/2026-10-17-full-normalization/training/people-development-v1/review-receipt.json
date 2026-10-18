@@ -1,0 +1,52 @@
+{
+  "agreement": {
+    "actor_kind": 11,
+    "candidate_judgments": 39,
+    "disagreements": 0
+  },
+  "compact_judgments": {
+    "bytes": 40293,
+    "path": "docs/research/2026-10-17-full-normalization/training/people-development-v1/independent-review.jsonl",
+    "sha256": "6fd92ac526cb7bb1101e7130448412c7645ea2ae84a5b90ea54c2dbc5c90b50a"
+  },
+  "comparison": {
+    "bytes": 14788,
+    "path": "docs/research/2026-10-17-full-normalization/training/people-development-v1/review-comparison.jsonl",
+    "sha256": "a4f360dd9a495f58beeef546f0a5e4eb303bbf8dfd3357e655a2e36cc98fa9f9"
+  },
+  "draft_answers_seen_before_initial_freeze": false,
+  "draft_labels_sha256": "e813c310b673bf66ee7dbeec5c87b9453d39bea6432f941587e79e6a9efaf4f2",
+  "frozen_at": "2026-10-18T01:25:47.464540+00:00",
+  "independent_human_adjudication": false,
+  "input": {
+    "bytes": 135850,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/blind-review-input-v2.jsonl",
+    "sha256": "80e4466f322dca6356f6ff8fa473204ad4c8ccbf9c25af3067ee02b46f702edc"
+  },
+  "limitations": [
+    "One separate Codex reviewer answered the retained original packet before seeing draft answers. This is not independent human adjudication.",
+    "Thirty selected questions and correlated candidate edges cannot estimate launch accuracy or broad identity coverage.",
+    "All 168 original labels remain frozen development drafts; review agreement does not adjudicate unreviewed tasks."
+  ],
+  "original_judgments": {
+    "bytes": 48004,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/blind-review-judgments-v1.jsonl",
+    "sha256": "bb3d16a2afa3b0915ccfda7b51645d6cc1fa6ee96e75cdd86370ebd7e1cc2de1"
+  },
+  "policy_activation_permitted": false,
+  "review_kind": "answer-blind original packet reading; not independent human adjudication",
+  "reviewer": "Codex /root/normalization_local_capture",
+  "schema_version": "people-development-independent-review-v1",
+  "selection": {
+    "actor_kind": 11,
+    "candidate_judgments": 39,
+    "identity_questions": 19,
+    "tasks": 30
+  },
+  "source_receipt": {
+    "bytes": 1250,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/blind-review-judgments-v1-receipt.json",
+    "sha256": "41dee3decbd529c06fd2d43c7a4845dcc3e4b6d6df5af57dff3fc6ecd7830e24"
+  },
+  "status": "reviewed_subset_adjudication_pending"
+}

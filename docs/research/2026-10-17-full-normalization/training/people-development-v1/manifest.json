@@ -1,0 +1,140 @@
+{
+  "answers": {
+    "actor_kind_tasks": {
+      "group": 6,
+      "person": 34,
+      "unknown": 39
+    },
+    "candidate_decisions_not_independent_tasks": {
+      "different_entities": 22,
+      "insufficient_evidence": 77,
+      "same_entity": 59
+    },
+    "evidence_strength_counts": {
+      "credit_mention_only": 39,
+      "explicit_alias_statement": 6,
+      "explicit_collective_members": 1,
+      "explicit_collective_roster": 1,
+      "explicit_coordinated_actors": 22,
+      "explicit_human_role_context": 33,
+      "explicit_joint_actor_attribution": 42,
+      "explicit_legal_organization": 1,
+      "missing_identity_evidence": 77,
+      "named_project_owner_corroborated": 11,
+      "performer_roster": 3,
+      "project_primary_individual_context": 1
+    }
+  },
+  "files": {
+    "candidate-pool.json": {
+      "bytes": 20599,
+      "sha256": "3176d472711662503b57087f1ad6d6f6f9c6c77b53d8738b926764559de08219"
+    },
+    "citations.jsonl": {
+      "bytes": 115308,
+      "sha256": "53828814dcb9642912ecab87dbed7bc37752512a65d602d4a9a5d7d0d08b08b2"
+    },
+    "independent-review.jsonl": {
+      "bytes": 40293,
+      "sha256": "6fd92ac526cb7bb1101e7130448412c7645ea2ae84a5b90ea54c2dbc5c90b50a"
+    },
+    "labels.jsonl": {
+      "bytes": 344888,
+      "sha256": "e813c310b673bf66ee7dbeec5c87b9453d39bea6432f941587e79e6a9efaf4f2"
+    },
+    "mentions.jsonl": {
+      "bytes": 117015,
+      "sha256": "6690ddb2e90bb3332e31e1e512800209b5dce88dc7e1edd20ac4b4d57f5c0a52"
+    },
+    "primary-sources.jsonl": {
+      "bytes": 794,
+      "sha256": "810ada6f75b54c1853e8da6ecf87eaa8929199636d6052d7bb2283183b44efba"
+    },
+    "reservation-receipt.json": {
+      "bytes": 1588,
+      "sha256": "81b1eea62e449c4d9d31e3e48386a6a6dca73ee695ac0ad37017fdac50ce895e"
+    },
+    "review-comparison.jsonl": {
+      "bytes": 14788,
+      "sha256": "a4f360dd9a495f58beeef546f0a5e4eb303bbf8dfd3357e655a2e36cc98fa9f9"
+    },
+    "review-receipt.json": {
+      "bytes": 2440,
+      "sha256": "e2850cbfe2f67df40935c4a579fecb362e871ff0fe142cd681e0af41a6677166"
+    },
+    "source-index.jsonl": {
+      "bytes": 78821,
+      "sha256": "1719a492e60bbaeeef95af9da16661b9e8e05907ef49e05f89ff8fa49bf63f09"
+    }
+  },
+  "identity_accuracy_established": false,
+  "independent_human_adjudication": false,
+  "independent_review": {
+    "frozen_candidate_pool_sha256": "3176d472711662503b57087f1ad6d6f6f9c6c77b53d8738b926764559de08219",
+    "frozen_labels_sha256": "e813c310b673bf66ee7dbeec5c87b9453d39bea6432f941587e79e6a9efaf4f2",
+    "frozen_mentions_sha256": "6690ddb2e90bb3332e31e1e512800209b5dce88dc7e1edd20ac4b4d57f5c0a52",
+    "input": {
+      "bytes": 135850,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/blind-review-input-v2.jsonl",
+      "sha256": "80e4466f322dca6356f6ff8fa473204ad4c8ccbf9c25af3067ee02b46f702edc"
+    },
+    "receipt": "review-receipt.json",
+    "selected_tasks": 30,
+    "selection": "Eleven actor-kind contexts, eleven full co-reference questions (four alias contexts, two joint-role contexts, five coordinated-credit contexts), and eight cross-recording questions including one project owner. SHA-256 rank within source-input strata with distinct focal wording and diverse recordings; no draft answers are supplied.",
+    "status": "reviewed_subset_adjudication_pending"
+  },
+  "limits": [
+    "All 168 labels remain development drafts. A separate Codex reviewer answered 30 questions before seeing draft answers; independent human review and adjudication are pending.",
+    "Unknown actor kind and insufficient identity evidence must never become negative labels or accepted person creation.",
+    "Person labels from performer/video rosters classify expressed actors; they do not establish a taper role, global person identity, or date-specific participation.",
+    "One named project owner supplies corroborated cross-artist referents for a single identity; repetitions do not establish broad identity coverage.",
+    "No verified provider-qualified person identifier is present in the catalog sample. Archive search URLs are query links, not person identifiers.",
+    "Candidate completeness is exact only within the frozen mention inventory and declared retrieval scope. Live-global identity evaluation remains required.",
+    "Group all recording, family and name hypotheses before any data split; all unknown cases participate. Split groups are not features.",
+    "The potentially exposed reserved source family is excluded and cannot support future untouched-evaluation claims."
+  ],
+  "original_collision_tasks": {
+    "bytes": 25617,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/original-collision-tasks.jsonl",
+    "sha256": "598da3b036c3f70b50c9017d3ea0c29a927cd5acd2fc080435990c06f6278356"
+  },
+  "original_selected_evidence": {
+    "bytes": 374161,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/original-selected-evidence.jsonl",
+    "sha256": "01e4ab5cab3f009ac74a0e66c0de20e14a3c270637c96426f8625878138c06a8"
+  },
+  "policy_activation_permitted": false,
+  "reservation_index": {
+    "bytes": 955704,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/reserved-reference-index.json",
+    "sha256": "f4f1d8c43d886800d4d0e8ef2d14c438a8f1ab92904ed0be53ef6436ebf32331"
+  },
+  "schema_version": "people-development-bundle-v1",
+  "selection": {
+    "citations": 311,
+    "cross_recording_tasks_with_other_artist_candidates": 40,
+    "eligible_development_artists": 1765,
+    "eligible_development_sources": 2184,
+    "mentions": 246,
+    "method": "Curated source-supported roster actors, explicit collectives, joint role actors, coordinated credits and aliases; existing equal-name collision tasks retain uncertainty. Repeated mentions are candidate inventory entries, not independent people.",
+    "original_collision_tasks": 45,
+    "selected_artists": 137,
+    "selected_source_records": 144,
+    "task_kinds": {
+      "actor_kind": 79,
+      "cross_recording_identity": 43,
+      "within_recording_coreference": 46
+    },
+    "tasks": 168
+  },
+  "source_annotation_evidence_sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0",
+  "source_annotation_manifest_sha256": "925db125599f4c28d8cc4c7c7cb6b48727619c8336afc915d3beadf4e7821a93",
+  "source_annotation_tasks_sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426",
+  "status": "draft_with_reviewed_subset_adjudication_pending",
+  "usage": "development_only",
+  "web_verification": {
+    "page_limit": 30,
+    "paid_requests": 0,
+    "primary_pages_retained": 1
+  }
+}

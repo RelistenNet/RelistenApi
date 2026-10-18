@@ -1,0 +1,106 @@
+{
+  "checks": [
+    {
+      "command": "python3 -O docs/research/2026-10-17-full-normalization/training/people-development-v1/validate_bundle.py",
+      "exit_code": 0,
+      "result": {
+        "adjudication": "pending",
+        "mentions": 246,
+        "sources": 144,
+        "split_components": 82,
+        "tasks": 168
+      }
+    },
+    {
+      "command": "python3 -O -m unittest discover -s docs/research/2026-10-17-full-normalization/training/people-development-v1 -p 'test_*.py' -v",
+      "exit_code": 0,
+      "failed": 0,
+      "passed": 14
+    },
+    {
+      "check": "README local links and tracked excerpt/reviewer contact-address scan",
+      "result": "all links resolve; no contact-like addresses found"
+    }
+  ],
+  "dotnet_runs": 0,
+  "files": {
+    "README.md": {
+      "bytes": 10897,
+      "sha256": "23cd0f8302a398862c19a0fb06ca15adb6aca41dfaf821914e77c3af94b235c4"
+    },
+    "candidate-pool.json": {
+      "bytes": 20599,
+      "sha256": "3176d472711662503b57087f1ad6d6f6f9c6c77b53d8738b926764559de08219"
+    },
+    "citations.jsonl": {
+      "bytes": 115308,
+      "sha256": "53828814dcb9642912ecab87dbed7bc37752512a65d602d4a9a5d7d0d08b08b2"
+    },
+    "independent-review.jsonl": {
+      "bytes": 40293,
+      "sha256": "6fd92ac526cb7bb1101e7130448412c7645ea2ae84a5b90ea54c2dbc5c90b50a"
+    },
+    "labels.jsonl": {
+      "bytes": 344888,
+      "sha256": "e813c310b673bf66ee7dbeec5c87b9453d39bea6432f941587e79e6a9efaf4f2"
+    },
+    "manifest.json": {
+      "bytes": 6697,
+      "sha256": "866ba35da197984f6b5e2df5285f84cd62102f67392e514171115c4f5898bd5c"
+    },
+    "mentions.jsonl": {
+      "bytes": 117015,
+      "sha256": "6690ddb2e90bb3332e31e1e512800209b5dce88dc7e1edd20ac4b4d57f5c0a52"
+    },
+    "primary-sources.jsonl": {
+      "bytes": 794,
+      "sha256": "810ada6f75b54c1853e8da6ecf87eaa8929199636d6052d7bb2283183b44efba"
+    },
+    "reservation-receipt.json": {
+      "bytes": 1588,
+      "sha256": "81b1eea62e449c4d9d31e3e48386a6a6dca73ee695ac0ad37017fdac50ce895e"
+    },
+    "review-comparison.jsonl": {
+      "bytes": 14788,
+      "sha256": "a4f360dd9a495f58beeef546f0a5e4eb303bbf8dfd3357e655a2e36cc98fa9f9"
+    },
+    "review-receipt.json": {
+      "bytes": 2440,
+      "sha256": "e2850cbfe2f67df40935c4a579fecb362e871ff0fe142cd681e0af41a6677166"
+    },
+    "source-index.jsonl": {
+      "bytes": 78821,
+      "sha256": "1719a492e60bbaeeef95af9da16661b9e8e05907ef49e05f89ff8fa49bf63f09"
+    },
+    "test_validate_bundle.py": {
+      "bytes": 11773,
+      "sha256": "0d5588afc8e1caa0382b4b67a5a7a78fc2695a7308a2e1894240ee73e99f44dd"
+    },
+    "validate_bundle.py": {
+      "bytes": 28643,
+      "sha256": "ef49b3864315f9b7288142c6a9519abe7a528412cd52f2918e57ef4b8b22953a"
+    }
+  },
+  "fresh_source_review": {
+    "additional_invariant": "Every nonempty known recording family must map to one transitive union split group.",
+    "final_result": "clean_after_fixes",
+    "initial_finding": "Authoritative annotation passes decoded unselected JSON rows before filtering line numbers.",
+    "kind": "read-only correctness/provenance/readability review after initial answer freeze",
+    "resolution": "Both passes now select physical lines before JSON decoding. A malformed excluded UTF-8/JSON regression verifies isolation.",
+    "reviewer": "Codex /root/normalization_local_capture",
+    "reviewer_executed_checks": false,
+    "reviewer_read_reserved_or_held_out_text": false
+  },
+  "independent_human_adjudication": false,
+  "limitations": [
+    "Development drafts remain pending adjudication, including the independently reviewed subset.",
+    "Correlated questions and one project-owner identity cannot estimate broad identity-matching or launch accuracy.",
+    "The validator authenticates source and annotation contracts; semantic judgment remains subject to review."
+  ],
+  "observed_at": "2026-10-18T01:30:18.495397+00:00",
+  "paid_api_requests": 0,
+  "policy_activation_permitted": false,
+  "production_mutations": 0,
+  "schema_version": "people-development-verification-v1",
+  "status": "frozen_development_bundle"
+}

@@ -1,0 +1,29 @@
+{
+  "counts": {
+    "eligible_development_artists": 1765,
+    "eligible_development_sources": 2184,
+    "excluded_annotation_rows": 6,
+    "excluded_strict_development_sources": 1,
+    "matched_retained_references": 9,
+    "reserved_annotation_family_groups": 3,
+    "reserved_cases": 36,
+    "reserved_references": 27,
+    "strict_development_sources_before_reservations": 2185,
+    "unmapped_references": 18
+  },
+  "exposure_note": "Before explicit reservations were known, the initial computational candidate scan included source:3717752 in the strict development intersection. Raw text-selection predicates may have processed it; no seed expected answers or rationales were opened. Exclude this source and its complete retained family from this bundle and future untouched-evaluation claims. Track:33689437 and track:7018353 are track identifiers, not source identifiers.",
+  "index": {
+    "bytes": 955704,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/reserved-reference-index.json",
+    "sha256": "f4f1d8c43d886800d4d0e8ef2d14c438a8f1ab92904ed0be53ef6436ebf32331"
+  },
+  "metadata_only_projection": true,
+  "policy_activation_permitted": false,
+  "schema_version": "people-development-reservation-receipt-v1",
+  "seed_labels_read": false,
+  "source_hashes": {
+    "annotation_evidence": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0",
+    "seed_cases": "9f05f4ddcb8a85bb8578a203be56f2ee10d6f07aa19605e8bcf2b172d25f1040",
+    "snapshot": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4"
+  }
+}
