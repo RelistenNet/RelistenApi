@@ -1037,7 +1037,7 @@ public sealed class TestNormalizationSetlistMaterialization
         var retryUuid = Guid.NewGuid();
         Func<Task> unchanged = () =>
             materializer.RetryAsync(retryUuid, failed.Registration.RegistrationUuid);
-        await unchanged.Should().ThrowAsync<NormalizationConflictException>();
+        await unchanged.Should().ThrowAsync<ArgumentException>();
         (await materializer.GetAsync(retryUuid)).Should().BeNull();
     }
 
