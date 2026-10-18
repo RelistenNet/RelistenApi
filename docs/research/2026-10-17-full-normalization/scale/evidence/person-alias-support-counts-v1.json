@@ -1,0 +1,39 @@
+{
+  "version": "person-alias-support-counts-v1",
+  "state": "focused_verified_query_measured",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/person-alias-support-counts-v1/execution-verification-v1/manifest.json",
+    "sha256": "6be8ca08c785d2917e3d1ac94816f67938b18fefdc45273f37de422a97224bc2"
+  },
+  "tests": {
+    "oldReaderPassed": 4,
+    "oldReaderFailed": 9,
+    "newPublicCandidateCases": 17,
+    "combinedPassed": 198,
+    "combinedFailed": 0,
+    "genuinePre57Compatibility": true
+  },
+  "behavior": [
+    "Authenticate each distinct support-introducing published Work against its retained certificate, owner, source, application version, request hash and full ticket.",
+    "Expand committed receipt names once per Work and match exact support, assignment and actual alias UUIDs. Later support can legitimately belong to an older assignment.",
+    "Retain every active support count and source/extraction/person freshness owner even when evidence witnesses are bounded or a stored proof is invalid.",
+    "Use original structural proof checks when both certificate fields are genuinely absent. Malformed or contradictory certificates invalidate facts instead of falling back.",
+    "Check migration-57 table availability before parsing SQL that names those tables, preserving actual schema-53 readers."
+  ],
+  "queryMeasurement": {
+    "baselineMilliseconds": 13416.384,
+    "certifiedMilliseconds": 31.381,
+    "baselineSharedHitBlocks": 1928740,
+    "certifiedSharedHitBlocks": 6928,
+    "activeSupports": 3000,
+    "invalidProofs": 0,
+    "evidence": "source-actor-publication-capacity-baseline-v1.json",
+    "note": "Comparable synthetic local snapshots during application activity; not isolated application throughput, catalog cost or matching accuracy."
+  },
+  "compatibility": "No schema, people facts version, current alias selection, owner collection or public write contract changes.",
+  "review": "Independent correctness and readability reviews found no issues. Public fault tests cover certificate metadata and actual Work hash, ticket, owner and state; genuine restoration recovers valid facts.",
+  "remaining": [
+    "Complete large repeat checkpoint capacity and distinct-person orchestration work.",
+    "Measure post-visibility-migration and catalog-scale query cost, then evaluate automatic matching independently."
+  ]
+}

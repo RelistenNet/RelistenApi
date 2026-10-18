@@ -164,59 +164,6 @@ public sealed partial class NormalizationCandidateService
         return counts.Supports;
     }
 
-    private static Task<PersonAliasSupportCounts> ReadPersonAliasSupportCounts(
-        NpgsqlConnection c,
-        NpgsqlTransaction t,
-        Guid[] members,
-        CancellationToken ct
-    ) =>
-        c.QuerySingleAsync<PersonAliasSupportCounts>(
-            new CommandDefinition(
-                """
-                SELECT count(*) AS "Supports",count(*) FILTER(WHERE (
-                    length(assignment.original_assertion->>'Version')>0
-                    AND assignment.original_assertion->>'AssertionUuid'=assignment.assertion_uuid::text
-                    AND assignment.original_assertion->>'ActorReferenceUuid'=assignment.actor_reference_uuid::text
-                    AND assignment.original_assertion->>'FieldSha256'=assignment.field_sha256
-                    AND jsonb_typeof(assignment.original_assertion->'Name')='string'
-                    AND length(assignment.original_assertion->>'Name')>0
-                    AND jsonb_typeof(assignment.original_assertion->'NameEvidence')='object'
-                    AND assignment.original_assertion#>>'{NameEvidence,InputRevisionUuid}'=assignment.input_revision_uuid::text
-                    AND assignment.original_assertion#>>'{NameEvidence,JsonPointer}'=assignment.field_json_pointer
-                    AND jsonb_typeof(assignment.original_assertion->'Aliases')='array'
-                    AND assignment.original_assertion->'Aliases'<>'[]'::jsonb
-                    AND jsonb_typeof(assignment.original_assertion->'Relationships')='array'
-                    AND assignment.original_assertion->'Relationships'<>'[]'::jsonb
-                    AND jsonb_typeof(assignment.original_assertion->'Context')='object'
-                    AND jsonb_typeof(assignment.original_assertion#>'{Context,Heading}')='object'
-                    AND jsonb_typeof(assignment.original_assertion#>'{Context,Qualifiers}')='array'
-                    AND jsonb_typeof(assignment.original_assertion#>'{Context,Statement}')='object'
-                    AND jsonb_typeof(assignment.original_assertion->'Unresolved')='array'
-                    AND assignment.original_scope->>'ProducerVersion'=assignment.producer_version
-                    AND assignment.original_scope->>'InputRevisionUuid'=assignment.input_revision_uuid::text
-                    AND assignment.original_scope#>>'{Resource,Provider}'=resource.provider
-                    AND assignment.original_scope#>>'{Resource,ResourceType}'=resource.resource_type
-                    AND assignment.original_scope#>>'{Resource,ProviderKey}'=resource.provider_key
-                    AND jsonb_typeof(assignment.original_scope->'RecordingOrigin')='object'
-                    AND jsonb_typeof(assignment.original_scope->'Extraction')='object'
-                    AND jsonb_typeof(assignment.original_scope#>'{Extraction,Assertions}')='array'
-                    AND (assignment.original_scope#>'{Extraction,Assertions}') @> jsonb_build_array(assignment.original_assertion)
-                    AND jsonb_typeof(assignment.original_scope#>'{Extraction,Unresolved}')='array'
-                    AND jsonb_typeof(assignment.original_scope#>'{Extraction,Scopes}')='array'
-                ) IS NOT TRUE) AS "InvalidProofs"
-                FROM normalization.current_person_aliases alias
-                JOIN normalization.person_alias_contributor_support support ON support.alias_uuid=alias.uuid
-                JOIN normalization.source_actor_alias_assignments assignment ON assignment.uuid=support.assignment_uuid
-                JOIN normalization.input_resources resource ON resource.uuid=assignment.resource_uuid
-                WHERE alias.person_uuid=ANY(@members) AND support.retired_work_uuid IS NULL
-                    AND assignment.retired_work_uuid IS NULL
-                """,
-                new { members },
-                t,
-                cancellationToken: ct
-            )
-        );
-
     private static async Task<CandidateNameFact[]> ReadPersonAliasWitnesses(
         NpgsqlConnection c,
         NpgsqlTransaction t,
