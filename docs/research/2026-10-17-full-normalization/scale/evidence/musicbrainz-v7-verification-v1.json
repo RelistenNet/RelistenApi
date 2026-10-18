@@ -9,8 +9,12 @@
     "affectedNotExecuted": 8,
     "separatelySelectedHistoricalPassed": 5,
     "remainingExplicitOutsideScope": 3,
-    "broadSuiteState": "running",
-    "apiAssemblySha256": "ccf1f5b35fbaf0c447adc1f309be8c6ce367a815318523d64d3b208c1db4aecf"
+    "broadSuiteState": "completed_passed",
+    "apiAssemblySha256": "ccf1f5b35fbaf0c447adc1f309be8c6ce367a815318523d64d3b208c1db4aecf",
+    "broadPassed": 3699,
+    "broadNotExecuted": 32,
+    "broadFailed": 0,
+    "broadFilter": "TestCategory!=SourceAliasScale&TestCategory!=PeopleFactsSnapshotScale"
   },
   "retainedResponseReplay": {
     "sameHttpResponse": true,
@@ -31,7 +35,7 @@
     "oldPositiveProducerRefused": true,
     "changedSavedHeadsRefused": true
   },
-  "qualification": "Source-review and targeted behavior verification, not matching accuracy or completed broad regression. Three large explicit cases retain earlier separate verification scope. Initial fixture-version assertion failure and its correction remain in retained diagnostics.",
+  "qualification": "Source-review and behavior verification, not matching accuracy. The broad suite ran on the pinned decoder-v7 capsule before credit-v3 and native-people reader changes. Actual TRX records 3,699 passed and 32 not executed. Excluded scale categories and unexecuted cases are not claimed passed. Three large explicit cases retain earlier separate verification scope. Initial fixture-version assertion failure and correction remain in retained diagnostics.",
   "privateEvidence": [
     {
       "manifest": "local-dev/normalization-data/2026-10-18-musicbrainz-v7-verification-v1/manifest.json",
@@ -48,6 +52,10 @@
     {
       "manifest": "local-dev/normalization-data/2026-10-18-musicbrainz-work-v7-redecode-v1/export/manifest.json",
       "sha256": "7b629636bc2e62a2608463ed17e867e5fc48ce31d5c2681ed290ca50499fb7f0"
+    },
+    {
+      "manifest": "local-dev/normalization-data/2026-10-18-full-v7-broad-verification-v1/manifest.json",
+      "sha256": "3188bf6deba2f8cf73606b2fc487be67ced4544d07135b9881bfde9d50292fbe"
     }
   ],
   "productionWrites": false,

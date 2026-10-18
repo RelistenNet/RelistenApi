@@ -40,13 +40,45 @@ results and five empty fields, at $0.0518212 configured token cost. Only 457 fie
 have complete labels. Preserve unavailable outputs and incomplete labels in
 coverage; these results do not establish global person identity or release accuracy.
 
-The next people packet freezes 162 questions from 95 artists, with 151 cross-artist
-questions. Two independent source readings are in progress. It falls 38 short of
-the proposed 200-question expansion; repeated names are questions, not identity
-answers. The 600 venue queries now have an additive read-only catalog capture:
+The next people comparison has executed all 162 questions from 95 artists, with
+151 cross-artist questions. Source-reviewed development judgments label 47
+relationships same and six different; 109 remain unresolved. Both unchanged models produce 43
+true positives, three false positives, four false negatives and three true
+negatives at the diagnostic one-half cutoff. Every declared source comparison
+exports successfully through the public C# projector, but 140 of 240 endpoints
+use its name-only fallback. The three false matches share the same five-feature
+vector as 32 supported matches and 49 unknowns. A threshold cannot separate those
+opposite labels. Improve source interpretation and discriminating evidence before
+retraining or selecting acceptance thresholds; comparison completeness does not
+establish complete identity evidence. The four missed matches need qualified
+handle or explicit alias evidence. Independent result review is complete.
+The six negatives concern performers or ensembles; confirmed same-full-name
+taper/transferrer collisions remain a gap. This tranche falls 38 short of the
+proposed 200-question expansion. Keep its results separate from the earlier 200.
+
+The committed v3 credit extractor now requires actor-specific prose attribution,
+supports named media transfers and credited handles, and preserves exact quotes,
+whole-response refusal and versioned caches. A compiled replay of all 458 distinct
+v2 responses keeps 383 of 389 previously usable responses and accepts 11 previously
+refused responses. Six earlier responses still fail the stricter grammar. This
+counterfactual does not measure the changed prompt. The full 600-field paired v3
+Luna run completed with 413 usable outputs, 58 unusable results, 124 unchanged
+contact exclusions and five empty fields. The new job used 458 admitted attempts
+and $0.0555205 configured token accounting, below its $30 ceiling. On 328 complete
+fields available in both runs, v3 recovers 209 supported credits, adds five false
+credits and misses nine; v2 recovers 207, adds six and misses 11. Three fields
+improve and one gains an error. Fifteen complete fields become available and
+fifteen become unavailable, so preserve those changes separately. Independent
+result review is in progress; these development results choose no fallback policy.
+
+The 600 venue queries now have an additive read-only catalog capture:
 1,954 dated association rows cover 594 queries. All first 60 review queries have
 associated rows, but catalog dates do not establish exact event dates or physical
-venue identity. Review the premises, rooms and historical names independently.
+venue identity. Two independent source readings of the first 60 queries are
+complete. Adjudication retains 45 premises/history cases, one event-label-only
+case and 14 insufficient cases. These are scoped facts; candidate mapping and
+identity-equivalent retrieval evaluation remain required. The answers preserve
+all four source/show venue-ID conflicts and unknown catalog date precision.
 Grouping exact venue name/location observations improves raw counterpart retrieval
 over a fixed 100-row budget, but gives no advantage over an equally sized expanded
 row budget on the 32 exposed directions. Keep this result as an experiment; it
@@ -56,12 +88,20 @@ The composition and repertoire selection retains 120 composition claims from 40
 artists and 60 repertoire parents from 50 artists, with complete selected context
 and song dictionaries. Preparing actual public-contract exports exposed dictionary-free
 recordings and unordered legacy setlist membership. Preserve these cases and their
-limits; they are acquisition and evaluation inputs, not completed music matching.
+limits. Bounded MusicBrainz acquisition is now running 420 frozen first-page
+queries for 120 composition claims across 40 artists, with at most 600 dispatched
+attempts and 256 MiB of retained evidence, including candidate hydration. Search
+windows and the external universe remain incomplete. Next establish supported
+catalog-to-work bridges and evaluate matching; acquisition alone supplies no
+identity answer. Expand repertoire queries with dictionary-bearing artists and
+file-title claims; existing imported memberships remain a separate control.
 
 The [retained broad API regression](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
 passes on its pinned earlier revision. The decoder-v7 change passes 624 distinct
 affected checks, including genuine v6 and original-schema v1 history restores; its
-new broad regression is running. The [v7 receipt](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-v7-verification-v1.json)
+broad regression passes 3,699 checks, with zero failures and 32 actual TRX entries
+not executed. That capsule predates the credit-v3 and native-people reader changes,
+which have separate focused verification. The [v7 receipt](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-v7-verification-v1.json)
 records the exact scope. The [1,001-source scale case](../../../research/2026-10-17-full-normalization/scale/evidence/source-owner-thousand-one-terminal-v1.json)
 reached its one-hour cancellation limit during initial publication, before its
 preservation assertions. Publication cost remains separate required work before
