@@ -30,8 +30,28 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
     private readonly HashSet<Guid> observedSources = [];
     private readonly Dictionary<string, Dictionary<string, ActorAccount>> accounts = new();
     private readonly IdentityCandidateMatcher matcher = new();
+    private readonly Dictionary<string, Dictionary<string, ActorAccount>> names = new();
+    private readonly ShadowLunaCreditEvidence? luna;
 
-    public string Version => "shadow-people-v1";
+    public ShadowPeopleAdapter() { }
+
+    /// <summary>Loads a completed Luna job pinned to the exact original extraction stream.</summary>
+    public ShadowPeopleAdapter(string? lunaOutputDirectory, string? expectedExtractionSha256)
+    {
+        if (lunaOutputDirectory is null && expectedExtractionSha256 is null)
+        {
+            return;
+        }
+        if (lunaOutputDirectory is null || expectedExtractionSha256 is null)
+        {
+            throw new ArgumentException(
+                "Luna output and its expected extraction SHA-256 are both required."
+            );
+        }
+        luna = new(lunaOutputDirectory, expectedExtractionSha256);
+    }
+
+    public string Version => "shadow-people-v2" + (luna is null ? "" : "/luna:" + luna.Identity);
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind == "source_sample" ? Domains : [];
@@ -44,11 +64,16 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
     /// </summary>
     public void Observe(JsonElement record)
     {
-        if (
-            !record.TryGetProperty("kind", out var kind)
-            || kind.GetString() != "source_sample"
-            || !record.TryGetProperty("resourceUuid", out _)
-        )
+        if (!record.TryGetProperty("kind", out var kind) || kind.GetString() != "source_sample")
+        {
+            return;
+        }
+        if (record.TryGetProperty("row", out _))
+        {
+            luna?.ObserveRaw(record);
+            return;
+        }
+        if (!record.TryGetProperty("resourceUuid", out _))
         {
             return;
         }
@@ -59,7 +84,8 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
             return;
         }
 
-        foreach (var actor in Actors(extraction))
+        var model = luna?.Resolve(extraction);
+        foreach (var actor in LocalActors(extraction).Concat(ModelActors(extraction, model)))
         {
             var signature =
                 JsonSerializer.Serialize(
@@ -72,25 +98,44 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                 )
                 + ":"
                 + extraction.ArtistUuid;
+            signature = (actor.ModelDerived ? "model:" : "local:") + signature;
             foreach (var lookup in LookupKeys(actor.Match))
             {
-                if (!accounts.TryGetValue(lookup, out var bucket))
+                Remember(accounts, lookup, signature, actor);
+            }
+            if (luna is not null)
+            {
+                foreach (var name in actor.Match.Names)
                 {
-                    bucket = new();
-                    accounts.Add(lookup, bucket);
-                }
-
-                if (
-                    !bucket.TryGetValue(signature, out var previous)
-                    || StringComparer.Ordinal.Compare(
-                        actor.Person.EntityKey,
-                        previous.Person.EntityKey
-                    ) < 0
-                )
-                {
-                    bucket[signature] = actor;
+                    Remember(
+                        names,
+                        NormalizedPeopleService.NameKey(name.Wording),
+                        signature,
+                        actor
+                    );
                 }
             }
+        }
+    }
+
+    private static void Remember(
+        Dictionary<string, Dictionary<string, ActorAccount>> index,
+        string key,
+        string signature,
+        ActorAccount actor
+    )
+    {
+        if (!index.TryGetValue(key, out var bucket))
+        {
+            bucket = new();
+            index.Add(key, bucket);
+        }
+        if (
+            !bucket.TryGetValue(signature, out var previous)
+            || StringComparer.Ordinal.Compare(actor.Person.EntityKey, previous.Person.EntityKey) < 0
+        )
+        {
+            bucket[signature] = actor;
         }
     }
 
@@ -138,7 +183,9 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         NormalizationBatchExtraction extraction
     )
     {
-        var actors = Actors(extraction).ToArray();
+        var model = luna?.Resolve(extraction, input.Row);
+        var modelActors = ModelActors(extraction, model).ToArray();
+        var actors = LocalActors(extraction).Concat(modelActors).ToArray();
         var comparisons = actors.Select(Relationships).ToArray();
         var relationships = comparisons.SelectMany(result => result.Links).ToArray();
         var people = actors.Select(actor => actor.Person).ToArray();
@@ -158,6 +205,17 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
             ))
             .Where(credit => people.Any(person => person.EntityKey == credit.PersonEntityKey))
             .ToArray();
+        var modelCredits = ModelCredits(extraction, model).ToArray();
+        credits = credits.Concat(modelCredits).ToArray();
+        var modelInterpretation = model is null
+            ? null
+            : new ShadowLunaCreditInterpretation(
+                model.State,
+                model.Reason,
+                model.Basis,
+                modelActors.Select(actor => actor.Person.EntityKey).ToArray(),
+                modelCredits.Select(credit => credit.EntityKey).ToArray()
+            );
         var personKeys = people
             .Select(person => person.EntityKey)
             .Concat(
@@ -179,13 +237,15 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                     people,
                     relationships,
                     comparisons.Select(result => result.Coverage).ToArray(),
-                    observedSources.Contains(input.Uuid)
+                    observedSources.Contains(input.Uuid),
+                    modelInterpretation
                 ),
                 new
                 {
                     OriginalInputs = extraction.Inputs,
                     extraction.SourceActorAliases,
                     CreditActors = extraction.CreditExtraction?.Credits,
+                    Model = ModelEvidence(model),
                 },
                 people.Length == 0 ? "no_named_actor_claims"
                     : !observedSources.Contains(input.Uuid) ? "global_actor_index_unavailable"
@@ -202,9 +262,15 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                     creditIssues,
                     (extraction.CreditExtraction?.Credits ?? [])
                         .Where(credit => !HasDisplayName(credit.Name))
-                        .ToArray()
+                        .ToArray(),
+                    modelInterpretation
                 ),
-                new { OriginalInputs = extraction.Inputs, extraction.CreditExtraction },
+                new
+                {
+                    OriginalInputs = extraction.Inputs,
+                    extraction.CreditExtraction,
+                    Model = ModelEvidence(model),
+                },
                 credits.Length == 0 ? "no_named_role_claims" : null,
                 credits
                     .Select(credit => credit.EntityKey)
@@ -221,9 +287,17 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         ShadowPeopleRelationshipCoverage Coverage
     ) Relationships(ActorAccount actor)
     {
+        // Model-only names can retrieve competing source actors, but name agreement
+        // supplies no identity link. Ordinary local namesakes retain their prior behavior.
+        var nameCandidates = actor
+            .Match.Names.Select(name => NormalizedPeopleService.NameKey(name.Wording))
+            .Where(names.ContainsKey)
+            .SelectMany(key => names[key].Values)
+            .Where(candidate => actor.ModelDerived || candidate.ModelDerived);
         var candidates = LookupKeys(actor.Match)
             .Where(accounts.ContainsKey)
             .SelectMany(key => accounts[key].Values)
+            .Concat(nameCandidates)
             .DistinctBy(candidate => candidate.Person.EntityKey)
             .Where(candidate => candidate.Person.SourceUuid != actor.Person.SourceUuid)
             .OrderBy(candidate => candidate.Person.EntityKey, StringComparer.Ordinal)
@@ -257,16 +331,22 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
             var supported =
                 sameName && !uncertain && !conflict && (contactAgrees || attributedProfileAgrees);
 
+            var accountAgrees = comparison.Features.Any(feature =>
+                feature.Name is "actor_contact" or "actor_profile"
+                && feature.Agreement == IdentityFeatureAgreement.Agrees
+            );
             links.Add(
                 new(
-                    supported ? "proposed_same_person" : "unresolved_shared_account",
+                    supported ? "proposed_same_person"
+                        : accountAgrees ? "unresolved_shared_account"
+                        : "unresolved_name_match",
                     actor.Person.EntityKey,
                     candidate.Person.EntityKey,
                     candidate.Person.SourceUuid,
                     candidate.Person.ArtistUuid,
-                    supported
-                        ? "name_or_explicit_alias_and_attributed_account"
-                        : "nonexclusive_account_requires_review",
+                    supported ? "name_or_explicit_alias_and_attributed_account"
+                        : accountAgrees ? "nonexclusive_account_requires_review"
+                        : "name_requires_identity_evidence",
                     comparison.Features,
                     candidate.Evidence
                 )
@@ -275,7 +355,7 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         return (links, new(actor.Person.EntityKey, candidates.Length, links.Count));
     }
 
-    private static IEnumerable<ActorAccount> Actors(NormalizationBatchExtraction extraction)
+    private static IEnumerable<ActorAccount> LocalActors(NormalizationBatchExtraction extraction)
     {
         var seen = new HashSet<string>();
         foreach (var credit in extraction.CreditExtraction?.Credits ?? [])
@@ -334,6 +414,83 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
             );
         }
     }
+
+    private static IEnumerable<ActorAccount> ModelActors(
+        NormalizationBatchExtraction extraction,
+        ShadowLunaCreditMatch? model
+    )
+    {
+        var seen = new HashSet<string>();
+        foreach (var credit in model?.Extraction?.Credits ?? [])
+        {
+            var key = PersonKey(extraction.ResourceUuid, ModelReference(model!, credit));
+            if (!seen.Add(key))
+            {
+                continue;
+            }
+            var person = new ShadowPerson(
+                key,
+                credit.Name,
+                null,
+                [],
+                extraction.ResourceUuid,
+                extraction.ArtistUuid,
+                null,
+                "retained_luna_extraction"
+            );
+            yield return new(
+                person,
+                PeopleActorProjection.Project(credit, extraction.ArtistUuid).Record,
+                [credit.Evidence],
+                true
+            );
+        }
+    }
+
+    private static IEnumerable<ShadowRecordingCredit> ModelCredits(
+        NormalizationBatchExtraction extraction,
+        ShadowLunaCreditMatch? model
+    )
+    {
+        foreach (var credit in model?.Extraction?.Credits ?? [])
+        {
+            var reference = ModelReference(model!, credit);
+            yield return new(
+                ShadowCatalogIdentity.Key(
+                    "credit",
+                    extraction.ResourceUuid + ":" + reference + ":" + credit.Role
+                ),
+                PersonKey(extraction.ResourceUuid, reference),
+                extraction.ResourceUuid,
+                extraction.ArtistUuid,
+                credit.Name,
+                credit.Role,
+                credit.OriginalRole,
+                credit.Evidence,
+                "retained_luna_extraction"
+            );
+        }
+    }
+
+    private static string ModelReference(ShadowLunaCreditMatch model, CreditMention credit) =>
+        "luna:"
+        + model.Basis.ExtractorVersion
+        + ":"
+        + model.Basis.CacheKey
+        + ":"
+        + CreditReference(credit);
+
+    private static object? ModelEvidence(ShadowLunaCreditMatch? model) =>
+        model is null
+            ? null
+            : new
+            {
+                model.Basis,
+                model.State,
+                model.Reason,
+                OriginalLunaResult = model.OriginalResult,
+                IdentityAndExhaustiveCoverageEstablished = false,
+            };
 
     private static IEnumerable<string> LookupKeys(PersonMatchRecord actor)
     {
@@ -426,7 +583,8 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
     private sealed record ActorAccount(
         ShadowPerson Person,
         PersonMatchRecord Match,
-        IReadOnlyList<NormalizationTextEvidence> Evidence
+        IReadOnlyList<NormalizationTextEvidence> Evidence,
+        bool ModelDerived = false
     );
 }
 
@@ -438,7 +596,9 @@ public sealed record ShadowPerson(
     IReadOnlyList<string> Aliases,
     Guid SourceUuid,
     Guid ArtistUuid,
-    Guid? SourceReferenceUuid
+    Guid? SourceReferenceUuid,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? InterpretationBasis = null
 );
 
 /// <summary>Account-supported comparison. Proposed links still require evaluated acceptance policy.</summary>
@@ -457,7 +617,9 @@ public sealed record ShadowPeopleProposal(
     IReadOnlyList<ShadowPerson> People,
     IReadOnlyList<ShadowPersonRelationship> Relationships,
     IReadOnlyList<ShadowPeopleRelationshipCoverage> RelationshipCoverage,
-    bool GlobalIndexIncludesSource
+    bool GlobalIndexIncludesSource,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ShadowLunaCreditInterpretation? ModelInterpretation = null
 );
 
 /// <summary>Counts semantic account candidates, not accepted identities or all catalog people.</summary>
@@ -479,11 +641,15 @@ public sealed record ShadowRecordingCredit(
     string Name,
     RecordingCreditRole Role,
     string? OriginalRole,
-    NormalizationTextEvidence Evidence
+    NormalizationTextEvidence Evidence,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        string? InterpretationBasis = null
 );
 
 public sealed record ShadowCreditsProposal(
     IReadOnlyList<ShadowRecordingCredit> Credits,
     IReadOnlyList<RecordingExtractionUnresolved> Unresolved,
-    IReadOnlyList<CreditMention> UnassignedCredits
+    IReadOnlyList<CreditMention> UnassignedCredits,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ShadowLunaCreditInterpretation? ModelInterpretation = null
 );

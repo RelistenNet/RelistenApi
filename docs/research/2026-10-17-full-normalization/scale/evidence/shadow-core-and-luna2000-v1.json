@@ -1,0 +1,181 @@
+{
+  "version": "shadow-core-and-luna2000-v1",
+  "core": {
+    "state": "completed",
+    "runDirectory": "local-dev/normalization-data/2026-10-18-shadow-complete-core-ranges-v1",
+    "process": {
+      "exitCode": 0,
+      "elapsedSeconds": 269.086
+    },
+    "rawRows": 563935,
+    "outputRows": 1242539,
+    "counts": [
+      {
+        "provider": "catalog:unattributed",
+        "domain": "people",
+        "processed": 292523,
+        "outcomes": {
+          "proposed": 253578,
+          "unresolved": 38945
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "credits",
+        "processed": 292523,
+        "outcomes": {
+          "proposed": 253571,
+          "unresolved": 38952
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "performances",
+        "processed": 327260,
+        "outcomes": {
+          "proposed": 292523,
+          "unresolved": 34737
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "venues",
+        "processed": 216332,
+        "outcomes": {
+          "proposed": 186288,
+          "unresolved": 30044
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "repertoire",
+        "processed": 16605,
+        "outcomes": {
+          "proposed": 16558,
+          "unresolved": 47
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "compositions",
+        "processed": 51342,
+        "outcomes": {
+          "unresolved": 51255,
+          "proposed": 87
+        }
+      },
+      {
+        "provider": "catalog:unattributed",
+        "domain": "setlists",
+        "processed": 34737,
+        "outcomes": {
+          "unresolved": 34737
+        }
+      },
+      {
+        "provider": "phantasytour.com",
+        "domain": "compositions",
+        "processed": 3738,
+        "outcomes": {
+          "unresolved": 3738
+        }
+      },
+      {
+        "provider": "phantasytour.com",
+        "domain": "performances",
+        "processed": 3738,
+        "outcomes": {
+          "unresolved": 3738
+        }
+      },
+      {
+        "provider": "phantasytour.com",
+        "domain": "setlists",
+        "processed": 3738,
+        "outcomes": {
+          "unresolved": 3738
+        }
+      },
+      {
+        "provider": "jerrygarcia.com",
+        "domain": "compositions",
+        "processed": 1,
+        "outcomes": {
+          "unresolved": 1
+        }
+      },
+      {
+        "provider": "jerrygarcia.com",
+        "domain": "performances",
+        "processed": 1,
+        "outcomes": {
+          "unresolved": 1
+        }
+      },
+      {
+        "provider": "jerrygarcia.com",
+        "domain": "setlists",
+        "processed": 1,
+        "outcomes": {
+          "proposed": 1
+        }
+      }
+    ],
+    "reader": "http://alecs-macbook-pro.tail09dbf.ts.net:18765/",
+    "scope": "All 15 completed recording, venue, repertoire and legacy-setlist ranges, plus one ordered provider input. File capture and normalization remain pending. Separate shard snapshots remain distinct."
+  },
+  "luna": {
+    "manifest": {
+      "state": "completed_partial",
+      "jobUuid": "67021bef-10ac-4853-bd7f-39b8d9ee8b60",
+      "inputSha256": "398104699bac6781714a295b469a5161b55d704db61da3be244643622584ae35",
+      "extractorVersion": "luna-recording-credits-v3",
+      "records": 2000,
+      "fromCache": 0,
+      "states": {
+        "extracted": 1952,
+        "unresolved": 48
+      },
+      "capUsd": 25,
+      "accountedUsd": 0.278385,
+      "concurrency": 8,
+      "uniqueRequests": 1999,
+      "reusedWithinBatch": 1,
+      "selectionSha256": "09b3b1b03a6bbece6f5b477a2e93bd9e50064b693145f9bfb813530648758fc4",
+      "resultsSha256": "b1c1a95c863a4e002c8c52f00fb2970275e3dd02635a3d472f1a7b32ab5020bd"
+    },
+    "manifestSha256": "cea42c3ed84c0e56004af55cde03b89899b8699a4d6b1b85f395ffd33e4ae821",
+    "process": {
+      "exitCode": 1,
+      "elapsedSeconds": 425.424,
+      "jobUuid": "67021bef-10ac-4853-bd7f-39b8d9ee8b60"
+    },
+    "positiveCreditMentions": 2296,
+    "scope": "Validated extraction proposals. No identity accuracy or publication acceptance follows from successful processing."
+  },
+  "integratedReplay": {
+    "state": "completed",
+    "runDirectory": "local-dev/normalization-data/2026-10-18-shadow-catalog-luna2000-v1",
+    "outputRows": 258987,
+    "failedOutcomes": 0,
+    "modelStates": {
+      "extracted": 1952,
+      "unresolved": 48
+    },
+    "positiveModelCreditMentions": 2296,
+    "process": {
+      "exitCode": 0,
+      "elapsedSeconds": 16.776
+    },
+    "reader": "http://alecs-macbook-pro.tail09dbf.ts.net:18764/",
+    "scope": "Offline replay of every retained sample input with byte-pinned model evidence. Local credits and actor facts remain separate. No new paid, database or public catalog writes."
+  },
+  "verification": {
+    "csharpBehaviorPassed": 121,
+    "csharpBehaviorFailed": 0,
+    "csharpBehaviorSkipped": 0,
+    "readerBehaviorPassed": 20,
+    "captureBehaviorPassed": 15
+  },
+  "open": "Full file population, importer-native evidence, composition and physical venue identity coverage, independent matching audits, automatic acceptance and rollout qualification remain unfinished."
+}

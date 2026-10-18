@@ -23,6 +23,29 @@ retained. See its [receipt](../../../research/2026-10-17-full-normalization/scal
 The expanded integration checkpoint passed 109 tests. The full file population
 and independent matching audits remain incomplete. Domain quality and model-enrichment work can continue independently over the completed sample.
 
+## Completed recording and venue ranges
+
+The [full recording/venue reader](http://alecs-macbook-pro.tail09dbf.ts.net:18765/)
+shows the completed 15-range core pass: 292,523 recordings, 216,332 venues,
+16,605 repertoire songs and 38,475 legacy setlists, plus one ordered provider
+input. It produced 1,242,539 outcomes with no processing failures. Audio-file
+capture and normalization remain incomplete. The reader reports any index lag
+separately from completed runner work.
+
+A 2,000-record Luna wave completed in 425 seconds with $0.278385 accounted in
+its ledger: 1,952 validated extraction results and 48 unresolved responses.
+The [sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) now includes
+those separate model interpretations and 2,296 positive model credit mentions.
+The offline replay processed every sample input without another paid request
+or a processing failure. These are extraction proposals; matching accuracy
+and production acceptance remain separate work.
+
+The current C# checkpoint passed 121 behavior tests; the compact reader passed
+20 and the capture operator passed 15. See the [combined run receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-core-and-luna2000-v1.json)
+for exact counts and retained execution paths. Physical venue identity,
+cross-artist compositions, native provider coverage and independent relationship
+audits remain incomplete even when a raw range has no processing failures.
+
 ## Run and inspect the completed sample
 
 Open the [live shadow reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/).

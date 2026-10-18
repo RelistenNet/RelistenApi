@@ -175,6 +175,15 @@ Each job has a durable $25 cap. Reuse its UUID and a new output directory after 
 
 The command validates the complete local extraction receipt before any paid call. It saves `selection.json`, then flushes each result to `results.jsonl`. A completed attempt publishes `manifest.json` with states, cache reuse, input hash and spend. Classified unresolved requests produce `completed_partial`. Cancellation or an unexpected failure leaves an inspectable prefix without a completed manifest. Results remain proposals; this command cannot accept a global person or taper/transferrer match.
 
+Completed source-credit jobs can enrich a shadow run without more API calls.
+Set `RELISTEN_SHADOW_LUNA_CREDITS` to the completed job directory and
+`RELISTEN_SHADOW_LUNA_INPUT_SHA256` to the exact original extraction-stream hash.
+The adapter verifies the selection and result hashes, source/artist identity,
+original fields and quoted spans. It preserves local credits and attached facts,
+labels model evidence separately and leaves failed or changed inputs unresolved.
+Empty model output does not remove local credits. Model-only people remain
+source-scoped; a matching name alone cannot establish a global identity.
+
 ## Matched-field Luna comparison
 
 Use [`luna-credit-fields`](luna-credit-fields.md) to compare the current local parser and Luna on the same 100 frozen development fields, with a separate $5 job cap. It retains all outcomes, keyless cache replay and current fallback routing. The offline scorer verifies frozen inputs and reports exact taper/transferrer names and roles, corrections, new errors and unavailable responses. Uncertain fields supply no negative labels. The guide covers preparation, scoring and recovery.

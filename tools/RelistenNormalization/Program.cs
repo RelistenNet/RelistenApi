@@ -75,7 +75,10 @@ try
     if (args[0] is "shadow" or "shadow-inline")
     {
         var shadow = new ShadowCatalogBatch([
-            new ShadowPeopleAdapter(),
+            new ShadowPeopleAdapter(
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256")
+            ),
             new ShadowVenueAdapter(),
             new ShadowRepertoireAdapter(),
             new ShadowCompositionAdapter(
