@@ -27,14 +27,42 @@ All 575,103 memberships remain intact. See the
 That completed replay is a bounded verification run; all 5.06 million files still
 need processing with the corrected implementation and sufficient storage.
 
-The first
-complete 50,000-recording source range also completed inline normalization:
+The first complete 50,000-recording source range also completed inline normalization:
 150,000 outcomes, no processing failures and all captured show UUID relationships
 retained. See its [receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json).
 The expanded integration checkpoint passed 109 tests. The full file population
 and independent matching audits remain incomplete. Domain quality and model-enrichment work can continue independently over the completed sample.
 
 ## Completed recording and venue ranges
+
+The latest integrated rehearsal is available in the
+[Jerry/Aadam reader](http://alecs-macbook-pro.tail09dbf.ts.net:18766/).
+It processes 701 local recordings and 7,826 files in a separate catalog namespace,
+including 348 Jerry-project recordings and 299 selected Aadam Jacobs recordings.
+All 35,931 outcomes are indexed. The independent audit verified every file's
+playback and ownership coordinates, all 236 dictionary songs and 404 unordered
+memberships. It also exposed unsupported title-derived identities; the corrected
+run removes 211 such file proposals while retaining known songs, musical
+neighbors and original audio. File cards now show their literal titles.
+The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
+records exact inputs, method versions, tests, audits and limits.
+
+The native-provider check separately admitted 300 Archive and 150 Phish responses.
+All 450 recording/show bindings and 219,864 native citations verified against the
+full captured source index. Native file facts remain distinct from catalog file
+assignments and ordered setlist passages. The separate global people diagnostic
+indexed all 292,523 recordings and retained every candidate in its selected
+complete pools. Its 14 actor rankings tied: repeated recording witnesses still
+need distinct-person resolution and independent identity evaluation before
+automatic acceptance.
+
+Full file processing and indexing remain incomplete. The approved temporary-bin
+cleanup recovered only 1.61 MiB of actual host capacity. A separate failed-output
+cleanup proposal awaits approval, and measured projections show that proposal
+alone cannot fit the full output and reader above the existing reserve. Obtain
+additional usable storage before committing to the full combined run. Continue
+physical-evidence acquisition, person-identity resolution and qualification
+without claiming these completed rehearsals establish catalog-wide accuracy.
 
 The current integration adds pinned geographic reference data, links external
 setlist accounts to existing show UUIDs where the evidence identifies one show,

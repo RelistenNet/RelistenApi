@@ -57,9 +57,11 @@ python3 tools/RelistenNormalization/shadow_reader.py \
 ```
 
 Open `http://127.0.0.1:18764/` for that local instance. The current hosted instance
-uses the Tailscale links above. The reader's rebuildable `.shadow-reader-v2.sqlite3`
+uses the Tailscale links above. The reader's rebuildable `.shadow-reader-v3.sqlite3`
 stores summaries, filters, entity keys and chunk/line pointers. Detail views read
 the original immutable chunk; the index does not copy proposal or evidence bodies.
+Version 3 gives file titles priority over recording dates. Earlier cache files
+remain intact, so rebuilding an older run requires space for the new cache too.
 `/api/stats` reports run coverage and index lag, `/api/records` searches outcomes,
 and `/api/record?id=<id>` returns one result with available playback links.
 
@@ -157,6 +159,15 @@ The [population guide](../../docs/research/2026-10-17-full-normalization/scale/s
 covers capture commands, range completion and parentless files. Full-catalog
 processing and matching quality remain separate acceptance requirements.
 
+For an ordinary catalog-row export without replica framing, use
+`shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]`. This route
+uses the same inline extractors and domain adapters, pins the entire input file
+and any provider-input file, and records the extractor versions. Changed input
+bytes or methods reject resume. The export's own provenance defines its capture
+scope; the command creates no database snapshot claim. Keep catalogs with
+colliding numeric IDs in separate runs. `shadow-inline` retains its strict
+original replica-shard verification.
+
 ### Shared geographic identities
 
 Set `RELISTEN_SHADOW_VENUE_GEOGRAPHY` to an offline GeoNames manifest followed by
@@ -167,6 +178,47 @@ region constraints can propose a shared `geonames:<ID>` locality. Missing towns,
 conflicting constraints and multiple candidates remain unresolved. A locality
 does not identify a physical venue; premises still need provider or address
 evidence. The runner makes no geographic network requests.
+
+### Admit retained Archive and Phish HTTP responses
+
+Use `retained-http-inputs <request.json> <new-output-directory>` to reuse completed
+native credit captures without fetching them again. The request names the original
+raw `catalogManifestPath` and an `httpCaptureDirectories` array of completed
+`native-archive-credit-fields-v1` or `native-phish-credit-fields-v1` directories.
+Preparation verifies their manifests, selection plans, HTTP receipts and exact
+response bytes, then finds each selected source in the captured catalog.
+
+The output contains `inputs.jsonl` and a completed `descriptor.json`. Set
+`RELISTEN_SHADOW_PROVIDER_INPUTS` to that input file for a subsequent shadow run.
+Reuse the completed file for exact replay. Preparing another directory creates
+new admission UUIDs and timestamps; the original HTTP time remains separate.
+This offline admission creates no database history or current-provider receipt.
+Cancellation or failure leaves no completed descriptor; use a new destination.
+
+Recording results use the captured source-to-show assignment. A missing or
+conflicting assignment remains explicit rather than selecting another recording
+by date. Updated provider dates and native file facts remain visible alongside
+that assignment. This does not move playback, infer ordered performances from
+file positions, or attach native files to guessed legacy file UUIDs. The full
+Phish response uses `phishin-show-response-v1` and `/data/...` citations; the
+existing `phishin-show-object-v1` contract keeps its original root coordinates.
+
+### Rank global people candidates with a retained model
+
+`RELISTEN_SHADOW_PEOPLE_MODEL` accepts a portable `models.json` path followed by
+`#sha256=<file-hash>`. The loader validates the trained five-feature logistic
+model, feature order, class order and runtime coefficient mapping. Its digest
+becomes part of the adapter version, so a changed model cannot resume an old run.
+
+The adapter retrieves names, explicit aliases and attached accounts across the
+indexed recordings, then scores every retrieved compact witness. Detailed prose
+is limited to 100 relationships per actor; compact outcomes and set-level
+decisions include the complete retrieved pool. Raw scores are ranking diagnostics,
+not probabilities or publication thresholds. Equal names alone still require
+identity evidence, and these results activate no automatic acceptance policy.
+An actual full-index diagnostic produced tied rankings for all 14 selected actor
+mentions. Repeated recording witnesses can describe one person; acceptance still
+needs distinct-person candidates and independent identity evaluation.
 
 ### Acquire composition evidence across the repertoire
 

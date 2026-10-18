@@ -71,7 +71,8 @@ class ShadowIndex:
     Integer dictionaries share repeated headers, labels and entity names. Headers
     are immutable variants: a replay in one domain must not change another domain's
     artist/provider metadata. Only summaries and original chunk pointers live here.
-    The v2 filename lets an existing v1 reader keep running during a separate rebuild.
+    A versioned filename keeps older readers running during a separate rebuild.
+    Version 3 rebuilds summaries with file titles ahead of recording dates.
     """
 
     LABEL_FIELDS = {"name", "title", "displayText", "label", "literalDate", "performanceLabel", "originalTitle", "wording", "displayName"}
@@ -81,7 +82,7 @@ class ShadowIndex:
         self.run = Path(run).resolve(strict=True)
         if not self.run.is_dir():
             raise ValueError("The existing run path must be a directory.")
-        self.database = self.run / ".shadow-reader-v2.sqlite3"
+        self.database = self.run / ".shadow-reader-v3.sqlite3"
         self._status_lock = threading.Lock()
         self._active_file = None
         self._scan_error = None
@@ -309,7 +310,8 @@ class ShadowIndex:
                               (domain_id, input_id)).fetchone()
         if previous and (Path(previous["path"]).name, previous["line_no"]) >= (order_key, line_no):
             return
-        labels = self._labels(record.get("proposal"))
+        labels = self._labels(record.get("proposal"), prefer_file_title=(
+            record["inputKind"] == "track_sample" and domain in ("repertoire", "file_contents")))
         label = labels[0] if labels else (record.get("reason") or record["inputKind"])[:240]
         summary = json.dumps([label, " ".join(labels).casefold()], ensure_ascii=False, separators=(",", ":"))
         values = (domain_id, input_id, self._header(db, record, input_id),
@@ -324,8 +326,17 @@ class ShadowIndex:
         self._replace_entities(db, input_id, domain_id, keys)
 
     @classmethod
-    def _labels(cls, proposal):
+    def _labels(cls, proposal, prefer_file_title=False):
         labels = []
+
+        # A file's recording home is useful search context, but its date cannot
+        # distinguish the files in that recording. Keep the literal title first.
+        if prefer_file_title and isinstance(proposal, dict):
+            interpretation = proposal.get("titleInterpretation", proposal)
+            if isinstance(interpretation, dict):
+                title = interpretation.get("originalTitle")
+                if isinstance(title, str) and title.strip():
+                    labels.append(title.strip()[:240])
 
         def visit(value):
             if len(labels) >= 16:

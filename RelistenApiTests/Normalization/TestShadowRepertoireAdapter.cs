@@ -464,6 +464,15 @@ public sealed class TestShadowRepertoireAdapter
     [TestCase("01 Set 1 Part 1", "unresolved")]
     [TestCase("Music Never Stopped (09:23.55)", "unresolved")]
     [TestCase("Banter - A Story", "unresolved")]
+    [TestCase("LOM 750409l side 2 fast.mp3", "unresolved")]
+    [TestCase("ABC19750409s2t05.flac", "unresolved")]
+    [TestCase("750409 track 03.wav", "unresolved")]
+    [TestCase("intro and soundcheck", "unresolved")]
+    [TestCase("soundcheck / introduction", "unresolved")]
+    [TestCase("introduction / interview", "unresolved")]
+    [TestCase("sound check & interview", "unresolved")]
+    [TestCase("untitled", "unresolved")]
+    [TestCase("Untitled Track #2", "unresolved")]
     public void ObservedRecordingLabelsDoNotCreateProvisionalSongs(string title, string outcome)
     {
         var input = Track(title);
@@ -476,10 +485,47 @@ public sealed class TestShadowRepertoireAdapter
         track.Segments.Should().OnlyContain(segment => segment.Song == null);
         track.OriginalTitle.Should().Be(title);
         track.Extraction.Should().BeEquivalentTo(original);
+        track.FileUuid.Should().Be(FileUuid);
+        track.SourceUuid.Should().Be(SourceUuid);
         track
             .Segments.Select(segment => segment.Evidence)
             .Should()
             .BeEquivalentTo(original.Segments.Select(segment => segment.Evidence));
+    }
+
+    [TestCase("soundcheck")]
+    [TestCase("interview")]
+    public void PartialControlPassageKeepsItsSpanAndMusicalNeighbors(string label)
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var morning = Guid.NewGuid();
+        var evening = Guid.NewGuid();
+        adapter.Observe(Song(morning, "Morning"));
+        adapter.Observe(Song(evening, "Evening"));
+        var title = "Morning > " + label + " (partial) > Evening";
+        var original = new TrackTitleExtractor().Extract(ArtistUuid, title);
+
+        var result = adapter.Process(Track(title)).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("unresolved");
+        track.Segments.Should().HaveCount(3);
+        track.Segments[0].Song!.LegacySongUuid.Should().Be(morning);
+        track.Segments[1].Song.Should().BeNull();
+        track.Segments[1].Outcome.Should().Be("unresolved");
+        track.Segments[1].Reason.Should().Be("shadow_guard_generic_control_passage");
+        track.Segments[1].Evidence.Quote.Should().Be(label);
+        track.Segments[2].Song!.LegacySongUuid.Should().Be(evening);
+        track.Extraction.Should().BeEquivalentTo(original);
+        track.Extraction!.Segments[1].Coverage.Should().Be(TitleCoverage.Partial);
+        track.FileUuid.Should().Be(FileUuid);
+        track.SourceUuid.Should().Be(SourceUuid);
+        result
+            .EntityKeys.Should()
+            .BeEquivalentTo([
+                ShadowRepertoireAdapter.KnownEntityKey(morning),
+                ShadowRepertoireAdapter.KnownEntityKey(evening),
+            ]);
     }
 
     [Test]
@@ -540,6 +586,11 @@ public sealed class TestShadowRepertoireAdapter
     [TestCase("(1,6)")]
     [TestCase("Music Never Stopped (09:23.55)")]
     [TestCase("Stage Banter")]
+    [TestCase("intro and soundcheck")]
+    [TestCase("soundcheck")]
+    [TestCase("interview")]
+    [TestCase("untitled")]
+    [TestCase("LOM 750409l side 2 fast")]
     public void LiteralDictionaryIdentitySurvivesRecordingLabelGuards(string title)
     {
         var adapter = new ShadowRepertoireAdapter();
@@ -563,6 +614,11 @@ public sealed class TestShadowRepertoireAdapter
     [TestCase("Set the Controls for the Heart of the Sun")]
     [TestCase("Part of Me")]
     [TestCase("The Matrix")]
+    [TestCase("Soundcheck Blues")]
+    [TestCase("An Interview")]
+    [TestCase("Interview with the Moon")]
+    [TestCase("Untitled Melody")]
+    [TestCase("Talk Talk")]
     public void WordsThatAlsoAppearInRecordingLabelsDoNotSuppressMusicalTitles(string title)
     {
         var result = new ShadowRepertoireAdapter().Process(Track(title)).Single();

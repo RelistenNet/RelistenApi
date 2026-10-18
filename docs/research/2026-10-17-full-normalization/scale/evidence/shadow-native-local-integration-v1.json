@@ -1,0 +1,298 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T20:44:19.513677+00:00",
+  "scope": "Implemented matching/evidence contracts and local shadow integration. Proposals do not alter the public catalog or activate automatic acceptance.",
+  "verification": {
+    "normalizationSuite": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-consolidated-verification-v1/normalization-consolidated-v2.trx",
+        "bytes": 1816383,
+        "sha256": "a9a0722a660153b4074d82926cb8fb9358822b2655928fbdf96fc161af7fe8f9"
+      },
+      "counters": {
+        "total": "1225",
+        "executed": "1186",
+        "passed": "1186",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "databaseIntegration": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-consolidated-verification-v1/normalization-domain-integration.trx",
+        "bytes": 143210,
+        "sha256": "31ddfc76c079c2c591c8b841e2681c0542954448fac1132d5c71da0e8cc3ef6c"
+      },
+      "counters": {
+        "total": "97",
+        "executed": "97",
+        "passed": "97",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "localRowsAndTitleV5": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-local-title-v5-verification-v1/normalization-local-title-v5.trx",
+        "bytes": 240162,
+        "sha256": "be4bf630cb50998e12b4109c08937e8dfdd52572886ec0d4128aaaf50f521b15"
+      },
+      "counters": {
+        "total": "163",
+        "executed": "163",
+        "passed": "163",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "latestSourceOverlay": {
+      "path": "local-dev/normalization-data/2026-10-18-normalization-local-title-v5-verification-v1/source-overlay.json",
+      "bytes": 166069,
+      "sha256": "a601b368a11d457c398b461355c241f0fe419a022dc55655003babd856956bba"
+    },
+    "readerSuite": {
+      "passed": 22,
+      "failed": 0,
+      "manifest": {
+        "path": "/tmp/normalization-reader-file-label-verification-v1/manifest.json",
+        "bytes": 1488,
+        "sha256": "1f261728f2fab4a06aa8173a25173031dcebee715e57b02f8a979b38044f0aaf"
+      }
+    }
+  },
+  "nativeProviderReplay": {
+    "test": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-real-diagnostics-verification-v1/retained-http-actual450.trx",
+        "bytes": 4779,
+        "sha256": "ebca01439952a2cf306fae40abb8ece91fdf1c256efa2d89ff5a45f38f8e4e3b"
+      },
+      "counters": {
+        "total": "1",
+        "executed": "1",
+        "passed": "1",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "summary": {
+      "path": "local-dev/normalization-data/2026-10-18-retained-http-actual450-probe-v1/summary.json",
+      "bytes": 1209,
+      "sha256": "b5a9360593efac7b196dca152854c7fd59b7715ccbbc4dcd2581c51ab6e9bbf0"
+    },
+    "admission": {
+      "path": "local-dev/normalization-data/2026-10-18-retained-http-admission-v1/descriptor.json",
+      "bytes": 853677,
+      "sha256": "f05704c2e9c2b2f4fa44c14459a5b97cbf982a089f64d87d9ea3665b1c29f60e"
+    },
+    "admissionExecution": {
+      "path": "local-dev/normalization-data/2026-10-18-retained-http-admission-request-v1/execution-receipt.json",
+      "bytes": 2285,
+      "sha256": "e5aa732894903e2088c25d092494f657c8c86ecfa0ddbc2a985556963541bce2"
+    },
+    "archiveResponses": 300,
+    "phishResponses": 150,
+    "sourceRowsIndexed": 292523,
+    "linkedSources": 450,
+    "linkedShows": 450,
+    "nativeFileObservations": 31079,
+    "validatedEvidenceReferences": 219864,
+    "contractViolations": 0,
+    "qualification": "Native files include provider derivatives and non-audio observations. Recording facts do not become guessed catalog file IDs or ordered setlist occurrences."
+  },
+  "globalPeopleDiagnostic": {
+    "test": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-real-diagnostics-verification-v1/people-global-diagnostic.trx",
+        "bytes": 2927,
+        "sha256": "3d83bc3bd13052c2dfa6cd288972e333836b27f4c040a48eab76a5567964a9fa"
+      },
+      "counters": {
+        "total": "1",
+        "executed": "1",
+        "passed": "1",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "receipt": {
+      "path": "/tmp/normalization-people-global-model-diagnostic-v1/actual-run/receipt.json",
+      "bytes": 7518,
+      "sha256": "1f5fd1fd4c74fc9a2aed6dd26d7744f3189d2c851ca9adfdd8e691fea80b3827"
+    },
+    "nativeAudit": {
+      "path": "/tmp/normalization-people-global-model-native-audit-v2/manifest.json",
+      "bytes": 1652,
+      "sha256": "5572602a5466b407a0cda960515e08372197e04fe9d63cbd958eaee17e43dd6b"
+    },
+    "arithmeticAudit": {
+      "path": "/tmp/normalization-people-global-model-diagnostic-arithmetic-audit-v1/manifest.json",
+      "bytes": 2188,
+      "sha256": "33449a8026adf689f9dc00e3e56745b37c46049643029b4329ca7fdf48b8c35c"
+    },
+    "sourceRowsIndexed": 292523,
+    "sourcesProcessed": 7,
+    "actorMentions": 14,
+    "candidateOutcomes": 2075,
+    "independentScoreChecks": 904,
+    "maximumScoreError": 4.44e-16,
+    "poolsAbove100": 6,
+    "nondetailedCandidatesStillScored": 1171,
+    "allRankingsTied": true,
+    "qualification": "Full retained-source index and selected complete-pool execution; no identity truth, calibrated probability, retrieval-recall estimate or automatic acceptance. Repeated witnesses require distinct-person resolution."
+  },
+  "localCollections": {
+    "inputManifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-input-v1/prepared-v2/manifest.json",
+      "bytes": 4232,
+      "sha256": "6949c6dabc61ad00003e8e917b249c655390cd20b405ebf1d93d647e06f703fd"
+    },
+    "runManifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-v2/manifest.json",
+      "bytes": 6233,
+      "sha256": "4a85e8401a09703549ed61b6b8bcf67a7a7ccebc1e96cf01cbdb6d8e93070255"
+    },
+    "execution": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-local-collections-execution-v2/request.json",
+      "bytes": 2313,
+      "sha256": "6fb4fb9fa5aa80b6565f688b58fe020f6e5b65c9870223253c22d56653c3f5cb"
+    },
+    "audit": {
+      "path": "/tmp/normalization-local-collections-real-output-audit-v2/manifest.json",
+      "bytes": 1908,
+      "sha256": "1e91bbd4d16e74506d21a4510c430179d4b586f56d820d26e641fad31ce3903b"
+    },
+    "runOutcomes": 35931,
+    "localRowOutcomes": 34323,
+    "separateProviderContextOutcomes": 1608,
+    "failed": 0,
+    "sources": 701,
+    "files": 7826,
+    "legacySongs": 236,
+    "unorderedMemberships": 404,
+    "jerryProjects": {
+      "artists": 6,
+      "sources": 348,
+      "shows": 269,
+      "files": 3700
+    },
+    "aadamJacobs": {
+      "artists": 252,
+      "sources": 299,
+      "shows": 298,
+      "files": 3098
+    },
+    "unsupportedFileSongProposalsRemoved": 211,
+    "unsupportedProvisionalKeysRemoved": 55,
+    "knownDictionaryKeysRemoved": 0,
+    "remainingSongSegmentProposals": 6556,
+    "qualification": "Separate local catalog namespace. Collection membership and current assignments remain in the authenticated export sidecar. The one ordered Jerry provider page is Grateful Dead context, not ordered Jerry-project or Aadam setlist coverage."
+  },
+  "storage": {
+    "approvedCleanup": {
+      "path": "/tmp/normalization-capsule-cleanup-approved-v1/manifest.json",
+      "bytes": 1750,
+      "sha256": "4eb63f8538c99b5ab685a864f941f91f8046450b4edd691211b59e60618ae2b1"
+    },
+    "approvedDirectoriesRemoved": 21,
+    "measuredHostFreeBytesRecovered": 1687552,
+    "pendingCleanupProposal": {
+      "path": "/tmp/normalization-shadow-failed-output-cleanup-proposal-v1/manifest.json",
+      "bytes": 1994,
+      "sha256": "442687e771560ac7b786c9545c5b2eceebefb8f817e778acc423e457c3afaff1"
+    },
+    "feasibility": {
+      "path": "/tmp/normalization-shadow-full-storage-feasibility-v1/manifest.json",
+      "bytes": 1333,
+      "sha256": "c63679ab33c33f45231ed253092f0cb661f443333ae7d8f31cc6e86080b64378"
+    },
+    "additionalChunkDeletionApproved": false,
+    "qualification": "Projection from measured ranges, not completed full-population storage. Pending cleanup alone cannot fit full output and reader index above the existing 4 GiB reserve.",
+    "fullFileOutputEstimateDecimalGb": 2.134,
+    "fullFileIndexEstimateDecimalGb": 4.069,
+    "estimateFileRoster": 5064076
+  },
+  "compositionAcquisition": {
+    "checkpoint": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-catalog-acquisition-v1/checkpoint.json",
+      "bytes": 18809932,
+      "sha256": "bf393d7d5b15459d1b534e3293a1d66b30ddd4d7d316b5e640417c593affe77a"
+    },
+    "executionResult": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-catalog-acquisition-execution-v1/result.json",
+      "bytes": 60,
+      "sha256": "639076856f19773612ab22aab96db443459cec161a4babb5c8bab0b47a3a9dc1"
+    },
+    "state": "deadline_reached",
+    "durationSeconds": 2701.4899807500187,
+    "reservedServiceCalls": 1619,
+    "retainedInputs": 1860,
+    "plannedCommands": 33496,
+    "qualification": "Bounded acquisition stopped at its original 45-minute deadline. Exit 1 denotes incomplete coverage; retained pending/failed commands remain recoverable. No policy activation."
+  },
+  "preview": {
+    "url": "http://alecs-macbook-pro.tail09dbf.ts.net:18766/",
+    "cacheVersion": 3,
+    "indexedResults": 35931,
+    "lag": 0,
+    "failedChunks": 0,
+    "phoneViewportWidth": 390,
+    "documentWidth": 390,
+    "verification": "Browser verified original file-title headings and a matching actual recording audio link without starting audio."
+  }
+}

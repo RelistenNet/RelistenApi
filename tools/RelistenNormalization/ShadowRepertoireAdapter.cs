@@ -31,6 +31,24 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         @"^\S*\d{4}[-_.]\d{2}[-_.]\d{2}(?:[._-]?[sd]\d+)?[._-]?t\d+(?:[._-][\p{L}\p{N}._-]+)*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
+    private static readonly Regex CompactDateRecordingLabel = new(
+        @"^[\p{L}\s._-]*(?<date>\d{8}|\d{6})[a-z]?(?:[\s._-]*(?:side|set|disc|track|part|[sdt])[\s._-]*(?:\d+|[a-d]|[ivx]+))+(?:[\s._-]+[\p{L}\p{N}._-]+)*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+    private const string ControlPassageTerm =
+        @"(?:intro(?:s|duction(?:s)?)?|outro|sound\s?check|interviews?|(?:stage\s)?banter|tuning|crowd|applause|band\sintroductions?|announcements?|talk)";
+    private static readonly Regex GenericControlPassage = new(
+        "^"
+            + ControlPassageTerm
+            + @"(?:(?:\s+and\s+|\s*[&,;/+]\s*)"
+            + ControlPassageTerm
+            + ")*[.!]?$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+    private static readonly Regex UnnamedContentLabel = new(
+        @"^untitled(?:\s+(?:song|track|tune|piece))?(?:\s+\d+)?$",
+        RegexOptions.CultureInvariant
+    );
     private static readonly Regex RecordingDivision = new(
         @"^(?:set|disc|part)\s*(?:\d+|[ivx]+)(?:\s*[-,:]?\s*(?:set|part)\s*(?:\d+|[ivx]+))*$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
@@ -53,7 +71,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     > songs = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v4";
+    public string Version => "shadow-repertoire-v5";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -318,6 +336,18 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             );
         }
 
+        // A passage label can describe music or speech without naming an authored song.
+        // Match the whole label so titles such as Soundcheck Blues remain usable. Literal
+        // dictionary assertions above still preserve actual catalog identities.
+        if (GenericControlPassage.IsMatch(trimmedTitle))
+        {
+            return Segment("unresolved", "shadow_guard_generic_control_passage");
+        }
+        if (UnnamedContentLabel.IsMatch(normalized))
+        {
+            return Segment("unresolved", "shadow_guard_unnamed_content");
+        }
+
         if (candidates.Count > 0)
         {
             return DictionarySegment();
@@ -335,6 +365,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             || normalized is "intro" or "intros" or "outro" or "interlude"
             || OpaqueOrUnparsedTitle.IsMatch(title)
             || RecordingFilename.IsMatch(trimmedTitle)
+            || IsCompactDateRecordingLabel(trimmedTitle)
             || RecordingDivision.IsMatch(trimmedTitle)
             || NumericAnnotation.IsMatch(trimmedTitle)
             || DurationSuffix.IsMatch(title)
@@ -468,6 +499,24 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
 
     private static string LiteralTitleKey(string title) =>
         title.Normalize(NormalizationForm.FormC).Trim().ToUpperInvariant();
+
+    private static bool IsCompactDateRecordingLabel(string title)
+    {
+        var match = CompactDateRecordingLabel.Match(title);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var date = match.Groups["date"].Value;
+        return DateOnly.TryParseExact(
+            date,
+            date.Length == 8 ? "yyyyMMdd" : "yyMMdd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out _
+        );
+    }
 
     private static ShadowRepertoireSong KnownSong(Guid artistUuid, Guid songUuid, string title) =>
         new(KnownEntityKey(songUuid), artistUuid, songUuid, title, "captured_artist_dictionary");

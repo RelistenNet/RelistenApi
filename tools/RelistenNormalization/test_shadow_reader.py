@@ -159,6 +159,47 @@ class TestShadowReader(unittest.TestCase):
         self.assertEqual(self.index.search({"q": "%_"})["total"], 1)
         self.assertEqual(self.index.search({"q": "plain JAM"})["total"], 1)
 
+    def test_same_date_files_have_distinct_literal_titles_and_keep_date_search_context(self):
+        expected = {}
+        for domain in ("repertoire", "file_contents"):
+            records = []
+            for ordinal, title in enumerate(("Dark Star >", "St. Stephen (reprise)")):
+                interpretation = {"originalTitle": title, "segments": [{"title": "Song mention"}]}
+                proposal = interpretation if domain == "repertoire" else {
+                    "home": {"literalDate": "1987-11-27", "performanceLabel": "late"},
+                    "titleInterpretation": interpretation,
+                }
+                records.append(self.record("track_sample:" + str(ordinal), domain,
+                                           inputKind="track_sample", inputUuid="file-" + str(ordinal),
+                                           proposal=proposal))
+                expected[domain, "file-" + str(ordinal)] = records[-1]
+            self.chunk("100", *records, domain=domain)
+        self.index.scan_once()
+
+        for domain in ("repertoire", "file_contents"):
+            with self.subTest(domain=domain):
+                items = self.index.search({"domain": domain})["items"]
+                self.assertEqual({item["label"] for item in items},
+                                 {"Dark Star >", "St. Stephen (reprise)"})
+                result = self.index.search({"domain": domain, "q": "St. Stephen"})
+                self.assertEqual(result["total"], 1)
+                detail = self.index.detail(result["items"][0]["id"])["record"]
+                self.assertEqual(detail, expected[domain, "file-1"])
+
+        self.assertEqual(self.index.search({"domain": "file_contents", "q": "1987-11-27"})["total"], 2)
+        self.assertEqual(self.index.search({"domain": "file_contents", "q": "late"})["total"], 2)
+        self.assertEqual(self.index.search({"domain": "file_contents", "q": "Song mention"})["total"], 2)
+
+    def test_missing_file_title_keeps_recording_label_and_original_detail(self):
+        record = self.record("track_sample:one", "file_contents", inputKind="track_sample",
+                             proposal={"home": {"literalDate": "1987-11-27"},
+                                       "titleInterpretation": None})
+        self.chunk("100", record, domain="file_contents")
+        self.index.scan_once()
+        item = self.index.search({"domain": "file_contents"})["items"][0]
+        self.assertEqual(item["label"], "1987-11-27")
+        self.assertEqual(self.index.detail(item["id"])["record"], record)
+
     def test_playback_returns_only_explicit_http_audio_urls_without_fetching_them(self):
         record = self.record(proposal={"playback": {"mp3Url": "https://archive.example.test/file.mp3"},
                                        "alternative": {"mp3Url": "javascript:alert(1)"},
@@ -290,13 +331,21 @@ class TestShadowReader(unittest.TestCase):
         self.assertEqual(self.index.stats()["indexedRecords"], 70)
 
     def test_new_cache_does_not_migrate_or_mutate_live_legacy_index(self):
-        legacy = self.run / ".shadow-reader.sqlite3"
-        legacy.write_bytes(b"preserved original live cache")
-        self.chunk("100", self.record())
+        legacy_paths = [self.run / name for name in (".shadow-reader.sqlite3", ".shadow-reader-v2.sqlite3")]
+        for legacy in legacy_paths:
+            legacy.write_bytes(b"preserved original live cache")
+        record = self.record("track_sample:one", "file_contents", inputKind="track_sample",
+                             proposal={"home": {"literalDate": "1987-11-27"},
+                                       "titleInterpretation": {"originalTitle": "Morning Dew"}})
+        self.chunk("100", record, domain="file_contents")
         reopened = ShadowIndex(self.run)
         reopened.scan_once()
-        self.assertEqual(reopened.search({})["total"], 1)
-        self.assertEqual(legacy.read_bytes(), b"preserved original live cache")
+        result = reopened.search({"q": "Morning Dew"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["label"], "Morning Dew")
+        self.assertEqual(reopened.detail(result["items"][0]["id"])["record"], record)
+        for legacy in legacy_paths:
+            self.assertEqual(legacy.read_bytes(), b"preserved original live cache")
 
     def test_representative_multi_domain_population_has_measured_compact_growth_and_exact_lookup(self):
         count = 5000
@@ -339,7 +388,7 @@ class TestShadowReader(unittest.TestCase):
             # This measures the whole real cache including dictionaries, both lookup
             # directions and schema pages. It is a regression ceiling, not a catalog forecast.
             self.assertLess(size / count, 1200)
-        print(json.dumps({"measurement": "synthetic-reader-index-v2", "inputs": count,
+        print(json.dumps({"measurement": "synthetic-reader-index-v3", "inputs": count,
                           "domainOutcomes": count * len(domains), "sqliteBytes": size,
                           "bytesPerInput": size / count, "bytesPerOutcome": size / (count * len(domains)),
                           "sqliteObjectBytes": objects}))
