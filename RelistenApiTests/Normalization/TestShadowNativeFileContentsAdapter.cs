@@ -408,6 +408,144 @@ public sealed class TestShadowNativeFileContentsAdapter
         return new([repertoire, new ShadowNativeFileContentsAdapter(new(), repertoire)]);
     }
 
+    [Test]
+    public async Task PartialNativeResumeKeepsOriginalStreamCoordinatesAndLaterDictionaryContext()
+    {
+        var directory = Directory.CreateTempSubdirectory("native-file-resume-");
+        try
+        {
+            var song = Guid.NewGuid();
+            var first = PlainInput(Archive("""[{"name":"first.mp3","title":"Café 🎵"}]"""));
+            var second = PlainInput(Archive("""[{"name":"second.mp3","title":"Café 🎵"}]"""));
+            var artist = JsonSerializer.SerializeToElement(
+                new
+                {
+                    kind = "artist",
+                    row = new
+                    {
+                        id = 1,
+                        uuid = Artist,
+                        name = "Fixture artist",
+                    },
+                    configured_provider_mappings = new[] { new { provider_name = "archive.org" } },
+                },
+                Json
+            );
+            var snapshot = Path.Combine(directory.FullName, "inputs.jsonl");
+            var interruptedOutput = Path.Combine(directory.FullName, "interrupted");
+            var cleanOutput = Path.Combine(directory.FullName, "clean");
+            // The dictionary is deliberately after the cancellation point. Both the initial
+            // pass and resume must observe it without shifting the original input checkpoint.
+            await File.WriteAllLinesAsync(
+                snapshot,
+                new[] { artist, first.Record, Song(song, "Café 🎵"), second.Record }.Select(row =>
+                    row.GetRawText()
+                )
+            );
+            using var cancellation = new CancellationTokenSource();
+            var interrupted = () =>
+                PartialBatch(cancellation.Cancel)
+                    .RunRowsInlineAsync(
+                        snapshot,
+                        interruptedOutput,
+                        providerInputsOnly: true,
+                        ct: cancellation.Token
+                    );
+
+            await interrupted.Should().ThrowAsync<OperationCanceledException>();
+
+            using var checkpoint = JsonDocument.Parse(
+                await File.ReadAllBytesAsync(Path.Combine(interruptedOutput, "checkpoint.json"))
+            );
+            checkpoint.RootElement.GetProperty("lastLine").GetInt64().Should().Be(2);
+            using var progress = JsonDocument.Parse(
+                await File.ReadAllBytesAsync(Path.Combine(interruptedOutput, "progress.json"))
+            );
+            progress.RootElement.GetProperty("state").GetString().Should().Be("interrupted");
+            var prefix = ReadBatchResults(interruptedOutput);
+            prefix
+                .Should()
+                .ContainSingle()
+                .Which.GetProperty("inputUuid")
+                .GetGuid()
+                .Should()
+                .Be(first.Uuid);
+
+            await PartialBatch()
+                .RunRowsInlineAsync(
+                    snapshot,
+                    interruptedOutput,
+                    resume: true,
+                    providerInputsOnly: true
+                );
+            await PartialBatch()
+                .RunRowsInlineAsync(snapshot, cleanOutput, providerInputsOnly: true);
+
+            var resumed = ReadBatchResults(interruptedOutput);
+            resumed.Should().HaveCount(2);
+            resumed
+                .Select(row => row.GetProperty("inputUuid").GetGuid())
+                .Should()
+                .BeEquivalentTo(new[] { first.Uuid, second.Uuid });
+            resumed
+                .Select(row => row.GetRawText())
+                .Should()
+                .Equal(ReadBatchResults(cleanOutput).Select(row => row.GetRawText()));
+            foreach (var result in resumed)
+            {
+                var file = result
+                    .GetProperty("proposal")
+                    .GetProperty("files")
+                    .EnumerateArray()
+                    .Single();
+                file.GetProperty("mentions")
+                    .EnumerateArray()
+                    .Single()
+                    .GetProperty("interpretation")
+                    .GetProperty("song")
+                    .GetProperty("legacySongUuid")
+                    .GetGuid()
+                    .Should()
+                    .Be(song);
+            }
+            using var completed = JsonDocument.Parse(
+                await File.ReadAllBytesAsync(Path.Combine(interruptedOutput, "checkpoint.json"))
+            );
+            completed.RootElement.GetProperty("lastLine").GetInt64().Should().Be(4);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static ShadowCatalogBatch PartialBatch(Action? afterFirstProvider = null) =>
+        new([new CancelAfterFirstProviderAdapter(Adapter(), afterFirstProvider)]);
+
+    private sealed class CancelAfterFirstProviderAdapter(
+        ShadowNativeFileContentsAdapter inner,
+        Action? afterFirstProvider
+    ) : IShadowCatalogAdapter
+    {
+        private bool processed;
+        public string Version => inner.Version;
+
+        public IReadOnlyList<string> DomainsFor(string inputKind) => inner.DomainsFor(inputKind);
+
+        public void Observe(JsonElement record) => inner.Observe(record);
+
+        public IEnumerable<ShadowCatalogResult> Process(ShadowCatalogInput input)
+        {
+            var results = inner.Process(input).ToArray();
+            if (!processed)
+            {
+                processed = true;
+                afterFirstProvider?.Invoke();
+            }
+            return results;
+        }
+    }
+
     private static List<JsonElement> ReadBatchResults(string output)
     {
         var results = new List<JsonElement>();
