@@ -6,7 +6,7 @@ using Relisten.Normalization;
 namespace RelistenApiTests.Normalization;
 
 /// <summary>
-/// Roster aliases describe source wording, not recording work or attendance. Real development
+/// Source aliases describe wording, not recording work or attendance. Real development
 /// examples exercise that boundary; synthetic cases cover citation and parsing boundaries.
 /// </summary>
 [TestFixture]
@@ -82,6 +82,120 @@ public sealed class TestSourceActorAliasExtractor
             .Which.Wording.Should()
             .Be("Night & Day");
         result.Unresolved.Should().BeEmpty();
+        AssertCitations(raw, result);
+    }
+
+    [Test]
+    public void ExplicitRecordingBylineKeepsItsPrefixAndAliasWithoutCreatingCredits()
+    {
+        const string prefix = "Recorded, Mastered and Posted by";
+        const string raw = prefix + " Pat Myers AKA DATPAT";
+        var result = Extract(raw);
+
+        var assertion = result.Assertions.Should().ContainSingle().Which;
+        assertion.Version.Should().StartWith("source-actor-aliases-v3/");
+        assertion.Name.Should().Be("Pat Myers");
+        assertion.NameEvidence.Quote.Should().Be("Pat Myers");
+        assertion.Context.Heading.Quote.Should().Be(prefix);
+        assertion.Context.Qualifiers.Should().BeEmpty();
+        assertion.Context.Statement.Quote.Should().Be(raw);
+        var alias = assertion.Aliases.Should().ContainSingle().Which;
+        alias.Wording.Should().Be("DATPAT");
+        alias.Evidence[0].Quote.Should().Be("DATPAT");
+        var relationship = assertion.Relationships.Should().ContainSingle().Which;
+        relationship.Relationship.Should().Be(ActorReferenceRelationship.ExplicitAlias);
+        relationship.Roles.Should().BeEmpty();
+        relationship
+            .ReferenceUuids.Should()
+            .BeEquivalentTo(new[] { assertion.ActorReferenceUuid, alias.ReferenceUuid });
+        var projection = PeopleActorProjection.Project(assertion, Guid.NewGuid());
+        projection.Record.Kind.Should().BeNull();
+        projection.Record.ActorContext.Should().BeNull();
+        projection.Record.ExternalIdentities.Should().BeEmpty();
+        new RecordingCreditExtractor().Extract(Fields(raw)).Credits.Should().BeEmpty();
+        result.Unresolved.Should().BeEmpty();
+        result.Scopes.Single().Complete.Should().BeTrue();
+        AssertCitations(raw, result);
+    }
+
+    [TestCase("Recorded and transferred by", "aka")]
+    [TestCase("Taped, tracked, seeded by", "a.k.a.")]
+    [TestCase("Recorded, mixed & posted by", "also known as")]
+    public void BoundedBylinesReuseQuotedAliasParsing(string prefix, string marker)
+    {
+        var raw = $"{prefix} Alice Vale {marker} \"Night & Day\"";
+        var result = Extract(raw);
+
+        var assertion = result.Assertions.Should().ContainSingle().Which;
+        assertion.Name.Should().Be("Alice Vale");
+        assertion.Aliases.Should().ContainSingle().Which.Wording.Should().Be("Night & Day");
+        assertion.Context.Heading.Quote.Should().Be(prefix);
+        assertion.Relationships.Should().OnlyContain(relationship => relationship.Roles.Count == 0);
+        AssertCitations(raw, result);
+    }
+
+    [Test]
+    public void BylinePrefixNameAndAliasRemainInOriginalHtmlAndUnicodeCoordinates()
+    {
+        const string raw =
+            "<p>🎵</p><p><b>Recorded, Mastered and Posted by</b> Zoë AKA <b>Lark</b></p>";
+        var result = Extract(raw);
+
+        var assertion = result.Assertions.Should().ContainSingle().Which;
+        assertion.NameEvidence.Quote.Should().Be("Zoë");
+        assertion.Context.Heading.Quote.Should().Be("<b>Recorded, Mastered and Posted by</b>");
+        assertion
+            .Context.Statement.Quote.Should()
+            .Be("<b>Recorded, Mastered and Posted by</b> Zoë AKA <b>Lark</b>");
+        assertion.Aliases.Should().ContainSingle().Which.Wording.Should().Be("Lark");
+        AssertCitations(raw, result);
+    }
+
+    [TestCase("Not recorded by Pat Myers AKA DATPAT")]
+    [TestCase("01. Recorded by Pat Myers AKA DATPAT")]
+    [TestCase("Pat Myers AKA DATPAT")]
+    [TestCase("Recorded by Pat Myers and Bob Reed AKA DATPAT")]
+    [TestCase("Recorded by Pat Myers, Bob Reed AKA DATPAT")]
+    [TestCase("Recorded by not Pat Myers AKA DATPAT")]
+    [TestCase("Recorded by The band played AKA DATPAT")]
+    [TestCase("Recorded by Pat Myers AKA DATPAT AKA Lark")]
+    [TestCase("Recorded by Pat Myers AKA DATPAT with help from Bob Reed")]
+    [TestCase("Recorded by Pat Myers AKA DATPAT. Notes follow.")]
+    public void UnsupportedOrAmbiguousBylineAliasesRemainUnresolved(string raw)
+    {
+        var result = Extract(raw);
+
+        result.Assertions.Should().BeEmpty();
+        result.Unresolved.Should().NotBeEmpty();
+        result.Scopes.Single().Complete.Should().BeFalse();
+        AssertCitations(raw, result);
+    }
+
+    [TestCase("Taped, tracked, seeded by Adam Downs (@Big_Perm_taper)")]
+    [TestCase("Recorded by Alice Vale (Lark)")]
+    public void BylineParenthesesWithoutAnAliasMarkerRemainLiteral(string raw)
+    {
+        var result = Extract(raw);
+
+        result.Assertions.Should().BeEmpty();
+        result.Unresolved.Should().BeEmpty();
+        AssertCitations(raw, result);
+    }
+
+    [Test]
+    public void ABylineEndsRosterContextAndDoesNotBorrowItsQualifiers()
+    {
+        const string raw =
+            "Personnel:\n-- and some or all of the following --\n"
+            + "Recorded by Pat Myers AKA DATPAT\nAlice Vale aka Lark - vocals";
+        var result = Extract(raw);
+
+        var assertion = result.Assertions.Should().ContainSingle().Which;
+        assertion.Name.Should().Be("Pat Myers");
+        assertion.Context.Heading.Quote.Should().Be("Recorded by");
+        assertion.Context.Qualifiers.Should().BeEmpty();
+        result.Unresolved.Should().ContainSingle();
+        result.Scopes.Single().Complete.Should().BeFalse();
         AssertCitations(raw, result);
     }
 
@@ -255,7 +369,9 @@ public sealed class TestSourceActorAliasExtractor
                 .Which.Wording.Should()
                 .Be("down2earthlandscaper");
         }
-        Extract(raw).Assertions.Should().BeEmpty();
+        var assertion = Extract(raw).Assertions.Should().ContainSingle().Which;
+        assertion.Name.Should().Be("John Hermsen");
+        assertion.Relationships.Should().OnlyContain(relationship => relationship.Roles.Count == 0);
 
         var handle = new RecordingCreditExtractor()
             .Extract(new Dictionary<string, string?> { ["taper"] = "BIGT aka IAMHAMMERED" })

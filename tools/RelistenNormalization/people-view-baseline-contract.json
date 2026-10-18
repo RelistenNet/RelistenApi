@@ -1,6 +1,6 @@
 {
-  "version": "people-view-baseline-v1",
-  "projectionVersion": "people-independent-source-views-v1",
+  "version": "people-view-baseline-v2",
+  "projectionVersion": "people-independent-source-views-v2",
   "featureOrder": [
     "name_token_similarity",
     "exact_name",
@@ -31,8 +31,11 @@
     "key",
     "selectorIndexes",
     "projection",
-    "facts"
+    "facts",
+    "sourceAssertion"
   ],
+  "sourceAssertion": "nullable original role-free actor alias assertion, including exact roster/byline context; mutually exclusive with recording-credit facts, never a recording role or canonical identity",
+  "historicalViewProfile": "people-view-baseline-v1 with people-independent-source-views-v1 retains exactly key, selectorIndexes, projection and facts; trainer reads both exact version pairs",
   "endpointFields": [
     "endpointId",
     "evidenceId",

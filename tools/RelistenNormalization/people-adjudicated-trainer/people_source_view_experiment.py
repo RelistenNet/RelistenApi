@@ -4,6 +4,8 @@ Every eligible leaf is an actual C# comparison, not an identity label. Source
 pair overlaps establish units and fold grouping before bag targets are read.
 Complete, numerically uniform units can fit once; all other observations remain
 diagnostics without a chosen field, actor, rule winner or inherited leaf target.
+Historical v1 views retain their original shape. V2 also retains role-free source
+alias assertions separately from recording-credit facts, without combining either.
 """
 
 import argparse
@@ -21,6 +23,11 @@ import types
 VERSION = "people-source-view-development-comparison-v1"
 EXPORT_VERSION = "people-view-baseline-v1"
 PROJECTION = "people-independent-source-views-v1"
+EXPORT_PROFILES = {
+    (EXPORT_VERSION, PROJECTION): {"key", "selectorIndexes", "projection", "facts"},
+    ("people-view-baseline-v2", "people-independent-source-views-v2"):
+        {"key", "selectorIndexes", "projection", "facts", "sourceAssertion"},
+}
 MAX_VIEWS = 100000
 MAX_PAIRS = 1000000
 MAX_BYTES = 134217728
@@ -107,7 +114,12 @@ def source_view_key(base, key, endpoint, indexes, variants):
     return canonical(key)
 
 
-def read_endpoint_views(base, prepared, diagnostics, rows):
+def read_endpoint_views(base, prepared, diagnostics, rows, *, export_version=EXPORT_VERSION,
+                        projection_version=PROJECTION):
+    profile = (export_version, projection_version)
+    require(profile in EXPORT_PROFILES, "Unsupported source-view export/projection pair")
+    view_fields = EXPORT_PROFILES[profile]
+    retains_assertions = "sourceAssertion" in view_fields
     endpoints = base.unique(rows, "endpointId")
     require(endpoints.keys() == prepared.endpoints.keys(), "Source view endpoint coverage changed")
     all_views, view_count = {}, 0
@@ -120,7 +132,7 @@ def read_endpoint_views(base, prepared, diagnostics, rows):
         views, owned_indexes = {}, set()
         records = set()
         for view in row["views"]:
-            require(set(view) == {"key", "selectorIndexes", "projection", "facts"}
+            require(set(view) == view_fields
                     and view["projection"]["complete"] is True, "Eligible view requires a complete source projection")
             key = source_view_key(base, view["key"], original, view["selectorIndexes"], row["variants"])
             require(key not in views and not owned_indexes.intersection(view["selectorIndexes"]),
@@ -135,8 +147,18 @@ def read_endpoint_views(base, prepared, diagnostics, rows):
                         and len(selected) == 1 and selected[0]["projection"]["complete"] is True,
                         "Uncertain selector cannot supply an eligible view")
                 original_variants.extend(selected)
+            require(all(("sourceAssertion" in variant) == retains_assertions for variant in original_variants),
+                    "Source variant assertion profile differs from its export")
             require(any(view["projection"] == variant["projection"] and view["facts"] == variant["facts"]
+                        and (not retains_assertions or view["sourceAssertion"] == variant["sourceAssertion"])
                         for variant in original_variants), "Source view must preserve one original projection without union")
+            if retains_assertions and view["sourceAssertion"] is not None:
+                assertion = view["sourceAssertion"]
+                # Role-free alias evidence cannot borrow recording facts or leave its source-local actor.
+                require(type(assertion) is dict and view["facts"] is None
+                        and view["key"]["kind"] == "source_actor"
+                        and assertion.get("actorReferenceUuid") == view["key"]["referenceUuid"],
+                        "Source assertion must retain its scoped actor without recording facts")
             views[key] = view
             records.add(canonical(view["projection"]["record"]))
         require(row["matchRecordsAgree"] == (len(records) == 1 if views else None),
@@ -341,8 +363,9 @@ def fit_relationships(base, experiment, prepared, bags, units):
 def load_inputs(base, experiment, package, package_sha, directory, manifest_sha):
     inputs, prepared = base.read_prepared_sources(experiment, package, package_sha)
     manifest = inputs.json(directory / "manifest.json", expected_sha=manifest_sha)
-    require(manifest["state"] == "completed" and manifest["version"] == EXPORT_VERSION
-            and manifest["projectionVersion"] == PROJECTION and manifest["featureOrder"] == list(FEATURES)
+    require(manifest["state"] == "completed"
+            and (manifest.get("version"), manifest.get("projectionVersion")) in EXPORT_PROFILES
+            and manifest["featureOrder"] == list(FEATURES)
             and manifest["packageManifestSha256"] == package_sha and manifest["policyActivationPermitted"] is False,
             "Expected the completed TOP source-view export; a nested comparator is insufficient")
     require(manifest["limits"] == {"maximumViews": MAX_VIEWS, "maximumLeafPairs": MAX_PAIRS,
@@ -372,7 +395,8 @@ def load_inputs(base, experiment, package, package_sha, directory, manifest_sha)
     bag_path = artifact(inputs, directory, manifest["bags"], "view-bags.jsonl", base.MAX_ROWS)
     leaf_path = artifact(inputs, directory, manifest["leafPairs"], "view-pairs.jsonl", MAX_PAIRS)
     endpoints, views, view_count = read_endpoint_views(base, prepared, diagnostics,
-                                                     inputs.rows(endpoint_path, manifest["endpointViews"]))
+        inputs.rows(endpoint_path, manifest["endpointViews"]), export_version=manifest["version"],
+        projection_version=manifest["projectionVersion"])
     bags, expected_pairs = read_bags(base, prepared, endpoints, views, inputs.rows(bag_path, manifest["bags"]))
     require(manifest["leafPairs"]["rows"] == expected_pairs, "Leaf artifact count truncates a declared bag")
     leaves = read_leaves(experiment, leaf_path, expected_pairs, bags, views)
@@ -513,7 +537,8 @@ def run(base, experiment, inputs, prepared, manifest, comparator_manifest, bags,
         write_rows(experiment, output, "leaf-predictions.jsonl", leaf_predictions),
         write_rows(experiment, output, "final-leaf-scores.jsonl", final)]
     retained = experiment.retain_replay_inputs(output, list(inputs.pins.values()))
-    report = {"state": "completed_development_comparison", "version": VERSION, "inputProjectionVersion": PROJECTION,
+    report = {"state": "completed_development_comparison", "version": VERSION,
+        "inputProjectionVersion": manifest["projectionVersion"],
         "portableModelProjectionVersion": experiment.CONTEXT_FEATURE_VERSION, "featureOrder": list(FEATURES),
         "counts": {"allTasks": len(prepared.questions), "declaredEdges": len(bags), "leafObservations": len(leaves),
             "distinctFullActorPairs": len({leaf.full_pair_id for leaf in leaves}), "sourceComponents": len(components),

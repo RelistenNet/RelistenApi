@@ -22,7 +22,33 @@ public sealed class RetainedSourceActorAliasExtractor
         + SourceActorAliasExtractor.Version
         + "/"
         + MappingVersion;
-    private readonly SourceActorAliasExtractor extractor = new();
+    internal const string LegacyV2Version =
+        "retained-source-actor-aliases-v1/"
+        + SourceActorAliasExtractor.LegacyV2Version
+        + "/retained-source-actor-alias-mapping-v1";
+    private readonly SourceActorAliasExtractor extractor;
+    internal string ProducerVersion { get; }
+
+    public RetainedSourceActorAliasExtractor()
+        : this(SourceActorAliasGrammar.Current) { }
+
+    internal RetainedSourceActorAliasExtractor(SourceActorAliasGrammar grammar)
+    {
+        extractor = new(grammar);
+        ProducerVersion = grammar == SourceActorAliasGrammar.LegacyV2 ? LegacyV2Version : Version;
+        if (
+            grammar == SourceActorAliasGrammar.LegacyV2
+            && !StringComparer.Ordinal.Equals(
+                MappingVersion,
+                "retained-source-actor-alias-mapping-v1"
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Legacy alias replay requires its original evidence mapping."
+            );
+        }
+    }
 
     /// <summary>
     /// Extracts only from the exact cited original strings. Display-only text is never an
@@ -60,7 +86,7 @@ public sealed class RetainedSourceActorAliasExtractor
             var extracted = extractor.Extract(
                 new Dictionary<string, string?> { [field.Field] = original }
             );
-            var mapping = new FieldMapping(document, field, original);
+            var mapping = new FieldMapping(document, field, original, ProducerVersion);
 
             cancellationToken.ThrowIfCancellationRequested();
             assertions.AddRange(extracted.Assertions.Select(mapping.MapAssertion));
@@ -96,7 +122,8 @@ public sealed class RetainedSourceActorAliasExtractor
     private sealed class FieldMapping(
         NormalizationRetainedDocument document,
         ProviderTextObservation field,
-        string original
+        string original,
+        string producerVersion
     )
     {
         private readonly string localPointer =
@@ -190,7 +217,7 @@ public sealed class RetainedSourceActorAliasExtractor
             new(
                 SHA256.HashData(
                     Encoding.UTF8.GetBytes(
-                        $"{Version}/{field.Text.Evidence.InputRevisionUuid:D}/{field.Text.Evidence.JsonPointer}/{field.Text.Evidence.StartCodePoint ?? 0}/{uuid:D}"
+                        $"{producerVersion}/{field.Text.Evidence.InputRevisionUuid:D}/{field.Text.Evidence.JsonPointer}/{field.Text.Evidence.StartCodePoint ?? 0}/{uuid:D}"
                     )
                 )[..16]
             );

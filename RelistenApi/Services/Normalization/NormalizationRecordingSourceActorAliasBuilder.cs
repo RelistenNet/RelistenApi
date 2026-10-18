@@ -13,7 +13,11 @@ namespace Relisten.Normalization;
 /// </summary>
 internal sealed class NormalizationRecordingSourceActorAliasBuilder
 {
-    private readonly RetainedSourceActorAliasExtractor extractor = new();
+    private readonly RetainedSourceActorAliasExtractor extractor;
+
+    internal NormalizationRecordingSourceActorAliasBuilder(
+        SourceActorAliasGrammar grammar = SourceActorAliasGrammar.Current
+    ) => extractor = new(grammar);
 
     internal NormalizationRecordingSourceActorAliasScope[] Build(
         NormalizationInputRevision input,
@@ -66,7 +70,7 @@ internal sealed class NormalizationRecordingSourceActorAliasBuilder
             }
             scopes.Add(
                 new(
-                    RetainedSourceActorAliasExtractor.Version,
+                    extractor.ProducerVersion,
                     input.Uuid,
                     input.Resource,
                     recording.Origin,

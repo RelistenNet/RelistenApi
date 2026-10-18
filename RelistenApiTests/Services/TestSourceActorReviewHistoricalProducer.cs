@@ -14,21 +14,21 @@ using Relisten.Normalization;
 namespace RelistenApiTests.Services;
 
 /// <summary>
-/// Cross-binary authority checks against a genuine v6 public capture restored by the operator.
+/// Cross-binary authority checks against genuine alias-v2 public captures restored by the operator.
 /// This probe creates or drops no database and never rebinds UUIDs or producer versions.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public sealed class TestSourceActorReviewHistoricalProducer
 {
     private const string Operator = "historical-negative-upgrade-operator";
-    private const string Reason = "Reviewed the exact retained v6 source field.";
+    private const string Reason = "Reviewed the exact retained pre-upgrade source field.";
 
     [TestCase("reject-new")]
     [TestCase("reject-saved")]
     [TestCase("retract-new")]
     [TestCase("retract-saved")]
     [Explicit(
-        "Root must restore the exact public v6 capture into a separately owned local database."
+        "Root must restore an exact public alias-v2 capture into a separately owned local database."
     )]
     public async Task HistoricalNegativeReviewRetainsOriginalAuthorityAcrossDecoderUpgrade(
         string name
@@ -200,21 +200,25 @@ public sealed class TestSourceActorReviewHistoricalProducer
                 "root must pin the exact cross-binary capture"
             );
         var capture = JsonSerializer.Deserialize<Capture>(bytes)!;
-        capture.CaptureVersion.Should().Be("source-review-v6-negative-upgrade-v1");
+        var expected = capture.CaptureVersion switch
+        {
+            "source-review-v6-negative-upgrade-v1" => (
+                Decoder: "provider-observations-v6",
+                Processor: SourceActorResolutionStore.LegacyAliasV2DecoderV6ProcessingVersion
+            ),
+            "source-review-v7-alias-v2-negative-upgrade-v1" => (
+                Decoder: "provider-observations-v7",
+                Processor: SourceActorResolutionStore.LegacyAliasV2DecoderV7ProcessingVersion
+            ),
+            _ => throw new InvalidDataException("Unsupported genuine historical capture profile."),
+        };
         capture.DatabaseHost.Should().Be("127.0.0.1");
         capture.DatabasePort.Should().Be(15432);
         Regex.IsMatch(capture.DatabaseName, "^relisten_test_[0-9a-f]{32}$").Should().BeTrue();
-        capture.DecoderVersion.Should().Be("provider-observations-v6");
+        capture.DecoderVersion.Should().Be(expected.Decoder);
         NormalizationProviderDecoder.Version.Should().Be("provider-observations-v7");
-        capture
-            .ProcessorVersion.Should()
-            .Be(
-                NormalizationRecordingProcessor.Version.Replace(
-                    "/provider-observations-v7/",
-                    "/provider-observations-v6/",
-                    StringComparison.Ordinal
-                )
-            );
+        capture.ProcessorVersion.Should().Be(expected.Processor);
+        capture.ProcessorVersion.Should().NotBe(NormalizationRecordingProcessor.Version);
         capture
             .Cases.Select(value => value.Name)
             .Should()

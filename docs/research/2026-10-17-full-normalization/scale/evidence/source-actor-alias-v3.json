@@ -1,0 +1,39 @@
+{
+  "version": "source-actor-alias-v3-verification-v1",
+  "state": "focused_verified_matching_inactive",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-18-people-alias-v3-compiled-verification-v1/manifest.json",
+    "sha256": "0f25aca57a597cfbbc4e808d01fd09d9cbf13cf5f35c437b520f4c1af04ed001"
+  },
+  "broaderVerification": {
+    "path": "local-dev/normalization-data/2026-10-18-people-alias-v3-local-contracts-v2/manifest.json",
+    "sha256": "8ccaf06db357903d09e148218b0d73111a388a8d84a326faa7bc9c60c49d47de",
+    "passed": 293,
+    "failed": 0,
+    "explicitNotExecuted": 4,
+    "scope": "Current source review, resolution and alias application; scale categories and the capacity class excluded. Counts use actual TRX result outcomes."
+  },
+  "verification": {
+    "pureContractTestsPassed": 253,
+    "currentPublicationAndRecoveryTestsPassed": 8,
+    "genuineHistoricalNegativeReviewControlsPassed": 8,
+    "genuineHistoricalAcceptedSupportWithdrawalControlsPassed": 2,
+    "pythonSourceViewTestsPassed": 35,
+    "pythonTestsIncludeNumericalFit": true,
+    "solutionBuildErrors": 0
+  },
+  "behavior": [
+    "Explicit aliases in bounded recording-operation bylines retain original Unicode evidence without inferring credits or actor kind.",
+    "The offline projector preserves credit priority and attaches a separate role-free assertion only when no credit matches the exact selector.",
+    "The v2 source-view export and Python reader retain exact export/projection profiles and preserve historical v1 inputs.",
+    "Exact historical alias-v2 producers can authenticate corrections and existing support, but cannot authorize new positive assignments under the current producer.",
+    "Actual restored old accepted aliases can be rejected or retracted through current public services, retiring exact support while preserving native person proof and original artifacts.",
+    "A refusal before planning atomically stores its immutable requested resolution header and negative result; exact replay and changed-request conflicts preserve accepted authority."
+  ],
+  "qualification": [
+    "The genuine v6 and v7 negative controls ran before the later store-only refusal fix; accepted-support withdrawal and current lifecycle checks ran with that fix.",
+    "These are protocol and recovery checks, not global identity accuracy or scale qualification.",
+    "The real-data model comparison has its own receipt.",
+    "No automatic policy, production write or deployment is enabled."
+  ]
+}

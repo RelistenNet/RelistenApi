@@ -90,6 +90,18 @@ def name_endpoint(base, name="a", selector_count=1):
     return endpoint, diagnostics, old
 
 
+def source_alias_endpoint(base):
+    endpoint, row, old = name_endpoint(base)
+    key = actor("Ada")
+    reference = {name: key[name] for name in ("evidenceId", "field", "referenceUuid")}
+    assertion = {"version": "source-actor-aliases-v1", "actorReferenceUuid": key["referenceUuid"],
+                 "name": "Ada", "aliases": [{"wording": "A", "evidence": []}]}
+    row["selectors"][0]["status"] = "matched"
+    row["variants"][0].update(actorReference=reference, sourceAssertion=assertion)
+    row["views"][0].update(key=key, sourceAssertion=assertion)
+    return endpoint, row, old
+
+
 class TestSourceViews(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -200,6 +212,125 @@ class TestSourceViews(unittest.TestCase):
         key = json.loads(next(iter(all_views["a"])))
         self.assertIsNone(key["referenceUuid"])
         self.assertEqual(key["anchor"]["quote"], "Ada")
+
+    def test_v2_retains_the_original_role_free_assertion_without_recording_facts(self):
+        endpoint, row, old = source_alias_endpoint(self.base)
+        package = prepared(self.base)
+        package.endpoints = {"a": endpoint}
+        _, all_views, total = views.read_endpoint_views(self.base, package, {"a": old}, [row],
+            export_version="people-view-baseline-v2", projection_version="people-independent-source-views-v2")
+        retained = next(iter(all_views["a"].values()))
+        self.assertEqual(total, 1)
+        self.assertEqual(retained["sourceAssertion"], old["variants"][0]["sourceAssertion"])
+        self.assertIsNone(retained["facts"])
+        self.assertEqual(retained["key"]["referenceUuid"], retained["sourceAssertion"]["actorReferenceUuid"])
+
+    def test_v2_name_fallback_retains_an_explicit_null_assertion(self):
+        endpoint, row, old = name_endpoint(self.base)
+        row["variants"][0]["sourceAssertion"] = None
+        row["views"][0]["sourceAssertion"] = None
+        package = prepared(self.base)
+        package.endpoints = {"a": endpoint}
+        _, all_views, _ = views.read_endpoint_views(self.base, package, {"a": old}, [row],
+            export_version="people-view-baseline-v2", projection_version="people-independent-source-views-v2")
+        self.assertIsNone(next(iter(all_views["a"].values()))["sourceAssertion"])
+
+    def test_recording_facts_remain_supported_in_both_export_versions(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                endpoint, row, old = source_alias_endpoint(self.base)
+                for original in (row["variants"][0], row["views"][0]):
+                    original["facts"] = {"roles": ["taper"]}
+                    if version == 1:
+                        original.pop("sourceAssertion")
+                    else:
+                        original["sourceAssertion"] = None
+                package = prepared(self.base)
+                package.endpoints = {"a": endpoint}
+                _, all_views, _ = views.read_endpoint_views(self.base, package, {"a": old}, [row],
+                    export_version=f"people-view-baseline-v{version}",
+                    projection_version=f"people-independent-source-views-v{version}")
+                self.assertEqual(next(iter(all_views["a"].values()))["facts"], old["variants"][0]["facts"])
+
+    def test_v1_rejects_a_new_assertion_field_instead_of_silently_discarding_it(self):
+        endpoint, row, old = source_alias_endpoint(self.base)
+        package = prepared(self.base)
+        package.endpoints = {"a": endpoint}
+        with self.assertRaisesRegex(ValueError, "complete source projection"):
+            views.read_endpoint_views(self.base, package, {"a": old}, [row])
+
+    def test_v2_cannot_add_an_alias_to_the_original_assertion(self):
+        endpoint, row, old = source_alias_endpoint(self.base)
+        row["views"][0]["sourceAssertion"] = copy.deepcopy(row["views"][0]["sourceAssertion"])
+        row["views"][0]["sourceAssertion"]["aliases"].append({"wording": "invented", "evidence": []})
+        package = prepared(self.base)
+        package.endpoints = {"a": endpoint}
+        with self.assertRaisesRegex(ValueError, "without union"):
+            views.read_endpoint_views(self.base, package, {"a": old}, [row],
+                export_version="people-view-baseline-v2", projection_version="people-independent-source-views-v2")
+
+    def test_v2_assertion_cannot_borrow_recording_facts_or_a_different_actor(self):
+        for tamper in ("recording_facts", "actor_reference", "name_fallback", "malformed_assertion"):
+            with self.subTest(tamper=tamper):
+                endpoint, row, old = source_alias_endpoint(self.base)
+                variant, view = row["variants"][0], row["views"][0]
+                if tamper == "recording_facts":
+                    variant["facts"] = view["facts"] = {"roles": ["taper"]}
+                elif tamper == "actor_reference":
+                    view["sourceAssertion"]["actorReferenceUuid"] = actor("other")["referenceUuid"]
+                elif tamper == "malformed_assertion":
+                    variant["sourceAssertion"] = view["sourceAssertion"] = "not an assertion"
+                else:
+                    _, fallback, _ = name_endpoint(self.base)
+                    variant["actorReference"] = None
+                    row["selectors"][0]["status"] = "name_only"
+                    view["key"] = fallback["views"][0]["key"]
+                package = prepared(self.base)
+                package.endpoints = {"a": endpoint}
+                with self.assertRaisesRegex(ValueError, "scoped actor without recording facts"):
+                    views.read_endpoint_views(self.base, package, {"a": old}, [row],
+                        export_version="people-view-baseline-v2", projection_version="people-independent-source-views-v2")
+
+    def test_v2_requires_the_assertion_field_on_both_view_and_original_variant(self):
+        for missing in ("views", "variants"):
+            with self.subTest(missing=missing):
+                endpoint, row, old = source_alias_endpoint(self.base)
+                row[missing][0].pop("sourceAssertion")
+                package = prepared(self.base)
+                package.endpoints = {"a": endpoint}
+                with self.assertRaises(ValueError):
+                    views.read_endpoint_views(self.base, package, {"a": old}, [row],
+                        export_version="people-view-baseline-v2", projection_version="people-independent-source-views-v2")
+
+    def test_mixed_or_unknown_export_profiles_fail_before_opening_targets(self):
+        profiles = [("people-view-baseline-v1", "people-independent-source-views-v2"),
+                    ("people-view-baseline-v2", "people-independent-source-views-v1"),
+                    ("people-view-baseline-v3", "people-independent-source-views-v3")]
+        for version, projection in profiles:
+            with self.subTest(version=version, projection=projection), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary)
+                raw = json.dumps({"state": "completed", "version": version, "projectionVersion": projection}).encode()
+                (directory / "manifest.json").write_bytes(raw)
+                inputs = self.base.Inputs(self.experiment)
+                with patch.object(self.base, "read_prepared_sources", return_value=(inputs, prepared(self.base))), \
+                     patch.object(self.base, "read_targets", side_effect=AssertionError("Targets must remain unopened")):
+                    with self.assertRaisesRegex(ValueError, "TOP"):
+                        views.load_inputs(self.base, self.experiment, directory, "unused", directory,
+                                          hashlib.sha256(raw).hexdigest())
+
+    def test_report_retains_the_actual_input_projection_without_training(self):
+        for projection in ("people-independent-source-views-v1", "people-independent-source-views-v2"):
+            with self.subTest(projection=projection), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary) / "output"
+                inputs = self.base.Inputs(self.experiment)
+                # This exercises report publication only; no fitted model is needed for an empty export.
+                with patch.object(views, "score_observations", return_value=({}, [], [], [], [])):
+                    report = views.run(self.base, self.experiment, inputs, prepared(self.base),
+                        {"projectionVersion": projection, "versions": {}}, {"version": "synthetic"},
+                        {}, [], {}, [], directory, {})
+                saved = json.loads((directory / "report.json").read_text())
+                self.assertEqual(report["inputProjectionVersion"], projection)
+                self.assertEqual(saved["inputProjectionVersion"], projection)
 
     def test_source_view_cannot_union_a_new_contact_into_original_projection(self):
         endpoint, row, old = name_endpoint(self.base)

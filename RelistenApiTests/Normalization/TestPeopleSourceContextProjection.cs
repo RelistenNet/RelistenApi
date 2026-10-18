@@ -278,6 +278,81 @@ public sealed class TestPeopleSourceContextProjection
             .Projection.Record.Names.Select(name => name.Wording)
             .Should()
             .Equal("Alice Vale", "Night Owl");
+        result.Facts.Should().NotBeNull();
+        result.SourceAssertion.Should().BeNull("the existing credit path retains its own facts");
+    }
+
+    [TestCase("The band:\nAlice Vale AKA Night Owl - guitar")]
+    [TestCase("Recorded, Mastered and Posted by Alice Vale AKA Night Owl")]
+    public void RoleFreeAliasSelectorsRetainOneOriginalAssertionWithoutManufacturingACredit(
+        string raw
+    )
+    {
+        var projector = Source("description", raw);
+
+        var actor = Project(projector, "Alice Vale", Anchor("description", raw, "Alice Vale"));
+        var alias = Project(projector, "Night Owl", Anchor("description", raw, "Night Owl"));
+
+        actor.Status.Should().Be("matched");
+        actor.MatchedVia.Should().Be("source_alias_actor_anchor");
+        alias.Status.Should().Be("matched");
+        alias.MatchedVia.Should().Be("source_alias");
+        alias.ReferenceUuid.Should().Be(actor.ReferenceUuid).And.NotBeNull();
+        actor.SourceAssertion.Should().NotBeNull();
+        alias.SourceAssertion.Should().BeSameAs(actor.SourceAssertion);
+        actor.Facts.Should().BeNull();
+        alias.Facts.Should().BeNull();
+        actor.SourceAssertion!.Context.Statement.Quote.Should().Contain("Alice Vale AKA Night Owl");
+        foreach (var result in new[] { actor, alias })
+        {
+            result.Projection.Complete.Should().BeTrue();
+            result
+                .Projection.Record.Names.Select(name => name.Wording)
+                .Should()
+                .Equal("Alice Vale", "Night Owl");
+            result.Projection.Record.Kind.Should().BeNull();
+            result.Projection.Record.Uuid.Should().BeNull();
+            result.Projection.Record.ActorContext.Should().BeNull();
+            result.Projection.Record.ExternalIdentities.Should().BeEmpty();
+        }
+    }
+
+    [Test]
+    public void ARepeatedRosterNameOutsideTheAliasStatementCannotBorrowItsNames()
+    {
+        const string raw = "Night Owl attended.\nThe band:\nAlice Vale AKA Night Owl - guitar";
+        var projector = Source("description", raw);
+
+        var first = Project(projector, "Night Owl", Anchor("description", raw, "Night Owl"));
+        var asserted = Project(
+            projector,
+            "Night Owl",
+            Anchor("description", raw, "Night Owl", raw.IndexOf("AKA", StringComparison.Ordinal))
+        );
+
+        first.Status.Should().Be("name_only");
+        first.ReferenceUuid.Should().BeNull();
+        first.SourceAssertion.Should().BeNull();
+        first.Projection.Record.Names.Select(name => name.Wording).Should().Equal("Night Owl");
+        asserted.Status.Should().Be("matched");
+        asserted.SourceAssertion.Should().NotBeNull();
+    }
+
+    [Test]
+    public void AnInnerOnlyQuotedRosterAliasDoesNotSelectTheEnclosingAssertion()
+    {
+        const string raw = "The band:\nAlice Vale (aka \"Night Owl\") - guitar";
+
+        var result = Project(
+            Source("description", raw),
+            "Night Owl",
+            Anchor("description", raw, "Night Owl")
+        );
+
+        result.Status.Should().Be("name_only");
+        result.ReferenceUuid.Should().BeNull();
+        result.SourceAssertion.Should().BeNull();
+        result.Projection.Record.ActorContext.Should().BeNull();
     }
 
     private static PeopleSourceContextProjection Source(string field, string raw) =>

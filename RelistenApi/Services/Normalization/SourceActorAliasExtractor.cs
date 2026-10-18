@@ -9,14 +9,46 @@ using Relisten.Api.Models.Normalization;
 namespace Relisten.Normalization;
 
 /// <summary>
-/// Reads explicit aliases in bounded performer-roster statements. Context is retained for
+/// Reads explicit aliases in bounded performer rosters and recording bylines. Context is retained for
 /// interpretation; this extractor creates no recording credits or participation assertions.
 /// Unknown alias contexts stay unresolved, including non-people uses of the same marker.
 /// </summary>
 public sealed class SourceActorAliasExtractor
 {
     public const string Version =
-        "source-actor-aliases-v2/" + RecordingActorEvidenceExtractor.Version;
+        "source-actor-aliases-v3/" + RecordingActorEvidenceExtractor.Version;
+
+    internal const string LegacyV2Version = "source-actor-aliases-v2/recording-actor-evidence-v1";
+    private readonly SourceActorAliasGrammar grammar;
+    private readonly string producerVersion;
+
+    public SourceActorAliasExtractor()
+        : this(SourceActorAliasGrammar.Current) { }
+
+    // Historical negative review replays the exact old roster grammar. It cannot use new
+    // bylines or assign old version/IDs to their newly supported assertions.
+    internal SourceActorAliasExtractor(SourceActorAliasGrammar grammar)
+    {
+        this.grammar = grammar;
+        producerVersion = grammar switch
+        {
+            SourceActorAliasGrammar.Current => Version,
+            SourceActorAliasGrammar.LegacyV2 => LegacyV2Version,
+            _ => throw new ArgumentOutOfRangeException(nameof(grammar)),
+        };
+        if (
+            grammar == SourceActorAliasGrammar.LegacyV2
+            && !StringComparer.Ordinal.Equals(
+                RecordingActorEvidenceExtractor.Version,
+                "recording-actor-evidence-v1"
+            )
+        )
+        {
+            throw new InvalidOperationException(
+                "Legacy alias replay requires its original shared actor grammar."
+            );
+        }
+    }
 
     // Bound expansion before the shared actor parser runs. Oversized text stays cited and
     // unresolved; absence of extracted aliases is never treated as a complete source clear.
@@ -36,6 +68,22 @@ public sealed class SourceActorAliasExtractor
     );
     private static readonly Regex AliasMarker = new(
         @"\b(?:aka|a\.k\.a\.?|also\s+known\s+as)\b",
+        Options,
+        Timeout
+    );
+    private const string BylineOperation =
+        @"(?:recorded|taped|transferred|mastered|uploaded|mixed|tracked|seeded|posted|collected|matrixed)";
+    private static readonly Regex RecordingByline = new(
+        @"^"
+            + BylineOperation
+            + @"(?:(?:\s*,\s*(?:(?:and|&)\s+)?|\s+(?:and|&)\s+)"
+            + BylineOperation
+            + @"){0,7}\s+by\s+(?<actor>.+)$",
+        Options,
+        Timeout
+    );
+    private static readonly Regex UnsupportedBylineActor = new(
+        @"[,;&:]|\s/\s|\b(?:and|not|never|unknown|anonymous)\b",
         Options,
         Timeout
     );
@@ -233,6 +281,17 @@ public sealed class SourceActorAliasExtractor
 
                 var markerCount = AliasMarker.Matches(line.Text).Count;
                 if (
+                    grammar == SourceActorAliasGrammar.Current
+                    && markerCount > 0
+                    && TryReadByline(line, fieldHash, markerCount, assertions, unresolved)
+                )
+                {
+                    // A recording byline ends an earlier roster. Its explicit alias carries
+                    // the original byline context, without assigning the listed operations.
+                    roster = null;
+                    continue;
+                }
+                if (
                     roster != null
                     && !NumberedEntry.IsMatch(line.Text)
                     && TryRosterEntry(line.Text, out var actorText, out var instrumentation)
@@ -289,14 +348,15 @@ public sealed class SourceActorAliasExtractor
     private void ReadAliases(
         RecordingText.Line line,
         string actorText,
-        RosterContext roster,
+        RosterContext? roster,
         string fieldHash,
         int markerCount,
         List<SourceActorAliasAssertion<NormalizationTextEvidence>> assertions,
-        List<ActorEvidenceUnresolved<NormalizationTextEvidence>> unresolved
+        List<ActorEvidenceUnresolved<NormalizationTextEvidence>> unresolved,
+        int visibleStart = 0
     )
     {
-        var phrases = actorParser.ReadAliasPhrases(actorText, line.Evidence, 0);
+        var phrases = actorParser.ReadAliasPhrases(actorText, line.Evidence, visibleStart);
         var retainedMarkers = 0;
         foreach (var phrase in phrases)
         {
@@ -309,7 +369,7 @@ public sealed class SourceActorAliasExtractor
             }
             retainedMarkers += phrase.Aliases.Count;
             var assertion = new SourceActorAliasAssertion<NormalizationTextEvidence>(
-                Version,
+                producerVersion,
                 AssertionUuid(fieldHash, phrase.ActorReferenceUuid),
                 phrase.ActorReferenceUuid,
                 fieldHash,
@@ -317,7 +377,11 @@ public sealed class SourceActorAliasExtractor
                 phrase.NameEvidence,
                 phrase.Aliases,
                 phrase.Relationships,
-                new(roster.Heading, roster.Qualifiers.ToArray(), line.Evidence),
+                new(
+                    roster?.Heading ?? BylineHeading(line, phrase.NameEvidence),
+                    roster?.Qualifiers.ToArray() ?? [],
+                    line.Evidence
+                ),
                 phrase.Unresolved
             );
             assertions.Add(assertion);
@@ -328,6 +392,89 @@ public sealed class SourceActorAliasExtractor
         {
             unresolved.Add(new("unresolved_alias_boundary", [], [line.Evidence]));
         }
+    }
+
+    private bool TryReadByline(
+        RecordingText.Line line,
+        string fieldHash,
+        int markerCount,
+        List<SourceActorAliasAssertion<NormalizationTextEvidence>> assertions,
+        List<ActorEvidenceUnresolved<NormalizationTextEvidence>> unresolved
+    )
+    {
+        var byline = RecordingByline.Match(line.Text);
+        if (!byline.Success)
+        {
+            return false;
+        }
+
+        var actor = byline.Groups["actor"];
+        var marker = AliasMarker.Match(actor.Value);
+        var primary = actor.Value[..marker.Index];
+        var aliasText = actor.Value[(marker.Index + marker.Length)..].TrimStart(' ', '.', ':');
+        var quotedAlias = aliasText.Length > 0 && aliasText[0] is '"' or '\'' or '“';
+        if (
+            markerCount != 1
+            || UnsupportedBylineActor.IsMatch(primary)
+            || IsNarrativePrefix(primary.TrimEnd(' ', '('))
+            || (
+                quotedAlias
+                    ? !HasBoundedQuotedAlias(aliasText, primary.TrimEnd().EndsWith('('))
+                    : ContinuationBoundary.IsMatch(aliasText)
+                        || Regex.IsMatch(aliasText, @"[.!?]\s+\S", Options, Timeout)
+            )
+        )
+        {
+            unresolved.Add(new("ambiguous_byline_alias", [], [line.Evidence]));
+            return true;
+        }
+
+        ReadAliases(
+            line,
+            actor.Value,
+            null,
+            fieldHash,
+            markerCount,
+            assertions,
+            unresolved,
+            line.VisibleStart + actor.Index
+        );
+        return true;
+    }
+
+    private static bool HasBoundedQuotedAlias(string text, bool parenthesized)
+    {
+        var closing = text[0] == '“' ? '”' : text[0];
+        var end = text.IndexOf(closing, 1);
+        if (end < 0)
+        {
+            return false;
+        }
+
+        // The shared actor parser consumes the suffix after AKA. Validate its entire extent
+        // first: a quoted nickname cannot hide a second actor or subsequent prose.
+        var tail = text[(end + 1)..].Trim();
+        return tail.Length == 0 || parenthesized && tail == ")";
+    }
+
+    private static NormalizationTextEvidence BylineHeading(
+        RecordingText.Line line,
+        NormalizationTextEvidence actor
+    )
+    {
+        // The shared parser already mapped the actor back to original Unicode coordinates.
+        // Keep the raw prefix (including its markup), rather than locating decoded text again.
+        var prefix = string.Concat(
+                line.Evidence.Quote.EnumerateRunes()
+                    .Take(actor.StartCodePoint - line.Evidence.StartCodePoint)
+                    .Select(rune => rune.ToString())
+            )
+            .TrimEnd();
+        return line.Evidence with
+        {
+            Quote = prefix,
+            EndCodePoint = line.Evidence.StartCodePoint + prefix.EnumerateRunes().Count(),
+        };
     }
 
     private static bool TryRosterEntry(
@@ -502,11 +649,11 @@ public sealed class SourceActorAliasExtractor
         && !name.Contains(':')
         && !name.Contains('@');
 
-    private static Guid AssertionUuid(string fieldHash, Guid referenceUuid) =>
+    private Guid AssertionUuid(string fieldHash, Guid referenceUuid) =>
         new(
-            SHA256.HashData(Encoding.UTF8.GetBytes($"{Version}:{fieldHash}:{referenceUuid:D}"))[
-                ..16
-            ]
+            SHA256.HashData(
+                Encoding.UTF8.GetBytes($"{producerVersion}:{fieldHash}:{referenceUuid:D}")
+            )[..16]
         );
 
     private static bool SupportsField(string field) =>
@@ -526,4 +673,10 @@ public sealed class SourceActorAliasExtractor
         NormalizationTextEvidence Heading,
         List<NormalizationTextEvidence> Qualifiers
     );
+}
+
+internal enum SourceActorAliasGrammar
+{
+    Current,
+    LegacyV2,
 }

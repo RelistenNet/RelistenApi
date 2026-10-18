@@ -8,7 +8,7 @@ namespace Relisten.Normalization.Batch;
 /// <summary>Retains independently supported source views without merging fields or asserting actor identity.</summary>
 internal sealed class PeopleIndependentSourceViewProjection
 {
-    public const string Version = "people-independent-source-views-v1";
+    public const string Version = "people-independent-source-views-v2";
     private readonly PeopleAdjudicatedSourcePackage package;
     private readonly PeopleAdjudicatedEndpointProjection projector;
     private readonly CancellationToken cancellationToken;
@@ -83,7 +83,13 @@ internal sealed class PeopleIndependentSourceViewProjection
             {
                 views.Add(
                     key,
-                    new(key, [selector.SelectorIndex], variant.Projection, variant.Facts)
+                    new(
+                        key,
+                        [selector.SelectorIndex],
+                        variant.Projection,
+                        variant.Facts,
+                        variant.SourceAssertion
+                    )
                 );
             }
         }
@@ -193,7 +199,8 @@ public sealed record PeopleIndependentSourceView(
     PeopleSourceViewKey Key,
     IReadOnlyList<int> SelectorIndexes,
     PeopleActorProjectionResult Projection,
-    CreditedActorFacts<NormalizationTextEvidence>? Facts
+    CreditedActorFacts<NormalizationTextEvidence>? Facts,
+    SourceActorAliasAssertion<NormalizationTextEvidence>? SourceAssertion = null
 );
 
 public sealed record PeopleEndpointViewDiagnostic(

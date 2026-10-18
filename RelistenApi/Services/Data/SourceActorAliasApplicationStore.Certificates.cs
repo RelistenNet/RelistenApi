@@ -109,11 +109,19 @@ public sealed partial class SourceActorAliasApplicationStore
             );
         }
 
+        // Exact historical application profiles may prove an existing accepted map. Their
+        // own published ticket, policy and receipt remain authoritative only for that past
+        // publication; this reader grants no current Add or pending-stage authority.
         var result = new Dictionary<Guid, SourceActorAliasPersonStageHeader>();
         foreach (var row in rows)
         {
             if (
-                row.ApplicationVersion != SourceActorAliasApplicationService.Version
+                (
+                    row.ApplicationVersion != SourceActorAliasApplicationService.Version
+                    && !SourceActorAliasApplicationService.SupportsHistoricalAcceptedApplication(
+                        row.ApplicationVersion
+                    )
+                )
                 || !row.HasReceipt
                 || row.Receipt == null
                 || row.TerminalReason != null

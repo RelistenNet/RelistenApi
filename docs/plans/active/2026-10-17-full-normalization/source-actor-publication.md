@@ -32,8 +32,13 @@ attempt. Reuse the application UUID to resume its exact saved work. Reusing it
 with another resolution conflicts. A terminal application returns its saved
 result with `Replayed = true`. A new decision requires a new application; new
 positive source evidence also requires a new extraction and resolution. A trusted
-historical rejection can use its exact original resolution to withdraw the old
-binding through a new application.
+historical rejection cites the original claim, then a current resolution and new
+application withdraw its exact old binding.
+
+A refusal before source planning retains a header-only negative plan and its
+terminal result in one transaction. The plan identifies the requested published
+resolution and refusal reason, with no authenticated claims. It permits exact
+result replay without implying accepted work or changing any existing plan.
 
 `GetApplicationAsync(applicationAttemptUuid, ct)` returns the plan, stage headers
 and terminal result. Headers contain name outcomes and references to independently
@@ -109,6 +114,17 @@ review authority, target and actual name/support facts without renewing that old
 machine decision. Policy deactivation stops uncommitted machine acceptance. It
 can still permit finalization based entirely on names already committed under
 their original receipts.
+
+Producer upgrades preserve correction authority. The readers recognize the exact
+retained decoder-v6/alias-v2 and decoder-v7/alias-v2 profiles for historical
+rejection or retraction and for authenticating support already published by those
+producers. They replay the original grammar, full scope, Work proof and target
+coordinates. This permits removal of old support; it does not authorize a new
+positive assignment, reassignment or automatic transfer of a review to v3.
+New positive decisions and unchanged-field correspondence require the current
+producer. A withdrawal can publish a stage with no remaining names; independent
+native aliases and their proof remain intact. No migration rewrites historical
+producer versions, UUIDs or evidence to make them current.
 
 New committed stage headers also retain a certificate version and the
 authenticated admission request hash. The writer records these only after the

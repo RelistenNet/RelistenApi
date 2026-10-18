@@ -18,6 +18,10 @@ existing Work ownership and recovery contracts. Full-size cost checks,
 independent matching evaluation and rollout remain required. No source-actor
 matching policy is active.
 
+The [v3 verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-alias-v3.json)
+records parser, export, recovery and genuine older-producer correction checks.
+It distinguishes those contract checks from matching accuracy and scale work.
+
 ## 1. Current proposal shape and exact source identity
 
 [SourceActorAssertions.cs](../../../../RelistenApi/Models/Normalization/SourceActorAssertions.cs)
@@ -26,6 +30,22 @@ An assertion retains its format version, local assertion/reference UUIDs, exact
 field hash, primary name/evidence, explicit aliases/relationships, heading,
 qualifiers, statement and unresolved observations. `SourceActorAliasExtraction`
 returns `Assertions`, `Unresolved` and field `Scopes` together.
+
+The current pure alias parser is
+`source-actor-aliases-v3/recording-actor-evidence-v1`. It recognizes explicit
+aliases in bounded recording-operation bylines as well as the existing roster
+forms. A byline must end its operation list with `by` and attach the explicit
+alias to one actor. A quoted alias must close at the actor boundary; trailing
+prose or another actor cannot become part of that alias. All evidence offsets
+refer to the original text. These assertions carry no recording role or person
+type, even when the surrounding byline names recording or transfer operations.
+
+The offline people projector first tries its recording-credit interpretation.
+Only when no credit matches the exact selector can it use one explicit source
+alias assertion. Ambiguous credit matches stay ambiguous. The v2 source-view
+export retains this assertion separately from nullable credit facts, and the
+Python reader accepts only the declared v1/v1 or v2/v2 export/projection pair.
+Neither branch combines evidence from different actors or activates matching.
 
 The implemented envelope in
 [NormalizationRecordingProcessing.cs](../../../../RelistenApi/Models/Normalization/NormalizationRecordingProcessing.cs)

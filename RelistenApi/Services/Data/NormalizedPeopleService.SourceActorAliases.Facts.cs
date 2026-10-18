@@ -254,7 +254,7 @@ public sealed partial class NormalizedPeopleService
                 application.SourceUuid,
                 ct
             );
-            var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(
+            var inputs = await SourceActorResolutionStore.ReadOriginalInputsForAcceptedProofAsync(
                 c,
                 t,
                 historical,

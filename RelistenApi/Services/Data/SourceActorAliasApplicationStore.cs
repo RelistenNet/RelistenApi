@@ -561,6 +561,24 @@ public sealed partial class SourceActorAliasApplicationStore(DbService db)
                         "Completion requires an explicit disposition reason."
                     );
                 }
+                var plan = current.Plan;
+                if (plan == null)
+                {
+                    if (
+                        disposition
+                        is not (
+                            SourceActorAliasApplicationDisposition.Stale
+                            or SourceActorAliasApplicationDisposition.Unresolved
+                        )
+                    )
+                    {
+                        throw new ArgumentException(
+                            "An application refused before planning cannot report accepted or complete work."
+                        );
+                    }
+                    plan = await ReadRefusalPlan(c, t, current, reason, ct);
+                }
+
                 var result = new SourceActorAliasApplicationResult(
                     current.AttemptUuid,
                     current.SourceUuid,
@@ -574,20 +592,55 @@ public sealed partial class SourceActorAliasApplicationStore(DbService db)
                 );
                 await c.ExecuteAsync(
                     new CommandDefinition(
-                        "UPDATE normalization.source_actor_alias_applications SET result=@json::jsonb WHERE attempt_uuid=@applicationUuid",
+                        "UPDATE normalization.source_actor_alias_applications SET plan=COALESCE(plan,@plan::jsonb),result=@json::jsonb WHERE attempt_uuid=@applicationUuid",
                         new
                         {
                             applicationUuid = current.AttemptUuid,
+                            plan = current.Plan == null
+                                ? SourceActorAliasApplicationCheckpointCodec.WritePlan(plan)
+                                : null,
                             json = SourceActorAliasApplicationCheckpointCodec.WriteResult(result),
                         },
                         t,
                         cancellationToken: ct
                     )
                 );
-                return current with { Result = result };
+                return current with { Plan = plan, Result = result };
             },
             ct
         );
+
+    private static async Task<SourceActorAliasApplicationPlan> ReadRefusalPlan(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorAliasApplication application,
+        string reason,
+        CancellationToken ct
+    )
+    {
+        // Every terminal application retains a plan. A pre-plan refusal records only its
+        // immutable request header and explicit reason; no source claims were authenticated.
+        // Save it atomically with the result, so cancellation cannot leave a partial plan.
+        var proposal =
+            await c.QuerySingleOrDefaultAsync<SourceActorAliasProposalReference>(
+                new CommandDefinition(
+                    """
+                    SELECT attempt_uuid AS "ResolutionAttemptUuid",extraction_attempt_uuid AS "ExtractionAttemptUuid",
+                        processing_version AS "ProcessingVersion"
+                    FROM normalization.source_actor_resolution_attempts
+                    WHERE attempt_uuid=@ResolutionAttemptUuid AND source_uuid=@SourceUuid
+                        AND disposition='published' AND batch IS NOT NULL
+                    """,
+                    new { application.ResolutionAttemptUuid, application.SourceUuid },
+                    t,
+                    cancellationToken: ct
+                )
+            )
+            ?? throw new NormalizationConflictException(
+                "The refused application's original published resolution is unavailable."
+            );
+        return new(proposal, [], reason);
+    }
 
     private static void RequireStageIdentity(SourceActorAliasPersonStage stage)
     {

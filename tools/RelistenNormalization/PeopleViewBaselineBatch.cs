@@ -8,7 +8,7 @@ namespace Relisten.Normalization.Batch;
 /// <summary>Exports every independently attributed source view without choosing or merging actor identities.</summary>
 public sealed class PeopleViewBaselineBatch
 {
-    public const string Version = "people-view-baseline-v1";
+    public const string Version = "people-view-baseline-v2";
     private const int MaximumViews = 100_000;
     private const long MaximumLeafPairs = 1_000_000;
     private const long MaximumOutputBytes = 128L * 1024 * 1024;
@@ -39,7 +39,7 @@ public sealed class PeopleViewBaselineBatch
         await package.RecheckAsync(cancellationToken);
 
         Directory.CreateDirectory(output);
-        // Keep the established comparator byte contract and old mode intact. This bounded
+        // Reuse the comparator protocol and its versioned source projection. This bounded
         // second read authenticates the same pinned sources; neither phase opens targets.
         var comparator = await new PeopleAdjudicatedBaselineBatch().RunAsync(
             packageDirectory,

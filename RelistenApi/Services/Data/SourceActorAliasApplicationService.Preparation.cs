@@ -542,7 +542,7 @@ public sealed partial class SourceActorAliasApplicationService
                 sourceUuid,
                 ct
             );
-            var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(
+            var inputs = await SourceActorResolutionStore.ReadOriginalInputsForAcceptedProofAsync(
                 c,
                 t,
                 extraction,
@@ -593,14 +593,24 @@ public sealed partial class SourceActorAliasApplicationService
                     : null;
                 if (exact == null)
                 {
-                    var historical = await ReadOriginalClaim(c, t, acceptance.Claim, ct);
+                    var historical = await ReadAcceptedClaimForWithdrawal(
+                        c,
+                        t,
+                        acceptance.Claim,
+                        ct
+                    );
                     exact = source.Reviews.Reviews.SingleOrDefault(value =>
                         value.Coordinates == historical.Claim.Coordinates
                     );
                 }
                 if (
                     exact == null
-                    || exact.State == "accepted" && exact.SelectedPersonUuid == person
+                    || exact.State == "accepted"
+                        && (
+                            exact.SelectedPersonUuid == person
+                            || exact.Coordinates.ProducerVersion
+                                != RetainedSourceActorAliasExtractor.Version
+                        )
                 )
                 {
                     continue;
@@ -617,12 +627,13 @@ public sealed partial class SourceActorAliasApplicationService
                     source.Extraction.SourceUuid,
                     ct
                 );
-                var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(
-                    c,
-                    t,
-                    original,
-                    ct
-                );
+                var inputs =
+                    await SourceActorResolutionStore.ReadOriginalInputsForAcceptedProofAsync(
+                        c,
+                        t,
+                        original,
+                        ct
+                    );
                 if (
                     !SourceActorReviewEvidence.Same(
                         SourceActorReviewEvidence.SelectField(original, inputs, exact.Coordinates),
@@ -662,14 +673,16 @@ public sealed partial class SourceActorAliasApplicationService
         return result;
     }
 
-    internal static async Task<OriginalClaim> ReadOriginalClaim(
+    // This reads an already accepted binding's immutable interpretation. It grants no Add
+    // authority: callers must also prove the actual prior map and a current negative review.
+    internal static async Task<OriginalClaim> ReadAcceptedClaimForWithdrawal(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorAliasClaimReference reference,
         CancellationToken ct
     )
     {
-        var batch = await ReadOriginalProposal(c, t, reference.Proposal, null, ct);
+        var batch = await ReadPublishedProposal(c, t, reference.Proposal, null, true, ct);
         var input = batch.Preparation.Inputs[reference.InputIndex];
         var scope = input.Scopes[reference.ScopeIndex];
         return new(
@@ -680,11 +693,20 @@ public sealed partial class SourceActorAliasApplicationService
         );
     }
 
-    internal static async Task<SourceActorResolutionBatch> ReadOriginalProposal(
+    internal static Task<SourceActorResolutionBatch> ReadOriginalProposal(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorAliasProposalReference reference,
         Guid? expectedSourceUuid,
+        CancellationToken ct
+    ) => ReadPublishedProposal(c, t, reference, expectedSourceUuid, false, ct);
+
+    private static async Task<SourceActorResolutionBatch> ReadPublishedProposal(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorAliasProposalReference reference,
+        Guid? expectedSourceUuid,
+        bool historicalAcceptedProof,
         CancellationToken ct
     )
     {
@@ -705,34 +727,107 @@ public sealed partial class SourceActorAliasApplicationService
             batch.AttemptUuid != reference.ResolutionAttemptUuid
             || batch.ExtractionAttemptUuid != reference.ExtractionAttemptUuid
             || batch.ProcessingVersion != reference.ProcessingVersion
-            || batch.ProcessingVersion != SourceActorResolutionService.Version
-            || expectedSourceUuid.HasValue && batch.SourceUuid != expectedSourceUuid
-            || !await c.ExecuteScalarAsync<bool>(
-                new CommandDefinition(
-                    """
-                    SELECT EXISTS(SELECT 1 FROM normalization.work_runs run
-                        JOIN normalization.work_subjects owner ON owner.uuid=run.subject_uuid
-                        WHERE run.uuid=@WorkUuid AND run.state='published' AND run.ticket=@ticket::jsonb
-                            AND owner.domain='people' AND owner.subject_kind='source_actor_resolution' AND owner.subject_uuid=@SourceUuid)
-                    """,
-                    new
-                    {
-                        batch.Ticket.WorkUuid,
-                        batch.SourceUuid,
-                        ticket = System.Text.Json.JsonSerializer.Serialize(batch.Ticket),
-                    },
-                    t,
-                    cancellationToken: ct
+            || (
+                batch.ProcessingVersion != SourceActorResolutionService.Version
+                && !(
+                    historicalAcceptedProof
+                    && SupportsHistoricalAcceptedProposal(batch.ProcessingVersion)
                 )
             )
+            || expectedSourceUuid.HasValue && batch.SourceUuid != expectedSourceUuid
+            || batch.Ticket.WorkUuid != batch.AttemptUuid
+            || batch.Ticket.PolicyVersion != batch.ProcessingVersion
+            || !SourceActorResolutionReadSet.IsComplete(batch.Ticket, batch.Preparation)
         )
         {
             throw new NormalizationConflictException(
                 "Source reference differs from its actual immutable published proposal receipt."
             );
         }
+
+        // The saved batch and ticket identify the actual original contributed admission.
+        // Historical proof cannot be borrowed from ordinary Work with coincidentally equal facts.
+        var requestHash = await c.QuerySingleOrDefaultAsync<string>(
+            new CommandDefinition(
+                """
+                SELECT run.request_hash FROM normalization.work_runs run
+                    JOIN normalization.work_subjects owner ON owner.uuid=run.subject_uuid
+                    WHERE run.uuid=@WorkUuid AND run.state='published' AND run.ticket=@ticket::jsonb
+                        AND owner.uuid=@SubjectUuid AND owner.domain='people'
+                        AND owner.subject_kind='source_actor_resolution' AND owner.subject_uuid=@SourceUuid
+                """,
+                new
+                {
+                    batch.Ticket.WorkUuid,
+                    batch.Ticket.SubjectUuid,
+                    batch.SourceUuid,
+                    ticket = System.Text.Json.JsonSerializer.Serialize(batch.Ticket),
+                },
+                t,
+                cancellationToken: ct
+            )
+        );
+        if (
+            requestHash == null
+            || !NormalizationWorkService.MatchesContributedBatchRequest(
+                requestHash,
+                SourceActorResolutionService.Owner(batch.SourceUuid),
+                batch.ProcessingVersion,
+                SourceActorResolutionReadSet.Contributions(batch.Preparation),
+                batch.Preparation.ExpectedConfigurationGeneration,
+                batch.Preparation.ExpectedContributions
+            )
+        )
+        {
+            throw new NormalizationConflictException(
+                "Source reference lacks its exact original contributed publication."
+            );
+        }
         return batch;
     }
+
+    private const string ResolutionPrefix = "source-actor-resolution-proposals-v1/";
+    private const string HistoricalResolutionComponents =
+        "/people-candidate-facts-v5/people-actor-retrieval-v3/people-actor-projection-v1/"
+        + "people-actor-context-linear-v3/people-actor-projection-v1/people-actor-context-features-v1/"
+        + "source-actor-review-correspondence-v1/source-actor-resolution-decisions-v1/"
+        + "people-source-actor-alias-projection-v1/";
+    private const string ResolutionFeatureSuffix = "/people-actor-context-features-v1";
+    private const string HistoricalResolutionSuffix =
+        HistoricalResolutionComponents
+        + SourceActorAliasExtractor.LegacyV2Version
+        + ResolutionFeatureSuffix;
+    private const string HistoricalV6Resolution =
+        ResolutionPrefix
+        + SourceActorResolutionStore.LegacyAliasV2DecoderV6ProcessingVersion
+        + HistoricalResolutionSuffix;
+    private const string HistoricalV7Resolution =
+        ResolutionPrefix
+        + SourceActorResolutionStore.LegacyAliasV2DecoderV7ProcessingVersion
+        + HistoricalResolutionSuffix;
+    private const string ApplicationPrefix = "source-actor-alias-publication-v1/";
+    private const string ApplicationSuffix = "/complete-person-map-v1/component-review-v1";
+
+    private static bool SupportsHistoricalAcceptedProposal(string version) =>
+        CurrentResolutionComponentsMatch()
+        && (version == HistoricalV6Resolution || version == HistoricalV7Resolution);
+
+    internal static bool SupportsHistoricalAcceptedApplication(string version) =>
+        CurrentResolutionComponentsMatch()
+        && (
+            version == ApplicationPrefix + HistoricalV6Resolution + ApplicationSuffix
+            || version == ApplicationPrefix + HistoricalV7Resolution + ApplicationSuffix
+        );
+
+    private static bool CurrentResolutionComponentsMatch() =>
+        // Preserve every non-alias component of the known profiles. The original-source
+        // reader separately requires the exact known decoder and full legacy field replay.
+        SourceActorResolutionService.Version
+        == ResolutionPrefix
+            + NormalizationRecordingProcessor.Version
+            + HistoricalResolutionComponents
+            + SourceActorAliasExtractor.Version
+            + ResolutionFeatureSuffix;
 
     internal sealed record OriginalClaim(
         SourceActorResolutionBatch Batch,

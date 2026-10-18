@@ -9,18 +9,33 @@ namespace Relisten.Data;
 
 public sealed partial class SourceActorResolutionStore
 {
+    // Exact published producer identities. Only alias-v2 roster replay and the known v6/v7
+    // recording-decoder equivalence are supported; unrelated component changes must refuse.
+    private const string LegacyAliasV2ExtractionPrefix =
+        "recording-source-actor-envelope-v2/recording-extraction-v4/"
+        + "retained-recording-credits-v2/recording-credits-v4/recording-actor-evidence-v1/"
+        + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/";
+    internal const string LegacyAliasV2DecoderV6ProcessingVersion =
+        "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v6/"
+        + LegacyAliasV2ExtractionPrefix
+        + RetainedSourceActorAliasExtractor.LegacyV2Version;
+    internal const string LegacyAliasV2DecoderV7ProcessingVersion =
+        "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v7/"
+        + LegacyAliasV2ExtractionPrefix
+        + RetainedSourceActorAliasExtractor.LegacyV2Version;
+
     // One authentication pass owns decoder/root caches. Each original input and selected root
     // document stays open only while its scopes are replayed; file extraction borrows that
     // document rather than opening the entire retained payload once per file.
     private sealed class OriginalInputAuthenticator(
         string processingVersion,
         IReadOnlyDictionary<Guid, NormalizationInputRevision> inputs,
-        bool allowV6NegativeReview
+        bool allowHistoricalProof
     )
     {
         private readonly NormalizationProviderDecoder decoder = new();
         private readonly Dictionary<Guid, ProviderDecodeResult> roots = [];
-        private readonly NormalizationRecordingSourceActorAliasBuilder builder = new();
+        private NormalizationRecordingSourceActorAliasBuilder? builder;
 
         public SourceActorResolutionInput Authenticate(
             NormalizationRecordingPreparedInput prepared,
@@ -103,6 +118,7 @@ public sealed partial class SourceActorResolutionStore
             CancellationToken ct
         )
         {
+            builder ??= new(RequireGrammar());
             var expected = builder.Build(input, document, recording, ct).AsEnumerable();
             if (selected != null)
             {
@@ -110,10 +126,7 @@ public sealed partial class SourceActorResolutionStore
                     builder.Build(root!, rootDocument!, selected.RootAccount, ct)
                 );
             }
-            if (
-                !SupportsProcessingVersion()
-                || !SourceActorResolutionCheckpoint.Same(aliases, expected.ToArray())
-            )
+            if (!SourceActorResolutionCheckpoint.Same(aliases, expected.ToArray()))
             {
                 throw new ArgumentException(
                     "Source actor scopes must reproduce their original published recording, files and selected root."
@@ -131,19 +144,29 @@ public sealed partial class SourceActorResolutionStore
                 .ToArray();
         }
 
-        private bool SupportsProcessingVersion()
+        private SourceActorAliasGrammar RequireGrammar()
         {
-            // v7 changes only MusicBrainz search relationship handling. Recording source
-            // decoding and role-free scope production are identical to v6. Keep the complete
-            // remaining producer identity in this boundary; an older alias grammar is not
-            // accepted merely because its decoder component says v6.
-            const string priorRecordingVersion =
-                "catalog-recording-processing-v4/"
-                + NormalizationLegacyInputService.RefreshCaptureVersion
-                + "/provider-observations-v6/"
-                + NormalizationRecordingExtractor.Version;
-            return processingVersion == NormalizationRecordingProcessor.Version
-                || allowV6NegativeReview && processingVersion == priorRecordingVersion;
+            if (processingVersion == NormalizationRecordingProcessor.Version)
+            {
+                return SourceActorAliasGrammar.Current;
+            }
+            if (
+                allowHistoricalProof
+                && (
+                    processingVersion == LegacyAliasV2DecoderV6ProcessingVersion
+                    || processingVersion == LegacyAliasV2DecoderV7ProcessingVersion
+                )
+                && NormalizationRecordingProcessor.Version
+                    == "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v7/"
+                        + LegacyAliasV2ExtractionPrefix
+                        + RetainedSourceActorAliasExtractor.Version
+            )
+            {
+                return SourceActorAliasGrammar.LegacyV2;
+            }
+            throw new ArgumentException(
+                "Source actor scopes must reproduce their original published recording, files and selected root."
+            );
         }
 
         private static SourceActorResolutionField[] ReadFields(

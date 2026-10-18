@@ -472,6 +472,63 @@ public sealed class TestPeopleViewBaselineBatch
         Rows(output, report.EndpointViews.Path)
             .ToDictionary(row => row.GetProperty("endpointId").GetString()!);
 
+    [Test]
+    public async Task RoleFreeAliasEvidenceSurvivesThePublicViewExportWithoutRecordingFacts()
+    {
+        const string roster = "The band:\nAlice Vale AKA Night Owl - guitar";
+        const string other = "Night Owl";
+        var hash = await WritePackage(
+            [Source(0, new() { ["description"] = roster }), Source(1, new() { ["taper"] = other })],
+            [
+                Endpoint(
+                    "left",
+                    0,
+                    null,
+                    new(
+                        Selector("description", roster, "actor_name", "Alice Vale"),
+                        Selector("description", roster, "actor_name", "Night Owl")
+                    )
+                ),
+                Endpoint("right", 1, null, new(Selector("taper", other, "actor_name", other))),
+            ],
+            [Question("alias-task", "cross_recording_identity", "left", ["right"])],
+            [new JsonObject { ["task_ids"] = new JsonArray("alias-task") }]
+        );
+
+        var report = await Run(hash);
+
+        report.Counts.CompleteBags.Should().Be(1);
+        report.Counts.LeafPairs.Should().Be(1);
+        var left = EndpointRows(report)["left"];
+        var view = left.GetProperty("views").EnumerateArray().Should().ContainSingle().Which;
+        view.GetProperty("selectorIndexes")
+            .EnumerateArray()
+            .Select(x => x.GetInt32())
+            .Should()
+            .Equal(0, 1);
+        view.GetProperty("facts").ValueKind.Should().Be(JsonValueKind.Null);
+        var assertion = view.GetProperty("sourceAssertion");
+        assertion
+            .GetProperty("context")
+            .GetProperty("heading")
+            .GetProperty("quote")
+            .GetString()
+            .Should()
+            .Be("The band:");
+        assertion
+            .GetProperty("nameEvidence")
+            .GetProperty("quote")
+            .GetString()
+            .Should()
+            .Be("Alice Vale");
+        var record = MatchRecord(view.GetProperty("projection").GetProperty("record"));
+        record.Names.Select(name => name.Wording).Should().Equal("Alice Vale", "Night Owl");
+        record.Kind.Should().BeNull();
+        record.Uuid.Should().BeNull();
+        record.ActorContext.Should().BeNull();
+        report.PolicyActivationPermitted.Should().BeFalse();
+    }
+
     private async Task<string> Package(string scenario = "complete")
     {
         const string actor = "Alice Vale aka Night Owl (shared@example.test)";

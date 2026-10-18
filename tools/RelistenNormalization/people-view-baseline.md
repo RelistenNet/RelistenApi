@@ -31,6 +31,23 @@ A source actor key includes its evidence ID, field, and extractor reference UUID
 
 Different fields retain independent records. No record receives names, contacts, or profiles from another view. All selectors, variants, attachment statuses, facts, and exact evidence remain in `endpoint-views.jsonl`, including ambiguous or unattributed alternatives that cannot supply a view. A single nearby actor hypothesis with an unowned reference is still unattributed.
 
+An exact name or alias selector can also select a role-free assertion from
+`SourceActorAliasExtractor`. These assertions retain the original roster or
+recording-byline context and establish only the source's explicit alias statement.
+The exporter first preserves any unique recording-credit match. If no credit
+matches, it can select one alias assertion by its exact primary-name or alias
+citation. It does not attach an inner guessed span, borrow a repeated name, or
+repair an ambiguous credit match with another assertion.
+
+Version 2 views and variants retain this typed evidence in `sourceAssertion`;
+their `facts` value stays null. Recording-credit views retain `facts` and a null
+`sourceAssertion`. Name-only fallbacks retain neither. The alias projection adds
+only the asserted names and the source artist's catalog context. It supplies no
+recording role, attendance, actor kind, contact ownership or canonical identity.
+The source-context version pins the alias extractor as well as this attachment
+behavior. Historical version 1 exports keep their original four-field view shape;
+the trainer supports both version profiles without rewriting old artifacts.
+
 `coverage=complete` means every declared selector supplied exactly one eligible view. Partial coverage retains its clear views. Ambiguous and unattributed selectors retain their separate statuses. `matchRecordsAgree` compares entire matching records structurally; it establishes neither co-reference nor global identity. Completeness does not require the different records to agree.
 
 ## Files and completion
@@ -45,7 +62,7 @@ The output contains:
 
 The top manifest is the only completion authority for this mode. A completed `comparator/manifest.json` alone acknowledges no completed view export. Writers use new files, retain partial output on interruption, and publish the top manifest last. Restart into a new directory with the same externally pinned package; existing output is never overwritten.
 
-The comparator phase deliberately reuses the existing public batch unchanged. The new projection reparses the same bounded, authenticated source package, and rechecks it before and after the comparator and output phases. This costs a second parse but keeps the old output contract intact and avoids a second parser or a shared workflow abstraction.
+The comparator phase reuses the existing public batch and records its source projection version. The view projection reparses the same bounded, authenticated source package, and rechecks it before and after the comparator and output phases. This costs a second parse but keeps the comparator protocol in one place and avoids a second parser or a shared workflow abstraction. New projection versions can change the resulting observations; the export records the versions needed to interpret them.
 
 The machine-readable exchange contract is [people-view-baseline-contract.json](people-view-baseline-contract.json). `edgeId` is a JSON-encoded two-string array containing task ID and candidate endpoint ID. Parse that JSON string; do not split it by punctuation. A leaf key combines edge ID and both full typed source-view keys. The nested comparator preserves every original grouping task and source-reference bridge, including unsupported endpoints and actor-kind questions.
 

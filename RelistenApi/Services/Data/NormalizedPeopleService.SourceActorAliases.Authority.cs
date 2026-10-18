@@ -199,7 +199,17 @@ public sealed partial class NormalizedPeopleService
             review.Coordinates.SourceUuid,
             ct
         );
-        var inputs = await SourceActorResolutionStore.ReadOriginalInputsAsync(c, t, extraction, ct);
+        // Only a withdrawal may authenticate an old grammar. Reviewed Add and correspondence
+        // still require a current producer and cannot turn an old acceptance into new authority.
+        var inputs =
+            authority.Kind == SourceActorAliasAuthorityKind.Withdrawal
+                ? await SourceActorResolutionStore.ReadOriginalInputsForAcceptedProofAsync(
+                    c,
+                    t,
+                    extraction,
+                    ct
+                )
+                : await SourceActorResolutionStore.ReadOriginalInputsAsync(c, t, extraction, ct);
         if (
             !SourceActorReviewEvidence.Same(
                 SourceActorReviewEvidence.SelectField(extraction, inputs, review.Coordinates),
@@ -232,7 +242,7 @@ public sealed partial class NormalizedPeopleService
             ?? throw new NormalizationConflictException(
                 "The original source withdrawal review is no longer current."
             );
-        var original = await SourceActorAliasApplicationService.ReadOriginalClaim(
+        var original = await SourceActorAliasApplicationService.ReadAcceptedClaimForWithdrawal(
             c,
             t,
             authority.Claim,
@@ -248,7 +258,12 @@ public sealed partial class NormalizedPeopleService
                 && !groups.Any(binding => binding.Acceptance.ReviewStateUuid == review.Uuid)
             || delta.Coordinates != review.Coordinates
             || delta.AssertionSha256 != review.AssertionSha256
-            || review.State == "accepted" && review.SelectedPersonUuid == stage.OriginalPersonUuid
+            || review.State == "accepted"
+                && (
+                    review.SelectedPersonUuid == stage.OriginalPersonUuid
+                    || review.Coordinates.ProducerVersion
+                        != RetainedSourceActorAliasExtractor.Version
+                )
             || review.State is not ("accepted" or "rejected" or "retracted")
             || delta.Names.Count != 0
             || delta.Readiness != null

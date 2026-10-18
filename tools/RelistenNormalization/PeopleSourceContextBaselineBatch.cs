@@ -145,7 +145,8 @@ public sealed class PeopleSourceContextBaselineBatch
                 context.ReferenceUuid,
                 context.Projection.Complete,
                 context.Issues,
-                context.Facts
+                context.Facts,
+                context.SourceAssertion
             );
             await JsonSerializer.SerializeAsync(output, diagnostic, Json, ct);
             await output.WriteAsync(new byte[] { (byte)'\n' }, ct);
@@ -224,7 +225,8 @@ public sealed record PeopleSourceContextDiagnostic(
     Guid? ReferenceUuid,
     bool QueryComplete,
     IReadOnlyList<string> Issues,
-    CreditedActorFacts<NormalizationTextEvidence>? Facts
+    CreditedActorFacts<NormalizationTextEvidence>? Facts,
+    SourceActorAliasAssertion<NormalizationTextEvidence>? SourceAssertion = null
 );
 
 public sealed record PeopleSourceContextBaselineReport(

@@ -156,10 +156,19 @@ public sealed partial class SourceActorResolutionStore
         CancellationToken ct
     ) => AuthenticateOriginalInputsAsync(c, t, extraction, false, ct);
 
-    // A negative review may correct the immediately preceding recording producer, whose
-    // recording decoders and alias grammar are unchanged. This is not current interpretation
-    // authority: every original group, file and selected Local root is still replayed exactly.
+    // Negative reviews may correct the exact supported alias-v2 producers with their original
+    // roster grammar and ID namespace. This grants no current interpretation authority:
+    // every original group, file and selected Local root is still replayed exactly.
     internal static Task<SourceActorResolutionInput[]> ReadOriginalInputsForNegativeReviewAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        SourceActorExtractionConsumption extraction,
+        CancellationToken ct
+    ) => AuthenticateOriginalInputsAsync(c, t, extraction, true, ct);
+
+    // Accepted maps retain old interpretation evidence. This reader permits exact supported
+    // historical replay for review inventory and withdrawal only; it cannot admit new aliases.
+    internal static Task<SourceActorResolutionInput[]> ReadOriginalInputsForAcceptedProofAsync(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorExtractionConsumption extraction,
@@ -170,7 +179,7 @@ public sealed partial class SourceActorResolutionStore
         NpgsqlConnection c,
         NpgsqlTransaction t,
         SourceActorExtractionConsumption extraction,
-        bool allowV6NegativeReview,
+        bool allowHistoricalProof,
         CancellationToken ct
     )
     {
@@ -216,7 +225,7 @@ public sealed partial class SourceActorResolutionStore
         var authenticator = new OriginalInputAuthenticator(
             extraction.ProcessingVersion,
             inputs,
-            allowV6NegativeReview
+            allowHistoricalProof
         );
         var result = original
             .Select(prepared =>

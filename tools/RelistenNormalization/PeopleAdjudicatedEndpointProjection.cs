@@ -127,7 +127,8 @@ internal sealed class PeopleAdjudicatedEndpointProjection
                     selector.Evidence.Quote,
                     null,
                     result.Projection,
-                    result.Facts
+                    result.Facts,
+                    result.SourceAssertion
                 )
             );
             return;
@@ -179,7 +180,8 @@ public sealed record PeopleAdjudicatedActorVariant(
     string Name,
     PeopleSourceReferenceAttachment? Attachment,
     PeopleActorProjectionResult Projection,
-    CreditedActorFacts<NormalizationTextEvidence>? Facts
+    CreditedActorFacts<NormalizationTextEvidence>? Facts,
+    SourceActorAliasAssertion<NormalizationTextEvidence>? SourceAssertion = null
 );
 
 public sealed record PeopleAdjudicatedSelectorDiagnostic(
