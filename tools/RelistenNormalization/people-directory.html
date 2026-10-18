@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>Tapers and transferrers · Relisten</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+      background: #101b1b;
+      color: #e9eeeb;
+    }
+    body {
+      max-width: 1050px;
+      margin: auto;
+      padding: 24px;
+    }
+    h1 {
+      font-size: clamp(2rem, 6vw, 3.2rem);
+      margin: 10px 0;
+    }
+    h2 {
+      margin-top: 30px;
+    }
+    a {
+      color: #9ddfd0;
+    }
+    p {
+      line-height: 1.55;
+    }
+    small,
+    .muted {
+      color: #a8bdb7;
+    }
+    input,
+    select,
+    button {
+      font: inherit;
+      padding: 11px;
+      border: 1px solid #4a6660;
+      border-radius: 8px;
+      background: #1a2b28;
+      color: inherit;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    input {
+      flex: 1;
+      min-width: 100px;
+    }
+    button,
+    a {
+      cursor: pointer;
+    }
+    form,
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin: 18px 0;
+    }
+    .card {
+      background: #1b2b28;
+      border: 1px solid #38554c;
+      border-radius: 12px;
+      padding: 18px;
+      margin: 13px 0;
+      overflow-wrap: anywhere;
+    }
+    .card h3 {
+      margin: 0 0 9px;
+    }
+    .badge {
+      font-size: 0.8rem;
+      color: #e4cf95;
+    }
+    blockquote {
+      margin: 10px 0;
+      border-left: 2px solid #678f80;
+      padding: 8px 14px;
+      white-space: pre-wrap;
+    }
+    details {
+      margin: 12px 0;
+    }
+    summary {
+      cursor: pointer;
+    }
+    .counts {
+      font-size: 0.9rem;
+      color: #c3d4ca;
+    }
+    .error {
+      color: #ffb2a5;
+    }
+    #status {
+      min-height: 25px;
+    }
+    nav {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    li {
+      line-height: 1.5;
+      margin: 8px 0;
+    }
+    code {
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 500px) {
+      body {
+        padding: 18px 14px;
+      }
+      .card {
+        padding: 14px;
+      }
+    }
+  </style>
+  <nav>
+    <a id="files-link" href="#">Files and songs</a
+    ><a id="core-link" href="#">All normalization results</a>
+  </nav>
+  <p class="badge">LOCAL EXPERIMENT · DRAFT NAME GROUPS</p>
+  <h1>Tapers and transferrers</h1>
+  <p>
+    Find recording credits across artists. Matching names appear together so you
+    can browse the recordings and inspect the evidence. Namesakes can share a
+    group; different aliases can still have separate groups.
+  </p>
+  <p id="coverage" class="counts"></p>
+  <details>
+    <summary>How these groups work and known issues</summary>
+    <ul id="issues"></ul>
+  </details>
+  <form id="search">
+    <input
+      id="query"
+      aria-label="Search credited name or explicit alias"
+      placeholder="Aadam Jacobs, Charlie Miller, Rob Berger…"
+    /><button>Search</button>
+  </form>
+  <div id="status" aria-live="polite"></div>
+  <main id="results"></main>
+  <div id="pagination" class="controls"></div>
+  <script>
+    const $ = (id) => document.getElementById(id),
+      count = (n) => Number(n).toLocaleString();
+    function node(tag, text, cls) {
+      let n = document.createElement(tag);
+      if (text !== undefined) n.textContent = text;
+      if (cls) n.className = cls;
+      return n;
+    }
+    function link(label, url) {
+      let a = node("a", label);
+      a.href = url;
+      return a;
+    }
+    function pageButton(label, action) {
+      let b = node("button", label);
+      b.onclick = action;
+      return b;
+    }
+    function setLocation(params) {
+      history.pushState(null, "", "?" + new URLSearchParams(params));
+      load();
+    }
+    async function get(url) {
+      let r = await fetch(url);
+      if (!r.ok) throw Error("Request failed (" + r.status + ").");
+      return r.json();
+    }
+    function pages(total, offset, limit, params) {
+      $("pagination").replaceChildren();
+      if (offset > 0)
+        $("pagination").append(
+          pageButton("Previous", () =>
+            setLocation({ ...params, offset: Math.max(0, offset - limit) }),
+          ),
+        );
+      if (offset + limit < total)
+        $("pagination").append(
+          pageButton("Next", () =>
+            setLocation({ ...params, offset: offset + limit }),
+          ),
+        );
+    }
+    async function load() {
+      let p = Object.fromEntries(new URLSearchParams(location.search));
+      $("query").value = p.q || "";
+      $("results").replaceChildren();
+      $("pagination").replaceChildren();
+      $("status").textContent = "Loading…";
+      try {
+        if (p.id) await detail(p);
+        else await search(p);
+      } catch (e) {
+        $("status").textContent = e.message;
+        $("status").className = "error";
+      }
+    }
+    async function search(p) {
+      let data = await get("/api/people?" + new URLSearchParams(p));
+      $("status").textContent =
+        count(data.total) +
+        " draft name groups" +
+        (p.q ? " matching “" + p.q + "”" : "") +
+        ".";
+      for (let g of data.groups) {
+        let card = node("article", undefined, "card");
+        card.append(
+          link(g.display_name, "?" + new URLSearchParams({ id: g.id })),
+          node(
+            "p",
+            count(g.recording_count) +
+              " recordings · " +
+              count(g.artist_count) +
+              " artists · " +
+              count(g.credit_count) +
+              " credit mentions",
+            "counts",
+          ),
+        );
+        $("results").append(card);
+      }
+      pages(data.total, data.offset, data.limit, p);
+    }
+    async function detail(p) {
+      let d = await get("/api/person?" + new URLSearchParams(p));
+      $("status").textContent = "";
+      let header = node("section");
+      header.append(
+        link("← All name groups", "?"),
+        node("h2", d.display_name),
+        node(
+          "p",
+          count(d.recording_count) +
+            " recordings across " +
+            count(d.artist_count) +
+            " artists. This is an inferred name group; inspect the credits before treating it as one person.",
+        ),
+      );
+      header.append(
+        node(
+          "p",
+          "Roles: " +
+            d.roles
+              .map(
+                (r) =>
+                  r.role + " (" + count(r.recording_count) + " recordings)",
+              )
+              .join(", "),
+          "counts",
+        ),
+      );
+      let spellings = [
+        ...new Set(
+          d.names.map(
+            (n) =>
+              n.wording +
+              (n.basis === "explicit_source_alias" ? " [explicit alias]" : ""),
+          ),
+        ),
+      ];
+      header.append(
+        node(
+          "p",
+          "Credited names and aliases: " + spellings.join(" · "),
+          "counts",
+        ),
+      );
+      if (d.relatedGroups.length) {
+        let related = node(
+          "p",
+          "Related name groups from explicit alias overlap: ",
+        );
+        for (let g of d.relatedGroups)
+          related.append(
+            link(g.display_name, "?" + new URLSearchParams({ id: g.id })),
+            document.createTextNode(" · "),
+          );
+        header.append(related);
+      }
+      let controls = node("div", undefined, "controls"),
+        select = node("select");
+      select.setAttribute("aria-label", "Filter recordings by artist");
+      let option = node("option", "All artists");
+      option.value = "";
+      select.append(option);
+      for (let a of d.artists) {
+        let o = node("option", a.name + " (" + count(a.recording_count) + ")");
+        o.value = a.uuid;
+        select.append(o);
+      }
+      select.value = p.artist || "";
+      select.onchange = () =>
+        setLocation({
+          id: p.id,
+          ...(select.value ? { artist: select.value } : {}),
+        });
+      controls.append(select);
+      header.append(
+        controls,
+        node(
+          "p",
+          count(d.total) +
+            " recordings in this view. Each recording has one source UUID; multiple roles count once.",
+          "counts",
+        ),
+      );
+      $("results").append(header);
+      for (let r of d.recordings) {
+        let card = node("article", undefined, "card"),
+          names = [
+            ...new Set(
+              r.credits.map(
+                (c) => c.artist_name || c.artist_uuid || "Unknown artist",
+              ),
+            ),
+          ];
+        card.append(
+          node("h3", names.join(" · ")),
+          link("Open playable files →", r.playableFilesUrl),
+          node("p", "Source " + r.sourceUuid, "muted"),
+        );
+        for (let c of r.credits) {
+          let section = node("details"),
+            summary = node("summary", c.name + " · " + c.role);
+          section.append(summary);
+          if (c.evidence)
+            section.append(
+              node("blockquote", c.evidence.quote),
+              node(
+                "p",
+                "Source field: " +
+                  c.evidence.field +
+                  " · code points " +
+                  c.evidence.startCodePoint +
+                  "–" +
+                  c.evidence.endCodePoint,
+                "counts",
+              ),
+            );
+          for (let a of c.aliases)
+            section.append(
+              node("p", "Explicit alias: " + a.wording),
+              node(
+                "blockquote",
+                (a.evidence || []).map((e) => e.quote).join("\n"),
+              ),
+            );
+          section.append(
+            link("Inspect source extraction", c.sourceEvidenceUrl),
+          );
+          card.append(section);
+        }
+        $("results").append(card);
+      }
+      pages(d.total, d.offset, d.limit, p);
+    }
+    $("search").onsubmit = (e) => {
+      e.preventDefault();
+      setLocation({ q: $("query").value });
+    };
+    window.onpopstate = load;
+    get("/api/stats")
+      .then((s) => {
+        $("files-link").href = s.filesUrl;
+        $("core-link").href = s.coreUrl;
+        $("coverage").textContent =
+          count(s.sourceRows) +
+          " source recordings scanned · " +
+          count(s.creditedRecordings) +
+          " with extracted credits · " +
+          count(s.creditedArtists) +
+          " artists with credits · " +
+          count(s.groups) +
+          " draft name groups";
+        for (let issue of s.knownIssues) $("issues").append(node("li", issue));
+      })
+      .catch((e) => ($("coverage").textContent = e.message));
+    load();
+  </script>
+</html>
