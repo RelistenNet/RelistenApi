@@ -14,6 +14,15 @@ Continue beyond shadow delivery to independently qualified acceptance/routing, i
 
 ## Experimental development policy
 
+Judge progress by what a listener can do in the app. Searching `MSG` should open
+Madison Square Garden with recordings across artists. Searching a taper's aliases
+should find their supported credits and playable recordings together. Song and
+composition search should lead to distinct playable performances. Venue rooms,
+namesakes and genuinely uncertain identities must remain distinguishable.
+Searchable raw rows, comparison cards, test counts and execution receipts do not
+by themselves deliver those outcomes. Build and expose the complete user journey;
+use checks to protect it and report the working experience first.
+
 Find a good overall normalization approach and a usable foundation that we can improve. This is challenging experimental work. Favor complete features and informative trials over perfecting individual components. A version with visible, understood mistakes can be useful for local inspection and deciding what to build next.
 
 Work in broad iterations: state the approach being tested and what would change the decision, implement the simplest complete path, expose its results, inspect representative successes and failures, then keep, revise or replace the approach. Finish cross-artist person lookup, shared venue lookup, song-to-playable-file search and supported setlist browsing as integrated features. Do not make another two-match improvement the milestone while those features remain unfinished.
