@@ -92,6 +92,12 @@ first answers and separate adjudication against either packet format, including
 exact citations and links to original answer bytes. These tools use retained
 development data only. None accepts an identity or activates a publication policy.
 
+The [development evidence selector](people-evaluation-selection/README.md)
+inventories every permitted source, closes known reservations and copies complete
+selected originals. It keeps artist coverage and probability panels separate,
+retains unknown parent links and records prior exposure. Its current frame is
+development data; it cannot establish catalog-wide matching accuracy.
+
 ## Retained MusicBrainz acquisition
 
 Use [`musicbrainz-acquire`](musicbrainz-acquire.md) for a bounded work, recording or artist lookup through the public acquisition service. The mode uses a dedicated local database, returns immediately when admission is pending, and exports exact responses, retained input, typed observations and hashes. It does not accept catalog identity links.

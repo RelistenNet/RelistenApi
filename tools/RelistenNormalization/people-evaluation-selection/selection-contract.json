@@ -1,0 +1,97 @@
+{
+  "schema_version": "people-evaluation-selection-contract:3",
+  "scope": "Offline retained development metadata and explicitly selected original contexts",
+  "partition": "development",
+  "identity_family_closure": "unqualified",
+  "eligible_for_release_evaluation": false,
+  "labels_or_acceptance_policy_changed": false,
+  "default": {
+    "command": "inventory",
+    "permitted_metadata_sources": 2184,
+    "permitted_metadata_artists": 1765,
+    "original_duplicate_groups": 2172,
+    "selected_sources": 0,
+    "raw_payloads_decoded": 0
+  },
+  "authority": {
+    "packet_helper": "tools/RelistenNormalization/people-identity-packet/people_identity_packet.py",
+    "functions_reused": ["authenticate", "development_metadata", "selected_originals", "publish_packet"],
+    "input_pins": "base-inputs.json",
+    "runtime_input_pins": "Executed packet helper plus reservations/receipt, census, prior-exposure packet and annotation manifest",
+    "recorded_execution_sources": ["select_people_evidence.py", "selection-contract.json", "base-inputs.json"],
+    "guide_tests_and_private_review_are_runtime_dependencies": false,
+    "exclusion_order": [
+      "Authenticate reviewed helper and metadata inputs",
+      "Validate entire original permitted development metadata with the packet helper",
+      "Join all safe eligible and excluded recording families and duplicate groups",
+      "Keep excluded track nodes and linked parent sources; only permitted source rows enter inventory",
+      "Join metadata_matches tracks to authenticated same-namespace parent source rows and explicit recording families",
+      "Retain pointers and unresolved parent status without inventing absent parent nodes",
+      "Apply original reservations, metadata-only bridges and additional reserved exposure",
+      "Propagate exclusions and exposure over complete known metadata components",
+      "Sample eligible whole components and freeze selection",
+      "Only a separate capture command may decode selected original physical lines"
+    ]
+  },
+  "keys": {
+    "catalog_source_example": "catalog-2026-10-17/source:123",
+    "catalog_track_example": "catalog-2026-10-17/track:123",
+    "catalog_venue_example": "catalog-2026-10-17/venue:123",
+    "local_source_example": "local-catalog/source:123",
+    "recording_family_namespace": "Recording family and duplicate-group graph nodes retain the catalog/local namespace",
+    "numeric_namespace_equivalence_inferred": false
+  },
+  "panels": {
+    "artist_coverage_challenge": {
+      "selection": "Seeded rank chooses up to K eligible components for each safe artist; selected components are included whole",
+      "probability_claim": null
+    },
+    "probability_sample": {
+      "selection": "Uniform pseudorandom sample without replacement of n eligible whole metadata components",
+      "component_and_source_inclusion_probability": "n / number of selection-eligible retained metadata components",
+      "within_component_inclusion_probability": "1 / 1",
+      "population": "Permitted retained development frame after all known exclusions and bridges",
+      "global_catalog_inclusion_probability": null,
+      "seed": "Preregistered 64 lower-case hexadecimal digits; retain before inspecting selection"
+    },
+    "union": {
+      "purpose": "Operational allowlist only; panel overlap retained",
+      "calibration_sample": false,
+      "inclusion_probability": null
+    }
+  },
+  "unknowns": [
+    "Complete identity-family closure",
+    "Per-source provider ownership",
+    "Knowledge cutoff and recording-date precision",
+    "Original provider/media format",
+    "Per-source prior label/model access enumeration",
+    "Full named artist roster outside the safe permitted metadata"
+  ],
+  "reservation_amendment": {
+    "schema_version": "people-selection-reservations:1",
+    "bridges": [],
+    "excluded_source_keys": [],
+    "exposures": []
+  },
+  "outputs": [
+    "inventory.jsonl",
+    "selection.jsonl",
+    "capture-requests.jsonl",
+    "artist-counts.jsonl",
+    "denominators.json",
+    "selection-spec.json",
+    "additional-reservations.json",
+    "reservation-exposure-ledger.json",
+    "manifest.json"
+  ],
+  "capture": {
+    "input": "Verified complete metadata selection",
+    "output": "New ignored directory with complete originals.jsonl and completion manifest",
+    "raw_gate": "Pinned selected_originals reads bytes for all physical lines but decodes only selected permitted lines",
+    "whole_annotation_hash_before_and_after": true,
+    "external_acquisition_authorized": false,
+    "new_labels": 0
+  },
+  "recovery": "A failed write has no complete manifest. Preserve the partial directory; use a new directory for a retry."
+}

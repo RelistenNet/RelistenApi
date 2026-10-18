@@ -1,0 +1,35 @@
+{
+  "schema_version": "people-evaluation-selection-inputs:1",
+  "artifacts": [
+    {
+      "path": "tools/RelistenNormalization/people-identity-packet/people_identity_packet.py",
+      "bytes": 26864,
+      "sha256": "20ac70e6b999b03049141852127334a31426ebc048071d650663aaa7d0e3a5c2"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/training/people-development-v1/reservation-receipt.json",
+      "bytes": 1588,
+      "sha256": "81b1eea62e449c4d9d31e3e48386a6a6dca73ee695ac0ad37017fdac50ce895e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/reserved-reference-index.json",
+      "bytes": 955704,
+      "sha256": "f4f1d8c43d886800d4d0e8ef2d14c438a8f1ab92904ed0be53ef6436ebf32331"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/evidence/coverage.json",
+      "bytes": 13260,
+      "sha256": "84790a553cbecaf9aab8f9dfcd67477578bf35eacbe51e5482fa21c8f8f2714a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-identity-adjudication-verification-v1/discovery/packet-manifest.json",
+      "bytes": 7740,
+      "sha256": "1255af35db5b6d1a26710c784dc4ba7332b44509a7cd00666433eb2c53f573b9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/annotation-v1/manifest.json",
+      "bytes": 5082,
+      "sha256": "925db125599f4c28d8cc4c7c7cb6b48727619c8336afc915d3beadf4e7821a93"
+    }
+  ]
+}
