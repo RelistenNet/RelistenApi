@@ -8,9 +8,10 @@ provider numeric IDs or Local numeric IDs.
 
 This addition is implemented and tested against synthetic retained outcomes.
 The first actual 34,139-file projection reached the 32 MiB staging cap and
-published nothing. Recording-origin interning corrects that representation; an
-actual retry and reader integration check remain separate verification. This
-document does not claim that cutover has happened.
+published nothing. The interned retry completed with 670 observations, 670 input
+parents and 34,139 files in 0.773 seconds. Its 9,814,016-byte overlay fits the
+unchanged 32 MiB cap. Reader integration and cutover remain separate verification;
+this document does not claim that cutover has happened.
 
 ## Project and serve
 
@@ -31,8 +32,8 @@ parent UUID, including original evidence coordinates and quotes. Interning does
 not collapse accounts by name, resource key or catalog ID. Bounds are 10,000 input
 results per domain, 10,000 venue observations, 100,000 files and 32 MiB of staging
 database/journal, with a 4.5 GiB free-space reserve. The current 670 venue inputs
-and 34,139 files fit the count bounds; the actual retry must establish that the
-interned database fits the size bound. These are not full-catalog limits.
+and 34,139 files fit the count bounds; the interned actual retry also fits the
+size bound. These are not full-catalog limits.
 
 An update writes an exclusive `.building` file and replaces the native overlay
 atomically only after completion and budget checks. The interned representation is
@@ -92,9 +93,12 @@ matches. `fileOffset` and `fileLimit` paginate this list independently from the
 recording list; each file link uses its stable `native_file` entity key in the
 native reader. Rebuildable reader cache IDs are not persisted in the overlay.
 
-Catalog source links are labeled separately from native files. They retain the
-existing full-file reader and authenticated `source:<uuid>` relationship; the
-original Local namespace never joins legacy recording rows by numeric IDs.
+Native recording source-file links stay in the same native reader and require
+both the enclosing input UUID (`q`) and authenticated `source:<uuid>` key. Even
+when a Local snapshot UUID coincides with a legacy source UUID, it cannot route
+to the production-captured file namespace. The exact native-file page remains
+available independently of catalog anchors. Legacy recording links retain their
+existing full-file reader. Native numeric IDs never join legacy recording rows.
 
 `/api/stats` preserves the legacy coverage fields and adds `nativeCoverage`
 (observations, provider-input outcomes and retained files), `nativeRun`,

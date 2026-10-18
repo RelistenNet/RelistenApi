@@ -350,7 +350,7 @@
             files.searchParams.set("entityKey", "source:" + recording.source_uuid);
           }
         }
-        if (files) { result.append(link(recording.recording_origin ? "Catalog source files ↗" : "Files & playback ↗", files.href, "button")); }
+        if (files) { result.append(link(recording.recording_origin ? "Native source-file account ↗" : "Files & playback ↗", files.href, "button")); }
         let source = safeUrl(recording.coreUrl);
         if (!source && recording.source_uuid) {
           source = safeUrl(readerUrl(data.coreUrl || stats.coreUrl, "performances", "source:" + recording.source_uuid));

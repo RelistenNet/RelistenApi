@@ -279,7 +279,10 @@ class TestVenueDirectory(unittest.TestCase):
             "inputRevisionUuid": uid(parent), "recordingOrigin": origin,
             "file": {"title": {"value": "Late song"}, "filename": {"value": "recording.mp3"}},
             "outcome": "unresolved", "entityKeys": ["native_file:" + str(parent)]}
-        file_record = {**record, "domain": "file_contents", "proposal": {"files": [child]}}
+        if anchor:
+            child["entityKeys"].append("source:" + anchor)
+        file_record = {**record, "domain": "file_contents", "proposal": {"files": [child]},
+                       "entityKeys": child["entityKeys"]}
         return record, file_record
 
     def native_overlay(self, records=None):
@@ -452,13 +455,25 @@ class TestVenueDirectory(unittest.TestCase):
     def test_native_uuid_anchors_and_file_pagination_do_not_expand_to_other_catalog_sources(self):
         self.build()
         record, files = self.native_fixture(anchor=uid(101))
-        directory = self.native_overlay([(record, files)])
-        row = directory.search({"kind": "native_observation"})["rows"][0]
+        directory = self.native_overlay([(record, files), self.native_fixture(802, anchor=uid(101))])
+        row = next(row for row in directory.search({"kind": "native_observation"})["rows"] if uid(801) in row["uuid"])
         detail = directory.detail(row["uuid"], {"fileOffset": "1", "fileLimit": "1"})
         self.assertEqual(detail["filesTotal"], 1)
         self.assertEqual(detail["files"], [])
         self.assertEqual(detail["recordingsTotal"], 1)
-        self.assertIn("source%3A" + uid(101), detail["recordings"][0]["filesUrl"])
+        native_link = urlsplit(detail["recordings"][0]["filesUrl"])
+        self.assertEqual(native_link.netloc, "native")
+        filters = {key: values[-1] for key, values in parse_qs(native_link.query).items()}
+        self.assertEqual(filters, {"domain": "file_contents", "q": uid(801), "entityKey": "source:" + uid(101)})
+        reader = ShadowIndex(self.native_run)
+        reader.scan_once()
+        found = reader.search(filters)
+        self.assertEqual(found["total"], 1)
+        self.assertEqual(found["items"][0]["input_uuid"], uid(801))
+        # The coincident UUID belongs to a different namespace in the legacy DB.
+        legacy = next(item for item in directory.detail(uid(1), {})["recordings"] if item["source_uuid"] == uid(101))
+        self.assertEqual(urlsplit(legacy["filesUrl"]).netloc, "files")
+        self.assertEqual(detail["filesUrl"], "http://native/")
         self.assertEqual(directory.detail(row["uuid"], {"artist": "Other Artist"})["filesTotal"], 0)
 
 

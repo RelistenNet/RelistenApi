@@ -553,7 +553,7 @@ class VenueDirectory:
             recordingsTotal=len(recordings), recordingsScope="original_native_recording_accounts", recordingsComplete=True,
             countsReady=True, offset=offset, limit=limit, files=files, filesTotal=total_files,
             fileOffset=file_offset, fileLimit=file_limit, evidenceUrl="/api/evidence?" + urlencode({"id": identifier}),
-            coreUrl=self.native_url, filesUrl=self.files_url)
+            coreUrl=self.native_url, filesUrl=self.native_url)
 
 
     def _native_recordings(self, outcome, account, artist):
@@ -564,7 +564,8 @@ class VenueDirectory:
                 artist_name=outcome["artistName"], source_date=(link.get("literalDate") or {}).get("value"),
                 show_date=None, relationship="original_native_recording_account", recording_origin=link["recording"],
                 literal_date=link.get("literalDate"), catalog_binding_reason=link.get("catalogBindingReason"),
-                filesUrl=self.files_url + "?" + urlencode({"domain": "file_contents", "entityKey": "source:" + source}) if source else None,
+                filesUrl=self.native_url + "?" + urlencode({"domain": "file_contents", "q": outcome["inputUuid"],
+                    "entityKey": "source:" + source}) if source else None,
                 coreUrl=self.native_url + "?" + urlencode({"domain": "venues", "entityKey": account["observationKey"]})))
         if artist and artist != outcome["artistUuid"] and folded(artist) not in folded(outcome["artistName"]):
             recordings = []
