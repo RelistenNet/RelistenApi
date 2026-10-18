@@ -119,7 +119,8 @@
     }
   </style>
   <nav>
-    <a id="files-link" href="#">Files and songs</a
+    <a href="?context=1">Contextual comparisons</a
+    ><a id="files-link" href="#">Files and songs</a
     ><a id="core-link" href="#">All normalization results</a>
   </nav>
   <p class="badge">LOCAL EXPERIMENT · DRAFT NAME GROUPS</p>
@@ -194,7 +195,10 @@
       $("pagination").replaceChildren();
       $("status").textContent = "Loading…";
       try {
-        if (p.id) await detail(p);
+        if (p.context) {
+          $("status").textContent = "";
+          await relationships("", Number(p.offset || 0));
+        } else if (p.id) await detail(p);
         else await search(p);
       } catch (e) {
         $("status").textContent = e.message;
@@ -226,6 +230,142 @@
         $("results").append(card);
       }
       pages(data.total, data.offset, data.limit, p);
+    }
+    async function relationships(group, offset = 0, previous = null) {
+      let data = await get(
+        "/api/relationships?" +
+          new URLSearchParams({ group, offset, limit: 10 }),
+      );
+      if (!data.total) {
+        if (!group)
+          $("status").textContent =
+            "Contextual results have not been attached yet.";
+        return;
+      }
+      let section = node("section");
+      section.append(
+        node("h2", "Contextual identity proposals"),
+        node(
+          "p",
+          count(data.total) +
+            " comparisons" +
+            (group
+              ? " involving this name group"
+              : " across the selected development population") +
+            ". Luna used captured credits and surrounding prose. These proposals do not merge people or recordings; a name group can contain namesakes.",
+        ),
+      );
+      for (let r of data.relationships) {
+        let card = node("article", undefined, "card");
+        card.append(
+          node("h3", r.left_name + " ↔ " + r.right_name),
+          node(
+            "p",
+            {
+              same_person: "Possible same person",
+              different_people: "Possible different people",
+              insufficient_evidence: "Insufficient evidence",
+            }[r.relation],
+            "badge",
+          ),
+          node("p", r.reason),
+          ...(r.basis === "recovered_from_failed_batch"
+            ? [
+                node(
+                  "p",
+                  "Recovered valid decision from a response with other rejected quotations",
+                  "badge",
+                ),
+              ]
+            : []),
+        );
+        for (let e of r.evidence)
+          card.append(
+            node("p", e.side + " · " + e.field, "muted"),
+            node("blockquote", e.quote),
+          );
+        let actions = node("p");
+        for (let [label, id] of [
+          [r.left_name, r.left_group],
+          [r.right_name, r.right_group],
+        ]) {
+          actions.append(
+            link(label + " recordings", "?" + new URLSearchParams({ id })),
+            document.createTextNode(" · "),
+          );
+        }
+        card.append(actions);
+        let evidence = node("details");
+        evidence.append(
+          node("summary", "Inspect exact witnesses and playback"),
+        );
+        evidence.ontoggle = async () => {
+          if (!evidence.open || evidence.dataset.loaded) return;
+          evidence.dataset.loaded = "true";
+          try {
+            let detail = await get(
+              "/api/relationship?" + new URLSearchParams({ id: r.id }),
+            );
+            for (let side of ["left", "right"]) {
+              let actor = detail.question[side];
+              evidence.append(
+                node("h3", actor.name + " · " + actor.artistName),
+                node(
+                  "p",
+                  [
+                    actor.literalDate || "Date unavailable",
+                    actor.roles.join(", "),
+                  ].join(" · "),
+                ),
+                link(
+                  "Open this recording’s playable files",
+                  actor.playableFilesUrl,
+                ),
+                document.createTextNode(" · "),
+                link("Original source evidence", actor.sourceEvidenceUrl),
+              );
+              for (let excerpt of actor.evidence)
+                evidence.append(
+                  node(
+                    "p",
+                    excerpt.field +
+                      " · code points " +
+                      excerpt.startCodePoint +
+                      "–" +
+                      excerpt.endCodePoint,
+                    "muted",
+                  ),
+                  node("blockquote", excerpt.quote),
+                );
+              if (actor.actorFacts) {
+                let facts = node(
+                  "pre",
+                  JSON.stringify(actor.actorFacts, null, 2),
+                );
+                facts.style.whiteSpace = "pre-wrap";
+                evidence.append(facts);
+              }
+            }
+          } catch (error) {
+            evidence.append(node("p", error.message, "error"));
+          }
+        };
+        card.append(evidence);
+        section.append(card);
+      }
+      let controls = node("div", undefined, "controls");
+      for (let [label, start] of [
+        ["Previous comparisons", offset - 10],
+        ["More comparisons", offset + 10],
+      ]) {
+        if (start >= 0 && start < data.total)
+          controls.append(
+            pageButton(label, () => relationships(group, start, section)),
+          );
+      }
+      section.append(controls);
+      if (previous) previous.replaceWith(section);
+      else $("results").append(section);
     }
     async function detail(p) {
       let d = await get("/api/person?" + new URLSearchParams(p));
@@ -311,6 +451,7 @@
         ),
       );
       $("results").append(header);
+      await relationships(p.id);
       for (let r of d.recordings) {
         let card = node("article", undefined, "card"),
           names = [
@@ -421,6 +562,22 @@
               count(s.modelCreditMentions) +
               " retained Luna credit proposals"
             : "");
+        if (s.peopleContext) {
+          let context = s.peopleContext;
+          $("coverage").append(
+            document.createTextNode(
+              " · " +
+                count(context.decisions) +
+                " validated contextual proposals from " +
+                count(context.processedQuestions) +
+                " processed questions" +
+                (context.plannedQuestions
+                  ? " of " + count(context.plannedQuestions) + " selected"
+                  : "") +
+                (context.state === "snapshot" ? " (run continuing)" : ""),
+            ),
+          );
+        }
         for (let issue of s.knownIssues) $("issues").append(node("li", issue));
       })
       .catch((e) => ($("coverage").textContent = e.message));

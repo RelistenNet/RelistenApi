@@ -39,6 +39,27 @@ def encoded(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def retained_actor_facts(record, credit):
+    """Read attributed facts from the extractor that supplied this exact credit."""
+    evidence = record.get("evidence", {})
+    basis = credit.get("interpretationBasis", credit.get("interpretation_basis"))
+    if basis == "retained_luna_extraction":
+        retained = (evidence.get("model") or {}).get("originalLunaResult") or {}
+        extraction = retained.get("extraction") or {}
+    else:
+        extraction = evidence.get("creditExtraction") or {}
+    return next(
+        (
+            item.get("actorFacts") or {}
+            for item in extraction.get("credits", [])
+            if item.get("name") == credit["name"]
+            and item.get("role") == credit["role"]
+            and item.get("evidence") == credit.get("evidence")
+        ),
+        {},
+    )
+
+
 class DirectoryBuilder:
     """Stream credited actors into a small projection, with exact evidence locators."""
 
@@ -224,24 +245,7 @@ class DirectoryBuilder:
                 "INSERT OR IGNORE INTO groups(id,name_key,display_name) VALUES(?,?,?)",
                 (identifier, key, credit["name"]),
             )
-            # Aliases belong to the interpretation that supplied this credit. An
-            # equal name/quote from another extractor supplies no additional alias.
-            evidence = record.get("evidence", {})
-            if credit.get("interpretationBasis") == "retained_luna_extraction":
-                retained = (evidence.get("model") or {}).get("originalLunaResult") or {}
-                extraction = retained.get("extraction") or {}
-            else:
-                extraction = evidence.get("creditExtraction") or {}
-            actor_facts = next(
-                (
-                    item.get("actorFacts") or {}
-                    for item in extraction.get("credits", [])
-                    if item.get("name") == credit["name"]
-                    and item.get("role") == credit["role"]
-                    and item.get("evidence") == credit.get("evidence")
-                ),
-                {},
-            )
+            actor_facts = retained_actor_facts(record, credit)
             aliases = actor_facts.get("aliases", [])
             artist_uuid = credit.get("artistUuid") or record.get("artistUuid")
             if artist_uuid:
@@ -616,6 +620,95 @@ class PeopleDirectory:
             result.update(offset=offset, limit=limit)
             return result
 
+    def relationships(self, identifier, parameters):
+        """Page witnessed pair proposals; name groups and recordings stay independent."""
+        offset, limit = self.page(parameters)
+        with closing(self.connect()) as db:
+            if not db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='context_relationships'"
+            ).fetchone():
+                return {
+                    "relationships": [],
+                    "total": 0,
+                    "offset": offset,
+                    "limit": limit,
+                }
+            where = "WHERE r.left_group=? OR r.right_group=?" if identifier else ""
+            values = (identifier, identifier) if identifier else ()
+            total = db.execute(
+                f"SELECT count(*) FROM context_relationships r {where}", values
+            ).fetchone()[0]
+            rows = [
+                dict(row)
+                for row in db.execute(
+                    f"""SELECT r.*,l.display_name left_name,g.display_name right_name
+                FROM context_relationships r JOIN groups l ON l.id=r.left_group JOIN groups g ON g.id=r.right_group
+                {where} ORDER BY CASE r.relation WHEN 'same_person' THEN 0 WHEN 'different_people' THEN 1 ELSE 2 END,r.id LIMIT ? OFFSET ?""",
+                    values + (limit, offset),
+                )
+            ]
+            for row in rows:
+                row["evidence"] = json.loads(row["evidence"])
+        return {
+            "relationships": rows,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "basis": "contextual_proposal",
+        }
+
+    def relationship(self, identifier):
+        """Read exact model input witnesses and the validated decision from its retained row."""
+        with closing(self.connect()) as db:
+            if not db.execute(
+                "SELECT 1 FROM sqlite_master WHERE name='context_relationships'"
+            ).fetchone():
+                return None
+            row = db.execute(
+                "SELECT * FROM context_relationships WHERE id=?", (identifier,)
+            ).fetchone()
+            if row is None:
+                return None
+            projection = dict(row)
+        with (Path(projection["run"]) / "results.jsonl").open(
+            encoding="utf-8"
+        ) as stream:
+            for line, text in enumerate(stream, 1):
+                if line == projection["line"]:
+                    retained = json.loads(text)
+                    break
+            else:
+                raise ValueError("Retained contextual row is unavailable")
+        question = next(
+            q for q in retained["input"]["questions"] if q["questionId"] == identifier
+        )
+        decision = next(
+            d for d in retained["result"]["decisions"] if d["questionId"] == identifier
+        )
+        for side in ("left", "right"):
+            actor = question[side]
+            actor["sourceEvidenceUrl"] = "/api/credit?" + urlencode(
+                {"id": actor["creditId"]}
+            )
+            actor["playableFilesUrl"] = (
+                self.files_url
+                + "?"
+                + urlencode(
+                    {
+                        "domain": "file_contents",
+                        "entityKey": "source:" + actor["sourceUuid"],
+                    }
+                )
+            )
+        return {
+            "question": question,
+            "decision": decision,
+            "cacheKey": retained["result"]["cacheKey"],
+            "jobUuid": projection["job_uuid"],
+            "basis": "contextual_proposal",
+            "recovery": retained.get("recovery"),
+        }
+
     def credit(self, identifier):
         """Return an overlay credit's exact retained source outcome on demand."""
         with closing(self.connect()) as db:
@@ -686,6 +779,17 @@ def handler_for(directory):
                     if result is None:
                         self.respond(
                             404, encoded({"error": "Unknown draft group"}).encode()
+                        )
+                        return
+                elif url.path == "/api/relationships":
+                    result = directory.relationships(
+                        parameters.get("group", ""), parameters
+                    )
+                elif url.path == "/api/relationship":
+                    result = directory.relationship(parameters.get("id", ""))
+                    if result is None:
+                        self.respond(
+                            404, encoded({"error": "Unknown relationship"}).encode()
                         )
                         return
                 elif url.path == "/api/credit":

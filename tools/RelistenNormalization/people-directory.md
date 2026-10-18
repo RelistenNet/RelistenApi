@@ -75,3 +75,29 @@ python3 -m unittest discover -s tools/RelistenNormalization -p test_people_direc
 ```
 
 The tests cover cross-artist grouping, duplicate roles, preserved quotes and playback ownership, partial date and label preservation, alias search without transitive merging, replay replacement, selected-source model overlays, artist filters, pagination and HTTP errors. They also pass generated URLs through the actual file reader to verify source selection. Inspect representative real names and compare a source's quoted evidence and file links when building a new projection. This directory is ready for local exploration without making a claim about production identity accuracy.
+
+## Compare people with source context
+
+`people_context.py` prepares comparisons between witnessed credits. Names and aliases retrieve candidates. The questions then include the exact credit occurrence, surrounding original prose, competing roles, attributed contacts and profiles, and captured performance date and location. A transfer credit does not imply that the transferrer attended the performance. Missing text in a bounded excerpt does not establish that the source lacks that text.
+
+The first contextual population contains 5,000 questions using 7,582 source witnesses across 1,837 artists. Of these questions, 4,650 cross artist boundaries. It includes name variants, explicit aliases, overlapping contact hints and potential namesakes. Same-date performances in different captured locations and differing contacts retrieve difficult questions; neither supplies an automatic negative label. These inputs are development data, not an independent accuracy evaluation.
+
+The C# `people-context <batches.jsonl> <new-output-directory> <job-uuid>` command owns Luna requests, exact quotation checks, caching and cost admission. It processes at most 500 batches and 5,000 questions, with four concurrent requests, a $25 job cap and 1,000 maximum attempts. It uses the existing dedicated local normalization cache database and reads `OPENAI_API_KEY` from its environment. It does not alter production identities. Requests use `gpt-6-luna`; reported token cost uses configured rates and is separate from an invoice. Uncertain calls retain their cost reservations.
+
+After a run settles, attach its validated proposals:
+
+```sh
+python3 tools/RelistenNormalization/people_context.py --attach \
+  --database local-dev/normalization-data/2026-10-18-people-directory-v1/directory.sqlite3 \
+  --output local-dev/normalization-data/2026-10-18-people-context-results-v1
+```
+
+The attachment verifies the completed result hash and each witness's credit, group, source and artist coordinates before committing compact relationships. It copies decisions and their supporting quotations. The original results own the full question context and usage receipts; SQLite stores a result locator rather than another copy of those inputs. Attachment does not merge groups, infer transitive relationships, change recording counts or change playback ownership.
+
+`GET /api/relationships?group=<optional-draft-group-id>&offset=0&limit=10` pages comparisons for one group, or all comparisons when the group is omitted. Each result contains the relationship, model rationale, exact supporting quotes and the two group names. `GET /api/relationship?id=<question-id>` returns the original witnessed question and validated decision, with source-evidence and source-owned playback URLs. Unknown question IDs return 404. The “Contextual comparisons” link opens the complete browsing path. Group pages show their own comparisons, including competing evidence within a shared name group.
+
+A proposed same-person relationship is evidence to inspect. A proposed different-people relationship is a possible namesake distinction. Insufficient evidence remains a visible result. None of these states asserts an accepted person identity. Further work should use this directory to identify broad failure classes and measure matching accuracy on independently labeled data.
+
+An immutable snapshot can expose a flushed prefix while the job continues. Its manifest has `state: snapshot`, the original run, exact result hash and original physical-line range. The page reports processed questions against the selected 5,000, so it does not present a partial run as complete catalog coverage. The first exposed prefix contained 510 processed questions and 350 validated proposals. The other 160 questions belonged to responses awaiting per-question recovery or rejection.
+
+Exact quotation checks also apply during recovery. One changed quote can invalidate an original batch response even when the other decisions are supported. `PeopleContextRecovery` reads that response from the local cache ledger, checks the original rendered request and complete question-ID set, then validates each decision separately. It makes no HTTP calls, changes no spend or cache acceptance, and preserves rejected question IDs and reasons. Recovered decisions appear with that basis on the page. Their original source witnesses and model usage stay attached; recovery does not charge the original cost twice.
