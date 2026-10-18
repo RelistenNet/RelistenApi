@@ -1,0 +1,74 @@
+{
+  "state": "capture_tool_verified_full_capture_running",
+  "scope": "Complete current venue, recording file/set and repertoire metadata, with same-snapshot artist/source/show parent rosters",
+  "verification": {
+    "synthetic_passed": 36,
+    "real_disposable_postgres_passed": 1,
+    "production_explain_plans": 10,
+    "explain_analyze": false,
+    "complete_capture": "running",
+    "offline_full_capture_verification": "pending",
+    "independent_full_capture_audit": "pending"
+  },
+  "logs": [
+    {
+      "path": "/tmp/relisten-domain-metadata-storage-synthetic-v1.log",
+      "bytes": 7085,
+      "sha256": "9b6506f98ba468c58657b2594504b46466e11e37d8e524816b00c0d1f68d3bdc"
+    },
+    {
+      "path": "/tmp/relisten-domain-metadata-storage-postgres-v1.log",
+      "bytes": 328,
+      "sha256": "971c63a937704c0bb17f52526955d9943c3e5edb71ead6a400413eaa8b63f775"
+    },
+    {
+      "path": "/tmp/relisten-domain-metadata-explain-v1.jsonstream",
+      "bytes": 48625,
+      "sha256": "20b80f82b811c1c7e48eaec040b5cd6fcb956820530abd650469b8ba0c236ec5"
+    }
+  ],
+  "source_files": [
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/capture_domain_metadata_frame.py",
+      "bytes": 17203,
+      "sha256": "19c736fc9d4fbfea3d633308719d521b8ab28a62dc0d8b7521d4332dd71a9eb3"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/domain_metadata_frame_validation.py",
+      "bytes": 22915,
+      "sha256": "2075c9204f0d7a0333623b39e96d39573f89aac0c6eb4f7650291ffb8e7a3c96"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame.py",
+      "bytes": 34831,
+      "sha256": "bfceea02738966f2563bf0c59ddf9e9f2c774baa05a2c1db0fd4bfea4385a931"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame_postgres.py",
+      "bytes": 8278,
+      "sha256": "46dfdd98041c758a04fb89f11458bed85c3968c910479c295f6a167af536d2b4"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/sql/full-domain-metadata-frame.sql",
+      "bytes": 8796,
+      "sha256": "c361559793cc6a9d78fc1f5cdabcfc192dd5f9590ad66a9028499134ad5407cc"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/sql/full-domain-metadata-frame-explain.sql",
+      "bytes": 7521,
+      "sha256": "69e0cfe8baa0a4b1c9454e8c0ba9dcb7ba4941f0c535c9ea988a969f4bc81b8f"
+    }
+  ],
+  "private_capture_directory": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/full-domain-capture-v1",
+  "schema_authority": {
+    "manifest": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/schema-inspection-v2/manifest.json",
+    "sha256": "a2573231a5c91854bd4af5d7c74a7980b64c25c8381ee45c134f97e42c92978b",
+    "columns": 102,
+    "indexes": 39,
+    "constraints": 40
+  },
+  "raw_source_text_exported": false,
+  "identity_accuracy_established": false,
+  "automatic_matching_enabled": false,
+  "production_writes": false
+}
