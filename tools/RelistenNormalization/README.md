@@ -50,6 +50,23 @@ This command runs offline. It reads only task/evidence correspondence and retain
 
 The completed `manifest.json` records the projection version, original bundle/file hashes, executed API and runner assembly hashes, and output hash/count. Inputs have byte, row and name bounds. A failed or cancelled run publishes no completed manifest; an output prefix can remain as `baseline.partial.jsonl`. Retry in a new directory. These comparisons support development experiments against the real implementation; they do not measure production accuracy or activate automatic matching.
 
+## People identity experiments and review
+
+The [people pair exporter](people-pair-baseline.md) supplies actual C# comparisons
+and the existing five runtime features. The [identity experiment](people-identity-matcher-experiment.md)
+compares those rules with trained logistic and boosted-tree scorers on complete
+development questions. Unknown judgments stay outside fitting and error counts;
+all questions participate in split grouping.
+
+The separate [cross-artist review packet tool](people-identity-packet/README.md)
+prepares 55 unanswered source-backed identity questions and validates complete
+contexts. The [control packet tool](people-identity-controls/README.md) adds six
+questions about co-credits and cross-recording linkage from four separate source
+contexts. The [review validator](people-identity-reviews/README.md) checks frozen
+first answers and separate adjudication against either packet format, including
+exact citations and links to original answer bytes. These tools use retained
+development data only. None accepts an identity or activates a publication policy.
+
 ## Retained MusicBrainz acquisition
 
 Use [`musicbrainz-acquire`](musicbrainz-acquire.md) for a bounded work, recording or artist lookup through the public acquisition service. The mode uses a dedicated local database, returns immediately when admission is pending, and exports exact responses, retained input, typed observations and hashes. It does not accept catalog identity links.

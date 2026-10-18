@@ -1,0 +1,23 @@
+{
+  "schema_version": "people-identity-controls-tools:1",
+  "state": "reviewed_tool_bundle",
+  "scope": "Separate unanswered development controls; runtime receipts record execution.",
+  "artifacts": [
+    {
+      "path": "people_identity_controls.py",
+      "bytes": 18665,
+      "sha256": "d8869c7af4e0bdbedc04a91d0f1e6676f6bbe0b34bdc0778d5371df860a433fe"
+    },
+    {
+      "path": "test_people_identity_controls.py",
+      "bytes": 11450,
+      "sha256": "c75977b99f7ee2adb2340f40efdad84296f563f413a8b236334a0b5279ca797b"
+    },
+    {
+      "path": "README.md",
+      "bytes": 9185,
+      "sha256": "abb9017e99518dfeadd3f9120aeea4afc176d8ce667c20d43ca229a7d51e0564"
+    }
+  ],
+  "manifest_hash_note": "Manifest excludes itself."
+}

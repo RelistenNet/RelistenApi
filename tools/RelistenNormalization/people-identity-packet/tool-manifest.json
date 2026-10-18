@@ -1,0 +1,23 @@
+{
+  "schema_version": "people-identity-packet-tools:1",
+  "state": "reviewed_tool_bundle",
+  "scope": "Development evidence packet builder, validator and synthetic contract tests.",
+  "artifacts": [
+    {
+      "path": "people_identity_packet.py",
+      "bytes": 26864,
+      "sha256": "20ac70e6b999b03049141852127334a31426ebc048071d650663aaa7d0e3a5c2"
+    },
+    {
+      "path": "test_people_identity_packet.py",
+      "bytes": 16202,
+      "sha256": "cd6890033c2846eb0fb503f4b669d700490afa72b95bb7f79556f62f594a9ef6"
+    },
+    {
+      "path": "README.md",
+      "bytes": 15274,
+      "sha256": "8186fb0c0fb9538bd14ba38996d29eb9599c9ab64e292f658fe8a1b771cb8be2"
+    }
+  ],
+  "manifest_hash_note": "Manifest excludes itself."
+}
