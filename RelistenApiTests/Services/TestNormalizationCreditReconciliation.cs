@@ -722,6 +722,20 @@ public sealed class TestNormalizationCreditReconciliation
             ProcessingVersion = oldVersion,
             Preparation = preparation,
             Ticket = ticket,
+            // This producer predates source-actor scopes. Preserve that absence for every
+            // prepared input while retaining the historical credit evidence.
+            Extraction = current.Extraction with
+            {
+                SourceActorAliases = null,
+            },
+            AdditionalExtractions = current
+                .AdditionalExtractions?.Select(group =>
+                    group with
+                    {
+                        Extraction = group.Extraction with { SourceActorAliases = null },
+                    }
+                )
+                .ToArray(),
         };
         await proposals.SaveExtractionAsync(historical);
         (
