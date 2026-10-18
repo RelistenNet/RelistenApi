@@ -4,9 +4,9 @@ Implement an evaluated resolver that links credits to existing people, creates
 evidenced identities or retains claims for review, through accepted people and
 credit writers. Automatic matching across artists is the outcome.
 
-This is the next implementation contract. The [proposal processor](people-resolution.md)
-already retains complete extraction contributors, candidate facts and reviewed
-context. Its decisions remain policy-free, with `AutomaticAcceptanceAuthorized`
+The [proposal processor](people-resolution.md) retains complete extraction
+contributors, candidate facts and reviewed context. `NormalizationPeopleResolutionApplier`
+connects those proposals to guarded accepted-data publication. Its decisions remain policy-free, with `AutomaticAcceptanceAuthorized`
 always false. Existing immutable proposal receipts keep that meaning.
 
 ## Ownership and entrypoints
@@ -17,7 +17,7 @@ Keep identity ownership at `(people, person, personUuid)`, accepted credits at
 publication, observations, contribution receipts and review operations. Do not
 add a second scheduler, work registry or general policy framework.
 
-Add these services and models; the signatures below are proposed public contracts:
+The services expose these public contracts (`CT` denotes cancellation):
 
 ```csharp
 // Trusted operator entrypoints; operator identity comes from the command host.
@@ -53,7 +53,9 @@ fixed scorer implementation and exported parameters; supported input forms;
 retrieval, candidate-facts, extraction and credit-context versions; match threshold,
 runner-up margin and rejection rules. Creation, actor-kind classification and
 within-recording co-reference are separate capabilities with separate evidence.
-An artifact can enable linking while leaving creation unavailable.
+An artifact can enable linking while leaving creation unavailable. The closed
+creation classifier currently covers one supported full-name person claim; handles,
+groups and co-reference need further evidenced capabilities.
 
 `PeopleAcceptanceEvaluationReceipt` pins the artifact hash, labeled dataset and
 split hashes, adjudication record, evaluator version, measured errors and trusted
@@ -84,7 +86,7 @@ provenance and uncertainty; Codex may supply development judgments.
 
 ## Set-level decisions
 
-Add pure `PeopleResolutionPolicyEvaluator.Evaluate` with the complete authenticated
+Use pure `PeopleResolutionPolicyEvaluator.Evaluate` with the complete authenticated
 claim, candidate facts, reviewed context and registered artifact as inputs. Return
 `PeopleAcceptanceClaimDecision`: proposal UUID, action, reason, all candidate scores
 and rejection reasons, winner and margin, policy/evaluation references, and optional
@@ -145,7 +147,7 @@ credit and reconciliation helpers within the publication transaction; do not cal
 another transactional Work method from its callback or introduce parallel SQL writers.
 Both verify the exact Work ticket and policy authority, never a caller acceptance bit.
 
-Extend contributor reconciliation to distinguish evidenced additions from complete
+Guarded contributor reconciliation distinguishes evidenced additions from complete
 retirement scopes. Existing `RecordingCreditContributorReplacement.CompleteScopes`
 continues to authorize withdrawal only when every extracted mention in that
 role/track scope has a successful corresponding credit and no unresolved coverage.
@@ -158,7 +160,9 @@ last accepted support; another contributor, unmanaged support and reviewed decis
 remain independent. Do not route additions through append-style `PublishAsync`:
 its unmanaged support cannot later be withdrawn by contributor reconciliation.
 Record `validated_match` basis and policy audit references, not human-review status.
-Keep the existing complete-scope reconciliation API compatible.
+The existing complete-scope API remains compatible. Saved scope coverage cites
+current fields: explicit null/empty values can clear prior managed roles; missing
+fields or unresolved prose cannot. Read prior support with the context owner/epoch.
 
 ## Creation requires two publication stages
 
@@ -177,7 +181,8 @@ obsolete candidate epoch into the new credit read set or attach a new epoch to o
 candidate facts. The creation receipt identifies the intended claim correspondence;
 it does not permit ignoring a new rival or intervening review.
 
-A crash can leave an evidenced identity without a credit. Resume its saved child
+A creation receipt anchors the original claim after the full reread; it supplies no
+permission to ignore a rival. A crash can leave an identity without a credit. Resume its saved child
 Work UUID and publication receipt, then complete the fresh credit preparation.
 With several creation groups, fully reread and reevaluate before each later
 creation too: the preceding creation already changed the candidate universe.
@@ -186,9 +191,11 @@ later credit stage is stale. No multi-owner atomic publication mechanism is need
 
 ## Evidence required before activation
 
-Current development labels concern extraction: 100 fields across 78 Archive-configured
-artists, with cross-artist identity resolution unlabeled. Parser/Luna agreement on
-names and roles cannot establish person identity, safe creation or actor kind.
+The [credit extraction drafts](../../../research/2026-10-17-full-normalization/training/credits-development-v1/README.md) cover 100 fields across 78 Archive-configured artists. The separate
+[people development bundle](../../../research/2026-10-17-full-normalization/training/people-development-v1/README.md) adds 168 actor-kind and identity questions across 137 artists. Its supported
+cross-artist positive examples concern one Aadam Jacobs project owner; the labels
+remain pending adjudication. These drafts and parser/Luna agreement cannot establish
+broad person-matching accuracy, safe creation or actor-kind classification.
 
 Build real complete-candidate tasks covering cross-artist aliases, namesakes, hard
 negatives, handles and organizations, unseen identities, genuine new identities,
@@ -218,3 +225,22 @@ Observe coverage, review reasons and audited errors by artist/input form. Revoca
 stops new automatic writes and preserves IDs, evidence, receipts and accepted data;
 correct accepted mistakes through existing reviewed decisions. Fixtures do not
 complete the automatic-normalization goal.
+
+
+Apply migration 46 before using these services. It adds policy artifacts and
+application/stage receipts; it activates no policy. API and worker dependency
+registration starts no processing or schedule. Existing public read routes and
+playback identifiers do not change.
+
+On binary rollback, stop acceptance callers and retain the new tables, policies,
+Work receipts and accepted identities. Do not delete an identity left by an
+interrupted application or discard its creation receipt. Resume with the same
+application UUID on a compatible processor; a changed processing version retains
+history and returns an explicit unresolved outcome.
+
+The local focused run passes 145 public-service, evaluator, writer and
+reconciliation checks. It includes missing-show credit evidence, complete clearing,
+unknown-field preservation, interrupted creation and transactional rollback. The broader
+API/service run passes 2,007 tests with 24 existing tour-contract skips and zero
+failures. These fixtures use synthetic
+evaluated policies in disposable databases; no runtime policy is active.

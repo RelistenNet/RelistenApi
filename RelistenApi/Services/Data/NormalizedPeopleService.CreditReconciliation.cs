@@ -40,84 +40,100 @@ public sealed partial class NormalizedPeopleService
             workUuid,
             async (c, t, ct) =>
             {
-                await c.ExecuteAsync(
-                    new CommandDefinition(
-                        "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:people:identity',0)); SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",
-                        new { key = $"normalization:credits:{reconciliation.SourceUuid}" },
-                        t,
-                        cancellationToken: ct
-                    )
-                );
-                var batch = await ReadReconciliationExtraction(c, t, workUuid, reconciliation, ct);
-                var credits = reconciliation
-                    .Contributors.SelectMany(contributor => contributor.Credits)
-                    .ToArray();
-                await ValidatePeoplePublicationOwner(c, t, workUuid, new([], [], [], credits), ct);
-                var owner = await ReadWorkContext(c, t, workUuid, ct);
-                if (owner.Kind != "recording" || owner.EntityUuid != reconciliation.SourceUuid)
-                {
-                    throw new ArgumentException(
-                        "Credit reconciliation requires its recording owner."
-                    );
-                }
-                await ValidatePublicationEvidenceAsync(
-                    c,
-                    t,
-                    workUuid,
-                    "people",
-                    credits.SelectMany(credit => credit.Evidence).ToArray(),
-                    ct
-                );
-                var inputs = NormalizationRecordingReadSet.Inputs(batch.Preparation);
-                var groups = new[]
-                {
-                    new NormalizationRecordingInputExtraction(
-                        batch.Preparation.Binding.InputRevisionUuid,
-                        batch.Extraction
-                    ),
-                }
-                    .Concat(batch.AdditionalExtractions ?? [])
-                    .ToDictionary(group => group.InputRevisionUuid);
-                if (
-                    reconciliation
-                        .Contributors.Select(replacement => replacement.Contributor)
-                        .Distinct()
-                        .Count() != reconciliation.Contributors.Count
-                )
-                {
-                    throw new ArgumentException(
-                        "A contributor can be replaced only once per publication."
-                    );
-                }
-                foreach (var replacement in reconciliation.Contributors)
-                {
-                    var input =
-                        inputs.SingleOrDefault(input =>
-                            input.Contributor == replacement.Contributor
-                        )
-                        ?? throw new ArgumentException(
-                            "Replacement contributor is absent from the published extraction."
-                        );
-                    ValidateCompleteCreditScopes(
-                        reconciliation.SourceUuid,
-                        replacement,
-                        input,
-                        groups[input.Binding.InputRevisionUuid].Extraction
-                    );
-                    await ReplaceContributorCreditSupport(
-                        c,
-                        t,
-                        workUuid,
-                        reconciliation.SourceUuid,
-                        replacement,
-                        ct
-                    );
-                }
-                await RetireUnsupportedCredits(c, t, workUuid, reconciliation.SourceUuid, ct);
+                await ApplyCreditReconciliation(c, t, workUuid, reconciliation, false, ct);
             },
             cancellationToken,
             candidateWriteScopes: IdentityCandidateWriteScopes
         );
+
+    // Both accepted pipelines share evidence validation, support ownership and reviewed-field
+    // guards. Only an authenticated resolution stage may add support in an incomplete scope.
+    private static async Task<
+        IReadOnlyList<PeopleAcceptanceCreditWriteOutcome>
+    > ApplyCreditReconciliation(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        Guid workUuid,
+        RecordingCreditReconciliation reconciliation,
+        bool allowPartialAdditions,
+        CancellationToken ct
+    )
+    {
+        await c.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:people:identity',0)); SELECT pg_advisory_xact_lock(hashtextextended(@key,0))",
+                new { key = $"normalization:credits:{reconciliation.SourceUuid}" },
+                t,
+                cancellationToken: ct
+            )
+        );
+        var batch = await ReadReconciliationExtraction(c, t, workUuid, reconciliation, ct);
+        var credits = reconciliation
+            .Contributors.SelectMany(contributor => contributor.Credits)
+            .ToArray();
+        await ValidatePeoplePublicationOwner(c, t, workUuid, new([], [], [], credits), ct);
+        var owner = await ReadWorkContext(c, t, workUuid, ct);
+        if (owner.Kind != "recording" || owner.EntityUuid != reconciliation.SourceUuid)
+        {
+            throw new ArgumentException("Credit reconciliation requires its recording owner.");
+        }
+        await ValidatePublicationEvidenceAsync(
+            c,
+            t,
+            workUuid,
+            "people",
+            credits.SelectMany(credit => credit.Evidence).ToArray(),
+            ct
+        );
+        var inputs = NormalizationRecordingReadSet.Inputs(batch.Preparation);
+        var groups = new[]
+        {
+            new NormalizationRecordingInputExtraction(
+                batch.Preparation.Binding.InputRevisionUuid,
+                batch.Extraction
+            ),
+        }
+            .Concat(batch.AdditionalExtractions ?? [])
+            .ToDictionary(group => group.InputRevisionUuid);
+        if (
+            reconciliation
+                .Contributors.Select(replacement => replacement.Contributor)
+                .Distinct()
+                .Count() != reconciliation.Contributors.Count
+        )
+        {
+            throw new ArgumentException("A contributor can be replaced only once per publication.");
+        }
+        var outcomes = new List<PeopleAcceptanceCreditWriteOutcome>();
+        foreach (var replacement in reconciliation.Contributors)
+        {
+            var input =
+                inputs.SingleOrDefault(input => input.Contributor == replacement.Contributor)
+                ?? throw new ArgumentException(
+                    "Replacement contributor is absent from the published extraction."
+                );
+            ValidateCompleteCreditScopes(
+                reconciliation.SourceUuid,
+                replacement,
+                input,
+                groups[input.Binding.InputRevisionUuid].Extraction,
+                allowPartialAdditions
+            );
+            outcomes.AddRange(
+                await ReplaceContributorCreditSupport(
+                    c,
+                    t,
+                    workUuid,
+                    reconciliation.SourceUuid,
+                    replacement,
+                    ct,
+                    requireAcceptedForRetirement: allowPartialAdditions
+                )
+            );
+        }
+        await RetireUnsupportedCredits(c, t, workUuid, reconciliation.SourceUuid, ct);
+        return outcomes;
+    }
 
     private static async Task<NormalizationRecordingProposalBatch> ReadReconciliationExtraction(
         NpgsqlConnection c,
@@ -179,7 +195,8 @@ public sealed partial class NormalizedPeopleService
         Guid sourceUuid,
         RecordingCreditContributorReplacement replacement,
         NormalizationRecordingPreparedInput input,
-        NormalizationRecordingExtraction extraction
+        NormalizationRecordingExtraction extraction,
+        bool allowPartialAdditions = false
     )
     {
         var scopes = replacement.CompleteScopes.ToHashSet();
@@ -201,15 +218,37 @@ public sealed partial class NormalizedPeopleService
                 ?.Binding.Value?.TrackUuid;
         }
         bool Unbound(ProviderObservationOrigin? origin) => origin != null && Scope(origin) == null;
+        bool UnresolvedBlocksScope(
+            RetainedCreditUnresolved issue,
+            RecordingCreditCompleteScope scope
+        )
+        {
+            // Guarded applications carry current-field coverage separately. A typed unknown
+            // transferrer does not invalidate complete taper coverage; prose has no such role fence.
+            var role = RetainedCreditFieldRole(issue.Evidence.JsonPointer);
+            if (allowPartialAdditions && role != null && role != scope.Role)
+            {
+                return false;
+            }
+            return issue.FileOrigin == null && scope.ScopeTrackUuid == null
+                || Unbound(issue.FileOrigin) && scope.ScopeTrackUuid != null
+                || issue.FileOrigin != null && scope.ScopeTrackUuid == Scope(issue.FileOrigin);
+        }
         if (
-            extraction.DecodeIssues.Count != 0
-            || extraction.Credits.Any(credit => Unbound(credit.FileOrigin))
-                && scopes.Any(scope => scope.ScopeTrackUuid != null)
-            || extraction.UnresolvedCredits.Any(issue =>
-                issue.FileOrigin == null && scopes.Any(scope => scope.ScopeTrackUuid == null)
-                || Unbound(issue.FileOrigin) && scopes.Any(scope => scope.ScopeTrackUuid != null)
-                || issue.FileOrigin != null
-                    && scopes.Any(scope => scope.ScopeTrackUuid == Scope(issue.FileOrigin))
+            (!allowPartialAdditions || scopes.Count != 0)
+            && (
+                (
+                    allowPartialAdditions
+                        ? extraction.DecodeIssues.Any(
+                            Relisten.Normalization.RecordingCreditDecodeIssues.AffectsCredits
+                        )
+                        : extraction.DecodeIssues.Count != 0
+                )
+                || extraction.Credits.Any(credit => Unbound(credit.FileOrigin))
+                    && scopes.Any(scope => scope.ScopeTrackUuid != null)
+                || extraction.UnresolvedCredits.Any(issue =>
+                    scopes.Any(scope => UnresolvedBlocksScope(issue, scope))
+                )
             )
         )
         {
@@ -227,7 +266,6 @@ public sealed partial class NormalizedPeopleService
                     Scope(proposal.FileOrigin)
                 ),
             })
-            .Where(proposal => scopes.Contains(proposal.Scope))
             .ToArray();
         bool Matches(
             RecordingCredit credit,
@@ -253,7 +291,8 @@ public sealed partial class NormalizedPeopleService
             replacement.Credits.Any(credit =>
                 credit.Basis == "reviewed"
                 || credit.State is not ("accepted" or "pending")
-                || !scopes.Contains(new(credit.Role, credit.ScopeTrackUuid))
+                || !allowPartialAdditions
+                    && !scopes.Contains(new(credit.Role, credit.ScopeTrackUuid))
                 || credit.Evidence.Any(evidence =>
                     !revisions.Contains(evidence.InputRevisionUuid)
                     || !proposals.Any(proposal =>
@@ -264,7 +303,8 @@ public sealed partial class NormalizedPeopleService
                 || !proposals.Any(proposal => Matches(credit, proposal.Proposal, proposal.Scope))
             )
             || proposals.Any(proposal =>
-                !replacement.Credits.Any(credit =>
+                scopes.Contains(proposal.Scope)
+                && !replacement.Credits.Any(credit =>
                     Matches(credit, proposal.Proposal, proposal.Scope)
                 )
             )
@@ -292,6 +332,25 @@ public sealed partial class NormalizedPeopleService
         }
     }
 
+    // A typed provider field establishes which role its unresolved value can affect. An
+    // arbitrary prose field does not. Array entries retain their parent field's role.
+    internal static string? RetainedCreditFieldRole(string pointer)
+    {
+        var slash = pointer.LastIndexOf('/');
+        var field = pointer[(slash + 1)..];
+        if (int.TryParse(field, out _) && slash > 0)
+        {
+            pointer = pointer[..slash];
+            field = pointer[(pointer.LastIndexOf('/') + 1)..];
+        }
+        return field switch
+        {
+            "taper" or "tapers" => "taper",
+            "transferrer" or "transferrers" or "transferer" => "transferrer",
+            _ => null,
+        };
+    }
+
     private static string CreditRole(RecordingCreditRole role) =>
         role switch
         {
@@ -301,16 +360,20 @@ public sealed partial class NormalizedPeopleService
             _ => role.ToString().ToLowerInvariant(),
         };
 
-    private static async Task ReplaceContributorCreditSupport(
+    private static async Task<
+        IReadOnlyList<PeopleAcceptanceCreditWriteOutcome>
+    > ReplaceContributorCreditSupport(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         Guid workUuid,
         Guid sourceUuid,
         RecordingCreditContributorReplacement replacement,
-        CancellationToken ct
+        CancellationToken ct,
+        bool requireAcceptedForRetirement = false
     )
     {
         var kept = new HashSet<Guid>();
+        var outcomes = new List<PeopleAcceptanceCreditWriteOutcome>();
         foreach (var incoming in replacement.Credits)
         {
             var credit = await HoldChangedReviewedField(c, t, incoming, ct);
@@ -326,8 +389,22 @@ public sealed partial class NormalizedPeopleService
             );
             if (written == null)
             {
+                outcomes.Add(
+                    new(incoming.Uuid, null, null, "preserved", "reviewed_claim_preserved")
+                );
                 continue;
             }
+            var actual = await c.QuerySingleAsync<CreditRow>(
+                new CommandDefinition(
+                    $"SELECT {CreditColumns} FROM normalization.recording_credits WHERE uuid=@Uuid",
+                    new { written.Uuid },
+                    t,
+                    cancellationToken: ct
+                )
+            );
+            outcomes.Add(
+                new(incoming.Uuid, actual.Uuid, actual.PersonUuid, actual.State, actual.ReasonCode)
+            );
             if (written.Created)
             {
                 await c.ExecuteAsync(
@@ -380,6 +457,24 @@ public sealed partial class NormalizedPeopleService
         // their original receipt. Failure anywhere rolls these transitions back atomically.
         foreach (var scope in replacement.CompleteScopes)
         {
+            // A successful identity proposal can still encounter a protected editorial
+            // claim in the domain writer. Such a scope did not complete successfully.
+            if (
+                requireAcceptedForRetirement
+                && replacement
+                    .Credits.Where(credit =>
+                        credit.Role == scope.Role && credit.ScopeTrackUuid == scope.ScopeTrackUuid
+                    )
+                    .Any(credit =>
+                        outcomes.Any(outcome =>
+                            outcome.RequestedCreditUuid == credit.Uuid
+                            && outcome.State != "accepted"
+                        )
+                    )
+            )
+            {
+                continue;
+            }
             await c.ExecuteAsync(
                 new CommandDefinition(
                     """
@@ -406,6 +501,7 @@ public sealed partial class NormalizedPeopleService
                 )
             );
         }
+        return outcomes;
     }
 
     private static async Task<RecordingCredit> HoldChangedReviewedField(

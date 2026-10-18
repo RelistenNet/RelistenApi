@@ -32,149 +32,150 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
             workUuid,
             async (connection, transaction, ct) =>
             {
-                await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:people:identity',0))",
-                        transaction: transaction,
-                        cancellationToken: ct
-                    )
-                );
-                await ValidatePeoplePublicationOwner(
-                    connection,
-                    transaction,
-                    workUuid,
-                    publication,
-                    ct
-                );
-                var references = publication
-                    .Aliases.Select(a => a.Evidence)
-                    .Concat(publication.ExternalIdentities.Select(a => a.Evidence))
-                    .Concat(publication.Credits.SelectMany(a => a.Evidence))
-                    .ToArray();
-                await ValidatePublicationEvidenceAsync(
-                    connection,
-                    transaction,
-                    workUuid,
-                    "people",
-                    references,
-                    ct
-                );
-                var created = new HashSet<Guid>();
-                foreach (var person in publication.People)
-                {
-                    if (
-                        !await connection.ExecuteScalarAsync<bool>(
-                            new CommandDefinition(
-                                "SELECT EXISTS(SELECT 1 FROM normalization.people WHERE uuid=@Uuid)",
-                                person,
-                                transaction,
-                                cancellationToken: ct
-                            )
-                        )
-                        && !publication.Aliases.Any(a =>
-                            a.PersonUuid == person.Uuid
-                            && NameKey(a.Wording) == NameKey(person.DisplayName)
-                        )
-                    )
-                    {
-                        throw new ArgumentException(
-                            "Automatic person creation requires an evidenced display-name assertion."
-                        );
-                    }
-                    if (await InsertPerson(connection, transaction, person, ct))
-                    {
-                        created.Add(person.Uuid);
-                    }
-                }
-                var assertionChanges = await WriteAliases(
-                    connection,
-                    transaction,
-                    workUuid,
-                    publication.Aliases,
-                    created,
-                    ct
-                );
-                foreach (var identity in publication.ExternalIdentities)
-                {
-                    if (
-                        !created.Contains(identity.PersonUuid)
-                        && !await connection.ExecuteScalarAsync<bool>(
-                            new CommandDefinition(
-                                "SELECT EXISTS(SELECT 1 FROM normalization.person_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey)",
-                                identity,
-                                transaction,
-                                cancellationToken: ct
-                            )
-                        )
-                    )
-                    {
-                        await ValidateWorkOwnerAsync(
-                            connection,
-                            transaction,
-                            workUuid,
-                            "people",
-                            "person",
-                            identity.PersonUuid,
-                            ct
-                        );
-                    }
-                    assertionChanges += await WriteExternalIdentity(
-                        connection,
-                        transaction,
-                        identity,
-                        ct
-                    );
-                }
-                if (assertionChanges > 0 && publication.Credits.Count == 0)
-                {
-                    var owner = await ReadWorkContext(connection, transaction, workUuid, ct);
-                    if (!created.Contains(owner.EntityUuid))
-                    {
-                        await connection.ExecuteAsync(
-                            new CommandDefinition(
-                                "UPDATE normalization.people SET revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@uuid",
-                                new { uuid = owner.EntityUuid },
-                                transaction,
-                                cancellationToken: ct
-                            )
-                        );
-                    }
-                }
-                foreach (var credit in publication.Credits)
-                {
-                    if (credit.Basis == "reviewed")
-                    {
-                        throw new ArgumentException(
-                            "Automatic publication cannot claim reviewed authority."
-                        );
-                    }
-                    var written = await WriteCredit(
-                        connection,
-                        transaction,
-                        credit,
-                        workUuid,
-                        false,
-                        0,
-                        ct
-                    );
-                    if (written != null)
-                    {
-                        // Append publication is independent support, even when it coalesces a
-                        // claim originally introduced by the replacement-based pipeline.
-                        await connection.ExecuteAsync(
-                            new CommandDefinition(
-                                "INSERT INTO normalization.recording_credit_unmanaged_support(credit_uuid) VALUES(@Uuid) ON CONFLICT DO NOTHING",
-                                new { written.Uuid },
-                                transaction,
-                                cancellationToken: ct
-                            )
-                        );
-                    }
-                }
+                await ApplyPeoplePublication(connection, transaction, workUuid, publication, ct);
             },
             cancellationToken,
             candidateWriteScopes: IdentityCandidateWriteScopes
         );
+
+    // Automatic entrypoints share the accepted writer's identity locks, evidence checks,
+    // assertion ownership and reviewed-claim protection in their existing Work transaction.
+    private static async Task ApplyPeoplePublication(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid workUuid,
+        PeoplePublication publication,
+        CancellationToken ct
+    )
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:people:identity',0))",
+                transaction: transaction,
+                cancellationToken: ct
+            )
+        );
+        await ValidatePeoplePublicationOwner(connection, transaction, workUuid, publication, ct);
+        var references = publication
+            .Aliases.Select(a => a.Evidence)
+            .Concat(publication.ExternalIdentities.Select(a => a.Evidence))
+            .Concat(publication.Credits.SelectMany(a => a.Evidence))
+            .ToArray();
+        await ValidatePublicationEvidenceAsync(
+            connection,
+            transaction,
+            workUuid,
+            "people",
+            references,
+            ct
+        );
+        var created = new HashSet<Guid>();
+        foreach (var person in publication.People)
+        {
+            if (
+                !await connection.ExecuteScalarAsync<bool>(
+                    new CommandDefinition(
+                        "SELECT EXISTS(SELECT 1 FROM normalization.people WHERE uuid=@Uuid)",
+                        person,
+                        transaction,
+                        cancellationToken: ct
+                    )
+                )
+                && !publication.Aliases.Any(a =>
+                    a.PersonUuid == person.Uuid && NameKey(a.Wording) == NameKey(person.DisplayName)
+                )
+            )
+            {
+                throw new ArgumentException(
+                    "Automatic person creation requires an evidenced display-name assertion."
+                );
+            }
+            if (await InsertPerson(connection, transaction, person, ct))
+            {
+                created.Add(person.Uuid);
+            }
+        }
+        var assertionChanges = await WriteAliases(
+            connection,
+            transaction,
+            workUuid,
+            publication.Aliases,
+            created,
+            ct
+        );
+        foreach (var identity in publication.ExternalIdentities)
+        {
+            if (
+                !created.Contains(identity.PersonUuid)
+                && !await connection.ExecuteScalarAsync<bool>(
+                    new CommandDefinition(
+                        "SELECT EXISTS(SELECT 1 FROM normalization.person_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey)",
+                        identity,
+                        transaction,
+                        cancellationToken: ct
+                    )
+                )
+            )
+            {
+                await ValidateWorkOwnerAsync(
+                    connection,
+                    transaction,
+                    workUuid,
+                    "people",
+                    "person",
+                    identity.PersonUuid,
+                    ct
+                );
+            }
+            assertionChanges += await WriteExternalIdentity(connection, transaction, identity, ct);
+        }
+        if (assertionChanges > 0 && publication.Credits.Count == 0)
+        {
+            var owner = await ReadWorkContext(connection, transaction, workUuid, ct);
+            if (!created.Contains(owner.EntityUuid))
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "UPDATE normalization.people SET revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@uuid",
+                        new { uuid = owner.EntityUuid },
+                        transaction,
+                        cancellationToken: ct
+                    )
+                );
+            }
+        }
+        foreach (var credit in publication.Credits)
+        {
+            if (credit.Basis == "reviewed")
+            {
+                throw new ArgumentException(
+                    "Automatic publication cannot claim reviewed authority."
+                );
+            }
+            var written = await WriteCredit(
+                connection,
+                transaction,
+                credit,
+                workUuid,
+                false,
+                0,
+                ct
+            );
+            if (written != null)
+            {
+                // Append publication is independent support, even when it coalesces a
+                // claim originally introduced by the replacement-based pipeline.
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        "INSERT INTO normalization.recording_credit_unmanaged_support(credit_uuid) VALUES(@Uuid) ON CONFLICT DO NOTHING",
+                        new { written.Uuid },
+                        transaction,
+                        cancellationToken: ct
+                    )
+                );
+            }
+        }
+    }
 
     private static async Task<int> WriteAliases(
         NpgsqlConnection connection,

@@ -150,6 +150,10 @@ internal static class LocalTestDatabase
             Migrations.AddNormalizationExtractionJobAttemptLimit.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationPeopleAcceptance.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
