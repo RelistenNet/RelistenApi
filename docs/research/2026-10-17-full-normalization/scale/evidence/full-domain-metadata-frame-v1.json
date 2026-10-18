@@ -1,152 +1,161 @@
 {
-  "state": "complete_capture_and_offline_verification_passed_independent_audit_running",
-  "scope": "Complete current venue, recording file/set and repertoire metadata, with same-snapshot artist/source/show parent rosters",
+  "state": "complete_capture_regular_replay_and_independent_audit_verified",
+  "scope": "Complete current venue, recording file/set and repertoire metadata, with same-snapshot artist/source/show parent coordinates",
+  "execution_evidence_packet": {
+    "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/manifest.json",
+    "bytes": 19823,
+    "sha256": "d3722d842223f84136234d66ce9a7b3318c074446506081a79859f76186ce5e9",
+    "retained_files": 50,
+    "external_artifacts_rehashed_without_decoding": 9
+  },
+  "capture": {
+    "directory": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/full-domain-capture-v1",
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/capture/manifest.json",
+      "bytes": 6700,
+      "sha256": "c50a6b3a76c6ed685e568ca997dcf8eaa7fb0018d528fece4364aa9abf800e02"
+    },
+    "captured_at": "2026-10-18T10:10:48.967639+00:00",
+    "snapshot": "59602782:59602782:",
+    "read_only": true,
+    "isolation": "repeatable read",
+    "replica": true,
+    "frame": {
+      "path": "frame.jsonl",
+      "bytes": 6612549496,
+      "sha256": "a3caa61a808feccc9087a839caac169d8685cda9ce30011e68afd8a760e21df6",
+      "rows": 6719411,
+      "rowsByKind": {
+        "metadata_snapshot": 1,
+        "metadata_counts": 1,
+        "metadata_columns": 102,
+        "artist": 4379,
+        "source": 292522,
+        "show": 215594,
+        "venue": 216331,
+        "source_set": 296221,
+        "source_track": 5064076,
+        "setlist_show": 38475,
+        "setlist_song": 16605,
+        "setlist_song_play": 575103,
+        "snapshot_complete": 1
+      }
+    },
+    "same_snapshot_counts": {
+      "shows": 215594,
+      "venues": 216331,
+      "artists": 4379,
+      "sources": 292522,
+      "source_sets": 296221,
+      "setlist_shows": 38475,
+      "setlist_songs": 16605,
+      "source_tracks": 5064076,
+      "setlist_songs_plays": 575103,
+      "setlist_song_play_groups": 575103
+    },
+    "initial_capture_source_sha256": "19c736fc9d4fbfea3d633308719d521b8ab28a62dc0d8b7521d4332dd71a9eb3",
+    "capture_precedes_cursor_fix": true
+  },
   "verification": {
-    "synthetic_passed": 36,
-    "real_disposable_postgres_passed": 1,
+    "capture_state": "completed_metadata_only",
+    "regular_replay": {
+      "state": "verified_metadata_only",
+      "output": {
+        "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/logs/relisten-domain-metadata-full-verification-v1.log",
+        "bytes": 3437,
+        "sha256": "22ccee45abcbe75e3918f91ae6c7e971be771474b6fd89db69ef3e47e2f2e953"
+      },
+      "manifest_sha256": "c50a6b3a76c6ed685e568ca997dcf8eaa7fb0018d528fece4364aa9abf800e02",
+      "shares_capture_validator": true
+    },
+    "independent_audit": {
+      "state": "completed_independent_metadata_audit",
+      "receipt": {
+        "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/independent/audit.json",
+        "bytes": 8231,
+        "sha256": "8facda51298430008ea3dbfc1378a9cf94b6d92d175eb47bd556823af7d49679"
+      },
+      "manifest_sha256": "c50a6b3a76c6ed685e568ca997dcf8eaa7fb0018d528fece4364aa9abf800e02",
+      "source_sha256": "02b0346d830cf594f2ddf8fe881a6fabcc905a0ac3d900cb80d71ca544cef5f5",
+      "capture_validator_imported": false,
+      "original_index_used_as_oracle": false
+    },
+    "all_counts_and_47_diagnostics_equal": true,
+    "all_16_profile_field_totals_match_table_denominators": true,
+    "initial_synthetic_passed": 36,
+    "initial_real_disposable_postgres_passed": 1,
     "production_explain_plans": 10,
     "explain_analyze": false,
-    "complete_capture": "terminal0_completed_metadata_only",
-    "offline_full_capture_verification": "terminal0_verified_metadata_only",
-    "independent_full_capture_audit": "running",
     "cursor_synthetic_passed": 36,
-    "cursor_real_postgres_passed": 1
+    "cursor_real_disposable_postgres_passed": 1,
+    "independent_audit_synthetic_passed": 13
   },
-  "logs": [
-    {
-      "path": "/tmp/relisten-domain-metadata-storage-synthetic-v1.log",
-      "bytes": 7085,
-      "sha256": "9b6506f98ba468c58657b2594504b46466e11e37d8e524816b00c0d1f68d3bdc"
+  "catalog_findings": {
+    "dangling_parent_pointers": 0,
+    "wrong_joined_parent_uuids": 0,
+    "duplicate_uuid_groups": 0,
+    "direct_source_and_set_source_disagreements": 0,
+    "tracks_missing_both_raw_source_and_set_pointers": 157656,
+    "stored_orphan_flag_true": 52759,
+    "missing_both_parents_with_orphan_flag_false": 116932,
+    "both_parents_present_with_orphan_flag_true": 12035,
+    "one_parent_only_tracks": 0,
+    "joint_parent_evidence": {
+      "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/joint/receipt.json",
+      "bytes": 1632,
+      "sha256": "f36d7a071ab71d3ba6d646078965cf4619a73be462d0e7e1ce9b6114a9009005"
     },
-    {
-      "path": "/tmp/relisten-domain-metadata-storage-postgres-v1.log",
-      "bytes": 328,
-      "sha256": "971c63a937704c0bb17f52526955d9943c3e5edb71ead6a400413eaa8b63f775"
-    },
-    {
-      "path": "/tmp/relisten-domain-metadata-explain-v1.jsonstream",
-      "bytes": 48625,
-      "sha256": "20b80f82b811c1c7e48eaec040b5cd6fcb956820530abd650469b8ba0c236ec5"
-    }
-  ],
-  "source_files": [
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/capture_domain_metadata_frame.py",
-      "bytes": 17203,
-      "sha256": "19c736fc9d4fbfea3d633308719d521b8ab28a62dc0d8b7521d4332dd71a9eb3"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/domain_metadata_frame_validation.py",
-      "bytes": 22915,
-      "sha256": "2075c9204f0d7a0333623b39e96d39573f89aac0c6eb4f7650291ffb8e7a3c96"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame.py",
-      "bytes": 34831,
-      "sha256": "bfceea02738966f2563bf0c59ddf9e9f2c774baa05a2c1db0fd4bfea4385a931"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame_postgres.py",
-      "bytes": 8278,
-      "sha256": "46dfdd98041c758a04fb89f11458bed85c3968c910479c295f6a167af536d2b4"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/sql/full-domain-metadata-frame.sql",
-      "bytes": 8796,
-      "sha256": "c361559793cc6a9d78fc1f5cdabcfc192dd5f9590ad66a9028499134ad5407cc"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/sql/full-domain-metadata-frame-explain.sql",
-      "bytes": 7521,
-      "sha256": "69e0cfe8baa0a4b1c9454e8c0ba9dcb7ba4941f0c535c9ea988a969f4bc81b8f"
-    }
-  ],
-  "private_capture_directory": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/full-domain-capture-v1",
-  "schema_authority": {
-    "manifest": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/schema-inspection-v2/manifest.json",
-    "sha256": "a2573231a5c91854bd4af5d7c74a7980b64c25c8381ee45c134f97e42c92978b",
-    "columns": 102,
-    "indexes": 39,
-    "constraints": 40
+    "recording_and_show_raw_venue_id_differences": 71819,
+    "venue_id_difference_interpretation": "Stored native IDs differ; this does not establish different physical venues",
+    "unordered_repertoire_association_rows": 575103,
+    "distinct_repertoire_association_pairs": 575103,
+    "duplicate_association_groups": 0,
+    "checked_parent_scope": "Relationships between the nine captured tables; tour/era/year coordinate parents are outside this reconciliation"
   },
-  "raw_source_text_exported": false,
-  "identity_accuracy_established": false,
-  "automatic_matching_enabled": false,
-  "production_writes": false,
-  "complete_capture": {
-    "directory": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/full-domain-capture-v1",
-    "manifest_sha256": "c50a6b3a76c6ed685e568ca997dcf8eaa7fb0018d528fece4364aa9abf800e02",
-    "frame_rows": 6719411,
-    "frame_bytes": 6612549496,
-    "frame_sha256": "a3caa61a808feccc9087a839caac169d8685cda9ce30011e68afd8a760e21df6",
-    "files": 5064076,
-    "venues": 216331,
-    "provider_song_show_associations": 575103,
-    "source_code_precedes_cursor_fix": true
+  "text_profile_findings": {
+    "venues_with_empty_names": 149,
+    "venues_with_null_past_names": 216331,
+    "files_with_empty_titles": 26,
+    "repertoire_songs_with_empty_names": 43,
+    "raw_text_read_or_exported_for_this_verification": false,
+    "profile_values_recomputed_from_original_text": false
   },
-  "cursor_transport": {
-    "fixed_fetch_rows": 1000,
-    "source_sql_and_snapshot_unchanged": true,
-    "real_postgres_tracks_before_concurrent_insert": 1004,
-    "real_postgres_tracks_after_insert_outside_snapshot": 1005,
-    "captured_snapshot_tracks": 1004,
+  "transport": {
+    "current_fixed_fetch_rows": 1000,
+    "current_capture_source_sha256": "152d96d236c87ec81a372e4aa1082d0254ed51e67b4c330cea8fbc09033ba95f",
+    "sql_bytes_and_snapshot_contract_unchanged": true,
+    "initial_observation": {
+      "psql_rss_kib": 6626112,
+      "python_rss_kib": 26288,
+      "single_observation_not_measured_peak": true,
+      "provenance": "Prior operator observation and prior research receipt; no standalone retained RSS measurement artifact"
+    },
     "synthetic_memory_probe": {
-      "receipt": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/cursor-memory-probe-v1/receipt.json",
-      "sha256": "5814d01b33e7af74a94cfb11cee0871a701c0cbafe2e342415833fb4954055f1",
+      "receipt": {
+        "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/completion-verification-v1/memory/receipt.json",
+        "bytes": 1422,
+        "sha256": "5814d01b33e7af74a94cfb11cee0871a701c0cbafe2e342415833fb4954055f1"
+      },
       "rows": 100000,
-      "output_bytes_equal": true,
       "output_bytes": 209188895,
+      "output_sha256": "a5100f049971f4b3eeabf77ec83059e59dcc9b7917bf8f533ec847cc5d66d66a",
+      "output_bytes_equal": true,
       "unlimited_sampled_max_rss_kib": 289328,
       "cursor_sampled_max_rss_kib": 21120,
       "sampled_maxima_are_lower_bounds": true,
       "full_catalog_cursor_memory_or_throughput_established": false
     }
   },
-  "observed_first_capture_transport": {
-    "psql_rss_kib_single_observation": 6626112,
-    "python_rss_kib_single_observation": 26288,
-    "not_measured_peak": true,
-    "unlimited_result_buffering": true,
-    "valid_complete_capture_retained": true
-  },
-  "cursor_source_files": [
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/capture_domain_metadata_frame.py",
-      "bytes": 17532,
-      "sha256": "152d96d236c87ec81a372e4aa1082d0254ed51e67b4c330cea8fbc09033ba95f"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame_postgres.py",
-      "bytes": 10335,
-      "sha256": "eb9c2e40d60e5bca8d640a370c980a5c33d36e142be52d15b5e6b5aa54aff6c1"
-    },
-    {
-      "path": "docs/research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md",
-      "bytes": 13094,
-      "sha256": "433abddfab18f62d538783d575fdb01e05997797bd506f732d9af58fec819f9c"
-    }
-  ],
-  "cursor_verification_logs": [
-    {
-      "path": "/tmp/relisten-domain-metadata-cursor-synthetic-v1.log",
-      "bytes": 7085,
-      "sha256": "65e7ff75eaa0b57382b6484d637a9b3a5b6c8e48f46ca1de82b36be0492ac0f5"
-    },
-    {
-      "path": "/tmp/relisten-domain-metadata-cursor-postgres-v1.log",
-      "bytes": 336,
-      "sha256": "6f1e946a4fff929d666b76b38925ea2687b217882d27457be14875abb80012a1"
-    },
-    {
-      "path": "/tmp/relisten-domain-metadata-cursor-memory-probe-v1.log",
-      "bytes": 1210,
-      "sha256": "de3bb97cede1111281365d903c83be67a64e8a8a19044c2625dd41926d7305dd"
-    }
-  ],
-  "independent_audit_tool": {
-    "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/independent-audit-tool-v2/manifest.json",
-    "sha256": "0f02c014cd5a1de9734cd08adc644cb8dd13c2f6e45b7f1d8d4aea3dccce4a03",
-    "synthetic_passed": 13,
-    "actual_audit": "running"
+  "limits": {
+    "metadata_only": true,
+    "current_raw_parent_links_only": true,
+    "profile_hashes_are_not_identity_proof": true,
+    "venue_identity_or_physical_conflicts_established": false,
+    "song_or_composition_identity_established": false,
+    "audio_availability_established": false,
+    "exposure_history_or_evaluation_independence_established": false,
+    "production_writes": false,
+    "automatic_matching_enabled": false,
+    "global_exposure_reconciliation_still_required": true
   }
 }

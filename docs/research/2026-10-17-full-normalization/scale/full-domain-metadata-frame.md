@@ -1,10 +1,34 @@
 # Complete venue, recording-file and repertoire metadata frame
 
+The October 18 full capture passed both complete replay and an independent complete audit. It covers 5,064,076 files and every current row in the nine catalog tables below. The [evidence receipt](evidence/full-domain-metadata-frame-v1.json) pins the capture, both verifications, executed tools and supporting checks.
+
 The `full-domain-metadata-frame-v1` command captures every current venue, recording set, recording file, provider setlist, repertoire song and song-to-setlist association. It also captures complete artist, recording and show coordinate rosters in the same transaction. Those parent rosters let the validator check relationships without borrowing current state from an earlier snapshot.
 
 This frame supplies denominators and current catalog links for venue, song, composition and people normalization. It contains no identity judgments, training targets or semantic extraction. A later reservation procedure must reconcile all known exposure before any new source text, labels or model access. Metadata hashes do not establish identity or independent evaluation.
 
 The existing [artist/recording/show frame](full-metadata-frame.md), its command, seed lookups, verifier and evidence remain version 1. The new command is separate. The old frame can support historical comparisons; it is not same-snapshot parent authority for this capture.
+
+## Verified snapshot and data implications
+
+The read-only replica snapshot began at **2026-10-18 10:10:48 UTC**. Its 6,719,411 metadata lines occupy 6,612,549,496 bytes, including the complete rosters, 102 schema rows and snapshot/count/completion records. The regular replay and separate auditor agree on every count and all 47 relationship diagnostics. The independent auditor reconstructs its own roster without importing the capture validator or using the original validation index as its oracle.
+
+| Table | Rows in this snapshot |
+| --- | ---: |
+| `artists` | 4,379 |
+| `sources` | 292,522 |
+| `shows` | 215,594 |
+| `venues` | 216,331 |
+| `source_sets` | 296,221 |
+| `source_tracks` | 5,064,076 |
+| `setlist_shows` | 38,475 |
+| `setlist_songs` | 16,605 |
+| `setlist_songs_plays` | 575,103 |
+
+Every non-null parent pointer between the nine captured tables resolves, and every exported parent UUID agrees with its native parent. There are no duplicate UUID groups or direct-source/set-source disagreements. Null pointers remain part of the inventory: a separately pinned joint diagnostic confirms that 157,656 files lack both raw recording and set pointers. The stored orphan flag marks 52,759 files; 116,932 unbound files have the flag off, while 12,035 files with both parents present have it on. Keep raw links and the flag separate when selecting files or reconciling exposure.
+
+For 71,819 recordings, the stored venue ID differs from the show's venue ID. This identifies catalog references that need venue-resolution evidence; it does not establish a physical venue disagreement. The repertoire relation has 575,103 distinct pairs and the same physical row count, with no duplicate pair groups. It supplies unordered song/show associations rather than ordered song occurrences.
+
+The profiles also identify incomplete labels without exposing them: 149 venues have empty names, 26 files have empty titles and 43 repertoire rows have empty song names. Every venue's `past_names` field is null, so that column supplies no alias seeds for this snapshot. These counts guide later evidence work; they do not assign venue, song or composition identities. Global exposure reconciliation remains necessary before new plaintext inspection or model access.
 
 ## What the frame preserves
 
@@ -53,7 +77,7 @@ The output directory must not exist. All counts, exact column metadata, parent r
 
 Each line passes a closed schema before reaching the partial evidence file or SQLite. Unknown properties, including nested plaintext fields, fail without retaining that line. SQLite holds only the coordinates needed to reconcile native parents and multiplicity; it uses an 8 MiB page cache and disk indexes. It does not load the complete track roster into Python memory. The `psql` transport uses fixed `FETCH_COUNT=1000` cursor batches inside the SQL's explicit transaction, so libpq does not retain the entire multi-million-row SELECT before emitting it. A fetch count bounds result rows per batch; it is not an overall RSS limit. The 64 KiB row check still occurs in Python after the client receives the row.
 
-The first full-frame capture used the earlier transport without cursor fetching. The operator observed `psql` RSS of 6,626,112 KiB while Python RSS was 26,288 KiB. The Python page-cache and line bounds did not constrain that libpq buffer. These measurements describe the earlier run; cursor-mode memory requires a separate synthetic probe. A completed earlier frame can remain valid after complete byte/count/relationship verification, because this transport fix preserves the exact SQL and snapshot contract.
+The first full-frame capture used the earlier transport without cursor fetching. The operator observed `psql` RSS of 6,626,112 KiB while Python RSS was 26,288 KiB. The Python page-cache and line bounds did not constrain that libpq buffer. The retained initial frame passed both full verifications; the transport change preserves its SQL and snapshot contract. A separate 100,000-row synthetic probe produced the same 209,188,895 output bytes in both modes. Sampled maximum RSS was 289,328 KiB with unlimited fetching and 21,120 KiB with 1,000-row fetching. These sampled maxima are lower bounds on peak RSS. The synthetic result does not establish full-catalog cursor memory or throughput.
 
 The refusal limits are 64 KiB per line, 20 million stream rows, 16 GiB of frame bytes and an 8 GiB SQLite main database. The SQL uses 16 MiB `work_mem`, a 45-minute statement limit and a 90-minute process deadline. These are bounds, not measured capture time or disk requirements. Counts that cannot fit the row bound fail before the rosters; any later capacity failure invalidates the whole attempt.
 
