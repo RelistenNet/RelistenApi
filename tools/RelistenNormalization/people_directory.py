@@ -12,6 +12,8 @@ the HTTP contract, coverage limits and links to the source and playable-file rea
 """
 
 import argparse
+from collections import Counter, OrderedDict
+import os
 from contextlib import closing
 import gzip
 import hashlib
@@ -23,7 +25,7 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-VERSION = "people-name-directory-v4"
+VERSION = "people-name-directory-v5"
 
 
 def name_key(name):
@@ -188,11 +190,21 @@ class DirectoryBuilder:
                             "explicit_source_alias",
                         ),
                     )
+        has_source_actors = db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone()
+        if has_source_actors:
+            for row in db.execute("SELECT group_id,name,aliases FROM source_actors"):
+                for wording, basis in [(row[1], "source_actor_name")] + [
+                    (alias["wording"], "source_actor_alias") for alias in json.loads(row[2])
+                ]:
+                    if name_key(wording):
+                        db.execute("INSERT OR IGNORE INTO names VALUES(?,?,?,?)",
+                                   (row[0], wording, name_key(wording), basis))
+        surviving_actor = " OR EXISTS(SELECT 1 FROM source_actors a WHERE a.group_id=groups.id)" if has_source_actors else ""
         # execute keeps this phase inside the caller's transaction. executescript
         # would commit source replacements before their counts become consistent.
         for statement in (
             "CREATE INDEX IF NOT EXISTS credits_group_source ON credits(group_id,source_uuid)",
-            "DELETE FROM groups WHERE NOT EXISTS(SELECT 1 FROM credits WHERE credits.group_id=groups.id)",
+            "DELETE FROM groups WHERE NOT (EXISTS(SELECT 1 FROM credits WHERE credits.group_id=groups.id)" + surviving_actor + ")",
             "DELETE FROM names WHERE group_id NOT IN(SELECT id FROM groups)",
             "CREATE INDEX IF NOT EXISTS credits_group_artist ON credits(group_id,artist_uuid)",
             "CREATE INDEX IF NOT EXISTS names_lookup ON names(lookup)",
@@ -237,6 +249,9 @@ class DirectoryBuilder:
                 ),
             )
         }
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone():
+            for label, column in (("sourceActors", "id"), ("sourceActorRecordings", "source_uuid"), ("sourceActorArtists", "artist_uuid")):
+                counts[label] = db.execute("SELECT count(DISTINCT " + column + ") FROM source_actors").fetchone()[0]
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone():
             counts["catalogGroups"] = counts["groups"]
             counts["groups"] += db.execute(
@@ -248,8 +263,8 @@ class DirectoryBuilder:
         )
         return counts
 
-    def _add_record(self, db, record, chunk, line, origin_run=None):
-        for credit in (record.get("proposal") or {}).get("credits", []):
+    def _add_record(self, db, record, chunk, line, origin_run=None, credit_ids=None):
+        for index, credit in enumerate((record.get("proposal") or {}).get("credits", [])):
             key = name_key(credit["name"])
             if not key:
                 continue
@@ -267,9 +282,10 @@ class DirectoryBuilder:
                     (artist_uuid, record.get("artistName") or artist_uuid),
                 )
             db.execute(
-                """INSERT INTO credits(group_id,source_uuid,artist_uuid,name,role,person_key,
-                evidence,aliases,chunk,line,interpretation_basis,credit_key,origin_run) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO credits(id,group_id,source_uuid,artist_uuid,name,role,person_key,
+                evidence,aliases,chunk,line,interpretation_basis,credit_key,origin_run) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
+                    credit_ids[index] if credit_ids is not None else None,
                     identifier,
                     credit["sourceUuid"],
                     artist_uuid,
@@ -435,6 +451,370 @@ class CreditOverlay:
             with gzip.open(chunk, "rt", encoding="utf-8") as stream:
                 for line, text in enumerate(stream, 1):
                     yield str(chunk.relative_to(self.run)), line, json.loads(text)
+
+
+class RetainedOutcomeCache:
+    """Keep at most three decoded chunks; locators always refer to original lines."""
+
+    def __init__(self, check_space):
+        self.check_space = check_space
+        self.chunks = OrderedDict()
+        self.pins = {}
+
+    def read(self, run, chunk, line):
+        path = (Path(run) / chunk).resolve()
+        if not path.is_relative_to(Path(run).resolve()):
+            raise ValueError("Retained outcome escapes its run")
+        if path not in self.chunks:
+            self.check_space()
+            digest = file_sha256(path)
+            if path in self.pins and self.pins[path] != digest:
+                raise ValueError("Retained outcome chunk changed")
+            records, decoded = [], 0
+            with gzip.open(path, "rb") as stream:
+                for text in stream:
+                    decoded += len(text)
+                    if decoded > 128 * 1024**2:
+                        raise ValueError("Retained chunk exceeds the 128 MiB decode bound")
+                    records.append(json.loads(text))
+            if file_sha256(path) != digest:
+                raise ValueError("Retained outcome chunk changed while reading")
+            self.pins[path] = digest
+            self.chunks[path] = records
+            if len(self.chunks) > 3:
+                self.chunks.popitem(last=False)
+        self.chunks.move_to_end(path)
+        try:
+            return self.chunks[path][line - 1]
+        except IndexError as error:
+            raise ValueError("Retained outcome line is missing") from error
+
+
+class SourceDirectoryRefresh:
+    """Publish a new generation without rewriting the old cohort's witnesses.
+
+    The operator seals context attachment before invoking this command. SQLite
+    backup then snapshots the old generation; all replacements and checkpoints
+    occur in a private .building file. A resumed refresh must use identical sealed
+    input files. Only the final atomic publish makes the new generation available.
+    """
+
+    FIELDS = {"taper", "transferrer", "description", "source", "lineage", "taper_notes"}
+
+    def __init__(self, run, source_database, output, context_sealed=False,
+                 minimum_free=5.5 * 1024**3, maximum_bytes=3 * 1024**3):
+        self.run = Path(run).resolve()
+        self.source_database = Path(source_database).resolve()
+        self.output = Path(output).resolve()
+        self.staging = self.output.with_name(self.output.name + ".building")
+        self.context_sealed = context_sealed
+        self.minimum_free = minimum_free
+        self.maximum_bytes = maximum_bytes
+        self.writer = DirectoryBuilder(self.run, self.staging, minimum_free)
+        self.cache = RetainedOutcomeCache(self._check_space)
+
+    def apply(self):
+        if not self.context_sealed:
+            raise ValueError("Seal context attachment before starting a source refresh (--context-sealed)")
+        if self.output.exists() or self.output == self.source_database:
+            raise FileExistsError(self.output)
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        manifest = json.loads((self.run / "manifest.json").read_text())
+        if manifest.get("state") != "completed" or not manifest.get("methods", {}).get("CatalogRowExtraction"):
+            raise ValueError("Source refresh requires a completed extraction run")
+        self._check_space()
+        pins = self._input_pins()
+        self._prepare_staging(pins)
+        with closing(sqlite3.connect(self.staging)) as db:
+            db.row_factory = sqlite3.Row
+            state = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRefreshProgress'").fetchone()[0])
+            self._verify_retained_pins(state)
+            if not state.get("finalized"):
+                self._index_population(db, state)
+                self._replace_sources(db, state)
+                self._finish(db, state, manifest)
+            self._verify_retained_pins(state)
+        self._check_space()
+        if self._input_pins() != pins:
+            raise ValueError("Sealed source generation or refresh run changed")
+        # Link publishes one closed SQLite file atomically and refuses a target
+        # created by another operator since preflight. Both names share a folder.
+        os.link(self.staging, self.output)
+        self.staging.unlink()
+        with closing(sqlite3.connect(self.output)) as db:
+            return json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRefresh'").fetchone()[0])
+
+    def _check_space(self):
+        if shutil.disk_usage(self.output.parent).free < self.minimum_free:
+            raise RuntimeError("Source refresh paused to preserve the host disk reserve")
+        run_bytes = sum(path.stat().st_size for path in self.run.rglob("*") if path.is_file())
+        staging_bytes = sum(path.stat().st_size for path in self.output.parent.glob(self.staging.name + "*"))
+        if run_bytes + staging_bytes > self.maximum_bytes:
+            raise RuntimeError("Source refresh exceeds the combined run and new-generation byte bound")
+
+    def _input_pins(self):
+        # WAL is included when present; the explicit operator seal is still
+        # required because hashes cannot establish that another writer is idle.
+        paths = [self.source_database, self.run / "manifest.json"]
+        paths += sorted(self.run.glob("people/*.jsonl.gz")) + sorted(self.run.glob("credits/*.jsonl.gz"))
+        wal = Path(str(self.source_database) + "-wal")
+        if wal.exists():
+            paths.append(wal)
+        return {str(path): file_sha256(path) for path in paths}
+
+    def _prepare_staging(self, pins):
+        if self.staging.exists():
+            with closing(sqlite3.connect(self.staging)) as db:
+                row = db.execute("SELECT value FROM metadata WHERE key='sourceRefreshProgress'").fetchone()
+                if row is None or json.loads(row[0])["pins"] != pins:
+                    raise ValueError("Resume inputs differ from the sealed refresh generation")
+            return
+        try:
+            with closing(sqlite3.connect(self.source_database.as_uri() + "?mode=ro", uri=True)) as source:
+                with closing(sqlite3.connect(self.staging)) as target:
+                    source.backup(target, pages=1024, progress=lambda *_: self._check_space())
+                    target.execute("PRAGMA journal_mode=DELETE")
+                    self.writer._ensure_credit_provenance_columns(target)
+                    target.executescript("""
+                        CREATE TABLE IF NOT EXISTS refresh_locators(domain TEXT, source_uuid TEXT, provider TEXT,
+                            chunk TEXT, line INTEGER, outcome TEXT, PRIMARY KEY(domain,source_uuid));
+                        CREATE TABLE IF NOT EXISTS refresh_done(source_uuid TEXT PRIMARY KEY);
+                        CREATE TABLE IF NOT EXISTS source_actors(id TEXT PRIMARY KEY, group_id TEXT, source_uuid TEXT,
+                            artist_uuid TEXT, name TEXT, person_key TEXT, actor_reference TEXT,
+                            aliases TEXT, chunk TEXT, line INTEGER, origin_run TEXT);
+                        CREATE INDEX IF NOT EXISTS source_actors_group ON source_actors(group_id,artist_uuid,id);
+                        CREATE INDEX IF NOT EXISTS source_actors_source ON source_actors(source_uuid);
+                    """)
+                    target.execute("DELETE FROM refresh_locators")
+                    target.execute("DELETE FROM refresh_done")
+                    previous = target.execute("SELECT value FROM metadata WHERE key='sourceRefreshProgress'").fetchone()
+                    previous_next_id = json.loads(previous[0])["nextCreditId"] if previous else 1
+                    # Removed IDs remain historical links and frozen question
+                    # witnesses. A later generation must never assign them again.
+                    next_id = max(previous_next_id, target.execute("SELECT coalesce(max(id),0)+1 FROM credits").fetchone()[0])
+                    state = dict(pins=pins, retainedPins={}, indexed=[], keptCredits=0, insertedCredits=0, removedCredits=0,
+                                 nextCreditId=next_id)
+                    self._save_progress(target, state)
+                    target.commit()
+            if self._input_pins() != pins:
+                raise ValueError("Sealed source generation changed during backup")
+        except BaseException:
+            self.staging.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _verify_retained_pins(state):
+        for path, expected in state["retainedPins"].items():
+            if file_sha256(Path(path)) != expected:
+                raise ValueError("Retained witness changed since the refresh checkpoint")
+
+    @staticmethod
+    def _save_progress(db, state):
+        db.execute("INSERT OR REPLACE INTO metadata VALUES('sourceRefreshProgress',?)", (encoded(state),))
+
+    def _index_population(self, db, state):
+        manifest = json.loads((self.run / "manifest.json").read_text())
+        method = manifest["methods"].get("ShadowPeopleAdapter")
+        if not method:
+            raise ValueError("Source people producer is missing")
+        base_run = Path(json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0]))
+        baseline_manifest = base_run / "manifest.json"
+        baseline_sha = file_sha256(baseline_manifest)
+        original_sha = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceManifestSha256'").fetchone()[0])
+        if baseline_sha != original_sha:
+            raise ValueError("Original source manifest changed")
+        state["retainedPins"][str(baseline_manifest)] = baseline_sha
+        for domain, run, directory in (("baseline", base_run, "credits"), ("people", self.run, "people"), ("credits", self.run, "credits")):
+            chunks = sorted((run / directory).glob("*.jsonl.gz"))
+            if not chunks:
+                raise ValueError("Missing source " + domain + " chunks")
+            for path in chunks:
+                checkpoint = str(path)
+                if checkpoint in state["indexed"]:
+                    continue
+                self._check_space()
+                before = file_sha256(path)
+                with db:
+                    with gzip.open(path, "rt", encoding="utf-8") as stream:
+                        for line, text in enumerate(stream, 1):
+                            record = json.loads(text)
+                            if record.get("inputKind") != "source_sample":
+                                if domain == "baseline":
+                                    continue
+                                raise ValueError("Source refresh contains non-source outcomes")
+                            if domain != "baseline" and (record.get("domain") != domain or record.get("method") != method):
+                                raise ValueError("Source outcome domain or producer differs from manifest")
+                            source = record["inputUuid"]
+                            if not db.execute("SELECT 1 FROM processed_sources WHERE uuid=?", (source,)).fetchone():
+                                raise ValueError("Source refresh changes the recording population")
+                            db.execute("INSERT OR REPLACE INTO refresh_locators VALUES(?,?,?,?,?,?)",
+                                       (domain, source, record.get("provider"), str(path.relative_to(run)), line, record.get("outcome")))
+                    if file_sha256(path) != before:
+                        raise ValueError("Source chunk changed while indexing")
+                    # Store original baseline pins durably too: resumed work must
+                    # not trust a different old extraction behind the same locator.
+                    if domain == "baseline":
+                        state["retainedPins"][str(path)] = before
+                    state["indexed"].append(checkpoint)
+                    self._save_progress(db, state)
+        expected_sources = db.execute("SELECT count(*) FROM processed_sources").fetchone()[0]
+        manifest = json.loads((self.run / "manifest.json").read_text())
+        for domain in ("baseline", "people", "credits"):
+            if db.execute("SELECT 1 FROM refresh_locators WHERE domain=? AND outcome='failed' LIMIT 1", (domain,)).fetchone():
+                raise ValueError("Latest failed source outcome cannot replace a generation")
+            if db.execute("SELECT count(*) FROM refresh_locators WHERE domain=?", (domain,)).fetchone()[0] != expected_sources:
+                raise ValueError("Source refresh is missing source outcomes")
+            if domain != "baseline":
+                expected = {item["provider"]: item["processed"] for item in manifest.get("counts", []) if item["domain"] == domain}
+                actual = dict(db.execute("SELECT provider,count(*) FROM refresh_locators WHERE domain=? GROUP BY provider", (domain,)))
+                if not expected or actual != expected:
+                    raise ValueError("Source refresh logical population differs from manifest counts")
+
+    def _outcome(self, db, domain, source):
+        row = db.execute("SELECT * FROM refresh_locators WHERE domain=? AND source_uuid=?", (domain, source)).fetchone()
+        run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0]) if domain == "baseline" else self.run
+        return self.cache.read(run, row["chunk"], row["line"]), row
+
+    @classmethod
+    def _raw_fields(cls, record):
+        fields = (record.get("evidence") or {}).get("originalInputs")
+        if not isinstance(fields, dict) or set(fields) != cls.FIELDS:
+            raise ValueError("Source outcome lacks the complete six original input fields")
+        return fields
+
+    @classmethod
+    def _witness(cls, record, credit):
+        facts = dict(sourceUuid=credit.get("sourceUuid"), artistUuid=credit.get("artistUuid") or record.get("artistUuid"),
+                     name=credit.get("name"), role=credit.get("role"), originalRole=credit.get("originalRole"),
+                     evidence=credit.get("evidence"), interpretationBasis=credit.get("interpretationBasis"),
+                     originalInputs=cls._raw_fields(record), actorFacts=retained_actor_facts(record, credit))
+        if credit.get("interpretationBasis") == "retained_luna_extraction":
+            facts["modelBasis"] = record.get("evidence", {}).get("model")
+        return hashlib.sha256(json.dumps(facts, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+    def _old_witness(self, row, base_run):
+        record = self.cache.read(row["origin_run"] or base_run, row["chunk"], row["line"])
+        projected = (row["source_uuid"], row["artist_uuid"], row["name"], row["role"],
+                     row["person_key"], json.loads(row["evidence"]), row["interpretation_basis"])
+        matches = []
+        for credit in (record.get("proposal") or {}).get("credits", []):
+            original = (credit.get("sourceUuid"), credit.get("artistUuid") or record.get("artistUuid"),
+                        credit.get("name"), credit.get("role"), credit.get("personEntityKey"),
+                        credit.get("evidence"), credit.get("interpretationBasis"))
+            # Early directory generations predate credit_key storage. NULL is a
+            # historical value, never permission to invent/relabel the old key.
+            if original == projected and (row["credit_key"] is None or credit.get("entityKey") == row["credit_key"]):
+                matches.append(credit)
+        if record.get("inputUuid") != row["source_uuid"] or not matches:
+            raise ValueError("Original credit witness is unavailable")
+        if any(retained_actor_facts(record, credit).get("aliases", []) != json.loads(row["aliases"]) for credit in matches):
+            raise ValueError("Original credit actor aliases differ from the projection")
+        witnesses = {self._witness(record, credit) for credit in matches}
+        if len(witnesses) != 1:
+            raise ValueError("Original credit witness is ambiguous")
+        # Repeated identical original occurrences share this fingerprint. The
+        # old/new multiplicity check below withholds reuse for those duplicates.
+        return witnesses.pop()
+
+    def _replace_sources(self, db, state):
+        base_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
+        chunks = [row[0] for row in db.execute("SELECT DISTINCT chunk FROM refresh_locators WHERE domain='credits' ORDER BY chunk")]
+        for chunk in chunks:
+            self._check_space()
+            with db, gzip.open(self.run / chunk, "rt", encoding="utf-8") as stream:
+                for line, text in enumerate(stream, 1):
+                    credit_record = json.loads(text)
+                    source = credit_record["inputUuid"]
+                    locator = db.execute("""SELECT * FROM refresh_locators l WHERE domain='credits' AND source_uuid=?
+                        AND chunk=? AND line=? AND NOT EXISTS(SELECT 1 FROM refresh_done d WHERE d.source_uuid=l.source_uuid)""",
+                                         (source, chunk, line)).fetchone()
+                    if locator is None:
+                        continue
+                    self._replace_source(db, state, credit_record, locator, base_run)
+                state["retainedPins"].update({str(path): digest for path, digest in self.cache.pins.items()
+                                             if str(path) not in state["pins"]})
+                self._save_progress(db, state)
+                self._check_space()
+            print(encoded(dict(completedSources=db.execute("SELECT count(*) FROM refresh_done").fetchone()[0],
+                               keptCredits=state["keptCredits"], insertedCredits=state["insertedCredits"])), flush=True)
+
+    def _replace_source(self, db, state, credit_record, locator, base_run):
+        source = credit_record["inputUuid"]
+        people_record, people_locator = self._outcome(db, "people", source)
+        baseline, _ = self._outcome(db, "baseline", source)
+        for record in (people_record, baseline):
+            if any(record.get(field) != credit_record.get(field) for field in ("inputUuid", "artistUuid", "provider", "inputKey")):
+                raise ValueError("Paired source outcome ownership differs")
+            if self._raw_fields(record) != self._raw_fields(credit_record):
+                raise ValueError("Source refresh changes original recording evidence")
+        old_rows = db.execute("SELECT * FROM credits WHERE source_uuid=? ORDER BY id", (source,)).fetchall()
+        old = [(row, self._old_witness(row, base_run)) for row in old_rows]
+        proposed = (credit_record.get("proposal") or {}).get("credits", [])
+        if any(credit.get("sourceUuid") != source or (credit.get("artistUuid") or credit_record.get("artistUuid")) != credit_record.get("artistUuid") for credit in proposed):
+            raise ValueError("Credit proposal changes source or artist ownership")
+        new = [(credit, self._witness(credit_record, credit)) for credit in proposed if name_key(credit["name"])]
+        old_counts, new_counts = Counter(key for _, key in old), Counter(key for _, key in new)
+        unchanged = {key for key in old_counts if old_counts[key] == new_counts[key] == 1}
+        removed = [row["id"] for row, key in old if key not in unchanged]
+        for identifier in removed:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='context_relationships'").fetchone():
+                db.execute("DELETE FROM context_relationships WHERE left_credit=? OR right_credit=?", (identifier, identifier))
+            db.execute("DELETE FROM credits WHERE id=?", (identifier,))
+        additions = [credit for credit, key in new if key not in unchanged]
+        identifiers = list(range(state["nextCreditId"], state["nextCreditId"] + len(additions)))
+        self.writer._add_record(db, dict(credit_record, proposal=dict(credits=additions)),
+                                locator["chunk"], locator["line"], str(self.run), identifiers)
+        state["nextCreditId"] += len(additions)
+        state["keptCredits"] += len(unchanged)
+        state["insertedCredits"] += len(additions)
+        state["removedCredits"] += len(removed)
+        self._add_source_actors(db, people_record, people_locator)
+        db.execute("INSERT INTO refresh_done VALUES(?)", (source,))
+
+    def _add_source_actors(self, db, record, locator):
+        source = record["inputUuid"]
+        db.execute("DELETE FROM source_actors WHERE source_uuid=?", (source,))
+        aliases = (record.get("evidence") or {}).get("sourceActorAliases") or {}
+        people = (record.get("proposal") or {}).get("people", [])
+        for assertion in aliases.get("assertions", []):
+            reference = assertion["actorReferenceUuid"]
+            actors = [actor for actor in people if actor.get("sourceReferenceUuid") == reference]
+            if len(actors) != 1:
+                raise ValueError("Source alias assertion lacks one exact actor")
+            actor = actors[0]
+            if actor.get("sourceUuid") != source or actor.get("artistUuid") != record.get("artistUuid") or actor.get("name") != assertion["name"]:
+                raise ValueError("Source alias actor changes source, artist or wording")
+            key = name_key(actor["name"])
+            if not key:
+                continue
+            identifier = group_id(key)
+            db.execute("INSERT OR IGNORE INTO groups(id,name_key,display_name) VALUES(?,?,?)", (identifier, key, actor["name"]))
+            db.execute("INSERT OR IGNORE INTO artists VALUES(?,?)", (record["artistUuid"], record.get("artistName") or record["artistUuid"]))
+            actor_id = "source-actor:" + hashlib.sha256(encoded([source, actor["entityKey"], reference]).encode()).hexdigest()
+            db.execute("INSERT INTO source_actors VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                       (actor_id, identifier, source, record["artistUuid"], actor["name"], actor["entityKey"], reference,
+                        encoded(assertion.get("aliases", [])), locator["chunk"], locator["line"], str(self.run)))
+
+    def _finish(self, db, state, manifest):
+        with db:
+            self.writer._rebuild_groups(db)
+            self.writer._refresh_stats(db)
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='context_relationships'").fetchone():
+                CreditOverlay._refresh_context_counts(db)
+            summary = dict(run=str(self.run), sources=db.execute("SELECT count(*) FROM refresh_done").fetchone()[0],
+                           keptCredits=state["keptCredits"], insertedCredits=state["insertedCredits"], removedCredits=state["removedCredits"],
+                           methods=manifest["methods"], manifestSha256=file_sha256(self.run / "manifest.json"),
+                           sealedSourceDatabase=str(self.source_database), maximumBytes=self.maximum_bytes, minimumFreeBytes=self.minimum_free)
+            issues = json.loads(db.execute("SELECT value FROM metadata WHERE key='knownIssues'").fetchone()[0])
+            issues = [issue for issue in issues if not issue.startswith("This source run predates")]
+            for key, value in dict(version=VERSION, sourceRefreshRun=str(self.run), sourceRefresh=summary, knownIssues=issues).items():
+                db.execute("INSERT OR REPLACE INTO metadata VALUES(?,?)", (key, encoded(value)))
+            # Pins and progress remain available until publication; scratch rows
+            # are disposable indexes, not another copy of retained source bodies.
+            db.execute("DELETE FROM refresh_locators")
+            db.execute("DELETE FROM refresh_done")
+            state["finalized"] = True
+            self._save_progress(db, state)
 
 
 class NativePeopleOverlay:
@@ -755,24 +1135,28 @@ class PeopleDirectory:
                     "Directory count snapshot is missing; refresh the projection"
                 )
             result.update(counts)
+            result["capabilities"] = dict(sourceActors=db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone() is not None)
             result.update(filesUrl=self.files_url, coreUrl=self.core_url)
             return result
 
     @staticmethod
     def _population_sql(db):
-        """Union retrieval names while keeping catalog and native counters separate."""
-        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone():
-            return "WITH directory_groups AS (SELECT * FROM groups), directory_names AS (SELECT * FROM names) "
-        return """WITH directory_groups AS (
-            SELECT g.*,coalesce(n.actor_count,0) native_actor_count,
-                coalesce(n.credit_count,0) native_credit_count,
-                coalesce(n.recording_count,0) native_recording_count,
-                coalesce(n.artist_count,0) native_artist_count
-            FROM groups g LEFT JOIN native_groups n ON n.id=g.id
-            UNION ALL
-            SELECT n.id,n.name_key,n.display_name,0,0,0,n.actor_count,n.credit_count,n.recording_count,n.artist_count
-            FROM native_groups n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)
-            ), directory_names AS (SELECT * FROM names UNION SELECT * FROM native_names) """
+        """Share retrieval groups while retaining separate observation counters."""
+        native = db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone()
+        source = db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone()
+        native_groups = "SELECT * FROM native_groups" if native else "SELECT NULL id,NULL name_key,NULL display_name,0 actor_count,0 credit_count,0 recording_count,0 artist_count WHERE 0"
+        native_names = "SELECT * FROM native_names" if native else "SELECT * FROM names WHERE 0"
+        source_groups = "SELECT group_id,count(*) actor_count,count(DISTINCT source_uuid) recording_count,count(DISTINCT artist_uuid) artist_count FROM source_actors GROUP BY group_id" if source else "SELECT NULL group_id,0 actor_count,0 recording_count,0 artist_count WHERE 0"
+        return """WITH native AS (""" + native_groups + """), source AS (""" + source_groups + """), catalog AS (
+            SELECT * FROM groups UNION ALL
+            SELECT n.id,n.name_key,n.display_name,0,0,0 FROM native n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)
+            ), directory_groups AS (
+            SELECT g.*,coalesce(n.actor_count,0) native_actor_count,coalesce(n.credit_count,0) native_credit_count,
+                coalesce(n.recording_count,0) native_recording_count,coalesce(n.artist_count,0) native_artist_count,
+                coalesce(s.actor_count,0) source_actor_count,coalesce(s.recording_count,0) source_recording_count,
+                coalesce(s.artist_count,0) source_artist_count
+            FROM catalog g LEFT JOIN native n ON n.id=g.id LEFT JOIN source s ON s.group_id=g.id
+            ), directory_names AS (SELECT * FROM names UNION """ + native_names + ") "
 
     def search(self, parameters):
         offset, limit = self.page(parameters)
@@ -871,7 +1255,7 @@ class PeopleDirectory:
                     credit["aliases"] = json.loads(credit["aliases"])
                     credit["sourceEvidenceUrl"] = (
                         "/api/credit?" + urlencode({"id": credit["id"]})
-                        if credit["origin_run"]
+                        if credit["origin_run"] or db.execute("SELECT 1 FROM metadata WHERE key='sourceRefresh'").fetchone()
                         else self.core_url
                         + "?"
                         + urlencode(
@@ -895,7 +1279,59 @@ class PeopleDirectory:
                 )
             result.update(offset=offset, limit=limit)
             result.update(self._native_observations(db, identifier, parameters))
+            result.update(self._source_observations(db, identifier, parameters))
             return result
+
+    def _source_observations(self, db, identifier, parameters):
+        empty = dict(sourceObservations=[], sourceTotal=0, sourceArtists=[])
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone():
+            return empty
+        offset, limit = self.page(dict(offset=parameters.get("sourceOffset", "0"), limit=parameters.get("limit", "30")))
+        artist = parameters.get("sourceArtist", "")
+        condition = "s.group_id=?" + (" AND s.artist_uuid=?" if artist else "")
+        values = [identifier] + ([artist] if artist else [])
+        result = dict(sourceTotal=db.execute("SELECT count(*) FROM source_actors s WHERE " + condition, values).fetchone()[0],
+                      sourceOffset=offset, sourceLimit=limit, sourceObservations=[],
+                      sourceArtists=[dict(row) for row in db.execute("""SELECT s.artist_uuid uuid,a.name,count(*) observations
+                          FROM source_actors s JOIN artists a ON a.uuid=s.artist_uuid WHERE s.group_id=?
+                          GROUP BY s.artist_uuid ORDER BY a.name,s.artist_uuid""", (identifier,))])
+        for row in db.execute("""SELECT s.*,a.name artist_name FROM source_actors s LEFT JOIN artists a ON a.uuid=s.artist_uuid
+                WHERE """ + condition + " ORDER BY s.id LIMIT ? OFFSET ?", values + [limit, offset]):
+            actor = dict(row)
+            actor["aliases"] = json.loads(actor["aliases"])
+            actor.update(capturedHome=self._home(db, actor["source_uuid"]),
+                         sourceEvidenceUrl="/api/source-actor?" + urlencode(dict(id=actor["id"])),
+                         playableFilesUrl=self.files_url + "?" + urlencode(dict(domain="file_contents", entityKey="source:" + actor["source_uuid"])),
+                         originRun=actor.pop("origin_run"), basis="source_actor_observation", acceptedIdentity=False)
+            result["sourceObservations"].append(actor)
+        return result
+
+    def source_actor(self, identifier):
+        """Return the typed original alias assertion, without inventing a role."""
+        with closing(self.connect()) as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone():
+                return None
+            row = db.execute("SELECT * FROM source_actors WHERE id=?", (identifier,)).fetchone()
+            if row is None:
+                return None
+            indexed = dict(row)
+            progress = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRefreshProgress'").fetchone()[0])
+        path = (Path(indexed["origin_run"]) / indexed["chunk"]).resolve()
+        expected = progress["pins"].get(str(path))
+        if not path.is_relative_to(Path(indexed["origin_run"])) or not expected or file_sha256(path) != expected:
+            raise ValueError("Original source actor evidence changed")
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            record = next((json.loads(text) for line, text in enumerate(stream, 1) if line == indexed["line"]), None)
+        if record is None or record.get("inputKind") != "source_sample" or (record.get("inputUuid"), record.get("artistUuid")) != (indexed["source_uuid"], indexed["artist_uuid"]):
+            raise ValueError("Original source actor ownership differs")
+        actors = [actor for actor in (record.get("proposal") or {}).get("people", []) if actor.get("entityKey") == indexed["person_key"]]
+        assertions = [item for item in ((record.get("evidence") or {}).get("sourceActorAliases") or {}).get("assertions", [])
+                      if item.get("actorReferenceUuid") == indexed["actor_reference"]]
+        if len(actors) != 1 or len(assertions) != 1 or actors[0].get("name") != indexed["name"] or assertions[0].get("aliases", []) != json.loads(indexed["aliases"]):
+            raise ValueError("Original source actor assertion differs")
+        return dict(actor=actors[0], assertion=assertions[0], originalInputs=record["evidence"]["originalInputs"],
+                    parent={field: record.get(field) for field in ("inputUuid", "artistUuid", "artistName", "provider", "method")},
+                    originRun=indexed["origin_run"], basis="source_actor_observation", acceptedIdentity=False)
 
     def _native_observations(self, db, identifier, parameters):
         empty = dict(nativeObservations=[], nativeTotal=0, nativeArtists=[])
@@ -1072,7 +1508,14 @@ class PeopleDirectory:
                     "SELECT value FROM metadata WHERE key='sourceRun'"
                 ).fetchone()[0]
             )
-        with gzip.open(Path(run) / credit["chunk"], "rt", encoding="utf-8") as stream:
+            refresh = db.execute("SELECT value FROM metadata WHERE key='sourceRefreshProgress'").fetchone()
+        path = (Path(run) / credit["chunk"]).resolve()
+        if refresh:
+            progress = json.loads(refresh[0])
+            expected = {**progress["pins"], **progress["retainedPins"]}.get(str(path))
+            if not path.is_relative_to(Path(run).resolve()) or not expected or file_sha256(path) != expected:
+                raise ValueError("Original credit evidence changed")
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
             for line, text in enumerate(stream, 1):
                 if line == credit["line"]:
                     outcome = json.loads(text)
@@ -1141,6 +1584,11 @@ def handler_for(directory):
                             404, encoded({"error": "Unknown relationship"}).encode()
                         )
                         return
+                elif url.path == "/api/source-actor":
+                    result = directory.source_actor(parameters.get("id", ""))
+                    if result is None:
+                        self.respond(404, encoded({"error": "Unknown source actor"}).encode())
+                        return
                 elif url.path == "/api/native-actor":
                     result = directory.native_actor(parameters.get("id", ""))
                     if result is None:
@@ -1182,6 +1630,13 @@ def main():
     overlay.add_argument("--run", required=True)
     overlay.add_argument("--selection", required=True)
     overlay.add_argument("--database", required=True)
+    refresh = sub.add_parser("refresh-sources", help="Publish a new sealed source generation, preserving exact unchanged witnesses")
+    refresh.add_argument("--run", required=True)
+    refresh.add_argument("--source-database", required=True)
+    refresh.add_argument("--database", required=True)
+    refresh.add_argument("--context-sealed", action="store_true")
+    refresh.add_argument("--minimum-free-bytes", type=int, default=int(5.5 * 1024**3))
+    refresh.add_argument("--maximum-bytes", type=int, default=3 * 1024**3)
     native = sub.add_parser("overlay-native")
     native.add_argument("--run", required=True)
     native.add_argument("--database", required=True)
@@ -1204,6 +1659,9 @@ def main():
             encoded(CreditOverlay(args.run, args.selection, args.database).apply()),
             flush=True,
         )
+    elif args.command == "refresh-sources":
+        print(encoded(SourceDirectoryRefresh(args.run, args.source_database, args.database,
+            args.context_sealed, args.minimum_free_bytes, args.maximum_bytes).apply()), flush=True)
     elif args.command == "overlay-native":
         print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:

@@ -61,6 +61,25 @@ Credits keep their actual occurrence key and `interpretation_basis`. `retained_l
 
 Overlay credit evidence links open `/api/credit` on this directory. That endpoint reads the exact retained source outcome at its stored run, chunk and physical line. Model person keys therefore do not point to the older core reader, where those keys do not exist. The endpoint retains the model's source-field evidence and extraction provenance without claiming that a proposed person identity has been accepted.
 
+## Refresh source credits and aliases into a new generation
+
+Use `refresh-sources` after a complete source-only extraction with the revised grammar. Include the retained model-credit results in that extraction; a parser-only result would remove model credits absent from its complete proposal. Seal all context attachments before starting. The command takes a consistent SQLite backup of the previous directory and writes a separate database:
+
+```sh
+python3 tools/RelistenNormalization/people_directory.py refresh-sources \
+  --run <completed-source-refresh-run> \
+  --source-database <sealed-previous-directory.sqlite3> \
+  --database <new-directory.sqlite3> --context-sealed
+```
+
+The new run must cover exactly the previous source population, with paired people/credit outcomes and unchanged artist ownership and six original text fields. Replay uses each source's latest outcome; a latest failure prevents publication. The command preserves homes, native observations and the old generation. `sourceRun` still owns captured homes; `sourceRefreshRun` identifies the new extraction. Each changed credit keeps its own original run locator.
+
+Only a unique, fully unchanged credit witness keeps its old row ID and evidence locator. Comparison includes the raw fields, name, role, literal role wording, citations, actor facts and model basis. Changed, split or removed credits invalidate their contextual relationships. New generations retain a credit-ID high-water mark so later additions cannot reuse retired IDs. Old questions retain their original witnesses; they cannot be reattached by name or row number.
+
+The default bounds are 3 GiB for the combined new run and staging database, plus a 5.5 GiB host reserve. Chunk checkpoints permit retry with the same sealed inputs and target. After backup completes, a failure leaves the private `.building` database for retry; the old directory stays available. Only a complete, validated generation is renamed to the new target; an existing target is rejected. Refreshed credit and alias evidence reads authenticate retained file hashes.
+
+Source alias observations have separate search counts and a separate group section. They assert neither a recording role nor an accepted identity. `capabilities.sourceActors` in `/api/stats` enables this interface; older servers receive no source-actor requests. `/api/person` adds `sourceObservations`, `sourceTotal`, `sourceOffset`, `sourceLimit` and `sourceArtists`. `sourceArtist` and `sourceOffset` filter and page this section independently. `/api/source-actor?id=…` returns the exact actor, alias assertion, original inputs and producer coordinates. Counts remain separate from catalog credits and native observations.
+
 ## Add native provider actors without replacing catalog credits
 
 The v4 reader can add a completed native shadow population to this same directory.
@@ -147,7 +166,7 @@ The tests cover cross-artist grouping, duplicate roles, preserved quotes and pla
 
 `people_context.py` prepares comparisons between witnessed credits. Names and aliases retrieve candidates. The questions then include the exact credit occurrence, surrounding original prose, competing roles, attributed contacts and profiles, and captured performance date and location. A transfer credit does not imply that the transferrer attended the performance. Missing text in a bounded excerpt does not establish that the source lacks that text.
 
-The prepared contextual population contains 5,000 questions using 7,582 source witnesses across 1,837 artists. The first run stopped at the host disk reserve after recording 2,460 questions. Its 2,318 usable results include 1,046 possible same-person links, 128 possible namesake distinctions and 1,144 insufficient-evidence results. Exact response validation retains 142 rejected or missing questions separately; another 2,540 selected questions have not been processed. Of these questions, 4,650 cross artist boundaries. It includes name variants, explicit aliases, overlapping contact hints and potential namesakes. Same-date performances in different captured locations and differing contacts retrieve difficult questions; neither supplies an automatic negative label. These inputs are development data, not an independent accuracy evaluation.
+The contextual population contains 5,000 processed questions using 7,582 source witnesses across 1,837 artists. Of these questions, 4,650 cross artist boundaries. The directory retains 4,677 usable proposals: 2,239 possible same-person links, 216 possible namesake distinctions and 2,222 insufficient-evidence results. Another 323 questions remain rejected or missing. The cohort includes name variants, explicit aliases, overlapping contact hints and potential namesakes. Same-date performances in different captured locations and differing contacts retrieve difficult questions; neither supplies an automatic negative label. These inputs are development data, not an independent accuracy evaluation.
 
 The C# `people-context <batches.jsonl> <new-output-directory> <job-uuid>` command owns Luna requests, exact quotation checks, caching and cost admission. It processes at most 500 batches and 5,000 questions, with four concurrent requests, a $25 job cap and 1,000 maximum attempts. It uses the existing dedicated local normalization cache database and reads `OPENAI_API_KEY` from its environment. It does not alter production identities. Requests use `gpt-6-luna`; reported token cost uses configured rates and is separate from an invoice. Uncertain calls retain their cost reservations.
 
@@ -199,4 +218,6 @@ Run keyless `people-context-recover` on the **new run** with its new job UUID af
 
 The projection records distinct question IDs per job separately from successful decisions. Overlapping snapshots and recovery do not increase processed coverage; a later continuation containing disjoint pending questions does. Only compact IDs are stored, without another copy of question prose.
 
-Fifteen real responses omitted independent decisions: fourteen returned nine answers for ten questions, and one returned seven. Another response duplicated an ID and remains wholly rejected. Recovery keeps present unique known IDs when their exact witness evidence passes validation and records the omitted ID as `missing_decision`. Requiring every response ID before recovering any result discarded supported independent answers. Duplicate or invented IDs still reject the whole response; recovery never guesses or remaps ownership.
+The completed continuation processed all 254 pending batches. Its primary results supplied 1,440 usable decisions; keyless recovery retained another 919, leaving 181 rejected or missing questions. Combined with the original job, the directory contains 4,677 proposals and 323 rejected or missing answers across all 5,000 questions. The continuation cost $0.6855741 at configured rates; combined known token cost is $1.3464393 and accounted cost is $1.3971328, including unchanged uncertain-call reservations. Original artifacts and catalog/native counts remain unchanged.
+
+In the original job, fifteen responses omitted independent decisions: fourteen returned nine answers for ten questions, and one returned seven. Another response duplicated an ID and remains wholly rejected. Recovery keeps present unique known IDs when their exact witness evidence passes validation and records the omitted ID as `missing_decision`. Requiring every response ID before recovering any result discarded supported independent answers. Duplicate or invented IDs still reject the whole response; recovery never guesses or remaps ownership.

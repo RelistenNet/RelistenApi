@@ -126,9 +126,10 @@
   <p class="badge">LOCAL EXPERIMENT · DRAFT NAME GROUPS</p>
   <h1>Tapers and transferrers</h1>
   <p>
-    Find recording credits across artists. Matching names appear together so you
-    can browse the recordings and inspect the evidence. Namesakes can share a
-    group; different aliases can still have separate groups.
+    Find recording credits and explicit source aliases across artists. Matching
+    names appear together so you can browse the recordings and inspect the
+    evidence. Namesakes can share a group; different aliases can still have
+    separate groups.
   </p>
   <p id="coverage" class="counts"></p>
   <details>
@@ -138,7 +139,7 @@
   <form id="search">
     <input
       id="query"
-      aria-label="Search credited name or explicit alias"
+      aria-label="Search source name or explicit alias"
       placeholder="Aadam Jacobs, Charlie Miller, Rob Berger…"
     /><button>Search</button>
   </form>
@@ -148,6 +149,7 @@
   <script>
     const $ = (id) => document.getElementById(id),
       count = (n) => Number(n).toLocaleString();
+    let sourceActorsSupported = false;
     function node(tag, text, cls) {
       let n = document.createElement(tag);
       if (text !== undefined) n.textContent = text;
@@ -224,7 +226,8 @@
               " catalog artists · " +
               count(g.credit_count) +
               " catalog credit mentions" +
-              (g.native_actor_count ? " · " + count(g.native_actor_count) + " native actor observations · " + count(g.native_credit_count) + " native role mentions" : ""),
+              (g.native_actor_count ? " · " + count(g.native_actor_count) + " native actor observations · " + count(g.native_credit_count) + " native role mentions" : "") +
+              (sourceActorsSupported && g.source_actor_count ? " · " + count(g.source_actor_count) + " source alias observations across " + count(g.source_recording_count) + " recordings and " + count(g.source_artist_count) + " artists" : ""),
             "counts",
           ),
         );
@@ -420,6 +423,78 @@
       $("results").append(section);
     }
 
+    function performanceLabel(home) {
+      return [
+        home?.literalDate || "Date unavailable",
+        home?.performanceLabel ||
+          (home?.performanceType !== "unknown" ? home?.performanceType : null),
+      ].filter(Boolean).join(" · ");
+    }
+
+    function sourceObservations(data, parameters) {
+      // Older directory generations do not expose this population or its evidence route.
+      if (!sourceActorsSupported || !Array.isArray(data.sourceObservations) ||
+          (!data.sourceTotal && !data.sourceArtists?.length)) return;
+      const section = node("section");
+      section.append(
+        node("h2", "Source alias observations"),
+        node("p", "These explicit alias statements come from captured catalog recording fields. They do not assert a recording credit role, person kind or accepted identity. An observation can repeat a catalog credit or native account, so these counts are not additive. Matching names bring observations together; they do not establish that the observations describe the same person."),
+      );
+      const select = node("select");
+      select.setAttribute("aria-label", "Filter source alias observations by artist");
+      const all = node("option", "All source artists");
+      all.value = "";
+      select.append(all);
+      for (const artist of data.sourceArtists || []) {
+        const option = node("option", artist.name + " (" + count(artist.observations) + " observations)");
+        option.value = artist.uuid;
+        select.append(option);
+      }
+      select.value = parameters.sourceArtist || "";
+      select.onchange = () => setLocation({ ...parameters, sourceArtist: select.value, sourceOffset: 0 });
+      section.append(select, node("p", count(data.sourceTotal) + " source alias observations in this view", "counts"));
+      for (const actor of data.sourceObservations) {
+        const card = node("article", undefined, "card");
+        card.append(
+          node("p", "SOURCE · ROLE-FREE ALIAS OBSERVATION", "badge"),
+          node("h3", actor.name + " · " + (actor.artist_name || actor.artist_uuid || "Unknown artist")),
+          node("p", "Captured assignment: " + performanceLabel(actor.capturedHome)),
+          node("p", "Source " + actor.source_uuid, "muted"),
+        );
+        for (const alias of actor.aliases) {
+          card.append(node("p", "Explicit source alias: " + alias.wording));
+          for (const evidence of alias.evidence || []) {
+            if (evidence.quote) card.append(node("blockquote", evidence.quote));
+          }
+        }
+        const original = node("details");
+        const facts = node("pre", JSON.stringify({
+          sourceUuid: actor.source_uuid,
+          artistUuid: actor.artist_uuid,
+          personKey: actor.person_key,
+          actorReference: actor.actor_reference,
+          originRun: actor.originRun,
+          aliases: actor.aliases,
+        }, null, 2));
+        facts.style.whiteSpace = "pre-wrap";
+        original.append(node("summary", "Original source scope and alias citations"), facts);
+        card.append(
+          link("Inspect original source alias evidence", actor.sourceEvidenceUrl),
+          document.createTextNode(" · "),
+          link("Open this recording’s playable files", actor.playableFilesUrl),
+          original,
+        );
+        section.append(card);
+      }
+      const controls = node("div", undefined, "controls");
+      if (data.sourceOffset) controls.append(pageButton("Previous source observations", () =>
+        setLocation({ ...parameters, sourceOffset: Math.max(0, data.sourceOffset - data.sourceLimit) })));
+      if (data.sourceOffset + data.sourceLimit < data.sourceTotal) controls.append(pageButton("Next source observations", () =>
+        setLocation({ ...parameters, sourceOffset: data.sourceOffset + data.sourceLimit })));
+      section.append(controls);
+      $("results").append(section);
+    }
+
     async function detail(p) {
       let d = await get("/api/person?" + new URLSearchParams(p));
       $("status").textContent = "";
@@ -439,12 +514,12 @@
         node(
           "p",
           "Catalog credit roles: " +
-            d.roles
+            (d.roles
               .map(
                 (r) =>
                   r.role + " (" + count(r.recording_count) + " recordings)",
               )
-              .join(", "),
+              .join(", ") || "none"),
           "counts",
         ),
       );
@@ -490,8 +565,9 @@
       select.value = p.artist || "";
       select.onchange = () =>
         setLocation({
-          id: p.id,
-          ...(select.value ? { artist: select.value } : {}),
+          ...p,
+          artist: select.value,
+          offset: 0,
         });
       controls.append(select);
       header.append(
@@ -506,6 +582,7 @@
       $("results").append(header);
       await relationships(p.id);
       nativeObservations(d, p);
+      sourceObservations(d, p);
       for (let r of d.recordings) {
         let card = node("article", undefined, "card"),
           names = [
@@ -519,15 +596,7 @@
           node("h3", names.join(" · ")),
           node(
             "p",
-            [
-              r.capturedHome?.literalDate || "Date unavailable",
-              r.capturedHome?.performanceLabel ||
-                (r.capturedHome?.performanceType !== "unknown"
-                  ? r.capturedHome?.performanceType
-                  : null),
-            ]
-              .filter(Boolean)
-              .join(" · "),
+            performanceLabel(r.capturedHome),
           ),
           link("Open playable files →", r.playableFilesUrl),
           node("p", "Source " + r.sourceUuid, "muted"),
@@ -600,6 +669,7 @@
     window.onpopstate = load;
     get("/api/stats")
       .then((s) => {
+        sourceActorsSupported = s.capabilities?.sourceActors === true;
         $("files-link").href = s.filesUrl;
         $("core-link").href = s.coreUrl;
         $("coverage").textContent =
@@ -620,6 +690,10 @@
           const native = s.nativeDirectory;
           $("coverage").append(node("span", " · native overlay: " + count(native.actors) + " actor observations, "
             + count(native.creditMentions) + " role mentions and " + count(native.aliasActors) + " role-free alias actors (separate counts)"));
+        }
+        if (sourceActorsSupported) {
+          $("coverage").append(node("span", " · source aliases: " + count(s.sourceActors) + " role-free observations across "
+            + count(s.sourceActorRecordings) + " recordings and " + count(s.sourceActorArtists) + " artists (separate counts)"));
         }
         if (s.peopleContext) {
           let context = s.peopleContext;
@@ -648,7 +722,7 @@
         }
         for (let issue of s.knownIssues) $("issues").append(node("li", issue));
       })
-      .catch((e) => ($("coverage").textContent = e.message));
-    load();
+      .catch((e) => ($("coverage").textContent = e.message))
+      .finally(load);
   </script>
 </html>

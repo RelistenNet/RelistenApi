@@ -1,8 +1,10 @@
 """Public directory behavior: source ownership, inferred groups and evidence survive."""
 
 import gzip
+from contextlib import closing
 import json
 import sqlite3
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -17,6 +19,7 @@ from http.server import ThreadingHTTPServer
 
 from people_directory import (
     CreditOverlay,
+    SourceDirectoryRefresh,
     NativePeopleOverlay,
     DirectoryBuilder,
     PeopleDirectory,
@@ -605,6 +608,295 @@ class TestPeopleDirectory(unittest.TestCase):
         )
         self.assertEqual(directory.stats()["modelCreditMentions"], 1)
 
+
+class TestSourceDirectoryRefresh(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.old_run = self.root / "old"
+        self.run = self.root / "fresh"
+        self.old_database = self.root / "old.sqlite3"
+        self.database = self.root / "fresh.sqlite3"
+        self.raw = {field: None for field in SourceDirectoryRefresh.FIELDS}
+        self.raw.update(taper="Pat", description="Alex aka Raven; Sam")
+        self.old = [self.outcome("one", "artist-a", "Pat"), self.outcome("two", "artist-b", "Changed")]
+        self.write_run(self.old_run, self.old)
+        DirectoryBuilder(self.old_run, self.old_database, minimum_free=0).build()
+        with closing(sqlite3.connect(self.old_database)) as db, db:
+            self.old_ids = dict(db.execute("SELECT source_uuid,id FROM credits"))
+            db.execute("CREATE TABLE context_relationships(id TEXT PRIMARY KEY,left_credit INTEGER,right_credit INTEGER,relation TEXT)")
+            db.execute("INSERT INTO context_relationships VALUES('keep',?,?, 'same_person')", (self.old_ids['one'], self.old_ids['one']))
+            db.execute("INSERT INTO context_relationships VALUES('remove',?,?, 'different_people')", (self.old_ids['one'], self.old_ids['two']))
+            db.execute("INSERT INTO metadata VALUES('peopleContext',?)", (json.dumps(dict(decisions=2)),))
+            db.execute("CREATE TABLE context_questions(id TEXT PRIMARY KEY,question TEXT)")
+            db.execute("INSERT INTO context_questions VALUES('frozen','original witness IDs')")
+        self.new = [self.outcome("one", "artist-a", "Pat"), self.outcome("two", "artist-b", "Corrected")]
+        self.write_run(self.run, self.new)
+
+    def outcome(self, source, artist, name):
+        evidence = dict(field="taper", quote=name, startCodePoint=0, endCodePoint=len(name))
+        credit = dict(entityKey="credit:" + source, personEntityKey="person:" + source,
+                      sourceUuid=source, artistUuid=artist, name=name, role="taper", evidence=evidence)
+        return dict(domain="credits", inputKind="source_sample", inputKey="source_sample:" + source,
+                    inputUuid=source, artistUuid=artist, artistName=artist, provider="catalog:unattributed",
+                    method="shadow-people-v1", outcome="proposed", proposal=dict(credits=[credit]),
+                    evidence=dict(originalInputs=dict(self.raw), creditExtraction=dict(credits=[dict(credit, actorFacts=dict(aliases=[]))])))
+
+    def people(self, credit):
+        source = credit["inputUuid"]
+        reference = "ref:" + source
+        actor = dict(entityKey="actor:" + source, name="Alex", sourceUuid=source,
+                     artistUuid=credit["artistUuid"], sourceReferenceUuid=reference)
+        assertion = dict(actorReferenceUuid=reference, assertionUuid="assertion:" + source, name="Alex",
+                         aliases=[dict(wording="Raven", evidence=[dict(field="description", quote="Alex aka Raven")])],
+                         context=dict(statement="Alex aka Raven; Sam"), relationships=[], unresolved=[])
+        return dict(credit, domain="people", proposal=dict(people=[actor]),
+                    evidence=dict(originalInputs=credit["evidence"]["originalInputs"], sourceActorAliases=dict(assertions=[assertion])))
+
+    def write_run(self, run, credits, split=False):
+        run.mkdir(exist_ok=True)
+        counts = [dict(domain=domain, provider="catalog:unattributed", processed=len({c['inputUuid'] for c in credits})) for domain in ("credits", "people")]
+        (run / "manifest.json").write_text(json.dumps(dict(state="completed", methods=dict(ShadowPeopleAdapter="shadow-people-v1", CatalogRowExtraction="credit-v5/alias-v4"), counts=counts)))
+        for domain in ("credits", "people"):
+            (run / domain).mkdir(exist_ok=True)
+            for old in (run / domain).glob("*.jsonl.gz"):
+                old.unlink()
+            groups = [[row] for row in credits] if split else [credits]
+            for index, rows in enumerate(groups):
+                with gzip.open(run / domain / f"{index:03}.jsonl.gz", "wt") as stream:
+                    for row in rows:
+                        stream.write(json.dumps(self.people(row) if domain == "people" else row) + "\n")
+
+    def refresh(self, **options):
+        return SourceDirectoryRefresh(self.run, self.old_database, self.database, context_sealed=True,
+                                      minimum_free=0, **options).apply()
+
+    def test_exact_witnesses_keep_ids_and_context_new_credits_get_new_ids_and_original_owners_survive(self):
+        # Native overlays and homes are independent populations copied unchanged.
+        with closing(sqlite3.connect(self.old_database)) as db, db:
+            db.execute("CREATE TABLE native_marker(value TEXT)")
+            db.execute("INSERT INTO native_marker VALUES('retained namespace')")
+            db.execute("INSERT INTO source_homes VALUES('one','show-one','1970-01-01','concert','Exact label','proposed','[]','captured','performances/original.jsonl.gz',17)")
+            original_home = db.execute("SELECT * FROM source_homes WHERE source_uuid='one'").fetchone()
+        original = self.old_database.read_bytes()
+        summary = self.refresh()
+        self.assertEqual((summary['keptCredits'], summary['removedCredits'], summary['insertedCredits']), (1, 1, 1))
+        self.assertEqual(self.old_database.read_bytes(), original)
+        with closing(sqlite3.connect(self.database)) as db, db:
+            rows = dict(db.execute("SELECT source_uuid,id FROM credits"))
+            self.assertEqual(rows['one'], self.old_ids['one'])
+            self.assertGreater(rows['two'], max(self.old_ids.values()))
+            kept = db.execute("SELECT origin_run,chunk,line FROM credits WHERE source_uuid='one'").fetchone()
+            self.assertEqual(kept, (None, 'credits/000.jsonl.gz', 1))
+            self.assertEqual(db.execute("SELECT id FROM context_relationships").fetchall(), [('keep',)])
+            self.assertEqual(db.execute("SELECT question FROM context_questions").fetchone()[0], 'original witness IDs')
+            self.assertEqual(db.execute("SELECT * FROM native_marker").fetchone()[0], 'retained namespace')
+            self.assertEqual(db.execute("SELECT * FROM source_homes WHERE source_uuid='one'").fetchone(), original_home)
+            metadata = dict(db.execute("SELECT key,value FROM metadata"))
+            self.assertEqual(json.loads(metadata['sourceRun']), str(self.old_run))
+            self.assertEqual(json.loads(metadata['sourceRefreshRun']), str(self.run))
+        directory = PeopleDirectory(self.database, 'http://files.test', 'http://core.test')
+        self.assertEqual(directory.stats()['credits'], 2)
+        self.assertEqual(directory.stats()['sourceActors'], 2)
+
+    def test_source_role_free_alias_http_search_paging_filter_and_original_evidence(self):
+        self.refresh()
+        directory = PeopleDirectory(self.database, 'http://files.test', 'http://core.test')
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(directory))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = 'http://127.0.0.1:' + str(server.server_port)
+        def get(path):
+            with urlopen(base + path) as response:
+                return json.load(response)
+        self.assertTrue(get('/api/stats')['capabilities']['sourceActors'])
+        group = get('/api/people?q=Raven')['groups'][0]
+        self.assertEqual((group['credit_count'], group['source_actor_count']), (0, 2))
+        detail = get('/api/person?id=' + group['id'] + '&limit=1')
+        self.assertEqual((detail['total'], detail['sourceTotal']), (0, 2))
+        self.assertEqual(detail['roles'], [])
+        first = detail['sourceObservations'][0]
+        second = get('/api/person?id=' + group['id'] + '&limit=1&sourceOffset=1')['sourceObservations'][0]
+        self.assertNotEqual(first['id'], second['id'])
+        filtered = get('/api/person?id=' + group['id'] + '&sourceArtist=artist-a')
+        self.assertEqual(filtered['sourceTotal'], 1)
+        self.assertEqual(filtered['sourceObservations'][0]['source_uuid'], 'one')
+        retained = get(first['sourceEvidenceUrl'])
+        self.assertEqual(retained['originalInputs'], self.raw)
+        self.assertEqual(retained['assertion']['context']['statement'], 'Alex aka Raven; Sam')
+        self.assertFalse(retained['acceptedIdentity'])
+        self.assertNotIn('role', first)
+        self.assertNotIn('kind', first)
+        self.assertEqual(parse_qs(urlsplit(first['playableFilesUrl']).query)['entityKey'], ['source:' + first['source_uuid']])
+        with self.assertRaises(HTTPError) as error:
+            get('/api/source-actor?id=missing')
+        self.assertEqual(error.exception.code, 404)
+        error.exception.close()
+        # Kept credits continue to expose their original producer, guarded by
+        # its own pin rather than trusting the same source UUID in changed bytes.
+        kept_detail = get('/api/person?id=' + group_id(name_key('Pat')))
+        kept_url = kept_detail['recordings'][0]['credits'][0]['sourceEvidenceUrl']
+        self.assertEqual(get(kept_url)['credit']['id'], self.old_ids['one'])
+        with gzip.open(self.old_run / 'credits/000.jsonl.gz', 'wt') as stream:
+            stream.write(json.dumps(dict(self.old[0], proposal=dict(credits=[]))) + '\n')
+        with self.assertRaises(HTTPError) as error:
+            get(kept_url)
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+        with gzip.open(self.run / 'people/000.jsonl.gz', 'at') as stream:
+            stream.write('{}\n')
+        with self.assertRaises(HTTPError) as error:
+            get(first['sourceEvidenceUrl'])
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+
+    def test_raw_input_change_or_missing_domain_never_publishes_or_changes_old_generation(self):
+        original = self.old_database.read_bytes()
+        self.new[0]['evidence']['originalInputs']['description'] = 'different evidence'
+        self.write_run(self.run, self.new)
+        with self.assertRaisesRegex(ValueError, 'original recording evidence'):
+            self.refresh()
+        self.assertFalse(self.database.exists())
+        self.assertEqual(self.old_database.read_bytes(), original)
+        # A new target can never silently turn missing evidence into a retraction.
+        self.database = self.root / 'other.sqlite3'
+        (self.run / 'people/000.jsonl.gz').unlink()
+        with self.assertRaisesRegex(ValueError, 'Missing source people'):
+            self.refresh()
+        self.assertFalse(self.database.exists())
+
+    def test_atomic_checkpoint_resume_and_same_input_pins(self):
+        self.write_run(self.run, self.new, split=True)
+        original = SourceDirectoryRefresh._check_space
+        def stop_after_one(refresh):
+            original(refresh)
+            if refresh.staging.exists():
+                with closing(sqlite3.connect(refresh.staging)) as db, db:
+                    if db.execute("SELECT 1 FROM sqlite_master WHERE name='refresh_done'").fetchone() and db.execute('SELECT count(*) FROM refresh_done').fetchone()[0] == 1:
+                        raise RuntimeError('fixture pause')
+        with patch.object(SourceDirectoryRefresh, '_check_space', stop_after_one):
+            with self.assertRaisesRegex(RuntimeError, 'fixture pause'):
+                self.refresh()
+        self.assertFalse(self.database.exists())
+        summary = self.refresh()
+        self.assertEqual((summary['sources'], summary['keptCredits'], summary['insertedCredits']), (2, 1, 1))
+        self.assertFalse(self.database.with_name(self.database.name + '.building').exists())
+
+    def test_alias_removal_and_empty_credit_are_valid_complete_latest_retractions(self):
+        self.new[1]['proposal']['credits'] = []
+        self.write_run(self.run, self.new)
+        # A replay's latest empty proposal must replace earlier people observations.
+        with gzip.open(self.run / 'people/001.jsonl.gz', 'wt') as stream:
+            stream.write(json.dumps(dict(self.people(self.new[0]), proposal=dict(people=[]), evidence=dict(originalInputs=self.raw, sourceActorAliases=dict(assertions=[])))) + '\n')
+        summary = self.refresh()
+        self.assertEqual((summary['keptCredits'], summary['removedCredits'], summary['insertedCredits']), (1, 1, 0))
+        directory = PeopleDirectory(self.database, 'http://files.test', 'http://core.test')
+        self.assertEqual(directory.stats()['sourceActors'], 1)
+        self.assertEqual(directory.detail(group_id(name_key('Alex')), {})['sourceObservations'][0]['source_uuid'], 'two')
+
+    def test_changed_actor_facts_or_model_basis_do_not_reuse_credit_identity(self):
+        self.new[0]['evidence']['creditExtraction']['credits'][0]['actorFacts']['contacts'] = [dict(value='new@example.test')]
+        self.write_run(self.run, self.new)
+        summary = self.refresh()
+        self.assertEqual(summary['keptCredits'], 0)
+        with closing(sqlite3.connect(self.database)) as db, db:
+            self.assertEqual(db.execute('SELECT count(*) FROM context_relationships').fetchone()[0], 0)
+
+    def test_latest_replay_success_replaces_failure_but_latest_failure_blocks_publication(self):
+        # Replay order is physical chunk/line order; failed historical rows are
+        # retained evidence, not the surviving logical result.
+        for domain in ("people", "credits"):
+            path = self.run / domain / '000.jsonl.gz'
+            path.rename(path.with_name('001.jsonl.gz'))
+            row = self.people(self.new[0]) if domain == 'people' else self.new[0]
+            with gzip.open(path, 'wt') as stream:
+                stream.write(json.dumps(dict(row, outcome='failed', proposal=None)) + '\n')
+        self.assertEqual(self.refresh()['sources'], 2)
+        self.database = self.root / 'failed.sqlite3'
+        with gzip.open(self.run / 'credits/002.jsonl.gz', 'wt') as stream:
+            stream.write(json.dumps(dict(self.new[0], outcome='failed', proposal=None)) + '\n')
+        with self.assertRaisesRegex(ValueError, 'Latest failed'):
+            self.refresh()
+        self.assertFalse(self.database.exists())
+
+    def test_resume_rejects_changed_inputs_and_finalization_can_resume_without_replacement(self):
+        original_finish = SourceDirectoryRefresh._finish
+        def pause_after_finish(refresh, db, state, manifest):
+            original_finish(refresh, db, state, manifest)
+            raise RuntimeError('fixture finalization pause')
+        with patch.object(SourceDirectoryRefresh, '_finish', pause_after_finish):
+            with self.assertRaisesRegex(RuntimeError, 'fixture finalization pause'):
+                self.refresh()
+        self.assertFalse(self.database.exists())
+        summary = self.refresh()
+        self.assertEqual((summary['sources'], summary['keptCredits']), (2, 1))
+        self.database = self.root / 'mismatch.sqlite3'
+        with patch.object(SourceDirectoryRefresh, '_finish', pause_after_finish):
+            with self.assertRaisesRegex(RuntimeError, 'fixture finalization pause'):
+                self.refresh()
+        with gzip.open(self.run / 'people/000.jsonl.gz', 'at') as stream:
+            stream.write('{}\n')
+        with self.assertRaisesRegex(ValueError, 'Resume inputs differ'):
+            self.refresh()
+        self.assertFalse(self.database.exists())
+
+    def test_changed_producer_keys_preserve_unique_witness_but_duplicate_new_witnesses_do_not(self):
+        # Identity is the exact witnessed occurrence, not a freshly generated
+        # adapter key. Historical DB keys and context inputs remain untouched.
+        self.new[0]['proposal']['credits'][0]['entityKey'] = 'new-producer-key'
+        self.new[0]['proposal']['credits'][0]['personEntityKey'] = 'new-person-key'
+        self.write_run(self.run, self.new)
+        self.assertEqual(self.refresh()['keptCredits'], 1)
+        with closing(sqlite3.connect(self.database)) as db:
+            self.assertEqual(db.execute("SELECT credit_key,person_key FROM credits WHERE id=?", (self.old_ids['one'],)).fetchone(), ('credit:one', 'person:one'))
+        self.database = self.root / 'ambiguous.sqlite3'
+        self.new[0]['proposal']['credits'].append(dict(self.new[0]['proposal']['credits'][0]))
+        self.write_run(self.run, self.new)
+        self.assertEqual(self.refresh()['keptCredits'], 0)
+        with closing(sqlite3.connect(self.database)) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM context_relationships').fetchone()[0], 0)
+
+    def test_credit_id_high_water_mark_survives_multiple_generations(self):
+        self.new[1]['proposal']['credits'] = []
+        self.write_run(self.run, self.new)
+        self.refresh()
+        second_database = self.database
+        self.old_database = second_database
+        self.database = self.root / 'third.sqlite3'
+        self.run = self.root / 'third-run'
+        self.new[1] = self.outcome('two', 'artist-b', 'Later person')
+        self.write_run(self.run, self.new)
+        self.refresh()
+        with closing(sqlite3.connect(self.database)) as db:
+            self.assertGreater(db.execute("SELECT id FROM credits WHERE source_uuid='two'").fetchone()[0], self.old_ids['two'])
+
+    def test_historical_null_credit_key_is_preserved_without_relabeling(self):
+        with closing(sqlite3.connect(self.old_database)) as db, db:
+            db.execute("UPDATE credits SET credit_key=NULL WHERE source_uuid='one'")
+        self.assertEqual(self.refresh()['keptCredits'], 1)
+        with closing(sqlite3.connect(self.database)) as db:
+            self.assertEqual(db.execute("SELECT id,credit_key FROM credits WHERE source_uuid='one'").fetchone(), (self.old_ids['one'], None))
+            self.assertEqual(db.execute("SELECT id FROM context_relationships").fetchall(), [('keep',)])
+
+    def test_cli_requires_seal_and_budget_pause_is_not_publication(self):
+        import subprocess
+        command = [sys.executable, str(Path(__file__).with_name('people_directory.py')), 'refresh-sources',
+                   '--run', str(self.run), '--source-database', str(self.old_database), '--database', str(self.database),
+                   '--minimum-free-bytes', '0']
+        failed = subprocess.run(command, capture_output=True, text=True)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn('Seal context attachment', failed.stderr)
+        self.assertFalse(self.database.exists())
+        failed = subprocess.run(command + ['--context-sealed', '--maximum-bytes', '1'], capture_output=True, text=True)
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn('combined run and new-generation', failed.stderr)
+        self.assertFalse(self.database.exists())
+        completed = subprocess.run(command + ['--context-sealed'], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout.splitlines()[-1])['sources'], 2)
 
 if __name__ == "__main__":
     unittest.main()
