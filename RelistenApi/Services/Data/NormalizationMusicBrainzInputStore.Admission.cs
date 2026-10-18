@@ -27,6 +27,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
             async (c, t) =>
             {
                 var gate = await LockGate(c, t, ct);
+                var clock = new MusicBrainzDispatchClock(timeProvider ?? TimeProvider.System);
                 var now = await DatabaseNow(c, t, ct);
                 await ExpireUnsavedOwner(c, t, gate, now, ct);
                 gate = await LockGate(c, t, ct);
@@ -115,7 +116,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
                     ct
                 );
                 await SavePendingTime(c, t, command, dispatch.LeaseUntil.UtcDateTime, ct);
-                return new(await ReadAcquisition(c, t, command, ct), dispatch);
+                return new(await ReadAcquisition(c, t, command, ct), dispatch, Clock: clock);
             },
             ct
         );

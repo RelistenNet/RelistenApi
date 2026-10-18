@@ -148,10 +148,11 @@ internal static class MusicBrainzHttpPolicy
         if (
             response.BodyComplete != (response.Body != null)
             || response.Body?.Length > MusicBrainzAcquisitionLimits.MaximumResponseBytes
+            || response.PreparationElapsed < TimeSpan.Zero
         )
         {
             throw new ArgumentException(
-                "A complete bounded response body or an explicit missing body is required.",
+                "A complete bounded response body or an explicit missing body and nonnegative timing are required.",
                 nameof(response)
             );
         }
@@ -186,40 +187,69 @@ internal static class MusicBrainzHttpPolicy
         IEnumerable<KeyValuePair<string, IEnumerable<string>>> headers
     )
     {
-        var now = DateTime.UtcNow;
-        DateTime? latest = null;
-        string? selected = null;
+        long largestDelta = -1;
+        DateTime? latestDate = null;
+        string? deltaHeader = null;
+        string? dateHeader = null;
         foreach (
             var value in headers
                 .Where(pair => pair.Key.Equals("Retry-After", StringComparison.OrdinalIgnoreCase))
                 .SelectMany(pair => pair.Value)
         )
         {
-            // RFC date/delta forms fit comfortably within this bound. Do not copy a hostile
-            // oversized header merely because ordinary receipt metadata was already rejected.
+            // Preserve at most one bounded value of each form. Their relative deadlines can
+            // only be compared once the receipt transaction supplies the database clock.
+            if (value.Length > 256)
+            {
+                continue;
+            }
             if (
-                value.Length <= 256
-                && RetryAt(value, now) is { } retryAt
-                && (latest == null || retryAt > latest)
+                long.TryParse(
+                    value,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out var seconds
+                )
+                && seconds >= 0
             )
             {
-                latest = retryAt;
-                selected = value;
+                if (seconds > largestDelta)
+                {
+                    largestDelta = seconds;
+                    deltaHeader = value;
+                }
+            }
+            else if (
+                RetryAt(value, DateTime.UnixEpoch) is { } date
+                && (latestDate == null || date > latestDate)
+            )
+            {
+                latestDate = date;
+                dateHeader = value;
             }
         }
-        return selected == null
+        var selected = new List<string>(2);
+        if (deltaHeader != null)
+        {
+            selected.Add(deltaHeader);
+        }
+        if (dateHeader != null)
+        {
+            selected.Add(dateHeader);
+        }
+        return selected.Count == 0
             ? new Dictionary<string, string[]>()
             : new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
             {
-                ["Retry-After"] = [selected],
+                ["Retry-After"] = selected.ToArray(),
             };
     }
 
     internal static DateTime ResponseCooldown(MusicBrainzHttpResponse response, DateTime now)
     {
-        var completed = response.CompletedAt.UtcDateTime;
-        var notBefore =
-            (completed > now ? completed : now) + MusicBrainzAcquisitionLimits.MinimumGap;
+        // Admission and backoff use the database clock. CompletedAt is the sender's original
+        // wall time and can be ahead of, or behind, this database.
+        var notBefore = now + MusicBrainzAcquisitionLimits.MinimumGap;
         foreach (
             var value in response
                 .Headers.Where(pair =>

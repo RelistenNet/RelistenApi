@@ -117,7 +117,7 @@ public sealed partial class NormalizationMusicBrainzInputService
             return step.Acquisition;
         }
 
-        var response = await FetchOnceAsync(step.Dispatch, ct);
+        var response = await FetchOnceAsync(step.Dispatch, step.Clock!, ct);
         // Once HTTP has run, bounded receipt persistence is independent of caller cancellation.
         // If this fails, the committed dispatch remains uncertain until automatic lease recovery.
         using var persist = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -175,7 +175,7 @@ public sealed partial class NormalizationMusicBrainzInputService
                     MusicBrainzHttpPolicy.Header(response, "Content-Type")!,
                     dispatch.Profile.CaptureVersion,
                     dispatch.ExpectedGeneration,
-                    response.CompletedAt,
+                    saved.ObservedAt,
                     MusicBrainzHttpPolicy.Header(response, "ETag")
                         ?? MusicBrainzHttpPolicy.Header(response, "Last-Modified")
                 ),

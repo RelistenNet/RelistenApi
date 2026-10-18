@@ -16,18 +16,19 @@ public sealed partial class NormalizationMusicBrainzInputService
 {
     private async Task<MusicBrainzHttpResponse> FetchOnceAsync(
         MusicBrainzDispatch dispatch,
+        MusicBrainzDispatchClock clock,
         CancellationToken ct
     )
     {
         var headers = (IReadOnlyDictionary<string, string[]>)new Dictionary<string, string[]>();
         int? status = null;
         string? finalUrl = null;
-        if (DateTimeOffset.UtcNow >= dispatch.SendDeadline)
+        if (clock.Elapsed >= dispatch.SendDeadline - dispatch.PreparedAt)
         {
             return Failure("send_deadline_elapsed");
         }
 
-        var remaining = dispatch.HttpDeadline - DateTimeOffset.UtcNow;
+        var remaining = dispatch.HttpDeadline - dispatch.PreparedAt - clock.Elapsed;
         if (remaining <= TimeSpan.Zero)
         {
             return Failure("request_timeout");
@@ -86,7 +87,15 @@ public sealed partial class NormalizationMusicBrainzInputService
                 await body.WriteAsync(buffer.AsMemory(0, read), deadline.Token);
             }
             return BoundMetadata(
-                new(status, finalUrl, headers, body.ToArray(), true, DateTimeOffset.UtcNow)
+                new(
+                    status,
+                    finalUrl,
+                    headers,
+                    body.ToArray(),
+                    true,
+                    clock.UtcNow,
+                    PreparationElapsed: clock.Elapsed
+                )
             );
         }
         catch (OperationCanceledException)
@@ -100,7 +109,7 @@ public sealed partial class NormalizationMusicBrainzInputService
 
         MusicBrainzHttpResponse Failure(string reason) =>
             BoundMetadata(
-                new(status, finalUrl, headers, null, false, DateTimeOffset.UtcNow, reason)
+                new(status, finalUrl, headers, null, false, clock.UtcNow, reason, clock.Elapsed)
             );
 
         static MusicBrainzHttpResponse BoundMetadata(MusicBrainzHttpResponse response) =>

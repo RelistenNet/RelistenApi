@@ -68,7 +68,11 @@ public sealed record MusicBrainzAcquisition(
     IReadOnlyList<MusicBrainzAcquisitionAttempt> Attempts
 );
 
-/// <summary>HTTP facts for one attempt; body is absent when an exact complete representation was unavailable.</summary>
+/// <summary>
+/// HTTP facts for one attempt; body is absent when an exact complete representation was unavailable.
+/// CompletedAt retains the sender's wall clock. PreparationElapsed measures monotonic time from
+/// the database preparation sample and, when present, supplies deadline eligibility instead.
+/// </summary>
 public sealed record MusicBrainzHttpResponse(
     int? StatusCode,
     string? FinalUrl,
@@ -76,15 +80,26 @@ public sealed record MusicBrainzHttpResponse(
     byte[]? Body,
     bool BodyComplete,
     DateTimeOffset CompletedAt,
-    string? Reason = null
+    string? Reason = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        TimeSpan? PreparationElapsed = null
 );
 
+/// <summary>
+/// Retains the original HTTP clock separately from the database receipt clock. Older receipts
+/// without monotonic timing keep their original capture timestamp during recovery.
+/// </summary>
 public sealed record MusicBrainzSavedResponse(
     Guid AttemptUuid,
     MusicBrainzHttpResponse Response,
     string? Sha256,
-    bool Eligible
-);
+    bool Eligible,
+    DateTimeOffset SavedAt
+)
+{
+    public DateTimeOffset ObservedAt =>
+        Response.PreparationElapsed.HasValue ? SavedAt : Response.CompletedAt;
+}
 
 /// <summary>Only bounded HTTP policy is configurable; supported origins and profiles are fixed.</summary>
 public sealed class MusicBrainzAcquisitionOptions
@@ -127,8 +142,22 @@ internal sealed record MusicBrainzDispatch(
 internal sealed record MusicBrainzAcquisitionStep(
     MusicBrainzCommandSnapshot Acquisition,
     MusicBrainzDispatch? Dispatch = null,
-    MusicBrainzSavedResponse? SavedResponse = null
+    MusicBrainzSavedResponse? SavedResponse = null,
+    MusicBrainzDispatchClock? Clock = null
 );
+
+/// <summary>
+/// Exists only in the call that creates a dispatch. Sampling before the database clock query
+/// makes query and commit delays consume the deadline conservatively. Replay cannot recreate
+/// this authority to send, and host wall-clock changes cannot extend the HTTP window.
+/// </summary>
+internal sealed class MusicBrainzDispatchClock(TimeProvider provider)
+{
+    private readonly long startedAt = provider.GetTimestamp();
+
+    internal TimeSpan Elapsed => provider.GetElapsedTime(startedAt);
+    internal DateTimeOffset UtcNow => provider.GetUtcNow();
+}
 
 /// <summary>The provider protocol state is shared; typed public projections never reinterpret another command kind.</summary>
 internal sealed record MusicBrainzCommandSnapshot(

@@ -55,11 +55,15 @@ public sealed partial class NormalizationMusicBrainzInputStore
                     gate.AttemptUuid == dispatch.AttemptUuid
                     && gate.Token == dispatch.Token
                     && gate.LeaseUntil > now
-                    && frozen.CompletedAt <= dispatch.HttpDeadline
-                    && frozen.CompletedAt >= dispatch.PreparedAt
-                    && frozen.CompletedAt.UtcDateTime <= now;
+                    && (
+                        frozen.PreparationElapsed is { } elapsed
+                            ? elapsed <= dispatch.HttpDeadline - dispatch.PreparedAt
+                            : frozen.CompletedAt <= dispatch.HttpDeadline
+                                && frozen.CompletedAt >= dispatch.PreparedAt
+                                && frozen.CompletedAt.UtcDateTime <= now
+                    );
                 var notBefore = MusicBrainzHttpPolicy.ResponseCooldown(frozen, now);
-                await c.ExecuteAsync(
+                var savedAt = await c.ExecuteScalarAsync<DateTime>(
                     new CommandDefinition(
                         """
                         INSERT INTO normalization.musicbrainz_responses(attempt_uuid,response,body,sha256,eligible)
@@ -67,7 +71,8 @@ public sealed partial class NormalizationMusicBrainzInputStore
                         UPDATE normalization.musicbrainz_attempts SET phase='ResponseSaved'
                         WHERE attempt_uuid=@AttemptUuid AND phase IN ('DispatchStarted','Uncertain','Retryable');
                         UPDATE normalization.musicbrainz_gate SET not_before=greatest(not_before,@notBefore)
-                        WHERE singleton
+                        WHERE singleton;
+                        SELECT saved_at FROM normalization.musicbrainz_responses WHERE attempt_uuid=@AttemptUuid
                         """,
                         new
                         {
@@ -85,7 +90,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
                 // Cooldown and immutable eligibility commit before any caller starts evidence capture.
                 // A late sender can extend backoff, but only its matching token can release ownership.
                 await ReleaseGate(c, t, dispatch, ct);
-                return new(dispatch.AttemptUuid, frozen, hash, eligible);
+                return new(dispatch.AttemptUuid, frozen, hash, eligible, new(savedAt));
             },
             ct
         );
@@ -227,7 +232,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
         var row = await c.QuerySingleOrDefaultAsync<ResponseRow>(
             new CommandDefinition(
                 """
-                SELECT response::text AS "ResponseJson",body AS "Body",sha256 AS "Sha256",eligible AS "Eligible"
+                SELECT response::text AS "ResponseJson",body AS "Body",sha256 AS "Sha256",eligible AS "Eligible",saved_at AS "SavedAt"
                 FROM normalization.musicbrainz_responses WHERE attempt_uuid=@attemptUuid
                 """,
                 new { attemptUuid },
@@ -244,7 +249,8 @@ public sealed partial class NormalizationMusicBrainzInputStore
                     Body = row.Body,
                 },
                 row.Sha256,
-                row.Eligible
+                row.Eligible,
+                new(row.SavedAt)
             );
     }
 
@@ -298,7 +304,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
                     saved.Sha256,
                     mediaType,
                     providerRevision,
-                    observedAt = Microseconds(saved.Response.CompletedAt),
+                    observedAt = Microseconds(saved.ObservedAt),
                 },
                 t,
                 cancellationToken: ct
@@ -362,6 +368,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
         public byte[]? Body { get; init; }
         public string? Sha256 { get; init; }
         public bool Eligible { get; init; }
+        public DateTime SavedAt { get; init; }
     }
 
     private sealed class CaptureRow

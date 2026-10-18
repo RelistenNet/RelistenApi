@@ -16,7 +16,10 @@ namespace Relisten.Data;
 /// Every mutation locks the gate before command/attempt rows. No transaction performs HTTP or
 /// calls EvidenceService: response retention and evidence capture commit independently.
 /// </summary>
-public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
+public sealed partial class NormalizationMusicBrainzInputStore(
+    DbService db,
+    TimeProvider? timeProvider = null
+)
 {
     internal async Task<MusicBrainzAcquisition> GetOrCreateAsync(
         Guid commandUuid,

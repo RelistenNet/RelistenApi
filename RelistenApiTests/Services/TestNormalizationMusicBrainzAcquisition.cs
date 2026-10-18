@@ -33,8 +33,10 @@ public sealed class TestNormalizationMusicBrainzAcquisition
     }
 
     [SetUp]
-    public Task ResetAdmission() =>
-        fixture.Db.WithWriteConnection(c =>
+    public Task ResetAdmission()
+    {
+        store = new(fixture.Db);
+        return fixture.Db.WithWriteConnection(c =>
             c.ExecuteAsync(
                 """
                 UPDATE normalization.musicbrainz_gate
@@ -43,6 +45,7 @@ public sealed class TestNormalizationMusicBrainzAcquisition
                 """
             )
         );
+    }
 
     [TearDown]
     public void DisposeClients()
@@ -127,6 +130,181 @@ public sealed class TestNormalizationMusicBrainzAcquisition
             decoded.MusicBrainzArtists!.Single().Artist.Type!.Value.Should().Be("Group");
         }
         (await DomainCounts()).Should().Be(before);
+    }
+
+    [TestCase(-12)]
+    [TestCase(12)]
+    public async Task HostWallClockSkewDoesNotRejectTimelyHttpOrCreateFutureCacheEvidence(int hours)
+    {
+        var clock = new AcquisitionClock(TimeSpan.FromHours(hours));
+        store = new(fixture.Db, clock);
+        var lookup = Work();
+        var upstream = Success(lookup);
+        var service = Service(upstream);
+
+        var acquired = await service.AcquireAsync(Guid.NewGuid(), lookup.Request);
+
+        acquired.State.Should().Be(MusicBrainzAcquisitionState.Completed);
+        acquired.Result!.Disposition.Should().Be(MusicBrainzAcquisitionDisposition.Captured);
+        var saved = (await store.GetResponseAsync(acquired.Result.FetchUuid!.Value))!;
+        saved.Eligible.Should().BeTrue();
+        saved.Response.PreparationElapsed.Should().Be(TimeSpan.Zero);
+        (saved.Response.CompletedAt - saved.SavedAt)
+            .Should()
+            .BeCloseTo(TimeSpan.FromHours(hours), TimeSpan.FromSeconds(5));
+        var captured = (await evidence.GetCaptureAsync(saved.AttemptUuid))!;
+        captured.Fetch.ObservedAt.Should().Be(saved.SavedAt.UtcDateTime);
+        captured.Fetch.ObservedAt.Should().BeOnOrBefore((await Now()).UtcDateTime);
+
+        var cached = await service.AcquireAsync(
+            Guid.NewGuid(),
+            lookup.Request with
+            {
+                CacheMode = MusicBrainzCacheMode.ReuseFresh,
+                MaximumCacheAge = TimeSpan.FromMinutes(1),
+            }
+        );
+
+        cached.Result!.Disposition.Should().Be(MusicBrainzAcquisitionDisposition.Cached);
+        cached.Result.FetchUuid.Should().Be(saved.AttemptUuid);
+        upstream.Calls.Should().Be(1);
+        var peer = Work();
+        var next = await Service(Success(peer)).AcquireAsync(Guid.NewGuid(), peer.Request);
+        next.State.Should().Be(MusicBrainzAcquisitionState.Pending);
+        next.NotBefore.Should().BeOnOrBefore(saved.SavedAt.AddSeconds(2));
+    }
+
+    [Test]
+    public async Task MonotonicLateCompletionCannotCaptureEvenWhenTheHostWallClockLooksTimely()
+    {
+        var clock = new AcquisitionClock(TimeSpan.Zero);
+        store = new(fixture.Db, clock);
+        var lookup = Work();
+        var upstream = new StubHandler(
+            (_, _) =>
+            {
+                clock.Advance(TimeSpan.FromSeconds(36));
+                return Task.FromResult(Response(lookup.Body));
+            }
+        );
+
+        var acquired = await Service(upstream).AcquireAsync(Guid.NewGuid(), lookup.Request);
+
+        acquired.State.Should().Be(MusicBrainzAcquisitionState.Pending);
+        acquired.Attempts.Single().Reason.Should().Be("admission_lost");
+        var saved = (await store.GetResponseAsync(acquired.Attempts.Single().AttemptUuid))!;
+        saved.Eligible.Should().BeFalse();
+        saved.Response.PreparationElapsed.Should().Be(TimeSpan.FromSeconds(36));
+        saved.Response.CompletedAt.Should().BeBefore(acquired.Attempts.Single().HttpDeadline);
+        (await evidence.GetCurrentInputAsync(lookup.Profile.Resource)).Should().BeNull();
+        upstream.Calls.Should().Be(1);
+    }
+
+    [Test]
+    public async Task TimelyCompletionCanPersistAfterTheHttpDeadlineWhileItsLeaseStillBelongsToIt()
+    {
+        var lookup = Work();
+        var command = Guid.NewGuid();
+        await store.GetOrCreateAsync(
+            command,
+            lookup.Request,
+            lookup.Profile,
+            NormalizationMusicBrainzInputService.Version
+        );
+        var options = new MusicBrainzAcquisitionOptions
+        {
+            UserAgent = UserAgent,
+            SendWindow = TimeSpan.FromMilliseconds(1),
+            RequestTimeout = TimeSpan.FromMilliseconds(1),
+            LeaseDuration = TimeSpan.FromSeconds(6),
+        };
+        var dispatch = (await store.AdvanceAsync(command, options)).Dispatch!;
+        await Task.Delay(TimeSpan.FromMilliseconds(20));
+        (await Now()).Should().BeAfter(dispatch.HttpDeadline);
+        var response = (await SavedResponse(dispatch, lookup.Body)) with
+        {
+            PreparationElapsed = TimeSpan.FromMilliseconds(1),
+        };
+
+        var saved = await store.SaveResponseAsync(dispatch, response);
+
+        saved.Eligible.Should().BeTrue();
+        saved.SavedAt.Should().BeAfter(dispatch.HttpDeadline);
+        var upstream = Success(lookup);
+        var completed = await Service(upstream).ResumeAsync(command);
+        completed.Result!.Disposition.Should().Be(MusicBrainzAcquisitionDisposition.Captured);
+        (await evidence.GetCaptureAsync(saved.AttemptUuid))!
+            .Fetch.ObservedAt.Should()
+            .Be(saved.SavedAt.UtcDateTime);
+        upstream.Calls.Should().Be(0);
+    }
+
+    [Test]
+    public async Task TimedReceiptCannotReleaseOrCaptureWithAReplacedOwnershipToken()
+    {
+        var lookup = Work();
+        var dispatch = await Dispatch(lookup);
+        var replacementToken = Guid.NewGuid();
+        await fixture.Db.WithWriteConnection(c =>
+            c.ExecuteAsync(
+                "UPDATE normalization.musicbrainz_gate SET token=@replacementToken WHERE singleton",
+                new { replacementToken }
+            )
+        );
+        var response = (await SavedResponse(dispatch, lookup.Body)) with
+        {
+            PreparationElapsed = TimeSpan.Zero,
+        };
+
+        var saved = await store.SaveResponseAsync(dispatch, response);
+
+        saved.Eligible.Should().BeFalse();
+        (
+            await fixture.Db.WithWriteConnection(c =>
+                c.ExecuteScalarAsync<Guid>(
+                    "SELECT token FROM normalization.musicbrainz_gate WHERE singleton"
+                )
+            )
+        )
+            .Should()
+            .Be(replacementToken);
+        var resumed = await Service(Success(lookup)).ResumeAsync(dispatch.CommandUuid);
+        resumed.State.Should().Be(MusicBrainzAcquisitionState.Pending);
+        resumed.Attempts.Single().Reason.Should().Be("admission_lost");
+        (await evidence.GetCurrentInputAsync(lookup.Profile.Resource)).Should().BeNull();
+    }
+
+    [Test]
+    public async Task InvalidTimingCannotBeRetainedAndReplayCannotReplaceTheOriginalClockProof()
+    {
+        var lookup = Work();
+        var dispatch = await Dispatch(lookup);
+        var response = (await SavedResponse(dispatch, lookup.Body)) with
+        {
+            PreparationElapsed = TimeSpan.Zero,
+        };
+        Func<Task> negative = () =>
+            store.SaveResponseAsync(
+                dispatch,
+                response with
+                {
+                    PreparationElapsed = TimeSpan.FromTicks(-1),
+                }
+            );
+        await negative.Should().ThrowAsync<ArgumentException>();
+        (await store.GetResponseAsync(dispatch.AttemptUuid)).Should().BeNull();
+
+        var saved = await store.SaveResponseAsync(dispatch, response);
+        Func<Task> overwrite = () =>
+            store.SaveResponseAsync(
+                dispatch,
+                response with
+                {
+                    PreparationElapsed = TimeSpan.FromMilliseconds(1),
+                }
+            );
+        await overwrite.Should().ThrowAsync<NormalizationConflictException>();
+        (await store.GetResponseAsync(dispatch.AttemptUuid)).Should().BeEquivalentTo(saved);
     }
 
     [Test]
@@ -371,6 +549,49 @@ public sealed class TestNormalizationMusicBrainzAcquisition
         (await evidence.GetCurrentInputAsync(lookup.Profile.Resource)).Should().BeNull();
     }
 
+    [TestCase(12, 60)]
+    [TestCase(-12, 180)]
+    public async Task OversizedMetadataRetainsBothBackoffFormsUntilTheDatabaseClockCanCompareThem(
+        int hostOffsetHours,
+        int deltaSeconds
+    )
+    {
+        store = new(fixture.Db, new AcquisitionClock(TimeSpan.FromHours(hostOffsetHours)));
+        var lookup = Work();
+        var started = await Now();
+        var retryDate = DateTimeOffset.FromUnixTimeSeconds(
+            started.AddSeconds(120).ToUnixTimeSeconds()
+        );
+        var dateHeader = retryDate.ToString("r");
+        var deltaHeader = deltaSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var upstream = new StubHandler(
+            (_, _) =>
+            {
+                var response = Response(lookup.Body, HttpStatusCode.ServiceUnavailable);
+                response.Headers.TryAddWithoutValidation("Retry-After", [dateHeader, deltaHeader]);
+                response.Headers.TryAddWithoutValidation("ETag", new string('x', 70 * 1024));
+                return Task.FromResult(response);
+            }
+        );
+        var service = Service(upstream);
+
+        var failed = await service.AcquireAsync(Guid.NewGuid(), lookup.Request);
+
+        failed.Result!.Reason.Should().Be("response_metadata_too_large");
+        var saved = (await store.GetResponseAsync(failed.Attempts.Single().AttemptUuid))!;
+        saved
+            .Response.Headers["Retry-After"]
+            .Should()
+            .BeEquivalentTo(new[] { dateHeader, deltaHeader });
+        var blocked = await service.AcquireAsync(Guid.NewGuid(), Work().Request);
+        blocked.State.Should().Be(MusicBrainzAcquisitionState.Pending);
+        var earliest = started.AddSeconds(deltaSeconds);
+        var latest = saved.SavedAt.AddSeconds(deltaSeconds);
+        blocked.NotBefore.Should().BeOnOrAfter(earliest > retryDate ? earliest : retryDate);
+        blocked.NotBefore.Should().BeOnOrBefore(latest > retryDate ? latest : retryDate);
+        upstream.Calls.Should().Be(1);
+    }
+
     [Test]
     public async Task ConcurrentResumeAcrossServiceInstancesCommitsOnlyOneDispatchAndSend()
     {
@@ -475,18 +696,31 @@ public sealed class TestNormalizationMusicBrainzAcquisition
         artistHandler.Calls.Should().Be(1);
     }
 
-    [TestCase(false, false)]
-    [TestCase(false, true)]
-    [TestCase(true, true)]
+    [TestCase(false, false, false)]
+    [TestCase(false, true, false)]
+    [TestCase(true, true, false)]
+    [TestCase(false, false, true)]
+    [TestCase(false, true, true)]
+    [TestCase(true, true, true)]
     public async Task SavedEligibleResponsesRecoverWithoutHttpEvenAfterExpiryOrCaptureCommit(
         bool captureCommitted,
-        bool expireAdmission
+        bool expireAdmission,
+        bool monotonicTiming
     )
     {
         var lookup = Work();
         var dispatch = await Dispatch(lookup);
         var response = await SavedResponse(dispatch, lookup.Body);
-        (await store.SaveResponseAsync(dispatch, response)).Eligible.Should().BeTrue();
+        if (monotonicTiming)
+        {
+            response = response with
+            {
+                PreparationElapsed = TimeSpan.Zero,
+                CompletedAt = response.CompletedAt.AddHours(12),
+            };
+        }
+        var saved = await store.SaveResponseAsync(dispatch, response);
+        saved.Eligible.Should().BeTrue();
         NormalizationCaptureResult? committed = null;
         if (captureCommitted)
         {
@@ -494,7 +728,7 @@ public sealed class TestNormalizationMusicBrainzAcquisition
                 lookup,
                 dispatch.AttemptUuid,
                 dispatch.ExpectedGeneration,
-                response.CompletedAt
+                saved.ObservedAt
             );
         }
         if (expireAdmission)
@@ -892,6 +1126,21 @@ public sealed class TestNormalizationMusicBrainzAcquisition
             .Revision.Uuid.Should()
             .Be(capture.Revision.Uuid);
         upstream.Calls.Should().Be(1);
+    }
+
+    // Wall time and elapsed time vary independently so clock-skew tests never need to
+    // change the machine clock or make a deadline depend on scheduler speed.
+    private sealed class AcquisitionClock(TimeSpan wallOffset) : TimeProvider
+    {
+        private long ticks;
+
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+
+        public override long GetTimestamp() => ticks;
+
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UtcNow + wallOffset;
+
+        public void Advance(TimeSpan elapsed) => ticks += elapsed.Ticks;
     }
 
     private NormalizationMusicBrainzInputService Service(StubHandler upstream)
