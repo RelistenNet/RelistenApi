@@ -166,6 +166,7 @@ internal static class LocalTestDatabase
             Migrations.AddCompositionResolution.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(Migrations.AddVenueResolution.SchemaSql, commandTimeout: 120);
     }
 
     public static async Task DropAsync()

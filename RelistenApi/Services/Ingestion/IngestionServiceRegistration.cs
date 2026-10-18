@@ -37,6 +37,10 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationCompositionResolutionStore>();
         services.AddScoped<NormalizationCompositionResolutionProcessor>();
         services.AddScoped<CompositionResolutionPolicyService>();
+        services.AddScoped<NormalizationVenueResolutionStore>();
+        services.AddScoped<NormalizationVenueResolutionProcessor>();
+        services.AddScoped<NormalizationVenueSourceService>();
+        services.AddScoped<VenueResolutionPolicyService>();
         services.AddScoped<PeopleAcceptanceApplicationStore>();
         services.AddScoped<PeopleResolutionPolicyService>();
         services.AddScoped<NormalizationPeopleResolutionApplier>();

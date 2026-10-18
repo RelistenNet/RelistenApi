@@ -25,128 +25,173 @@ public sealed partial class NormalizedVenueService(DbService db, NormalizationWo
     ) =>
         work.TryPublishAsync(
             workUuid,
-            async (c, t, ct) =>
-            {
-                await c.ExecuteAsync(
+            (c, t, ct) => ApplyVenuePublicationAsync(c, t, workUuid, publication, ct),
+            cancellationToken,
+            candidateWriteScopes: IdentityCandidateWriteScopes
+        );
+
+    private static async Task ApplyVenuePublicationAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        Guid workUuid,
+        VenuePublication publication,
+        CancellationToken ct,
+        IReadOnlyList<NormalizedEvidenceReference>? authenticatedAcceptedEvidence = null
+    )
+    {
+        await c.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:venues:identity',0))",
+                transaction: t,
+                cancellationToken: ct
+            )
+        );
+        await ValidateVenuePublicationOwner(c, t, workUuid, publication, ct);
+        await ValidateVenuePublicationEvidenceAsync(
+            c,
+            t,
+            workUuid,
+            publication,
+            authenticatedAcceptedEvidence,
+            ct
+        );
+        var created = new HashSet<Guid>();
+        foreach (var venue in publication.Venues.OrderBy(v => v.ParentVenueUuid.HasValue))
+        {
+            if (
+                !await c.ExecuteScalarAsync<bool>(
                     new CommandDefinition(
-                        "SELECT pg_advisory_xact_lock_shared(hashtextextended('normalization:venues:identity',0))",
-                        transaction: t,
+                        "SELECT EXISTS(SELECT 1 FROM normalization.canonical_venues WHERE uuid=@Uuid)",
+                        venue,
+                        t,
                         cancellationToken: ct
                     )
+                )
+                && !publication.Names.Any(n =>
+                    n.VenueUuid == venue.Uuid
+                    && NormalizedPeopleService.NameKey(n.Wording)
+                        == NormalizedPeopleService.NameKey(venue.DisplayName)
+                )
+            )
+            {
+                throw new ArgumentException(
+                    "Automatic venue creation requires an evidenced display-name assertion."
                 );
-                await ValidateVenuePublicationOwner(c, t, workUuid, publication, ct);
-                var evidence = publication
-                    .Names.Select(n => n.Evidence)
-                    .Concat(publication.Locations.Select(l => l.Evidence))
-                    .Concat(publication.ExternalIdentities.Select(i => i.Evidence))
-                    .Concat(publication.ImportedVenues.SelectMany(a => a.Evidence))
-                    .Concat(publication.Shows.SelectMany(a => a.Evidence))
-                    .ToArray();
-                await NormalizedPeopleService.ValidatePublicationEvidenceAsync(
+            }
+            if (await InsertVenue(c, t, venue, ct))
+            {
+                created.Add(venue.Uuid);
+            }
+        }
+        var assertionChanges = await WriteNames(c, t, workUuid, publication.Names, created, ct);
+        assertionChanges += await WriteLocations(
+            c,
+            t,
+            workUuid,
+            publication.Locations,
+            created,
+            ct
+        );
+        foreach (var identity in publication.ExternalIdentities)
+        {
+            if (
+                !created.Contains(identity.VenueUuid)
+                && !await c.ExecuteScalarAsync<bool>(
+                    new CommandDefinition(
+                        "SELECT EXISTS(SELECT 1 FROM normalization.venue_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey)",
+                        identity,
+                        t,
+                        cancellationToken: ct
+                    )
+                )
+            )
+            {
+                await NormalizedPeopleService.ValidateWorkOwnerAsync(
                     c,
                     t,
                     workUuid,
                     "venues",
-                    evidence,
+                    "venue",
+                    identity.VenueUuid,
                     ct
                 );
-                var created = new HashSet<Guid>();
-                foreach (var venue in publication.Venues.OrderBy(v => v.ParentVenueUuid.HasValue))
-                {
-                    if (
-                        !await c.ExecuteScalarAsync<bool>(
-                            new CommandDefinition(
-                                "SELECT EXISTS(SELECT 1 FROM normalization.canonical_venues WHERE uuid=@Uuid)",
-                                venue,
-                                t,
-                                cancellationToken: ct
-                            )
-                        )
-                        && !publication.Names.Any(n =>
-                            n.VenueUuid == venue.Uuid
-                            && NormalizedPeopleService.NameKey(n.Wording)
-                                == NormalizedPeopleService.NameKey(venue.DisplayName)
-                        )
+            }
+            assertionChanges += await WriteExternalIdentity(c, t, identity, ct);
+        }
+        if (assertionChanges > 0)
+        {
+            var owner = await NormalizedPeopleService.ReadWorkContext(c, t, workUuid, ct);
+            if (!created.Contains(owner.EntityUuid))
+            {
+                await c.ExecuteAsync(
+                    new CommandDefinition(
+                        "UPDATE normalization.canonical_venues SET revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@uuid",
+                        new { uuid = owner.EntityUuid },
+                        t,
+                        cancellationToken: ct
                     )
-                    {
-                        throw new ArgumentException(
-                            "Automatic venue creation requires an evidenced display-name assertion."
-                        );
-                    }
-                    if (await InsertVenue(c, t, venue, ct))
-                    {
-                        created.Add(venue.Uuid);
-                    }
-                }
-                var assertionChanges = await WriteNames(
-                    c,
-                    t,
-                    workUuid,
-                    publication.Names,
-                    created,
-                    ct
                 );
-                assertionChanges += await WriteLocations(
-                    c,
-                    t,
-                    workUuid,
-                    publication.Locations,
-                    created,
-                    ct
+            }
+        }
+        foreach (var assignment in publication.ImportedVenues)
+        {
+            await WriteAutomaticAssignment(c, t, assignment, false, workUuid, ct);
+        }
+        foreach (var assignment in publication.Shows)
+        {
+            await WriteAutomaticAssignment(c, t, assignment, true, workUuid, ct);
+        }
+    }
+
+    private static async Task ValidateVenuePublicationEvidenceAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        Guid workUuid,
+        VenuePublication publication,
+        IReadOnlyList<NormalizedEvidenceReference>? authenticatedAcceptedEvidence,
+        CancellationToken ct
+    )
+    {
+        var evidence = publication
+            .Names.Select(n => n.Evidence)
+            .Concat(publication.Locations.Select(l => l.Evidence))
+            .Concat(publication.ExternalIdentities.Select(i => i.Evidence))
+            .Concat(publication.ImportedVenues.SelectMany(a => a.Evidence))
+            .Concat(publication.Shows.SelectMany(a => a.Evidence))
+            .ToArray();
+        if (authenticatedAcceptedEvidence == null)
+        {
+            await NormalizedPeopleService.ValidatePublicationEvidenceAsync(
+                c,
+                t,
+                workUuid,
+                "venues",
+                evidence,
+                ct
+            );
+        }
+        else
+        {
+            // The dedicated resolver authenticates historical accepted candidate citations
+            // through their owner clocks; they must not acquire a fabricated fresh input head.
+            var context = await NormalizedPeopleService.ReadWorkContext(c, t, workUuid, ct);
+            var sourceRevisions = context
+                .Ticket.Inputs.Select(input => input.RevisionUuid)
+                .ToHashSet();
+            if (
+                evidence.Any(citation =>
+                    !sourceRevisions.Contains(citation.InputRevisionUuid)
+                    && !authenticatedAcceptedEvidence.Contains(citation)
+                )
+            )
+            {
+                throw new NormalizationConflictException(
+                    "Venue evidence is outside its consumed source inputs and authenticated candidate facts."
                 );
-                foreach (var identity in publication.ExternalIdentities)
-                {
-                    if (
-                        !created.Contains(identity.VenueUuid)
-                        && !await c.ExecuteScalarAsync<bool>(
-                            new CommandDefinition(
-                                "SELECT EXISTS(SELECT 1 FROM normalization.venue_external_identities WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey)",
-                                identity,
-                                t,
-                                cancellationToken: ct
-                            )
-                        )
-                    )
-                    {
-                        await NormalizedPeopleService.ValidateWorkOwnerAsync(
-                            c,
-                            t,
-                            workUuid,
-                            "venues",
-                            "venue",
-                            identity.VenueUuid,
-                            ct
-                        );
-                    }
-                    assertionChanges += await WriteExternalIdentity(c, t, identity, ct);
-                }
-                if (assertionChanges > 0)
-                {
-                    var owner = await NormalizedPeopleService.ReadWorkContext(c, t, workUuid, ct);
-                    if (!created.Contains(owner.EntityUuid))
-                    {
-                        await c.ExecuteAsync(
-                            new CommandDefinition(
-                                "UPDATE normalization.canonical_venues SET revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@uuid",
-                                new { uuid = owner.EntityUuid },
-                                t,
-                                cancellationToken: ct
-                            )
-                        );
-                    }
-                }
-                foreach (var assignment in publication.ImportedVenues)
-                {
-                    await WriteAutomaticAssignment(c, t, assignment, false, workUuid, ct);
-                }
-                foreach (var assignment in publication.Shows)
-                {
-                    await WriteAutomaticAssignment(c, t, assignment, true, workUuid, ct);
-                }
-            },
-            cancellationToken,
-            candidateWriteScopes: IdentityCandidateWriteScopes
-        );
+            }
+            await NormalizedPeopleService.ValidateEvidenceAsync(c, t, evidence, ct);
+        }
+    }
 
     private static async Task<int> WriteNames(
         NpgsqlConnection c,
