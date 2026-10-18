@@ -1,0 +1,293 @@
+{
+  "schemaVersion": "local-normalization-migration-rehearsal-v1",
+  "status": "restored_and_migrated_catalog_rows_verified_api_rehearsal_pending",
+  "artifactBase": "local-dev/normalization-data/2026-10-17-normalization-rehearsal-v1",
+  "implementationCommit": "9807387",
+  "method": "Root-operated local custom pg_dump and single-transaction pg_restore with source-matched TimescaleDB version and pre/post restore; explicit worker --migrate, no host or schedules.",
+  "catalogFingerprintSql": {
+    "path": "docs/research/2026-10-17-full-normalization/sql/local-rehearsal-fingerprints.sql",
+    "sha256": "e364292b529365fc69693b32b2549f8331cb513b10a9de204149f19f52e70bce"
+  },
+  "cohorts": [
+    {
+      "cohort": "jerry",
+      "originalDatabase": "relisten_jerry_20261017",
+      "rehearsalDatabase": "relisten_normalization_jerry_20261017",
+      "timescaledbVersion": "2.28.2",
+      "originalMigration": 17,
+      "rehearsalMigration": 47,
+      "normalizationTables": 116,
+      "originalDatabaseMigrationUnchanged": true,
+      "allOriginalApplicationRowsUnchanged": true,
+      "applicationRows": {
+        "shows": {
+          "rows": 607,
+          "sha256": "a11eaf8baaf31734743b51274866b59818515da1802f4d2d1b825e1b7f116d20"
+        },
+        "artists": {
+          "rows": 268,
+          "sha256": "0a18977dd00e0d32389efdadbf6538a86e2bbc8421b03c40cf49e8f8a3fdec5d"
+        },
+        "sources": {
+          "rows": 701,
+          "sha256": "78505172c4beb5c7b02c335551731db1c230f5147e15c756e969be1a14f460b8"
+        },
+        "collections": {
+          "rows": 2,
+          "sha256": "8151170846c5e6a04281b96faeace5665c922353f78b143605b77c1f9b06e91a"
+        },
+        "source_sets": {
+          "rows": 717,
+          "sha256": "b55617e2395c51b138d29b2e594637bae7472abc261063c55a703251978c118a"
+        },
+        "source_tracks": {
+          "rows": 7826,
+          "sha256": "30c98b4cadc33464b8d230c2cd1d913fd811f8923952a01599221c943bb6371f"
+        },
+        "collection_playable_sources": {
+          "rows": 647,
+          "sha256": "9eec2df6230107f084b72a81e52a5e8b08e4c1a81d56eeaaddba374b9ac0337e"
+        }
+      },
+      "additiveColumnsExcludedFromPostMigrationLegacyHash": {},
+      "canonicalStateAfterMigration": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "repertoireSongs": 0,
+        "activePeoplePolicies": 0
+      },
+      "completeOriginalMigrationHistoryUnchanged": true,
+      "originalMigrationHistoryComparison": {
+        "before": "jerry-version-before.json",
+        "after": "jerry-source-version-history-after.json"
+      }
+    },
+    {
+      "cohort": "govt-mule",
+      "originalDatabase": "relisten_govt_mule_20261017",
+      "rehearsalDatabase": "relisten_normalization_govt_mule_20261017",
+      "timescaledbVersion": "2.19.3",
+      "originalMigration": 15,
+      "rehearsalMigration": 47,
+      "normalizationTables": 116,
+      "originalDatabaseMigrationUnchanged": true,
+      "allOriginalApplicationRowsUnchanged": true,
+      "applicationRows": {
+        "shows": {
+          "rows": 325,
+          "sha256": "0cd096649ce99c30fb328b6c24f89287c622e79e08128ff73e0e5ca3c6c516f0"
+        },
+        "artists": {
+          "rows": 6,
+          "sha256": "1614c86f840b5279a8608f918f3d9210eced4754aecfcc4336879acc67e0b1d1"
+        },
+        "sources": {
+          "rows": 413,
+          "sha256": "7d4fecfe329a85aabd5273650b948f5f1c3e7415e590f84b0c4651df8a65361f"
+        },
+        "collections": {
+          "rows": 4,
+          "sha256": "ef7b6942916fd556a6018b437f17e745ef7176b287fb1145929d49bebe809c44"
+        },
+        "source_sets": {
+          "rows": 429,
+          "sha256": "9b731dffbb324d4f17738b4ffc86f52923b7caa7e9711a763a827711869e9f08"
+        },
+        "source_tracks": {
+          "rows": 7561,
+          "sha256": "1ea94a38818ee60240a0e72a109948c0080e94c49e3921be5b78be06abb418db"
+        },
+        "collection_playable_sources": {
+          "rows": 364,
+          "sha256": "8de6b4bfead419e73f7ed294721e773705eefb57ddf0839662a4afd2c9e28ebb"
+        }
+      },
+      "additiveColumnsExcludedFromPostMigrationLegacyHash": {
+        "shows": [
+          "is_legacy_survivor",
+          "performance_key",
+          "performance_label",
+          "performance_type"
+        ]
+      },
+      "canonicalStateAfterMigration": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "repertoireSongs": 0,
+        "activePeoplePolicies": 0
+      },
+      "completeOriginalMigrationHistoryUnchanged": true,
+      "originalMigrationHistoryComparison": {
+        "before": "govt-mule-version-before.json",
+        "after": "govt-mule-source-version-history-after.json"
+      }
+    }
+  ],
+  "artifacts": {
+    "govt-mule-after-legacy-fingerprints.json": {
+      "bytes": 952,
+      "sha256": "645db6ec26674f1f690b3c1c2bd2033e5a4e112c62ce50901b3725f3909617e0"
+    },
+    "govt-mule-after-legacy-projection.sql": {
+      "bytes": 1916,
+      "sha256": "69c66f4f7446892e766f2f0beb51e030c95f44c9b2741decad28a1e255f8abe7"
+    },
+    "govt-mule-clone-columns-after.json": {
+      "bytes": 1319,
+      "sha256": "e26c8712b9981d5043f58411abce6c9014a55faa15aef9de08168ac5ec0c3c35"
+    },
+    "govt-mule-clone-fingerprints.json": {
+      "bytes": 952,
+      "sha256": "9e0e8518222d9d7c7835ecde2dda0663b9c2cbde1f6c99d0df5dc4bbcca5bc31"
+    },
+    "govt-mule-clone-readiness-after.json": {
+      "bytes": 4737,
+      "sha256": "7a5f27d2ba98edfacd65f0fdbbff2a483ef01a32af99410ec638aa64a0b97ba7"
+    },
+    "govt-mule-clone-readiness.json": {
+      "bytes": 1764,
+      "sha256": "b4fd486bc23e3ed020aafa7c6bdce48341ced76b5cead00046b8b8792dbe5451"
+    },
+    "govt-mule-first-restore-failure.log": {
+      "bytes": 270,
+      "sha256": "b398d164a69ef2e68f97ec7627c8aaceb24c6a3e1a1e52bfce4c2c308716c7ad"
+    },
+    "govt-mule-normalization-empty-after.json": {
+      "bytes": 95,
+      "sha256": "9a7a39afad94087379c54b06014235108e7ad8ffb64b33903a93948f8064ce7d"
+    },
+    "govt-mule-source-after-fingerprints.json": {
+      "bytes": 938,
+      "sha256": "7cae3aa67ce6d8dbabb1ae1a5d24e4fba4e6b7824ede814b9d3c323f36279ac5"
+    },
+    "govt-mule-source-columns.json": {
+      "bytes": 1237,
+      "sha256": "0211706cccd1b3f0d18f24da329a86d196d66110ed7b8da0ed395319060302b0"
+    },
+    "govt-mule-source-fingerprints.json": {
+      "bytes": 937,
+      "sha256": "b92a6f35354868ea9c9b5595e9395979e4b8d879c61777650360098f9815559a"
+    },
+    "govt-mule-source-version-after.json": {
+      "bytes": 23,
+      "sha256": "328bdbd5952cd5f9e98ada6465594c63acd5933ea119269814b3abfd13975c65"
+    },
+    "govt-mule-source-version-history-after.json": {
+      "bytes": 2327,
+      "sha256": "4512bdb050780370dae25c1a95e4da4320880cf0eb26abfd580f90f7f782c51d"
+    },
+    "govt-mule-version-after.json": {
+      "bytes": 51,
+      "sha256": "bb825c77e39541975c46e32050d56b48ec8b0d2bab48cc553c69824dd108e060"
+    },
+    "govt-mule-version-before.json": {
+      "bytes": 2327,
+      "sha256": "4512bdb050780370dae25c1a95e4da4320880cf0eb26abfd580f90f7f782c51d"
+    },
+    "govt-mule.dump": {
+      "bytes": 4135872,
+      "sha256": "ce683e9801fbf8d5e75023298ce2b8166d7404c7b27a2e6927c4a6bf2b021342"
+    },
+    "jerry-after-legacy-fingerprints.json": {
+      "bytes": 949,
+      "sha256": "d85ed3e0f5638cd6cdb599928b651a7ac1c143b29b4a8b379bd6bf7df153697d"
+    },
+    "jerry-after-legacy-projection.sql": {
+      "bytes": 1818,
+      "sha256": "e364292b529365fc69693b32b2549f8331cb513b10a9de204149f19f52e70bce"
+    },
+    "jerry-clone-columns-after.json": {
+      "bytes": 1319,
+      "sha256": "e26c8712b9981d5043f58411abce6c9014a55faa15aef9de08168ac5ec0c3c35"
+    },
+    "jerry-clone-fingerprints.json": {
+      "bytes": 950,
+      "sha256": "b69e112b89ef1959d8379d6d81d175dfcf2733ca7d6213ab756d757f5cc03e4f"
+    },
+    "jerry-clone-readiness-after.json": {
+      "bytes": 4733,
+      "sha256": "df22d0d5509e8e5d17fe74559b1e3453f96ba95cdaf41169177050fbc05660fb"
+    },
+    "jerry-clone-readiness.json": {
+      "bytes": 1760,
+      "sha256": "00c4f21f24621868d8bb84dfedd77322b054f6e287008ce4a4d83f9964bd998b"
+    },
+    "jerry-first-restore-failure.log": {
+      "bytes": 380,
+      "sha256": "5b2b6800bd27229214bab0563d3b6f2476bd195005fff21bd064e7df34a590ac"
+    },
+    "jerry-normalization-empty-after.json": {
+      "bytes": 95,
+      "sha256": "9a7a39afad94087379c54b06014235108e7ad8ffb64b33903a93948f8064ce7d"
+    },
+    "jerry-normalization-migration.log": {
+      "bytes": 1722,
+      "sha256": "84a843de67177e9e8917aed3329cea5aa3f823b4d6173f5dd0e4277d9fa29e78"
+    },
+    "jerry-rehearsal-post-restore.log": {
+      "bytes": 66,
+      "sha256": "82f23dda71192bffad654412dfeb1d40d0e09b893632adfaaf73651d1abe2ac8"
+    },
+    "jerry-rehearsal-restore-fixed.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jerry-source-after-fingerprints.json": {
+      "bytes": 936,
+      "sha256": "aa5e4d8dddc9b49c11616d9952bef7fdc367da88d3dc09025c85b797aadf49a5"
+    },
+    "jerry-source-columns.json": {
+      "bytes": 1319,
+      "sha256": "e26c8712b9981d5043f58411abce6c9014a55faa15aef9de08168ac5ec0c3c35"
+    },
+    "jerry-source-fingerprints.json": {
+      "bytes": 936,
+      "sha256": "74e0dd99d50d364ad8421b36c0e82fb0701c3a7bac75b74a2d46bc07229494a4"
+    },
+    "jerry-source-version-after.json": {
+      "bytes": 23,
+      "sha256": "dbb1a179ad8b9365ae794a9b34a2e5ba55e1a18279b2ce675de928ac2dc3c383"
+    },
+    "jerry-source-version-history-after.json": {
+      "bytes": 2691,
+      "sha256": "1f1f0e5fee4cca42d9b91d0c90254b1c06ebf83be032f81167cab737cca6f389"
+    },
+    "jerry-version-after.json": {
+      "bytes": 51,
+      "sha256": "bb825c77e39541975c46e32050d56b48ec8b0d2bab48cc553c69824dd108e060"
+    },
+    "jerry-version-before.json": {
+      "bytes": 2691,
+      "sha256": "1f1f0e5fee4cca42d9b91d0c90254b1c06ebf83be032f81167cab737cca6f389"
+    },
+    "jerry.dump": {
+      "bytes": 13531113,
+      "sha256": "c1ae44fe39056807348b6a987283c6aa6bf1334aad4b901be9a8cc7138ef531a"
+    },
+    "mule-normalization-migration.log": {
+      "bytes": 1746,
+      "sha256": "cab9a9175c5a39c481fcbae1fc4114c0f5f41b9dfd6e093f387e269bc3221b66"
+    },
+    "mule-rehearsal-post-restore-matched.log": {
+      "bytes": 66,
+      "sha256": "82f23dda71192bffad654412dfeb1d40d0e09b893632adfaaf73651d1abe2ac8"
+    },
+    "mule-rehearsal-restore-matched.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "setup.json": {
+      "bytes": 532,
+      "sha256": "72ae2ee9bfc2968f739d0a02b62e81bd4a2a21e50a5b1e936b9f54781cc50303"
+    }
+  },
+  "limits": [
+    "Hashes cover all original columns of the seven named application tables/views, not every PostgreSQL or extension table.",
+    "Govt Mule migration16 adds four show-performance columns; only these additive fields are excluded when comparing post-migration rows to the old source schema.",
+    "Neither running HTTP APIs nor audio availability has been checked in this receipt.",
+    "No canonical identity, normalized credit or automatic people policy was created. Full matching evaluation and backfill remain required.",
+    "Initial restores at the wrong TimescaleDB version failed; original error logs are retained. Successful restores used matching extension versions and Timescale restore mode. Single-transaction command flags and rollback observations are operator-reported; catalog preservation and original migration histories are verified separately by saved query snapshots."
+  ]
+}
