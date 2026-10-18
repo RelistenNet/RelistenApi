@@ -141,6 +141,20 @@ catalog/context endpoints and their witness ownership remain unchanged. A later
 catalog credit overlay can still replace its selected sources without removing native
 observations or importing them into model-context questions.
 
+## Shared provisional people
+
+Supported recording credits now have a shared person page across names and artists. Search shows these pages before the raw name groups. The page combines the exact member recordings, their taper or transferrer roles, captured show assignments, playback links and original evidence. Artist and role filters apply to those member credits. A matching name elsewhere in the catalog does not add a recording to the person.
+
+Membership comes from the retained contextual decisions. Each page has one anchor credit; every other member has a direct `same_person` decision with that anchor. A `different_people` decision blocks conflicting membership. An `insufficient_evidence` result remains visible without adding a member. The projection does not follow chains of matches. For example, A–B, B–C and C–D can support the anchored views A/B/C and B/C/D; they do not establish one A/B/C/D identity. Overlapping views remain explicit alternatives. Search hides duplicate and subset views, while their anchor URLs remain valid.
+
+Person IDs start with `person-hypothesis:` and derive from the anchor's source UUID and preserved credit row ID. They identify provisional interpretations, with `acceptedIdentity: false`. Existing raw name groups, contextual decisions, role-free aliases and native observations keep their own evidence and APIs. A role-free alias does not become a credit or a person membership through equal wording.
+
+The reader consumes the currently surviving contextual comparisons. The source refresh can invalidate comparisons when their credit witnesses change. These pages therefore cover supported occurrences in that comparison population; they do not claim complete identity matching across the catalog. Broader membership belongs in the shared C# identity resolver, which can supply compact, directly supported occurrences to the same page without copying full comparison diagnostics into each source output.
+
+`GET /api/people` keeps its raw `groups` result and adds `personHypotheses`, `personHypothesesTotal`, `personHypothesesOffset` and `personHypothesesLimit`. `personOffset` pages the person results independently. Search includes supported member names and their explicit aliases. `/api/stats` advertises `capabilities.sharedPeople` and reports the separate hypothesis and supported-credit counts. A raw `/api/person` result includes links to hypotheses containing its actual member credits.
+
+`GET /api/shared-person?id=<person-hypothesis-id>&artist=<optional-uuid>&role=<optional-role>&offset=0&limit=30` returns the summary, names, aliases, anchor credit ID, membership rule, artist and role counts, and paged `recordings`. Recording objects use the existing exact credit, captured-home and playback contracts. `support`, `conflicts`, `insufficientEvidence` and `relatedSupport` retain the original comparison IDs, reasons, quotes and `/api/relationship` evidence links. `overlappingHypotheses` identifies alternative supported views; it does not merge them. Unknown person IDs return 404. The projection reads the directory and retained decisions without changing accepted catalog data.
+
 ## HTTP contract
 
 `GET /` serves the phone-friendly page. The following endpoints return JSON:

@@ -27,6 +27,21 @@ from people_directory import (
     handler_for,
     name_key,
 )
+from person_hypotheses import PersonHypotheses
+
+
+def create_context_table(db):
+    db.execute("""CREATE TABLE context_relationships(
+        id TEXT PRIMARY KEY,left_group TEXT,right_group TEXT,left_credit INTEGER,right_credit INTEGER,
+        relation TEXT,reason TEXT,evidence TEXT,retrieval_basis TEXT,run TEXT,line INTEGER,
+        cache_key TEXT,job_uuid TEXT,basis TEXT)""")
+
+
+def add_context(db, identifier, left, right, relation, run='', line=1):
+    groups = dict(db.execute('SELECT id,group_id FROM credits WHERE id IN (?,?)', (left, right)))
+    db.execute('INSERT INTO context_relationships VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+               (identifier, groups[left], groups[right], left, right, relation, 'Retained direct source support',
+                '[]', 'development-fixture', str(run), line, 'cache:' + identifier, 'fixture-job', 'validated_batch'))
 
 
 class TestPeopleDirectory(unittest.TestCase):
@@ -130,8 +145,9 @@ class TestPeopleDirectory(unittest.TestCase):
         with directory.connect() as db:
             base_homes = [tuple(row) for row in db.execute("SELECT * FROM source_homes")]
         with sqlite3.connect(self.database) as db:
-            db.execute("CREATE TABLE context_relationships(id TEXT PRIMARY KEY, decision TEXT)")
-            db.execute("INSERT INTO context_relationships VALUES('existing-question','retained decision')")
+            create_context_table(db)
+            add_context(db, 'existing-question', 1, 1, 'insufficient_evidence')
+            retained_context = db.execute('SELECT * FROM context_relationships').fetchone()
         role = self.native_actor("native:role")
         alias = self.native_actor("native:alias", aliases=["Lark"], role_free=True)
         file_actor = self.native_actor("native:file", "File Avery", file_origin={"evidence": {"jsonPointer": "/files/0"}})
@@ -159,7 +175,7 @@ class TestPeopleDirectory(unittest.TestCase):
         self.assertTrue(all("capturedHome" not in item and "playableFilesUrl" not in item for item in detail["nativeObservations"]))
         with directory.connect() as db:
             self.assertEqual([tuple(row) for row in db.execute("SELECT * FROM source_homes")], base_homes)
-            self.assertEqual(tuple(db.execute("SELECT * FROM context_relationships").fetchone()), ("existing-question", "retained decision"))
+            self.assertEqual(tuple(db.execute("SELECT * FROM context_relationships").fetchone()), retained_context)
         observed = detail["nativeObservations"]
         self.assertTrue(all(item["artist_key"] != item["artist_uuid"] for item in observed))
         self.assertEqual([len(item["credits"]) for item in observed if item["role_free"]], [0])
@@ -381,6 +397,132 @@ class TestPeopleDirectory(unittest.TestCase):
                 urlopen(base + path)
             self.assertEqual(result.exception.code, status)
             result.exception.close()
+
+    def test_shared_person_http_combines_supported_aliases_artists_roles_and_exact_playback(self):
+        directory = self.build([
+            ('one', 'artist-a', [self.credit('one', 'artist-a', 'Pat Myers', 'taper', 'DATPAT')]),
+            ('two', 'artist-b', [self.credit('two', 'artist-b', 'DATPAT', 'transferrer')]),
+            ('namesake', 'artist-c', [self.credit('namesake', 'artist-c', 'Pat Myers', 'taper')]),
+        ])
+        retained = self.root / 'context'
+        retained.mkdir()
+        with closing(sqlite3.connect(self.database)) as db, db:
+            identifiers = dict(db.execute('SELECT source_uuid,id FROM credits'))
+            create_context_table(db)
+            add_context(db, 'direct-alias', identifiers['one'], identifiers['two'], 'same_person', retained)
+        def actor(source, name, artist, role):
+            return dict(creditId=identifiers[source], sourceUuid=source, name=name, artistName=artist, roles=[role], evidence=[])
+        question = dict(questionId='direct-alias', left=actor('one', 'Pat Myers', 'artist-a', 'taper'),
+                        right=actor('two', 'DATPAT', 'artist-b', 'transferrer'))
+        (retained / 'results.jsonl').write_text(json.dumps(dict(input=dict(questions=[question]),
+            result=dict(cacheKey='cache:direct-alias', decisions=[dict(questionId='direct-alias', relation='same_person')]))))
+        server = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(directory))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        base = 'http://127.0.0.1:' + str(server.server_port)
+        def get(path):
+            with urlopen(base + path) as response:
+                return json.load(response)
+        self.assertTrue(get('/api/stats')['capabilities']['sharedPeople'])
+        found = get('/api/people?q=DATPAT')
+        self.assertEqual(found['personHypothesesTotal'], 1)
+        person = found['personHypotheses'][0]
+        self.assertEqual((person['recordingCount'], person['artistCount'], person['creditCount']), (2, 2, 2))
+        self.assertFalse(person['acceptedIdentity'])
+        self.assertEqual(set(person['names']), {'Pat Myers', 'DATPAT'})
+        page = get('/api/shared-person?id=' + person['id'])
+        self.assertEqual({r['sourceUuid'] for r in page['recordings']}, {'one', 'two'})
+        self.assertEqual({r['role'] for r in page['roles']}, {'taper', 'transferrer'})
+        self.assertEqual(get(page['support'][0]['evidenceUrl'])['question'], question | {
+            'left': question['left'] | {'sourceEvidenceUrl': '/api/credit?id=' + str(identifiers['one']),
+                'playableFilesUrl': 'http://files.test/?domain=file_contents&entityKey=source%3Aone'},
+            'right': question['right'] | {'sourceEvidenceUrl': '/api/credit?id=' + str(identifiers['two']),
+                'playableFilesUrl': 'http://files.test/?domain=file_contents&entityKey=source%3Atwo'}})
+        for recording in page['recordings']:
+            self.assertEqual(parse_qs(urlsplit(recording['playableFilesUrl']).query)['entityKey'], ['source:' + recording['sourceUuid']])
+            self.assertEqual(get(recording['credits'][0]['sourceEvidenceUrl'])['retainedOutcome']['inputUuid'], recording['sourceUuid'])
+        self.assertEqual(get('/api/shared-person?id=' + person['id'] + '&artist=artist-b')['recordings'][0]['sourceUuid'], 'two')
+        self.assertEqual(get('/api/shared-person?id=' + person['id'] + '&role=taper')['recordings'][0]['sourceUuid'], 'one')
+        self.assertEqual(len(get('/api/shared-person?id=' + person['id'] + '&limit=1&offset=1')['recordings']), 1)
+        raw = get('/api/person?id=' + group_id(name_key('Pat Myers')))
+        self.assertEqual(raw['recording_count'], 2)
+        self.assertEqual(raw['personHypotheses'][0]['id'], person['id'])
+        with self.assertRaises(HTTPError) as error:
+            get('/api/shared-person?id=missing')
+        self.assertEqual(error.exception.code, 404)
+        error.exception.close()
+
+    def test_shared_people_never_close_chains_or_absorb_namesakes_and_keep_conflicts_visible(self):
+        directory = self.build([(source, 'artist-' + source, [self.credit(source, 'artist-' + source, name, 'taper')])
+                                for source, name in [('a', 'Pat'), ('b', 'DATPAT'), ('c', 'Patrick'), ('d', 'P Myers'), ('e', 'Pat')]])
+        with closing(sqlite3.connect(self.database)) as db, db:
+            ids = dict(db.execute('SELECT source_uuid,id FROM credits'))
+            create_context_table(db)
+            for identifier, left, right in [('ab', 'a', 'b'), ('bc', 'b', 'c'), ('cd', 'c', 'd')]:
+                add_context(db, identifier, ids[left], ids[right], 'same_person')
+            add_context(db, 'unknown', ids['a'], ids['e'], 'insufficient_evidence')
+        found = directory.search({})['personHypotheses']
+        self.assertEqual(len(found), 2)
+        self.assertTrue(all(person['creditCount'] == 3 for person in found))
+        for person in found:
+            detail = directory.shared_person(person['id'], {})
+            self.assertNotIn('e', {recording['sourceUuid'] for recording in detail['recordings']})
+            self.assertTrue(detail['overlappingHypotheses'])
+        original_id = found[0]['id']
+        # A new contradictory decision invalidates unsafe membership immediately;
+        # stable anchor IDs remain addressable even when their search view changes.
+        with closing(sqlite3.connect(self.database)) as db, db:
+            add_context(db, 'ac-conflict', ids['a'], ids['c'], 'different_people')
+        detail = directory.shared_person(original_id, {})
+        self.assertTrue(detail['conflicts'])
+        members = {recording['sourceUuid'] for recording in detail['recordings']}
+        self.assertFalse({'a', 'c'} <= members)
+        self.assertTrue(any(person['insufficientEvidence'] for person in
+            (directory.shared_person(item['id'], {}) for item in directory.search({})['personHypotheses'])))
+
+    def supported_pair(self):
+        directory = self.build([
+            ('one', 'artist-a', [self.credit('one', 'artist-a', 'Pat Myers', 'taper')]),
+            ('two', 'artist-b', [self.credit('two', 'artist-b', 'DATPAT', 'transferrer')]),
+        ])
+        with closing(sqlite3.connect(self.database)) as db, db:
+            ids = dict(db.execute('SELECT source_uuid,id FROM credits'))
+            create_context_table(db)
+            add_context(db, 'direct-alias', ids['one'], ids['two'], 'same_person')
+        return directory, ids
+
+    def test_shared_people_read_one_snapshot_when_credit_and_comparison_are_withdrawn_mid_read(self):
+        directory, ids = self.supported_pair()
+        with closing(sqlite3.connect(self.database)) as writer:
+            writer.execute('PRAGMA journal_mode=WAL')
+            read_credits = PersonHypotheses._read_credits
+            def withdraw_before_credit_read(snapshot):
+                with writer:
+                    writer.execute('DELETE FROM context_relationships')
+                    writer.execute('DELETE FROM credits WHERE id=?', (ids['two'],))
+                return read_credits(snapshot)
+            with patch.object(PersonHypotheses, '_read_credits', side_effect=withdraw_before_credit_read):
+                prior = directory.search({})
+            self.assertEqual(prior['personHypothesesTotal'], 1)
+            self.assertEqual(prior['personHypotheses'][0]['creditCount'], 2)
+            self.assertEqual(directory.search({})['personHypothesesTotal'], 0)
+
+    def test_atomic_replacement_never_caches_old_people_under_the_new_file_generation(self):
+        directory, _ = self.supported_pair()
+        replacement = self.root / 'replacement.sqlite3'
+        with closing(sqlite3.connect(self.database)) as source, closing(sqlite3.connect(replacement)) as target:
+            source.backup(target)
+            target.execute('DELETE FROM context_relationships')
+            target.commit()
+        shared_people = directory._shared_people
+        def replace_after_snapshot_open(snapshot):
+            replacement.replace(self.database)
+            return shared_people(snapshot)
+        with patch.object(directory, '_shared_people', side_effect=replace_after_snapshot_open):
+            prior = directory.search({})
+        self.assertEqual(prior['personHypothesesTotal'], 1)
+        self.assertEqual(directory.search({})['personHypothesesTotal'], 0)
 
     def test_recording_home_preserves_partial_dates_labels_and_source_roles(self):
         (self.root / "performances").mkdir()
@@ -625,9 +767,9 @@ class TestSourceDirectoryRefresh(unittest.TestCase):
         DirectoryBuilder(self.old_run, self.old_database, minimum_free=0).build()
         with closing(sqlite3.connect(self.old_database)) as db, db:
             self.old_ids = dict(db.execute("SELECT source_uuid,id FROM credits"))
-            db.execute("CREATE TABLE context_relationships(id TEXT PRIMARY KEY,left_credit INTEGER,right_credit INTEGER,relation TEXT)")
-            db.execute("INSERT INTO context_relationships VALUES('keep',?,?, 'same_person')", (self.old_ids['one'], self.old_ids['one']))
-            db.execute("INSERT INTO context_relationships VALUES('remove',?,?, 'different_people')", (self.old_ids['one'], self.old_ids['two']))
+            create_context_table(db)
+            add_context(db, 'keep', self.old_ids['one'], self.old_ids['one'], 'same_person')
+            add_context(db, 'remove', self.old_ids['one'], self.old_ids['two'], 'different_people')
             db.execute("INSERT INTO metadata VALUES('peopleContext',?)", (json.dumps(dict(decisions=2)),))
             db.execute("CREATE TABLE context_questions(id TEXT PRIMARY KEY,question TEXT)")
             db.execute("INSERT INTO context_questions VALUES('frozen','original witness IDs')")
@@ -882,6 +1024,29 @@ class TestSourceDirectoryRefresh(unittest.TestCase):
         with closing(sqlite3.connect(self.database)) as db:
             self.assertEqual(db.execute("SELECT id,credit_key FROM credits WHERE source_uuid='one'").fetchone(), (self.old_ids['one'], None))
             self.assertEqual(db.execute("SELECT id FROM context_relationships").fetchall(), [('keep',)])
+
+    def test_source_alias_selects_its_own_actor_when_credit_shares_exact_reference(self):
+        row = self.people(self.new[0])
+        alias_actor = row['proposal']['people'][0]
+        alias_actor['name'] = 'Pat'
+        alias_actor['aliases'] = []
+        assertion = row['evidence']['sourceActorAliases']['assertions'][0]
+        assertion.update(name='Pat', aliases=[], context=dict(statement='Pat'))
+        credited_actor = dict(alias_actor, entityKey=self.new[0]['proposal']['credits'][0]['personEntityKey'])
+        row['proposal']['people'].insert(0, credited_actor)
+        with gzip.open(self.run / 'people/000.jsonl.gz', 'wt') as stream:
+            stream.write(json.dumps(row) + '\n')
+            stream.write(json.dumps(self.people(self.new[1])) + '\n')
+        self.refresh()
+        directory = PeopleDirectory(self.database, 'http://files.test', 'http://core.test')
+        detail = directory.detail(group_id(name_key('Pat')), {})
+        self.assertEqual(detail['credit_count'], 1)
+        self.assertEqual(detail['sourceTotal'], 1)
+        observation = detail['sourceObservations'][0]
+        self.assertEqual(observation['person_key'], alias_actor['entityKey'])
+        self.assertNotEqual(observation['person_key'], credited_actor['entityKey'])
+        self.assertNotIn('role', observation)
+        self.assertEqual(directory.source_actor(observation['id'])['actor']['entityKey'], alias_actor['entityKey'])
 
     def test_cli_requires_seal_and_budget_pause_is_not_publication(self):
         import subprocess

@@ -22,8 +22,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import shutil
 import sqlite3
+import threading
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
+
+from person_hypotheses import PersonHypotheses
 
 VERSION = "people-name-directory-v5"
 
@@ -768,17 +771,23 @@ class SourceDirectoryRefresh:
         state["keptCredits"] += len(unchanged)
         state["insertedCredits"] += len(additions)
         state["removedCredits"] += len(removed)
-        self._add_source_actors(db, people_record, people_locator)
+        self._add_source_actors(db, people_record, people_locator, credit_record)
         db.execute("INSERT INTO refresh_done VALUES(?)", (source,))
 
-    def _add_source_actors(self, db, record, locator):
+    def _add_source_actors(self, db, record, locator, credit_record):
         source = record["inputUuid"]
+        credited_people = {credit["personEntityKey"] for credit in
+                           (credit_record.get("proposal") or {}).get("credits", [])}
         db.execute("DELETE FROM source_actors WHERE source_uuid=?", (source,))
         aliases = (record.get("evidence") or {}).get("sourceActorAliases") or {}
         people = (record.get("proposal") or {}).get("people", [])
         for assertion in aliases.get("assertions", []):
             reference = assertion["actorReferenceUuid"]
-            actors = [actor for actor in people if actor.get("sourceReferenceUuid") == reference]
+            # Credit and alias actors can cite the same reference. The paired
+            # typed credits identify role-bearing actors; the independent alias
+            # observation must select its own actor without inventing a role.
+            actors = [actor for actor in people if actor.get("sourceReferenceUuid") == reference
+                      and actor["entityKey"] not in credited_people]
             if len(actors) != 1:
                 raise ValueError("Source alias assertion lacks one exact actor")
             actor = actors[0]
@@ -1104,6 +1113,12 @@ class SourceHomeEnrichment:
         return metadata
 
 
+class DirectoryReadConnection(sqlite3.Connection):
+    """A read transaction and its observed file generation travel together."""
+
+    generation_stamp = None
+
+
 class PeopleDirectory:
     """Read-only search and recording pages; each request uses its own connection."""
 
@@ -1111,10 +1126,43 @@ class PeopleDirectory:
         self.database = Path(database).resolve()
         self.files_url = files_url.rstrip("/") + "/"
         self.core_url = core_url.rstrip("/") + "/"
+        self._people_lock = threading.Lock()
+        self._people_stamp = None
+        self._people_index = None
+
+    def _database_stamp(self):
+        paths = (self.database, Path(str(self.database) + '-wal'))
+        stamps = []
+        for path in paths:
+            try:
+                value = path.stat()
+                stamps.append((value.st_ino, value.st_size, value.st_mtime_ns))
+            except FileNotFoundError:
+                stamps.append(None)
+        return tuple(stamps)
+
+    def _shared_people(self, db):
+        # The stamp belongs to the open read snapshot, not the current path.
+        # A replacement can occur after connect without relabeling that snapshot.
+        stamp = db.generation_stamp
+        if stamp is None:
+            return PersonHypotheses(db, name_key)
+        with self._people_lock:
+            if stamp != self._people_stamp:
+                self._people_index = PersonHypotheses(db, name_key)
+                self._people_stamp = stamp
+            return self._people_index
 
     def connect(self):
-        db = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)
+        before = self._database_stamp()
+        db = sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True, factory=DirectoryReadConnection)
         db.row_factory = sqlite3.Row
+        db.execute('BEGIN')
+        db.execute("SELECT value FROM metadata WHERE key='version'").fetchone()
+        after = self._database_stamp()
+        # If a writer committed while the snapshot opened, its reads are still
+        # coherent, but filesystem observations cannot safely name its generation.
+        db.generation_stamp = before if before == after else None
         return db
 
     @staticmethod
@@ -1139,6 +1187,10 @@ class PeopleDirectory:
                 )
             result.update(counts)
             result["capabilities"] = dict(sourceActors=db.execute("SELECT 1 FROM sqlite_master WHERE name='source_actors'").fetchone() is not None)
+            result['capabilities']['sharedPeople'] = True
+            shared = self._shared_people(db)
+            result['personHypotheses'] = len(shared.visible)
+            result['personHypothesisCredits'] = len({credit for person in shared.visible for credit in person['members']})
             result.update(filesUrl=self.files_url, coreUrl=self.core_url)
             return result
 
@@ -1182,12 +1234,15 @@ class PeopleDirectory:
                     values + [limit, offset],
                 )
             ]
+            person_offset, person_limit = self.page(dict(offset=parameters.get('personOffset', '0'), limit=parameters.get('limit', '30')))
+            shared = self._shared_people(db).search(parameters.get('q', ''), person_offset, person_limit)
         return {
             "groups": groups,
             "total": total,
             "offset": offset,
             "limit": limit,
             "basis": "inferred_name_group",
+            **shared,
         }
 
     def detail(self, identifier, parameters):
@@ -1286,6 +1341,42 @@ class PeopleDirectory:
             result.update(offset=offset, limit=limit)
             result.update(self._native_observations(db, identifier, parameters))
             result.update(self._source_observations(db, identifier, parameters))
+            result['personHypotheses'] = self._shared_people(db).for_group(identifier)
+            return result
+
+    def shared_person(self, identifier, parameters):
+        """Combine exact supported occurrences without expanding their name buckets."""
+        offset, limit = self.page(parameters)
+        artist, role = parameters.get('artist', ''), parameters.get('role', '')
+        with closing(self.connect()) as db:
+            projected = self._shared_people(db).detail(identifier)
+            if projected is None:
+                return None
+            result, members = projected
+            source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
+            artist_sources, role_sources = {}, {}
+            for credit in members:
+                artist_sources.setdefault(credit['artist_uuid'], set()).add(credit['source_uuid'])
+                role_sources.setdefault(credit['role'], set()).add(credit['source_uuid'])
+            artist_names = {credit['artist_uuid']: credit['artist_name'] or credit['artist_uuid'] for credit in members}
+            result['artists'] = [dict(uuid=identifier, name=artist_names[identifier], recordingCount=len(sources))
+                                 for identifier, sources in sorted(artist_sources.items(), key=lambda pair: (artist_names[pair[0]], pair[0]))]
+            result['roles'] = [dict(role=wording, recordingCount=len(sources)) for wording, sources in sorted(role_sources.items())]
+            selected = [credit for credit in members if (not artist or credit['artist_uuid'] == artist)
+                        and (not role or credit['role'] == role)]
+            recordings = {}
+            for member in selected:
+                source = member['source_uuid']
+                if source not in recordings:
+                    recordings[source] = dict(sourceUuid=source, capturedHome=self._home(db, source),
+                        playableFilesUrl=self.files_url + '?' + urlencode(dict(domain='file_contents', entityKey='source:' + source)), credits=[])
+                credit = dict(member)
+                credit.update(evidence=json.loads(member['evidence']), aliases=json.loads(member['aliases']),
+                              originRun=member['origin_run'] or source_run,
+                              sourceEvidenceUrl='/api/credit?' + urlencode(dict(id=member['id'])))
+                recordings[source]['credits'].append(credit)
+            result.update(total=len(recordings), offset=offset, limit=limit,
+                          recordings=[recordings[source] for source in sorted(recordings)[offset:offset + limit]])
             return result
 
     def _source_observations(self, db, identifier, parameters):
@@ -1578,6 +1669,11 @@ def handler_for(directory):
                         self.respond(
                             404, encoded({"error": "Unknown draft group"}).encode()
                         )
+                        return
+                elif url.path == '/api/shared-person':
+                    result = directory.shared_person(parameters.get('id', ''), parameters)
+                    if result is None:
+                        self.respond(404, encoded({'error': 'Unknown person hypothesis'}).encode())
                         return
                 elif url.path == "/api/relationships":
                     result = directory.relationships(
