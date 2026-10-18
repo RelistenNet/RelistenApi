@@ -1,16 +1,21 @@
 """Behavior contracts for immutable output indexing; no server or network is needed."""
 
 import gzip
+import itertools
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 import uuid
 from unittest.mock import patch
 from contextlib import closing
 from pathlib import Path
+from http.server import ThreadingHTTPServer
+from urllib.error import HTTPError
+from urllib.request import urlopen
 
-from shadow_reader import ShadowIndex
+from shadow_reader import ShadowIndex, handler_for
 
 
 class TestShadowReader(unittest.TestCase):
@@ -54,6 +59,61 @@ class TestShadowReader(unittest.TestCase):
         self.assertEqual(self.index.search({})["total"], 2)
         self.assertEqual(self.index.detail(first_id)["record"], first)
         self.assertEqual(self.index.stats()["pendingChunks"], 0)
+
+    def test_low_disk_space_defers_new_chunks_without_hiding_existing_results_and_recovers(self):
+        first = self.record()
+        self.chunk("100", first)
+        self.index.scan_once()
+        first_id = self.index.search({})["items"][0]["id"]
+        second = self.record("source_sample:two")
+        self.chunk("200", second)
+        self.index.minimum_free_bytes = 1024
+
+        with patch("shadow_reader.shutil.disk_usage") as available:
+            available.return_value.free = 512
+            self.index.scan_once()
+            self.assertEqual(self.index.search({})["total"], 1)
+            self.assertEqual(self.index.detail(first_id)["record"], first)
+            self.assertEqual(self.index.stats()["pendingChunks"], 1)
+
+            available.return_value.free = 2048
+            self.index.scan_once()
+            self.index.scan_once()
+
+        self.assertEqual(self.index.search({})["total"], 2)
+        self.assertEqual(self.index.detail(first_id)["record"], first)
+        second_id = self.index.search({"q": second["inputKey"]})["items"][0]["id"]
+        self.assertEqual(self.index.detail(second_id)["record"], second)
+        self.assertEqual(self.index.stats()["pendingChunks"], 0)
+
+    def test_interrupted_sqlite_read_returns_503_and_a_later_http_query_recovers(self):
+        self.chunk("100", *(self.record("source_sample:" + str(number)) for number in range(1000)))
+        self.index.scan_once()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.index))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        url = "http://127.0.0.1:" + str(server.server_port) + "/api/records?domain=people&limit=1"
+
+        try:
+            # The real SQLite progress callback sees the deadline pass without a
+            # wall-clock delay. No database exception or HTTP response is mocked.
+            with patch("shadow_reader.time.monotonic", side_effect=itertools.count(step=100)):
+                with self.assertRaises(HTTPError) as failed:
+                    urlopen(url, timeout=5)
+                self.assertEqual(failed.exception.code, 503)
+                self.assertTrue(json.loads(failed.exception.read())["error"])
+                failed.exception.close()
+
+            with urlopen(url, timeout=5) as response:
+                recovered = json.load(response)
+                self.assertEqual(response.status, 200)
+                self.assertEqual(recovered["total"], 1000)
+                self.assertEqual(len(recovered["items"]), 1)
+            self.assertEqual(self.index.search({})["total"], 1000)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_latest_logical_record_wins_replays_and_replaces_entity_membership(self):
         self.chunk("200", self.record())

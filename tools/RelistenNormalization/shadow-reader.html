@@ -30,6 +30,7 @@ header p{margin-top:.55rem;max-width:65ch}
 .metric strong{display:block;font-size:1.4rem}
 .metric small{display:block}
 .notice{padding:.75rem 1rem;border:1px solid var(--line);border-radius:.65rem;background:var(--soft);overflow-wrap:anywhere}
+.known-issues{margin-top:.75rem}
 .error{border-color:var(--danger);color:var(--danger)}
 details.progress{margin:1rem 0;padding:.85rem 1rem;background:var(--paper);border:1px solid var(--line);border-radius:.75rem}
 summary{cursor:pointer;font-weight:600}
@@ -106,6 +107,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <header><p class="eyebrow">Relisten · Actual shadow output</p><h1>Normalization reader</h1><p class="muted">Explore proposed identities, recording credits and performance data. Each result keeps the original evidence. Proposals have not changed the public catalog.</p></header>
 <div id="status" class="status" aria-live="polite"></div>
 <div id="notice" class="notice">Waiting for completed output chunks. Indexing runs in the background.</div>
+<section id="known-issues" class="notice known-issues" hidden aria-label="Known issues"></section>
 <details class="progress"><summary>Coverage by provider and domain <small id="coverage-summary"></small></summary><p class="muted" style="font-size:.85rem;margin-top:.5rem">Expected and processed counts come from the runner checkpoint. Indexed counts are unique results currently visible here. The retained run may cover less than the catalog census.</p><div class="scroll-table"><table><thead><tr><th>Provider / domain</th><th class="num">Expected</th><th class="num">Processed</th><th class="num">Remaining</th><th class="num">Indexed</th><th class="num">Index lag</th></tr></thead><tbody id="coverage"></tbody></table></div></details>
 <form id="filters">
 <label class="search">Search names and titles<input id="q" name="q" type="search" placeholder="Song, venue, taper, title…" autocomplete="off"></label>
@@ -133,6 +135,7 @@ let lastRevision = null;
 let searchRequest = 0;
 let detailRequest = 0;
 let lastStats = null;
+let statsRefreshing = false;
 
 function element(tag, text, className) {
     const node = document.createElement(tag);
@@ -203,6 +206,7 @@ function renderProgress(data) {
     let note = progress.state === 'indexing'
         ? 'The runner is preparing global indexes. Completed results will appear as they are written.'
         : data.index.activeFile ? 'Indexing ' + data.index.activeFile : 'Following completed output chunks.';
+    if (data.index.pauseReason) note = data.index.pauseReason;
     if (data.pendingChunks) note += ' ' + number(data.pendingChunks) + ' chunks are waiting to be indexed.';
     if (data.coverage.some(row => row.aheadOfCheckpoint)) {
         note += ' Some complete chunks are ahead of the latest runner checkpoint.';
@@ -214,8 +218,12 @@ function renderProgress(data) {
     }
     if (data.index.error) note += ' Index scan: ' + data.index.error;
     if (data.progressError) note += ' Progress file: ' + data.progressError;
+    if (progress.previewNotice) note = progress.previewNotice + ' ' + note;
     $('notice').textContent = note;
     $('notice').classList.toggle('error', Boolean(data.failedChunks || data.index.error || data.progressError));
+    const issues = Array.isArray(progress.knownIssues) ? progress.knownIssues : [];
+    $('known-issues').hidden = issues.length === 0;
+    $('known-issues').replaceChildren(...issues.map(issue => element('p', issue)));
     $('coverage-summary').textContent = '· ' + data.coverage.length + ' provider/domain groups';
     $('coverage').replaceChildren(...data.coverage.map(row => {
         const tr = element('tr');
@@ -232,6 +240,9 @@ function renderProgress(data) {
 }
 
 async function refreshStats() {
+    // A large index can take longer than the polling interval to summarize.
+    if (statsRefreshing) return;
+    statsRefreshing = true;
     try {
         const data = await api('/api/stats');
         lastStats = data;
@@ -245,6 +256,8 @@ async function refreshStats() {
     } catch (error) {
         $('notice').textContent = error.message;
         $('notice').classList.add('error');
+    } finally {
+        statsRefreshing = false;
     }
 }
 

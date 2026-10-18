@@ -12,6 +12,7 @@ import hashlib
 from functools import lru_cache
 import json
 import sqlite3
+import shutil
 import threading
 import time
 import zlib
@@ -78,14 +79,16 @@ class ShadowIndex:
     LABEL_FIELDS = {"name", "title", "displayText", "label", "literalDate", "performanceLabel", "originalTitle", "wording", "displayName"}
     OUTCOMES = {"proposed", "unresolved", "failed", "not_applicable"}
 
-    def __init__(self, run):
+    def __init__(self, run, minimum_free_bytes=0):
         self.run = Path(run).resolve(strict=True)
         if not self.run.is_dir():
             raise ValueError("The existing run path must be a directory.")
         self.database = self.run / ".shadow-reader-v3.sqlite3"
+        self.minimum_free_bytes = minimum_free_bytes
         self._status_lock = threading.Lock()
         self._active_file = None
         self._scan_error = None
+        self._pause_reason = None
         self._last_scan = None
         self._revision = 0
         self._aggregate_cache = None
@@ -152,8 +155,11 @@ class ShadowIndex:
             """)
             db.commit()
 
-    def connect(self):
+    def connect(self, read_timeout=None):
         db = sqlite3.connect(self.database, timeout=10)
+        if read_timeout is not None:
+            deadline = time.monotonic() + read_timeout
+            db.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
         db.row_factory = sqlite3.Row
         db.create_function("key_text", 1, _unpack_text, deterministic=True)
         db.create_function("casefold", 1, str.casefold, deterministic=True)
@@ -167,14 +173,26 @@ class ShadowIndex:
     def chunks(self):
         # Only the runner's completed, direct domain chunks are eligible. Neither
         # unfinished writes nor symlinks can broaden the reader's file boundary.
-        return sorted(path for path in self.run.glob("*/*.jsonl.gz")
-                      if path.is_file() and not path.is_symlink()
-                      and not path.parent.is_symlink()
-                      and path.resolve().parent.parent == self.run)
+        paths = sorted((path for path in self.run.glob("*/*.jsonl.gz")
+                        if path.is_file() and not path.is_symlink()
+                        and not path.parent.is_symlink()
+                        and path.resolve().parent.parent == self.run),
+                       key=lambda path: path.name, reverse=True)
+        paths.sort(key=lambda path: (path.parent.name != "file_contents", path.parent.name))
+
+        # Surface the latest completed data in every domain before backfilling,
+        # with playable files first. Older chunks cannot replace a newer result.
+        latest = {}
+        for path in paths:
+            latest.setdefault(path.parent.name, path)
+        heads = set(latest.values())
+        return list(latest.values()) + [path for path in paths if path not in heads]
 
     def scan_once(self):
         """Commit each complete chunk atomically; a bad chunk does not hide later files."""
         try:
+            with self._status_lock:
+                self._pause_reason = None
             with closing(self.connect()) as db:
                 paths = self.chunks()
                 present = {str(path.relative_to(self.run)) for path in paths}
@@ -195,6 +213,21 @@ class ShadowIndex:
                             db.commit()
                             self._changed()
                         continue
+                    # Readers can hold a WAL snapshot during a search. Reclaim its
+                    # high-water allocation as soon as they finish, without waiting.
+                    wal = Path(str(self.database) + "-wal")
+                    if wal.exists() and wal.stat().st_size > 64 * 1024**2:
+                        db.execute("PRAGMA busy_timeout=0")
+                        try:
+                            db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+                        finally:
+                            db.execute("PRAGMA busy_timeout=10000")
+                    # Leave the existing index available to HTTP readers when storage
+                    # is tight. The reserve includes room for this bounded chunk write.
+                    if self.minimum_free_bytes and shutil.disk_usage(self.run).free < self.minimum_free_bytes:
+                        with self._status_lock:
+                            self._pause_reason = "Indexing paused to preserve free disk space. Existing results remain available."
+                        break
                     with self._status_lock:
                         self._active_file = relative
                     self._index_chunk(db, path, relative, stat)
@@ -367,31 +400,55 @@ class ShadowIndex:
 
     def search(self, filters):
         conditions, arguments = ["c.state='indexed'"], []
-        for parameter, column in (("provider", "provider"), ("domain", "domain"), ("outcome", "outcome")):
+        selectors = (
+            ("domain", "r.domain_id=(SELECT id FROM domains WHERE name=?)"),
+            ("outcome", "r.outcome_id=(SELECT id FROM terms WHERE value=?)"),
+            ("provider", "r.header_id IN (SELECT id FROM headers WHERE provider_id=(SELECT id FROM terms WHERE value=?))"),
+        )
+        for parameter, condition in selectors:
             if filters.get(parameter):
-                conditions.append(f"r.{column}=?")
+                conditions.append(condition)
                 arguments.append(filters[parameter])
         if filters.get("artist"):
-            conditions.append("(r.artist_uuid=? OR lower(r.artist_name) LIKE ? ESCAPE '\\')")
+            conditions.append("r.header_id IN (SELECT h.id FROM headers h JOIN artists a ON a.id=h.artist_id "
+                              "WHERE a.uuid=? OR lower(a.name) LIKE ? ESCAPE '\\')")
             arguments.extend((filters["artist"], self._like(filters["artist"].lower())))
-        if filters.get("q"):
-            conditions.append("r.search_text LIKE ? ESCAPE '\\'")
-            arguments.append(self._like(filters["q"].casefold()))
-        source = " FROM result_rows r JOIN chunks c ON c.id=r.chunk_id"
+        prefix = ""
+        source = " FROM records r JOIN chunks c ON c.id=r.chunk_id"
         if filters.get("entityKey"):
-            source += (" JOIN input_entities requested ON requested.input_id=r.input_id"
-                       " AND has_domain(requested.domains,r.domain_id)"
-                       " JOIN entities found ON found.id=requested.entity_id")
-            conditions.append("found.digest=? AND key_text(found.data)=?")
-            arguments.extend((hashlib.blake2b(filters["entityKey"].encode("utf-8"), digest_size=16).digest(), filters["entityKey"]))
+            # Resolve the small entity membership first. A domain-first plan over
+            # result_rows otherwise scans millions of files before checking the key.
+            prefix = """WITH requested_records AS MATERIALIZED (
+                SELECT matched.id FROM entities found
+                JOIN input_entities requested ON requested.entity_id=found.id
+                JOIN records matched ON matched.input_id=requested.input_id
+                WHERE found.digest=? AND key_text(found.data)=?
+                    AND has_domain(requested.domains,matched.domain_id)
+            ) """
+            source = (" FROM requested_records requested CROSS JOIN records r ON r.id=requested.id"
+                      " JOIN chunks c ON c.id=r.chunk_id")
+            arguments = [hashlib.blake2b(filters["entityKey"].encode("utf-8"), digest_size=16).digest(),
+                         filters["entityKey"], *arguments]
+        if filters.get("q"):
+            source += " JOIN result_rows searched ON searched.id=r.id"
+            conditions.append("searched.search_text LIKE ? ESCAPE '\\'")
+            arguments.append(self._like(filters["q"].casefold()))
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         limit = max(1, min(int(filters.get("limit", 40)), 100))
         offset = max(0, int(filters.get("offset", 0)))
-        with closing(self.connect()) as db:
-            total = db.execute("SELECT count(*)" + source + where, arguments).fetchone()[0]
-            rows = db.execute("SELECT r.id,r.domain,r.input_key,r.input_kind,r.input_uuid,r.artist_uuid,"
-                              "r.artist_name,r.provider,r.outcome,r.reason,r.method,r.label" + source
-                              + where + " ORDER BY r.id DESC LIMIT ? OFFSET ?", (*arguments, limit, offset)).fetchall()
+        with closing(self.connect(read_timeout=10)) as db:
+            total = db.execute(prefix + "SELECT count(*)" + source + where, arguments).fetchone()[0]
+            selected = db.execute(prefix + "SELECT r.id" + source + where
+                                  + " ORDER BY r.id DESC LIMIT ? OFFSET ?", (*arguments, limit, offset)).fetchall()
+            ids = [row[0] for row in selected]
+            # Materialize only the current page's summaries. Counts and pagination
+            # need no title decoding or wide metadata joins across every recording.
+            rows = []
+            if ids:
+                rows = db.execute(
+                    "SELECT id,domain,input_key,input_kind,input_uuid,artist_uuid,artist_name,provider,outcome,reason,method,label "
+                    "FROM result_rows WHERE id IN (" + ",".join("?" for _ in ids) + ") ORDER BY id DESC", ids
+                ).fetchall()
             items = []
             for row in rows:
                 item = dict(row)
@@ -477,7 +534,8 @@ class ShadowIndex:
         discovered = {str(path.relative_to(self.run)) for path in self.chunks()}
         indexed_files = {item["path"] for item in chunks}
         with self._status_lock:
-            status = {"activeFile": self._active_file, "lastScan": self._last_scan, "error": self._scan_error}
+            status = {"activeFile": self._active_file, "lastScan": self._last_scan,
+                      "error": self._scan_error, "pauseReason": self._pause_reason}
         return {"run": str(self.run), "progress": progress, "progressError": progress_error,
                 "coverage": coverage, "facets": facets, "indexedRecords": sum(indexed.values()),
                 "pendingChunks": len(discovered-indexed_files),
@@ -493,7 +551,7 @@ class ShadowIndex:
             if self._aggregate_cache is not None:
                 return self._aggregate_cache
             revision = self._revision
-        with closing(self.connect()) as db:
+        with closing(self.connect(read_timeout=15)) as db:
             db.execute("BEGIN")
             groups = db.execute("""SELECT r.domain_id,h.provider_id,r.outcome_id,h.artist_id,count(*) n
                 FROM records r JOIN chunks c ON c.id=r.chunk_id JOIN headers h ON h.id=r.header_id
@@ -541,8 +599,10 @@ def handler_for(index):
                 return self.send_json(404, {"error": str(error)})
             except (ValueError, OSError, EOFError, zlib.error) as error:
                 return self.send_json(409, {"error": str(error)})
-            except sqlite3.Error:
-                return self.send_json(503, {"error": "Reader index is temporarily unavailable."})
+            except sqlite3.Error as error:
+                message = ("This query took too long. Try fewer artists or a more specific search."
+                           if str(error) == "interrupted" else "Reader index is temporarily unavailable.")
+                return self.send_json(503, {"error": message})
 
         def send_json(self, status, payload):
             return self.send_body(status, json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
@@ -565,10 +625,12 @@ def main():
     parser.add_argument("--run", type=Path, required=True, help="Absolute existing shadow output directory")
     parser.add_argument("--bind", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=18764)
+    parser.add_argument("--minimum-free-bytes", type=int, default=0,
+                        help="Pause indexing below this free-space reserve; keep serving existing results")
     args = parser.parse_args()
     if not args.run.is_absolute() or not args.run.is_dir():
         parser.error("--run must name an absolute, existing directory.")
-    index = ShadowIndex(args.run)
+    index = ShadowIndex(args.run, args.minimum_free_bytes)
     stop = threading.Event()
 
     def follow():
