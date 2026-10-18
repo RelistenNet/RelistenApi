@@ -9,7 +9,7 @@ namespace Relisten.Normalization.Batch;
 /// A name and city retrieve alternatives, but cannot merge physical premises.
 /// Production matching, review and acceptance remain separate from this reader.
 /// </summary>
-public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
+public sealed partial class ShadowVenueAdapter : IShadowCatalogAdapter
 {
     private const int MaximumAlternatives = 20;
     private static readonly IReadOnlyList<string> Domains = ["venues"];
@@ -24,7 +24,8 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
     private readonly ShadowVenueGeography? geography;
 
     public string Version =>
-        "shadow-venue-physical-history-v2/geography=" + (geography?.EvidenceIdentity ?? "none");
+        "shadow-venue-physical-history-v3/corpus-hypotheses-v1/geography="
+        + (geography?.EvidenceIdentity ?? "none");
 
     /// <param name="geographyManifest">Optional pinned offline GeoNames manifest. Null preserves parsed locality labels.</param>
     public ShadowVenueAdapter(string? geographyManifest = null)
@@ -43,11 +44,16 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
 
     public void Observe(JsonElement record)
     {
+        if (ObserveSourceContext(record))
+        {
+            return;
+        }
         if (DomainsFor(record.GetProperty("kind").GetString()!).Count == 0)
         {
             return;
         }
         var venue = ShadowVenueObservation.Read(record.GetProperty("row"), geography);
+        normalization = null;
         if (venues.TryGetValue(venue.Uuid, out var previous))
         {
             // Repeated legacy UUIDs may carry different snapshots. Keep their
@@ -76,10 +82,26 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             yield break;
         }
         var venue = ShadowVenueObservation.Read(input.Row, geography);
-        var grouping = Place(venue);
+        var normalized = Normalize(venue);
+        var grouping =
+            normalized.MembershipBasis == "conflicting_source_show_venue_accounts"
+                ? (
+                    Key: ShadowCatalogIdentity.Key("venue", "catalog\n" + venue.Uuid.ToString("D")),
+                    Basis: normalized.MembershipBasis
+                )
+                : Place(venue);
+        if (normalized.Hypothesis is { } hypothesis)
+        {
+            grouping = (hypothesis.Key, hypothesis.Basis);
+        }
         var candidates = AlternativeIds(venue);
+        if (normalized.Hypothesis is { } selected)
+        {
+            candidates.UnionWith(normalizedMembers[selected.Key]);
+            candidates.Remove(venue.Uuid);
+        }
         var alternatives = candidates
-            .OrderByDescending(id => Place(venues[id]).Key == grouping.Key)
+            .OrderByDescending(id => NormalizedPlaceKey(venues[id]) == grouping.Key)
             .ThenByDescending(id => venues[id].NameLocalityKey == venue.NameLocalityKey)
             .ThenBy(id => id)
             .Take(MaximumAlternatives)
@@ -89,7 +111,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
         var enrichment = Enrichment(venue, grouping.Basis);
         var proposal = new ShadowVenueProposal(
             grouping.Key,
-            venue.Name,
+            normalized.Hypothesis?.PreferredName ?? venue.Name,
             venue.Scope,
             venue.Locality,
             venue.Coordinates,
@@ -99,8 +121,9 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             alternatives,
             candidates.Count,
             candidates.Count > alternatives.Length,
-            unknowns,
-            enrichment
+            unknowns.Concat(normalized.Uncertainties).Distinct().ToArray(),
+            enrichment,
+            Normalization: normalized
         );
         var outcome =
             !venue.HasName
@@ -108,6 +131,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             || venue.Locality.BrowseKey == null
             || venue.Locality.Geography is { ProposedGeographicKey: null }
             || conflictingRows.Contains(venue.Uuid)
+            || normalized.Status == "ambiguous"
                 ? "unresolved"
                 : "proposed";
         var reason =
@@ -117,9 +141,16 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
             : venue.Locality.Geography is { ProposedGeographicKey: null } geographic
                 ? geographic.Status
             : venue.Locality.BrowseKey == null ? "locality_requires_interpretation"
+            : normalized.Status == "ambiguous" ? normalized.MembershipBasis
             : grouping.Basis == "retained_venue_row" ? "physical_identity_requires_more_evidence"
             : null;
-        var entityKeys = new List<string> { grouping.Key };
+        var entityKeys = new List<string> { grouping.Key, Place(venue).Key };
+        if (normalized.Hypothesis is { } named)
+        {
+            entityKeys.Add(
+                ShadowCatalogIdentity.Key("venue_name", ShadowVenueText.Key(named.PreferredName))
+            );
+        }
         if (venue.Locality.BrowseKey != null)
         {
             entityKeys.Add(venue.Locality.BrowseKey);
@@ -151,7 +182,7 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
                 NameAndLocalityEstablishIdentity = false,
             },
             reason,
-            entityKeys
+            entityKeys.Distinct().ToArray()
         );
     }
 
@@ -243,21 +274,31 @@ public sealed class ShadowVenueAdapter : IShadowCatalogAdapter
     )
     {
         var otherPlace = Place(other);
+        var normalizedOther = Normalize(other).Hypothesis;
+        if (normalizedOther != null)
+        {
+            otherPlace = (normalizedOther.Key, normalizedOther.Basis);
+        }
         var relationship =
-            otherPlace.Key == placeKey ? "proposed_same_physical_place"
-            : source.Locality.PhysicalConstraintKey == null
-            || other.Locality.PhysicalConstraintKey == null
-                ? "locality_unknown"
-            : source.Locality.PhysicalConstraintKey != other.Locality.PhysicalConstraintKey
-                ? "different_locality_or_location_history"
-            : source.Scope != other.Scope ? "room_stage_or_site_scope_unresolved"
-            : source.Locality.Address != null
-            && other.Locality.Address != null
-            && ShadowVenueText.Key(source.Locality.Address)
-                != ShadowVenueText.Key(other.Locality.Address)
-                ? "different_address_or_relocation"
-            : source.NameKey == other.NameKey ? "same_name_locality_premises_unresolved"
-            : "provider_reference_premises_unresolved";
+            otherPlace.Key == placeKey
+                ? normalizedOther == null
+                    ? "proposed_same_physical_place"
+                    : "proposed_corpus_place_hypothesis"
+                : source.Locality.PhysicalConstraintKey == null
+                || other.Locality.PhysicalConstraintKey == null
+                    ? "locality_unknown"
+                    : source.Locality.PhysicalConstraintKey != other.Locality.PhysicalConstraintKey
+                        ? "different_locality_or_location_history"
+                        : source.Scope != other.Scope
+                            ? "room_stage_or_site_scope_unresolved"
+                            : source.Locality.Address != null
+                            && other.Locality.Address != null
+                            && ShadowVenueText.Key(source.Locality.Address)
+                                != ShadowVenueText.Key(other.Locality.Address)
+                                ? "different_address_or_relocation"
+                                : source.NameKey == other.NameKey
+                                    ? "same_name_locality_premises_unresolved"
+                                    : "provider_reference_premises_unresolved";
         return new(
             other.Uuid,
             other.ArtistId,

@@ -39,6 +39,7 @@ if (
                     or "shadow-rows"
                     or "shadow-native"
                     or "shadow-source-observations"
+                    or "shadow-venues"
             && (args.Length == 3 || args[3] == "--resume")
         )
         || (args.Length == 5 && args[0] == "luna-credit-cohort")
@@ -56,6 +57,7 @@ if (
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
@@ -129,9 +131,11 @@ try
             or "shadow-rows"
             or "shadow-native"
             or "shadow-source-observations"
+            or "shadow-venues"
     )
     {
         var sourceObservationsOnly = args[0] == "shadow-source-observations";
+        var venuesOnly = args[0] == "shadow-venues";
         if (
             sourceObservationsOnly
             && new[]
@@ -154,33 +158,49 @@ try
         );
         var geography =
             geographyManifest == null ? null : ShadowVenueGeography.Load(geographyManifest);
-        var people = new ShadowPeopleAdapter(
-            Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
-            Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256"),
-            Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL"),
-            Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_CANDIDATES"),
-            sourceObservationsOnly: sourceObservationsOnly
-        );
-        var shadow = new ShadowCatalogBatch(
-            sourceObservationsOnly
-                ? [people, new ShadowPerformanceAdapter()]
-                :
-                [
-                    people,
-                    geography == null
-                        ? new ShadowVenueAdapter()
-                        : new ShadowVenueAdapter(geography),
-                    new ShadowNativePeopleAdapter(nativeObservations),
-                    new ShadowNativeVenueAdapter(nativeObservations, geography),
-                    new ShadowNativeFileContentsAdapter(nativeObservations),
-                    new ShadowRepertoireAdapter(),
-                    new ShadowCompositionAdapter(
-                        Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
-                    ),
-                    new ShadowPerformanceAdapter(),
-                ]
-        );
-        var providerInputs = Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PROVIDER_INPUTS");
+        ShadowCatalogBatch shadow;
+        if (venuesOnly)
+        {
+            // Observe the retained source/show contexts, but emit only venue outcomes.
+            // Other domain adapters and their optional model inputs are not constructed.
+            shadow = new([
+                geography == null ? new ShadowVenueAdapter() : new ShadowVenueAdapter(geography),
+            ]);
+        }
+        else
+        {
+            var people = new ShadowPeopleAdapter(
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_CANDIDATES"),
+                sourceObservationsOnly: sourceObservationsOnly
+            );
+            shadow = new ShadowCatalogBatch(
+                sourceObservationsOnly
+                    ? [people, new ShadowPerformanceAdapter()]
+                    :
+                    [
+                        people,
+                        geography == null
+                            ? new ShadowVenueAdapter()
+                            : new ShadowVenueAdapter(geography),
+                        new ShadowNativePeopleAdapter(nativeObservations),
+                        new ShadowNativeVenueAdapter(nativeObservations, geography),
+                        new ShadowNativeFileContentsAdapter(nativeObservations),
+                        new ShadowRepertoireAdapter(),
+                        new ShadowCompositionAdapter(
+                            Environment.GetEnvironmentVariable(
+                                "RELISTEN_SHADOW_COMPOSITION_EVIDENCE"
+                            )
+                        ),
+                        new ShadowPerformanceAdapter(),
+                    ]
+            );
+        }
+        var providerInputs = venuesOnly
+            ? null
+            : Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PROVIDER_INPUTS");
         var outputDirectory = args[0] == "shadow" ? args[3] : args[2];
         if (args[0] is "shadow-rows" or "shadow-native")
         {
@@ -193,7 +213,7 @@ try
                 providerInputsOnly: args[0] == "shadow-native"
             );
         }
-        else if (args[0] is "shadow-inline" or "shadow-source-observations")
+        else if (args[0] is "shadow-inline" or "shadow-source-observations" or "shadow-venues")
         {
             await shadow.RunInlineAsync(
                 args[1],

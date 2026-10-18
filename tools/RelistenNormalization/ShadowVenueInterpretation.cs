@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Relisten.Api.Models.Normalization;
 
@@ -24,7 +25,70 @@ public sealed record ShadowVenueProposal(
     bool AlternativesTruncated,
     IReadOnlyList<string> ProtectedUnknowns,
     IReadOnlyList<string> EnrichmentTasks,
-    bool AcceptedIdentity = false
+    bool AcceptedIdentity = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ShadowVenueNormalization? Normalization = null
+);
+
+/// <summary>
+/// Experimental corpus interpretation, separate from raw labels and accepted physical identity.
+/// Every member of a selected hypothesis emits its own original record and evidence unchanged.
+/// </summary>
+public sealed record ShadowVenueNormalization(
+    string Status,
+    string MembershipBasis,
+    string? OriginalName,
+    string? DisplayLocation,
+    string? GeographicKey,
+    ShadowVenueHypothesis? Hypothesis,
+    int CandidateCount,
+    IReadOnlyList<string> CandidateKeys,
+    bool CandidatesTruncated,
+    IReadOnlyList<string> Uncertainties
+);
+
+public sealed record ShadowVenueHypothesis(
+    string Key,
+    Guid AnchorVenueUuid,
+    string PreferredName,
+    string Scope,
+    string GeographicKey,
+    string DisplayLocation,
+    string Basis,
+    int MemberCount,
+    int ArtistCount,
+    IReadOnlyList<Guid> MemberExamples,
+    bool MembersTruncated,
+    int NameCount,
+    IReadOnlyList<string> Names,
+    bool NamesTruncated,
+    int SourceObservationCount,
+    IReadOnlyList<ShadowVenueSourceContext> SourceExamples,
+    bool SourceExamplesTruncated,
+    ShadowVenueRecordingDates RecordingDates,
+    bool PremisesContinuityVerified = false
+);
+
+/// <summary>Coverage of observed recordings, not historical opening, closing or name-validity dates.</summary>
+public sealed record ShadowVenueRecordingDates(
+    DateOnly? FirstObservedDay,
+    DateOnly? LastObservedDay,
+    int SourcesWithoutExactDay,
+    bool DescribesNameValidity = false
+);
+
+/// <summary>
+/// Original source/show association, not independent confirmation of premises identity.
+/// Dates describe captured recordings; they are never repurposed as name-validity intervals.
+/// </summary>
+public sealed record ShadowVenueSourceContext(
+    Guid SourceUuid,
+    long ArtistId,
+    long? SourceVenueId,
+    Guid? ShowUuid,
+    long? ShowVenueId,
+    string? SourceDate,
+    string? ShowDate
 );
 
 /// <summary>Parsed geographic wording, without claiming a gazetteer-resolved locality.</summary>
@@ -108,7 +172,8 @@ internal sealed record ShadowVenueObservation(
     ShadowVenueCoordinates? Coordinates,
     IReadOnlyList<ShadowVenueHistoryName> PastNames,
     ShadowVenueProviderReference? ProviderReference,
-    bool MultiplePlaces
+    bool MultiplePlaces,
+    long? CatalogId
 )
 {
     public bool HasName => NameKey.Length > 0 && !ShadowVenueText.IsUnknown(Name);
@@ -213,7 +278,10 @@ internal sealed record ShadowVenueObservation(
             ShadowVenueText.Coordinates(row),
             ShadowVenueText.History(past),
             ShadowVenueText.ProviderReference(upstream),
-            multiple
+            multiple,
+            row.TryGetProperty("id", out var catalogId) && catalogId.TryGetInt64(out var number)
+                ? number
+                : null
         );
     }
 }
