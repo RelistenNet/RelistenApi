@@ -19,7 +19,8 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         SetlistStructureChange structure,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var normalizedSets = new List<SetlistSetCorrespondence>();
@@ -135,7 +136,8 @@ public sealed partial class NormalizedMusicService
                 reviewed,
                 structure.SetCorrespondence.Count(other => other.SetUuid == set.Uuid) > 1,
                 map.AuthorizationUuid,
-                ct
+                ct,
+                authenticatedSetlistAttempt
             );
             normalizedSets.Add(map with { AuthorizationUuid = authority });
         }
@@ -159,7 +161,8 @@ public sealed partial class NormalizedMusicService
                     && other.OccurrenceUuids.Intersect(map.OccurrenceUuids).Any()
                 ),
                 map.AuthorizationUuid,
-                ct
+                ct,
+                authenticatedSetlistAttempt
             );
             foreach (var uuid in map.OccurrenceUuids)
             {
@@ -225,7 +228,14 @@ public sealed partial class NormalizedMusicService
             }
             normalizedPassages.Add(map with { AuthorizationUuid = passageAuthority });
         }
-        await ValidateStructureRemovalAuthorizations(c, t, structure, reviewed, ct);
+        await ValidateStructureRemovalAuthorizations(
+            c,
+            t,
+            structure,
+            reviewed,
+            ct,
+            authenticatedSetlistAttempt
+        );
         return structure with
         {
             SetCorrespondence = normalizedSets,
@@ -244,7 +254,8 @@ public sealed partial class NormalizedMusicService
         bool reviewed,
         bool sharedTarget,
         Guid? declaredAuthorization,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var kind = claim.SetIndex.HasValue ? "set" : "passage";
@@ -263,7 +274,8 @@ public sealed partial class NormalizedMusicService
             claim,
             completeTargets,
             declaredAuthorization,
-            ct
+            ct,
+            authenticatedSetlistAttempt
         );
         if (declared.HasValue)
         {
@@ -349,7 +361,8 @@ public sealed partial class NormalizedMusicService
                     structure.Edition.Uuid,
                     authority,
                     completeTargets,
-                    ct
+                    ct,
+                    authenticatedSetlistAttempt
                 );
             }
             return targets[0].AuthorizationUuid;

@@ -152,11 +152,20 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         MusicPublication publication,
         Guid decisionUuid,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         await LockAndValidateChanges(c, t, publication, reviewed, ct);
-        publication = await ValidateStructureRoute(c, t, publication, reviewed, ct);
+        authenticatedSetlistAttempt ??= new SetlistMaterializationPublicationAuthority(null);
+        publication = await ValidateStructureRoute(
+            c,
+            t,
+            publication,
+            reviewed,
+            ct,
+            authenticatedSetlistAttempt
+        );
         await RestoreSplitIdentities(c, t, publication, reviewed, ct);
         foreach (var song in publication.RepertoireSongs)
         {

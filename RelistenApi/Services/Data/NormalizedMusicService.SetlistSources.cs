@@ -274,7 +274,8 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         NormalizationWorkTicket ticket,
         SetlistStructureChange structure,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var batches = await ReadStructureProposals(c, t, structure, ct);
@@ -304,16 +305,39 @@ public sealed partial class NormalizedMusicService
             }
         }
         var consumed = ticket.Inputs.Select(input => input.RevisionUuid).ToHashSet();
-        if (
-            structure
-                .Sets.SelectMany(set => set.Evidence)
-                .Any(evidence => !consumed.Contains(evidence.InputRevisionUuid))
-        )
+        foreach (var set in structure.Sets)
         {
+            if (set.Evidence.All(evidence => consumed.Contains(evidence.InputRevisionUuid)))
+            {
+                continue;
+            }
+            // A withdrawal retains the target's accepted evidence; it does not claim that the
+            // historical raw revision is still current. Only the authenticated consumer route
+            // may use its same-transaction, revision-checked accepted snapshot for this purpose.
+            if (IsAuthenticatedSetTombstone(structure, set, authenticatedSetlistAttempt))
+            {
+                continue;
+            }
             throw new ArgumentException(
                 "Set evidence is outside the consumed original input read set."
             );
         }
+    }
+
+    private static bool IsAuthenticatedSetTombstone(
+        SetlistStructureChange structure,
+        SetlistStructureSet set,
+        SetlistMaterializationPublicationAuthority? authority
+    )
+    {
+        var context = authority?.Attempt?.Preparation?.Context;
+        return authority != null
+            && set.Retracted
+            && context != null
+            && context.EditionUuid == structure.Edition.Uuid
+            && context.Structure?.Revision == structure.ExpectedRevision
+            && authority.AcceptedSets.TryGetValue(set.Uuid, out var previous)
+            && SameStructureJson(previous with { Retracted = true }, set);
     }
 
     private sealed record StructureProposalBound(int Count, long Bytes);

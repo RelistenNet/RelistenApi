@@ -117,7 +117,20 @@ public sealed record TrackContentChange : MusicChange
     public long? StartMs { get; init; }
     public long? EndMs { get; init; }
     public string MatchEvidence { get; init; } = "file_title";
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TrackContentTitleFacts? TitleFacts { get; init; }
 }
+
+public sealed record TrackContentTitleFacts(
+    TitleCoverage Coverage,
+    TitleTransition TransitionAfter,
+    IReadOnlyList<TrackContentTitleQualifier> Qualifiers,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        NormalizedEvidenceReference? SourceEvidence = null
+);
+
+public sealed record TrackContentTitleQualifier(string Kind, NormalizedEvidenceReference Evidence);
 
 public sealed record MusicExternalIdentityChange : MusicChange
 {

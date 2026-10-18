@@ -102,7 +102,8 @@ public sealed partial class NormalizedMusicService
                     SELECT a.uuid AS AuthorizationUuid,a.edition_uuid AS EditionUuid,a.operation_uuid AS OperationUuid,
                         a.authorization_key AS AuthorizationKey,a.kind AS Kind,a.action AS Action,a.payload::text AS Payload,
                         a.source_tickets::text AS SourceTickets,a.created_at AS CreatedAt,
-                        EXISTS(SELECT 1 FROM normalization.setlist_authorization_heads h WHERE h.authorization_uuid=a.uuid) AS Active
+                        EXISTS(SELECT 1 FROM normalization.setlist_authorization_heads h WHERE h.authorization_uuid=a.uuid) AS Active,
+                        a.processor_decision_uuid AS ProcessorDecisionUuid
                     FROM normalization.setlist_authorization_events a
                     WHERE a.edition_uuid=@editionUuid AND (@afterUuid::uuid IS NULL OR a.uuid>@afterUuid)
                     ORDER BY a.uuid LIMIT @limit
@@ -780,19 +781,21 @@ public sealed partial class NormalizedMusicService
                 : null,
             JsonSerializer.Deserialize<NormalizationWorkTicket[]>(row.SourceTickets)!,
             row.Active,
-            row.CreatedAt
+            row.CreatedAt,
+            row.ProcessorDecisionUuid
         );
 
     private sealed record SetlistAuthorizationRow(
         Guid AuthorizationUuid,
         Guid EditionUuid,
-        Guid OperationUuid,
+        Guid? OperationUuid,
         string AuthorizationKey,
         string Kind,
         string Action,
         string Payload,
         string SourceTickets,
         DateTime CreatedAt,
-        bool Active
+        bool Active,
+        Guid? ProcessorDecisionUuid = null
     );
 }

@@ -21,10 +21,18 @@ public sealed partial class NormalizedMusicService
         SetlistClaimReference claim,
         IReadOnlyList<Guid> targets,
         Guid? declared,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
-        var head = await ReadSetlistAuthorizationHead(c, t, edition, ClaimKey(source, claim), ct);
+        var head = await ReadSetlistAuthorizationHead(
+            c,
+            t,
+            edition,
+            ClaimKey(source, claim),
+            ct,
+            authenticatedSetlistAttempt
+        );
         if (head == null)
         {
             // A different exact source can carry provenance only through the existing stable
@@ -78,19 +86,21 @@ public sealed partial class NormalizedMusicService
         return head.AuthorizationUuid;
     }
 
-    private static Task<SetlistAuthorizationRow?> ReadSetlistAuthorizationHead(
+    private static async Task<SetlistAuthorizationRow?> ReadSetlistAuthorizationHead(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         Guid edition,
         string key,
-        CancellationToken ct
-    ) =>
-        c.QuerySingleOrDefaultAsync<SetlistAuthorizationRow>(
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
+    )
+    {
+        var row = await c.QuerySingleOrDefaultAsync<SetlistAuthorizationRow>(
             new CommandDefinition(
                 """
                 SELECT a.uuid AS AuthorizationUuid,a.edition_uuid AS EditionUuid,a.operation_uuid AS OperationUuid,
                     a.authorization_key AS AuthorizationKey,a.kind AS Kind,a.action AS Action,a.payload::text AS Payload,
-                    a.source_tickets::text AS SourceTickets,a.created_at AS CreatedAt,true AS Active
+                    a.source_tickets::text AS SourceTickets,a.created_at AS CreatedAt,true AS Active,a.processor_decision_uuid AS ProcessorDecisionUuid
                 FROM normalization.setlist_authorization_heads h JOIN normalization.setlist_authorization_events a ON a.uuid=h.authorization_uuid
                 WHERE h.edition_uuid=@edition AND h.authorization_key=@key
                 """,
@@ -99,6 +109,18 @@ public sealed partial class NormalizedMusicService
                 cancellationToken: ct
             )
         );
+        if (row != null)
+        {
+            await RequireProcessorSetlistAuthorizationAsync(
+                c,
+                t,
+                row,
+                ct,
+                authenticatedSetlistAttempt
+            );
+        }
+        return row;
+    }
 
     private static async Task ValidateInheritedCorrespondenceAuthorization(
         NpgsqlConnection c,
@@ -106,21 +128,30 @@ public sealed partial class NormalizedMusicService
         Guid edition,
         Guid authorization,
         IReadOnlyList<Guid> targets,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
-        var payload = await c.QuerySingleOrDefaultAsync<string>(
+        var key = await c.QuerySingleOrDefaultAsync<string>(
             new CommandDefinition(
-                """
-                SELECT a.payload::text FROM normalization.setlist_authorization_heads h
-                    JOIN normalization.setlist_authorization_events a ON a.uuid=h.authorization_uuid
-                    WHERE h.edition_uuid=@edition AND a.uuid=@authorization AND a.kind='correspondence' AND a.action='authorize'
-                """,
+                "SELECT authorization_key FROM normalization.setlist_authorization_events WHERE edition_uuid=@edition AND uuid=@authorization AND kind='correspondence' AND action='authorize'",
                 new { edition, authorization },
                 t,
                 cancellationToken: ct
             )
         );
+        var head =
+            key == null
+                ? null
+                : await ReadSetlistAuthorizationHead(
+                    c,
+                    t,
+                    edition,
+                    key,
+                    ct,
+                    authenticatedSetlistAttempt
+                );
+        var payload = head?.AuthorizationUuid == authorization ? head.Payload : null;
         if (
             payload == null
             || !JsonSerializer
@@ -140,7 +171,8 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         SetlistStructureChange structure,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var references = structure.RemovalAuthorizations ?? [];
@@ -162,7 +194,14 @@ public sealed partial class NormalizedMusicService
                     "Removal authorization references must name explicit tombstones in this image."
                 );
             }
-            await ValidateRemovalAuthorization(c, t, structure, reference, ct);
+            await ValidateRemovalAuthorization(
+                c,
+                t,
+                structure,
+                reference,
+                ct,
+                authenticatedSetlistAttempt
+            );
         }
         if (reviewed)
         {
@@ -231,7 +270,8 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         SetlistStructureChange structure,
         SetlistRemovalAuthorization reference,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var head = await ReadSetlistAuthorizationHead(
@@ -239,7 +279,8 @@ public sealed partial class NormalizedMusicService
             t,
             structure.Edition.Uuid,
             RemovalKey(reference.Kind, reference.TargetUuid),
-            ct
+            ct,
+            authenticatedSetlistAttempt
         );
         if (
             head == null

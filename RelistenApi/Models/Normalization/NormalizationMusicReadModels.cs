@@ -107,4 +107,35 @@ public sealed class NormalizedTrackContent : NormalizedMusicRelationship
     public long? end_ms { get; set; }
     public string match_evidence { get; set; } = "";
     public bool reference_available { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    )]
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public NormalizedTrackTitleFacts? title_facts { get; set; }
+
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    )]
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public string? title_facts_status { get; set; }
 }
+
+/// <summary>What the retained title says; these values establish no audio boundary or verified performance transition.</summary>
+public sealed record NormalizedTrackTitleFacts(
+    string coverage,
+    string transition_after,
+    IReadOnlyList<NormalizedTrackTitleQualifier> qualifiers,
+    [property: System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    )]
+    [property: Newtonsoft.Json.JsonProperty(
+        NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore
+    )]
+        NormalizationPublicEvidence? source_evidence
+);
+
+public sealed record NormalizedTrackTitleQualifier(
+    string kind,
+    NormalizationPublicEvidence evidence
+);

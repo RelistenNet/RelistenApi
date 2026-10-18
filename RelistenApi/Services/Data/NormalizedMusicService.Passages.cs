@@ -210,6 +210,24 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     )
     {
+        if (content.TitleFacts is { } titleFacts)
+        {
+            if (!Enum.IsDefined(titleFacts.Coverage) || !Enum.IsDefined(titleFacts.TransitionAfter))
+            {
+                throw new ArgumentException(
+                    "File title coverage and transition must retain supported extraction values."
+                );
+            }
+            await NormalizedPeopleService.ValidateEvidenceAsync(
+                c,
+                t,
+                titleFacts
+                    .Qualifiers.Select(qualifier => qualifier.Evidence)
+                    .Concat(titleFacts.SourceEvidence is { } sourceEvidence ? [sourceEvidence] : [])
+                    .ToArray(),
+                ct
+            );
+        }
         // Only new catalog bindings need live validation. A disappeared file retains its prior
         // accepted contents and evidence; it simply cannot supply a playable public result.
         await Require(
@@ -286,11 +304,29 @@ public sealed partial class NormalizedMusicService
         {
             throw new ArgumentException("A content bound exceeds the known file duration.");
         }
-        if (content.RepertoireSongUuid is { } song && track != null)
+        // An explicitly withdrawn assertion retains its exact historical musical bindings.
+        // Redirected or withdrawn targets must not prevent recording that tombstone; any new
+        // binding, reactivation or file move still follows the live-scope checks below.
+        var retainsHistoricalBinding =
+            content.Retracted
+            && await c.ExecuteScalarAsync<bool>(
+                new CommandDefinition(
+                    """
+                    SELECT EXISTS(SELECT 1 FROM normalization.track_contents WHERE uuid=@Uuid
+                        AND source_track_uuid=@SourceTrackUuid
+                        AND repertoire_song_uuid IS NOT DISTINCT FROM @RepertoireSongUuid
+                        AND occurrence_uuid IS NOT DISTINCT FROM @OccurrenceUuid)
+                    """,
+                    content,
+                    t,
+                    cancellationToken: ct
+                )
+            );
+        if (content.RepertoireSongUuid is { } song && track != null && !retainsHistoricalBinding)
         {
             await RequireArtistSong(c, t, song, track.ArtistUuid, ct);
         }
-        if (content.OccurrenceUuid is { } occurrence)
+        if (content.OccurrenceUuid is { } occurrence && !retainsHistoricalBinding)
         {
             var scope =
                 await c.QuerySingleOrDefaultAsync<OccurrenceScope>(

@@ -263,13 +263,21 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         NormalizationWorkTicket ticket,
         MusicPublication publication,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         var required = new HashSet<(string Domain, string Kind, Guid Uuid)>();
         if (publication.SetlistStructure is { } structure)
         {
-            await ValidateStructureReadSet(c, t, ticket, structure, ct);
+            await ValidateStructureReadSet(
+                c,
+                t,
+                ticket,
+                structure,
+                ct,
+                authenticatedSetlistAttempt
+            );
         }
         foreach (var link in publication.CompositionLinks)
         {

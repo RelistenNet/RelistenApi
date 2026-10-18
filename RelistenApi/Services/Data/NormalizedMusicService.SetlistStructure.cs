@@ -110,7 +110,8 @@ public sealed partial class NormalizedMusicService
         NpgsqlTransaction t,
         MusicPublication publication,
         bool reviewed,
-        CancellationToken ct
+        CancellationToken ct,
+        SetlistMaterializationPublicationAuthority? authenticatedSetlistAttempt = null
     )
     {
         if (publication.SetlistStructure is not { } structure)
@@ -140,7 +141,14 @@ public sealed partial class NormalizedMusicService
             ct
         );
         await ValidateStructureSources(c, t, structure, reviewed, ct);
-        var normalized = await ValidateStructureCorrespondence(c, t, structure, reviewed, ct);
+        var normalized = await ValidateStructureCorrespondence(
+            c,
+            t,
+            structure,
+            reviewed,
+            ct,
+            authenticatedSetlistAttempt
+        );
         return publication with { SetlistStructure = normalized };
     }
 

@@ -171,6 +171,10 @@ internal static class LocalTestDatabase
             Migrations.AddRepertoireResolution.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddRepertoireConsumers.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

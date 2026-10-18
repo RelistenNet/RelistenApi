@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -70,12 +71,14 @@ public sealed record SetlistRemovalAuthorization(
 public sealed record SetlistAuthorizationRecord(
     Guid AuthorizationUuid,
     Guid EditionUuid,
-    Guid OperationUuid,
+    Guid? OperationUuid,
     string Kind,
     SetlistAuthorizationAction Action,
     SetlistCorrespondenceApproval? Correspondence,
     SetlistRemovalApproval? Removal,
     IReadOnlyList<NormalizationWorkTicket> OriginalSourceTickets,
     bool Active,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        Guid? ProcessorDecisionUuid = null
 );

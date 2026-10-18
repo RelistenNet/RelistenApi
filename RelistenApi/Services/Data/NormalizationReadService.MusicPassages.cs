@@ -329,6 +329,7 @@ public sealed partial class NormalizationReadService
                     }
                 }
                 await PopulateMusicEvidenceAsync(c, t, rows, cancellationToken);
+                await PopulateTrackTitleFactsAsync(c, t, rows.Take(limit), cancellationToken);
                 return Page(
                     rows,
                     limit,
