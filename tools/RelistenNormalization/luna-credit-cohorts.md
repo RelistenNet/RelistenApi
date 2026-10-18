@@ -12,6 +12,22 @@ Development requires development partitions. Tuning requires a validation partit
 
 Source scope binds each field to its source UUID, artist UUID, original text hash and partitions. Provider origins use retained provider-input or importer-execution evidence for Archive.org, Local or Phish.in. Unknown origin remains explicit. An artist's provider configuration does not establish the origin of a particular field.
 
+The label resource provider distinguishes two original-text authorities. Use
+[relisten_catalog_snapshot](luna-credit-fields.md) for retained catalog field text.
+Cohorts may instead use the explicit namespace relisten_retained_provider_field
+for a current provider field linked to the same catalog source UUID. That namespace
+requires provider_origin to name Archive.org, Local or Phish.in, use
+retained_provider_input, and retain both evidence and resource-key SHA-256 hashes.
+Unknown origin or importer-execution evidence alone cannot authorize native field
+text. The legacy 100-field mode remains catalog-snapshot only.
+
+Both namespaces use the experiment field path /raw_record/row/FIELD. This is a
+normalized one-field experiment envelope, not a claim about the native JSON shape.
+The source receipt must preserve the native pointer, exact complete provider value
+and retained response identity. When the current native value differs from the
+catalog snapshot, keep the native value and its own hash; do not describe it as
+catalog snapshot text.
+
 ## Run and recover
 
 Use the dedicated local database and cache migrations described in the legacy guide. The tool reads `OPENAI_API_KEY` from its process environment. Choose a new job UUID and output directory:

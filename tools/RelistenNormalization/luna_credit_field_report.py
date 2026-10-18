@@ -112,7 +112,7 @@ class CohortPlan:
         text = raw["field_text"]
         require(field in {"taper", "transferrer", "source", "description", "lineage", "taper_notes"}
                 and label["field_path"] == "/raw_record/row/" + field
-                and label["resource"]["provider"] == "relisten_catalog_snapshot"
+                and label["resource"]["provider"] in {"relisten_catalog_snapshot", "relisten_retained_provider_field"}
                 and label["resource"]["resource_type"] == "source"
                 and uuid.UUID(source).int != 0 and uuid.UUID(artist).int != 0
                 and key == "credit-field:" + source + ":" + field
@@ -140,12 +140,19 @@ class CohortPlan:
                 and answer["adjudicator"].strip(), "Non-development label lacks an adjudicator")
         origin = scope["provider_origin"]
         closed(origin, {"provider", "kind", "evidence_sha256", "resource_key_sha256"}, "provider origin")
-        require((origin["provider"] == origin["kind"] == "unknown"
-                 and origin["evidence_sha256"] is None and origin["resource_key_sha256"] is None)
-                or (origin["provider"] in {"archive.org", "local", "phish.in"}
-                    and origin["kind"] in {"retained_provider_input", "import_execution"}
-                    and valid_digest(origin["evidence_sha256"]) and valid_digest(origin["resource_key_sha256"])),
+        unknown_origin = (origin["provider"] == origin["kind"] == "unknown"
+                          and origin["evidence_sha256"] is None and origin["resource_key_sha256"] is None)
+        known_provider_evidence = (origin["provider"] in {"archive.org", "local", "phish.in"}
+                                   and valid_digest(origin["evidence_sha256"])
+                                   and valid_digest(origin["resource_key_sha256"]))
+        require(unknown_origin or known_provider_evidence
+                and origin["kind"] in {"retained_provider_input", "import_execution"},
                 "Cohort provider provenance is incomplete")
+        # Native field bytes need a retained provider input; an import execution can
+        # classify catalog provenance without authenticating a native field capture.
+        require(label["resource"]["provider"] != "relisten_retained_provider_field"
+                or known_provider_evidence and origin["kind"] == "retained_provider_input",
+                "Native cohort field requires retained provider input provenance")
 
     def check_selection(self, labels_bytes, selection):
         require(labels_bytes == self.labels_bytes and selection["cohort"] == {

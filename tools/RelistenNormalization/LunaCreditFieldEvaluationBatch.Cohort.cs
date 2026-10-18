@@ -257,14 +257,29 @@ public sealed partial class LunaCreditFieldEvaluationBatch
                 && origin.Kind == "unknown"
                 && origin.EvidenceSha256 == null
                 && origin.ResourceKeySha256 == null;
-            var supported =
-                origin.Provider is "archive.org" or "local" or "phish.in"
-                && origin.Kind is "retained_provider_input" or "import_execution"
-                && IsSha256(origin.EvidenceSha256)
-                && IsSha256(origin.ResourceKeySha256);
+            var supported = IsKnownProviderOrigin(origin);
             Require(unknown || supported, "Provider origin lacks explicit retained provenance.");
         }
     }
+
+    // A native field keeps its catalog source link, but its original text comes from the
+    // retained provider response. Only cohort inputs can supply that retained origin.
+    private static bool IsSupportedFieldProvider(
+        string provider,
+        LunaCreditCohortProviderOrigin? origin
+    ) =>
+        provider == "relisten_catalog_snapshot"
+        || (
+            provider == "relisten_retained_provider_field"
+            && origin is { Kind: "retained_provider_input" }
+            && IsKnownProviderOrigin(origin)
+        );
+
+    private static bool IsKnownProviderOrigin(LunaCreditCohortProviderOrigin origin) =>
+        origin.Provider is "archive.org" or "local" or "phish.in"
+        && origin.Kind is "retained_provider_input" or "import_execution"
+        && IsSha256(origin.EvidenceSha256)
+        && IsSha256(origin.ResourceKeySha256);
 
     private static bool HasContact(string text) =>
         Regex.IsMatch(text, @"[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}");
@@ -327,7 +342,7 @@ public sealed record LunaCreditCohortScope(
     [property: JsonPropertyName("items")] IReadOnlyList<LunaCreditCohortScopeItem> Items
 );
 
-/// <summary>Exact catalog field identity, partitions and reviewed provider origin for one task.</summary>
+/// <summary>Catalog source link, original field identity, partitions and reviewed provider origin.</summary>
 public sealed record LunaCreditCohortScopeItem(
     [property: JsonPropertyName("label_id")] string LabelId,
     [property: JsonPropertyName("evidence_id")] string EvidenceId,

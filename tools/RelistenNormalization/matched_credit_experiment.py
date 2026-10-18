@@ -213,7 +213,12 @@ class MatchedFields:
             require(field in {"taper", "transferrer", "source", "description", "lineage", "taper_notes"}
                     and label["field_path"] == "/raw_record/row/" + field,
                     "Unsupported raw field")
-            require(label["resource"]["provider"] == "relisten_catalog_snapshot"
+            # CohortPlan already requires retained-input evidence for native fields.
+            # The original 100-field comparison remains catalog-snapshot-only.
+            provider = label["resource"]["provider"]
+            require((provider == "relisten_catalog_snapshot"
+                     or expected_version == "luna-credit-cohort-v1"
+                     and provider == "relisten_retained_provider_field")
                     and label["resource"]["resource_type"] == "source"
                     and key == "credit-field:" + source_uuid + ":" + field
                     and item["taskId"] == label["task_id"] == "extract:source_sample:" + source_uuid

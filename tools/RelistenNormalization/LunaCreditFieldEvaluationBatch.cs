@@ -399,8 +399,10 @@ public sealed partial class LunaCreditFieldEvaluationBatch
             Require(
                 sourceUuid != Guid.Empty
                     && artistUuid != Guid.Empty
-                    && Text(label.GetProperty("resource"), "provider")
-                        == "relisten_catalog_snapshot"
+                    && IsSupportedFieldProvider(
+                        Text(label.GetProperty("resource"), "provider"),
+                        cohort?.Scope.Items[items.Count].ProviderOrigin
+                    )
                     && Text(label.GetProperty("resource"), "resource_type") == "source"
                     && labelId == $"credit-field:{sourceUuid:D}:{fieldName}"
                     && Text(label, "task_id") == "extract:" + evidenceId

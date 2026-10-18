@@ -354,8 +354,13 @@ class MatchedCohortTests(unittest.TestCase):
             exclusions = json.loads(path.read_text())
             exclusions["explicit_receipt_exclusions"] += [reference.labels[i]["label_id"] for i in range(11, 24)]
             write(path, exclusions)
-            cohort = SyntheticCohort(root / "cohort", 6)
+            cohort = SyntheticCohort(root / "cohort", 6,
+                field_texts=["Contact fixture", "Native River", "Corin Vale", "Mira Brook", "Aster Reed", "Sage Vale"])
             cohort.replace_field_with_skipped(0, "Alice <alice@example.org>")
+            cohort.labels[1]["resource"]["provider"] = "relisten_retained_provider_field"
+            cohort.scopes[1]["provider_origin"] = {
+                "provider": "local", "kind": "retained_provider_input",
+                "evidence_sha256": "a" * 64, "resource_key_sha256": "b" * 64}
             cohort.outputs[1]["luna"]["fromCache"] = False
             cohort.attempts.append({"uuid": str(uuid.uuid4()), "jobUuid": cohort.job_uuid,
                                    "cacheKey": cohort.outputs[1]["luna"]["cacheKey"], "state": "succeeded"})
@@ -380,7 +385,8 @@ class MatchedCohortTests(unittest.TestCase):
                     fitted.append((tuple(example.key for example in examples), tuple(roles)))
                     self.assertEqual(len(examples), 84)
                     self.assertFalse(set(cohort.authenticated().labels) & {example.key for example in examples})
-                    self.assertFalse(any("New cohort actor" in example.text for example in examples))
+                    cohort_texts = {field["field_text"] for field in cohort.fields}
+                    self.assertFalse(any(example.text in cohort_texts for example in examples))
                     return {role: SyntheticModel() for role in roles}
                 trainer.fit_models = fit
                 trainer.fit_logistic_models = fit
@@ -402,6 +408,9 @@ class MatchedCohortTests(unittest.TestCase):
             self.assertEqual(value["training_reference"]["fit_fields"], 84)
             self.assertFalse(value["training_reference"]["new_cohort_labels_used_for_fitting"])
             self.assertEqual(value["cohort"]["artist_partition"], "test")
+            self.assertEqual(value["cohort"]["provider_origin_fields"], {"unknown": 5, "local": 1})
+            native = next(row for row in predictions if row["label_id"] == cohort.labels[1]["label_id"])
+            self.assertEqual(native["methods"]["luna"][0]["display_name"], "Native River")
             self.assertEqual(value["coverage"]["fields"]["contact_excluded"], 1)
             self.assertEqual(value["coverage"]["fields"]["attempted_in_job"], 1)
             self.assertEqual(value["coverage"]["attempts_in_job"], 1)
@@ -459,6 +468,20 @@ class MatchedCohortTests(unittest.TestCase):
                  redirect_stdout(io.StringIO()), redirect_stderr(error):
                 self.assertEqual(study.main(reference.argv()), 1)
             self.assertIn("Successful answer lacks equal key-free cached replay", error.getvalue())
+            self.assertFalse((reference.root / "output").exists())
+
+    def test_legacy100_refuses_native_namespace_even_when_envelope_hashes_are_refreshed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = SyntheticStudy(Path(directory))
+            reference.labels[0]["resource"]["provider"] = "relisten_retained_provider_field"
+            reference.save()
+            error = io.StringIO()
+            with patch.object(study, "training_environment",
+                              side_effect=AssertionError("Legacy native input reached fitting")) as environment, \
+                 redirect_stdout(io.StringIO()), redirect_stderr(error):
+                self.assertEqual(study.main(reference.argv()), 1)
+            environment.assert_not_called()
+            self.assertIn("Source or artist identity differs", error.getvalue())
             self.assertFalse((reference.root / "output").exists())
 
     def test_wrong_reference_count_fails_before_any_fit(self):

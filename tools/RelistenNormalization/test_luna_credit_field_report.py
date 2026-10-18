@@ -156,7 +156,7 @@ class CreditComparisonTests(unittest.TestCase):
 class SyntheticCohort:
     """A complete declared population; all inputs and provider receipts are synthetic."""
 
-    def __init__(self, root, count=3, purpose="untouched_evaluation"):
+    def __init__(self, root, count=3, purpose="untouched_evaluation", *, field_texts=None):
         self.root, self.count = root, count
         root.mkdir(parents=True)
         self.labels, self.fields, self.items, self.outputs, self.scopes, self.requests = [], [], [], [], [], []
@@ -166,7 +166,8 @@ class SyntheticCohort:
         for index in range(count):
             source = str(uuid.uuid5(uuid.NAMESPACE_URL, "new-cohort-source-" + str(index)))
             artist = str(uuid.uuid5(uuid.NAMESPACE_URL, "new-cohort-artist-" + str(index)))
-            key, text = "credit-field:" + source + ":taper", "New cohort actor " + str(index)
+            key = "credit-field:" + source + ":taper"
+            text = "New cohort actor " + str(index) if field_texts is None else field_texts[index]
             digest = report.sha256(text.encode())
             self.labels.append({"label_id": key, "task_id": "extract:source_sample:" + source,
                 "evidence_id": "source_sample:" + source, "scope": "complete_single_field",
@@ -301,6 +302,77 @@ class CohortComparisonTests(unittest.TestCase):
             fixture.save()
             with self.assertRaisesRegex(ValueError, "provenance"):
                 fixture.authenticated()
+
+    def test_native_provider_fields_retain_distinct_plaintext_and_exact_origins_through_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            texts = ["Marin Astor", "Corin Vale", "Renée River"]
+            fixture = SyntheticCohort(root / "native", field_texts=texts)
+            for label, scope, provider in zip(fixture.labels, fixture.scopes,
+                                              ("archive.org", "local", "phish.in")):
+                label["resource"]["provider"] = "relisten_retained_provider_field"
+                scope["provider_origin"] = {
+                    "provider": provider, "kind": "retained_provider_input",
+                    "evidence_sha256": report.sha256(("synthetic native capture:" + provider).encode()),
+                    "resource_key_sha256": report.sha256(("synthetic native resource:" + provider).encode())}
+            fixture.save()
+            cohort = fixture.authenticated()
+            self.assertEqual([item["field_text"] for item in cohort.fields.values()], texts)
+            output = root / "report"
+
+            value = report.run(fixture.root / "labels.jsonl", fixture.comparison, output,
+                cohort_plan=fixture.root / "plan.json", cohort_plan_sha256=fixture.plan_sha,
+                comparison_sha256=report.sha256((fixture.comparison / "manifest.json").read_bytes()))
+
+            self.assertEqual(value["fields"], 3)
+            self.assertEqual(value["methods"]["luna"]["true_positive"], 3)
+            self.assertEqual(value["cohort"]["provider_origin_fields"],
+                             {"archive.org": 1, "local": 1, "phish.in": 1})
+            self.assertEqual(value["coverage"]["fields"]["selected"], 3)
+            self.assertTrue((output / "report.json").exists())
+
+    def test_native_namespace_refuses_unretained_or_incomplete_origins_even_with_refreshed_hashes(self):
+        mutations = ("unknown", "import_execution", "missing_evidence", "missing_resource",
+                     "malformed_evidence", "malformed_resource")
+        with tempfile.TemporaryDirectory() as directory:
+            for mutation in mutations:
+                with self.subTest(origin=mutation):
+                    fixture = SyntheticCohort(Path(directory) / mutation,
+                                              field_texts=["Aster Reed", "Corin Vale", "Mira Brook"])
+                    fixture.labels[0]["resource"]["provider"] = "relisten_retained_provider_field"
+                    origin = {"provider": "archive.org", "kind": "retained_provider_input",
+                              "evidence_sha256": "a" * 64, "resource_key_sha256": "b" * 64}
+                    if mutation == "unknown":
+                        origin = {"provider": "unknown", "kind": "unknown",
+                                  "evidence_sha256": None, "resource_key_sha256": None}
+                    elif mutation == "import_execution":
+                        origin["kind"] = "import_execution"
+                    elif mutation.startswith("missing"):
+                        origin["evidence_sha256" if mutation == "missing_evidence"
+                               else "resource_key_sha256"] = None
+                    else:
+                        origin["evidence_sha256" if mutation == "malformed_evidence"
+                               else "resource_key_sha256"] = "Not a SHA-256"
+                    fixture.scopes[0]["provider_origin"] = origin
+                    fixture.save()
+                    with self.assertRaisesRegex(ValueError, "provenance"):
+                        fixture.authenticated()
+
+    def test_catalog_namespace_still_allows_explicit_unknown_and_import_execution_origins(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "catalog")
+            fixture.scopes[1]["provider_origin"] = {
+                "provider": "local", "kind": "import_execution",
+                "evidence_sha256": "a" * 64, "resource_key_sha256": "b" * 64}
+            fixture.save()
+
+            cohort = fixture.authenticated()
+            value = report.compare(cohort.labels_bytes, fixture.selection, fixture.outputs,
+                                   cohort_plan=cohort)
+
+            self.assertEqual(value["fields"], 3)
+            self.assertEqual(value["methods"]["luna"]["true_positive"], 3)
+            self.assertEqual(value["cohort"]["provider_origin_fields"], {"unknown": 2, "local": 1})
 
     def test_tune_requires_adjudication_and_a_plan_relative_complete_bundle(self):
         with tempfile.TemporaryDirectory() as directory:
