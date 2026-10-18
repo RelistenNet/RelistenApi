@@ -183,35 +183,57 @@ now includes 300 Archive, 150 Phish and 220 Local retained inputs. All 670
 performance results bind to their existing recording/show homes. Local's
 220 directories resolve to 150 recordings through 3,060 exact media URL anchors;
 the root and directory revisions remain separate, jointly required evidence.
-The new shared batch processed 6,250 supporting/provider rows and produced
-5,820 outcomes in 7.24 seconds. Its serving view contains only the 4,020 native
-outcomes across people, credits, venues, performances, compositions and setlists.
-The 1,800 supporting catalog outcomes stay outside this view. No processing
-outcome failed; missing facts remain explicit unresolved/not-applicable results.
-All 670 historical assignments and 3,060 Local media anchors remain unchanged.
-The view contains 2,204 proposed, 476 unresolved and 1,340 not-applicable results.
-People and credits each have 432 proposed and 238 unresolved recording inputs;
-those proposals retain 799 actor observations and 867 role-bearing credit claims.
-The venue results retain 670 unaccepted observations. Native name and venue
-searches both follow authenticated catalog keys into original playable files.
+The current native-only run observes the full retained song/setlist dictionaries
+and source/show context, then emits only provider outcomes. It produces 4,690
+outcomes across seven domains for the same 670 native inputs. All 670 historical
+performance and credit payloads and all 3,060 Local media anchors remain unchanged.
+The result retains 799 existing credit-bearing actor observations and 867 credit
+claims. Two additional alias actors retain the explicit names Andrew S./bazillion
+and Pat Myers/DATPAT with their original Local scope. They add no recording role,
+attendance claim or accepted identity.
 
-Native people and credits now consume recording/file prose with the exact
-original citations. Native venues retain identifiers, coordinate kinds, locality
-alternatives and history prose. Selected Local root notes and decoder issues
-stay within their directory account; adjacent accounts cannot contribute facts.
-These native proposals remain separate from the older people/venue directory
-projections. Both native domains expose authenticated source/show keys. The
-reader's “Find playable files” action follows an exact key into the full-file
-reader; it does not move a file or infer a passage-to-audio alignment.
+The [native file view](http://alecs-macbook-pro.tail09dbf.ts.net:18771/?view=files)
+searches all 34,139 decoded files individually: 27,967 Archive files, 3,112 Phish
+files and 3,060 Local files. These are provider file observations, including
+untitled files and non-audio metadata. They are not distinct performances or a
+count of playable catalog tracks. All original file objects and their recording
+origins match the prior native accounts. The file results include 13,162 proposed,
+20,726 unresolved and 251 not-applicable interpretations, with no failed files.
 
-Native decoded files still have no standalone file-content projection. Names or
-aliases mentioned without a recording credit also need direct native extraction;
-credit-bearing actor facts alone do not complete that coverage. The
-[native-wave guide](../../../research/2026-10-17-full-normalization/scale/native-provider-wave-v1.md)
-records the actual runs and provider coverage. The
-[native credit guide](../../../research/2026-10-17-full-normalization/scale/native-provider-credits.md)
-defines person and credit proposals, optional catalog links and original scopes.
-The [Local admission guide](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
+File title mentions use the same artist-scoped repertoire resolver as the catalog
+and setlist paths. Known dictionary identities, provisional title-derived songs
+and competing interpretations stay distinct. Original title citations retain
+Unicode code-point offsets. File positions and title transitions supply no audio
+times, ordered setlist occurrences or performance assignments.
+
+Native aliases now retain assertions, scope coverage and unresolved wording from
+recording/file prose and the selected Local root account. Native venues retain
+identifiers, coordinate kinds, locality alternatives and history prose. Adjacent
+Local accounts cannot contribute facts. These native proposals remain separate
+from the older people/venue directory and music-discovery projections. Connecting
+the new observations to those shared discovery features remains integration work.
+
+The reader adds a compact child-file index while retaining full bodies in the
+original provider chunks. Its complete cache is 14,659,584 bytes, including the
+4,690 parent outcomes and all 34,139 file pointers. Existing catalog file rows
+have no duplicate child projection. Exact source, file and song-key filters work
+alongside title/filename search. Only an exact catalog anchor supplies a catalog
+MP3 control; an absolute native playback locator appears separately as a provider
+file link. Missing bindings leave original files inspectable. No filename becomes
+a guessed URL or catalog track UUID.
+
+The actual SIGINT/resume check interrupted finalization after all input rows and
+outcomes were written, then completed from the same pins. It does not establish
+midstream native recovery. A separate focused test interrupts after the first
+native input, resumes across a skipped dictionary row and compares the complete
+result with an uninterrupted run. The native batch tests also verify complete
+dictionary context, same-mode replay and changed-scope refusal.
+
+The [native-wave guide](../../../research/2026-10-17-full-normalization/scale/native-provider-wave-v1.md)
+records actual runs and coverage. The [native credit guide](../../../research/2026-10-17-full-normalization/scale/native-provider-credits.md)
+defines people, aliases and credit scopes. The [native file contract](../../../../tools/RelistenNormalization/native-files.md)
+defines file identity, interpretation and optional playback. The
+[Local admission guide](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
 defines exact root selection and catalog binding.
 
 The people adapter now retains direct source-anchor identity hypotheses with
@@ -261,9 +283,10 @@ Extraction proposals still require identity matching and accuracy evaluation.
 The latest consolidated normalization checks passed 1,186 tests with 39
 environment-dependent skips; 97 database integration tests passed separately.
 The later title/ordinary-row checks passed 163 tests. The current file reader
-passes 28 behavioral tests. Native routing passed 106 boundary tests and 16 final
-venue cases; contextual people changes passed 21 C# and 16 Python checks. HTTP
-checks follow real native credits and venues through their exact catalog homes
+passes 33 behavioral tests. Native aliases, files, binding and batch behavior
+passed 129 focused checks. The later native-file suite passed 11 cases, including
+partial checkpoint recovery; contextual people changes passed 21 C# and 16 Python
+checks. HTTP checks follow real native credits and venues through their exact catalog homes
 to playable files. These suites overlap; their counts are not a distinct-test total. The
 [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
 pins the exact reports and source versions.
@@ -431,8 +454,8 @@ Jerry/Aadam rehearsal and full-file computation are complete. The full-file
 reader serves the verified correction from its existing index; indexing is
 temporarily paused to reserve capacity for the next domain jobs. The
 people directory supports cross-artist credit lookup and contextual Luna
-hypotheses. Shared venue and music lookup are available. Next, extend native
-file/alias extraction and complete broader title discovery, then improve physical-venue
+hypotheses. Shared venue and music lookup are available. Next, integrate native
+observations into shared discovery and complete broader title discovery, then improve physical-venue
 and composition evidence using the visible results. Physical venue
 history, legacy setlist order, importer provenance and independent accuracy
 qualification remain open; production acceptance follows that work.
