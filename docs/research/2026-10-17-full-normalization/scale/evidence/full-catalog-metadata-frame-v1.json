@@ -1,0 +1,77 @@
+{
+  "state": "verified_complete_artist_source_show_metadata_frame",
+  "source_commit": "421dd75",
+  "captured_at": "2026-10-18T09:10:48.97999+00:00",
+  "snapshot": "59599211:59599211:",
+  "scope": "All deployed artists, sources and shows; track-parent lookups cover supplied known historical metadata references.",
+  "read_only_replica": true,
+  "isolation": "repeatable read",
+  "same_snapshot_counts": {
+    "artists": 4379,
+    "sources": 292522,
+    "shows": 215594
+  },
+  "frame": {
+    "bytes": 673728934,
+    "rows": 582272,
+    "sha256": "8c1b468dd809e47561013adae6a6d099681e60b94680fa01fbef386dee895f7d"
+  },
+  "lookup_seed_tuples": 34867,
+  "lookup_coordinate_results": 69728,
+  "lookup_outcomes": {
+    "found_current_row": 69727,
+    "missing_current_row": 0,
+    "different_catalog_not_queried": 1
+  },
+  "join_diagnostics": {
+    "artists_without_sources": 21,
+    "sources_without_artist": 0,
+    "sources_null_show": 0,
+    "sources_missing_show": 0,
+    "sources_show_artist_disagreements": 0,
+    "shows_without_artist": 0,
+    "lookup_direct_set_parent_disagreements": 0
+  },
+  "paired_native_uuid_parent_disagreements": 0,
+  "independent_audit_passed": true,
+  "verification": {
+    "distinct_synthetic_cases": 10,
+    "normal_and_optimized_python_passed": true,
+    "disposable_local_postgres_cases": 1,
+    "production_explain_plans_without_analyze": 4
+  },
+  "qualifications": [
+    "No source prose, titles, names, contacts, URLs or upstream identifiers exported as plaintext; server nullness/length/MD5 computation is content-derived metadata.",
+    "Track lookups cover all named historical metadata authorities, not a complete global exposure history or a full track roster.",
+    "Provider attribution, event-date precision and knowledge clocks remain unavailable where the deployed schema supplies no recording-level authority.",
+    "Current parent observations do not establish historical binding, performance identity or equality of old duplicate families.",
+    "No untouched evaluation clearance, matching accuracy, identity labels, production writes, model calls or policy activation."
+  ],
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-full-metadata-frame/complete-frame-v1/manifest.json",
+      "bytes": 4019,
+      "sha256": "0955975899fd82467295e2483b39f03e86cb455c6cc5f34e6ce1dcd9199bef16"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-full-metadata-frame/independent-audit-v1/receipt.json",
+      "bytes": 4393,
+      "sha256": "6a92670f658ec8fdb7acfa943d8fffab17b2fddd5e9354bfcc25c04ff27742b1"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-full-metadata-frame/execution-verification-v1/receipt.json",
+      "bytes": 5655,
+      "sha256": "23d7d9c9cd698452302fb1a0ae6624fc229bbe9dde8bb709d6b4fdb73ec0ef2c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-full-metadata-frame/seed-plan-v1/seed-receipt.json",
+      "bytes": 20064,
+      "sha256": "94d141f9c0e1cb37b2294684dccc18c48b07abe5a1868c96a1a1f9880591dfd6"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-full-metadata-frame/explain-actual-v1/receipt.json",
+      "bytes": 770,
+      "sha256": "42d97d9e2d3bd87b12c8af4b22911b8fb3756a16a031ade875bf3ccd17377bd8"
+    }
+  ]
+}

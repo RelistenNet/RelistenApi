@@ -1,0 +1,89 @@
+{
+  "state": "actual_public_people_pipeline_membership_and_admission_identity_verified",
+  "source_commit": "9d74d64",
+  "build_errors": 0,
+  "existing_build_warnings": 25,
+  "repository_format_check_exit_code": 0,
+  "tests": {
+    "focused_ownership_passed": 3,
+    "large_pipeline_passed": 1,
+    "existing_regressions_passed": 125,
+    "total_passed": 129,
+    "failed": 0,
+    "skipped": 0
+  },
+  "membership": {
+    "people_read_sites": 4,
+    "people_maximum_contributors": 100,
+    "people_maximum_stored_bindings": 100000,
+    "work_default_maximum_contributors_unchanged": 100,
+    "work_default_maximum_stored_bindings_unchanged": 10000,
+    "complete_snapshot_required": true,
+    "original_owner_stamps_retained": true,
+    "scope": "Explicit existing Work envelope for people; exceeding either bound still refuses the complete snapshot. Stored membership remains per contributor."
+  },
+  "admission_identity": {
+    "complete_contributor_headers_match": true,
+    "replacement_revision": "saved expected revision plus one",
+    "untouched_peer_and_tombstone_revisions": "saved prior revisions unchanged",
+    "generation_and_binding_guards_retained": true,
+    "creation_or_uuid_order_is_not_identity": true,
+    "original_peer_tickets_not_refreshed": true
+  },
+  "large_fixture_assertions": {
+    "seed_recording_owners": 6788,
+    "seed_original_owner_observations": 6789,
+    "seed_service_published_accounts": 2,
+    "mechanical_relational_copies": 6786,
+    "genuine_probe_contributors": 2,
+    "original_seed_owner_keys_retained_by_each_probe_contributor": 6789,
+    "candidate_owner_stamps_after_probe": 6790,
+    "scope": "Fixture mechanics and accepted source accounts, not identity labels or independent upstream publications for the mechanical copies."
+  },
+  "verified_public_behaviors": [
+    "New processor and applier calls after both large memberships exist",
+    "Real local contact change, atomic publication rollback, same admitted-ticket recovery and replay",
+    "Stale original-owner rejection outside every retained raw witness",
+    "Inactive-policy acknowledgment without accepted writes",
+    "Unresolved Archive wording preserves independent accounts; explicit null withdraws only Archive",
+    "Unmentioned empty peers retain revision one; missing/stale peer headers do not select checkpoints",
+    "Attempt creation order reversed relative to admission order selects the exact admitted preparation"
+  ],
+  "measurement_provenance": {
+    "passing_v2_numeric_size_output_retained": false,
+    "passing_logger": "console minimal summaries only",
+    "earlier_failed_run_sizes_are_separate": true,
+    "earlier_metadata_only_total_stored_bindings": 13584,
+    "earlier_metadata_only_pipeline_recovery_established": false,
+    "current_pipeline_stored_binding_total": "Not reported as a fresh numeric measurement; includes more binding kinds than the earlier metadata-only fixture.",
+    "many_claim_checkpoint_capacity_established": false,
+    "checkpoint_limit_mib_unchanged": 32
+  },
+  "limits": [
+    "Repeated candidate snapshots and the 32 MiB many-claim checkpoint limit remain required work.",
+    "Passing fixtures do not establish identity accuracy, catalog-wide query cost, throughput or safe backfill capacity.",
+    "No evaluated runtime people policy is activated and no production write or deployment is established.",
+    "The initial failure and its numeric measurements remain unchanged historical evidence."
+  ],
+  "identity_accuracy_established": false,
+  "throughput_established": false,
+  "policy_activation_permitted": false,
+  "production_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-contribution-capacity-v1/runtime-success-v3/receipt.json",
+      "bytes": 16894,
+      "sha256": "d62f3fffdd41129aa245ff294517ace68ae48cdb531658f0865e6b377d3d9634"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-contribution-capacity-v1/runtime-failure-v1/receipt.json",
+      "bytes": 5656,
+      "sha256": "bda3ed1611eb6f01afe2ce5a733de68fd50b6fab0b1073766a097dddcf497f04"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/evidence/people-distinct-owner-capacity-v1.json",
+      "bytes": 2684,
+      "sha256": "3d9cbea6a2a81d75fb719e879bcc811760753bd5c63ea5c071a14c0e5ae017ad"
+    }
+  ]
+}

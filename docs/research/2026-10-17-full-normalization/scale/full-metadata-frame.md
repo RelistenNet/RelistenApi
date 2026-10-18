@@ -2,7 +2,7 @@
 
 This fixed capture exports every current artist, recording (`sources`), and show, including artists with no recordings. It also resolves each supplied prior track coordinate independently to its current direct and set-based parents. The initial frame is a denominator for later reservations, not a new identity dataset or evidence of independent evaluation. Full track, venue, and music metadata sections remain subsequent work.
 
-The implementation is source-authored and has not been executed by its authors. Root must run the synthetic tests, disposable local PostgreSQL test, and plan inspection before the production read-only capture.
+The October 18 capture and independent audit passed. The [evidence receipt](evidence/full-catalog-metadata-frame-v1.json) records 4,379 artists, 292,522 recordings, 215,594 shows and all 69,728 requested coordinate results. Twenty-one artists have no recordings. The capture contains metadata only; no normalization identity or untouched evaluation status follows from it.
 
 ## What leaves the server
 
@@ -72,7 +72,9 @@ The optional PostgreSQL test creates and removes only its UUID-named disposable 
 
 Have root execute [the fixed plan queries](sql/full-catalog-metadata-frame-explain.sql) with its approved read-only connection before the actual capture. These are `EXPLAIN (FORMAT JSON, COSTS TRUE)` only, with no `ANALYZE`; they return estimates, not source rows. The actual capture SQL is [full-catalog-metadata-frame.sql](sql/full-catalog-metadata-frame.sql).
 
-The verified root census at `2026-10-18T08:47:31.005445Z` had 4,379 artists, 292,522 recordings, and 215,594 shows: 512,495 roster rows, plus 46 schema rows, three snapshot/count/footer rows, and one result per supplied lookup coordinate. Of the artists, 21 had no recordings. At that scale, plan for roughly 0.5–1 GiB of metadata output, a conservative **unmeasured estimate**, with a 2 GiB refusal bound. Source text length affects server hashing cost, not proportional output size. The artist source count is grouped once, and targeted track coordinates use verified unique ID/UUID indexes; the frame does not require a 5-million-track text-hash scan. No latency or production query cost is claimed until root inspects plans and measures the actual run.
+The executed snapshot contains 582,272 JSONL rows and 673,728,934 bytes, below the 2 GiB refusal bound. It includes all 512,495 artist/recording/show rows, 46 schema rows, three snapshot/count/footer rows and 69,728 coordinate results. The independent audit reconciles every row and lookup, including the local coordinate that must remain unqueried. Native-ID and UUID parents agree for every paired request; current agreement does not authenticate historical bindings.
+
+The four production plan estimates use the expected complete roster scans and unique ID/UUID indexes for targeted track lookups. No full track scan was required. Source text length affects server hashing cost rather than proportional output size. These results establish this capture's completeness and size, not production normalization throughput or query latency.
 
 ## Reservation and exposure limits
 

@@ -14,6 +14,8 @@ The October 17 census contains **4,379 artists, 292,476 sources, 5,063,161 track
 
 Credit and lineage evidence is already substantial: 246,849 sources have taper text, 227,655 have transferrer text, 229,568 have lineage text and 267,878 have lineage or source-chain text. Nonempty fields can contain multiple people, unknowns or unrelated narrative. These counts do not measure extracted identities or establish shared capture ancestry.
 
+The [October 18 complete metadata frame](scale/full-metadata-frame.md) adds an independently reconciled roster of all 4,379 artists, 292,522 recordings and 215,594 shows, plus every requested historical track-coordinate lookup. It preserves current parent relationships and text fingerprints without exporting prose. This is the starting inventory for broader evaluation and backfill preparation; it does not assign identities or establish untouched evaluation groups.
+
 ## Playback eligibility is a separate relationship check
 
 The catalog marks 5,010,402 tracks as not orphaned. Of those, 116,932 have no remaining source or matching source-set row. Another 4,893,470 have matching artist/source/set/show references and a media URL. The latter is a catalog-link check, not an HTTP availability or full-audio test. Unmatched historical file rows must not become live normalization search results solely because their orphan flag is false.
@@ -119,9 +121,14 @@ owners. Two accounts are service-published sentinels; 6,786 are mechanical
 relational copies, not identity labels. Owner-only invalidation and genuine
 sentinel retraction pass. A linear owner-clock index passes 25 public cases
 without SQL or lock-order changes. The default 10,000-binding metadata limit
-still refuses the fixture's 13,584 stored bindings. A larger explicit read
-succeeds, but full people-pipeline recovery, many-claim checkpoint capacity and
-backfill throughput remain unverified.
+still refuses the earlier metadata fixture's 13,584 stored bindings. People
+entrypoints now select an explicit 100,000-binding envelope. The
+[public pipeline receipt](scale/evidence/people-contribution-pipeline-capacity-v1.json)
+records 129 passing cases, including exact admitted-header matching, interrupted
+recovery, stale-owner rejection and genuine contributor-only withdrawal.
+Many-claim checkpoint capacity under the unchanged 32 MiB limit and backfill
+throughput remain unverified. Passing minimal-console runs retain no fresh
+numeric size output.
 
 The [local MusicBrainz search receipt](scale/evidence/musicbrainz-search-local-v1.json) verifies retained timeout outcomes and explicit retry across four invocations. No successful page was received. Successful live search verification and evaluated catalog-to-work matching remain open; the [correspondence processor](../../plans/active/2026-10-17-full-normalization/composition-resolution.md) is implemented. Unavailable results are not an empty candidate set.
 
