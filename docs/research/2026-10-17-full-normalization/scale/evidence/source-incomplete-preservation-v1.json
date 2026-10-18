@@ -1,0 +1,36 @@
+{
+  "kind": "source-incomplete-preservation-v1",
+  "observedDate": "2026-10-18",
+  "baseCommit": "86d3f85141084278f7c22f7b25db2083ae1ed988",
+  "testSource": {
+    "path": "RelistenApiTests/Services/TestNormalizationSourceActorAliasApplications.Capacity.cs",
+    "sha256": "cff0d744d17c20978819f02df3a2281e94166f0774072dd762fc7310d9b25864"
+  },
+  "productionSourceChanged": false,
+  "verification": {
+    "case": "ThreePublicSourceApplicationsRetainEveryScopeAndOwnerWhenOneSourceBecomesIncomplete",
+    "passed": 1,
+    "sourceCount": 3,
+    "independentOwnerUuidCount": 6,
+    "buildErrors": 0,
+    "buildWarnings": 49,
+    "checks": [
+      "Every source completes actual extraction, resolution and application.",
+      "All assignment owner UUIDs equal the independent public owner/ticket set.",
+      "The incomplete source retains its own scope keys, complete bindings and last complete observation.",
+      "Its new proposal adds an incomplete observation without authorizing a clear.",
+      "Complete original accepted evidence, assignment and support rows remain unchanged.",
+      "Other source scopes and bindings remain unchanged."
+    ],
+    "full1001CaseStatus": "pending",
+    "recoveryExercisedByThisCase": false
+  },
+  "compatibility": "The existing 1001-source displayed case name and scale category are preserved; the same lifecycle now has an ordinary three-source case. No production interface or behavior changes.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-incomplete-preservation-v1/runtime-v1/manifest.json",
+    "sha256": "dd502a3f54cce2bb5d5f6621e1041512fad202301cd7a0ecd2c7815315647662",
+    "files": 16
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

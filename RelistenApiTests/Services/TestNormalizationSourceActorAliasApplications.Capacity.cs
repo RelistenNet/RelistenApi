@@ -9,8 +9,19 @@ namespace RelistenApiTests.Services;
 
 public sealed partial class TestNormalizationSourceActorAliasApplications
 {
-    [Test, Category("SourceAliasScale"), CancelAfter(3_600_000)]
-    public async Task OneThousandAndOnePublicSourceApplicationsRetainEveryScopeAndOwnerWhenOneSourceBecomesIncomplete()
+    [TestCase(
+        3,
+        TestName = "ThreePublicSourceApplicationsRetainEveryScopeAndOwnerWhenOneSourceBecomesIncomplete"
+    )]
+    [TestCase(
+        1001,
+        TestName = "OneThousandAndOnePublicSourceApplicationsRetainEveryScopeAndOwnerWhenOneSourceBecomesIncomplete",
+        Category = "SourceAliasScale"
+    )]
+    [CancelAfter(3_600_000)]
+    public async Task PublicSourceApplicationsRetainEveryScopeAndOwnerWhenOneSourceBecomesIncomplete(
+        int count
+    )
     {
         var cancellationToken = TestContext.CurrentContext.CancellationToken;
         await SelectPolicy(Policy());
@@ -18,8 +29,9 @@ public sealed partial class TestNormalizationSourceActorAliasApplications
         var alias = Unique("Scale Finch");
         var person = await Person(name);
         var sources = new List<SourceContext>();
+        var sourceOwners = new List<Guid>();
         ExpandedApplication? latest = null;
-        for (var index = 0; index < 1001; index++)
+        for (var index = 0; index < count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             // Every authority row comes from real extraction, Resolve and Apply. No direct
@@ -38,9 +50,14 @@ public sealed partial class TestNormalizationSourceActorAliasApplications
                     "source {0} must commit through the public lifecycle",
                     index
                 );
+            var sourceOwner = await fixture.Work.GetSubjectAsync(
+                SourceActorResolutionService.Owner(source.Source.SourceUuid)
+            );
+            sourceOwner.Should().NotBeNull();
+            sourceOwners.Add(sourceOwner!.SubjectUuid);
         }
         var map = Receipts(latest!).Last().ResultingMap;
-        map.Select(entry => entry.Scope.SourceUuid).Distinct().Should().HaveCount(1001);
+        map.Select(entry => entry.Scope.SourceUuid).Distinct().Should().HaveCount(count);
         map.Should().OnlyContain(entry => entry.Bindings.Count > 0);
         var sourceUuids = sources.Select(source => source.Source.SourceUuid).ToArray();
         var observations = latest!
@@ -61,7 +78,14 @@ public sealed partial class TestNormalizationSourceActorAliasApplications
                 new { sourceUuids }
             )
         );
-        observations.Should().Contain(requiredOwners);
+        // Expected UUIDs come from public owner reads and the original extraction tickets,
+        // not from the assignment query under test. Missing active authority cannot pass vacuously.
+        var expectedOwners = sourceOwners
+            .Concat(sources.Select(source => source.Extraction.Ticket.SubjectUuid))
+            .ToArray();
+        expectedOwners.Should().OnlyHaveUniqueItems().And.HaveCount(2 * count);
+        requiredOwners.Should().BeEquivalentTo(expectedOwners);
+        observations.Should().Contain(expectedOwners);
         var membership = await fixture.Work.GetInputContributionsAsync(
             new("people", "person", person),
             new(100, 100000)
@@ -74,6 +98,15 @@ public sealed partial class TestNormalizationSourceActorAliasApplications
             .Be(1);
         var retained = map.Where(entry => entry.Scope.SourceUuid != sources[0].Source.SourceUuid)
             .ToArray();
+        var previous = map.Where(entry => entry.Scope.SourceUuid == sources[0].Source.SourceUuid)
+            .ToArray();
+        previous.Should().NotBeEmpty();
+        previous
+            .Should()
+            .OnlyContain(entry =>
+                entry.LastCompleteObservation != null && entry.LastCompleteObservation.Complete
+            );
+        var authority = await AcceptedAuthority();
         var changed = await Replace(sources[0], null);
 
         var partial = await publisher.ApplyAsync(
@@ -89,6 +122,36 @@ public sealed partial class TestNormalizationSourceActorAliasApplications
                 "the incomplete source observation must be retained without losing prior authority"
             );
         var current = Receipts(partial).Last().ResultingMap;
+        var held = current
+            .Where(entry => entry.Scope.SourceUuid == changed.Source.SourceUuid)
+            .ToArray();
+        held.Select(entry => entry.Scope)
+            .Should()
+            .BeEquivalentTo(previous.Select(entry => entry.Scope));
+        foreach (var prior in previous)
+        {
+            var entry = held.Single(value => value.Scope == prior.Scope);
+            entry
+                .Bindings.Should()
+                .BeEquivalentTo(
+                    prior.Bindings,
+                    options => options.WithStrictOrdering().AllowingInfiniteRecursion()
+                );
+            entry.LastCompleteObservation.Should().Be(prior.LastCompleteObservation);
+            entry
+                .IncompleteObservations.Should()
+                .Contain(observation =>
+                    observation.Proposal.ResolutionAttemptUuid == changed.Resolution.AttemptUuid
+                    && observation.Proposal.ExtractionAttemptUuid == changed.Extraction.AttemptUuid
+                    && !observation.Complete
+                    && !observation.ExplicitClear
+                );
+        }
+        // Incomplete evidence appends a map observation; it cannot rewrite original cited
+        // alias/assignment evidence or add, retire, or replace accepted support UUIDs.
+        (await AcceptedAuthority())
+            .Should()
+            .Be(authority);
         current
             .Where(entry => entry.Scope.SourceUuid != changed.Source.SourceUuid)
             .Should()

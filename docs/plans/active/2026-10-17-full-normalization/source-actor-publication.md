@@ -235,6 +235,15 @@ are mixed. These measurements establish neither peak memory nor whole-applicatio
 throughput. Full-size lifecycles and final-code broad regression remain required.
 
 Local verification covers the public lifecycle and nonempty upgrade. The
+multi-source test must also prove that an incomplete recording keeps its own
+bindings, last complete observation and original accepted evidence/support rows.
+Alias visibility through another recording cannot establish this preservation.
+Compare all assignment owner UUIDs against independently read source-resolution
+and extraction owners. The [three-source regression](../../../research/2026-10-17-full-normalization/scale/evidence/source-incomplete-preservation-v1.json)
+passes; run the same lifecycle with 1,001 sources for full-size verification,
+which remains required.
+
+The
 [capacity evidence](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
 retains the separate large-input baseline runs. The [checkpoint follow-up](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
 now verifies the complete 1,000-claim repeat through both applications and saved
