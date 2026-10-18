@@ -2,11 +2,11 @@
 
 Automatic matching across venues, artist repertoire, compositions and people is the release outcome. Recording provenance covers credited tapers and transferrers. This strategy determines which local methods to deploy and which inputs benefit from Luna. It extends the [implementation plan](README.md) and [domain contracts](../../../design/2026-10-17-normalization-contracts.md).
 
-Continue the current implementation step. These experiments follow the local baseline, candidate retrieval and labeled-data prerequisites; this document does not direct an immediate switch of work. It authorizes no new production write, model deployment or spending beyond the plan's existing run controls.
+Expanded real-data comparison is the next completed milestone. Preserve the completed credit, people and venue training and Luna experiments, then expand their independently checked evidence under the [coverage and execution plan](evaluation-milestone.md). Continue scale and regression verification in parallel. Offline extraction, retrieval and matching experiments use frozen evidence and require no accepted publication. Interrupt evaluation only for a demonstrated defect that prevents trustworthy experiments or risks accepted data; name that dependency and repair it while independent work continues. Production writes and deployment still require approval. New bounded Luna jobs use the existing spending authorization and retained run controls.
 
 ## Train and compare
 
-Run training experiments explicitly. Choose production methods after measuring their benefit.
+Build on the completed experiments and compare improved methods on broader independent evidence. Choose production methods after measuring their benefit. The [coverage ledger](evaluation-milestone.md#coverage-ledger) records each domain's completed evidence, gaps and next actions.
 
 For identity matching, compare explainable rules, a logistic-regression matcher and a boosted-tree matcher. Train them to compare evidence-bearing record pairs or rank candidates, rather than classify a record into a fixed list of entity IDs. Use features such as name/alias agreement, locality, artist context, role/writer evidence and provider-qualified identifiers. Keep absent evidence distinct from contradictory evidence. Do not use catalog UUIDs as learned identity labels or treat similarity as a probability without calibration.
 

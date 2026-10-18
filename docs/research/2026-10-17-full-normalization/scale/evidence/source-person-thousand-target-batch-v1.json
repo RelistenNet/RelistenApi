@@ -1,0 +1,33 @@
+{
+  "kind": "source-person-thousand-target-batch-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "f3ae5e8",
+  "status": "The 1,000-distinct-person lifecycle reached its one-hour cancellation limit before completing. Retained partial proof supports further publication-cost work before backfill; offline matching evaluation proceeds independently.",
+  "verification": {
+    "passed": 0,
+    "failed": 1,
+    "testName": "ManyPersonOrchestrationReturnsBoundedHeadersAndSeparateOriginalStageProofs(1000)",
+    "testDuration": "01:00:00.2675870",
+    "startTime": "2026-10-18T08:08:48.7975460-07:00",
+    "endTime": "2026-10-18T09:08:49.0806820-07:00",
+    "reason": "Test exceeded CancelAfter value of 3600000ms",
+    "apiAssemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+    "testAssemblySha256": "134cf0e4a52e9997c07267cf8cacf80d19ac2d9d66242bbca5982547179e0905"
+  },
+  "partialEvidence": {
+    "lastRetainedSnapshotUtc": "2026-10-18T16:06:54.535146+00:00",
+    "committedStages": 1195,
+    "databaseBytes": 2037962419,
+    "snapshotIsTerminalCount": false,
+    "completeCommittedRowsPreserved": 4,
+    "observerManifestSha256": "704ecc0e34c7e24616c8138a894e5e624f994d6a30b243eb0afded87f57bb82c"
+  },
+  "qualification": "Older target-batch binaries precede typed-stage JSON reuse. Shared host, synthetic policies, incomplete application; not accepted matching accuracy or an isolated throughput result. The cancellation limit is a test guard, not a product latency target.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-person-thousand-target-batch-v1/terminal-runtime-v1/manifest.json",
+    "sha256": "4b8234d2535ce39ccc2687ed4b1ef51a0c890d959e0fdbb3007d79beb0ac76b3",
+    "files": 8
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

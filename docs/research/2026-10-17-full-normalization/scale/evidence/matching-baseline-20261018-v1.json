@@ -1,0 +1,18 @@
+{
+  "kind": "matching-comparison-baseline-v1",
+  "frozenDate": "2026-10-18",
+  "sourceCommit": "d5f4514",
+  "purpose": "Build expanded real-data comparisons on completed credit, people, venue and Luna experiments without rerunning them for unrelated publication changes.",
+  "privateManifest": {
+    "path": "local-dev/normalization-data/2026-10-18-matching-baseline-v2/manifest.json",
+    "sha256": "a4fee2fb981eb1aae3cab7a5d393249aef021fbc167f0d2cc05f34850093930d",
+    "retainedSourceFiles": 79,
+    "authenticatedPriorArtifacts": 25
+  },
+  "qualification": "Original experiment receipts retain their own source, binaries, inputs, labels, partitions and outputs. The new source snapshot does not claim to reproduce those results or replace their authority.",
+  "newLabels": 0,
+  "modelCalls": 0,
+  "newRawSourceExposure": 0,
+  "productionWrites": false,
+  "policyActivation": false
+}
