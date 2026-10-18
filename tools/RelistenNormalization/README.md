@@ -110,6 +110,46 @@ identify the captured audio host; an artist's configured providers alone do not
 identify which importer produced a row. The [shadow delivery plan](../../docs/plans/active/2026-10-17-full-normalization/shadow-delivery.md)
 tracks the remaining full-file processing, provider coverage and audits.
 
+### Browse individual native files
+
+Use `?view=files` in the same reader to browse native provider files individually.
+Each file keeps its exact native key, physical ordinal and parent provider
+result. Search covers every file title and filename, including files late in a
+large response. It uses case-insensitive token prefixes: all query words must
+match, in any order. The query is limited to 256 characters. Artist, provider,
+outcome and exact entity-key filters apply to files; the domain is file contents.
+Following an entity key in this view stays within native files.
+
+`GET /api/files` accepts `q`, `artist`, `provider`, `outcome`, `entityKey`,
+`parentId`, `limit` and `offset`. Pages contain `items`, `total`, `limit` and
+`offset`; limits are clamped to 1–100. Each item includes `parentId`,
+`nativeFileKey`, `fileOrdinal`, `label`, filename, artist, provider and outcome.
+Order is parent ID descending, then physical file ordinal ascending. An ordinal
+identifies the original array member; it does not establish performance order.
+`GET /api/file?parentId=…&nativeFileKey=…` returns that original file, parent
+metadata and a URL for the complete original parent. An unknown or withdrawn
+file returns 404; changed immutable evidence returns 409.
+The parent ID addresses this rebuildable reader cache, not a lasting catalog
+identity. Retain the native file key and original revision/origin as evidence.
+After a cache rebuild, an exact `entityKey=native_file:…` search finds the current
+parent address.
+
+Only `catalogPlayback.mp3Url` supplies a catalog audio control. A native
+`playbackLocator` that is an absolute HTTP(S) URL appears separately as “Open
+provider file”; relative filenames and other schemes remain inspectable facts.
+The reader never constructs a URL from a filename, assumes the provider format
+is MP3, or loads provider media automatically. Exact catalog home keys can open
+the configured full-file reader even when the native file has no catalog match.
+
+The existing v3 cache adds a compact child table, exact entity memberships and
+SQLite FTS5 over titles/filenames. Original files and evidence stay in parent
+chunks. The first restart backfills only indexed native `provider_input`
+file-content parents; legacy catalog `track_sample` rows retain their existing
+index. Replay replaces a parent's child pointers, search terms and memberships
+in the same transaction. Failed or missing chunks hide their children.
+`/api/stats.nativeFileCoverage` reports indexed files and parents separately
+from domain-outcome coverage. Neither count establishes accepted identities.
+
 ### Compare distinct accepted people
 
 `RELISTEN_SHADOW_PEOPLE_CANDIDATES=<path>#sha256=<digest>` adds an offline

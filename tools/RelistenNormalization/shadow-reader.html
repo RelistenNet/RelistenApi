@@ -110,6 +110,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <section id="known-issues" class="notice known-issues" hidden aria-label="Known issues"></section>
 <details class="progress"><summary>Coverage by provider and domain <small id="coverage-summary"></small></summary><p class="muted" style="font-size:.85rem;margin-top:.5rem">Expected and processed counts come from the runner checkpoint. Indexed counts are unique results currently visible here. The retained run may cover less than the catalog census.</p><div class="scroll-table"><table><thead><tr><th>Provider / domain</th><th class="num">Expected</th><th class="num">Processed</th><th class="num">Remaining</th><th class="num">Indexed</th><th class="num">Index lag</th></tr></thead><tbody id="coverage"></tbody></table></div></details>
 <form id="filters">
+<input id="parentId" name="parentId" type="hidden">
+<label>Browse<select id="view" name="view"><option value="">Domain outcomes</option><option value="files" disabled hidden>Native provider files</option></select></label>
 <label class="search">Search names and titles<input id="q" name="q" type="search" placeholder="Song, venue, taper, title…" autocomplete="off"></label>
 <label>Artist<select id="artist" name="artist"><option value="">All artists</option></select></label>
 <label>Domain<select id="domain" name="domain"><option value="">All domains</option></select></label>
@@ -127,7 +129,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,su
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
-const fields = ['q', 'artist', 'domain', 'provider', 'outcome', 'entityKey'];
+const fields = ['view', 'q', 'artist', 'domain', 'provider', 'outcome', 'entityKey', 'parentId'];
 const pageSize = 40;
 let offset = 0;
 let total = 0;
@@ -173,7 +175,9 @@ function restoreFilters() {
     for (const field of fields) {
         const value = query.get(field);
         if (!value) continue;
-        if ($(field).tagName === 'SELECT') $(field).append(new Option(value, value));
+        if ($(field).tagName === 'SELECT' && ![...$(field).options].some(option => option.value === value)) {
+            $(field).append(new Option(value, value));
+        }
         $(field).value = value;
     }
 }
@@ -196,6 +200,9 @@ function metric(label, value) {
 }
 
 function renderProgress(data) {
+    const filesOption = $('view').querySelector('option[value="files"]');
+    filesOption.disabled = !data.nativeFileCoverage;
+    filesOption.hidden = !data.nativeFileCoverage;
     const progress = data.progress || {};
     const lag = data.coverage.reduce((sum, row) => sum + row.indexLag, 0);
     $('status').replaceChildren(
@@ -208,6 +215,9 @@ function renderProgress(data) {
         : data.index.activeFile ? 'Indexing ' + data.index.activeFile : 'Following completed output chunks.';
     if (data.index.pauseReason) note = data.index.pauseReason;
     if (data.pendingChunks) note += ' ' + number(data.pendingChunks) + ' chunks are waiting to be indexed.';
+    if (data.nativeFileCoverage?.indexedFiles) {
+        note += ' ' + number(data.nativeFileCoverage.indexedFiles) + ' native provider files are individually searchable.';
+    }
     if (data.coverage.some(row => row.aheadOfCheckpoint)) {
         note += ' Some complete chunks are ahead of the latest runner checkpoint.';
     }
@@ -281,7 +291,10 @@ async function search(reset = true) {
     query.set('limit', pageSize);
     query.set('offset', offset);
     try {
-        const data = await api('/api/records?' + query);
+        const files = $('view').value === 'files';
+        $('domain').disabled = files;
+        $('q').placeholder = files ? 'Title or filename · all token prefixes must match' : 'Song, venue, taper, title…';
+        const data = await api((files ? '/api/files?' : '/api/records?') + query);
         if (request !== searchRequest) return;
         total = data.total;
         if (total && offset >= total) {
@@ -338,7 +351,9 @@ function interpretation(value) {
 }
 
 function followKey(key) {
+    const view = $('view').value;
     for (const field of fields) $(field).value = '';
+    $('view').value = view;
     $('entityKey').value = key;
     $('detail').close();
     search();
@@ -389,12 +404,27 @@ function playbackSection(urls) {
 }
 
 function renderDetail(data) {
-    const record = data.record;
+    const record = data.file ? {...data.parent, proposal: data.file,
+        outcome: data.file.outcome, reason: data.file.reason, entityKeys: data.file.entityKeys,
+        evidence: {recordingOrigin: data.file.recordingOrigin, file: data.file.file, mentions: data.file.mentions}}
+        : data.record;
     const body = $('detail-body');
     body.replaceChildren();
     $('detail-meta').textContent = record.artistName + ' · ' + record.domain + ' · ' + record.outcome + ' · ' + record.provider;
     if (record.reason) body.append(element('p', record.reason, 'notice'));
     if (data.playback.length) body.append(playbackSection(data.playback));
+    if (data.record?.inputKind === 'provider_input' && Array.isArray(data.record.proposal?.files)) {
+        const link = element('a', 'Browse native provider files');
+        link.href = '?' + new URLSearchParams({view: 'files', parentId: data.id});
+        body.append(link);
+    }
+    if (data.providerFileUrl) {
+        const link = element('a', 'Open provider file');
+        link.href = data.providerFileUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        body.append(link);
+    }
     const proposed = element('section');
     proposed.append(element('h3', 'Proposed interpretation'), interpretation(record.proposal));
     body.append(proposed);
@@ -434,7 +464,14 @@ function renderDetail(data) {
     evidence.append(jsonDetails('Original evidence and citations', record.evidence));
     body.append(evidence);
     const exact = element('section');
-    exact.append(jsonDetails('Complete original result', record));
+    exact.append(jsonDetails(data.file ? 'Complete original native file' : 'Complete original result', data.file || record));
+    if (data.file) {
+        const link = element('a', 'Open original provider result');
+        link.href = data.parentRecordUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        exact.append(link);
+    }
     body.append(exact);
 }
 
@@ -445,7 +482,10 @@ async function openDetail(item) {
     $('detail-body').replaceChildren(element('p', 'Loading original proposal and evidence…', 'muted'));
     if (!$('detail').open) $('detail').showModal();
     try {
-        const data = await api('/api/record?id=' + item.id);
+        const path = item.nativeFileKey
+            ? '/api/file?' + new URLSearchParams({parentId: item.parentId, nativeFileKey: item.nativeFileKey})
+            : '/api/record?id=' + item.id;
+        const data = await api(path);
         if (request !== detailRequest || !$('detail').open) return;
         renderDetail(data);
     } catch (error) {
@@ -455,7 +495,7 @@ async function openDetail(item) {
 }
 
 $('filters').addEventListener('submit', event => { event.preventDefault(); search(); });
-for (const field of ['artist', 'domain', 'provider', 'outcome']) {
+for (const field of ['view', 'artist', 'domain', 'provider', 'outcome']) {
     $(field).addEventListener('change', () => search());
 }
 $('reset').addEventListener('click', () => {

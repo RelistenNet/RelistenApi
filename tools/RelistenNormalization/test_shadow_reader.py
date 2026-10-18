@@ -15,6 +15,7 @@ from contextlib import closing
 from pathlib import Path
 from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
+from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from shadow_reader import ShadowIndex, handler_for
@@ -49,6 +50,151 @@ class TestShadowReader(unittest.TestCase):
             for record in records:
                 stream.write(json.dumps(record, ensure_ascii=False) + "\n")
         return path
+
+    @staticmethod
+    def native_file(ordinal, title, **changes):
+        key = "native_file:observed-" + str(ordinal)
+        file = {
+            "fileOrdinal": ordinal, "entityKey": key, "inputRevisionUuid": "revision-one",
+            "recordingOrigin": {"scope": "resource_item", "evidence": {"jsonPointer": "/files"}},
+            "file": {"title": {"value": title, "evidence": {"jsonPointer": "/files/" + str(ordinal) + "/title"}},
+                     "filename": {"value": "track-" + str(ordinal) + ".flac"},
+                     "playbackLocator": {"value": "track-" + str(ordinal) + ".flac"}},
+            "titleInterpretation": {"originalTitle": title}, "mentions": [],
+            "outcome": "unresolved", "reason": "unknown_song", "entityKeys": [key, "source:recording-one"],
+            "catalogPlayback": None,
+        }
+        file.update(changes)
+        return file
+
+    def native_record(self, *files, **changes):
+        return self.record("provider_input:revision-one", domain="file_contents", inputKind="provider_input",
+                           proposal={"files": list(files), "decoderIssues": ["partial input"]}, **changes)
+
+    def test_native_file_search_reaches_late_titles_and_keeps_legacy_files_in_their_original_index(self):
+        children = [self.native_file(n, "Earlier " * 1000 if n == 0 else "Ordinary track") for n in range(30)]
+        children[-1] = self.native_file(29, "Faraway Nebula Finale", entityKeys=["repertoire:shared-song"])
+        parent = self.native_record(*children)
+        self.chunk("100", parent, self.record("track:legacy", domain="file_contents", inputKind="track_sample"),
+                   domain="file_contents")
+        self.index.scan_once()
+        self.assertEqual(self.index.search({"domain": "file_contents"})["total"], 2)
+        self.assertEqual(self.index.stats()["nativeFileCoverage"], {"indexedFiles": 30, "indexedParents": 1})
+        matched = self.index.search_files({"q": "NEBU FINA", "entityKey": "repertoire:shared-song"})
+        self.assertEqual(matched["total"], 1)
+        item = matched["items"][0]
+        self.assertEqual(item["fileOrdinal"], 29)
+        detail = self.index.file_detail(item["parentId"], item["nativeFileKey"])
+        self.assertEqual(detail["file"], children[-1])
+        self.assertEqual(detail["parent"]["inputKey"], parent["inputKey"])
+        self.assertEqual(detail["playback"], [])
+        self.assertIsNone(detail["providerFileUrl"])
+        first = self.index.search_files({"limit": "7"})
+        second = self.index.search_files({"limit": "7", "offset": "7"})
+        self.assertEqual([x["fileOrdinal"] for x in first["items"] + second["items"]], list(range(14)))
+        self.assertEqual(self.index.search_files({"q": '" NEBULA OR ORDINARY *'})["total"], 0)
+        self.assertEqual(self.index.search_files({"q": '" *'})["total"], 0)
+
+    def test_native_file_http_separates_provider_links_from_explicit_catalog_audio(self):
+        phish = self.native_file(0, "Unbound Phish passage")
+        phish["file"]["playbackLocator"]["value"] = "https://media.example.test/native.mp3"
+        local = self.native_file(1, "Bound Local passage", catalogPlayback={
+            "fileUuid": "catalog-file", "sourceUuid": "catalog-source", "mp3Url": "https://audio.example.test/catalog.mp3"})
+        unsafe = self.native_file(2, "Unsafe locator")
+        unsafe["file"]["playbackLocator"]["value"] = "javascript:alert(1)"
+        malformed = self.native_file(3, "Malformed URL", catalogPlayback={"mp3Url": "https://media.example.test:invalid/file.mp3"})
+        malformed["file"]["playbackLocator"]["value"] = "https://media.example.test:invalid/file.mp3"
+        self.chunk("100", self.native_record(phish, local, unsafe, malformed), domain="file_contents")
+        self.index.scan_once()
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(self.index))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = "http://127.0.0.1:" + str(server.server_port)
+        try:
+            with urlopen(base + "/api/files?provider=archive.org&artist=artist-one&outcome=unresolved") as response:
+                page = json.load(response)
+            self.assertEqual(page["total"], 4)
+            details = []
+            for item in page["items"]:
+                with urlopen(base + "/api/file?" + urlencode({"parentId": item["parentId"], "nativeFileKey": item["nativeFileKey"]})) as response:
+                    details.append(json.load(response))
+            self.assertEqual(details[0]["providerFileUrl"], "https://media.example.test/native.mp3")
+            self.assertEqual(details[0]["playback"], [])
+            self.assertEqual(details[1]["playback"], ["https://audio.example.test/catalog.mp3"])
+            self.assertIsNone(details[1]["providerFileUrl"])
+            self.assertIsNone(details[2]["providerFileUrl"])
+            self.assertIsNone(details[3]["providerFileUrl"])
+            self.assertEqual(details[3]["playback"], [])
+            self.assertEqual([d["file"] for d in details], [phish, local, unsafe, malformed])
+            with self.assertRaises(HTTPError) as missing:
+                urlopen(base + "/api/file?parentId=999999&nativeFileKey=native_file%3Amissing")
+            self.assertEqual(missing.exception.code, 404)
+            missing.exception.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def test_native_file_replay_replaces_titles_memberships_and_ordinals_across_restart(self):
+        original = self.native_file(0, "Old Song", entityKeys=["repertoire:old"])
+        self.chunk("100", self.native_record(original), domain="file_contents")
+        self.index.scan_once()
+        parent_id = self.index.search_files({})["items"][0]["parentId"]
+        replacement = self.native_file(0, "New Song", entityKeys=["repertoire:new"])
+        self.chunk("200", self.native_record(replacement, self.native_file(1, "Bonus Song")), domain="file_contents")
+        self.index.scan_once()
+        restarted = ShadowIndex(self.run)
+        self.assertEqual(restarted.search_files({"q": "Old"})["total"], 0)
+        self.assertEqual(restarted.search_files({"entityKey": "repertoire:old"})["total"], 0)
+        self.assertEqual(restarted.search_files({"entityKey": "repertoire:new"})["total"], 1)
+        self.assertEqual(restarted.file_detail(parent_id, replacement["entityKey"])["file"], replacement)
+        self.chunk("050", self.native_record(original), domain="file_contents")
+        restarted.scan_once()
+        self.assertEqual(restarted.search_files({})["total"], 2)
+        self.assertEqual(restarted.search_files({"q": "Old"})["total"], 0)
+        self.chunk("300", self.native_record(), domain="file_contents")
+        restarted.scan_once()
+        self.assertEqual(restarted.search_files({})["total"], 0)
+        with self.assertRaises(KeyError):
+            restarted.file_detail(parent_id, replacement["entityKey"])
+
+    def test_existing_native_parent_cache_upgrade_preserves_originals_and_excludes_missing_chunks(self):
+        child = self.native_file(0, "Retained native title")
+        path = self.chunk("100", self.native_record(child), domain="file_contents")
+        self.index.scan_once()
+        parent_id = self.index.search_files({})["items"][0]["parentId"]
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                if missing:
+                    path.unlink()
+                with closing(self.index.connect()) as db:
+                    db.executescript("""DROP TRIGGER native_files_insert; DROP TRIGGER native_files_delete;
+                        DROP TABLE native_file_entities; DROP TABLE native_file_search; DROP TABLE native_files;""")
+                upgraded = ShadowIndex(self.run)
+                self.assertEqual(upgraded.search_files({})["total"], 0 if missing else 1)
+                if not missing:
+                    self.assertEqual(upgraded.file_detail(parent_id, child["entityKey"])["file"], child)
+                else:
+                    self.assertEqual(upgraded.stats()["failedChunks"], 1)
+                    self.assertEqual(upgraded.search({})["total"], 0)
+
+    def test_bad_native_child_rolls_back_parent_and_children_and_removed_chunk_hides_them(self):
+        original = self.native_file(0, "Original Song")
+        self.chunk("100", self.native_record(original), domain="file_contents")
+        self.index.scan_once()
+        bad = self.native_file(3, "Wrong physical ordinal")
+        self.chunk("200", self.native_record(self.native_file(0, "Replacement Song"), bad), domain="file_contents")
+        self.index.scan_once()
+        self.assertEqual(self.index.search_files({"q": "Original"})["total"], 1)
+        self.assertEqual(self.index.search_files({"q": "Replacement"})["total"], 0)
+        self.assertEqual(self.index.stats()["nativeFileCoverage"]["indexedFiles"], 1)
+        item = self.index.search_files({})["items"][0]
+        (self.run / "file_contents" / "100.jsonl.gz").unlink()
+        self.index.scan_once()
+        self.assertEqual(self.index.search_files({})["total"], 0)
+        self.assertEqual(self.index.stats()["nativeFileCoverage"]["indexedFiles"], 0)
+        with self.assertRaises(KeyError):
+            self.index.file_detail(item["parentId"], item["nativeFileKey"])
 
     def test_growing_run_becomes_searchable_without_rebuilding_previous_chunks(self):
         first = self.record()

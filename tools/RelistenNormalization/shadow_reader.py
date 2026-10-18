@@ -11,6 +11,7 @@ import gzip
 import hashlib
 from functools import lru_cache
 import json
+import re
 import sqlite3
 import shutil
 import threading
@@ -175,6 +176,7 @@ class ShadowIndex:
                 JOIN summaries s ON s.id=r.summary_id;
             """)
             self._ensure_chunk_facets(db)
+            self._ensure_native_files(db)
             db.commit()
 
     @staticmethod
@@ -195,6 +197,50 @@ class ShadowIndex:
             SELECT r.chunk_id,r.domain_id,h.provider_id,r.outcome_id,h.artist_id,count(*)
             FROM records r JOIN headers h ON h.id=r.header_id
             GROUP BY r.chunk_id,r.domain_id,h.provider_id,r.outcome_id,h.artist_id""")
+        db.commit()
+
+    def _ensure_native_files(self, db):
+        """Backfill native child pointers once; legacy track rows need no second index."""
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='native_files'").fetchone():
+            return
+        db.execute("BEGIN")
+        statements = [
+            """CREATE TABLE native_files (
+                id INTEGER PRIMARY KEY, parent_id INTEGER NOT NULL, native_key_id INTEGER NOT NULL,
+                file_ordinal INTEGER NOT NULL, label TEXT NOT NULL, filename TEXT NOT NULL,
+                outcome_id INTEGER NOT NULL, UNIQUE(parent_id,native_key_id), UNIQUE(parent_id,file_ordinal)
+            )""",
+            """CREATE TABLE native_file_entities (
+                file_id INTEGER NOT NULL, entity_id INTEGER NOT NULL,
+                PRIMARY KEY(file_id,entity_id)
+            ) WITHOUT ROWID""",
+            "CREATE INDEX native_file_entity_lookup ON native_file_entities(entity_id,file_id)",
+            """CREATE VIRTUAL TABLE native_file_search USING fts5(
+                label,filename,content='native_files',content_rowid='id',tokenize='unicode61 remove_diacritics 0')""",
+            """CREATE TRIGGER native_files_insert AFTER INSERT ON native_files BEGIN
+                INSERT INTO native_file_search(rowid,label,filename) VALUES(new.id,new.label,new.filename);
+            END""",
+            """CREATE TRIGGER native_files_delete AFTER DELETE ON native_files BEGIN
+                INSERT INTO native_file_search(native_file_search,rowid,label,filename)
+                    VALUES('delete',old.id,old.label,old.filename);
+            END""",
+        ]
+        for statement in statements:
+            db.execute(statement)
+        # Only native file_contents parents require their original bodies during
+        # this upgrade. Catalog track_sample bodies are never reprojected.
+        parents = db.execute("""SELECT r.id,r.chunk_id FROM records r JOIN headers h ON h.id=r.header_id
+            JOIN chunks c ON c.id=r.chunk_id
+            WHERE r.domain_id=(SELECT id FROM domains WHERE name='file_contents')
+                AND h.kind_id=(SELECT id FROM terms WHERE value='provider_input') AND c.state='indexed'""").fetchall()
+        for parent in parents:
+            try:
+                record = self.detail(parent["id"])["record"]
+            except (OSError, EOFError, zlib.error, ValueError, KeyError) as error:
+                db.execute("UPDATE chunks SET state='failed',error=? WHERE id=?",
+                           (str(error)[:1000], parent["chunk_id"]))
+                continue
+            self._replace_native_files(db, parent["id"], record)
         db.commit()
 
     def connect(self, read_timeout=None):
@@ -406,16 +452,45 @@ class ShadowIndex:
                   outcome_id, self._term(db, (record.get("reason") or "")[:500]),
                   self._term(db, record["method"][:256]), self._key(db, "summaries", summary), chunk_id, line_no)
         if previous:
+            record_id = previous["id"]
             db.execute("""UPDATE records SET domain_id=?,input_id=?,header_id=?,outcome_id=?,reason_id=?,
                 method_id=?,summary_id=?,chunk_id=?,line_no=? WHERE id=?""", (*values, previous["id"]))
         else:
-            db.execute("""INSERT INTO records(domain_id,input_id,header_id,outcome_id,reason_id,method_id,
-                summary_id,chunk_id,line_no) VALUES(?,?,?,?,?,?,?,?,?)""", values)
+            record_id = db.execute("""INSERT INTO records(domain_id,input_id,header_id,outcome_id,reason_id,method_id,
+                summary_id,chunk_id,line_no) VALUES(?,?,?,?,?,?,?,?,?)""", values).lastrowid
         self._replace_entities(db, input_id, domain_id, keys)
+        if domain == "file_contents" and record["inputKind"] == "provider_input":
+            self._replace_native_files(db, record_id, record)
         if previous:
             facet_changes[(previous["chunk_id"], domain_id, previous["provider_id"],
                            previous["outcome_id"], previous["artist_id"])] -= 1
         facet_changes[(chunk_id, domain_id, provider_id, outcome_id, artist_id)] += 1
+
+    def _replace_native_files(self, db, parent_id, record):
+        db.execute("DELETE FROM native_file_entities WHERE file_id IN (SELECT id FROM native_files WHERE parent_id=?)",
+                   (parent_id,))
+        db.execute("DELETE FROM native_files WHERE parent_id=?", (parent_id,))
+        files = (record.get("proposal") or {}).get("files", [])
+        for ordinal, child in enumerate(files):
+            if (not isinstance(child, dict) or child.get("fileOrdinal") != ordinal
+                    or not isinstance(child.get("entityKey"), str) or not child["entityKey"].startswith("native_file:")):
+                raise ValueError("Native file keys and physical ordinals must identify each child.")
+            keys = child.get("entityKeys", [])
+            if not isinstance(keys, list) or any(not isinstance(key, str) for key in keys):
+                raise ValueError("Native file entity keys must be strings.")
+            outcome = child.get("outcome")
+            if outcome not in self.OUTCOMES:
+                raise ValueError("Unknown native file outcome.")
+            file = child.get("file") or {}
+            filename = (file.get("filename") or {}).get("value") or ""
+            title = ((child.get("titleInterpretation") or {}).get("originalTitle")
+                     or (file.get("title") or {}).get("value") or filename or child["entityKey"])
+            native_key_id = self._key(db, "entities", child["entityKey"])
+            file_id = db.execute("""INSERT INTO native_files
+                (parent_id,native_key_id,file_ordinal,label,filename,outcome_id) VALUES(?,?,?,?,?,?)""",
+                                 (parent_id, native_key_id, ordinal, title, filename, self._term(db, outcome))).lastrowid
+            for key in set(keys) | {child["entityKey"]}:
+                db.execute("INSERT INTO native_file_entities VALUES(?,?)", (file_id, self._key(db, "entities", key)))
 
     @classmethod
     def _labels(cls, proposal, prefer_file_title=False):
@@ -518,6 +593,92 @@ class ShadowIndex:
                 items.append(item)
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
+    def search_files(self, filters):
+        """Search every native child title/filename; q is an AND of token prefixes."""
+        source = " FROM native_files f"
+        conditions, arguments = ["c.state='indexed'"], []
+        if filters.get("q"):
+            if len(filters["q"]) > 256:
+                raise ValueError("Native file search is limited to 256 characters.")
+            tokens = re.findall(r"[^\W_]+", filters["q"], re.UNICODE)
+            if tokens:
+                source = " FROM native_file_search CROSS JOIN native_files f ON f.id=native_file_search.rowid"
+                conditions.append("native_file_search MATCH ?")
+                arguments.append(" AND ".join('"' + token + '"*' for token in tokens))
+            else:
+                conditions.append("0")
+        source += (" JOIN records r ON r.id=f.parent_id JOIN chunks c ON c.id=r.chunk_id"
+                   " JOIN headers h ON h.id=r.header_id JOIN artists a ON a.id=h.artist_id"
+                   " JOIN terms p ON p.id=h.provider_id JOIN terms o ON o.id=f.outcome_id"
+                   " JOIN entities k ON k.id=f.native_key_id")
+        for parameter, column in (("provider", "p.value"), ("outcome", "o.value")):
+            if filters.get(parameter):
+                conditions.append(column + "=?")
+                arguments.append(filters[parameter])
+        if filters.get("artist"):
+            conditions.append("(a.uuid=? OR lower(a.name) LIKE ? ESCAPE '\\')")
+            arguments.extend((filters["artist"], self._like(filters["artist"].lower())))
+        if filters.get("parentId"):
+            conditions.append("f.parent_id=?")
+            arguments.append(int(filters["parentId"]))
+        if filters.get("entityKey"):
+            conditions.append("""f.id IN (SELECT e.file_id FROM entities found
+                JOIN native_file_entities e ON e.entity_id=found.id
+                WHERE found.digest=? AND key_text(found.data)=?)""")
+            arguments.extend((hashlib.blake2b(filters["entityKey"].encode(), digest_size=16).digest(), filters["entityKey"]))
+        where = " WHERE " + " AND ".join(conditions)
+        limit = max(1, min(int(filters.get("limit", 40)), 100))
+        offset = max(0, int(filters.get("offset", 0)))
+        with closing(self.connect(read_timeout=10)) as db:
+            db.execute("BEGIN")
+            total = db.execute("SELECT count(*)" + source + where, arguments).fetchone()[0]
+            rows = db.execute("""SELECT f.parent_id parentId,f.file_ordinal fileOrdinal,
+                key_text(k.data) nativeFileKey,f.label,f.filename,a.uuid artist_uuid,a.name artist_name,
+                p.value provider,o.value outcome,'file_contents' domain""" + source + where
+                              + " ORDER BY f.parent_id DESC,f.file_ordinal LIMIT ? OFFSET ?",
+                              (*arguments, limit, offset)).fetchall()
+        return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+
+    def file_detail(self, parent_id, native_file_key):
+        with closing(self.connect(read_timeout=10)) as db:
+            row = db.execute("""SELECT f.file_ordinal FROM native_files f
+                JOIN entities k ON k.id=f.native_key_id JOIN records r ON r.id=f.parent_id
+                JOIN chunks c ON c.id=r.chunk_id
+                WHERE f.parent_id=? AND k.digest=? AND key_text(k.data)=? AND c.state='indexed'""",
+                             (parent_id, hashlib.blake2b(native_file_key.encode(), digest_size=16).digest(),
+                              native_file_key)).fetchone()
+        if row is None:
+            raise KeyError("Native file no longer exists in this index.")
+        record = self.detail(parent_id)["record"]
+        files = record["proposal"]["files"]
+        ordinal = row["file_ordinal"]
+        if ordinal >= len(files) or files[ordinal]["entityKey"] != native_file_key:
+            raise ValueError("Original native file no longer matches its indexed coordinates.")
+        child = files[ordinal]
+        # Native locators may be filenames or arbitrary formats. Only the typed,
+        # explicitly bound catalog field supplies audio; an absolute provider URL
+        # remains a separately labeled link and is never loaded as audio here.
+        mp3 = self._http_url((child.get("catalogPlayback") or {}).get("mp3Url"))
+        provider_url = self._http_url(((child.get("file") or {}).get("playbackLocator") or {}).get("value"))
+        parent = {key: record[key] for key in ("domain", "inputKey", "inputKind", "inputUuid",
+                                               "artistUuid", "artistName", "provider", "method")}
+        return {"parentId": parent_id, "parentRecordUrl": "/api/record?id=" + str(parent_id),
+                "parent": parent, "file": child, "playback": [mp3] if mp3 else [],
+                "providerFileUrl": provider_url}
+
+    @staticmethod
+    def _http_url(value):
+        if not isinstance(value, str):
+            return None
+        try:
+            parsed = urlsplit(value)
+            parsed.port  # Reject malformed ports as well as non-HTTP locators.
+            if parsed.scheme in {"http", "https"} and parsed.hostname:
+                return value
+        except ValueError:
+            pass
+        return None
+
     @staticmethod
     def _like(value):
         return "%" + value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
@@ -602,6 +763,7 @@ class ShadowIndex:
                 "indexedChunks": sum(item["state"] == "indexed" for item in chunks),
                 "failedChunks": sum(item["state"] == "failed" for item in chunks),
                 "chunks": [item for item in chunks if item["state"] == "failed"][:50],
+                "nativeFileCoverage": aggregate["native_files"],
                 "indexRevision": aggregate["revision"], "index": status}
 
     def _aggregates(self):
@@ -620,6 +782,9 @@ class ShadowIndex:
             domains = dict(db.execute("SELECT id,name FROM domains"))
             artists = {row["id"]: (row["uuid"], row["name"]) for row in db.execute("SELECT * FROM artists")}
             chunks = [dict(row) for row in db.execute("SELECT path,state,rows,error FROM chunks ORDER BY path")]
+            native_files = db.execute("""SELECT count(*) indexedFiles,count(DISTINCT f.parent_id) indexedParents
+                FROM native_files f JOIN records r ON r.id=f.parent_id
+                JOIN chunks c ON c.id=r.chunk_id WHERE c.state='indexed'""").fetchone()
         indexed, counts = {}, {name: {} for name in ("domain", "provider", "outcome", "artists")}
         for row in groups:
             domain, provider = domains[row["domain_id"]], terms[row["provider_id"]]
@@ -632,7 +797,8 @@ class ShadowIndex:
                   for name in ("domain", "provider", "outcome")}
         facets["artists"] = [{"value": key[0], "label": key[1], "count": count}
                              for key, count in sorted(counts["artists"].items(), key=lambda item: (item[0][1], item[0][0]))]
-        aggregate = {"indexed": indexed, "chunks": chunks, "facets": facets, "revision": revision}
+        aggregate = {"indexed": indexed, "chunks": chunks, "facets": facets, "revision": revision,
+                     "native_files": dict(native_files)}
         with self._status_lock:
             if self._revision == revision:
                 self._aggregate_cache = aggregate
@@ -654,6 +820,10 @@ def handler_for(index):
                     return self.send_json(200, index.search(query))
                 if route.path == "/api/record":
                     return self.send_json(200, index.detail(int(query.get("id", ""))))
+                if route.path == "/api/files":
+                    return self.send_json(200, index.search_files(query))
+                if route.path == "/api/file":
+                    return self.send_json(200, index.file_detail(int(query.get("parentId", "")), query["nativeFileKey"]))
                 return self.send_json(404, {"error": "Unknown reader route."})
             except KeyError as error:
                 return self.send_json(404, {"error": str(error)})
