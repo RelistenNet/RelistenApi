@@ -407,7 +407,11 @@ public sealed partial class NormalizedMusicService(DbService db, NormalizationWo
         )
         {
             if (
-                property.Name is "Uuid" or "ExpectedRevision" or "Basis"
+                property.Name
+                    is "Uuid"
+                        or "ExpectedRevision"
+                        or "Basis"
+                        or "EvaluatedCorrespondenceReceiptUuid"
                 || (change is SetlistEditionChange && property.Name == "Selected")
                 || (change is SetlistStructureChange && property.Name == "RemovalAuthorizations")
             )

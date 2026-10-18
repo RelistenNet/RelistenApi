@@ -99,6 +99,12 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     )
     {
+        if (!reviewed && link.EvaluatedCorrespondenceReceiptUuid != null)
+        {
+            throw new ArgumentException(
+                "Evaluated correspondence receipts require the authenticated processor publication route."
+            );
+        }
         await Require(
             c,
             t,

@@ -427,7 +427,8 @@ public sealed partial class NormalizationCandidateService
                         r.revision AS "Revision",r.basis AS "Basis",r.uuid AS "MusicRevisionUuid",
                         r.payload->>'MatchReason' AS "MatchReason",r.payload->'MatchedWorkIdentity' AS "MatchedWorkIdentity",
                         ARRAY(SELECT author::text::uuid FROM jsonb_array_elements_text(COALESCE(r.payload->'MatchedAuthorUuids','[]'::jsonb)) author LIMIT @take) AS "MatchedAuthorUuids",
-                        COALESCE((r.payload->>'CompleteAuthorship')::boolean,false) AS "CompleteAuthorship",{MusicEvidenceProjection}
+                        COALESCE((r.payload->>'CompleteAuthorship')::boolean,false) AS "CompleteAuthorship",
+                        (r.payload->>'EvaluatedCorrespondenceReceiptUuid')::uuid AS "EvaluatedCorrespondenceReceiptUuid",{MusicEvidenceProjection}
                     FROM normalization.repertoire_compositions x JOIN normalization.music_revisions r ON r.uuid=x.revision_uuid
                     WHERE x.repertoire_song_uuid=ANY(@ids) AND NOT x.retracted ORDER BY x.uuid LIMIT @take
                     """,
@@ -510,7 +511,8 @@ public sealed partial class NormalizationCandidateService
                     candidate,
                     "matched_authors"
                 ),
-                row.CompleteAuthorship
+                row.CompleteAuthorship,
+                row.EvaluatedCorrespondenceReceiptUuid
             ))
             .ToArray();
         return new(
@@ -1045,6 +1047,7 @@ public sealed partial class NormalizationCandidateService
         public string? MatchedWorkIdentity { get; init; }
         public Guid[] MatchedAuthorUuids { get; init; } = [];
         public bool CompleteAuthorship { get; init; }
+        public Guid? EvaluatedCorrespondenceReceiptUuid { get; init; }
     }
 
     private sealed class MusicCreditRow : MusicAssertionRow

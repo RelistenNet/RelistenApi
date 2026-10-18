@@ -41,6 +41,9 @@ public sealed record RepertoireCompositionChange : MusicChange
     public NormalizationResourceKey? MatchedWorkIdentity { get; init; }
     public IReadOnlyList<Guid> MatchedAuthorUuids { get; init; } = [];
     public bool CompleteAuthorship { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? EvaluatedCorrespondenceReceiptUuid { get; init; }
 }
 
 public sealed record WorkCreditChange : MusicChange

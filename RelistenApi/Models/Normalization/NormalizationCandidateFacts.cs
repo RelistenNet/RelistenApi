@@ -247,7 +247,9 @@ public sealed record RepertoireCompositionFact(
     string MatchReason,
     NormalizationResourceKey? MatchedWorkIdentity,
     IReadOnlyList<Guid> MatchedAuthorUuids,
-    bool CompleteAuthorship
+    bool CompleteAuthorship,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        Guid? EvaluatedCorrespondenceReceiptUuid = null
 );
 
 public sealed record RepertoireCandidateFacts
@@ -324,6 +326,7 @@ public sealed record CompositionCandidateFacts
 
     // Empty when source lists conflict, an author is unresolved, or the bounded author
     // projection is incomplete. This aggregate never replaces the individual assertions.
+    [JsonConverter(typeof(ReadOnlyGuidSetJsonConverter))]
     public IReadOnlySet<Guid> AuthorUuids { get; init; } = new HashSet<Guid>();
     public bool CompleteAuthorship => AuthorUuids.Count > 0;
 }

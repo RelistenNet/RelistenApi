@@ -47,6 +47,27 @@ public sealed partial class NormalizationWorkService
                 cancellationToken: cancellationToken
             )
         );
+        var result = await GetInputContributionsInSnapshotAsync(
+            connection,
+            transaction,
+            subject,
+            limits,
+            cancellationToken
+        );
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    // Domain facts readers join this metadata-only membership read to their own primary snapshot.
+    // It never refreshes evidence, configures an owner or opens a second transaction.
+    internal static async Task<NormalizationInputContributionsSnapshot> GetInputContributionsInSnapshotAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        NormalizationSubjectKey subject,
+        NormalizationInputContributionsLimits limits,
+        CancellationToken cancellationToken
+    )
+    {
         var owner = await connection.QuerySingleOrDefaultAsync<SubjectRow>(
             new CommandDefinition(
                 $"SELECT {SubjectColumns} FROM normalization.work_subjects WHERE domain=@Domain AND subject_kind=@Kind AND subject_uuid=@Uuid",
@@ -57,7 +78,6 @@ public sealed partial class NormalizationWorkService
         );
         if (owner == null)
         {
-            await transaction.CommitAsync(cancellationToken);
             return new(null, []);
         }
         var counts = await CountContributionBindings(
@@ -121,7 +141,6 @@ public sealed partial class NormalizationWorkService
                 .ToArray(),
             unmanaged
         );
-        await transaction.CommitAsync(cancellationToken);
         return result;
     }
 

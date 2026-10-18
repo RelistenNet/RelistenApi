@@ -162,6 +162,10 @@ internal static class LocalTestDatabase
             Migrations.AddAcceptedRecordingActorContext.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddCompositionResolution.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()
