@@ -5,6 +5,8 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import uuid
+from unittest.mock import patch
 from contextlib import closing
 from pathlib import Path
 
@@ -108,6 +110,8 @@ class TestShadowReader(unittest.TestCase):
         record = self.record()
         original = "PRIVATE-ORIGINAL-" + "prose " * 12000
         record["evidence"]["originalInputs"]["description"] = original
+        with closing(self.index.connect()) as db:
+            empty_cache_bytes = db.execute("PRAGMA page_count").fetchone()[0] * db.execute("PRAGMA page_size").fetchone()[0]
         self.chunk("100", record)
         self.index.scan_once()
         item = self.index.search({})["items"][0]
@@ -118,7 +122,9 @@ class TestShadowReader(unittest.TestCase):
         with closing(sqlite3.connect(self.index.database)) as db:
             retained = " ".join(str(value) for row in db.execute("SELECT * FROM records") for value in row)
             self.assertNotIn("PRIVATE-ORIGINAL", retained)
-        self.assertLess(self.index.database.stat().st_size, len(original))
+        with closing(self.index.connect()) as db:
+            populated_cache_bytes = db.execute("PRAGMA page_count").fetchone()[0] * db.execute("PRAGMA page_size").fetchone()[0]
+        self.assertLess(populated_cache_bytes - empty_cache_bytes, len(original))
 
     def test_changed_completed_chunk_cannot_serve_substituted_original_evidence(self):
         path = self.chunk("100", self.record())
@@ -192,6 +198,151 @@ class TestShadowReader(unittest.TestCase):
             (self.run / "people" / "100.jsonl.gz").symlink_to(outside)
             self.index.scan_once()
             self.assertEqual(self.index.search({})["total"], 0)
+
+    def test_shared_input_keeps_domain_headers_and_entity_membership_independent_on_replay(self):
+        source = self.record(entityKeys=["person:shared", "person:only-first"])
+        credit = self.record(domain="credits", provider="local", artistName="Earlier name",
+                             artistUuid="earlier-artist", method="credit-v1", inputUuid="other-format",
+                             entityKeys=["person:shared", "person:only-credit"], proposal={"title": "Credit label"})
+        self.chunk("100", source)
+        self.chunk("100", credit, domain="credits")
+        self.index.scan_once()
+        ids = {item["domain"]: item["id"] for item in self.index.search({})["items"]}
+        updated = self.record(entityKeys=["person:replacement"], provider="archive-updated",
+                              artistName="Later name", proposal={"title": "Changed label"})
+        self.chunk("200", updated)
+        self.index.scan_once()
+        self.assertEqual(self.index.search({})["total"], 2)
+        self.assertEqual(self.index.search({"entityKey": "person:shared"})["total"], 1)
+        self.assertEqual(self.index.search({"entityKey": "person:shared", "domain": "people"})["total"], 0)
+        self.assertEqual(self.index.search({"entityKey": "person:only-first"})["total"], 0)
+        self.assertEqual(self.index.search({"entityKey": "person:only-credit", "provider": "local"})["total"], 1)
+        self.assertEqual(self.index.detail(ids["credits"])["record"], credit)
+        self.assertEqual(self.index.detail(ids["people"])["record"], updated)
+        self.assertEqual(self.index.search({"q": "Credit label"})["items"][0]["input_uuid"], "other-format")
+        self.assertEqual(self.index.stats()["indexedRecords"], 2)
+
+    def test_failed_replay_rolls_back_header_and_entity_changes_across_domains(self):
+        first = self.record(entityKeys=["person:old", "person:shared"])
+        other = self.record(domain="credits", entityKeys=["person:shared"])
+        self.chunk("100", first)
+        self.chunk("100", other, domain="credits")
+        self.index.scan_once()
+        first_id = self.index.search({"domain": "people"})["items"][0]["id"]
+        replay = self.record(provider="replacement", entityKeys=["person:new"], proposal={"title": "Changed"})
+        with gzip.open(self.run / "people/200.jsonl.gz", "wt", encoding="utf-8") as stream:
+            stream.write(json.dumps(replay) + "\n{bad-json}\n")
+        self.index.scan_once()
+        self.assertEqual(self.index.detail(first_id)["record"], first)
+        self.assertEqual(self.index.search({"entityKey": "person:new"})["total"], 0)
+        self.assertEqual(self.index.search({"entityKey": "person:shared"})["total"], 2)
+        self.assertEqual(self.index.search({"provider": "replacement"})["total"], 0)
+        self.assertEqual(self.index.stats()["indexedRecords"], 2)
+        self.chunk("300", replay)
+        self.index.scan_once()
+        self.assertEqual(self.index.detail(first_id)["record"], replay)
+        self.assertEqual(self.index.search({"entityKey": "person:shared"})["total"], 1)
+        self.assertEqual(self.index.search({"entityKey": "person:new"})["total"], 1)
+
+    def test_packed_keys_and_unicode_search_preserve_literal_public_values(self):
+        known = str(uuid.UUID(int=123))
+        entities = ["file:" + known, "UPPER:" + known.upper(), "opaque:🎹\x00" + "phrase" * 50]
+        key = "track_sample:" + known
+        record = self.record(key, inputKind="track_sample", inputUuid=known, entityKeys=entities,
+                             artistName="Straße 🎹", proposal={"title": "CAFÉ é ﬃ 100%_"})
+        self.chunk("100", record)
+        self.index.scan_once()
+        for entity in entities:
+            item = self.index.search({"entityKey": entity})["items"][0]
+            self.assertEqual(item["input_key"], key)
+            self.assertEqual(item["input_uuid"], known)
+            self.assertEqual(item["entityKeys"], sorted(entities))
+            self.assertEqual(self.index.detail(item["id"])["record"], record)
+        for query in ("STRASSE", "café", "ffi", "100%_"):
+            self.assertEqual(self.index.search({"q": query})["total"], 1)
+
+    def test_digest_collisions_do_not_join_inputs_entities_or_labels(self):
+        class Collision:
+            def digest(self):
+                return b"collision-key!!!"
+        first = self.record("input:first", entityKeys=["person:first"], proposal={"title": "First only"})
+        second = self.record("input:second", entityKeys=["person:second"], proposal={"title": "Second only"})
+        with patch("shadow_reader.hashlib.blake2b", return_value=Collision()):
+            self.chunk("100", first, second)
+            self.index.scan_once()
+            self.assertEqual(self.index.search({})["total"], 2)
+            self.assertEqual(self.index.search({"entityKey": "person:first"})["total"], 1)
+            self.assertEqual(self.index.search({"q": "Second only"})["total"], 1)
+            for record in (first, second):
+                item = self.index.search({"q": record["inputKey"]})["items"][0]
+                self.assertEqual(self.index.detail(item["id"])["record"], record)
+
+    def test_entity_domain_bits_extend_and_clear_without_an_arbitrary_domain_limit(self):
+        for ordinal in range(70):
+            domain = "domain-" + str(ordinal).zfill(2)
+            self.chunk("100", self.record(domain=domain), domain=domain)
+        self.index.scan_once()
+        self.assertEqual(self.index.search({"entityKey": "person:shared"})["total"], 70)
+        self.chunk("200", self.record(domain="domain-00", entityKeys=[]), domain="domain-00")
+        self.index.scan_once()
+        self.assertEqual(self.index.search({"entityKey": "person:shared"})["total"], 69)
+        self.assertEqual(self.index.search({"entityKey": "person:shared", "domain": "domain-69"})["total"], 1)
+        self.assertEqual(self.index.stats()["indexedRecords"], 70)
+
+    def test_new_cache_does_not_migrate_or_mutate_live_legacy_index(self):
+        legacy = self.run / ".shadow-reader.sqlite3"
+        legacy.write_bytes(b"preserved original live cache")
+        self.chunk("100", self.record())
+        reopened = ShadowIndex(self.run)
+        reopened.scan_once()
+        self.assertEqual(reopened.search({})["total"], 1)
+        self.assertEqual(legacy.read_bytes(), b"preserved original live cache")
+
+    def test_representative_multi_domain_population_has_measured_compact_growth_and_exact_lookup(self):
+        count = 5000
+        domains = ("performances", "file_contents", "songs", "compositions")
+        sample = None
+        for domain in domains:
+            directory = self.run / domain
+            directory.mkdir()
+            with gzip.open(directory / "100.jsonl.gz", "wt", encoding="utf-8") as stream:
+                for ordinal in range(count):
+                    file_uuid = str(uuid.UUID(int=ordinal + 1))
+                    artist_uuid = str(uuid.UUID(int=100000 + ordinal % 100))
+                    source_uuid = str(uuid.UUID(int=200000 + ordinal // 10))
+                    show_uuid = str(uuid.UUID(int=300000 + ordinal // 10))
+                    song_uuid = str(uuid.UUID(int=400000 + ordinal))
+                    title = "Recorded song " + str(ordinal) + " > Another song"
+                    proposal = ({"literalDate": "1970-02-03", "performanceLabel": "late"}
+                                if domain == "performances" else {"originalTitle": title})
+                    entities = ["file:" + file_uuid, "artist-song:" + artist_uuid + ":" + song_uuid]
+                    if domain in ("performances", "file_contents"):
+                        entities.extend(("source:" + source_uuid, "show:" + show_uuid))
+                    record = self.record("track_sample:" + file_uuid, domain, inputUuid=file_uuid,
+                                         inputKind="track_sample", artistUuid=artist_uuid,
+                                         artistName="Artist " + str(ordinal % 100), entityKeys=entities,
+                                         proposal=proposal, method="shadow-" + domain + "-v2")
+                    stream.write(json.dumps(record) + "\n")
+                    if domain == "file_contents" and ordinal == 123:
+                        sample = record
+        self.index.scan_once()
+        self.assertEqual(self.index.stats()["indexedRecords"], count * len(domains))
+        item = self.index.search({"entityKey": sample["entityKeys"][0], "domain": "file_contents"})["items"][0]
+        self.assertEqual(self.index.detail(item["id"])["record"], sample)
+        self.assertEqual(self.index.search({"entityKey": sample["entityKeys"][0]})["total"], 4)
+        self.assertEqual(self.index.search({"q": "Recorded song 123 >"})["total"], 3)
+        with closing(self.index.connect()) as db:
+            db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            size = db.execute("PRAGMA page_count").fetchone()[0] * db.execute("PRAGMA page_size").fetchone()[0]
+            objects = {row[0]: row[1] for row in db.execute(
+                "SELECT name,sum(pgsize) FROM dbstat GROUP BY name")}
+            # This measures the whole real cache including dictionaries, both lookup
+            # directions and schema pages. It is a regression ceiling, not a catalog forecast.
+            self.assertLess(size / count, 1200)
+        print(json.dumps({"measurement": "synthetic-reader-index-v2", "inputs": count,
+                          "domainOutcomes": count * len(domains), "sqliteBytes": size,
+                          "bytesPerInput": size / count, "bytesPerOutcome": size / (count * len(domains)),
+                          "sqliteObjectBytes": objects}))
 
 
 if __name__ == "__main__":
