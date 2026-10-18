@@ -106,7 +106,7 @@ internal sealed class LunaRecordingCreditClient(HttpClient http, TimeSpan timeou
         return buffer.ToArray();
     }
 
-    private static LunaCreditResponse ParseResponse(byte[] body, string? requestId)
+    internal static LunaCreditResponse ParseResponse(byte[] body, string? requestId)
     {
         using var document = JsonDocument.Parse(body);
         var root = document.RootElement;

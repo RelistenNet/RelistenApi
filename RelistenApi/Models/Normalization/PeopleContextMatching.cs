@@ -66,3 +66,11 @@ public sealed record PeopleContextMatchResult(
     long? OutputTokens = null,
     decimal? ActualUsd = null
 );
+
+/// <summary>Rejected questions remain visible beside independently supported recovered proposals.</summary>
+public sealed record PeopleContextRejectedQuestion(string QuestionId, string Reason);
+
+public sealed record PeopleContextRecoveredDecisions(
+    IReadOnlyList<PeopleContextDecision> Decisions,
+    IReadOnlyList<PeopleContextRejectedQuestion> RejectedQuestions
+);

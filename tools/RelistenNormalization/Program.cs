@@ -11,7 +11,7 @@ if (
             && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
-        || (args.Length == 4 && args[0] == "people-context")
+        || (args.Length == 4 && args[0] is "people-context" or "people-context-recover")
         || (args.Length == 5 && args[0] == "admit-retained-local")
         || (args.Length == 3 && args[0] is "shadow-compositions-acquire" or "retained-http-inputs")
         || (
@@ -67,6 +67,7 @@ if (
             + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>\n"
             + "       RelistenNormalization luna-credit-cohort <plan.json> <plan-sha256> <new-output-directory> <job-uuid>"
             + "\n       RelistenNormalization people-context <batches.jsonl> <new-output-directory> <job-uuid>"
+            + "\n       RelistenNormalization people-context-recover <completed-run-directory> <new-output-directory> <job-uuid>"
     );
     return 2;
 }
@@ -236,6 +237,26 @@ try
             )
         );
         return contextReport.State == "completed" ? 0 : 1;
+    }
+    if (args[0] == "people-context-recover")
+    {
+        if (!Guid.TryParse(args[3], out var contextJobUuid))
+        {
+            throw new ArgumentException("Use the original contextual job UUID.");
+        }
+        var recoveryReport = await new PeopleContextRecovery().RunAsync(
+            args[1],
+            args[2],
+            contextJobUuid,
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                recoveryReport,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return 0;
     }
     if (args[0] == "people-pair-baseline")
     {
