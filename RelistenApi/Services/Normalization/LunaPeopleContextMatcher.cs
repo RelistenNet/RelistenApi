@@ -325,7 +325,7 @@ public sealed class LunaPeopleContextMatcher(
 
     /// <summary>
     /// Recovers independently valid decisions from one retained failed response. The complete
-    /// question set must still match before individual support checks run. This performs no HTTP,
+    /// every returned question ID must still match before individual support checks run. This performs no HTTP,
     /// cache promotion or identity acceptance, and uses exactly the normal response validator.
     /// </summary>
     public static PeopleContextRecoveredDecisions RecoverFailedBatch(
@@ -383,8 +383,8 @@ public sealed class LunaPeopleContextMatcher(
             throw new LunaCreditResponseException("invalid_response");
         }
 
-        // An incomplete or duplicated response could attach otherwise valid evidence to the
-        // wrong question. Check the entire set before retaining any individual proposal.
+        // Duplicate or invented IDs make assignment ambiguous. Missing independent
+        // questions do not invalidate supported answers to the known IDs that remain.
         var questions = input.Questions.ToDictionary(
             question => question.QuestionId,
             StringComparer.Ordinal
@@ -405,20 +405,19 @@ public sealed class LunaPeopleContextMatcher(
                 throw new LunaCreditResponseException("invalid_response");
             }
         }
-        if (byQuestion.Count != questions.Count)
-        {
-            throw new LunaCreditResponseException("invalid_response");
-        }
-
         var decisions = new List<PeopleContextDecision>();
         var rejected = new List<PeopleContextRejectedQuestion>();
         foreach (var question in input.Questions)
         {
+            if (!byQuestion.TryGetValue(question.QuestionId, out var entry))
+            {
+                rejected.Add(new(question.QuestionId, "missing_decision"));
+                continue;
+            }
             try
             {
                 var oneQuestion = input with { Questions = [question] };
-                var oneDecision =
-                    "{\"decisions\":[" + byQuestion[question.QuestionId].GetRawText() + "]}";
+                var oneDecision = "{\"decisions\":[" + entry.GetRawText() + "]}";
                 decisions.Add(ValidateResponse(oneQuestion, oneDecision).Single());
             }
             catch (Exception error) when (error is JsonException or LunaCreditResponseException)

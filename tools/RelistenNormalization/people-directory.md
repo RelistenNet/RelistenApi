@@ -80,11 +80,11 @@ The tests cover cross-artist grouping, duplicate roles, preserved quotes and pla
 
 `people_context.py` prepares comparisons between witnessed credits. Names and aliases retrieve candidates. The questions then include the exact credit occurrence, surrounding original prose, competing roles, attributed contacts and profiles, and captured performance date and location. A transfer credit does not imply that the transferrer attended the performance. Missing text in a bounded excerpt does not establish that the source lacks that text.
 
-The first contextual population contains 5,000 questions using 7,582 source witnesses across 1,837 artists. Of these questions, 4,650 cross artist boundaries. It includes name variants, explicit aliases, overlapping contact hints and potential namesakes. Same-date performances in different captured locations and differing contacts retrieve difficult questions; neither supplies an automatic negative label. These inputs are development data, not an independent accuracy evaluation.
+The prepared contextual population contains 5,000 questions using 7,582 source witnesses across 1,837 artists. The first run stopped at the host disk reserve after recording 2,460 questions. Its 2,318 usable results include 1,046 possible same-person links, 128 possible namesake distinctions and 1,144 insufficient-evidence results. Exact response validation retains 142 rejected or missing questions separately; another 2,540 selected questions have not been processed. Of these questions, 4,650 cross artist boundaries. It includes name variants, explicit aliases, overlapping contact hints and potential namesakes. Same-date performances in different captured locations and differing contacts retrieve difficult questions; neither supplies an automatic negative label. These inputs are development data, not an independent accuracy evaluation.
 
 The C# `people-context <batches.jsonl> <new-output-directory> <job-uuid>` command owns Luna requests, exact quotation checks, caching and cost admission. It processes at most 500 batches and 5,000 questions, with four concurrent requests, a $25 job cap and 1,000 maximum attempts. It uses the existing dedicated local normalization cache database and reads `OPENAI_API_KEY` from its environment. It does not alter production identities. Requests use `gpt-6-luna`; reported token cost uses configured rates and is separate from an invoice. Uncertain calls retain their cost reservations.
 
-After a run settles, attach its validated proposals:
+After a run settles, including a sealed cancelled prefix, attach its validated proposals:
 
 ```sh
 python3 tools/RelistenNormalization/people_context.py --attach \
@@ -98,8 +98,23 @@ The attachment verifies the completed result hash and each witness's credit, gro
 
 A proposed same-person relationship is evidence to inspect. A proposed different-people relationship is a possible namesake distinction. Insufficient evidence remains a visible result. None of these states asserts an accepted person identity. Further work should use this directory to identify broad failure classes and measure matching accuracy on independently labeled data.
 
-An immutable snapshot can expose a flushed prefix while the job continues. Its manifest has `state: snapshot`, the original run, exact result hash and original physical-line range. The page reports processed questions against the selected 5,000, so it does not present a partial run as complete catalog coverage. The first exposed prefix contained 510 processed questions and 350 validated proposals. The other 160 questions belonged to responses awaiting per-question recovery or rejection.
+An immutable snapshot can expose a flushed prefix while the job continues. Its manifest has `state: snapshot`, the original run, exact result hash and original physical-line range. The page reports processed questions against the selected 5,000, so it does not present a partial run as complete catalog coverage.
 
-Exact quotation checks also apply during recovery. One changed quote can invalidate an original batch response even when the other decisions are supported. `PeopleContextRecovery` reads that response from the local cache ledger, checks the original rendered request and complete question-ID set, then validates each decision separately. It makes no HTTP calls, changes no spend or cache acceptance, and preserves rejected question IDs and reasons. Recovered decisions appear with that basis on the page. Their original source witnesses and model usage stay attached; recovery does not charge the original cost twice.
+Exact quotation checks also apply during recovery. One changed quote can invalidate an original batch response even when the other decisions are supported. `PeopleContextRecovery` reads that response from the local cache ledger, checks the original rendered request and rejects duplicate or invented question IDs, then validates each present decision separately. Each absent question remains `missing_decision`. It makes no HTTP calls, changes no spend or cache acceptance, and preserves rejected question IDs and reasons. Recovered decisions appear with that basis on the page. Their original source witnesses and model usage stay attached; recovery does not charge the original cost twice.
 
 A later credit overlay invalidates contextual relationships that cite the replaced source's credit occurrences in the same transaction. It retains unrelated relationships and updates their count snapshot. This prevents an old local credit ID from linking to newly projected evidence. The original contextual run remains available as historical evidence; attaching a new proposal requires its witnesses to match current credits.
+
+Recover a sealed run with the original job UUID. This command does not need an API key:
+
+```sh
+dotnet tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll \
+  people-context-recover <sealed-run-directory> <new-recovery-directory> <original-job-uuid>
+```
+
+A cancelled run retains all prepared inputs and the hash of its completed result prefix. Recovery verifies the recorded number of completed batches, without treating unrecorded inputs as failed responses. Its projection preserves the stopped execution state even though recovery itself completed. Recovery retained 718 supported decisions without new calls or spend. Known token cost for the original job was $0.6608652 at configured rates; the ledger retained $0.7115587 including uncertain cost reservations. These values are not invoice totals.
+
+The retained `continuation.json` lists completed and pending batch IDs against the original input hash, plus attempts whose results were not recorded. It authorizes no restart. After storage is resolved, an explicit continuation can stream only pending inputs under the same job/cache limits. Completed batches must not be processed again, and uncertain-attempt reservations must remain accounted.
+
+The projection records distinct question IDs per job separately from successful decisions. Overlapping snapshots and recovery do not increase processed coverage; a later continuation containing disjoint pending questions does. Only compact IDs are stored, without another copy of question prose.
+
+Fifteen real responses omitted independent decisions: fourteen returned nine answers for ten questions, and one returned seven. Another response duplicated an ID and remains wholly rejected. Recovery keeps present unique known IDs when their exact witness evidence passes validation and records the omitted ID as `missing_decision`. Requiring every response ID before recovering any result discarded supported independent answers. Duplicate or invented IDs still reject the whole response; recovery never guesses or remaps ownership.

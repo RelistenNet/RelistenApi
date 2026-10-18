@@ -568,13 +568,22 @@
             document.createTextNode(
               " · " +
                 count(context.decisions) +
-                " validated contextual proposals from " +
+                " contextual comparison results from " +
                 count(context.processedQuestions) +
                 " processed questions" +
                 (context.plannedQuestions
                   ? " of " + count(context.plannedQuestions) + " selected"
                   : "") +
-                (context.state === "snapshot" ? " (run continuing)" : ""),
+                ((context.executionState || context.state) === "snapshot"
+                  ? " (run continuing)"
+                  : (context.executionState || context.state) === "cancelled"
+                    ? " (run stopped; remaining selected questions were not processed)"
+                    : "") +
+                (context.rejectedQuestions
+                  ? " · " +
+                    count(context.rejectedQuestions) +
+                    " questions have no supported retained decision"
+                  : ""),
             ),
           );
         }

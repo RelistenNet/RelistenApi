@@ -264,7 +264,7 @@ public sealed class TestLunaPeopleContextRecovery
 
     [TestCase(true)]
     [TestCase(false)]
-    public void DuplicateOrMissingQuestionIdsRejectTheWholeEnvelope(bool duplicate)
+    public void DuplicateOrInventedQuestionIdsRejectTheWholeEnvelope(bool duplicate)
     {
         var input = TenQuestions();
         var decision = JsonDocument
@@ -280,10 +280,29 @@ public sealed class TestLunaPeopleContextRecovery
         }
         else
         {
-            entries.RemoveAt(9);
+            entries[9] = decision.Replace("pair-1", "invented-question");
         }
         var act = () => Recover(input, "{\"decisions\":[" + string.Join(",", entries) + "]}");
         act.Should().Throw<JsonException>();
+    }
+
+    [Test]
+    public void MissingIndependentDecisionKeepsSupportedKnownQuestions()
+    {
+        var input = TenQuestions();
+        var decision = JsonDocument
+            .Parse(TestLunaPeopleContextMatcher.Response())
+            .RootElement.GetProperty("decisions")[0]
+            .GetRawText();
+        var entries = input
+            .Questions.Take(9)
+            .Select(question => decision.Replace("pair-1", question.QuestionId));
+        var recovered = Recover(input, "{\"decisions\":[" + string.Join(",", entries) + "]}");
+        recovered.Decisions.Should().HaveCount(9);
+        recovered.Decisions.Select(item => item.QuestionId).Should().NotContain("pair-10");
+        recovered
+            .RejectedQuestions.Should()
+            .Equal(new PeopleContextRejectedQuestion("pair-10", "missing_decision"));
     }
 
     [Test]
@@ -483,8 +502,9 @@ public sealed class TestLunaPeopleContextMatcherCache
         attemptState.Should().Be("failed");
     }
 
-    [Test]
-    public async Task RecoveryReadsFailedEvidenceWithoutNewSpendOrCachePromotion()
+    [TestCase(false)]
+    [TestCase(true)]
+    public async Task RecoveryReadsFailedEvidenceWithoutNewSpendOrCachePromotion(bool interrupted)
     {
         var job = Guid.NewGuid();
         await cache.CreateJobAsync(job);
@@ -514,7 +534,17 @@ public sealed class TestLunaPeopleContextMatcherCache
         Directory.CreateDirectory(original);
         try
         {
-            var inputBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(input, json) + "\n");
+            var inputText = JsonSerializer.Serialize(input, json) + "\n";
+            if (interrupted)
+            {
+                var pending = input with
+                {
+                    BatchId = "pending-batch",
+                    Questions = [input.Questions[0] with { QuestionId = "pending-question" }],
+                };
+                inputText += JsonSerializer.Serialize(pending, json) + "\n";
+            }
+            var inputBytes = Encoding.UTF8.GetBytes(inputText);
             var result = new PeopleContextMatchResult(
                 input.BatchId,
                 "unresolved",
@@ -532,11 +562,11 @@ public sealed class TestLunaPeopleContextMatcherCache
             await File.WriteAllBytesAsync(Path.Combine(original, "inputs.jsonl"), inputBytes);
             await File.WriteAllBytesAsync(Path.Combine(original, "results.jsonl"), resultBytes);
             var report = new PeopleContextBatchReport(
-                "completed_partial",
+                interrupted ? "cancelled" : "completed_partial",
                 job,
                 LunaPeopleContextMatcher.Version,
-                1,
-                1,
+                interrupted ? 2 : 1,
+                interrupted ? 2 : 1,
                 1,
                 0,
                 new Dictionary<string, int> { ["unresolved"] = 1 },

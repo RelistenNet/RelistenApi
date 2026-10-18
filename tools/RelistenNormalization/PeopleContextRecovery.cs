@@ -8,7 +8,7 @@ using Relisten.Data;
 namespace Relisten.Normalization.Batch;
 
 /// <summary>
-/// Salvages individually supported contextual proposals after a completed local experiment.
+/// Salvages individually supported contextual proposals after a sealed local experiment.
 /// Reads retained failed envelopes and writes a separate result artifact. It sends no requests,
 /// changes no cache entries, and leaves both the original run and its spend ledger unchanged.
 /// </summary>
@@ -17,7 +17,8 @@ public sealed class PeopleContextRecovery(DbService? database = null)
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>
-    /// Recovers only invalid-response attempts belonging to this exact completed run and job.
+    /// Recovers only invalid-response attempts belonging to this exact sealed run and job.
+    /// Cancellation can leave a complete result prefix; unrecorded batches remain pending.
     /// Every output row retains the full original batch plus its failed-attempt locator.
     /// Individual decisions pass the same exact source-support checks as primary responses.
     /// </summary>
@@ -41,12 +42,12 @@ public sealed class PeopleContextRecovery(DbService? database = null)
         if (
             jobUuid == Guid.Empty
             || original.JobUuid != jobUuid
-            || original.State is not ("completed" or "completed_partial")
+            || original.State is not ("completed" or "completed_partial" or "cancelled")
             || original.Method != LunaPeopleContextMatcher.Version
         )
         {
             throw new ArgumentException(
-                "Recover a completed contextual matching run for the exact job and method."
+                "Recover a sealed contextual matching run for the exact job and method."
             );
         }
         var inputPath = Path.Combine(originalRun, "inputs.jsonl");
@@ -64,6 +65,7 @@ public sealed class PeopleContextRecovery(DbService? database = null)
             inputPath,
             resultPath,
             original.InputBatches,
+            original.CompletedBatches,
             cancellationToken
         );
         var db = database ?? NormalizationLocalDatabase.Create();
@@ -227,7 +229,8 @@ public sealed class PeopleContextRecovery(DbService? database = null)
     private static async Task<IReadOnlyList<FailedRow>> ReadFailedRowsAsync(
         string inputsPath,
         string resultsPath,
-        int expectedBatches,
+        int expectedInputs,
+        int expectedResults,
         CancellationToken cancellationToken
     )
     {
@@ -282,10 +285,10 @@ public sealed class PeopleContextRecovery(DbService? database = null)
                 }
             }
         }
-        if (inputs.Count != expectedBatches || seen.Count != inputs.Count)
+        if (inputs.Count != expectedInputs || seen.Count != expectedResults)
         {
             throw new ArgumentException(
-                "The completed run must contain one result for every input batch."
+                "The sealed run must contain its recorded number of completed batches."
             );
         }
         return failed;

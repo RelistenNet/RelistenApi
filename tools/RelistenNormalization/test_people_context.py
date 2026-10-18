@@ -220,13 +220,24 @@ class TestPeopleContext(unittest.TestCase):
         database = self.contextual_run()
         manifest_path = self.run / "manifest.json"
         manifest = json.loads(manifest_path.read_text())
-        manifest.update(questions=10, plannedQuestions=20)
+        primary = self.run / "results.jsonl"
+        pending = json.loads(primary.read_text())
+        pending["input"]["questions"][0]["questionId"] = "pair-2"
+        pending["result"].update(state="unresolved", decisions=[])
+        with primary.open("a") as stream:
+            stream.write(encoded(pending) + "\n")
+        manifest.update(
+            questions=20,
+            plannedQuestions=20,
+            state="cancelled",
+            resultsSha256=hashlib.sha256(primary.read_bytes()).hexdigest(),
+        )
         manifest_path.write_text(encoded(manifest))
         PeopleContextProjection(database, self.run).apply()
         original_run = self.run
         recovered = self.root / "recovered"
         recovered.mkdir()
-        row = json.loads((original_run / "results.jsonl").read_text())
+        row = json.loads((original_run / "results.jsonl").read_text().splitlines()[0])
         row["input"]["questions"][0]["questionId"] = "pair-2"
         row["result"]["decisions"][0]["questionId"] = "pair-2"
         row["recovery"] = {
@@ -254,7 +265,8 @@ class TestPeopleContext(unittest.TestCase):
         )
         summary = PeopleContextProjection(database, recovered).apply()
         self.assertEqual(summary["decisions"], 2)
-        self.assertEqual(summary["processedQuestions"], 10)
+        self.assertEqual(summary["processedQuestions"], 2)
+        self.assertEqual(summary["executionState"], "cancelled")
         self.assertEqual(summary["plannedQuestions"], 20)
         self.assertEqual(summary["knownTokenCostUsd"], 0.01)
         self.assertEqual(summary["accountedUsd"], 0.01)
@@ -264,6 +276,34 @@ class TestPeopleContext(unittest.TestCase):
             "recovered_from_failed_batch",
         )
         self.assertEqual(directory.relationships("a", {})["total"], 2)
+
+    def test_disjoint_continuation_adds_progress_without_counting_recovery_twice(self):
+        database = self.contextual_run()
+        PeopleContextProjection(database, self.run).apply()
+        continuation = self.root / "continuation"
+        continuation.mkdir()
+        row = json.loads((self.run / "results.jsonl").read_text())
+        row["input"]["questions"][0]["questionId"] = "another-pair"
+        row["result"]["decisions"][0]["questionId"] = "another-pair"
+        result = continuation / "results.jsonl"
+        result.write_text(encoded(row) + "\n")
+        manifest = json.loads((self.run / "manifest.json").read_text())
+        manifest.update(
+            resultsSha256=hashlib.sha256(result.read_bytes()).hexdigest(),
+            questions=1,
+            plannedQuestions=5,
+        )
+        (continuation / "manifest.json").write_text(encoded(manifest))
+        summary = PeopleContextProjection(database, continuation).apply()
+        self.assertEqual(summary["processedQuestions"], 2)
+        self.assertEqual(summary["decisions"], 2)
+        self.assertEqual(summary["plannedQuestions"], 5)
+        self.assertEqual(
+            PeopleContextProjection(database, continuation).apply()[
+                "processedQuestions"
+            ],
+            2,
+        )
 
     def test_credit_replacement_invalidates_only_relationships_using_replaced_source(
         self,
@@ -396,11 +436,8 @@ class TestPeopleContext(unittest.TestCase):
             db.execute("UPDATE credits SET source_uuid='other-source' WHERE id=2")
         with self.assertRaisesRegex(ValueError, "credited source"):
             PeopleContextProjection(database, self.run).apply()
-        with closing(sqlite3.connect(database)) as db, db:
-            self.assertEqual(
-                db.execute("SELECT count(*) FROM context_relationships").fetchone()[0],
-                0,
-            )
+        directory = PeopleDirectory(database, "http://files.test/", "http://core.test/")
+        self.assertEqual(directory.relationships("a", {})["total"], 0)
 
 
 if __name__ == "__main__":

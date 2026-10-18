@@ -529,7 +529,12 @@ class PeopleContextProjection:
 
     def apply(self):
         manifest = json.loads((self.run / "manifest.json").read_text())
-        if manifest["state"] not in ("completed", "completed_partial", "snapshot"):
+        if manifest["state"] not in (
+            "completed",
+            "completed_partial",
+            "cancelled",
+            "snapshot",
+        ):
             raise ValueError(
                 "Attach only settled results or an immutable result snapshot"
             )
@@ -539,8 +544,19 @@ class PeopleContextProjection:
             != manifest["resultsSha256"]
         ):
             raise ValueError("Contextual results changed after completion")
-        decisions, states = self._read_decisions(results)
+        decisions, states, questions = self._read_decisions(results)
         with closing(sqlite3.connect(self.database)) as db, db:
+            db.execute("""CREATE TABLE IF NOT EXISTS context_questions(
+                job_uuid TEXT NOT NULL, question_id TEXT NOT NULL,
+                PRIMARY KEY(job_uuid,question_id))""")
+            db.executemany(
+                "INSERT OR IGNORE INTO context_questions VALUES(?,?)",
+                [(manifest["jobUuid"], question) for question in questions],
+            )
+            processed = db.execute(
+                "SELECT count(*) FROM context_questions WHERE job_uuid=?",
+                (manifest["jobUuid"],),
+            ).fetchone()[0]
             db.execute("""CREATE TABLE IF NOT EXISTS context_relationships(
                 id TEXT PRIMARY KEY,left_group TEXT NOT NULL,right_group TEXT NOT NULL,
                 left_credit INTEGER NOT NULL,right_credit INTEGER NOT NULL,
@@ -621,10 +637,10 @@ class PeopleContextProjection:
             ).fetchone()
             previous = json.loads(previous[0]) if previous else {}
             same_job = previous.get("jobUuid") == manifest["jobUuid"]
-            processed = manifest.get("questions") or 0
-            planned = manifest.get("plannedQuestions", processed)
+            planned = manifest.get(
+                "plannedQuestions", manifest.get("questions", processed)
+            )
             if same_job:
-                processed = max(processed, previous.get("processedQuestions") or 0)
                 planned = max(planned, previous.get("plannedQuestions") or 0)
             relations = dict(
                 db.execute(
@@ -634,6 +650,11 @@ class PeopleContextProjection:
             summary = {
                 "run": str(self.run),
                 "state": manifest["state"],
+                "executionState": (
+                    previous.get("executionState", previous.get("state"))
+                    if "originalJobAccountedUsdAfter" in manifest and same_job
+                    else manifest["state"]
+                ),
                 "originalRun": manifest.get("originalRun"),
                 "jobUuid": manifest["jobUuid"],
                 "decisions": sum(relations.values()),
@@ -665,10 +686,14 @@ class PeopleContextProjection:
     def _read_decisions(results):
         decisions = []
         states = Counter()
+        observed_questions = set()
         with results.open(encoding="utf-8") as stream:
             for line, text in enumerate(stream, 1):
                 row = json.loads(text)
                 result = row["result"]
+                observed_questions.update(
+                    q["questionId"] for q in row["input"]["questions"]
+                )
                 states[result["state"]] += 1
                 if result["state"] != "proposed":
                     continue
@@ -684,7 +709,7 @@ class PeopleContextProjection:
                             row.get("recovery", {}).get("basis", "validated_batch"),
                         )
                     )
-        return decisions, states
+        return decisions, states, observed_questions
 
 
 def main():
