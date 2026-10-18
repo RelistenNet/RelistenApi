@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "local-normalization-api-rehearsal-v1",
+  "status": "migration49_catalog_api_verified_matching_inactive",
+  "implementationCommit": "a275979",
+  "apiAssembly": {
+    "path": "RelistenApi/bin/net10.0/RelistenApi.dll",
+    "bytes": 7173632,
+    "sha256": "0f1a61a4a58db9283b66ccd70b922aba75ee82623e8043ad6640389d610cefb1"
+  },
+  "verifier": {
+    "path": "tools/normalization-rehearsal/verify_api.py",
+    "bytes": 23989,
+    "sha256": "ee9d685c4ca1f91c1871653a8bb438ca1d0a9f7e44a2d0f5040f553f943c8f0c"
+  },
+  "expectedSql": {
+    "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/expected-catalog-v2.sql",
+    "bytes": 5897,
+    "sha256": "f6187f4ae9155fc79b9ef20a07bdb6620f8bfaa2b4b0d0ff3a04c62328f52bd3"
+  },
+  "catalogFingerprintSql": {
+    "path": "docs/research/2026-10-17-full-normalization/sql/local-rehearsal-fingerprints.sql",
+    "bytes": 1818,
+    "sha256": "e364292b529365fc69693b32b2549f8331cb513b10a9de204149f19f52e70bce"
+  },
+  "method": "Root-operated disposable catalog copies, serialized Development API hosts, Temporal client only with no workers or schedules, and a fresh private Redis instance per catalog. All API verification used catalog GETs; retained responses were authenticated by size and SHA-256.",
+  "cohorts": [
+    {
+      "cohort": "jerry",
+      "database": "relisten_normalization_jerry_20261017",
+      "migration": 49,
+      "state": "completed",
+      "errorCount": 0,
+      "requestAttempts": 1409,
+      "counts": {
+        "artists_expected": 263,
+        "browsable_sources_not_reached": 0,
+        "catalog_artists": 268,
+        "catalog_collections": 2,
+        "catalog_sets": 717,
+        "catalog_shows": 607,
+        "catalog_sources": 701,
+        "catalog_tracks": 7826,
+        "collection_recording_memberships_expected": 647,
+        "distinct_sources_checked": 701,
+        "distinct_tracks_checked": 7684,
+        "flac_only_recordings": 0,
+        "full_show_responses": 607,
+        "mp3_bearing_recordings": 701,
+        "multiple_performance_date_cohorts": 2,
+        "non_orphan_tracks_without_media": 0,
+        "orphan_tracks_excluded_from_playback": 142,
+        "partial_date_cohorts": 2,
+        "shows_expected": 607,
+        "sources_outside_browsable_show_view": 0,
+        "sources_with_missing_or_inconsistent_context": 0,
+        "tracks_with_inconsistent_context": 0
+      },
+      "publishedCollections": [
+        {
+          "slug": "aadam-selector-smoke",
+          "recordings": 299,
+          "shows": 298,
+          "artists": 252
+        },
+        {
+          "slug": "jerry-projects-smoke",
+          "recordings": 348,
+          "shows": 269,
+          "artists": 6
+        }
+      ],
+      "allSevenCatalogFingerprintsUnchanged": true,
+      "completeComparisonManifestUnchanged": true,
+      "normalizationState": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "setlist_sets": 0,
+        "track_contents": 0,
+        "music_exclusions": 0,
+        "repertoire_songs": 0,
+        "setlist_editions": 0,
+        "song_occurrences": 0,
+        "recording_credits": 0,
+        "setlist_structures": 0,
+        "active_people_policies": 0,
+        "show_venue_assignments": 0,
+        "imported_venue_assignments": 0,
+        "active_composition_policies": 0
+      },
+      "artifacts": {
+        "result": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-api-run-v1/result.json",
+          "bytes": 370321,
+          "sha256": "13f5413c53e21059961ddfb55250ea0a54779f64382df13b2b13211b93b20512"
+        },
+        "before": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-expected-v2.json",
+          "bytes": 5812506,
+          "sha256": "81395398e7af64304458ff204ee5daed117e0dd768338bec1cb4cdeefbd030b8"
+        },
+        "after": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-after-api-expected.json",
+          "bytes": 5812506,
+          "sha256": "81395398e7af64304458ff204ee5daed117e0dd768338bec1cb4cdeefbd030b8"
+        },
+        "fingerprintsBefore": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-before-fingerprints.json",
+          "bytes": 950,
+          "sha256": "bb97e07f80f6ba63cbb8c6202bfbe95fb673d4c8a1a0dd834008d24b86b8ccc3"
+        },
+        "fingerprintsAfter": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-after-api-fingerprints.json",
+          "bytes": 950,
+          "sha256": "c684b082b4bd0503c18574bbf8f4c350c9cd660b537900ab429a7f2acac61785"
+        },
+        "migrationLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-migrate49.log",
+          "bytes": 1722,
+          "sha256": "84a843de67177e9e8917aed3329cea5aa3f823b4d6173f5dd0e4277d9fa29e78"
+        },
+        "apiLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/jerry-api.log",
+          "bytes": 17939675,
+          "sha256": "1e18c2e4edaa70feab197e7fdfb55f970788fe7bb783b9428f750c6b782d3752"
+        }
+      }
+    },
+    {
+      "cohort": "govt-mule",
+      "database": "relisten_normalization_govt_mule_20261017",
+      "migration": 49,
+      "state": "completed",
+      "errorCount": 0,
+      "requestAttempts": 353,
+      "counts": {
+        "artists_expected": 6,
+        "browsable_sources_not_reached": 0,
+        "catalog_artists": 6,
+        "catalog_collections": 3,
+        "catalog_sets": 429,
+        "catalog_shows": 325,
+        "catalog_sources": 413,
+        "catalog_tracks": 7561,
+        "collection_recording_memberships_expected": 363,
+        "distinct_sources_checked": 413,
+        "distinct_tracks_checked": 7419,
+        "flac_only_recordings": 0,
+        "full_show_responses": 325,
+        "mp3_bearing_recordings": 413,
+        "multiple_performance_date_cohorts": 0,
+        "non_orphan_tracks_without_media": 0,
+        "orphan_tracks_excluded_from_playback": 142,
+        "partial_date_cohorts": 0,
+        "shows_expected": 325,
+        "sources_outside_browsable_show_view": 0,
+        "sources_with_missing_or_inconsistent_context": 0,
+        "tracks_with_inconsistent_context": 0
+      },
+      "publishedCollections": [
+        {
+          "slug": "zz-http-20261017-empty",
+          "recordings": 0,
+          "shows": 0,
+          "artists": 0
+        },
+        {
+          "slug": "zz-http-20261017-selected",
+          "recordings": 4,
+          "shows": 4,
+          "artists": 2
+        },
+        {
+          "slug": "zz-http-20261017-wide",
+          "recordings": 359,
+          "shows": 285,
+          "artists": 1
+        }
+      ],
+      "allSevenCatalogFingerprintsUnchanged": true,
+      "completeComparisonManifestUnchanged": true,
+      "normalizationState": {
+        "people": 0,
+        "venues": 0,
+        "compositions": 0,
+        "setlist_sets": 0,
+        "track_contents": 0,
+        "music_exclusions": 0,
+        "repertoire_songs": 0,
+        "setlist_editions": 0,
+        "song_occurrences": 0,
+        "recording_credits": 0,
+        "setlist_structures": 0,
+        "active_people_policies": 0,
+        "show_venue_assignments": 0,
+        "imported_venue_assignments": 0,
+        "active_composition_policies": 0
+      },
+      "artifacts": {
+        "result": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-api-run-v1/result.json",
+          "bytes": 89146,
+          "sha256": "d8d64be0b731ab4d9bd570b021b1a4dd99ecb2169a62cdc60b7b8ee609931d98"
+        },
+        "before": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-expected-v2.json",
+          "bytes": 5071426,
+          "sha256": "065ca019db77ef77308d08c33637840279462394a396cda8569914dd99c6d4f2"
+        },
+        "after": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-after-api-expected.json",
+          "bytes": 5071426,
+          "sha256": "065ca019db77ef77308d08c33637840279462394a396cda8569914dd99c6d4f2"
+        },
+        "fingerprintsBefore": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-before-fingerprints.json",
+          "bytes": 952,
+          "sha256": "141cea0094218f984712fef2ccc71c35f7b7e50952151f896773787b60deb749"
+        },
+        "fingerprintsAfter": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-after-api-fingerprints.json",
+          "bytes": 952,
+          "sha256": "97c49711b34ff504fa34bcd86ae57cc6dca47506aeb2dd8a2e61f64f534161ed"
+        },
+        "migrationLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-migrate49.log",
+          "bytes": 1746,
+          "sha256": "cab9a9175c5a39c481fcbae1fc4114c0f5f41b9dfd6e093f387e269bc3221b66"
+        },
+        "apiLog": {
+          "path": "local-dev/normalization-data/2026-10-17-normalization-api-rehearsal-v1/govt-mule-api.log",
+          "bytes": 3703996,
+          "sha256": "d95d177956e03ea5330799e93d47f49c860fa0edb05d9d718b0bf6adab2bd882"
+        }
+      }
+    }
+  ],
+  "verification": {
+    "pythonBehaviorTests": 15,
+    "combinedNormalizationTests": 1808,
+    "responseHashesRechecked": 1762
+  },
+  "limits": [
+    "Verifies catalog ownership, exact media URLs, ordering, collection pagination, represented partial-date/multiple-performance routes and legacy ID preservation; no media bytes fetched.",
+    "Both copies include common seed data; sums across catalogs are not global distinct counts. Published collection counts identify the actual Jerry/Aadam/Mule cohorts.",
+    "Accepted identities, credits, music heads and active policies remained empty before and after the API run. Proposal/attempt and inactive policy-registry counts were not captured. Matching accuracy, normalization backfill and binary rollback remain separate work.",
+    "Private rehearsal API hosts and Redis were stopped after verification. Original imported catalogs were not migrated or rewritten."
+  ]
+}
