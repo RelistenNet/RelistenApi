@@ -48,6 +48,12 @@ public sealed partial class NormalizationProviderDecoder
             .Root.Descendants("time")
             .FirstOrDefault(node => node.Attributes["datetime"] != null);
         var tour = names.Length > 2 ? html.MarkupText("tour", names[2]) : null;
+        var text = new List<ProviderTextObservation>();
+        if (tour != null)
+        {
+            text.Add(tour);
+        }
+        text.AddRange(ReadJerryShowFacts(html));
         var edition = new ProviderSetlistObservation
         {
             Origin = reader.Origin(
@@ -56,12 +62,14 @@ public sealed partial class NormalizationProviderDecoder
                 ProviderObservationScope.ResourceItem
             ),
             Performers = performer == null ? [] : [new() { Name = performer }],
-            LiteralDate = time == null ? null : html.Attribute(time, "datetime"),
+            LiteralDate =
+                (time == null ? null : html.Attribute(time, "datetime"))
+                ?? html.FirstTextWithClass(html.Root, "details-date"),
             Venue = venue,
             Ordered = sets.Count > 0,
             Sets = sets,
             Passages = passages,
-            Text = tour == null ? [] : [tour],
+            Text = text,
         };
         return reader.Result() with { Venues = venue == null ? [] : [venue], Setlists = [edition] };
     }
@@ -84,10 +92,7 @@ public sealed partial class NormalizationProviderDecoder
             {
                 continue;
             }
-            var labelNode = list.Ancestors()
-                .Prepend(list)
-                .FirstOrDefault(node => node.Attributes["data-set"] != null);
-            var label = labelNode == null ? null : html.Attribute(labelNode, "data-set");
+            var label = JerrySetLabel(html, list);
             var set = new ProviderSetObservation
             {
                 Ordinal = sets.Count + 1,
@@ -147,6 +152,68 @@ public sealed partial class NormalizationProviderDecoder
         }
 
         return (sets, passages);
+    }
+
+    private static ObservedValue<string>? JerrySetLabel(HtmlObservationSource html, HtmlNode list)
+    {
+        var labelNode = list.Ancestors()
+            .Prepend(list)
+            .FirstOrDefault(node => node.Attributes["data-set"] != null);
+        if (labelNode != null)
+        {
+            return html.Attribute(labelNode, "data-set");
+        }
+
+        var heading = list.PreviousSibling;
+        while (heading != null && heading.NodeType != HtmlNodeType.Element)
+        {
+            heading = heading.PreviousSibling;
+        }
+        return
+            heading != null
+            && heading.Name == "h3"
+            && heading
+                .GetAttributeValue("class", "")
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+                .Contains("set-title")
+            ? html.Text(heading)
+            : null;
+    }
+
+    private static IEnumerable<ProviderTextObservation> ReadJerryShowFacts(
+        HtmlObservationSource html
+    )
+    {
+        var sections = html.NodesWithClass(html.Root, "collapsible")
+            .Where(section =>
+                html.NodesWithClass(section, "collapse-title")
+                    .Any(heading => html.Text(heading)?.Value == "Show Facts")
+            );
+        foreach (var paragraph in sections.SelectMany(section => section.Descendants("p")))
+        {
+            var note = html.MarkupText("show_facts", paragraph);
+            if (note == null)
+            {
+                continue;
+            }
+
+            // Keep the exact cited markup as authority. This separate display value preserves
+            // explicit BR boundaries without treating the prose as additional song passages.
+            var plain = string.Concat(
+                paragraph
+                    .Descendants()
+                    .Select(node =>
+                        node.Name == "br" ? "\n"
+                        : node.NodeType == HtmlNodeType.Text
+                            ? Regex.Replace(HtmlEntity.DeEntitize(node.InnerText), @"\s+", " ")
+                        : ""
+                    )
+            );
+            yield return note with
+            {
+                PlainText = string.Join("\n", plain.Split('\n').Select(line => line.Trim())).Trim(),
+            };
+        }
     }
 
     private static ProviderDecodeResult DecodePhishNetShows(ProviderObservationReader reader)

@@ -1,0 +1,45 @@
+{
+  "source_path": "local-dev/normalization-data/2026-10-18-real-setlist-rehearsal-v1/provider-capture-v1/show.body",
+  "source_sha256": "0538513070936b6586e18a6e37be4cca40c9b10e5ede09a09aeb8393ff3f905f",
+  "source_bytes": 77369,
+  "excerpt": "Nine verbatim HTML fragments joined with LF: five show-detail paragraphs, three complete labeled set blocks, and the scoped Show Facts section. Navigation, scripts, lineup widgets and audience comments are omitted. No source wording is repaired.",
+  "fragments": [
+    {
+      "byte_start_inclusive": 16361,
+      "byte_end_exclusive": 16410
+    },
+    {
+      "byte_start_inclusive": 16446,
+      "byte_end_exclusive": 16509
+    },
+    {
+      "byte_start_inclusive": 16515,
+      "byte_end_exclusive": 16547
+    },
+    {
+      "byte_start_inclusive": 16605,
+      "byte_end_exclusive": 16715
+    },
+    {
+      "byte_start_inclusive": 16726,
+      "byte_end_exclusive": 16766
+    },
+    {
+      "byte_start_inclusive": 20781,
+      "byte_end_exclusive": 21550
+    },
+    {
+      "byte_start_inclusive": 21562,
+      "byte_end_exclusive": 22484
+    },
+    {
+      "byte_start_inclusive": 22496,
+      "byte_end_exclusive": 22707
+    },
+    {
+      "byte_start_inclusive": 27353,
+      "byte_end_exclusive": 28303
+    }
+  ],
+  "use": "Development source-coverage regression, not untouched identity-accuracy evidence."
+}

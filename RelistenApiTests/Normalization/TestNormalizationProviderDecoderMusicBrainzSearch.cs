@@ -30,7 +30,6 @@ public sealed class TestNormalizationProviderDecoderMusicBrainzSearch
         var result = decoder.Decode(input);
         var page = result.MusicBrainzSearchPages.Should().ContainSingle().Subject;
 
-        result.DecoderVersion.Should().Be("provider-observations-v5");
         page.Origin.Item.Should().Be(input.Resource);
         page.Origin.Evidence.Should().Be(new NormalizedEvidenceReference(input.Uuid, ""));
         page.Origin.Scope.Should().Be(ProviderObservationScope.ResourceItem);

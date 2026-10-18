@@ -66,6 +66,27 @@ unparsed credits remain unresolved. Extraction supplies names and roles, not
 global person identities. Paid extraction and identity matching use their own
 evaluated policies and caches.
 
+## Jerry mirror HTML
+
+The mirror's real show pages use an adjacent `h3.set-title` for each set and a
+`details-date` paragraph for the displayed date. The decoder retains those cited
+values when the existing `data-set` and `time[datetime]` forms are absent. It
+preserves song order, provider song links and explicit transition markers.
+
+The scoped Show Facts section remains account-level prose. Preserve its exact
+markup as evidence and its line breaks in display text. Do not turn a note into
+another song passage or use it to repair the ordered list. The retained July 2,
+1995 page names “Brokedown Palace” in the ordered list and “Broken Arrow” in a
+separate note; both statements remain available.
+
+This interpretation change advances the decoder fingerprint to
+`provider-observations-v6`; the capture format remains `jerry-mirror-html:1`.
+Completed attempts keep their original replay results, and accepted reads remain
+available. New acceptance that depends on an older processed account requires a
+new compatible processing attempt and repertoire receipt. Reuse the retained
+current input through the registration's retry contract. No provider fetch or
+replacement observation time is needed.
+
 ## Seed evidence from the existing catalog
 
 `NormalizationLegacyInputService.SeedRecordingAsync(sourceUuid, cancellationToken)`
