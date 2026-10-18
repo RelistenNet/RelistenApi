@@ -429,7 +429,8 @@ public sealed class LunaCreditFieldEvaluationBatch
                         """
                         SELECT uuid AS "Uuid",request_sha256 AS "CacheKey",job_uuid AS "JobUuid",state AS "State",
                             reserved_usd AS "ReservedUsd",actual_usd AS "ActualUsd",input_tokens AS "InputTokens",
-                            output_tokens AS "OutputTokens",provider_request_id AS "ProviderRequestId",reason AS "Reason"
+                            output_tokens AS "OutputTokens",provider_request_id AS "ProviderRequestId",reason AS "Reason",
+                            failure_stage AS "FailureStage",failed_response_body AS "FailedResponseBody"
                         FROM normalization.extraction_attempts WHERE request_sha256=ANY(@keys) OR job_uuid=@jobUuid
                         ORDER BY created_at,uuid LIMIT 201
                         """,
@@ -552,7 +553,9 @@ public sealed record LunaCreditFieldAttemptReceipt(
     long? InputTokens,
     long? OutputTokens,
     string? ProviderRequestId,
-    string? Reason
+    string? Reason,
+    string? FailureStage = null,
+    byte[]? FailedResponseBody = null
 );
 
 public sealed record LunaCreditFieldAudit(

@@ -262,6 +262,32 @@ public sealed class TestLunaCreditFieldEvaluationBatch
     }
 
     [Test]
+    public async Task FailedResponseDiagnosticsAreExportedWithTheirAttemptAndExactBytes()
+    {
+        handler.InvalidFirst = true;
+        var output = bundle.Output("failure-audit");
+        var report = await Run(Guid.NewGuid(), output);
+
+        report.State.Should().Be("completed_partial");
+        var audit = JsonNode.Parse(
+            await File.ReadAllTextAsync(Path.Combine(output, "receipts.json"))
+        )!;
+        var failure = audit["attempts"]!
+            .AsArray()
+            .Should()
+            .ContainSingle(attempt =>
+                attempt!["failureStage"] != null
+                && attempt["failureStage"]!.GetValue<string>() == "credit_schema"
+            )
+            .Which!;
+        failure["state"]!.GetValue<string>().Should().Be("failed");
+        Convert
+            .FromBase64String(failure["failedResponseBody"]!.GetValue<string>())
+            .Should()
+            .Equal(handler.InvalidBody!);
+    }
+
+    [Test]
     public async Task Failed_provider_attempt_retains_reservation_and_successful_cache_recovers()
     {
         handler.FailFirst = true;
@@ -431,6 +457,8 @@ internal sealed class CreditFieldResponses : HttpMessageHandler
 {
     internal int Calls { get; private set; }
     internal bool FailFirst { get; set; }
+    internal bool InvalidFirst { get; set; }
+    internal byte[]? InvalidBody { get; private set; }
     internal CancellationTokenSource? CancelDuringResponse { get; set; }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -479,11 +507,22 @@ internal sealed class CreditFieldResponses : HttpMessageHandler
                     new
                     {
                         type = "message",
-                        content = new[] { new { type = "output_text", text = extracted } },
+                        content = new[]
+                        {
+                            new
+                            {
+                                type = "output_text",
+                                text = InvalidFirst && Calls == 1 ? "{}" : extracted,
+                            },
+                        },
                     },
                 },
             }
         );
+        if (InvalidFirst && Calls == 1)
+        {
+            InvalidBody = Encoding.UTF8.GetBytes(body);
+        }
         CancelDuringResponse?.Cancel();
         var response = new HttpResponseMessage(HttpStatusCode.OK)
         {

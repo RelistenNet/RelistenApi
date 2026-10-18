@@ -38,4 +38,29 @@ public sealed record LunaCreditResponse(
     string? ProviderRequestId,
     long InputTokens,
     long OutputTokens
-);
+)
+{
+    // Kept only while handling this response. Successful reusable cache entries store Json,
+    // whereas a failed attempt may retain the complete bounded envelope for private diagnosis.
+    internal ReadOnlyMemory<byte>? Envelope { get; init; }
+}
+
+public enum LunaCreditFailureStage
+{
+    ResponseEnvelope,
+    CreditSchema,
+    CreditSupport,
+    UsageLimit,
+}
+
+/// <summary>
+/// Private attempt evidence, never a reusable extraction or a public extraction result.
+/// A null body means no complete bounded response was available; partial bytes are not retained.
+/// </summary>
+public sealed record LunaCreditFailureDiagnostic(
+    LunaCreditFailureStage Stage,
+    ReadOnlyMemory<byte>? ResponseBody = null
+)
+{
+    public const int MaxResponseBodyBytes = 1_048_576;
+}

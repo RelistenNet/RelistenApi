@@ -238,7 +238,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
         CancellationToken cancellationToken = default,
         LunaCreditResponse? receipt = null,
         decimal? actualUsd = null,
-        string? providerRequestId = null
+        string? providerRequestId = null,
+        LunaCreditFailureDiagnostic? diagnostic = null
     )
     {
         if (
@@ -263,8 +264,42 @@ public sealed class NormalizationExtractionCacheService(DbService db)
             actualUsd,
             reason,
             cancellationToken,
-            providerRequestId
+            providerRequestId,
+            FreezeDiagnostic(diagnostic)
         );
+    }
+
+    private static FailureDiagnosticSnapshot? FreezeDiagnostic(
+        LunaCreditFailureDiagnostic? diagnostic
+    )
+    {
+        if (diagnostic is null)
+        {
+            return null;
+        }
+
+        var stage = diagnostic.Stage switch
+        {
+            LunaCreditFailureStage.ResponseEnvelope => "response_envelope",
+            LunaCreditFailureStage.CreditSchema => "credit_schema",
+            LunaCreditFailureStage.CreditSupport => "credit_support",
+            LunaCreditFailureStage.UsageLimit => "usage_limit",
+            _ => throw new ArgumentException(
+                "Use a supported extraction failure stage.",
+                nameof(diagnostic)
+            ),
+        };
+        if (diagnostic.ResponseBody?.Length > LunaCreditFailureDiagnostic.MaxResponseBodyBytes)
+        {
+            throw new ArgumentException(
+                "The complete failed response exceeds the diagnostic byte limit.",
+                nameof(diagnostic)
+            );
+        }
+
+        // The caller may own the underlying memory. Freeze it before connection acquisition or
+        // lock waits so the first terminal accounting transaction retains exactly this evidence.
+        return new(stage, diagnostic.ResponseBody?.ToArray());
     }
 
     private Task FinishAsync(
@@ -273,7 +308,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
         decimal? actualUsd,
         string? reason,
         CancellationToken cancellationToken,
-        string? providerRequestId = null
+        string? providerRequestId = null,
+        FailureDiagnosticSnapshot? diagnostic = null
     ) =>
         db.WithWriteConnection(async connection =>
         {
@@ -330,7 +366,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
                         """
                         UPDATE normalization.extraction_jobs SET accounted_usd=accounted_usd-@ReservedUsd+@actualUsd WHERE uuid=@JobUuid AND @actualUsd IS NOT NULL;
                         UPDATE normalization.extraction_attempts SET state=@state,actual_usd=@actualUsd,input_tokens=@InputTokens,
-                            output_tokens=@OutputTokens,provider_request_id=@ProviderRequestId,completed_at=clock_timestamp(),reason=@reason WHERE uuid=@attemptUuid;
+                            output_tokens=@OutputTokens,provider_request_id=@ProviderRequestId,completed_at=clock_timestamp(),reason=@reason,
+                            failure_stage=@FailureStage,failed_response_body=@FailedResponseBody WHERE uuid=@attemptUuid;
                         UPDATE normalization.extraction_requests SET response_json=@Json,completed_at=clock_timestamp()
                             WHERE sha256=@cacheKey AND response_json IS NULL AND @reason IS NULL
                         """,
@@ -347,6 +384,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
                             response.Json,
                             attemptUuid,
                             cacheKey,
+                            FailureStage = diagnostic?.Stage,
+                            FailedResponseBody = diagnostic?.Body,
                         },
                         transaction,
                         cancellationToken: cancellationToken
@@ -358,7 +397,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
-                        UPDATE normalization.extraction_attempts SET state='failed',reason=@reason,provider_request_id=@providerRequestId,completed_at=clock_timestamp()
+                        UPDATE normalization.extraction_attempts SET state='failed',reason=@reason,provider_request_id=@providerRequestId,completed_at=clock_timestamp(),
+                            failure_stage=@FailureStage,failed_response_body=@FailedResponseBody
                         WHERE uuid=@attemptUuid AND state IN ('running','uncertain')
                         """,
                         new
@@ -366,6 +406,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
                             attemptUuid,
                             reason,
                             providerRequestId,
+                            FailureStage = diagnostic?.Stage,
+                            FailedResponseBody = diagnostic?.Body,
                         },
                         transaction,
                         cancellationToken: cancellationToken
@@ -380,6 +422,8 @@ public sealed class NormalizationExtractionCacheService(DbService db)
         public string RenderedRequest { get; init; } = null!;
         public string? ResponseJson { get; init; }
     }
+
+    private sealed record FailureDiagnosticSnapshot(string Stage, byte[]? Body);
 
     private sealed class AttemptRow
     {

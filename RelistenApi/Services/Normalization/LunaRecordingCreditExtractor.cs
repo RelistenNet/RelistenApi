@@ -141,7 +141,10 @@ public sealed class LunaRecordingCreditExtractor
                 || response.InputTokens > Encoding.UTF8.GetByteCount(request) + 16384L
             )
             {
-                throw new LunaCreditResponseException("usage_exceeded_reservation");
+                throw new LunaCreditResponseException(
+                    "usage_exceeded_reservation",
+                    failureStage: LunaCreditFailureStage.UsageLimit
+                );
             }
         }
         catch (Exception error)
@@ -167,13 +170,30 @@ public sealed class LunaRecordingCreditExtractor
             var knownCost = response is not null
                 ? CostUsd(response.InputTokens, response.OutputTokens, options)
                 : (decimal?)null;
+            var responseFailure = error as LunaCreditResponseException;
+            var failureStage =
+                responseFailure?.FailureStage
+                ?? reason switch
+                {
+                    "invalid_response" when error is JsonException =>
+                        LunaCreditFailureStage.CreditSchema,
+                    "invalid_response" => LunaCreditFailureStage.CreditSupport,
+                    _ => (LunaCreditFailureStage?)null,
+                };
+            var diagnostic = failureStage is not null
+                ? new LunaCreditFailureDiagnostic(
+                    failureStage.Value,
+                    responseFailure?.ResponseBody ?? response?.Envelope
+                )
+                : null;
             await cache.FailAsync(
                 claim.AttemptUuid!.Value,
                 reason,
                 CancellationToken.None,
                 response,
                 knownCost <= reservation ? knownCost : null,
-                (error as LunaCreditResponseException)?.ProviderRequestId
+                responseFailure?.ProviderRequestId,
+                diagnostic
             );
             if (cancellationToken.IsCancellationRequested)
             {
@@ -338,14 +358,20 @@ public sealed class LunaRecordingCreditExtractor
             || entries.ValueKind != JsonValueKind.Array
         )
         {
-            throw new LunaCreditResponseException("invalid_response");
+            throw new LunaCreditResponseException(
+                "invalid_response",
+                failureStage: LunaCreditFailureStage.CreditSchema
+            );
         }
         var credits = new List<CreditMention>();
         foreach (var entry in entries.EnumerateArray())
         {
             if (entry.ValueKind != JsonValueKind.Object || entry.EnumerateObject().Count() != 6)
             {
-                throw new LunaCreditResponseException("invalid_response");
+                throw new LunaCreditResponseException(
+                    "invalid_response",
+                    failureStage: LunaCreditFailureStage.CreditSchema
+                );
             }
             var name = RequiredString(entry, "name");
             var roleText = RequiredString(entry, "role");
@@ -374,7 +400,10 @@ public sealed class LunaRecordingCreditExtractor
             {
                 "taper" => RecordingCreditRole.Taper,
                 "transferrer" => RecordingCreditRole.Transferrer,
-                _ => throw new LunaCreditResponseException("invalid_response"),
+                _ => throw new LunaCreditResponseException(
+                    "invalid_response",
+                    failureStage: LunaCreditFailureStage.CreditSchema
+                ),
             };
             var roleEvidence = field.ToLowerInvariant() switch
             {
@@ -414,7 +443,10 @@ public sealed class LunaRecordingCreditExtractor
             || !entry.TryGetProperty("end", out var endValue)
         )
         {
-            throw new LunaCreditResponseException("invalid_response");
+            throw new LunaCreditResponseException(
+                "invalid_response",
+                failureStage: LunaCreditFailureStage.CreditSchema
+            );
         }
         int start;
         int end;
@@ -435,7 +467,10 @@ public sealed class LunaRecordingCreditExtractor
             || !endValue.TryGetInt32(out end)
         )
         {
-            throw new LunaCreditResponseException("invalid_response");
+            throw new LunaCreditResponseException(
+                "invalid_response",
+                failureStage: LunaCreditFailureStage.CreditSchema
+            );
         }
         var runes = raw.EnumerateRunes().ToArray();
         if (
@@ -458,7 +493,10 @@ public sealed class LunaRecordingCreditExtractor
             || string.IsNullOrWhiteSpace(value.GetString())
         )
         {
-            throw new LunaCreditResponseException("invalid_response");
+            throw new LunaCreditResponseException(
+                "invalid_response",
+                failureStage: LunaCreditFailureStage.CreditSchema
+            );
         }
         return value.GetString()!;
     }
@@ -467,10 +505,14 @@ public sealed class LunaRecordingCreditExtractor
 internal sealed class LunaCreditResponseException(
     string reason,
     LunaCreditResponse? receipt = null,
-    string? providerRequestId = null
+    string? providerRequestId = null,
+    LunaCreditFailureStage? failureStage = null,
+    ReadOnlyMemory<byte>? responseBody = null
 ) : Exception("Luna credit extraction failed validation.")
 {
     internal string Reason { get; } = reason;
     internal LunaCreditResponse? Receipt { get; } = receipt;
     internal string? ProviderRequestId { get; } = providerRequestId ?? receipt?.ProviderRequestId;
+    internal LunaCreditFailureStage? FailureStage { get; } = failureStage;
+    internal ReadOnlyMemory<byte>? ResponseBody { get; } = responseBody;
 }

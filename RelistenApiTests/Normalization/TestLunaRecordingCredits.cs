@@ -190,6 +190,8 @@ public sealed class TestLunaRecordingCredits
         var failure = (await call.Should().ThrowAsync<LunaCreditResponseException>()).Which;
         failure.Reason.Should().Be(reason);
         failure.ProviderRequestId.Should().Be("broken-body-request");
+        failure.ResponseBody.Should().BeNull();
+        failure.Receipt.Should().BeNull();
     }
 
     private sealed class BrokenBodyHandler(bool timeout) : HttpMessageHandler

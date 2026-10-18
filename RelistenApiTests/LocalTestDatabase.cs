@@ -142,6 +142,10 @@ internal static class LocalTestDatabase
             Migrations.AddMusicBrainzAcquisition.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddNormalizationExtractionFailureDiagnostics.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

@@ -39,9 +39,11 @@ internal sealed class LunaRecordingCreditClient(HttpClient http, TimeSpan timeou
         {
             throw new LunaCreditResponseException("provider_error", providerRequestId: requestId);
         }
+        // The nullable casts below distinguish an unfinished read from a complete empty body.
+        byte[]? body = null;
         try
         {
-            var body = await ReadBodyAsync(response.Content, deadline.Token);
+            body = await ReadBodyAsync(response.Content, deadline.Token);
             return ParseResponse(body, requestId);
         }
         catch (System.IO.IOException)
@@ -57,11 +59,29 @@ internal sealed class LunaRecordingCreditClient(HttpClient http, TimeSpan timeou
         }
         catch (JsonException)
         {
-            throw new LunaCreditResponseException("invalid_response", providerRequestId: requestId);
+            throw new LunaCreditResponseException(
+                "invalid_response",
+                providerRequestId: requestId,
+                failureStage: LunaCreditFailureStage.ResponseEnvelope,
+                responseBody: body is null
+                    ? (ReadOnlyMemory<byte>?)null
+                    : new ReadOnlyMemory<byte>(body)
+            );
         }
-        catch (LunaCreditResponseException error) when (error.ProviderRequestId is null)
+        catch (LunaCreditResponseException error)
         {
-            throw new LunaCreditResponseException(error.Reason, error.Receipt, requestId);
+            throw new LunaCreditResponseException(
+                error.Reason,
+                error.Receipt,
+                error.ProviderRequestId ?? requestId,
+                error.FailureStage
+                    ?? (
+                        error.Reason == "invalid_response"
+                            ? LunaCreditFailureStage.ResponseEnvelope
+                            : null
+                    ),
+                body is null ? (ReadOnlyMemory<byte>?)null : new ReadOnlyMemory<byte>(body)
+            );
         }
     }
 
@@ -77,7 +97,7 @@ internal sealed class LunaRecordingCreditClient(HttpClient http, TimeSpan timeou
         int count;
         while ((count = await stream.ReadAsync(chunk, cancellationToken)) != 0)
         {
-            if (buffer.Length + count > 1_048_576)
+            if (buffer.Length + count > LunaCreditFailureDiagnostic.MaxResponseBodyBytes)
             {
                 throw new LunaCreditResponseException("invalid_response");
             }
@@ -107,7 +127,10 @@ internal sealed class LunaRecordingCreditClient(HttpClient http, TimeSpan timeou
             throw new LunaCreditResponseException("invalid_response", providerRequestId: requestId);
         }
         // Usage remains a receipt even when refusal, truncation or bad structure prevents proposals.
-        var receipt = new LunaCreditResponse("", requestId, inputTokens, outputTokens);
+        var receipt = new LunaCreditResponse("", requestId, inputTokens, outputTokens)
+        {
+            Envelope = body,
+        };
         if (
             !root.TryGetProperty("status", out var status)
             || status.ValueKind != JsonValueKind.String

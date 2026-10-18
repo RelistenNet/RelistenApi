@@ -6,7 +6,7 @@ The [development labels](../../docs/research/2026-10-17-full-normalization/train
 
 ## Prepare the bounded run
 
-Use a dedicated local `relisten_normalization_*` PostgreSQL database with the extraction-cache schema from migration 22 applied. The command refuses remote database hosts and does not start an API host, imports or schedules. `RELISTEN_NORMALIZATION_DATABASE_URL` must point to that database. `OPENAI_API_KEY` must already be in the process environment; this tool does not read `.env.local` itself.
+Use a dedicated local `relisten_normalization_*` PostgreSQL database with the extraction-cache schema from migration 22 and failure-diagnostic columns from migration 44 applied. The command refuses remote database hosts and does not start an API host, imports or schedules. `RELISTEN_NORMALIZATION_DATABASE_URL` must point to that database. `OPENAI_API_KEY` must already be in the process environment; this tool does not read `.env.local` itself.
 
 From the repository root, use a **new job UUID** and a **new output directory**:
 
@@ -37,14 +37,16 @@ Requests use `store:false` and contain only the selected original field, with `c
 `selection.json` owns the new output directory and retains all selected text, source references and hashes. Keep outputs under ignored `local-dev/normalization-data/`; do not commit the raw fields or receipts.
 
 - `results.jsonl` is flushed after each field. Each row contains current local extraction, the Luna outcome, keyless cache replay and current routing.
-- `receipts.json` records the job, bounded request bodies, validated response JSON, attempt states, usage, request IDs and accounted cost. It contains no authorization header or API key.
+- `receipts.json` records the job, bounded request bodies, validated response JSON, attempt states, usage, request IDs and accounted cost. Failed attempts can also contain a classified validation stage and the complete bounded response envelope, encoded as base64. This private evidence can repeat source prose; keep it outside Git and public logs. It contains no authorization header or API key.
 - `manifest.json` is written last. `completed` means all field outcomes and cache checks succeeded; `completed_partial` retains terminal failures for analysis. The CLI returns nonzero for a partial run.
+
+Failure stages distinguish `response_envelope`, `credit_schema`, `credit_support` and `usage_limit`. Failure bodies belong to attempts and never become reusable successful cache entries. A null body means no complete bounded response was available; no partial body is presented as complete. Earlier attempts have null diagnostics and cannot be reconstructed retroactively. Stage, body and usage accounting commit together; a terminal attempt keeps its first result on replay.
 
 Only `luna.state == "extracted"` is a Luna prediction. On errors or budget exhaustion, the existing extractor returns local fallback data inside its result; scoring that data as Luna would hide failures. `paidAttempts` counts all admitted attempts for the dedicated job, including failed attempts and previous recovery runs. It does not count newly billed requests in just this output directory. Read per-field cache flags and attempt receipts separately.
 
 Cancellation or an exception can leave a result prefix without a manifest. Receipt export uses an uncancelled token so spend remains visible. If cancellation occurs before an extractor returns its cache key, the receipt includes that job's attempt and reservation but may omit the final rendered request body. The durable cache remains authoritative. Failed or uncertain attempts can retain their reservations; do not reset them to make a retry fit the budget.
 
-Investigate the prefix, then retry with the **same job UUID and a new output directory**. Completed responses are reused. Existing output files are never overwritten, and the job cap cannot be changed on recovery. A full keyless replay uses the same command in a new directory with `OPENAI_API_KEY` removed from its environment. Missing cached results remain explicit failures.
+Investigate the prefix, then retry with the **same job UUID and a new output directory**. Completed responses are reused. Existing output files are never overwritten, and the job cap cannot be changed on recovery. A full keyless replay uses the same command in a new directory with `OPENAI_API_KEY` removed from its environment. Missing cached results remain explicit failures. The audit export supports at most 200 admitted attempts for the dedicated job. The first two measured prompt versions use 192; use a fresh bounded job for another prompt version. Do not reuse this comparison job for unrelated commands.
 
 ## Score extraction separately from identity
 
