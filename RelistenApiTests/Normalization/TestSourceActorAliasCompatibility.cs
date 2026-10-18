@@ -88,6 +88,103 @@ public sealed class TestSourceActorAliasCompatibility
     }
 
     [Test]
+    public void HistoricalRosterKeepsItsOriginalIncompleteContactInterpretation()
+    {
+        const string raw = "The band:\nAlice Vale (alice at gmail) AKA Night Owl - guitar";
+        var fields = new Dictionary<string, string?> { ["description"] = raw };
+
+        var current = new SourceActorAliasExtractor().Extract(fields);
+        current.Assertions.Should().ContainSingle().Which.Name.Should().Be("Alice Vale");
+        foreach (
+            var grammar in new[]
+            {
+                SourceActorAliasGrammar.LegacyV2,
+                SourceActorAliasGrammar.LegacyV3,
+            }
+        )
+        {
+            var historical = new SourceActorAliasExtractor(grammar).Extract(fields);
+            var assertion = historical.Assertions.Should().ContainSingle().Which;
+            assertion.Name.Should().Be("Alice Vale (alice at gmail)");
+            assertion.Aliases.Should().ContainSingle().Which.Wording.Should().Be("Night Owl");
+            assertion
+                .Relationships.Should()
+                .OnlyContain(relationship => relationship.Roles.Count == 0);
+        }
+        current.Unresolved.Should().Contain(issue => issue.Reason == "incomplete_actor_contact");
+    }
+
+    [Test]
+    public void LegacyV3KeepsItsPublishedBylinesWithoutAdoptingNewActionForms()
+    {
+        var historical = new SourceActorAliasExtractor(SourceActorAliasGrammar.LegacyV3);
+        const string original = "Recorded, Mastered and Posted by Pat Myers AKA DATPAT";
+        var originalResult = historical.Extract(
+            new Dictionary<string, string?> { ["description"] = original }
+        );
+
+        var assertion = originalResult.Assertions.Should().ContainSingle().Which;
+        assertion.Name.Should().Be("Pat Myers");
+        assertion.NameEvidence.Quote.Should().Be("Pat Myers");
+        assertion.Context.Heading.Quote.Should().Be("Recorded, Mastered and Posted by");
+        assertion.Aliases.Should().ContainSingle().Which.Wording.Should().Be("DATPAT");
+        assertion.Relationships.Should().OnlyContain(relationship => relationship.Roles.Count == 0);
+
+        var fields = new Dictionary<string, string?>
+        {
+            ["description"] = "Transfer by Alice Vale AKA Night Owl",
+        };
+        historical.Extract(fields).Assertions.Should().BeEmpty();
+        new SourceActorAliasExtractor()
+            .Extract(fields)
+            .Assertions.Should()
+            .ContainSingle()
+            .Which.Name.Should()
+            .Be("Alice Vale");
+    }
+
+    [Test]
+    public void RetainedLegacyV3BylineHasItsOwnProducerNamespaceAndOriginalCoordinates()
+    {
+        const string raw = "🎵<div>Recorded, Mastered and Posted by Zoë AKA Lark</div>";
+        var input = new NormalizationInputRevision
+        {
+            Uuid = Guid.Parse("3081eecf-a5c8-4847-815a-2c81b1d06ac2"),
+            Resource = new("archive.org", "item_metadata", "historical-byline"),
+            Payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { description = raw })),
+            MediaType = "application/json",
+            CaptureVersion = "archive-item-response-v1",
+        };
+        ProviderTextObservation[] fields =
+        [
+            new("description", new(raw, new(input.Uuid, "/description"))),
+        ];
+
+        var historical = new RetainedSourceActorAliasExtractor(
+            SourceActorAliasGrammar.LegacyV3
+        ).Extract(input, fields);
+        var current = new RetainedSourceActorAliasExtractor().Extract(input, fields);
+
+        var oldAssertion = historical.Assertions.Should().ContainSingle().Which;
+        var currentAssertion = current.Assertions.Should().ContainSingle().Which;
+        oldAssertion.Name.Should().Be("Zoë");
+        oldAssertion.NameEvidence.Should().Be(currentAssertion.NameEvidence);
+        oldAssertion.Context.Should().BeEquivalentTo(currentAssertion.Context);
+        oldAssertion.AssertionUuid.Should().NotBe(currentAssertion.AssertionUuid);
+        oldAssertion.ActorReferenceUuid.Should().NotBe(currentAssertion.ActorReferenceUuid);
+        oldAssertion
+            .Aliases.Single()
+            .ReferenceUuid.Should()
+            .NotBe(currentAssertion.Aliases.Single().ReferenceUuid);
+        using var document = NormalizationRetainedDocument.Open(input);
+        document.ValidateEvidence(oldAssertion.NameEvidence);
+        foreach (var evidence in oldAssertion.Aliases.Single().Evidence)
+        {
+            document.ValidateEvidence(evidence);
+        }
+    }
+
+    [Test]
     public void CurrentAndHistoricalMappingsKeepDistinctProducerNamespacesForTheSameRoster()
     {
         const string raw = "The band:\nAlice Vale AKA Night Owl - guitar";

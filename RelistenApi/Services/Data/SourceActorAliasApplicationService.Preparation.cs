@@ -793,24 +793,41 @@ public sealed partial class SourceActorAliasApplicationService
         + "source-actor-review-correspondence-v1/source-actor-resolution-decisions-v1/"
         + "people-source-actor-alias-projection-v1/";
     private const string ResolutionFeatureSuffix = "/people-actor-context-features-v1";
-    private const string HistoricalResolutionSuffix =
+    private const string HistoricalAliasV2ResolutionSuffix =
         HistoricalResolutionComponents
         + SourceActorAliasExtractor.LegacyV2Version
         + ResolutionFeatureSuffix;
     private const string HistoricalV6Resolution =
         ResolutionPrefix
         + SourceActorResolutionStore.LegacyAliasV2DecoderV6ProcessingVersion
-        + HistoricalResolutionSuffix;
+        + HistoricalAliasV2ResolutionSuffix;
     private const string HistoricalV7Resolution =
         ResolutionPrefix
         + SourceActorResolutionStore.LegacyAliasV2DecoderV7ProcessingVersion
-        + HistoricalResolutionSuffix;
+        + HistoricalAliasV2ResolutionSuffix;
+    private const string HistoricalV7AliasV3Resolution =
+        ResolutionPrefix
+        + SourceActorResolutionStore.LegacyAliasV3DecoderV7ProcessingVersion
+        + HistoricalResolutionComponents
+        + SourceActorAliasExtractor.LegacyV3Version
+        + ResolutionFeatureSuffix;
+    private const string HistoricalV8AliasV3Resolution =
+        ResolutionPrefix
+        + SourceActorResolutionStore.LegacyAliasV3DecoderV8ProcessingVersion
+        + HistoricalResolutionComponents
+        + SourceActorAliasExtractor.LegacyV3Version
+        + ResolutionFeatureSuffix;
     private const string ApplicationPrefix = "source-actor-alias-publication-v1/";
     private const string ApplicationSuffix = "/complete-person-map-v1/component-review-v1";
 
-    private static bool SupportsHistoricalAcceptedProposal(string version) =>
+    internal static bool SupportsHistoricalAcceptedProposal(string version) =>
         CurrentResolutionComponentsMatch()
-        && (version == HistoricalV6Resolution || version == HistoricalV7Resolution);
+        && (
+            version == HistoricalV6Resolution
+            || version == HistoricalV7Resolution
+            || version == HistoricalV7AliasV3Resolution
+            || version == HistoricalV8AliasV3Resolution
+        );
 
     internal static bool SupportsHistoricalAcceptedApplication(string version) =>
         HistoricalAcceptedApplicationReadVersions().Contains(version, StringComparer.Ordinal);
@@ -825,18 +842,21 @@ public sealed partial class SourceActorAliasApplicationService
             [
                 ApplicationPrefix + HistoricalV6Resolution + ApplicationSuffix,
                 ApplicationPrefix + HistoricalV7Resolution + ApplicationSuffix,
+                ApplicationPrefix + HistoricalV7AliasV3Resolution + ApplicationSuffix,
+                ApplicationPrefix + HistoricalV8AliasV3Resolution + ApplicationSuffix,
             ]
             : [];
 
     private static bool CurrentResolutionComponentsMatch() =>
         // Preserve every non-alias component of the known profiles. The original-source
         // reader separately requires the exact known decoder and full legacy field replay.
-        SourceActorResolutionService.Version
-        == ResolutionPrefix
-            + NormalizationRecordingProcessor.Version
-            + HistoricalResolutionComponents
-            + SourceActorAliasExtractor.Version
-            + ResolutionFeatureSuffix;
+        SourceActorResolutionStore.SupportsHistoricalAliasReplay
+        && SourceActorResolutionService.Version
+            == ResolutionPrefix
+                + NormalizationRecordingProcessor.Version
+                + HistoricalResolutionComponents
+                + SourceActorAliasExtractor.Version
+                + ResolutionFeatureSuffix;
 
     internal sealed record OriginalClaim(
         SourceActorResolutionBatch Batch,

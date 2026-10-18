@@ -16,28 +16,31 @@ namespace Relisten.Normalization;
 public sealed class SourceActorAliasExtractor
 {
     public const string Version =
-        "source-actor-aliases-v3/" + RecordingActorEvidenceExtractor.Version;
+        "source-actor-aliases-v4/" + RecordingActorEvidenceExtractor.Version;
 
     internal const string LegacyV2Version = "source-actor-aliases-v2/recording-actor-evidence-v1";
+    internal const string LegacyV3Version = "source-actor-aliases-v3/recording-actor-evidence-v1";
     private readonly SourceActorAliasGrammar grammar;
     private readonly string producerVersion;
 
     public SourceActorAliasExtractor()
         : this(SourceActorAliasGrammar.Current) { }
 
-    // Historical negative review replays the exact old roster grammar. It cannot use new
-    // bylines or assign old version/IDs to their newly supported assertions.
+    // Historical review replays its exact roster/byline and attachment grammar. Newly
+    // supported interpretations cannot acquire old producer versions or source-scoped IDs.
     internal SourceActorAliasExtractor(SourceActorAliasGrammar grammar)
     {
         this.grammar = grammar;
+        actorParser = new(grammar != SourceActorAliasGrammar.Current);
         producerVersion = grammar switch
         {
             SourceActorAliasGrammar.Current => Version,
             SourceActorAliasGrammar.LegacyV2 => LegacyV2Version,
+            SourceActorAliasGrammar.LegacyV3 => LegacyV3Version,
             _ => throw new ArgumentOutOfRangeException(nameof(grammar)),
         };
         if (
-            grammar == SourceActorAliasGrammar.LegacyV2
+            grammar != SourceActorAliasGrammar.Current
             && !StringComparer.Ordinal.Equals(
                 RecordingActorEvidenceExtractor.Version,
                 "recording-actor-evidence-v1"
@@ -71,13 +74,16 @@ public sealed class SourceActorAliasExtractor
         Options,
         Timeout
     );
-    private const string BylineOperation =
+
+    // Published v3 supports coordinated verb bylines, but not the current noun forms,
+    // adjacent actions, tool qualifiers or structured labels.
+    private const string LegacyV3Operation =
         @"(?:recorded|taped|transferred|mastered|uploaded|mixed|tracked|seeded|posted|collected|matrixed)";
-    private static readonly Regex RecordingByline = new(
+    private static readonly Regex LegacyV3Byline = new(
         @"^"
-            + BylineOperation
+            + LegacyV3Operation
             + @"(?:(?:\s*,\s*(?:(?:and|&)\s+)?|\s+(?:and|&)\s+)"
-            + BylineOperation
+            + LegacyV3Operation
             + @"){0,7}\s+by\s+(?<actor>.+)$",
         Options,
         Timeout
@@ -194,7 +200,7 @@ public sealed class SourceActorAliasExtractor
         "steel",
         "and",
     };
-    private readonly RecordingActorEvidenceExtractor actorParser = new();
+    private readonly RecordingActorEvidenceExtractor actorParser;
 
     /// <summary>
     /// Extracts literal aliases from supported recording-text fields. Unclassified markers
@@ -281,7 +287,7 @@ public sealed class SourceActorAliasExtractor
 
                 var markerCount = AliasMarker.Matches(line.Text).Count;
                 if (
-                    grammar == SourceActorAliasGrammar.Current
+                    grammar != SourceActorAliasGrammar.LegacyV2
                     && markerCount > 0
                     && TryReadByline(line, fieldHash, markerCount, assertions, unresolved)
                 )
@@ -402,7 +408,11 @@ public sealed class SourceActorAliasExtractor
         List<ActorEvidenceUnresolved<NormalizationTextEvidence>> unresolved
     )
     {
-        var byline = RecordingByline.Match(line.Text);
+        var byline = (
+            grammar == SourceActorAliasGrammar.LegacyV3
+                ? LegacyV3Byline
+                : RecordingBylineGrammar.LeadingByline
+        ).Match(line.Text);
         if (!byline.Success)
         {
             return false;
@@ -679,4 +689,5 @@ internal enum SourceActorAliasGrammar
 {
     Current,
     LegacyV2,
+    LegacyV3,
 }

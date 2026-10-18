@@ -9,20 +9,70 @@ namespace Relisten.Data;
 
 public sealed partial class SourceActorResolutionStore
 {
-    // Exact published producer identities. Only alias-v2 roster replay and the known v6/v7
-    // recording-decoder equivalence are supported; unrelated component changes must refuse.
-    private const string LegacyAliasV2ExtractionPrefix =
+    // Exact published producer identities. Historical replay retains the original grammar
+    // and IDs; it never authorizes current interpretation or a new publication.
+    private const string HistoricalCreditV4ExtractionPrefix =
         "recording-source-actor-envelope-v2/recording-extraction-v4/"
         + "retained-recording-credits-v2/recording-credits-v4/recording-actor-evidence-v1/"
         + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/";
     internal const string LegacyAliasV2DecoderV6ProcessingVersion =
         "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v6/"
-        + LegacyAliasV2ExtractionPrefix
+        + HistoricalCreditV4ExtractionPrefix
         + RetainedSourceActorAliasExtractor.LegacyV2Version;
     internal const string LegacyAliasV2DecoderV7ProcessingVersion =
         "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v7/"
-        + LegacyAliasV2ExtractionPrefix
+        + HistoricalCreditV4ExtractionPrefix
         + RetainedSourceActorAliasExtractor.LegacyV2Version;
+
+    internal const string LegacyAliasV3DecoderV7ProcessingVersion =
+        "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v7/"
+        + HistoricalCreditV4ExtractionPrefix
+        + RetainedSourceActorAliasExtractor.LegacyV3Version;
+    internal const string LegacyAliasV3DecoderV8ProcessingVersion =
+        "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v8/"
+        + HistoricalCreditV4ExtractionPrefix
+        + RetainedSourceActorAliasExtractor.LegacyV3Version;
+
+    // Pin the reader implementation as well as each historical producer. Decoder v8 keeps
+    // the v6/v7 recording fields at their original coordinates; complete scope replay below
+    // still refuses any changed field/file/root inventory. Future component changes require
+    // an explicit compatibility decision rather than inheriting these historical grants.
+    internal static bool SupportsHistoricalAliasReplay =>
+        NormalizationRecordingProcessor.Version
+        == "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v8/"
+            + "recording-source-actor-envelope-v2/recording-extraction-v4/"
+            + "retained-recording-credits-v2/recording-credits-v5/recording-actor-evidence-v1/"
+            + "retained-actor-facts-v1/track-title-v1/local-selected-account-v1/"
+            + "retained-source-actor-aliases-v1/source-actor-aliases-v4/recording-actor-evidence-v1/"
+            + "retained-source-actor-alias-mapping-v1";
+
+    internal static SourceActorAliasGrammar RequireOriginalAliasGrammar(
+        string processingVersion,
+        bool allowHistoricalProof
+    )
+    {
+        if (processingVersion == NormalizationRecordingProcessor.Version)
+        {
+            return SourceActorAliasGrammar.Current;
+        }
+
+        if (allowHistoricalProof && SupportsHistoricalAliasReplay)
+        {
+            switch (processingVersion)
+            {
+                case LegacyAliasV2DecoderV6ProcessingVersion:
+                case LegacyAliasV2DecoderV7ProcessingVersion:
+                    return SourceActorAliasGrammar.LegacyV2;
+                case LegacyAliasV3DecoderV7ProcessingVersion:
+                case LegacyAliasV3DecoderV8ProcessingVersion:
+                    return SourceActorAliasGrammar.LegacyV3;
+            }
+        }
+
+        throw new ArgumentException(
+            "Source actor scopes must reproduce their original published recording, files and selected root."
+        );
+    }
 
     // One authentication pass owns decoder/root caches. Each original input and selected root
     // document stays open only while its scopes are replayed; file extraction borrows that
@@ -118,7 +168,7 @@ public sealed partial class SourceActorResolutionStore
             CancellationToken ct
         )
         {
-            builder ??= new(RequireGrammar());
+            builder ??= new(RequireOriginalAliasGrammar(processingVersion, allowHistoricalProof));
             var expected = builder.Build(input, document, recording, ct).AsEnumerable();
             if (selected != null)
             {
@@ -142,31 +192,6 @@ public sealed partial class SourceActorResolutionStore
                     []
                 ))
                 .ToArray();
-        }
-
-        private SourceActorAliasGrammar RequireGrammar()
-        {
-            if (processingVersion == NormalizationRecordingProcessor.Version)
-            {
-                return SourceActorAliasGrammar.Current;
-            }
-            if (
-                allowHistoricalProof
-                && (
-                    processingVersion == LegacyAliasV2DecoderV6ProcessingVersion
-                    || processingVersion == LegacyAliasV2DecoderV7ProcessingVersion
-                )
-                && NormalizationRecordingProcessor.Version
-                    == "catalog-recording-processing-v4/legacy-recording-snapshot-v2/provider-observations-v7/"
-                        + LegacyAliasV2ExtractionPrefix
-                        + RetainedSourceActorAliasExtractor.Version
-            )
-            {
-                return SourceActorAliasGrammar.LegacyV2;
-            }
-            throw new ArgumentException(
-                "Source actor scopes must reproduce their original published recording, files and selected root."
-            );
         }
 
         private static SourceActorResolutionField[] ReadFields(

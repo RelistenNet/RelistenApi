@@ -11,6 +11,196 @@ public sealed class TestRecordingExtraction
     private readonly RecordingCreditExtractor credits = new();
 
     [Test]
+    public void CoordinatedActionsShareTheActorWithoutBecomingPartOfItsName()
+    {
+        // String Cheese Incident: original structured taper wording, including its explicit alias.
+        const string raw = "Recorded, Mastered and Posted By Pat Myers Aka Datpat";
+        var result = credits.Extract(new Dictionary<string, string?> { ["taper"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Pat Myers", RecordingCreditRole.Taper),
+                ("Pat Myers", RecordingCreditRole.MasteringEngineer),
+                ("Pat Myers", RecordingCreditRole.Other)
+            );
+        result
+            .Credits.Should()
+            .OnlyContain(credit => credit.ActorFacts!.Aliases.Single().Wording == "Datpat");
+        result.Credits.Last().OriginalRole.Should().Be("Recorded, Mastered and Posted By");
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.ActorFacts!.Anchor);
+        }
+    }
+
+    [TestCase("taper_notes", "Master Audience Recorded By Fitzy, Transfer By Keo;  ")]
+    [TestCase("description", " <b>Master Audience Recorded By </b>Fitzy, <b>Transfer By </b>Keo")]
+    public void NounFormTransferStartsItsOwnCreditAcrossStructuredAndHtmlFields(
+        string field,
+        string raw
+    )
+    {
+        // Los Lobos taper notes and Ratdog HTML description use the same byline grammar.
+        var result = credits.Extract(new Dictionary<string, string?> { [field] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(("Fitzy", RecordingCreditRole.Taper), ("Keo", RecordingCreditRole.Transferrer));
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.ActorFacts!.Anchor);
+        }
+    }
+
+    [Test]
+    public void EditingAndRemasteringKeepTheirOwnActorAndLiteralUnsupportedAction()
+    {
+        // Grateful Dead: both the software qualifier and the action date are metadata, not names.
+        const string raw =
+            "Transfer by Charlie Miller Edited & reMastered using Adobe Audition by Joe Noel March 23, 2020";
+        var result = credits.Extract(new Dictionary<string, string?> { ["transferrer"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Charlie Miller", RecordingCreditRole.Transferrer),
+                ("Joe Noel", RecordingCreditRole.Other),
+                ("Joe Noel", RecordingCreditRole.MasteringEngineer)
+            );
+        result.Credits[1].OriginalRole.Should().Be("Edited & reMastered using Adobe Audition by");
+    }
+
+    [Test]
+    public void UnsupportedEngineeringDoesNotInheritThePreviousTaperRole()
+    {
+        // Archive.org Uncle John's Band metadata; engineering alone does not identify a taper.
+        const string raw =
+            "Multi-track recording, Uncle John’s Band at Ringside Cafe St Pete FL, mixed and mastered by Steve Connelly, recorded by JB Whiteley, engineered by Fil Pate.";
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Steve Connelly", RecordingCreditRole.Other),
+                ("Steve Connelly", RecordingCreditRole.MasteringEngineer),
+                ("JB Whiteley", RecordingCreditRole.Taper),
+                ("Fil Pate", RecordingCreditRole.Other)
+            );
+        result.Credits.Last().OriginalRole.Should().Be("engineered by");
+    }
+
+    [TestCase("Recorded using microphones supplied by Pat", "supplied by")]
+    [TestCase("Mastered using a recording provided by Pat", "provided by")]
+    [TestCase("Recording supplied by Pat", "supplied by")]
+    public void NestedSupplierBylinesCannotAttributeTheOuterRecordingAction(
+        string raw,
+        string originalRole
+    )
+    {
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Pat");
+        credit.Role.Should().Be(RecordingCreditRole.Other);
+        credit.OriginalRole.Should().Be(originalRole);
+    }
+
+    [Test]
+    public void EquipmentQualifiersBeforeRecordingDoNotBecomeTheFirstActorsName()
+    {
+        // Grateful Dead structured taper field uses a noun-form recording byline.
+        const string raw = "Master Digital FOB Recording by Dave Brotman & Jeff Metchick";
+        var result = credits.Extract(new Dictionary<string, string?> { ["taper"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Dave Brotman", RecordingCreditRole.Taper),
+                ("Jeff Metchick", RecordingCreditRole.Taper)
+            );
+    }
+
+    [TestCase(
+        "taper_notes",
+        "Minor Edits: Fades (in/out at beginning/end of sets) Transferred by Dan Marquardt <danmarq@msn.com>, please contact me with questions/comments. There are also 48KHz shn's of this seed for archival.",
+        "Dan Marquardt"
+    )]
+    [TestCase(
+        "description",
+        "Note: The RRPH set was recorded by Peter Costello & included Schoeps cmc64's -> ART Tube MP Studio Pre Amps -> Zoom H6N as source 2 and the Zoom H6N as the record deck instead of 788T.",
+        "Peter Costello"
+    )]
+    [TestCase(
+        "taper",
+        "Recorded, edited, mixed, and mastered by Eric McRoberts 08/12/2017 - FOH mix by Ryan Breen - Lights by Victor Cornette - Thanks to Val Foster",
+        "Eric McRoberts"
+    )]
+    [TestCase("source", "Editing and Mastering by Jamie Waddell in Wavelab 7.1", "Jamie Waddell")]
+    public void ActionDatesEquipmentAndFollowupProseDoNotBecomeActors(
+        string field,
+        string raw,
+        string expected
+    )
+    {
+        // Retained Phish, JRAD/Rock and Roll Playhouse, Michelangelo Carubba/Cris Jacobs, and GD text.
+        var result = credits.Extract(new Dictionary<string, string?> { [field] = raw });
+
+        result.Credits.Should().NotBeEmpty().And.OnlyContain(credit => credit.Name == expected);
+        foreach (var credit in result.Credits)
+        {
+            AssertCitation(raw, credit.ActorFacts!.Anchor);
+        }
+    }
+
+    [TestCase("Taper Chris")]
+    [TestCase("Jay in KC")]
+    [TestCase("Dr. FOB")]
+    [TestCase("sleepypedro (pwking)")]
+    [TestCase("Mike D (VT)")]
+    [TestCase("Top Hat Crew ( Big Jerry )")]
+    [TestCase("Alice Vale (Mike at MSG)")]
+    public void RoleWordsLocationsAndAmbiguousParenthesesStayLiteralNames(string name)
+    {
+        var result = credits.Extract(new Dictionary<string, string?> { ["taper"] = name });
+
+        result.Credits.Should().ContainSingle().Which.Name.Should().Be(name);
+        result.Credits.Single().ActorFacts!.Aliases.Should().BeEmpty();
+    }
+
+    [Test]
+    public void AdjacentActionWordsStillPermitALiteralTaperHandle()
+    {
+        // Retained Twiddle byline; the role word in the handle is not an operation boundary.
+        const string raw = "Recorded transferred and mastered by Taper Chris";
+        var result = credits.Extract(new Dictionary<string, string?> { ["description"] = raw });
+
+        result
+            .Credits.Select(credit => (credit.Name, credit.Role))
+            .Should()
+            .Equal(
+                ("Taper Chris", RecordingCreditRole.Taper),
+                ("Taper Chris", RecordingCreditRole.Transferrer),
+                ("Taper Chris", RecordingCreditRole.MasteringEngineer)
+            );
+    }
+
+    [TestCase("Transfer")]
+    [TestCase("DFC, FOB, bottom of hill on the grass, stand 12' high")]
+    public void BareOperationsAndMicrophonePositionsDoNotCreatePeople(string raw)
+    {
+        var result = credits.Extract(new Dictionary<string, string?> { ["taper"] = raw });
+
+        result.Credits.Should().BeEmpty();
+        result.Unresolved.Should().NotBeEmpty();
+    }
+
+    [Test]
     public void StructuredCreditsPreserveMultipleNamesAndSeparateRoles()
     {
         // Retained production sources 2012667 and 2402885.

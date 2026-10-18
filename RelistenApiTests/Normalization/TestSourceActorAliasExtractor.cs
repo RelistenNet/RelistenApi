@@ -86,14 +86,13 @@ public sealed class TestSourceActorAliasExtractor
     }
 
     [Test]
-    public void ExplicitRecordingBylineKeepsItsPrefixAndAliasWithoutCreatingCredits()
+    public void ExplicitRecordingBylineKeepsItsPrefixAndRoleFreeAlias()
     {
         const string prefix = "Recorded, Mastered and Posted by";
         const string raw = prefix + " Pat Myers AKA DATPAT";
         var result = Extract(raw);
 
         var assertion = result.Assertions.Should().ContainSingle().Which;
-        assertion.Version.Should().StartWith("source-actor-aliases-v3/");
         assertion.Name.Should().Be("Pat Myers");
         assertion.NameEvidence.Quote.Should().Be("Pat Myers");
         assertion.Context.Heading.Quote.Should().Be(prefix);
@@ -112,7 +111,6 @@ public sealed class TestSourceActorAliasExtractor
         projection.Record.Kind.Should().BeNull();
         projection.Record.ActorContext.Should().BeNull();
         projection.Record.ExternalIdentities.Should().BeEmpty();
-        new RecordingCreditExtractor().Extract(Fields(raw)).Credits.Should().BeEmpty();
         result.Unresolved.Should().BeEmpty();
         result.Scopes.Single().Complete.Should().BeTrue();
         AssertCitations(raw, result);
@@ -121,6 +119,9 @@ public sealed class TestSourceActorAliasExtractor
     [TestCase("Recorded and transferred by", "aka")]
     [TestCase("Taped, tracked, seeded by", "a.k.a.")]
     [TestCase("Recorded, mixed & posted by", "also known as")]
+    [TestCase("Transfer by", "aka")]
+    [TestCase("Engineered by", "aka")]
+    [TestCase("Recorded transferred and mastered by", "aka")]
     public void BoundedBylinesReuseQuotedAliasParsing(string prefix, string marker)
     {
         var raw = $"{prefix} Alice Vale {marker} \"Night & Day\"";

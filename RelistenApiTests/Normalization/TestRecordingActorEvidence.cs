@@ -15,6 +15,121 @@ public sealed class TestRecordingActorEvidence
 {
     private readonly RecordingCreditExtractor extractor = new();
 
+    [TestCase("corey the groundhog", "china_c_a_tATyahooDOTcom", "china_c_a_t@yahoo.com")]
+    [TestCase("Larry Pillman", "atxtaperATyahooDOTcom", "atxtaper@yahoo.com")]
+    [TestCase("vanark", "vanarkATgmailDOTcom", "vanark@gmail.com")]
+    public void CompactObfuscatedAttachmentsKeepTheOriginalLiteralAndActor(
+        string name,
+        string literal,
+        string lookupKey
+    )
+    {
+        // Retained cross-artist taper fields; no address component is supplied by the extractor.
+        var raw = $"🎵<b>Recorded by {name}</b> ({literal})";
+        var result = Extract("description", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be(name);
+        var facts = Facts(credit);
+        var contact = facts.Contacts.Should().ContainSingle().Which;
+        contact.Literal.Should().Be(literal);
+        contact.LookupKey.Should().Be(lookupKey);
+        AssertCitations(raw, facts);
+    }
+
+    [TestCase("PATATgmailDOTcom")]
+    [TestCase("fooATATLASDOTorg")]
+    [TestCase("fooATDOTCOMDOTorg")]
+    public void AmbiguousCompactContactsKeepTheLiteralWithoutChoosingAMailbox(string literal)
+    {
+        var raw = $"Recorded by Pat ({literal})";
+        var result = Extract("description", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Pat");
+        var facts = Facts(credit);
+        facts.Contacts.Should().BeEmpty();
+        facts
+            .Unresolved.Should()
+            .Contain(issue =>
+                issue.Reason == "ambiguous_actor_contact"
+                && issue.Evidence.Any(evidence => evidence.Quote == literal)
+            );
+        AssertCitations(raw, facts);
+    }
+
+    [Test]
+    public void IncompleteParenthesizedContactStaysUnresolvedWithoutInventingAnAddress()
+    {
+        // Local Trey metadata contains no domain suffix for this contact hint.
+        const string raw = "Recorded by Alex Leary (vwmule at gmail)";
+        var result = Extract("description", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("Alex Leary");
+        var facts = Facts(credit);
+        facts.Contacts.Should().BeEmpty();
+        facts
+            .Unresolved.Should()
+            .Contain(issue =>
+                issue.Reason == "incomplete_actor_contact"
+                && issue.Evidence.Any(evidence => evidence.Quote == "(vwmule at gmail)")
+            );
+        AssertCitations(raw, facts);
+    }
+
+    [Test]
+    public void SeparateContactDoesNotBecomeASecondTaperOrAnAttributedAddress()
+    {
+        // Archive.org Deadicated description: proximity is not contact ownership.
+        const string raw = "Taper: MattMan, deadicated.us AT gmail.com";
+        var result = Extract("description", raw);
+
+        var credit = result.Credits.Should().ContainSingle().Which;
+        credit.Name.Should().Be("MattMan");
+        var facts = Facts(credit);
+        facts.Contacts.Should().BeEmpty();
+        facts.Unresolved.Should().Contain(issue => issue.Reason == "unattributed_contact");
+        AssertCitations(raw, facts);
+    }
+
+    [TestCase("joel at jamlivedotorg")]
+    [TestCase("china_c_a_tATyahooDOTcom")]
+    public void ContactOnlyWordingDoesNotInventAPersonOrMissingEmailParts(string raw)
+    {
+        var result = Extract("taper", raw);
+
+        result.Credits.Should().BeEmpty();
+        result.Unresolved.Should().NotBeEmpty();
+    }
+
+    [TestCase("PATAT@example.DOTcom", "patat@example.dotcom")]
+    [TestCase("person@ATLAS.DOTorg", "person@atlas.dotorg")]
+    public void NormalEmailContactsKeepLiteralAtAndDotLettersInBothAttachmentGrammars(
+        string literal,
+        string key
+    )
+    {
+        var raw = $"Alice Vale ({literal})";
+        var evidence = new NormalizationTextEvidence(
+            "taper",
+            "/taper",
+            raw,
+            0,
+            raw.EnumerateRunes().Count()
+        );
+        foreach (var historical in new[] { false, true })
+        {
+            var actor = new RecordingActorEvidenceExtractor(historical)
+                .Enrich(raw, evidence, [RecordingCreditRole.Taper])
+                .Single();
+
+            actor.Name.Should().Be("Alice Vale");
+            actor.ActorFacts.Contacts.Should().ContainSingle().Which.LookupKey.Should().Be(key);
+            AssertCitations(raw, actor.ActorFacts);
+        }
+    }
+
     [TestCase("aka")]
     [TestCase("a.k.a.")]
     [TestCase("also known as")]

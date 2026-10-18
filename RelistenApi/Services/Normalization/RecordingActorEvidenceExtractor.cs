@@ -37,6 +37,44 @@ public sealed class RecordingActorEvidenceExtractor
         Options,
         Timeout
     );
+
+    // Compact AT/DOT is accepted only with literal uppercase separators. Matching arbitrary
+    // letters inside a handle would manufacture a contact from ordinary name text.
+    private const string CompactDomain = @"[\p{L}\p{N}\-]+(?:(?-i:DOT)[\p{L}\p{N}\-]+)+";
+    private static readonly Regex CompactContact = new(
+        @"(?<local>[\p{L}\p{N}._%+\-]+)(?-i:AT)(?<domain>" + CompactDomain + ")",
+        Options,
+        Timeout
+    );
+    private static readonly Regex CurrentContact = new(
+        "(?:" + Contact + ")|(?:" + CompactContact + ")",
+        Options,
+        Timeout
+    );
+    private static readonly Regex IncompleteContact = new(
+        @"^\s*(?:e-?mail\s*:\s*)?[\p{L}\p{N}._%+\-]+\s+at\s+(?:gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|[\p{L}\p{N}\-]+dot(?:com|org|net|edu))\s*$",
+        Options,
+        Timeout
+    );
+    private readonly bool legacyAttachments;
+
+    public RecordingActorEvidenceExtractor()
+        : this(false) { }
+
+    // Old accepted alias reviews reproduce their original attachments and source-scoped IDs.
+    internal RecordingActorEvidenceExtractor(bool legacyAttachments)
+    {
+        this.legacyAttachments = legacyAttachments;
+    }
+
+    internal static bool IsContactOnly(string text)
+    {
+        var value = text.Trim().Trim('<', '>', '(', ')');
+        var match = CurrentContact.Match(value);
+        return match.Success && match.Index == 0 && match.Length == value.Length
+            || IncompleteContact.IsMatch(value);
+    }
+
     private static readonly Regex Url = new(@"https?://[^\s<>""']+", Options, Timeout);
     private static readonly Regex AnchorTag = new(
         @"<a\b[^>]*\bhref\s*=\s*(?:""(?<href>[^""]*)""|'(?<href>[^']*)')[^>]*>(?<label>.*?)</a\s*>",
@@ -104,7 +142,7 @@ public sealed class RecordingActorEvidenceExtractor
             .ToArray();
     }
 
-    private static PreparedActor[] PrepareActors(
+    private PreparedActor[] PrepareActors(
         string actorText,
         NormalizationTextEvidence enclosingEvidence,
         int visibleStart,
@@ -117,7 +155,9 @@ public sealed class RecordingActorEvidenceExtractor
             StringComparison.Ordinal
         );
         return SplitActors(actorText)
-            .Select(part => Prepare(part.Text, part.Start, start, map, enclosingEvidence))
+            .Select(part =>
+                Prepare(part.Text, part.Start, start, map, enclosingEvidence, legacyAttachments)
+            )
             .ToArray();
     }
 
@@ -126,9 +166,11 @@ public sealed class RecordingActorEvidenceExtractor
         int partStart,
         int phraseStart,
         VisibleTextMap map,
-        NormalizationTextEvidence enclosing
+        NormalizationTextEvidence enclosing,
+        bool legacyAttachments
     )
     {
+        var contactPattern = legacyAttachments ? Contact : CurrentContact;
         var removals = new List<(int Start, int Length)>();
         var attachments = new List<(int Start, int Length)>();
         var aliases =
@@ -165,9 +207,9 @@ public sealed class RecordingActorEvidenceExtractor
                 );
                 removals.Add(group);
             }
-            else if (Contact.IsMatch(body) || Url.IsMatch(body))
+            else if (contactPattern.IsMatch(body) || Url.IsMatch(body))
             {
-                var remainder = Contact.Replace(Url.Replace(body, ""), "");
+                var remainder = contactPattern.Replace(Url.Replace(body, ""), "");
                 if (
                     Regex.IsMatch(
                         remainder,
@@ -183,6 +225,13 @@ public sealed class RecordingActorEvidenceExtractor
                 {
                     issues.Add(("ambiguous_actor_attachment", Evidence(group.Start, group.Length)));
                 }
+                removals.Add(group);
+            }
+            else if (!legacyAttachments && IncompleteContact.IsMatch(body))
+            {
+                // Known mail hosts or a written domain suffix distinguish these hints from
+                // ambiguous location wording such as "Mike at MSG". Never fill missing parts.
+                issues.Add(("incomplete_actor_contact", Evidence(group.Start, group.Length)));
                 removals.Add(group);
             }
             else if (PersonDescription.IsMatch(body) || GroupDescription.IsMatch(body))
@@ -360,6 +409,20 @@ public sealed class RecordingActorEvidenceExtractor
                         && candidate.Anchor.StartCodePoint >= linked.StartCodePoint
                         && candidate.Anchor.EndCodePoint <= linked.EndCodePoint
                 );
+            if (hint.AmbiguousContact)
+            {
+                if (Attached(actor) || !actors.Any(Attached))
+                {
+                    unresolved.Add(
+                        new(
+                            "ambiguous_actor_contact",
+                            Attached(actor) ? [actor.ReferenceUuid] : references,
+                            [hint.Evidence]
+                        )
+                    );
+                }
+                continue;
+            }
             if (!Attached(actor))
             {
                 if (!actors.Any(Attached))
@@ -493,11 +556,11 @@ public sealed class RecordingActorEvidenceExtractor
             ))
             .ToArray();
 
-    private static IReadOnlyList<Hint> ReadHints(VisibleTextMap map)
+    private IReadOnlyList<Hint> ReadHints(VisibleTextMap map)
     {
         var hints = new List<Hint>();
         var urls = Url.Matches(map.Text).Cast<Match>().ToArray();
-        foreach (Match contact in Contact.Matches(map.Text))
+        foreach (Match contact in (legacyAttachments ? Contact : CurrentContact).Matches(map.Text))
         {
             // Query strings and paths can contain addresses unrelated to the credited actor.
             // Only a separate contact literal or explicit mailto link supplies contact evidence.
@@ -521,13 +584,15 @@ public sealed class RecordingActorEvidenceExtractor
             {
                 continue;
             }
+            var contactKey = ContactKey(contact.Value);
             hints.Add(
                 new(
                     map.Evidence(contact.Index, contact.Length),
                     contact.Value,
-                    ContactKey(contact.Value),
+                    contactKey,
                     null,
-                    null
+                    null,
+                    contactKey is null
                 )
             );
         }
@@ -616,8 +681,44 @@ public sealed class RecordingActorEvidenceExtractor
         return null;
     }
 
-    private static string ContactKey(string value)
+    private string? ContactKey(string value)
     {
+        var compact = CompactContact.Match(value);
+        if (
+            !legacyAttachments
+            && compact.Success
+            && compact.Index == 0
+            && compact.Length == value.Length
+        )
+        {
+            // More than one valid AT split can change both mailbox and domain. A known mail
+            // provider is not authority to choose one interpretation of the original literal.
+            var splits = Regex
+                .Matches(value, "AT", RegexOptions.None, Timeout)
+                .Where(separator =>
+                    separator.Index > 0
+                    && Regex.IsMatch(
+                        value[(separator.Index + separator.Length)..],
+                        "^" + CompactDomain + "$",
+                        Options,
+                        Timeout
+                    )
+                )
+                .Take(2)
+                .Count();
+            if (splits != 1)
+            {
+                return null;
+            }
+            var domain = compact
+                .Groups["domain"]
+                .Value.Replace("DOT", ".", StringComparison.Ordinal);
+            if (domain.Split('.').Any(label => label.Length == 0))
+            {
+                return null;
+            }
+            value = compact.Groups["local"].Value + "@" + domain;
+        }
         var at = Regex.Replace(value, @"\[\s*at\s*\]|\(\s*at\s*\)|\s+at\s+", "@", Options, Timeout);
         var dots = Regex.Replace(
             at,
@@ -761,7 +862,8 @@ public sealed class RecordingActorEvidenceExtractor
         string DecodedLiteral,
         string? ContactKey,
         string? LinkedActorName,
-        NormalizationTextEvidence? LinkedActorEvidence
+        NormalizationTextEvidence? LinkedActorEvidence,
+        bool AmbiguousContact = false
     );
 
     /// <summary>

@@ -216,7 +216,7 @@ public sealed class TestSourceActorReviewHistoricalProducer
         capture.DatabasePort.Should().Be(15432);
         Regex.IsMatch(capture.DatabaseName, "^relisten_test_[0-9a-f]{32}$").Should().BeTrue();
         capture.DecoderVersion.Should().Be(expected.Decoder);
-        NormalizationProviderDecoder.Version.Should().Be("provider-observations-v7");
+        NormalizationProviderDecoder.Version.Should().Be("provider-observations-v8");
         capture.ProcessorVersion.Should().Be(expected.Processor);
         capture.ProcessorVersion.Should().NotBe(NormalizationRecordingProcessor.Version);
         capture

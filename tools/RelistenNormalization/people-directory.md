@@ -6,6 +6,14 @@ The directory is an experimental projection. It groups names with the same retri
 
 The directory scans all 292,523 source results from `2026-10-18-shadow-complete-core-ranges-v1`. Its baseline uses `shadow-people-v1`. A selected 2,000-source overlay now adds retained Luna credit interpretations through the current C# credit adapter. The combined directory contains 253,722 recordings with credits across 4,284 artists, including 2,296 model credit mentions. Luna supplied credits on 151 recordings where the local parser supplied none. These are coverage results, not identity accuracy measurements. The page lists known limitations, including truncated names, missed prose credits and equipment mistaken for people.
 
+## Credit extraction policy
+
+The shared recording byline grammar separates coordinated actions, names and later actions before assigning roles. For example, “Recorded, Mastered and Posted by Pat Myers AKA DATPAT” names Pat Myers, retains DATPAT as an explicit alias and records the supported roles. “Posted” remains an `Other` role with its original wording. A later “Transfer by Keo” starts a new credit. An unsupported action such as “engineered by” also starts its own credit and keeps `Other`; it cannot inherit the preceding taper role. These are source claims, not accepted identities.
+
+Attached complete contacts retain their original spelling and a separate lookup key. Literal uppercase `AT` and `DOT` separators can describe a complete address. When more than one mailbox/domain split is possible, the literal stays unresolved without a guessed lookup key. An incomplete attachment such as “(vwmule at gmail)” stays unresolved without adding a domain suffix. A separate address does not become another taper or an attributed contact. Literal handles, including “Taper Chris” and “Jay in KC,” and ambiguous parentheses remain intact.
+
+Credit grammar v5 and source-alias grammar v4 apply only when new outputs are extracted. The actor fact format remains v1. Existing run chunks, directory rows and the frozen contextual comparison cohort keep their original producer versions and evidence. A later refresh must regenerate affected credit and alias projections together, then prepare new context questions against those occurrences. Keep the previous generation for inspection; its occurrence IDs and comparison witnesses do not silently acquire the new interpretation. Historical v2 and v3 alias reviews use their original byline and attachment grammars.
+
 ## Build and serve
 
 Build into a new file. Existing files are rejected so an active directory cannot be overwritten. The builder reads existing gzip chunks, retains a compact projection and preserves a 4.5 GiB host disk reserve. It makes no provider requests and does not access the catalog database.

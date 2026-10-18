@@ -15,21 +15,9 @@ namespace Relisten.Normalization;
 public sealed class RecordingCreditExtractor
 {
     /// <summary>Persist with extraction output so cached results can be invalidated when grammar changes.</summary>
-    public const string Version = "recording-credits-v4/" + RecordingActorEvidenceExtractor.Version;
+    public const string Version = "recording-credits-v5/" + RecordingActorEvidenceExtractor.Version;
 
-    private const string CreditVerbs =
-        @"(?:recorded|taped|transferred|mastered|uploaded|collected|matrixed)";
-    private static readonly Regex ExplicitCredit = new(
-        @"\b(?<role>(?:renamed\s+and\s+tagged|(?:[\p{L}]+ly\s+)?"
-            + CreditVerbs
-            + @"(?:\s+(?:and|&)\s+(?:[\p{L}]+ly\s+)?"
-            + CreditVerbs
-            + @")*)\s+by\b|(?:tapers?|transferrers?|recording\s+engineer|mastering\s+engineer|matrix\s+builder|uploader|collector|musicians?)\b(?=\s*:)|matrix\s+by\b)(?:\s*:\s*|\s+)(?<name>.+?)(?=;(?![^()]*\))|$|\s+(?:(?:and\s+)?(?:[\p{L}]+ly\s+)?"
-            + CreditVerbs
-            + @"\s+by\b|taper\s*:|transferrer\s*:|(?:from|using|via|with)\b))",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(1)
-    );
+    private static readonly Regex ExplicitCredit = RecordingBylineGrammar.Credits;
     private static readonly Regex OperationActor = new(
         @"\b(?:by|via)\s+(?<name>[\p{L}\p{N}_.’' -]+?)(?=\s+\d{1,4}/|,|\(|;|\.\s|$)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
@@ -148,7 +136,7 @@ public sealed class RecordingCreditExtractor
                     continue;
                 }
 
-                var roles = Roles(match.Groups["role"].Value).ToArray();
+                var roles = RecordingBylineGrammar.Roles(match.Groups["role"].Value).ToArray();
                 foreach (var role in roles)
                 {
                     AddNames(
@@ -238,51 +226,6 @@ public sealed class RecordingCreditExtractor
             _ => null,
         };
 
-    private static IEnumerable<RecordingCreditRole> Roles(string wording)
-    {
-        var role = wording.ToLowerInvariant();
-        if (role.Contains("engineer"))
-        {
-            yield return role.StartsWith("mastering")
-                ? RecordingCreditRole.MasteringEngineer
-                : RecordingCreditRole.RecordingEngineer;
-            yield break;
-        }
-
-        if (role.Contains("recorded") || role.Contains("tape"))
-        {
-            yield return RecordingCreditRole.Taper;
-        }
-        if (role.Contains("transfer"))
-        {
-            yield return RecordingCreditRole.Transferrer;
-        }
-        if (role.Contains("mastered"))
-        {
-            yield return RecordingCreditRole.MasteringEngineer;
-        }
-        if (role.Contains("matrix"))
-        {
-            yield return RecordingCreditRole.MatrixBuilder;
-        }
-        if (role.Contains("upload"))
-        {
-            yield return RecordingCreditRole.Uploader;
-        }
-        if (role.Contains("collect"))
-        {
-            yield return RecordingCreditRole.Collector;
-        }
-        if (role.Contains("renamed") || role.Contains("tagged"))
-        {
-            yield return RecordingCreditRole.Other;
-        }
-        if (role.Contains("musician"))
-        {
-            yield return RecordingCreditRole.Musician;
-        }
-    }
-
     private static void AddNames(
         string text,
         RecordingCreditRole role,
@@ -294,6 +237,7 @@ public sealed class RecordingCreditExtractor
         int visibleStart = 0
     )
     {
+        text = RecordingBylineGrammar.TrimActorList(text);
         var withoutDate = Regex.Replace(text, @"\s*\[\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}\]\s*$", "");
         var actors = new RecordingActorEvidenceExtractor().Enrich(
             withoutDate,
@@ -324,6 +268,8 @@ public sealed class RecordingCreditExtractor
                 || name.Length > 100
                 || name.Contains(':')
                 || name.Contains('@')
+                || RecordingActorEvidenceExtractor.IsContactOnly(name)
+                || RecordingBylineGrammar.IsNonActorFragment(name)
             )
             {
                 unresolved.Add(new("unparsed_credit", evidence));

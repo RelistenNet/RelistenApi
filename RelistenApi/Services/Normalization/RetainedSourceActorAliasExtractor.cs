@@ -26,6 +26,10 @@ public sealed class RetainedSourceActorAliasExtractor
         "retained-source-actor-aliases-v1/"
         + SourceActorAliasExtractor.LegacyV2Version
         + "/retained-source-actor-alias-mapping-v1";
+    internal const string LegacyV3Version =
+        "retained-source-actor-aliases-v1/"
+        + SourceActorAliasExtractor.LegacyV3Version
+        + "/retained-source-actor-alias-mapping-v1";
     private readonly SourceActorAliasExtractor extractor;
     internal string ProducerVersion { get; }
 
@@ -35,9 +39,14 @@ public sealed class RetainedSourceActorAliasExtractor
     internal RetainedSourceActorAliasExtractor(SourceActorAliasGrammar grammar)
     {
         extractor = new(grammar);
-        ProducerVersion = grammar == SourceActorAliasGrammar.LegacyV2 ? LegacyV2Version : Version;
+        ProducerVersion = grammar switch
+        {
+            SourceActorAliasGrammar.LegacyV2 => LegacyV2Version,
+            SourceActorAliasGrammar.LegacyV3 => LegacyV3Version,
+            _ => Version,
+        };
         if (
-            grammar == SourceActorAliasGrammar.LegacyV2
+            grammar != SourceActorAliasGrammar.Current
             && !StringComparer.Ordinal.Equals(
                 MappingVersion,
                 "retained-source-actor-alias-mapping-v1"
