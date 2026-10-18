@@ -31,3 +31,20 @@ processing-attempt coordinates for replay; allocate new attempt UUIDs for later
 repertoire and consumer processing. Preserve this input receipt when adding
 those separate results. This page establishes real-input preparation and replay,
 not inferred matching accuracy, accepted song coverage or a complete backfill.
+
+## Completed recording-title decisions
+
+The next [recording-title receipt](evidence/recording-repertoire-local-v1.json)
+records completed repertoire accounts for all 25 saved recording extractions.
+The resolver makes 284 claim decisions: 251 visibly `title_derived` provisional
+song identities and 33 unresolved decisions with `unsupported_claim_kind`.
+All accounts complete and replay through 294 actual worker invocations.
+No inferred matching policy is active, and this run merges no identities by title
+similarity.
+
+The new database now contains 460 accepted repertoire entries. All 209 original
+entries, their imported assignments, external identities and original revision
+rows retain their exact fingerprints. All 12 legacy relation fingerprints and the
+original rehearsal database also remain unchanged. There are still no accepted
+file contents or setlists. The completed accounts supply real inputs for consumer
+publication; this run does not yet verify their new song-to-file results over HTTP.

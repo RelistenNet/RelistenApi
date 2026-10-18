@@ -1,0 +1,127 @@
+{
+  "state": "completed_real_recording_repertoire",
+  "implementation_commit": "f540f69",
+  "input_receipt": "docs/research/2026-10-17-full-normalization/scale/evidence/materialization-local-inputs-v1.json",
+  "executables_receipt": "docs/research/2026-10-17-full-normalization/scale/evidence/repertoire-local-rehearsal-v1.json",
+  "database": "relisten_normalization_materialization_20261018",
+  "outcomes": {
+    "claims": 284,
+    "reasons": {
+      "unsupported_claim_kind": 33,
+      "new_title_derived_identity": 251
+    },
+    "attempts": 25,
+    "database": "relisten_normalization_materialization_20261018",
+    "dispositions": {
+      "unresolved": 33,
+      "provisional": 251
+    },
+    "title_derived_targets": 251,
+    "transaction_read_only": "on",
+    "accepted_track_contents": 0,
+    "accepted_repertoire_songs": 460,
+    "accepted_setlist_editions": 0,
+    "distinct_accepted_targets": 251,
+    "active_repertoire_policies": 0,
+    "current_completed_registrations": 25
+  },
+  "verification": {
+    "worker_invocations": 294,
+    "exact_terminal_replays": 25,
+    "worker_stdout_hashes_checked": 294,
+    "worker_stderr_hashes_checked": 294,
+    "legacy_relation_fingerprints_unchanged": 12,
+    "original_accepted_music_relation_fingerprints_unchanged": 4,
+    "original_rehearsal_unchanged": true,
+    "provider_requests": 0,
+    "model_requests": 0,
+    "production_writes": 0
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-v1/receipt.json",
+      "bytes": 192803,
+      "sha256": "cbb0eb01007d81f77374eeb13d0e31001252f20da112d9325789c8818af77ef3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-v1/run-plan.json",
+      "bytes": 10503,
+      "sha256": "5eca395344bd20cab772e0c11e6d99228ed530536ed4f09ec9c54a42b9f7c7e2"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-v1/commands.jsonl",
+      "bytes": 142784,
+      "sha256": "61c07a7f223e5631e06ef9df4af54536dfdf3482d2ee04982ad983e02cff54d1"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-v1/rehearse-recording-repertoire.py",
+      "bytes": 4832,
+      "sha256": "f64d55369d0c778c4ecf2839ea4d5c3f3ab9e6e637471aba51b500fb07a0d8ff"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/original-accepted-fingerprints.sql",
+      "bytes": 57426,
+      "sha256": "328fb67cf97e622d17e320ffb54a34e71a917fd07cdf339dcf9c7f4b7b5326d6"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/original-accepted-uuids.json",
+      "bytes": 55308,
+      "sha256": "066d62153bd496259c9a488b61cebf9bf37c21f94fcad4f1fec663b301f34447"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/outcomes.json",
+      "bytes": 492,
+      "sha256": "65b350f2f4abc3b702997d55b40bf27cbf9571bd51a8ff99c8cf99f63b57c211"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/outcomes.sql",
+      "bytes": 2991,
+      "sha256": "820e59b0062284d48b9564805d4a2f328f87cb131fb31ffc1c836026c2028c1d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/receipt.json",
+      "bytes": 3812,
+      "sha256": "19d0907c740563af10d68b3df3320071a364cc7abdd72a2f54a1c2b79c4e1bdd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/source-accepted-music.json",
+      "bytes": 574,
+      "sha256": "0de24a60d5342c5474825be6aca4ee3369529fe34ce047d617fa1598d24a3fd8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/source-application.json",
+      "bytes": 955,
+      "sha256": "3a8f425afd06e6529159774919061184b0cad63ffa9f9ab04322dea2cea93370"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/source-extra-legacy.json",
+      "bytes": 664,
+      "sha256": "7bcebe0978ff85ed654f8a372831d56bca1eac74161911b98d669709182e5778"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/target-application.json",
+      "bytes": 960,
+      "sha256": "db39c8eefcb32d56d3439e62e7f1baff5399155a870c0f03721ccb648c3aa773"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/target-extra-legacy.json",
+      "bytes": 669,
+      "sha256": "65c96b0f7a10de90cbb17901c2f9ef9aed6d714e67143aaaccc89e76f4d8e7f4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/target-original-accepted-fingerprints.json",
+      "bytes": 516,
+      "sha256": "f94dfac80f64bfb1dc2d73b7137766af98c61d82900b1a473f1a2d7039c353b9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-repertoire-verification-v1/verify-recording-repertoire.py",
+      "bytes": 7038,
+      "sha256": "390de5b06adb7ca11c8a01bc7682d5ab9d703fa692ad9988faadc208093e6948"
+    }
+  ],
+  "limits": [
+    "Provisional title-derived entries do not establish inferred identity-matching accuracy.",
+    "No accepted setlists, occurrences or file contents were published.",
+    "HTTP song-to-file behavior for these newly accepted entries remains to be verified after consumer publication."
+  ]
+}
