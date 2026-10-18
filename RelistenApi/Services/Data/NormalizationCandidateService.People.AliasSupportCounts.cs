@@ -38,6 +38,7 @@ public sealed partial class NormalizationCandidateService
                     members,
                     certificateVersion = SourceActorAliasApplicationStore.PublishedStageCertificateVersion,
                     applicationVersion = SourceActorAliasApplicationService.Version,
+                    historicalApplicationVersions = SourceActorAliasApplicationService.HistoricalAcceptedApplicationReadVersions(),
                     format = SourceActorAliasApplicationCheckpointCodec.FormatVersion,
                     accepted = ((int)SourceActorAliasNameDisposition.Accepted).ToString(
                         System.Globalization.CultureInfo.InvariantCulture
@@ -132,7 +133,9 @@ public sealed partial class NormalizationCandidateService
                         AND stage.receipt_header->>'CertificateVersion'=@certificateVersion
                         AND stage.receipt_header->>'AuthenticatedRequestHash'=run.request_hash
                         AND length(stage.receipt_header->>'AuthenticatedRequestHash')=64
-                        AND app.version=@applicationVersion AND run.state='published'
+                        AND (app.version=@applicationVersion
+                            OR app.version=ANY(@historicalApplicationVersions))
+                        AND run.state='published'
                         AND stage.admitted_work_uuid=stage.work_uuid AND run.uuid=stage.work_uuid
                         AND run.subject_uuid=stage.owner_subject_uuid AND owner.domain='people'
                         AND owner.subject_kind='person' AND owner.subject_uuid=stage.person_uuid

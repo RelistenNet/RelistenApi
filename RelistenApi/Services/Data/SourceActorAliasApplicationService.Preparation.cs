@@ -813,11 +813,20 @@ public sealed partial class SourceActorAliasApplicationService
         && (version == HistoricalV6Resolution || version == HistoricalV7Resolution);
 
     internal static bool SupportsHistoricalAcceptedApplication(string version) =>
+        HistoricalAcceptedApplicationReadVersions().Contains(version, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Exact profiles whose existing published support can be read. This compatibility
+    /// grants no new application, proposal, stage or policy admission authority.
+    /// </summary>
+    internal static string[] HistoricalAcceptedApplicationReadVersions() =>
         CurrentResolutionComponentsMatch()
-        && (
-            version == ApplicationPrefix + HistoricalV6Resolution + ApplicationSuffix
-            || version == ApplicationPrefix + HistoricalV7Resolution + ApplicationSuffix
-        );
+            ?
+            [
+                ApplicationPrefix + HistoricalV6Resolution + ApplicationSuffix,
+                ApplicationPrefix + HistoricalV7Resolution + ApplicationSuffix,
+            ]
+            : [];
 
     private static bool CurrentResolutionComponentsMatch() =>
         // Preserve every non-alias component of the known profiles. The original-source

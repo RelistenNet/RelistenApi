@@ -1,0 +1,32 @@
+{
+  "version": "source-actor-historical-candidates-v1",
+  "state": "focused_verified_matching_inactive",
+  "runtimePacket": {
+    "path": "local-dev/normalization-data/2026-10-18-source-alias-v2-candidate-runtime-verification-v1/manifest.json",
+    "sha256": "5f20338d395e3a32c91f693a3f9a0cf29ee09bccf4dd703c89cb324fcf478b8d"
+  },
+  "compiledPacket": {
+    "path": "local-dev/normalization-data/2026-10-18-source-alias-v2-candidate-compiled-verification-v1/manifest.json",
+    "sha256": "1e2634dcd6017d77838320bcff6cdb32495c1637287c484e8f42337315373329"
+  },
+  "verification": {
+    "beforeGenuineHistoricalCandidateFailures": 2,
+    "afterGenuineHistoricalCandidateAndWithdrawalPassed": 4,
+    "currentPublicationCandidateAndRecoveryPassed": 117,
+    "failedAfter": 0,
+    "notExecutedAfter": 0,
+    "solutionBuildErrors": 0,
+    "existingSolutionBuildWarnings": 25
+  },
+  "behavior": [
+    "Alias-only public candidate lookup authenticates exact supported historical certified publications without restamping their proof.",
+    "Published-Work, owner, ticket, certificate, request hash and exact support checks remain mandatory.",
+    "New historical positive publication remains refused; current rejection/retraction withdraws only managed source support and preserves native alias lookup.",
+    "Current certified, contradictory-certificate and absent-certificate fallback contracts pass."
+  ],
+  "qualification": [
+    "Actual accepted historical runtime covers decoder-v7/alias-v2. No genuine accepted-v6 capture is claimed.",
+    "Future extractor or model version changes must preserve known accepted-state lookup with explicitly supported read profiles.",
+    "No schema/public API/producer-version change, automatic policy activation, production write or deployment."
+  ]
+}

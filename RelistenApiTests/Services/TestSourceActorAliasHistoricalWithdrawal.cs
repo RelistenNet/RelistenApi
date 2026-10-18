@@ -33,6 +33,50 @@ public sealed class TestSourceActorAliasHistoricalWithdrawal
 
     [TestCase("reject")]
     [TestCase("retract")]
+    [Order(0)]
+    [Explicit("Restore the pinned accepted capture before any current negative review.")]
+    public async Task HistoricalAcceptedAliasesRemainCandidateEvidence(string name)
+    {
+        var control = await ReadControlAsync();
+        var item = control.Capture.Cases.Single(value => value.Name == name);
+        var previousWrite = DbService.ConnStr;
+        var previousRead = DbService.ReadOnlyConnStr;
+        try
+        {
+            var host = Host.CreateApplicationBuilder(
+                new HostApplicationBuilderSettings
+                {
+                    DisableDefaults = true,
+                    EnvironmentName = Environments.Production,
+                }
+            );
+            var db = new DbService(
+                $"postgresql://relisten:local_dev_password@127.0.0.1:15432/{control.Database}",
+                null,
+                null,
+                host.Environment,
+                NullLogger<DbService>.Instance
+            );
+            var probe = new WithdrawalProbe(db);
+            await probe.RequireCapturedStateAsync(item);
+            var originalRows = await probe.ReadOriginalRowsAsync(item);
+
+            await probe.RequireCandidateAliasFactsAsync(item, withdrawn: false);
+
+            (await probe.ReadOriginalRowsAsync(item)).Should().Be(originalRows);
+            await probe.RequireOriginalArtifactsAsync(item);
+            await RequireCaptureHashAsync(control.Path);
+        }
+        finally
+        {
+            DbService.ConnStr = previousWrite;
+            DbService.ReadOnlyConnStr = previousRead;
+        }
+    }
+
+    [TestCase("reject")]
+    [TestCase("retract")]
+    [Order(1)]
     [Explicit(
         "Restore the pinned genuine v7/alias-v2 accepted capture into its owned local database."
     )]
@@ -70,6 +114,7 @@ public sealed class TestSourceActorAliasHistoricalWithdrawal
             var application = await probe.WithdrawAsync(item, current);
 
             await probe.RequireWithdrawnStateAsync(item, application, negative);
+            await probe.RequireCandidateAliasFactsAsync(item, withdrawn: true);
             (await probe.ReadOriginalRowsAsync(item)).Should().Be(originalRows);
             await probe.RequireOriginalArtifactsAsync(item);
             await RequireCaptureHashAsync(control.Path);
@@ -149,6 +194,80 @@ public sealed class TestSourceActorAliasHistoricalWithdrawal
             Same(sourceRows, item.AcceptedRows);
             var aliases = await ReadPublicAliasIdsAsync(item.Native.PersonUuid);
             aliases.Should().Contain(item.PublicAliases.Select(value => value.Uuid));
+        }
+
+        internal async Task RequireCandidateAliasFactsAsync(CapturedCase item, bool withdrawn)
+        {
+            var managedAliasIds = Ids(item.AcceptedRows, "aliases");
+            var sourceNames = item
+                .PublicAliases.Where(alias => managedAliasIds.Contains(alias.Uuid))
+                .Select(alias => alias.Wording)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            sourceNames.Should().NotBeEmpty();
+            sourceNames.Should().NotContain(item.Native.Name);
+            sourceNames.Should().NotContain(item.Native.Alias.Wording);
+            string[] queryNames = withdrawn ? [item.Native.Alias.Wording] : sourceNames;
+            var candidates = new NormalizationCandidateService(db);
+            foreach (var name in queryNames)
+            {
+                // The lookup receives one alias spelling only. The known person UUID
+                // identifies the expected result; it is never supplied as a lookup hint.
+                var snapshot = await candidates.FindPeopleFactsAsync(
+                    new(IdentityMatchingDomain.People, [name], [], MinimumNameSimilarity: .99)
+                );
+                var fact = snapshot.Facts.Single(value => value.Hit.Uuid == item.Native.PersonUuid);
+                fact.Hit.Reasons.Should().Contain("alias");
+                fact.Header.DisplayText.Should().Be(item.Native.Name);
+                fact.AliasMatchingNamesComplete.Should().BeTrue();
+                fact.AcceptedAliasMatchingNames.Should().Contain(name);
+                fact.AliasSupportCount.Should()
+                    .Be(withdrawn ? 0 : Ids(item.AcceptedRows, "support").LongLength);
+                if (withdrawn)
+                {
+                    fact.AcceptedAliasMatchingNames.Should().NotIntersectWith(sourceNames);
+                    fact.Aliases.Select(alias => alias.Provenance.AssertionUuid)
+                        .Should()
+                        .NotIntersectWith(managedAliasIds);
+                    fact.Aliases.Select(alias => alias.Provenance.AssertionUuid)
+                        .Should()
+                        .Contain(item.Native.Alias.Uuid);
+                }
+                else
+                {
+                    fact.Aliases.Select(alias => alias.Provenance.AssertionUuid)
+                        .Should()
+                        .Contain(managedAliasIds);
+                    var owners = item
+                        .AcceptedRows.GetProperty("assignments")
+                        .EnumerateArray()
+                        .SelectMany(assignment =>
+                            new[]
+                            {
+                                assignment.GetProperty("extraction_owner_uuid").GetGuid(),
+                                assignment.GetProperty("source_resolution_owner_uuid").GetGuid(),
+                            }
+                        )
+                        .Distinct();
+                    snapshot
+                        .ReadSet.OwnerObservations.Select(owner => owner.SubjectUuid)
+                        .Should()
+                        .Contain(owners);
+                }
+                snapshot
+                    .Issues.Should()
+                    .NotContain(issue =>
+                        issue.CandidateUuid == item.Native.PersonUuid
+                        && issue.Kind == CandidateFactsIssueKind.InvalidStoredFact
+                        && issue.FactKind == "person_alias_support_proof"
+                    );
+                snapshot
+                    .Complete.Should()
+                    .BeTrue(
+                        "genuine accepted alias support remains readable: {0}",
+                        snapshot.Issues
+                    );
+            }
         }
 
         internal async Task RequireOriginalArtifactsAsync(CapturedCase item)

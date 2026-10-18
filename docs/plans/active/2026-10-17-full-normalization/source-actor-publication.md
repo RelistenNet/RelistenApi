@@ -126,6 +126,20 @@ producer. A withdrawal can publish a stage with no remaining names; independent
 native aliases and their proof remain intact. No migration rewrites historical
 producer versions, UUIDs or evidence to make them current.
 
+`NormalizationCandidateService.FindPeopleFactsAsync` uses the same exact historical
+application profiles when it authenticates certified alias support. An alias-only
+query must still return complete candidate facts for a person supported by those
+publications. The reader retains the original certificate, admission hash, published
+Work, owner, ticket and support checks. An unsupported or contradictory proof
+prevents automatic acceptance. The [accepted-state regression](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-historical-candidates-v1.json)
+checks lookup before a correction and native-alias lookup after withdrawal, using
+an unchanged capture produced by the older writer.
+
+An extractor or model upgrade must verify accepted-state lookup as well as
+correction and replay. Changes to the complete producer fingerprint can require
+another explicitly supported read profile. Do not rewrite old evidence or permit
+new historical publication to preserve that compatibility.
+
 New committed stage headers also retain a certificate version and the
 authenticated admission request hash. The writer records these only after the
 original full validation, in the same transaction as the receipt and Work
