@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -92,7 +93,28 @@ public sealed record CompositionCorrespondenceFacts(
     string QueryBuilderVersion,
     string DecoderVersion,
     IReadOnlyList<CompositionCandidateFacts>? LocalCandidates = null,
-    RepertoireCandidateFacts? LocalRepertoire = null
+    RepertoireCandidateFacts? LocalRepertoire = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionRetainedRecordingInventory? RetainedRecordingInventory = null
+);
+
+/// <summary>Every decoded member and diagnostic from one retained recording representation.</summary>
+public sealed record CompositionRetainedRecording(
+    MusicBrainzRecordingObservation Observation,
+    IReadOnlyList<ProviderDecodeIssue> Issues
+);
+
+/// <summary>
+/// Coverage of the processor's recording hydration readset, including recordings whose target
+/// work was not hydrated. Complete concerns these inputs, never the external search universe.
+/// Missing or malformed retained inputs prevent this inventory from being complete. Unacquired
+/// alternatives remain acquisition coverage issues rather than assertions of external absence.
+/// </summary>
+public sealed record CompositionRetainedRecordingInventory(
+    IReadOnlyList<NormalizationBindingInputReference> ExpectedInputs,
+    IReadOnlyList<CompositionRetainedRecording> Recordings,
+    bool Complete,
+    IReadOnlyList<string> Issues
 );
 
 public enum CompositionCorrespondenceAction

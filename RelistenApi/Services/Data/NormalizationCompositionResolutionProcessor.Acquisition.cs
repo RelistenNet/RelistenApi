@@ -571,7 +571,11 @@ public sealed partial class NormalizationCompositionResolutionProcessor
             CompositionResolutionPolicyEvaluator.ProcessorVersion,
             CompositionResolutionPolicyEvaluator.FactsVersion,
             MusicBrainzCandidateQueryBuilder.Version,
-            NormalizationProviderDecoder.Version
+            NormalizationProviderDecoder.Version,
+            RetainedRecordingInventory: attempt.Preparation.Policy?.Policy.Artifact.FixtureOnly
+            == true
+                ? null
+                : CompositionRetainedRecordingInventoryBuilder.Build(hydration.Lookups, decoded)
         );
     }
 

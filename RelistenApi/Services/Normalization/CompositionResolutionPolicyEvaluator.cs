@@ -7,19 +7,24 @@ using Relisten.Api.Models.Normalization;
 namespace Relisten.Normalization;
 
 /// <summary>
-/// Pure correspondence evaluation, not publication authority. The only implemented rule is a
-/// disposable-fixture classifier demonstrating independently evaluated corroboration without a
-/// source work MBID or complete authorship. It is not a production matching recommendation.
+/// Pure correspondence evaluation, not publication authority. The affirmative production rule
+/// requires a cited title, an accepted catalog performer identity and an explicit recording-to-work
+/// path. Fixture behavior remains separately named; independent qualification and registry
+/// activation are required before either rule can authorize publication.
 /// </summary>
-public sealed class CompositionResolutionPolicyEvaluator
+public sealed partial class CompositionResolutionPolicyEvaluator
 {
     public const string ProcessorVersion = "composition-resolution-processor-v2";
     public const string FactsVersion = "composition-correspondence-facts-v1";
     public const string FixtureRuleId = "fixture-title-performer-recording-work-v1";
 
+    public const string AffirmativeRuleId = "title-accepted-performer-recording-work-v1";
+
     public static bool Supports(CompositionAcceptancePolicyArtifact artifact) =>
-        artifact.FixtureOnly
-        && artifact.RuleId == FixtureRuleId
+        (
+            (artifact.FixtureOnly && artifact.RuleId == FixtureRuleId)
+            || (!artifact.FixtureOnly && artifact.RuleId == AffirmativeRuleId)
+        )
         && artifact.ProcessorVersion == ProcessorVersion
         && artifact.FactsVersion == FactsVersion
         && artifact.QueryBuilderVersion == MusicBrainzCandidateQueryBuilder.Version
@@ -33,7 +38,7 @@ public sealed class CompositionResolutionPolicyEvaluator
         var artifact = policy.Artifact;
         if (
             !Supports(artifact)
-            || !policy.Evaluation.FixtureOnly
+            || policy.Evaluation.FixtureOnly != artifact.FixtureOnly
             || facts.ProcessorVersion != artifact.ProcessorVersion
             || facts.FactsVersion != artifact.FactsVersion
             || facts.QueryBuilderVersion != artifact.QueryBuilderVersion
@@ -50,6 +55,11 @@ public sealed class CompositionResolutionPolicyEvaluator
         )
         {
             return Review(artifact.RuleId, "incomplete_or_inconsistent_local_candidate_pool", []);
+        }
+
+        if (artifact.RuleId == AffirmativeRuleId)
+        {
+            return EvaluateAffirmative(facts, artifact);
         }
 
         var candidates = facts.Candidates.Select(candidate => Compare(facts, candidate)).ToArray();
