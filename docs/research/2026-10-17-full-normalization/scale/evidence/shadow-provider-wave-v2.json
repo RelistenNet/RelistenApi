@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T20:51:15.171474+00:00",
+  "scope": "Frozen retained provider inputs for an explicit new shadow replay; no identity acceptance or current-generation assertion.",
+  "manifest": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-provider-inputs-v2/manifest.json",
+    "bytes": 2017,
+    "sha256": "3b6e62a565557fc3097fda1f2f3a149cb82b80b49738702c9124ba3e69e185f5"
+  },
+  "inputs": {
+    "path": "local-dev/normalization-data/2026-10-18-shadow-provider-inputs-v2/inputs.jsonl",
+    "bytes": 19022238,
+    "sha256": "36478b775147d7cb7a2af8e5f5a8de040d0b4475e18a49c2bc38774210ac41ff"
+  },
+  "musicBrainzInputs": 1860,
+  "additionalOriginalJerryInputs": 1,
+  "musicBrainzResourceCounts": {
+    "recordingLookups": 1318,
+    "workLookups": 126,
+    "recordingSearchPages": 296,
+    "workSearchPages": 120
+  },
+  "retainedRecordingWorkTargetIds": 127,
+  "workTargetsWithoutFullLookup": 1,
+  "acquisitionState": "deadline_reached",
+  "externalUniverseComplete": false,
+  "currentGenerationClaimed": false,
+  "publicationPermitted": false,
+  "verification": "Frozen assembly and independent integrity/readability review, including eight tampering controls. Replay and catalog relationship quality require separate verification."
+}

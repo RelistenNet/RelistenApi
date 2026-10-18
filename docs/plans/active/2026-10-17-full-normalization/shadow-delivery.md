@@ -13,122 +13,117 @@ This execution sequence supersedes the evaluation-first milestone. The [standing
 - [x] 2026-10-18: Alec directed full-catalog shadow delivery, parallel domain integration, larger model jobs and consolidated testing; the plan and standing objective are amended.
 - [x] Complete the retained-sample pass and retain its command, input hashes, method versions and output location.
 - [x] Expose the eight integrated domains in a reader with proposals, native evidence, related records and playback links.
-- [ ] Capture and process the full recording/file population, reconcile provider coverage, and independently audit outputs and systemic failures.
+- [x] Capture the full recording/file population and reconcile it against the earlier inventory.
+- [ ] Process every captured file, reconcile provider coverage, and independently audit outputs and systemic failures.
 - [ ] Rehearse incremental input changes and restart locally, then continue production qualification and backfill preparation.
 
-The current integration step is full raw-population replay. Capture is complete;
-the full replay stopped at its free-space floor. It exposed repeated dictionary
-citations copied from setlist memberships into each matching file. The correction
-retains one actual witness per distinct literal spelling and preserves every
-membership in its original setlist result. A replay with all 16,605 songs, 38,475
-setlists and 50,000 files passed independent ownership, title and citation checks.
-All 575,103 memberships remain intact. See the
+## Current results and remaining work
+
+The full raw capture is complete: 292,523 recordings and 5,064,097 files across
+118 shards. Each shard has its own read-only snapshot. Reconciliation found no
+missing expected rows or UUID/parent-coordinate drift; 21 files were added after
+the earlier metadata inventory. Keep both inventories and their capture times.
+
+The [recording/venue reader](http://alecs-macbook-pro.tail09dbf.ts.net:18765/)
+contains the completed core pass: 292,523 recordings, 216,332 venues, 16,605
+repertoire songs and 38,475 legacy setlists, plus one ordered provider input.
+It exposes 1,242,539 outcomes with no processing failures. These outcomes include
+proposals and unresolved cases; row processing does not establish identity
+accuracy. The reader reports index lag separately from runner progress.
+
+Full file replay stopped at its free-space floor. It also exposed dictionary
+citations copied from repeated setlist memberships into each matching file.
+The correction retains one actual witness per distinct literal spelling;
+every membership stays in its original setlist result. A replay with all 16,605
+songs, 38,475 setlists and 50,000 files passed independent ownership, title and
+citation checks. All 575,103 memberships remain intact. See the
 [dictionary-context receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-dictionary-context-v1.json).
-That completed replay is a bounded verification run; all 5.06 million files still
-need processing with the corrected implementation and sufficient storage.
+The corrected implementation still needs a complete run over all 5.06 million
+files.
 
-The first complete 50,000-recording source range also completed inline normalization:
-150,000 outcomes, no processing failures and all captured show UUID relationships
-retained. See its [receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json).
-The expanded integration checkpoint passed 109 tests. The full file population
-and independent matching audits remain incomplete. Domain quality and model-enrichment work can continue independently over the completed sample.
+### Jerry and Aadam Jacobs
 
-## Completed recording and venue ranges
+The [Jerry/Aadam reader](http://alecs-macbook-pro.tail09dbf.ts.net:18766/)
+processes 701 local recordings and 7,826 files in a separate catalog namespace.
+It includes 348 recordings from six Jerry projects and 299 selected Aadam Jacobs
+recordings across 252 artists. All 35,931 outcomes are indexed. The independent
+audit verified every file's playback and ownership coordinates, all 236
+dictionary songs and 404 unordered memberships. Local numeric IDs must never
+be combined with production IDs.
 
-The latest integrated rehearsal is available in the
-[Jerry/Aadam reader](http://alecs-macbook-pro.tail09dbf.ts.net:18766/).
-It processes 701 local recordings and 7,826 files in a separate catalog namespace,
-including 348 Jerry-project recordings and 299 selected Aadam Jacobs recordings.
-All 35,931 outcomes are indexed. The independent audit verified every file's
-playback and ownership coordinates, all 236 dictionary songs and 404 unordered
-memberships. It also exposed unsupported title-derived identities; the corrected
-run removes 211 such file proposals while retaining known songs, musical
-neighbors and original audio. File cards now show their literal titles.
+The audit exposed unsupported title-derived identities. The corrected run
+removes 211 such file proposals while retaining known songs, supported musical
+segments and original audio. File cards show their literal titles. The one
+ordered Jerry provider page concerns a Grateful Dead performance; it does not
+establish ordered setlist coverage for the Jerry projects or Aadam collection.
 The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
 records exact inputs, method versions, tests, audits and limits.
 
-The native-provider check separately admitted 300 Archive and 150 Phish responses.
-All 450 recording/show bindings and 219,864 native citations verified against the
-full captured source index. Native file facts remain distinct from catalog file
-assignments and ordered setlist passages. The separate global people diagnostic
-indexed all 292,523 recordings and retained every candidate in its selected
-complete pools. Its 14 actor rankings tied: repeated recording witnesses still
-need distinct-person resolution and independent identity evaluation before
-automatic acceptance.
+### Matching and provider evidence
 
-Full file processing and indexing remain incomplete. The approved temporary-bin
-cleanup recovered only 1.61 MiB of actual host capacity. A separate failed-output
-cleanup proposal awaits approval, and measured projections show that proposal
-alone cannot fit the full output and reader above the existing reserve. Obtain
-additional usable storage before committing to the full combined run. Continue
-physical-evidence acquisition, person-identity resolution and qualification
-without claiming these completed rehearsals establish catalog-wide accuracy.
+A native-provider check admitted 300 Archive and 150 Phish responses. All 450
+recording/show bindings and 219,864 native citations verified against the full
+captured source index. Native file facts remain distinct from catalog file
+assignments and ordered setlist passages.
 
-The current integration adds pinned geographic reference data, links external
-setlist accounts to existing show UUIDs where the evidence identifies one show,
-and acquires composition evidence across the repertoire through the existing
-MusicBrainz service. The isolated build and 185 behavior tests passed. These
-changes preserve playback ownership and do not enable production acceptance.
-The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-relationship-enrichment-v1.json)
-records the code, tests, file audit and storage measurements.
+The global people diagnostic indexed all 292,523 recordings and scored every
+candidate in its selected complete pools. Its 14 actor rankings tied: repeated
+recording witnesses still need distinct-person resolution and independent
+identity evaluation before automatic acceptance. The physical-venue and
+composition rules are implemented and tested. Broader physical-location evidence
+and independent qualification remain necessary.
 
-The first 50,000-file pass processed 233,210 outcomes, including the shared song
-dictionary, without a processing failure. Independent reference and citation
-checks found no mismatches. An exposed review of 150 examples found false
-provisional songs from banter descriptions, filenames, set labels and numeric
-annotations. The shared repertoire interpretation now suppresses those labels
-without losing supported neighboring songs or exact dictionary identities.
-Composition and file-content interpretations use the same policy. A second
-real-data replay confirmed the eight reported cases. This exposed review identifies failure classes; it
-does not estimate matching accuracy.
+The MusicBrainz acquisition stopped at its original 45-minute deadline. Its
+plan contains 33,496 commands and remains incomplete. The 1,860 retained responses
+are frozen in provider wave v2 alongside the separately identified original Jerry
+page. They include 1,318 recording lookups and 126
+work lookups. The retained recording relationships name 127 work IDs; one target
+has no full lookup. Search results and unhydrated rivals remain evidence, without
+an accepted catalog assignment. Later responses require a new replay selection.
+The [provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
+pins the exact frozen manifest and input bytes. The current phone reader still
+uses the earlier 535-response MusicBrainz wave.
 
-The raw capture completed all 118 ranges: 5,064,097 files, no missing expected
-rows and no UUID or parent-coordinate drift. The capture includes 21 files added
-since its earlier metadata inventory. Full-population replay is running at
-`local-dev/normalization-data/2026-10-18-shadow-full-population-v2/`, with frozen
-Luna results, geographic data and 535 retained MusicBrainz inputs. The acquisition
-job continues independently; later responses require a new replay selection.
+A separate 2,000-record Luna wave completed in 425 seconds with $0.278385
+accounted in its ledger: 1,952 validated extraction results and 48 unresolved
+responses. The [sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/)
+contains those model interpretations and 2,296 positive credit mentions.
+See the [core/model receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-core-and-luna2000-v1.json).
+Extraction proposals still require identity matching and accuracy evaluation.
 
-Full-file output also needs a storage check. Equivalent stronger-compression
-copies reduced this pass from 46.83 MB to 26.97 MB. New output uses stronger
-gzip compression. The measured compact index projects to about 4.08 GB for the
-file population, so output and a full new reader together do not yet fit above
-the laptop's disk reserve. Keep the existing reader available while completing
-output and resolving reader storage; do not silently omit files from a claimed
-full-population view.
+The latest consolidated normalization checks passed 1,186 tests with 39
+environment-dependent skips; 97 database integration tests passed separately.
+The later title/ordinary-row checks passed 163 tests, and the reader passed 22.
+These suites overlap; their counts are not a distinct-test total. The
+[integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
+pins the exact reports and source versions.
 
-The [full recording/venue reader](http://alecs-macbook-pro.tail09dbf.ts.net:18765/)
-shows the completed 15-range core pass: 292,523 recordings, 216,332 venues,
-16,605 repertoire songs and 38,475 legacy setlists, plus one ordered provider
-input. It produced 1,242,539 outcomes with no processing failures. Audio-file
-capture and normalization remain incomplete. The reader reports any index lag
-separately from completed runner work.
+### Storage and next actions
 
-A 2,000-record Luna wave completed in 425 seconds with $0.278385 accounted in
-its ledger: 1,952 validated extraction results and 48 unresolved responses.
-The [sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) now includes
-those separate model interpretations and 2,296 positive model credit mentions.
-The offline replay processed every sample input without another paid request
-or a processing failure. These are extraction proposals; matching accuracy
-and production acceptance remain separate work.
+The approved temporary-build cleanup recovered only 1.61 MiB of actual host
+capacity. A separate failed-output cleanup proposal awaits approval. Measured
+projections show that proposal alone cannot fit the full output and reader
+above the existing reserve. Obtain additional usable storage before the full
+combined run; keep completed readers and retained evidence available.
 
-The current C# checkpoint passed 121 behavior tests; the compact reader passed
-20 and the capture operator passed 15. See the [combined run receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-core-and-luna2000-v1.json)
-for exact counts and retained execution paths. Physical venue identity,
-cross-artist compositions, native provider coverage and independent relationship
-audits remain incomplete even when a raw range has no processing failures.
+Continue composition replay, physical-location evidence, distinct-person
+resolution and native-provider coverage while storage is resolved. Then process
+and index the complete file population, audit its relationships, and rehearse
+changed-input replay and restart. Automatic production acceptance, full backfill
+and API compatibility still require independent qualification. Earlier bounded
+checks remain in the [inline range receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json)
+and [relationship-enrichment receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-relationship-enrichment-v1.json).
 
-## Run and inspect the completed sample
+## Reproduce the earlier sample
 
-Open the [live shadow reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/).
+Open the [earlier sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/).
 The retained run at `local-dev/normalization-data/2026-10-18-shadow-catalog-v1/`
 contains **258,987 domain outcomes and zero failures**. It processes all 32,593
 recordings, 34,861 files, 17,073 venues, 1,696 repertoire songs and 432 legacy
 setlists in the raw sample, plus one retained Jerry Garcia provider input.
 An input can contribute several domain outcomes. Counts do not represent distinct
-canonical identities or completion of the full catalog. The shared integration
-checkpoint passed 69 tests.
-The checked-in [first-run receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-catalog-first-run-v1.json)
+canonical identities or completion of the full catalog. The checked-in
+[first-run receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-catalog-first-run-v1.json)
 retains the run's population and verification summary.
 
 From the repository root, reproduce the input/evidence settings in a new output
@@ -175,8 +170,9 @@ Use the reader's filters and detail view to inspect these relationships:
 
 The coverage panel separates runner progress from indexed visibility. Provider
 labels preserve unattributed catalog rows and playback hosts; configured artist
-providers alone do not establish importer provenance. Full capture, remaining
-provider/domain evidence and independent relationship audits are still open.
+providers alone do not establish importer provenance. Full-file processing,
+remaining provider/domain evidence and independent relationship audits are still
+open.
 
 ## Execution and ownership
 
@@ -231,4 +227,4 @@ Completed evaluation found format-specific credit gains, people features that ca
 
 ## Outcomes and retrospective
 
-The retained-sample pass and integrated reader are complete. The next population deliverable is raw capture and shadow replay of all recordings and files. Composition evidence, physical venue history, legacy setlist order, importer provenance and independent audits remain active quality work; production acceptance qualification follows those results.
+The retained-sample pass, full raw capture, core recording/venue pass and local Jerry/Aadam rehearsal are complete. The next population deliverable is corrected shadow replay and reader coverage of every captured file. Composition evidence, physical venue history, distinct-person resolution, legacy setlist order, importer provenance and independent audits remain active quality work; production acceptance qualification follows those results.
