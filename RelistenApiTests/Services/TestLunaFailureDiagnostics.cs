@@ -215,7 +215,7 @@ public sealed class TestLunaFailureDiagnostics
         var exactBound = new byte[LunaCreditFailureDiagnostic.MaxResponseBodyBytes];
         exactBound[^1] = 42;
         await cache.FailAsync(
-            claim.AttemptUuid.Value,
+            claim.AttemptUuid!.Value,
             "invalid_response",
             diagnostic: new(LunaCreditFailureStage.ResponseEnvelope, exactBound)
         );
