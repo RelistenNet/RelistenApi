@@ -138,6 +138,10 @@ internal static class LocalTestDatabase
             Migrations.AddSetlistCorrespondenceAuthorizations.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddMusicBrainzAcquisition.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

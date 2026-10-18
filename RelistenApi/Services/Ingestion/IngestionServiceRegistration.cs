@@ -44,6 +44,28 @@ public static class IngestionServiceRegistration
         services.AddScoped<NormalizationRecordingPageStore>();
         services.AddScoped<NormalizationRecordingPageService>();
         services.AddScoped<NormalizationProviderInputService>();
+        services.AddScoped<NormalizationMusicBrainzInputStore>();
+        services
+            .AddOptions<MusicBrainzAcquisitionOptions>()
+            .BindConfiguration("Normalization:MusicBrainz");
+        services
+            .AddHttpClient("normalization-musicbrainz")
+            .RemoveAllLoggers()
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler
+                {
+                    AllowAutoRedirect = false,
+                    UseCookies = false,
+                    AutomaticDecompression = System.Net.DecompressionMethods.None,
+                    MaxResponseHeadersLength = 64,
+                }
+            );
+        services.AddScoped(sp => new NormalizationMusicBrainzInputService(
+            sp.GetRequiredService<IHttpClientFactory>().CreateClient("normalization-musicbrainz"),
+            sp.GetRequiredService<NormalizationMusicBrainzInputStore>(),
+            sp.GetRequiredService<NormalizationEvidenceService>(),
+            sp.GetRequiredService<IOptions<MusicBrainzAcquisitionOptions>>().Value
+        ));
         services.AddScoped<NormalizationPhishInInputService>();
         services.AddSingleton<NormalizationProviderDecoder>();
         services.AddSingleton<RetainedRecordingCreditExtractor>();
