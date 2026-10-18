@@ -11,6 +11,10 @@ pins actual C# export, model fitting and public C# scoring. The
 [experiment guide](../../../../../tools/RelistenNormalization/people-identity-matcher-experiment.md)
 defines commands, input contracts and recovery behavior.
 
+The [source-context follow-on](../people-source-context-comparison-v1/README.md) now
+implements the shared projection and resolves four of these six errors. This page
+retains the initial name-only comparison and its limitations.
+
 ## Inputs and results
 
 Grouping all 168 original development questions before filtering produces 82

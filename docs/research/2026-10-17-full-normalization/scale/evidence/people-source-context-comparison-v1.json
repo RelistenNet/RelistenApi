@@ -1,0 +1,157 @@
+{
+  "state": "completed_real_source_context_people_comparison",
+  "implementation_commit": "843e456",
+  "all_tasks": 168,
+  "identity_questions": 89,
+  "candidate_edges": 158,
+  "group_components": 82,
+  "resolved_draft_edges": 81,
+  "unknown_edges": 77,
+  "mention_contexts": {
+    "all": 246,
+    "matched_actor_anchor": 188,
+    "matched_explicit_alias": 4,
+    "name_only": 48,
+    "unsupported_expression": 6
+  },
+  "matched_context_contact_facts": 0,
+  "matched_context_profile_facts": 0,
+  "training_comparison": {
+    "prior_draft_errors": {
+      "logistic": 6,
+      "boosted_tree": 6
+    },
+    "current_draft_errors": {
+      "logistic": 2,
+      "boosted_tree": 2
+    },
+    "current_errors_are_false_negatives": true,
+    "alias_pairs_corrected": 4,
+    "logistic_draft_mean_log_loss": 0.13731903577270074,
+    "boosted_tree_draft_mean_log_loss": 0.2144252092802708
+  },
+  "tests": {
+    "csharp_passed": 102,
+    "python_passed": 34,
+    "failed": 0
+  },
+  "public_csharp_final_score_parity": {
+    "scored": 155,
+    "unsupported_skips": 3,
+    "maximum_absolute_error": 0.0,
+    "tolerance": 1e-12
+  },
+  "original_name_only_158_comparisons_byte_identical": true,
+  "before_and_after_shared_feature_cleanup_exports_byte_identical": true,
+  "original_labels_unchanged": true,
+  "identity_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "accepted_identity_writes": 0,
+  "provider_requests": 0,
+  "model_api_requests": 0,
+  "limits": [
+    "All model targets remain the original development drafts; the 61 separately adjudicated questions have not entered this comparison.",
+    "Four alias relationships improve name agreement. This cohort has no attached contact/profile facts and does not evaluate those matching signals.",
+    "The remaining two diagnostic errors concern musician-roster aliases outside the current recording-credit grammar.",
+    "True cross-recording positives still cover one Aadam project family; supported cross-recording negatives and independent release evaluation remain required."
+  ],
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/verification/receipt.json",
+      "bytes": 7595,
+      "sha256": "758107d7bc8d114daf700f39198629b54b6eb9a582371809ef2edeb59be14a8f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/runtime/binaries.json",
+      "bytes": 16358,
+      "sha256": "4d22bebe390543b51f5b3315c3c6938410073a277664caf251f6b3053efb3b9f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/csharp-baseline/manifest.json",
+      "bytes": 3846,
+      "sha256": "9613ced0cda68d70c0cd7df16bf316a16ec43a94a56dd9dbef71309af296f361"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/csharp-baseline/baseline.jsonl",
+      "bytes": 307316,
+      "sha256": "714fedfc0f4c79bccf34cc0131e66b2e16aa7b71fc63b3199e6a12347c81972b"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/csharp-baseline/context-diagnostics.jsonl",
+      "bytes": 520941,
+      "sha256": "4573d961543de83812f4d5dd7e292e7aa8c654c6fb4916fabac359909e240aaa"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/logistic-boosted/report.json",
+      "bytes": 10458,
+      "sha256": "3600bff9ca20d70e78fef562307a24aef9c96d75e26ae0c4b1387dea01ce064c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/logistic-boosted/models.json",
+      "bytes": 1741869,
+      "sha256": "61ce361bd77322e67567f52e8995d278b7b5b9350157b166ab699f8e9717207a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/logistic-boosted/predictions.jsonl",
+      "bytes": 375207,
+      "sha256": "c962bad167f547a53e6d68b4b47864b1ab5a542fe6d4b802eb9fb281006ef7dd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/logistic-boosted/inputs.json",
+      "bytes": 17948,
+      "sha256": "13f6fe4bc2f132db68fd8cd338f565594d51a73f0e532ddd855a13200394d542"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/csharp-parity/receipt.json",
+      "bytes": 1831,
+      "sha256": "675438206fc6ed96c8f8ab52d3af5be1b7af7c80935398901eea6097a5ff5f0d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/csharp-parity/scores.jsonl",
+      "bytes": 64530,
+      "sha256": "fa739f3a0779cc60b824031cf422955014147cd75c2a0b08e0ea938e073ac4a9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/score-verification/receipt.json",
+      "bytes": 1596,
+      "sha256": "88005da4b113366dd06e512a3085c7122149f09c1d388ebcf59786b6eb2b448a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/score-verification/verify.py",
+      "bytes": 4854,
+      "sha256": "6d92c7d844eb813af46f3771fefc534d8b511b7d8018d42ec5dfb68f188f7097"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/name-only-replay/manifest.json",
+      "bytes": 3459,
+      "sha256": "544de19c6b42622216eb29046783c13547bac2dd7bf3c0f2135f64e1a08e703f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/name-only-replay/baseline.jsonl",
+      "bytes": 239516,
+      "sha256": "34c81939429f76d99af6b7c8d703fb5417cc41a7dadd5e41578321fc34ac1056"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/parity-tools/binaries.json",
+      "bytes": 1188,
+      "sha256": "1b6bf79790cc0db3809aa2974b7996fa6cbc3bb5b796a49904e287ab478dd99a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/independent-audit/receipt.json",
+      "bytes": 65252,
+      "sha256": "f1c5bdd6954a575ef913a4a77ce7baef626144bc9f24827d6d8082d82ba36335"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/source-context-comparison-v3/independent-audit/audit.py",
+      "bytes": 22290,
+      "sha256": "b3c68a0f4ee970a0ff71f57f51e8458f596de754f6696f46a62f0e5efd0d5c32"
+    }
+  ],
+  "independent_audit": {
+    "file_pins_checked": 205,
+    "selected_original_records": 144,
+    "diagnostic_anchors": 246,
+    "nested_source_citations": 1895,
+    "findings": 0
+  }
+}

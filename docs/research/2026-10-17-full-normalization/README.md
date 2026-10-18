@@ -87,8 +87,12 @@ The [first real people model comparison](training/people-matcher-comparison-v1/R
 compares rules, logistic regression and boosted trees on the original candidate
 pools. Both models miss six explicit aliases absent from their name/artist
 features. The final logistic model matches public C# scores exactly on all 155
-supported comparisons. Next, add source-supported actor relationships and the
-separate adjudicated targets, then repeat the comparison with broader evidence.
+supported comparisons. The [source-context follow-on](training/people-source-context-comparison-v1/README.md)
+now adds four explicit alias relationships and reduces both models' errors from
+six to two on the same 81 resolved drafts. It passes 102 C# and 34 Python checks,
+with exact final C# scoring and unchanged original name-only output. Contact and
+profile agreements remain absent in this cohort; the separately adjudicated
+source-reference questions supply the next development inputs.
 
 The [local MusicBrainz search receipt](scale/evidence/musicbrainz-search-local-v1.json) verifies retained timeout outcomes and explicit retry across four invocations. No successful page was received. Successful live search verification and evaluated catalog-to-work matching remain open; the [correspondence processor](../../plans/active/2026-10-17-full-normalization/composition-resolution.md) is implemented. Unavailable results are not an empty candidate set.
 
