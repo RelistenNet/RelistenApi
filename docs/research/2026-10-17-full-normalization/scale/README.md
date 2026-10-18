@@ -65,3 +65,11 @@ See the [tool guide](../../../../tools/RelistenNormalization/README.md) to repro
 The [blind annotation pack](annotation/README.md) contains 18,628 extraction tasks and 866 candidate entity links selected from this retained capture. Every answer is null. Exact evidence stays in the ignored workspace directory; the committed receipt records hashes, coverage and partitioning. Twelve behavioral tests and an independent rebuild verify the pack. Independent labeling and adjudication remain required.
 
 A separate two-input [Luna connectivity receipt](evidence/luna-connectivity.json) records schema-valid, span-validated real Responses calls costing $0.0001745. Repeating both requests without an API key returned cached results, with the same two durable attempts and unchanged cost. This verifies integration and retry reuse; it supplies no independently judged accuracy or routing result. The broader training, matching and fallback comparison follows the [evaluation strategy](../../../plans/active/2026-10-17-full-normalization/evaluation-strategy.md).
+
+## Local publication rehearsals
+
+The [repertoire rehearsal](repertoire-local-rehearsal.md) publishes 209 imported
+songs and checks compatibility through the API. A separate
+[recording-input preparation](materialization-local-inputs.md) retains a published,
+replayable page of 25 recordings across 17 artists for the setlist and file-content
+consumers. The latter preparation publishes no accepted file contents or setlists.
