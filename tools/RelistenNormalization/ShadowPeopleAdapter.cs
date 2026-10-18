@@ -7,16 +7,16 @@ namespace Relisten.Normalization.Batch;
 
 /// <summary>
 /// Projects quoted recording credits and role-free aliases into shadow people. The global
-/// index retrieves attributed contact/profile accounts; it never turns those nonexclusive
-/// accounts into accepted identities. Every person remains scoped to its original source.
+/// index retrieves explicit names, aliases and attributed contact/profile accounts across
+/// artists. Pair scores and whole-pool decisions remain proposals. Every credited actor
+/// retains its original source ownership; no identity is accepted by this adapter.
 /// </summary>
-public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
+public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.SnakeCaseLower) },
     };
-    private const int MaximumRelatedAccounts = 100;
     private static readonly string[] Domains = ["people", "credits"];
     private static readonly string[] Fields =
     [
@@ -28,16 +28,21 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         "taper_notes",
     ];
     private readonly HashSet<Guid> observedSources = [];
-    private readonly Dictionary<string, Dictionary<string, ActorAccount>> accounts = new();
-    private readonly IdentityCandidateMatcher matcher = new();
-    private readonly Dictionary<string, Dictionary<string, ActorAccount>> names = new();
     private readonly ShadowLunaCreditEvidence? luna;
+    private readonly ShadowPeopleIdentityModel? identityModel;
 
     public ShadowPeopleAdapter() { }
 
-    /// <summary>Loads a completed Luna job pinned to the exact original extraction stream.</summary>
-    public ShadowPeopleAdapter(string? lunaOutputDirectory, string? expectedExtractionSha256)
+    /// <summary>Load optional pinned Luna evidence and an offline trained identity-ranking model.</summary>
+    /// <param name="identityModelPath">Optional &lt;models-path&gt;#sha256=&lt;digest&gt; of the trainer's portable model. Scores provide ranking, never acceptance authority.</param>
+    public ShadowPeopleAdapter(
+        string? lunaOutputDirectory,
+        string? expectedExtractionSha256,
+        string? identityModelPath = null
+    )
     {
+        identityModel =
+            identityModelPath == null ? null : new ShadowPeopleIdentityModel(identityModelPath);
         if (lunaOutputDirectory is null && expectedExtractionSha256 is null)
         {
             return;
@@ -51,7 +56,14 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         luna = new(lunaOutputDirectory, expectedExtractionSha256);
     }
 
-    public string Version => "shadow-people-v2" + (luna is null ? "" : "/luna:" + luna.Identity);
+    public string Version =>
+        "shadow-people-v3/global-retrieval="
+        + PeopleActorProjection.Version
+        + "/"
+        + IdentityCandidateMatcher.PeopleActorFeaturesVersion
+        + (luna is null ? "" : "/luna:" + luna.Identity)
+        + "/model:"
+        + (identityModel?.Identity ?? "none");
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind == "source_sample" ? Domains : [];
@@ -59,8 +71,9 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
     /// <summary>
     /// The runner supplies extraction records as well as raw rows during its first pass.
     /// Raw rows have no resourceUuid and do not add a second copy of an extraction.
-    /// Index entries retain compact semantic facts and one deterministic source witness
-    /// per artist, rather than every repeated description in the catalog.
+    /// Index entries retain compact semantic facts and two deterministic distinct-source
+    /// witnesses per artist. Retrieval chooses one outside the incoming source; repeated
+    /// descriptions cannot expand the pool or hide the representative's counterpart.
     /// </summary>
     public void Observe(JsonElement record)
     {
@@ -98,28 +111,24 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                 )
                 + ":"
                 + extraction.ArtistUuid;
-            signature = (actor.ModelDerived ? "model:" : "local:") + signature;
+            signature =
+                (actor.ModelDerived ? "model:" : "local:")
+                + actor.ProjectionComplete
+                + ":"
+                + signature;
             foreach (var lookup in LookupKeys(actor.Match))
             {
                 Remember(accounts, lookup, signature, actor);
             }
-            if (luna is not null)
+            foreach (var name in actor.Match.Names)
             {
-                foreach (var name in actor.Match.Names)
-                {
-                    Remember(
-                        names,
-                        NormalizedPeopleService.NameKey(name.Wording),
-                        signature,
-                        actor
-                    );
-                }
+                Remember(names, NormalizedPeopleService.NameKey(name.Wording), signature, actor);
             }
         }
     }
 
     private static void Remember(
-        Dictionary<string, Dictionary<string, ActorAccount>> index,
+        Dictionary<string, Dictionary<string, ActorWitnesses>> index,
         string key,
         string signature,
         ActorAccount actor
@@ -130,12 +139,14 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
             bucket = new();
             index.Add(key, bucket);
         }
-        if (
-            !bucket.TryGetValue(signature, out var previous)
-            || StringComparer.Ordinal.Compare(actor.Person.EntityKey, previous.Person.EntityKey) < 0
-        )
+        if (!bucket.TryGetValue(signature, out var witnesses))
         {
-            bucket[signature] = actor;
+            witnesses = new ActorWitnesses(actor);
+            bucket.Add(signature, witnesses);
+        }
+        else
+        {
+            witnesses.Remember(actor);
         }
     }
 
@@ -219,7 +230,20 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         var personKeys = people
             .Select(person => person.EntityKey)
             .Concat(
-                relationships.SelectMany(link => new[] { link.FromEntityKey, link.ToEntityKey })
+                comparisons
+                    .SelectMany(result => result.Decision.CandidateOutcomes)
+                    .Select(candidate => candidate.CandidateEntityKey)
+            )
+            // Shared name keys are retrieval groups, never canonical identity keys.
+            .Concat(
+                actors
+                    .SelectMany(actor => actor.Match.Names)
+                    .Select(name =>
+                        ShadowCatalogIdentity.Key(
+                            "person_name",
+                            NormalizedPeopleService.NameKey(name.Wording)
+                        )
+                    )
             )
             .Distinct()
             .Order(StringComparer.Ordinal)
@@ -238,7 +262,8 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                     relationships,
                     comparisons.Select(result => result.Coverage).ToArray(),
                     observedSources.Contains(input.Uuid),
-                    modelInterpretation
+                    modelInterpretation,
+                    comparisons.Select(result => result.Decision).ToArray()
                 ),
                 new
                 {
@@ -282,79 +307,6 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         ];
     }
 
-    private (
-        IReadOnlyList<ShadowPersonRelationship> Links,
-        ShadowPeopleRelationshipCoverage Coverage
-    ) Relationships(ActorAccount actor)
-    {
-        // Model-only names can retrieve competing source actors, but name agreement
-        // supplies no identity link. Ordinary local namesakes retain their prior behavior.
-        var nameCandidates = actor
-            .Match.Names.Select(name => NormalizedPeopleService.NameKey(name.Wording))
-            .Where(names.ContainsKey)
-            .SelectMany(key => names[key].Values)
-            .Where(candidate => actor.ModelDerived || candidate.ModelDerived);
-        var candidates = LookupKeys(actor.Match)
-            .Where(accounts.ContainsKey)
-            .SelectMany(key => accounts[key].Values)
-            .Concat(nameCandidates)
-            .DistinctBy(candidate => candidate.Person.EntityKey)
-            .Where(candidate => candidate.Person.SourceUuid != actor.Person.SourceUuid)
-            .OrderBy(candidate => candidate.Person.EntityKey, StringComparer.Ordinal)
-            .ToArray();
-
-        // Shared accounts can name hundreds of different actors. Bound comparison output,
-        // retain every local claim, and report the exact omitted comparison count.
-        var links = new List<ShadowPersonRelationship>();
-        foreach (var candidate in candidates.Take(MaximumRelatedAccounts))
-        {
-            var comparison = matcher.ComparePeople(actor.Match, candidate.Match);
-            var sameName = actor.Match.Names.Any(left =>
-                candidate.Match.Names.Any(right =>
-                    NormalizedPeopleService.NameKey(left.Wording)
-                    == NormalizedPeopleService.NameKey(right.Wording)
-                )
-            );
-            var uncertain =
-                actor.Match.ActorContext?.HasAttachmentUncertainty == true
-                || candidate.Match.ActorContext?.HasAttachmentUncertainty == true;
-            var conflict = comparison.Features.Any(feature =>
-                feature.Agreement == IdentityFeatureAgreement.Conflicts
-            );
-            var contactAgrees = comparison.Features.Any(feature =>
-                feature.Name == "actor_contact"
-                && feature.Agreement == IdentityFeatureAgreement.Agrees
-            );
-            var attributedProfileAgrees = ProfileKeys(actor.Match)
-                .Intersect(ProfileKeys(candidate.Match))
-                .Any();
-            var supported =
-                sameName && !uncertain && !conflict && (contactAgrees || attributedProfileAgrees);
-
-            var accountAgrees = comparison.Features.Any(feature =>
-                feature.Name is "actor_contact" or "actor_profile"
-                && feature.Agreement == IdentityFeatureAgreement.Agrees
-            );
-            links.Add(
-                new(
-                    supported ? "proposed_same_person"
-                        : accountAgrees ? "unresolved_shared_account"
-                        : "unresolved_name_match",
-                    actor.Person.EntityKey,
-                    candidate.Person.EntityKey,
-                    candidate.Person.SourceUuid,
-                    candidate.Person.ArtistUuid,
-                    supported ? "name_or_explicit_alias_and_attributed_account"
-                        : accountAgrees ? "nonexclusive_account_requires_review"
-                        : "name_requires_identity_evidence",
-                    comparison.Features,
-                    candidate.Evidence
-                )
-            );
-        }
-        return (links, new(actor.Person.EntityKey, candidates.Length, links.Count));
-    }
-
     private static IEnumerable<ActorAccount> LocalActors(NormalizationBatchExtraction extraction)
     {
         var seen = new HashSet<string>();
@@ -384,7 +336,12 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                 .Concat(facts?.Profiles.SelectMany(profile => profile.Evidence) ?? [])
                 .Distinct()
                 .ToArray();
-            yield return new(person, projected.Record, citations);
+            yield return new(
+                person,
+                projected.Record,
+                citations,
+                ProjectionComplete: projected.Complete
+            );
         }
 
         foreach (var assertion in extraction.SourceActorAliases?.Assertions ?? [])
@@ -404,13 +361,15 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                 extraction.ArtistUuid,
                 assertion.ActorReferenceUuid
             );
+            var projected = PeopleActorProjection.Project(assertion, extraction.ArtistUuid);
             yield return new(
                 person,
-                PeopleActorProjection.Project(assertion, extraction.ArtistUuid).Record,
+                projected.Record,
                 new[] { assertion.NameEvidence, assertion.Context.Statement }
                     .Concat(assertion.Aliases.SelectMany(alias => alias.Evidence))
                     .Distinct()
-                    .ToArray()
+                    .ToArray(),
+                ProjectionComplete: projected.Complete
             );
         }
     }
@@ -438,12 +397,8 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
                 null,
                 "retained_luna_extraction"
             );
-            yield return new(
-                person,
-                PeopleActorProjection.Project(credit, extraction.ArtistUuid).Record,
-                [credit.Evidence],
-                true
-            );
+            var projected = PeopleActorProjection.Project(credit, extraction.ArtistUuid);
+            yield return new(person, projected.Record, [credit.Evidence], true, projected.Complete);
         }
     }
 
@@ -584,7 +539,8 @@ public sealed class ShadowPeopleAdapter : IShadowCatalogAdapter
         ShadowPerson Person,
         PersonMatchRecord Match,
         IReadOnlyList<NormalizationTextEvidence> Evidence,
-        bool ModelDerived = false
+        bool ModelDerived = false,
+        bool ProjectionComplete = true
     );
 }
 
@@ -601,7 +557,7 @@ public sealed record ShadowPerson(
         string? InterpretationBasis = null
 );
 
-/// <summary>Account-supported comparison. Proposed links still require evaluated acceptance policy.</summary>
+/// <summary>Source-actor comparison through the public matcher; name and account links remain unaccepted.</summary>
 public sealed record ShadowPersonRelationship(
     string Kind,
     string FromEntityKey,
@@ -610,7 +566,9 @@ public sealed record ShadowPersonRelationship(
     Guid TargetArtistUuid,
     string Method,
     IReadOnlyList<IdentityMatchingFeature> Features,
-    IReadOnlyList<NormalizationTextEvidence> TargetEvidence
+    IReadOnlyList<NormalizationTextEvidence> TargetEvidence,
+    IdentityCandidateComparison? Comparison = null,
+    bool ModelDerivedEvidence = false
 );
 
 public sealed record ShadowPeopleProposal(
@@ -619,17 +577,23 @@ public sealed record ShadowPeopleProposal(
     IReadOnlyList<ShadowPeopleRelationshipCoverage> RelationshipCoverage,
     bool GlobalIndexIncludesSource,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        ShadowLunaCreditInterpretation? ModelInterpretation = null
+        ShadowLunaCreditInterpretation? ModelInterpretation = null,
+    IReadOnlyList<ShadowPeopleIdentityDecision>? IdentityDecisions = null
 );
 
-/// <summary>Counts semantic account candidates, not accepted identities or all catalog people.</summary>
+/// <summary>Counts compact matching-fact witnesses, not accepted identities or all catalog people.</summary>
 public sealed record ShadowPeopleRelationshipCoverage(
     string PersonEntityKey,
     int AvailableAccounts,
-    int ComparedAccounts
+    int ComparedAccounts,
+    int NameCandidates = 0,
+    int AccountCandidates = 0,
+    int CrossArtistCandidates = 0,
+    int DetailedRelationships = 0
 )
 {
     public bool Complete => AvailableAccounts == ComparedAccounts;
+    public bool DetailedEvidenceComplete => DetailedRelationships == AvailableAccounts;
 }
 
 /// <summary>Quoted role on the native source; no artist attendance or lineage relation is inferred.</summary>

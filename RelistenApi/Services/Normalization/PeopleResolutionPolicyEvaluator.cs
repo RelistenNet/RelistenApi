@@ -353,27 +353,8 @@ public sealed partial class PeopleResolutionPolicyEvaluator
         PeopleAcceptanceLinearScorer scorer
     )
     {
-        bool Agrees(string name) =>
-            pair.Features.Any(feature =>
-                feature.Name == name && feature.Agreement == IdentityFeatureAgreement.Agrees
-            );
-        var reasons = new List<string>();
-        if (!pair.IsCandidate)
-        {
-            reasons.Add("not_a_candidate");
-        }
-        if (pair.Features.Any(feature => feature.Agreement == IdentityFeatureAgreement.Conflicts))
-        {
-            reasons.Add("contradictory_facts");
-        }
-        var value =
-            scorer.Intercept
-            + scorer.NameSimilarityWeight * pair.NameTokenSimilarity
-            + scorer.ExactNameWeight * (Agrees("name") ? 1 : 0)
-            + scorer.ArtistOverlapWeight * (Agrees("artist_context") ? 1 : 0)
-            + scorer.ContactAgreementWeight * (Agrees("actor_contact") ? 1 : 0)
-            + scorer.ProfileAgreementWeight * (Agrees("actor_profile") ? 1 : 0);
-        return new(pair.CandidateUuid!.Value, value, reasons.Count == 0, reasons);
+        var score = ScorePair(pair, scorer);
+        return new(pair.CandidateUuid!.Value, score.Score, score.Eligible, score.RejectionReasons);
     }
 
     private static bool IsSupportedFullName(string name)
