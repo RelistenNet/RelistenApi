@@ -1,0 +1,110 @@
+{
+  "state": "proposal_extraction_checkpoint_and_music_projection_focused_verified_full_suite_predates_fixes",
+  "source_actor_producer": "source-actor-aliases-v2/recording-actor-evidence-v1",
+  "tests": {
+    "full_suite": {
+      "passed": 3052,
+      "skipped": 24,
+      "failed": 1,
+      "duration": "27m24s",
+      "failure": "EveryInputGroupSurvivesConflictOrMoreThanTenThousandAgreeingCorrespondences(5001,False)",
+      "reason": "materialization_capacity_exceeded",
+      "investigation": "Focused reproduction measured 39,790,855 bytes of full producer JSON, including optional people output, against the 33,554,432-byte music consumer bound. The named music projection fixes this without changing the full producer or the limit.",
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/full-suite-checkpoint-alias-v1/normalization-full-suite-v1.trx"
+    },
+    "post_fix_public_extraction_and_music_projection": {
+      "passed": 126,
+      "failed": 0,
+      "skipped": 0,
+      "duration": "7m14s",
+      "large_case_duration": "6m24s",
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/music-projection-v1/source-actor-music-projection-v1.trx",
+      "complete_files": 5001,
+      "complete_correspondences": 10002,
+      "historical_review_and_replay": true,
+      "full_alias_producer_preserved": true
+    },
+    "full_suite_covers_current_fix": false,
+    "broader_recording_and_setlist_consumers": {
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/music-consumers-v1/source-actor-music-consumers-v1.trx",
+      "sha256": "1364cbd307b886d08c9e3b0074a2bcf8c2b513ca006177639af57ab50fad2d2d"
+    },
+    "authenticated_alias_checkpoint_boundaries": {
+      "passed": 98,
+      "failed": 0,
+      "skipped": 0,
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/checkpoint-boundaries-v1/source-actor-checkpoint-boundaries-v1.trx",
+      "sha256": "c1ef3fa9ef1e2b51ac21e45be592b3aca62ede0b2ede507cd5cca290baf70342"
+    },
+    "authenticated_alias_checkpoint_extraction_and_recovery": {
+      "passed": 88,
+      "failed": 0,
+      "skipped": 0,
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/checkpoint-compatibility-v1/source-actor-checkpoint-compatibility-v1.trx",
+      "sha256": "fe0df0a0e799ed70eab33f4e5ba9fc282362181a05b7bb217c14a43e8fe968a6"
+    },
+    "post_checkpoint_guard_large_recording": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "duration": "9m13s",
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/checkpoint-large-materialization-v1/source-actor-checkpoint-large-materialization-v1.trx",
+      "sha256": "b22214d11a134aa8d604651f3133351e0eb572dae43b47af4f05317d36c43d3a",
+      "complete_files": 5001,
+      "complete_correspondences": 10002,
+      "unchanged_retry_and_historical_review_replay": true
+    },
+    "pre_checkpoint_guard_extraction_compatibility_passed": 259
+  },
+  "actual_development_cohort": {
+    "sources": 2184,
+    "artists": 1765,
+    "item_errors": 0,
+    "assertions": 2,
+    "conditional_assertions": 1,
+    "sources_with_unresolved": 37,
+    "identity_accuracy_established": false
+  },
+  "compatibility": {
+    "default_rows_and_manifest_byte_exact_against_historical_tool": true,
+    "all_legacy_proposals_preserved_in_explicit_alias_mode": true,
+    "public_input_decoding_binding_legacy_result_and_optional_absence_byte_exact": true,
+    "credit_and_title_proposal_uuids_unchanged": true,
+    "complete_public_alias_result_byte_exact_after_shared_builder_refactor": true
+  },
+  "cohort_verifier_receipt": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-full-development-output-verification-v6/receipt.json",
+    "sha256": "13a1f69a4564a5a609386e2079f791f181d388e76e04ce12be0b1aeecdf327f7"
+  },
+  "private_execution_packet": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/execution-verification-v3",
+  "accepted_alias_support_implemented": false,
+  "policy_activation": false,
+  "production_writes": false,
+  "recording_envelope": "recording-source-actor-envelope-v2",
+  "capacity_repair": {
+    "cause": "The music reader charged optional people alias output to its producer-byte limit.",
+    "diagnostic_probe_full_producer_pg_json_text_bytes": 39790855,
+    "unchanged_music_consumer_limit_bytes": 33554432,
+    "fix": "Measure and load the same alias-excluded music projection at preparation, publication reauthentication and historical review. Keep the full immutable public producer.",
+    "post_fix_projected_bound_assertion_passed": true,
+    "exact_post_fix_projected_bytes_retained": false
+  },
+  "public_fixture_final_directory": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/public-extraction-checkpoint-guard-v1",
+  "checkpoint_validation": {
+    "boundary": "NormalizationRecordingProposalService.SaveExtractionAsync",
+    "proof": "Exact alias-only replay of original recording, file and selected Local root accounts through the same builder as production extraction.",
+    "historical_all_null_absence_preserved": true,
+    "partial_group_alias_output_rejected": true,
+    "tamper_refusal_before_write_and_recovery_verified": true,
+    "credit_and_title_extraction_replayed": false,
+    "per_file_retained_document_opens_added": false
+  },
+  "private_execution_packet_manifest_sha256": "e16a784d606d29bcd32e7cd45ba81d13ae6eaddd318a4eaebc60fab94cd3a80f",
+  "public_fixture_compatibility_receipt": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/public-extraction-checkpoint-guard-v1/compatibility.json",
+    "sha256": "30d30fa5255add6e5824936abfafedca747d091fd1078d1d00d86519968f2546"
+  }
+}

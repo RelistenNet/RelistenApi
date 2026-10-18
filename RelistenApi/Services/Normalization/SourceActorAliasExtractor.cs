@@ -16,7 +16,7 @@ namespace Relisten.Normalization;
 public sealed class SourceActorAliasExtractor
 {
     public const string Version =
-        "source-actor-aliases-v1/" + RecordingActorEvidenceExtractor.Version;
+        "source-actor-aliases-v2/" + RecordingActorEvidenceExtractor.Version;
 
     // Bound expansion before the shared actor parser runs. Oversized text stays cited and
     // unresolved; absence of extracted aliases is never treated as a complete source clear.
@@ -44,16 +44,59 @@ public sealed class SourceActorAliasExtractor
         Options,
         Timeout
     );
-    private static readonly Regex Dash = new(
-        @"(?<=\s)[-–—]\s*|[-–—](?=\s)",
-        RegexOptions.CultureInvariant,
-        Timeout
-    );
     private static readonly Regex InstrumentSuffix = new(
         @"^(?:[\p{L}]+|\s|[,/&])+$",
         RegexOptions.CultureInvariant,
         Timeout
     );
+    private static readonly Regex InstrumentItems = new(
+        @"\s*(?:[,/&]|\band\b)\s*",
+        Options,
+        Timeout
+    );
+    private static readonly Regex ShortListItem = new(
+        @"^[\p{L}\p{M}]+(?:[ -][\p{L}\p{M}]+){0,2}$",
+        RegexOptions.CultureInvariant,
+        Timeout
+    );
+    private static readonly Regex SectionLabel = new(
+        @"^(?:notes?|recording\s+notes?|source(?:\s+notes?)?|setlists?|tracklists?|credits?"
+            + @"|bonus(?:\s+material)?|encore|(?:set|disc|side)\s+(?:\d+|[ivx]+))$",
+        Options,
+        Timeout
+    );
+    private static readonly Regex ProsePrefix = new(
+        @"^(?:(?:[\p{L}]+ly\s+)?(?:recorded|taped|transferred|mastered|uploaded|mixed)"
+            + @"(?:\s+(?:and|&)\s+(?:[\p{L}]+ly\s+)?(?:recorded|taped|transferred|mastered|uploaded|mixed))*\s+by\b"
+            + @"|(?:tapers?|transferr?ers?|recording\s+engineer|mastering\s+engineer"
+            + @"|matrix\s+builder|uploader|collector|musicians?)\s*:"
+            + @"|recording\s+(?:notes?|details?|information)\b"
+            + @"|notes?\s+(?:on|about|for|from)\b"
+            + @"|(?:after|before|during)\s+(?:the|this|that)\b"
+            + @"|(?:some|more|additional)\s+(?:notes?|information|details?)\b"
+            + @"|(?:this|that|these|those)\b)",
+        Options,
+        Timeout
+    );
+    private static readonly Regex NarrativePrefix = new(
+        @"^(?:(?:the|a|an|our|their)\s+[\p{L}][\p{L}'’ -]{0,80}"
+            + @"|(?:i|we|it|they|he|she))\s+(?:played|plays|performed|performs|sang|sings"
+            + @"|recorded|taped|was|were|is|are|has|have|had)\b",
+        Options,
+        Timeout
+    );
+    private static readonly Regex ContinuationBoundary = new(
+        @"\b(?:notes?|info(?:rmation)?|details?|setlists?|tracklists?|tracks?|songs?|credits?"
+            + @"|bonus|material|encore|recording|recorded|taped|transferred|mastered|uploaded"
+            + @"|played|playing|source|after|before|during|from|by|for|with|without|not|never"
+            + @"|was|were|is|are|on|at|this|that|these|those)\b",
+        Options,
+        Timeout
+    );
+    private static readonly Regex PedalSteel = new(@"^pedal\s+steel$", Options, Timeout);
+    private const int MaximumInstrumentItems = 16;
+    private const int MaximumInstrumentItemLength = 48;
+
     private static readonly HashSet<string> InstrumentWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "vocal",
@@ -192,10 +235,18 @@ public sealed class SourceActorAliasExtractor
                 if (
                     roster != null
                     && !NumberedEntry.IsMatch(line.Text)
-                    && TryActorPhrase(line.Text, out var actorText)
+                    && TryRosterEntry(line.Text, out var actorText, out var instrumentation)
                 )
                 {
-                    if (markerCount > 0)
+                    if (instrumentation == InstrumentationSupport.Partial)
+                    {
+                        // An unfamiliar coordinated item does not end a clearly introduced
+                        // roster. Keep its context, but emit no alias from this uncertain row.
+                        unresolved.Add(
+                            new("unsupported_roster_instrumentation", [], [line.Evidence])
+                        );
+                    }
+                    else if (markerCount > 0)
                     {
                         ReadAliases(
                             line,
@@ -279,34 +330,170 @@ public sealed class SourceActorAliasExtractor
         }
     }
 
-    private static bool TryActorPhrase(string line, out string actorText)
+    private static bool TryRosterEntry(
+        string line,
+        out string actorText,
+        out InstrumentationSupport instrumentation
+    )
     {
-        foreach (Match delimiter in Dash.Matches(line))
+        var delimiter = RosterDelimiter(line);
+        actorText = delimiter < 0 ? "" : line[..delimiter].Trim();
+        instrumentation = InstrumentationSupport.Unsupported;
+        if (
+            delimiter < 0
+            || actorText.Length == 0
+            || SectionLabel.IsMatch(actorText)
+            || ProsePrefix.IsMatch(actorText)
+            || IsNarrativePrefix(actorText)
+        )
         {
-            var actors = line[..delimiter.Index].Trim();
-            var suffix = line[(delimiter.Index + delimiter.Length)..].Trim();
-            if (actors.Length == 0 || !InstrumentSuffix.IsMatch(suffix))
+            return false;
+        }
+
+        // A rejected first structural delimiter cannot be rescued by treating later prose
+        // as an actor name. Dashes inside quoted or parenthesized names are not delimiters.
+        var suffix = line[(delimiter + 1)..].Trim();
+        if (!InstrumentSuffix.IsMatch(suffix))
+        {
+            return false;
+        }
+
+        instrumentation = ClassifyInstrumentation(suffix);
+        return instrumentation == InstrumentationSupport.Supported
+            || instrumentation == InstrumentationSupport.Partial
+                && UsableName(actorText)
+                && !ContinuationBoundary.IsMatch(suffix);
+    }
+
+    private static bool IsNarrativePrefix(string actors)
+    {
+        // Alias wording is literal name evidence. A finite clause before its explicit marker
+        // can establish a prose boundary; words inside the alias cannot establish that boundary.
+        var marker = AliasMarker.Match(actors);
+        var primary = marker.Success ? actors[..marker.Index].TrimEnd() : actors;
+        return NarrativePrefix.IsMatch(primary);
+    }
+
+    private static int RosterDelimiter(string line)
+    {
+        char? quoteEnd = null;
+        var parentheses = 0;
+        for (var index = 0; index < line.Length; index++)
+        {
+            var current = line[index];
+            if (quoteEnd is { } closing)
             {
+                if (
+                    current == closing
+                    && (index == 0 || line[index - 1] != '\\')
+                    && (
+                        closing != '\''
+                        || index + 1 == line.Length
+                        || !char.IsLetter(line[index + 1])
+                    )
+                )
+                {
+                    quoteEnd = null;
+                }
                 continue;
             }
-            var words = Regex
-                .Matches(suffix, @"[\p{L}]+", RegexOptions.CultureInvariant, Timeout)
-                .Select(match => match.Value)
-                .ToArray();
+
             if (
-                words.Any(InstrumentWords.Contains)
-                && words.All(word =>
-                    InstrumentWords.Contains(word) || SuffixModifiers.Contains(word)
+                (current is '"' or '“')
+                || current == '\''
+                    && (index == 0 || char.IsWhiteSpace(line[index - 1]) || line[index - 1] == '(')
+            )
+            {
+                quoteEnd = current == '“' ? '”' : current;
+                continue;
+            }
+            if (current == '(')
+            {
+                parentheses++;
+                continue;
+            }
+            if (current == ')')
+            {
+                if (parentheses == 0)
+                {
+                    return -1;
+                }
+                parentheses--;
+                continue;
+            }
+
+            if (
+                parentheses == 0
+                && (current is '-' or '–' or '—')
+                && (
+                    index > 0 && char.IsWhiteSpace(line[index - 1])
+                    || index + 1 < line.Length && char.IsWhiteSpace(line[index + 1])
                 )
             )
             {
-                actorText = actors;
-                return true;
+                return index;
             }
         }
 
-        actorText = "";
-        return false;
+        return -1;
+    }
+
+    private static InstrumentationSupport ClassifyInstrumentation(string suffix)
+    {
+        var items = InstrumentItems.Split(suffix);
+        if (
+            items.Length > MaximumInstrumentItems
+            || items.Any(item => item.Length == 0 || item.Length > MaximumInstrumentItemLength)
+        )
+        {
+            return InstrumentationSupport.Unsupported;
+        }
+
+        var itemsWithoutInstrument = items.Where(item => !SupportedInstrumentItem(item)).ToArray();
+        if (itemsWithoutInstrument.Length == items.Length)
+        {
+            return InstrumentationSupport.Unsupported;
+        }
+
+        // Lead/backing may be separate comma groups, but cannot anchor a roster alone.
+        var unknownItems = itemsWithoutInstrument.Where(item => !ModifierItem(item)).ToArray();
+        if (unknownItems.Length == 0)
+        {
+            return InstrumentationSupport.Supported;
+        }
+
+        // Continuation needs an explicit coordinated list and a complete known item.
+        // A musical word inside prose, or an unknown standalone item, cannot anchor it.
+        return items.Length > 1 && unknownItems.All(ShortListItem.IsMatch)
+            ? InstrumentationSupport.Partial
+            : InstrumentationSupport.Unsupported;
+    }
+
+    private static bool ModifierItem(string item) =>
+        Regex
+            .Matches(item, @"[\p{L}]+", RegexOptions.CultureInvariant, Timeout)
+            .All(match => SuffixModifiers.Contains(match.Value));
+
+    private static bool SupportedInstrumentItem(string item)
+    {
+        if (PedalSteel.IsMatch(item))
+        {
+            return true;
+        }
+
+        var words = Regex
+            .Matches(item, @"[\p{L}]+", RegexOptions.CultureInvariant, Timeout)
+            .Select(match => match.Value)
+            .ToArray();
+        return words.Any(InstrumentWords.Contains)
+            && words.All(word => InstrumentWords.Contains(word) || SuffixModifiers.Contains(word));
+    }
+
+    private enum InstrumentationSupport
+    {
+        Unsupported,
+        Partial,
+        Supported,
     }
 
     private static bool UsableName(string name) =>

@@ -365,9 +365,11 @@ public sealed partial class NormalizedMusicService
         CancellationToken ct
     )
     {
+        // Historical review consumes the same music view as automatic materialization;
+        // unrelated retained people output must not prevent exact correspondence review.
         var bytes = await c.ExecuteScalarAsync<long?>(
             new CommandDefinition(
-                "SELECT octet_length(batch::text) FROM normalization.recording_processing_attempts WHERE attempt_uuid=@uuid AND source_uuid=@source AND disposition='published'",
+                $"SELECT octet_length(({NormalizationRepertoireResolutionStore.RecordingMusicConsumptionProjectionSql})::text) FROM normalization.recording_processing_attempts WHERE attempt_uuid=@uuid AND source_uuid=@source AND disposition='published'",
                 new { uuid = reference.ExtractionAttemptUuid, source },
                 t,
                 cancellationToken: ct
@@ -381,7 +383,7 @@ public sealed partial class NormalizedMusicService
         }
         var json = await c.QuerySingleAsync<string>(
             new CommandDefinition(
-                "SELECT batch::text FROM normalization.recording_processing_attempts WHERE attempt_uuid=@uuid",
+                $"SELECT ({NormalizationRepertoireResolutionStore.RecordingMusicConsumptionProjectionSql})::text FROM normalization.recording_processing_attempts WHERE attempt_uuid=@uuid",
                 new { uuid = reference.ExtractionAttemptUuid },
                 t,
                 cancellationToken: ct

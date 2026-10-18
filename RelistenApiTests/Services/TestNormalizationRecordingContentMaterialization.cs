@@ -98,6 +98,64 @@ public sealed class TestNormalizationRecordingContentMaterialization
         await AssertSettled(source);
     }
 
+    [Test]
+    public async Task MusicConsumptionKeepsOriginalAliasEvidenceInThePublishedProducer()
+    {
+        var source = await Source("Jam");
+        await Execute(
+            "UPDATE sources SET description=@description WHERE id=@SourceId",
+            new { source.SourceId, description = "Personnel:\nAlice Vale aka Lark - vocals" }
+        );
+        var published = await PublishRecording(source);
+        var proposals = new NormalizationRecordingProposalService(fixture.Db);
+        var original = (await proposals.GetAsync(source.SourceUuid))!;
+        var alias = original
+            .Extraction.SourceActorAliases!.SelectMany(scope => scope.Extraction.Assertions)
+            .Should()
+            .ContainSingle()
+            .Subject;
+        alias.Name.Should().Be("Alice Vale");
+        alias.Aliases.Should().ContainSingle().Which.Wording.Should().Be("Lark");
+        var originalStoredBatch = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                "SELECT batch::text FROM normalization.recording_processing_attempts WHERE attempt_uuid=@AttemptUuid",
+                new { original.AttemptUuid }
+            )
+        );
+
+        var account = await ResolveBatch(published);
+        var completed = await Drain(Guid.NewGuid(), new(account.AttemptUuid));
+
+        completed.Result!.Disposition.Should().Be(MusicMaterializationDisposition.Completed);
+        var consumed = completed.Preparation!.Context!.Consumption.Recording!;
+        consumed.Extraction.SourceActorAliases.Should().BeNull();
+        consumed
+            .Should()
+            .BeEquivalentTo(
+                original with
+                {
+                    Extraction = original.Extraction with { SourceActorAliases = null },
+                }
+            );
+        await AssertHistoricalCorrespondenceReview(source, completed);
+        var publicAfter = (await proposals.GetAsync(source.SourceUuid))!;
+        publicAfter.Should().BeEquivalentTo(original);
+        publicAfter
+            .Extraction.SourceActorAliases!.SelectMany(scope => scope.Extraction.Assertions)
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(alias);
+        var storedAfter = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                "SELECT batch::text FROM normalization.recording_processing_attempts WHERE attempt_uuid=@AttemptUuid",
+                new { original.AttemptUuid }
+            )
+        );
+        storedAfter.Should().Be(originalStoredBatch);
+        (await music.GetTrackContentsAsync(source.TrackUuid)).Should().ContainSingle();
+    }
+
     [TestCase(null)]
     [TestCase("")]
     [TestCase("!!! ???")]
@@ -1311,11 +1369,73 @@ public sealed class TestNormalizationRecordingContentMaterialization
             .ContainSingle()
             .Which.Extraction.Titles.Should()
             .HaveCount(fileCount);
+        var producerBatchJsonTextBytes = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<long>(
+                """
+                SELECT octet_length(batch::text)::bigint
+                FROM normalization.recording_processing_attempts
+                WHERE attempt_uuid=@AttemptUuid AND disposition='published'
+                """,
+                new { batch.AttemptUuid }
+            )
+        );
+        var musicProjectionJsonTextBytes = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<long>(
+                $"""
+                SELECT octet_length(({NormalizationRepertoireResolutionStore.RecordingMusicConsumptionProjectionSql})::text)::bigint
+                FROM normalization.recording_processing_attempts
+                WHERE attempt_uuid=@AttemptUuid AND disposition='published'
+                """,
+                new { batch.AttemptUuid }
+            )
+        );
+        TestContext.Progress.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    Measurement = "complete_recording_music_consumption_projection",
+                    FileCount = fileCount,
+                    ProducerBatchJsonTextBytes = producerBatchJsonTextBytes,
+                    MusicProjectionJsonTextBytes = musicProjectionJsonTextBytes,
+                    ConsumerBatchLimitBytes = NormalizationRepertoireResolutionStore.MaximumCheckpointBytes,
+                }
+            )
+        );
+        musicProjectionJsonTextBytes
+            .Should()
+            .BeLessThanOrEqualTo(
+                NormalizationRepertoireResolutionStore.MaximumCheckpointBytes,
+                "the complete music projection must fit the consuming repertoire contract"
+            );
         var completedAccount = await ResolveBatch(batch.AttemptUuid, maximumPhases: 500);
 
         var completed = await Drain(Guid.NewGuid(), new(completedAccount.AttemptUuid));
 
-        completed.Result!.Disposition.Should().Be(MusicMaterializationDisposition.Completed);
+        string? failureState = null;
+        if (completed.Result!.Disposition != MusicMaterializationDisposition.Completed)
+        {
+            failureState = JsonSerializer.Serialize(
+                new
+                {
+                    completed.AttemptUuid,
+                    completed.CheckpointRevision,
+                    completed.Result,
+                    completed.AdmissionFailureReason,
+                    PreparationSaved = completed.Preparation != null,
+                    TicketSaved = completed.Ticket != null,
+                    PublicationStatus = completed.Receipt?.Status,
+                    ProducerBatchJsonTextBytes = producerBatchJsonTextBytes,
+                    MusicProjectionJsonTextBytes = musicProjectionJsonTextBytes,
+                }
+            );
+        }
+        completed
+            .Result.Disposition.Should()
+            .Be(
+                MusicMaterializationDisposition.Completed,
+                "the complete input groups must materialize; observed public state was {0}",
+                failureState
+            );
         if (conflict)
         {
             completed.Preparation!.Image!.Contents.Should().BeEmpty();
@@ -1344,6 +1464,7 @@ public sealed class TestNormalizationRecordingContentMaterialization
             );
             count.Should().Be(fileCount);
             await AssertSettled(source);
+            await AssertHistoricalCorrespondenceReview(source, completed);
         }
     }
 
@@ -1608,6 +1729,57 @@ public sealed class TestNormalizationRecordingContentMaterialization
             }
         }
         throw new AssertionException("No durable recording content admission was retained.");
+    }
+
+    private async Task AssertHistoricalCorrespondenceReview(
+        CatalogSource source,
+        RecordingContentMaterializationAttempt completed
+    )
+    {
+        var original = (await music.GetTrackContentsAsync(source.TrackUuid)).Single();
+        var claim = completed.Preparation!.Decisions.First(decision =>
+            decision.Source?.TrackUuid == source.TrackUuid
+            && decision.ContentUuid == original.Value.Uuid
+        );
+        var prior =
+            claim.Evaluation?.Disposition == MusicUsageDecisionDisposition.Authorized
+                ? claim.DecisionUuid
+                : claim.ExistingAuthorizationUuid;
+        var owner = (
+            await fixture.Work.GetSubjectAsync(
+                new NormalizationSubjectKey("songs", "recording", source.SourceUuid)
+            )
+        )!;
+        var command = new RecordingContentCorrespondenceReview(
+            Guid.NewGuid(),
+            owner.SubjectUuid,
+            source.SourceUuid,
+            owner.EditorialRevision,
+            [
+                new(
+                    Guid.NewGuid(),
+                    claim.Source,
+                    [new(original.Value.Uuid, original.Revision)],
+                    SetlistAuthorizationAction.Block,
+                    false,
+                    prior,
+                    claim.Evidence
+                ),
+            ],
+            "Review one exact historical correspondence without changing accepted file content"
+        );
+
+        (await music.ReviewRecordingContentCorrespondenceAsync(command, Operator))
+            .Replayed.Should()
+            .BeFalse();
+        (await music.ReviewRecordingContentCorrespondenceAsync(command, Operator))
+            .Replayed.Should()
+            .BeTrue();
+        (await music.GetTrackContentsAsync(source.TrackUuid))
+            .Should()
+            .ContainSingle()
+            .Which.Should()
+            .BeEquivalentTo(original);
     }
 
     private async Task<IReadOnlyList<RecordingContentMaterializationDecision>> Decisions(

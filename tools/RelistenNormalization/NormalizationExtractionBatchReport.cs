@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
@@ -14,7 +15,9 @@ public sealed record NormalizationBatchExtraction(
     IReadOnlyDictionary<string, string?> Inputs,
     NormalizationTrackInputContext? TrackContext,
     RecordingCreditExtraction? CreditExtraction,
-    TrackTitleExtraction? TitleExtraction
+    TrackTitleExtraction? TitleExtraction,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        SourceActorAliasExtraction<NormalizationTextEvidence>? SourceActorAliases = null
 );
 
 /// <summary>Retained context availability; null does not establish playback availability.</summary>

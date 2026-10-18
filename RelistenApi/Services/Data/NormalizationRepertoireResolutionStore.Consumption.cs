@@ -321,6 +321,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 c,
                 t,
                 "recording_processing_attempts",
+                RecordingMusicConsumptionProjectionSql,
                 recording.PublishedProcessingAttemptUuid,
                 budget,
                 ct
@@ -362,6 +363,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 c,
                 t,
                 "setlist_processing_attempts",
+                "batch",
                 setlist.PublishedProcessingAttemptUuid,
                 budget,
                 ct
@@ -451,16 +453,17 @@ public sealed partial class NormalizationRepertoireResolutionStore
         NpgsqlConnection c,
         NpgsqlTransaction t,
         string table,
+        string projection,
         Guid uuid,
         ConsumptionBudget budget,
         CancellationToken ct
     )
     {
-        // Table is selected only by the two typed producer branches above. No candidate
-        // history or private provider body is needed to authenticate the immutable batch.
+        // Table and projection are selected only by the two typed producer branches above.
+        // Size and read exactly the same domain view; the immutable producer stays unchanged.
         var bytes = await c.ExecuteScalarAsync<long?>(
             new CommandDefinition(
-                $"SELECT octet_length(batch::text) FROM normalization.{table} WHERE attempt_uuid=@uuid AND disposition='published'",
+                $"SELECT octet_length(({projection})::text) FROM normalization.{table} WHERE attempt_uuid=@uuid AND disposition='published'",
                 new { uuid },
                 t,
                 cancellationToken: ct
@@ -473,7 +476,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         budget.Add(bytes.Value, MaximumCheckpointBytes);
         var json = await c.QuerySingleAsync<string>(
             new CommandDefinition(
-                $"SELECT batch::text FROM normalization.{table} WHERE attempt_uuid=@uuid",
+                $"SELECT ({projection})::text FROM normalization.{table} WHERE attempt_uuid=@uuid",
                 new { uuid },
                 t,
                 cancellationToken: ct

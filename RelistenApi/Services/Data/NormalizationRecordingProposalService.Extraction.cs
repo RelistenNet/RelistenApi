@@ -181,6 +181,19 @@ public sealed partial class NormalizationRecordingProposalService
                 "Recording proposals require one extraction for every distinct prepared input."
             );
         }
+        var hasSourceActors = groups.Any(group => group.Extraction.SourceActorAliases != null);
+        if (
+            hasSourceActors
+            && (
+                batch.ProcessingVersion != NormalizationRecordingProcessor.Version
+                || groups.Any(group => group.Extraction.SourceActorAliases == null)
+            )
+        )
+        {
+            throw new ArgumentException(
+                "Source actor proposals require the current producer and every prepared input group."
+            );
+        }
         var proposalUuids = groups
             .SelectMany(group =>
                 group
@@ -305,6 +318,7 @@ public sealed partial class NormalizationRecordingProposalService
         var inputs = retained.ToDictionary(input => input.Uuid);
         var decoder = new NormalizationProviderDecoder();
         var roots = new Dictionary<Guid, ProviderDecodeResult>();
+        var sourceActors = new NormalizationRecordingSourceActorAliasBuilder();
         foreach (var group in ExtractionGroups(batch))
         {
             var binding = prepared
@@ -374,6 +388,37 @@ public sealed partial class NormalizationRecordingProposalService
                 selection?.RootAccount,
                 group.Extraction
             );
+            if (group.Extraction.SourceActorAliases is { } actualAliases)
+            {
+                // Exact replay authenticates every nested field, local reference, role-free
+                // relationship and coverage claim. A global citation walk alone cannot prove
+                // which original file or selected root account owns a valid citation.
+                var recording = NormalizationRecordingExtractor.RequireRecording(
+                    input,
+                    decoded,
+                    binding
+                );
+                var expectedAliases = sourceActors
+                    .Build(input, document, recording, ct)
+                    .AsEnumerable();
+                if (selection != null)
+                {
+                    expectedAliases = expectedAliases.Concat(
+                        sourceActors.Build(root!, rootDocument!, selection.RootAccount, ct)
+                    );
+                }
+                if (
+                    !SameJson(
+                        JsonSerializer.Serialize(actualAliases),
+                        JsonSerializer.Serialize(expectedAliases)
+                    )
+                )
+                {
+                    throw new ArgumentException(
+                        "Source actor proposals must reproduce their complete original recording, file and selected root scopes."
+                    );
+                }
+            }
         }
     }
 

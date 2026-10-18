@@ -1,5 +1,6 @@
 using System.Data;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dapper;
 using FluentAssertions;
 using Npgsql;
@@ -28,6 +29,84 @@ public sealed class TestNormalizationCompletedRepertoireConsumption
 
     [OneTimeTearDown]
     public void Stop() => fixture?.Dispose();
+
+    [TestCase("missing", "missing")]
+    [TestCase("null", "null")]
+    [TestCase("empty", "present")]
+    [TestCase("groups", "present")]
+    [TestCase("malformed", "present")]
+    public async Task MusicProducerProjectionPreservesEveryOtherOriginalValue(
+        string additionalShape,
+        string primaryAliases
+    )
+    {
+        var original = JsonNode.Parse(
+            """
+            {
+                "Extraction":{"Titles":[{"ProposalUuid":"first"}],"UnresolvedCredits":[{"Reason":"keep"}],"SourceActorAliases":[{"Name":"retained outside music"}]},
+                "Preparation":{"SourceActorAliases":"unrelated same-named property"},
+                "Ticket":{"PolicyVersion":"original"}
+            }
+            """
+        )!;
+        var expected = JsonNode.Parse(
+            """
+            {
+                "Extraction":{"Titles":[{"ProposalUuid":"first"}],"UnresolvedCredits":[{"Reason":"keep"}]},
+                "Preparation":{"SourceActorAliases":"unrelated same-named property"},
+                "Ticket":{"PolicyVersion":"original"}
+            }
+            """
+        )!;
+        if (primaryAliases == "missing")
+        {
+            original["Extraction"]!.AsObject().Remove("SourceActorAliases");
+        }
+        else if (primaryAliases == "null")
+        {
+            original["Extraction"]!["SourceActorAliases"] = null;
+        }
+        if (additionalShape != "missing")
+        {
+            var additional = additionalShape switch
+            {
+                "null" => "null",
+                "empty" => "[]",
+                "malformed" => "{\"keep_invalid_shape\":true}",
+                _ => """
+                    [
+                        {"InputRevisionUuid":"second","Extraction":{"Titles":[{"ProposalUuid":"second"}],"SourceActorAliases":[{"Name":"original second"}]}},
+                        {"InputRevisionUuid":"third","Extraction":null},
+                        {"InputRevisionUuid":"second","Extraction":{"Titles":[{"ProposalUuid":"second"}],"SourceActorAliases":null}}
+                    ]
+                    """,
+            };
+            var expectedAdditional =
+                additionalShape == "groups"
+                    ? """
+                        [
+                            {"InputRevisionUuid":"second","Extraction":{"Titles":[{"ProposalUuid":"second"}]}},
+                            {"InputRevisionUuid":"third","Extraction":null},
+                            {"InputRevisionUuid":"second","Extraction":{"Titles":[{"ProposalUuid":"second"}]}}
+                        ]
+                        """
+                    : additional;
+            original["AdditionalExtractions"] = JsonNode.Parse(additional);
+            expected["AdditionalExtractions"] = JsonNode.Parse(expectedAdditional);
+        }
+
+        var projected = await fixture.Db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                $"""
+                SELECT ({NormalizationRepertoireResolutionStore.RecordingMusicConsumptionProjectionSql})::text
+                FROM (SELECT CAST(@payload AS jsonb) AS batch) AS original
+                """,
+                new { payload = original.ToJsonString() }
+            )
+        );
+
+        JsonNode.DeepEquals(JsonNode.Parse(projected), expected).Should().BeTrue();
+    }
 
     [TestCase(false)]
     [TestCase(true)]

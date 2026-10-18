@@ -35,6 +35,21 @@ public sealed class RetainedSourceActorAliasExtractor
     )
     {
         using var document = NormalizationRetainedDocument.Open(input, cancellationToken);
+        return Extract(document, fields, cancellationToken);
+    }
+
+    /// <summary>
+    /// Borrows the caller's already validated retained document for one original scope.
+    /// The caller owns disposal; every field and mapped citation still validates against it.
+    /// </summary>
+    internal SourceActorAliasExtraction<NormalizedEvidenceReference> Extract(
+        NormalizationRetainedDocument document,
+        IReadOnlyList<ProviderTextObservation> fields,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Borrowing must observe cancellation at each scope, including empty file text lists.
+        cancellationToken.ThrowIfCancellationRequested();
         var assertions = new List<SourceActorAliasAssertion<NormalizedEvidenceReference>>();
         var unresolved = new List<ActorEvidenceUnresolved<NormalizedEvidenceReference>>();
         var scopes = new List<SourceActorAliasScopeCoverage<NormalizedEvidenceReference>>();

@@ -32,7 +32,9 @@ public sealed record CompletedRepertoireTarget(
 );
 
 /// <summary>
-/// A complete account for downstream consumers, read in their primary repeatable-read transaction.
+/// A complete repertoire/music account, read in the consumer's primary repeatable-read transaction.
+/// Recording excludes optional source-actor aliases from every extraction group; those remain in
+/// the immutable public producer batch. Their absence here grants no people completeness or clear.
 /// Producer clocks remain original. Resolver candidate epochs remain in its audit history and
 /// are deliberately absent from AcceptedReadSet. Historical accepted citations need no raw-head refresh.
 /// </summary>

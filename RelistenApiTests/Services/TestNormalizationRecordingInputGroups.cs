@@ -10,7 +10,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>Checkpoint storage preserves each retained account's facts and exact credit scope.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationRecordingInputGroups
+public sealed partial class TestNormalizationRecordingInputGroups
 {
     private NormalizationDomainFixture fixture = null!;
     private NormalizationEvidenceService evidence = null!;
@@ -362,10 +362,11 @@ public sealed class TestNormalizationRecordingInputGroups
     private async Task<NormalizationRecordingProposalBatch> Batch(
         bool includeLegacy = false,
         bool retainedAssignment = false,
-        bool consumeUuidFence = true
+        bool consumeUuidFence = true,
+        bool sourceActorText = false
     )
     {
-        var context = await CaptureSource(retainedAssignment);
+        var context = await CaptureSource(retainedAssignment, sourceActorText);
         var bindings = new NormalizationCatalogBindingService(fixture.Db);
         var peerInputs = new List<NormalizationRecordingPreparedInput>();
         var peerExtractions = new List<NormalizationRecordingInputExtraction>();
@@ -461,14 +462,18 @@ public sealed class TestNormalizationRecordingInputGroups
         );
     }
 
-    private async Task<CapturedSource> CaptureSource(bool retainedAssignment = false)
+    private async Task<CapturedSource> CaptureSource(
+        bool retainedAssignment = false,
+        bool sourceActorText = false
+    )
     {
         var source = await fixture.Source();
         var key = "input-groups-" + Guid.NewGuid().ToString("N");
         await fixture.Db.WithWriteConnection(c =>
             c.ExecuteAsync(
                 """
-                UPDATE sources SET upstream_identifier=@key,taper='Legacy Taper' WHERE id=@SourceId;
+                UPDATE sources SET upstream_identifier=@key,taper='Legacy Taper',
+                    description=CASE WHEN @sourceActorText THEN 'Personnel:'||chr(10)||'Legacy Robin aka Finch - vocals' ELSE description END WHERE id=@SourceId;
                 UPDATE source_tracks SET mp3_url=@media WHERE uuid=@TrackUuid;
                 INSERT INTO links(source_id,upstream_source_id,for_source,for_reviews,for_ratings,url,label)
                     VALUES(@SourceId,@archiveUpstreamId,true,false,false,@url,'Archive');
@@ -479,6 +484,7 @@ public sealed class TestNormalizationRecordingInputGroups
                     source.TrackUuid,
                     archiveUpstreamId,
                     key,
+                    sourceActorText,
                     media = $"https://archive.org/download/{key}/file.mp3",
                     url = $"https://archive.org/details/{key}",
                 }
@@ -508,7 +514,14 @@ public sealed class TestNormalizationRecordingInputGroups
                 JsonSerializer.SerializeToUtf8Bytes(
                     new
                     {
-                        metadata = new { identifier = key, taper = "Provider Taper" },
+                        metadata = new
+                        {
+                            identifier = key,
+                            taper = "Provider Taper",
+                            description = sourceActorText
+                                ? "Personnel:\nRecording Robin aka Finch - vocals"
+                                : null,
+                        },
                         files = new object[]
                         {
                             new
@@ -518,6 +531,9 @@ public sealed class TestNormalizationRecordingInputGroups
                                 format = "VBR MP3",
                                 taper = "File Recorder",
                                 transferer = "unknown",
+                                description = sourceActorText
+                                    ? "Personnel:\nFile Avery aka Lark - guitar"
+                                    : null,
                             },
                             new
                             {
@@ -525,6 +541,10 @@ public sealed class TestNormalizationRecordingInputGroups
                                 title = "Unplayable",
                                 format = "Flac",
                                 taper = "Unplayable Recorder",
+                                description = sourceActorText
+                                    ? "Personnel:\nFile Morgan aka Jay - bass\nBonus material:\nThe Chimney Tops (aka Pilotdrift)"
+                                    : null,
+                                notes = sourceActorText ? "" : null,
                             },
                         },
                     }

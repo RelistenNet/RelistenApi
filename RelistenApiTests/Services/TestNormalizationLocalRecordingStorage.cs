@@ -10,7 +10,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>Synthetic Local accounts exercise exact retained root membership at durable storage boundaries.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationLocalRecordingStorage
+public sealed partial class TestNormalizationLocalRecordingStorage
 {
     private NormalizationDomainFixture fixture = null!;
     private NormalizationEvidenceService evidence = null!;
@@ -338,7 +338,7 @@ public sealed class TestNormalizationLocalRecordingStorage
         );
     }
 
-    private async Task<LocalContext> Context()
+    private async Task<LocalContext> Context(bool sourceActorText = false)
     {
         var source = await fixture.Source();
         var rootName = "local-storage-" + Guid.NewGuid().ToString("N");
@@ -378,13 +378,17 @@ public sealed class TestNormalizationLocalRecordingStorage
                         {
                             dir = "disc",
                             date = "1970-xx-xx",
-                            taper_notes = "Taped by Selected Root Taper",
+                            taper_notes = sourceActorText
+                                ? "Personnel:\nSelected Robin aka Finch - vocals"
+                                : "Taped by Selected Root Taper",
                         },
                         new
                         {
                             dir = "other",
                             date = "1991-01-01",
-                            taper_notes = "Taped by Other Root Taper",
+                            taper_notes = sourceActorText
+                                ? "Personnel:\nOther Morgan aka Jay - bass"
+                                : "Taped by Other Root Taper",
                         },
                     },
                 },
@@ -394,7 +398,12 @@ public sealed class TestNormalizationLocalRecordingStorage
             NormalizationProviderResources.LocalDirectory(rootName, "disc"),
             new
             {
-                txts = new[] { "Transferred by Directory Transfer" },
+                txts = new[]
+                {
+                    sourceActorText
+                        ? "Personnel:\nDirectory Avery aka Lark - guitar"
+                        : "Transferred by Directory Transfer",
+                },
                 tracks = new[]
                 {
                     new

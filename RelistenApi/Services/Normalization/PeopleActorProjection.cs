@@ -16,6 +16,10 @@ namespace Relisten.Normalization;
 public static class PeopleActorProjection
 {
     public const string Version = "people-actor-projection-v1";
+
+    /// <summary>Producer identity for the additional role-free assertion input contract.</summary>
+    public const string SourceAliasVersion =
+        "people-source-actor-alias-projection-v1/" + SourceActorAliasExtractor.Version;
     private const int MaximumTerms = 16;
 
     public static PeopleActorProjectionResult Project(
@@ -27,20 +31,51 @@ public static class PeopleActorProjection
     public static PeopleActorProjectionResult Project(CreditMention mention, Guid artistUuid) =>
         Project(mention.Name, mention.ActorFacts, artistUuid);
 
+    /// <summary>
+    /// Projects the explicit names in one source assertion for proposal comparison. The
+    /// source's artist supplies catalog context, never attendance or a recording credit.
+    /// This projection supplies no person kind, hints or accepted identity authority.
+    /// </summary>
+    public static PeopleActorProjectionResult Project<TEvidence>(
+        SourceActorAliasAssertion<TEvidence> assertion,
+        Guid artistUuid
+    )
+    {
+        var result = Project(
+            assertion.Name,
+            assertion.Aliases.Select(alias => alias.Wording),
+            null,
+            null,
+            artistUuid
+        );
+        return result with { Complete = result.Complete && assertion.Unresolved.Count == 0 };
+    }
+
     private static PeopleActorProjectionResult Project<TEvidence>(
         string name,
         CreditedActorFacts<TEvidence>? facts,
         Guid artistUuid
+    ) =>
+        Project(
+            name,
+            facts?.Aliases.Select(alias => alias.Wording) ?? [],
+            facts?.Kind?.Kind,
+            Context(facts == null ? [] : new[] { facts }),
+            artistUuid
+        );
+
+    private static PeopleActorProjectionResult Project(
+        string name,
+        IEnumerable<string> aliases,
+        string? kind,
+        PersonActorMatchContext? context,
+        Guid artistUuid
     )
     {
-        var terms = new[] { name }
-            .Concat(facts?.Aliases.Select(alias => alias.Wording) ?? [])
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
+        var terms = new[] { name }.Concat(aliases).Distinct(StringComparer.Ordinal).ToArray();
         var names = terms
             .Where(NormalizationPeopleResolutionDecisionService.CanQueryName)
             .ToArray();
-        var context = Context(facts == null ? [] : new[] { facts });
         var contacts = context?.Contacts ?? [];
         var profiles = context?.Profiles ?? [];
         var complete =
@@ -76,7 +111,7 @@ public static class PeopleActorProjection
             query,
             new(
                 null,
-                facts?.Kind?.Kind,
+                kind,
                 queryNames.Select(name => new IdentityMatchingName(name)).ToArray(),
                 [],
                 new HashSet<Guid> { artistUuid },

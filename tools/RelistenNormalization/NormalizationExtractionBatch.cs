@@ -11,9 +11,10 @@ namespace Relisten.Normalization.Batch;
 /// claims for inspection, never accepted people, repertoire or composition identities.
 /// No host, database, provider client or paid model is started by this runner.
 /// </summary>
-public sealed class NormalizationExtractionBatch
+public sealed class NormalizationExtractionBatch(bool includeSourceActorAliases = false)
 {
     public const string Version = "normalization-extraction-batch-v1";
+    public const string SourceActorVersion = "normalization-source-actor-extraction-batch-v1";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -92,7 +93,7 @@ public sealed class NormalizationExtractionBatch
             bufferSize: 65536,
             leaveOpen: true
         );
-        var run = new ExtractionRun(output);
+        var run = new ExtractionRun(output, includeSourceActorAliases);
         var reachedEnd = false;
         var cancelled = false;
 
@@ -158,9 +159,10 @@ public sealed class NormalizationExtractionBatch
     /// Holds counters and artist scope for one run. Only artist metadata and counters
     /// remain in memory; retained source prose and file titles stream to JSONL.
     /// </summary>
-    private sealed class ExtractionRun(StreamWriter output)
+    private sealed class ExtractionRun(StreamWriter output, bool includeSourceActorAliases)
     {
         private readonly RecordingCreditExtractor credits = new();
+        private readonly SourceActorAliasExtractor sourceActors = new();
         private readonly TrackTitleExtractor titles = new();
         private readonly Dictionary<long, Guid> artists = new();
         private readonly HashSet<(string Kind, Guid Uuid)> seenResources = new();
@@ -318,7 +320,10 @@ public sealed class NormalizationExtractionBatch
                 inputs,
                 context,
                 creditExtraction,
-                titleExtraction
+                titleExtraction,
+                includeSourceActorAliases && kind == "source_sample"
+                    ? sourceActors.Extract(inputs)
+                    : null
             );
             await output.WriteLineAsync(JsonSerializer.Serialize(result, Json));
             outputRecords++;
@@ -419,11 +424,7 @@ public sealed class NormalizationExtractionBatch
                 outputRecords,
                 extractedRecords,
                 errorCount,
-                new Dictionary<string, string>
-                {
-                    ["recording_credits"] = RecordingCreditExtractor.Version,
-                    ["track_title"] = TrackTitleExtractor.Version,
-                },
+                ExtractorVersions(),
                 kinds,
                 unsupported,
                 roles,
@@ -432,11 +433,28 @@ public sealed class NormalizationExtractionBatch
                 errorReasons
             );
 
-        private static string RunIdentity(string inputSha256) =>
+        private IReadOnlyDictionary<string, string> ExtractorVersions()
+        {
+            var versions = new Dictionary<string, string>
+            {
+                ["recording_credits"] = RecordingCreditExtractor.Version,
+                ["track_title"] = TrackTitleExtractor.Version,
+            };
+            if (includeSourceActorAliases)
+            {
+                versions.Add("source_actor_aliases", SourceActorAliasExtractor.Version);
+            }
+
+            return versions;
+        }
+
+        private string RunIdentity(string inputSha256) =>
             Convert.ToHexStringLower(
                 SHA256.HashData(
                     Encoding.UTF8.GetBytes(
-                        $"{Version}\n{inputSha256}\nrecording_credits={RecordingCreditExtractor.Version}\ntrack_title={TrackTitleExtractor.Version}\n"
+                        includeSourceActorAliases
+                            ? $"{SourceActorVersion}\n{inputSha256}\nrecording_credits={RecordingCreditExtractor.Version}\ntrack_title={TrackTitleExtractor.Version}\nsource_actor_aliases={SourceActorAliasExtractor.Version}\n"
+                            : $"{Version}\n{inputSha256}\nrecording_credits={RecordingCreditExtractor.Version}\ntrack_title={TrackTitleExtractor.Version}\n"
                     )
                 )
             );

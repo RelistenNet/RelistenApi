@@ -6,7 +6,10 @@ using Relisten.Normalization.Batch;
 
 if (
     !(
-        (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
+        (
+            args.Length == 3
+            && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
+        )
         || (args.Length == 5 && args[0] == "luna-credits")
         || (
             args.Length == 4
@@ -29,6 +32,7 @@ if (
 {
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
+            + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
@@ -244,11 +248,9 @@ try
         return result.State == "completed" ? 0 : 1;
     }
 
-    var report = await new NormalizationExtractionBatch().RunAsync(
-        args[1],
-        args[2],
-        cancellation.Token
-    );
+    var report = await new NormalizationExtractionBatch(
+        includeSourceActorAliases: args[0] == "extract-source-actors"
+    ).RunAsync(args[1], args[2], cancellation.Token);
     Console.WriteLine(
         JsonSerializer.Serialize(
             new

@@ -17,24 +17,34 @@ public sealed partial class NormalizationRecordingExtractor(
     TrackTitleExtractor titles
 )
 {
-    public const string Version =
+    // Adding a parallel extraction must not change the existing credit/title proposal IDs.
+    // Their identity version still advances if any of their actual producers changes.
+    private const string CreditAndTitleProposalVersion =
         "recording-extraction-v4/"
         + RetainedRecordingCreditExtractor.Version
         + "/"
         + TrackTitleExtractor.Version
         + "/"
         + NormalizationLocalRecordingSelection.Version;
+    public const string Version =
+        "recording-source-actor-envelope-v2/"
+        + CreditAndTitleProposalVersion
+        + "/"
+        + RetainedSourceActorAliasExtractor.Version;
+    private readonly NormalizationRecordingSourceActorAliasBuilder sourceActors = new();
 
     /// <summary>
     /// Extracts recording and file credits even when playback context is incomplete. File
     /// credits keep their retained file origin, including for unbound files. Only positively
     /// bound files receive title proposals. Retain the binding, unresolved credits and decoder
-    /// issues with this result; an unresolved file must not disappear from the batch.
+    /// issues with this result; an unresolved file must not disappear from the batch. Role-free
+    /// aliases retain separate original scopes, including unresolved statements and coverage.
     /// </summary>
     /// <remarks>
-    /// Proposal UUIDs identify evidenced mentions within this extractor version, not people or
-    /// songs. Title segment offsets remain relative to the exact original title string; they
-    /// describe neither audio boundaries nor separate performances.
+    /// Credit/title proposal UUIDs use their unchanged producer identity version rather than
+    /// this expanded envelope's version. Alias UUIDs retain their own producer/input/field
+    /// scope. None identifies a canonical person or song. Title segment offsets remain relative
+    /// to the original title; they describe neither audio times nor separate performances.
     /// </remarks>
     public NormalizationRecordingExtraction Extract(
         NormalizationInputRevision input,
@@ -53,7 +63,7 @@ public sealed partial class NormalizationRecordingExtractor(
             document.ValidateEvidence(issue.Evidence);
         }
 
-        var extractedCredits = ExtractCredits(
+        var textProposals = ExtractTextProposals(
             input,
             recording,
             owner.SourceUuid,
@@ -65,17 +75,19 @@ public sealed partial class NormalizationRecordingExtractor(
             .Select(file => ExtractTitle(input, document, file, owner, cancellationToken))
             .ToArray();
         return new(
-            extractedCredits.Credits,
-            extractedCredits.Unresolved,
+            textProposals.Credits,
+            textProposals.Unresolved,
             titleProposals,
-            decoded.Issues
+            decoded.Issues,
+            textProposals.SourceActors
         );
     }
 
     private (
         NormalizationRecordingCreditProposal[] Credits,
-        RetainedCreditUnresolved[] Unresolved
-    ) ExtractCredits(
+        RetainedCreditUnresolved[] Unresolved,
+        NormalizationRecordingSourceActorAliasScope[] SourceActors
+    ) ExtractTextProposals(
         NormalizationInputRevision input,
         ProviderRecordingObservation recording,
         Guid sourceUuid,
@@ -85,30 +97,14 @@ public sealed partial class NormalizationRecordingExtractor(
     {
         var proposals = new List<NormalizationRecordingCreditProposal>();
         var unresolved = new List<RetainedCreditUnresolved>();
+        var actorScopes = sourceActors.Build(input, document, recording, cancellationToken);
         ExtractScope(recording.Text, null);
         foreach (var file in recording.Files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            // The binder supplies catalog associations. Its observation copy must not replace
-            // the original decoded text, particularly for files without a playable binding.
-            document.ValidateEvidence(file.Origin.Evidence);
-            if (
-                file.Origin.Item != input.Resource
-                && !file.Identities.Any(identity => identity.Identity == file.Origin.Item)
-            )
-            {
-                throw new ArgumentException(
-                    "A file credit origin must belong to this retained recording."
-                );
-            }
-
-            foreach (var field in file.Text)
-            {
-                ValidateFileCreditEvidence(input, document, file.Origin, field.Text.Evidence);
-            }
             ExtractScope(file.Text, file.Origin);
         }
-        return (proposals.ToArray(), unresolved.ToArray());
+        return (proposals.ToArray(), unresolved.ToArray(), actorScopes);
 
         void ExtractScope(
             IReadOnlyList<ProviderTextObservation> fields,
@@ -175,7 +171,7 @@ public sealed partial class NormalizationRecordingExtractor(
         }
     }
 
-    private static ProviderRecordingObservation RequireRecording(
+    internal static ProviderRecordingObservation RequireRecording(
         NormalizationInputRevision input,
         ProviderDecodeResult decoded,
         NormalizationRecordingBindingSnapshot binding
@@ -301,7 +297,7 @@ public sealed partial class NormalizationRecordingExtractor(
             JsonSerializer.SerializeToUtf8Bytes(
                 new
                 {
-                    Version,
+                    Version = CreditAndTitleProposalVersion,
                     kind,
                     mention,
                 }

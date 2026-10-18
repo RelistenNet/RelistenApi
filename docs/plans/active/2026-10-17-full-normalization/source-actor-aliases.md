@@ -1,0 +1,310 @@
+# Publish source actor aliases through the complete people lifecycle
+
+A source can say that a named actor uses another name without claiming that the
+actor taped, transferred or performed on this recording. Preserve that explicit
+alias, resolve it to an existing identity through evaluated matching or trusted
+review, and maintain only the source support that Relisten can still justify.
+A conditional roster such as “some or all of the following” supports the quoted
+alias relationship; it does not establish attendance.
+
+This is required normalization work. Proposal extraction is one implemented
+part. Source assignment, canonical alias support, review, candidate visibility,
+withdrawal and evaluated publication must all be completed before these
+assertions improve automatic matching. An offline export alone does not complete
+the route.
+
+Existing domain storage, retained processing, trusted review and API reads
+already work locally. The main program now needs evaluated automatic matching
+and backfill; this alias lifecycle supplies required evidence and support for
+that step.
+
+This plan orders the work for the implementing engineer and reviewer/operator.
+The [binding contracts](source-actor-alias-contracts.md) specify identities,
+authority, complete read sets and failure behavior. The
+[main normalization plan](README.md) remains the program and rollout plan. Keep
+Progress, Discoveries, Decisions and Outcomes below current as implementation
+advances.
+
+## Progress and current state
+
+As of 2026-10-18:
+
+- [x] Add the shared pure extractor, retained-input mapper and role-free assertion
+  types. Preserve source-local names, relationships, headings and qualifiers.
+- [x] Integrate optional source-actor scopes into recording/file/selected Local
+  root extraction, explicit offline proposal extraction and the shared proposal
+  projection. The integration build has zero errors and 25 existing warnings;
+  16 new cases and 196 compatibility cases pass. Public before/after extraction
+  preserves the legacy credit/title bytes and UUIDs.
+- [x] Correct full-field roster parsing with the complete original field and 37
+  new cases. All 259 extraction, compatibility and checkpoint checks pass. The
+  repeated development run processes all 2,184 recordings from 1,765 artists with
+  zero item errors and retains both known explicit roster aliases. Its default
+  rows and manifest remain byte-exact against the historical tool; the public
+  extraction fixture also preserves credit/title bytes and UUIDs. This verifies
+  the correction and compatibility, not extraction accuracy across the catalog.
+- [x] Keep music consumption independent of optional people output. All 126
+  focused checks pass, including 5,001 files, 10,002 title correspondences,
+  unchanged retry and historical correspondence review/replay. The full public
+  producer retains its aliases; music readers size and load only their named
+  projection under the unchanged 32 MiB bound. Empty field lists add no wrapper;
+  explicitly empty fields retain incomplete evidence. The v2 recording envelope
+  preserves credit/title proposal identities. Final binary compatibility again
+  passes across all 2,184 sources and the public extraction fixture.
+- [x] Authenticate alias output at the public recording checkpoint before any
+  save. All 98 storage/publication and 88 extraction/recovery checks pass,
+  including altered citations, scope membership, local references, coverage,
+  selected Local roots and failure recovery. Alias-only replay shares the
+  production builder; historical all-null absence supplies no clear. The three
+  subsequent large-recording checks pass with all 5,001 files and 10,002
+  mappings, unchanged retry and historical review/replay.
+- [ ] Implement migration, canonical alias write outcomes and compatible current
+  alias readers, including complete distinct names and every support owner.
+- [ ] Implement immutable source assignment decisions, qualified policy
+  applicability and trusted source review.
+- [ ] Implement accepted support publication, complete source-scope replacement,
+  withdrawal, replay, partial progress and stale recovery.
+- [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
+  bounds, and enable it through the normal evaluated rollout process.
+
+No source-actor identity assignment or accepted alias-support lifecycle is
+implemented by the proposal integration. It activates no matching policy.
+
+The corrected producer is `source-actor-aliases-v2/recording-actor-evidence-v1`.
+An unfamiliar coordinated instrument row can retain roster context only under
+the bounded continuation rule. It emits no alias from that row and makes its
+field incomplete. Prose and unsupported section boundaries still end the roster.
+The development run retains two assertions, one with a conditional qualifier,
+and unresolved evidence on 37 sources. These are proposal counts, not people
+counts. Future policy evaluation must cover the v2 attachment rule and incomplete
+fields before these proposals can authorize accepted aliases.
+
+The [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-proposals-v2.json)
+records the executed checks and compatibility evidence. The first parser run is
+retained separately; its missed assertion is not counted as a successful result.
+
+## Current code and terms
+
+An **assertion** is an exact source statement about a local actor and explicit
+alias. An **assignment** is a later accepted link from that assertion to an
+existing canonical identity. **Support** links that assignment to a canonical
+alias row. These are separate records with different authority and lifetimes.
+
+The current code already supplies:
+
+- [Assertion and coverage types](../../../../RelistenApi/Models/Normalization/SourceActorAssertions.cs),
+  the [pure parser](../../../../RelistenApi/Services/Normalization/SourceActorAliasExtractor.cs)
+  and [retained mapper](../../../../RelistenApi/Services/Normalization/RetainedSourceActorAliasExtractor.cs).
+- [Recording proposal scopes](../../../../RelistenApi/Models/Normalization/NormalizationRecordingProcessing.cs)
+  and [recording extraction](../../../../RelistenApi/Services/Normalization/NormalizationRecordingExtractor.cs),
+  including [selected Local root input](../../../../RelistenApi/Services/Normalization/NormalizationRecordingExtractor.Local.cs).
+- The explicit [offline extraction runner](../../../../tools/RelistenNormalization/NormalizationExtractionBatch.cs)
+  and [role-free proposal projection](../../../../RelistenApi/Services/Normalization/PeopleActorProjection.cs).
+
+`NormalizationRecordingSourceActorAliasScope` groups producer version, retained
+input revision/resource, original recording origin, optional file origin and
+`Extraction`. Its containing published extraction supplies publication identity.
+Do not introduce a second proposal UUID. Local assertion/reference UUIDs must
+always travel with their original resource, field, producer and input scope.
+
+The [canonical people writer](../../../../RelistenApi/Services/Data/NormalizedPeopleService.cs),
+[metadata review](../../../../RelistenApi/Services/Data/NormalizedPeopleService.Metadata.cs),
+[people acceptance](people-acceptance.md),
+[credit reconciliation](credit-reconciliation.md) and
+[candidate freshness](candidate-universes.md) provide the existing ownership and
+transaction conventions. Role-free assertions must not be forced through a
+`CreditMention`, recording actor context or placeholder recording role.
+
+## Ordered implementation phases
+
+### 1. Finish and verify proposal extraction
+
+Keep production and development on the same pure parser. The retained mapper
+must validate exact original strings and Unicode spans, including HTML line
+boundaries, repeated provider fields, unresolved files and selected Local root
+coordinates. The explicit `extract-source-actors` mode retains proposals and
+field coverage; existing `extract` and context/view contracts keep their old
+semantics. The accepted source-actor context/view route is later work.
+
+Fix roster continuity using complete original fields, not an isolated alias
+line. A recognized instrument list provides parsing context; it creates no
+participation or role. An unsupported boundary must leave a cited unresolved
+scope rather than silently classify a later alias as absent. Keep song, venue,
+date and unsupported ensemble uses out of the people assertions.
+
+The phase is complete when source-backed full-field regressions, pure/retained
+projection agreement and full-frame extraction receipts pass. Preserve all
+inputs and old outputs. Report assertion yield, unresolved scope coverage and
+item failures with their actual denominators. Yield is not identity accuracy.
+
+### 2. Establish storage authority and compatible alias reads
+
+Add the assignment, managed support, source review-state and unmanaged alias
+support records in one additive migration. Backfill existing alias authority
+before installing the current-alias projection so accepted aliases retain their
+visibility. Keep raw assertion/history rows for metadata review and duplicate
+detection.
+
+Give the canonical alias writer a typed outcome that distinguishes accepted
+rows, exact reusable duplicates, pending writes, protected natural claims and
+conflicting UUIDs. Attach support only to authenticated accepted UUIDs. A null
+`AutomaticMetadataState` result is not sufficient permission. Reviewed rejection
+or retraction must veto the normalized-name claim across new UUIDs and sources.
+
+Move every accepted alias lookup to `current_person_aliases`, including resolved
+aliases, generic candidate retrieval, people facts and direct searches. Add the
+next people facts contract: complete deterministic distinct alias names,
+explicit semantic completeness and all original support owner observations,
+with separately bounded evidence witnesses. Support-only retirement and
+reactivation must advance both People and Compositions candidate universes.
+
+Deploy this read compatibility with source-actor acceptance disabled. The phase
+is complete when migration/backfill, every reader, natural-claim veto and
+support-only visibility/invalidation tests pass. It does not yet authorize new
+source assignments or publication.
+
+### 3. Prepare source identity decisions and trusted review
+
+A dedicated source-actor resolver authenticates the original published
+extraction and exact scoped assertion, then retains the complete candidate pool,
+actual comparisons and proposed action. Use the shared role-free projection.
+Artist ownership is query context, not an accepted artist credit.
+
+Automatic assignment requires independently evaluated policy applicability for
+`source_actor_alias_assertion` and the exact producer/projection/reader versions.
+Existing recording-credit receipts do not authorize this input. This form has
+no identity creation, merge or kind capability. It may assign an existing
+person/group; it does not infer person versus crew from a handle.
+
+Source assignment review uses its own durable CAS revision as well as Work
+editorial revision. Reject-before-assignment must be addressable. Exact review
+carry-forward requires byte-identical original field content and a complete
+coordinate/content mapping; equal names are insufficient. A changed reviewed
+field holds new automatic assignments for review. Source review cannot override
+canonical alias review.
+
+The phase is complete when public services verify exact proposal authentication,
+policy qualification/refusal, ambiguous and reviewed outcomes, redirect/reversal
+and original input/owner freshness. Proposed decisions still write no accepted
+alias support.
+
+### 4. Publish and retire complete source support
+
+Publish one original person owner per immutable stage. The typed writer loads
+the saved stage and checks its exact extraction, decision authority, review
+revision, complete membership and original observations. A caller supplies
+attempt/stage IDs, never accepted assertion JSON or a chosen candidate.
+
+Use one stable person-owned Work contribution:
+`("relisten", "source_actor_aliases", "person_metadata")`. Source-specific support
+remains separately keyed and evidenced. One contributor per recording would
+exhaust Work membership limits; a single producer must support more than 1,000
+source accounts without losing their ownership.
+
+Its configured preparation retains the complete map of active source scopes and
+zero-alias completion tombstones, including predecessor preparation/Work/header
+identity. Each update changes only its prepared scopes. Load the complete map,
+resources and original owner union before admission; never reconstruct the map
+only from active support rows. Locate it by exact admitted headers, not union
+generation, UUID ordering or creation time. Preserve other producers and their
+original observations.
+
+A complete successful scope may retire only its own superseded support.
+Incomplete parsing, missing fields or pending/protected writes preserve prior
+support. Last managed support disappearance hides an alias unless independent
+review or unmanaged authority keeps it visible. Keep the last clear proof and
+its bindings even after the source has no active alias.
+
+Reassignment retires old support before exposing a new identity link. Redirects
+retain the original owner instead of pretending the survivor is a new
+assignment. A crash before commit changes nothing; a crash between person stages
+reports the committed subset. Exact replay returns saved outcomes. Before each
+new person stage, re-evaluate remaining assertions against current pools under
+the same still-active pinned policy and save a new preparation. Never add fresh
+stamps to an admitted old decision.
+
+The phase is complete when genuine service tests cover at least 1,001 distinct
+source supports on one producer contribution, concurrent scope updates,
+independent peer preservation, partial/complete replacement, last-support
+withdrawal, reactivation, review veto, redirects and interrupted multi-person
+reassignment. Complete membership and checkpoint overflow must fail explicitly;
+raising caps or omitting known owners is not a substitute.
+
+### 5. Evaluate and enable the complete route
+
+Add an explicit source-actor-aware context/view contract with its own nullable
+DTO field and producer-scoped references. Keep role-free facts out of
+`CreditedActorFacts`. Production and offline candidate projections must consume
+the same current alias visibility and complete matching aggregate.
+
+Freeze fresh full-frame extraction, candidate routing and view results without
+rewriting older targets or artifacts. Evaluate grammar coverage separately from
+identity assignments. Use independent held-out identities/artists/formats/time,
+local/rule/Luna comparisons and public C# score parity as required by the main
+plan. Expanded source coverage does not inherit old model accuracy or policy
+attestations.
+
+Enable accepted publication only after phases 2–4 and the evaluated route are
+complete. Start with bounded batches, inspect source support/visibility/review
+outcomes, then expand through the current and future artist pipeline. This
+program also has to satisfy complete membership and many-claim checkpoint
+capacity. The [people checkpoint format](checkpoint-format.md) now shares repeated
+original proof within each saved value under the unchanged 32 MiB limit. Source
+assignment and support checkpoints still need their own complete lifecycle and
+capacity verification; they do not inherit that result.
+
+## Validation and retained evidence
+
+From the repository root, build and run the relevant current extraction tests:
+
+```sh
+dotnet build RelistenApi.sln
+./test-local.sh --no-build --filter 'FullyQualifiedName~SourceActor|FullyQualifiedName~RecordingExtraction|FullyQualifiedName~RecordingActorEvidence'
+```
+
+Use the explicit proposal-only batch mode on a retained snapshot, writing a new
+output directory:
+
+```sh
+dotnet run --project tools/RelistenNormalization -- extract-source-actors \
+  /path/to/retained-snapshot.jsonl /path/to/new-output-directory
+```
+
+Retain exact command/source/input/output hashes, producer versions, field-level
+coverage, actual test totals and failures. Verify that tests were selected and
+that every permitted source has an output or explicit item failure. Keep partial
+batch outcomes explicit. These commands perform local verification; they do not
+authorize a live provider call, accepted write or policy activation.
+
+Each later phase needs public success, partial failure and recovery tests from
+its actual entrypoints. Preserve legacy credit/title bytes and UUIDs, recording
+credit counts, participation, public v3 response shapes and existing identity
+UUIDs. Source assertions must never manufacture those facts. Run the repository
+formatter check before each commit.
+
+## Discoveries and decisions
+
+- Full-field structure matters: a rejected earlier suffix can hide a later
+  valid alias. A regression consisting only of the alias line cannot prove
+  roster coverage.
+- Reuse canonical `person_aliases` and metadata review. A second global alias
+  store would split authority and visibility.
+- Keep one stable producer contribution per person. Per-source support and
+  scope proofs remain distinct inside that complete ownership.
+- A source-local explicit alias is useful without proving attendance, global
+  identity or person/crew kind. This input needs no new creation authority.
+- Proposal keys use the existing scope and containing extraction attempt.
+  Adding another proposal UUID would duplicate an existing identity boundary.
+
+## Outcomes and remaining work
+
+The proposal path, full-field grammar correction and development-cohort
+verification pass. Assignment, managed support,
+source review, current alias readers, candidate aggregation and accepted
+publication remain unimplemented. Complete this program as a connected lifecycle;
+do not declare normalization complete after extraction or offline comparison.
+
+Rollback must stop new source-actor acceptance while retaining tables, original
+proof and support history. Keep the current-alias predicate deployed or use a
+rollback binary that understands managed support. Returning to a raw alias-table
+reader would resurrect retired managed aliases.

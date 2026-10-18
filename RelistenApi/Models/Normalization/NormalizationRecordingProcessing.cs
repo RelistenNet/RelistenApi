@@ -88,12 +88,30 @@ public sealed record NormalizationRecordingTitleProposal(
     string? Reason
 );
 
+/// <summary>
+/// Role-free source assertions from one original recording or file account. The assertion
+/// UUID is scoped by this producer, retained input and field; the enclosing attempt supplies
+/// publication identity. FileOrigin is absent for recording-wide/root-account prose, including
+/// when that prose accompanies files with unresolved catalog bindings.
+/// </summary>
+public sealed record NormalizationRecordingSourceActorAliasScope(
+    string ProducerVersion,
+    Guid InputRevisionUuid,
+    NormalizationResourceKey Resource,
+    ProviderObservationOrigin RecordingOrigin,
+    SourceActorAliasExtraction<NormalizedEvidenceReference> Extraction,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ProviderObservationOrigin? FileOrigin = null
+);
+
 /// <summary>Local extraction only. CandidateSearchStatus distinguishes an unrun search from an empty pool.</summary>
 public sealed record NormalizationRecordingExtraction(
     IReadOnlyList<NormalizationRecordingCreditProposal> Credits,
     IReadOnlyList<RetainedCreditUnresolved> UnresolvedCredits,
     IReadOnlyList<NormalizationRecordingTitleProposal> Titles,
-    IReadOnlyList<ProviderDecodeIssue> DecodeIssues
+    IReadOnlyList<ProviderDecodeIssue> DecodeIssues,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<NormalizationRecordingSourceActorAliasScope>? SourceActorAliases = null
 )
 {
     public string CandidateSearchStatus => "not_run";

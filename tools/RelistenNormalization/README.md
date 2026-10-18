@@ -14,6 +14,29 @@ Item errors retain the input in an `extraction_error` row and allow other record
 
 The runner checks the beginning and ending snapshot markers, read-only replica state and artist count. Use the [scale capture validator](../../docs/research/2026-10-17-full-normalization/scale/README.md) to verify population reconciliation and per-artist sample completeness before drawing coverage conclusions. These extraction outputs support inspection and selection of cases for labeling or a later paid fallback run.
 
+## Source actor alias proposals
+
+Use the explicit `extract-source-actors` mode to add separate role-free alias
+assertions beside the existing credit/title output:
+
+```sh
+dotnet run --project tools/RelistenNormalization -- extract-source-actors \
+  /path/to/retained-snapshot.jsonl /path/to/new-source-actor-output
+```
+
+The default `extract` command keeps its existing output contract. This mode uses
+local code and the same pure parser as retained recording extraction; it makes
+no provider, database or model call. Its additional `SourceActorAliases` retain
+original names, alias relationships, conditional headings, unresolved statements
+and field coverage. They assign no canonical identity, recording role, actor
+kind or attendance. Existing recording-credit proposals remain separate.
+
+Use a new output directory and preserve the source-actor producer versions and
+original `Inputs`. Proposal yield is not matching accuracy or publication
+authority. The [source actor alias plan](../../docs/plans/active/2026-10-17-full-normalization/source-actor-aliases.md)
+records current grammar/cohort verification and the required assignment, support,
+review, candidate and withdrawal lifecycle.
+
 ## Bounded Luna credit extraction
 
 The separate `luna-credits` command uses the real Responses API. It compares retained credit inputs from two cohorts: apparent local taper/transferrer successes, and unresolved or missing local credits. Both receive Luna extraction. Stable resource hashes select up to the requested count in each cohort. This diagnostic selection does not estimate catalog accuracy; independently label and judge the outputs before choosing a fallback policy.

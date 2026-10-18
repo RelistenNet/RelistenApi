@@ -29,7 +29,7 @@ public sealed partial class NormalizationRecordingExtractor
         );
         var directory = Extract(directoryInput, directoryDecoded, binding, cancellationToken);
         using var rootDocument = NormalizationRetainedDocument.Open(rootInput, cancellationToken);
-        var rootCredits = ExtractCredits(
+        var rootText = ExtractTextProposals(
             rootInput,
             selected.RootAccount,
             binding.Recording.Value!.SourceUuid,
@@ -37,10 +37,11 @@ public sealed partial class NormalizationRecordingExtractor
             cancellationToken
         );
         return new(
-            [.. directory.Credits, .. rootCredits.Credits],
-            [.. directory.UnresolvedCredits, .. rootCredits.Unresolved],
+            [.. directory.Credits, .. rootText.Credits],
+            [.. directory.UnresolvedCredits, .. rootText.Unresolved],
             directory.Titles,
-            [.. directory.DecodeIssues, .. selected.RootIssues]
+            [.. directory.DecodeIssues, .. selected.RootIssues],
+            [.. directory.SourceActorAliases!, .. rootText.SourceActors]
         );
     }
 }

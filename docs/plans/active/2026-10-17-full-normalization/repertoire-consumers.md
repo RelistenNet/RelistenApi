@@ -53,11 +53,21 @@ The caller supplies its primary read-only repeatable-read transaction. The reade
 
 - The immutable resolver request, lineage and exact source claims; every claim has its immutable decision and correspondence key.
 - The completed registration/current-attempt identity and the exact successful source-acknowledgment Work receipt.
-- The exact compatible recording/setlist extraction batch and original producer ticket.
+- The compatible recording music projection or complete setlist extraction batch, with the exact original producer ticket.
 - Canonical repertoire targets with current accepted revisions, artist scope and retained assertion provenance. Repertoire redirects are followed without rewriting stored association coordinates.
 - The original producer read set, the repertoire acknowledgment's causal publication stamp, and current accepted identity-owner observations needed by the consumer.
 
 Require a completed resolver result, the matching registration current pointer, a successful acknowledgment stage and an actual published Work receipt. Verify full claim coverage and exact joins back to title `ProposalUuid` plus segment coordinates, or setlist `(InputRevisionUuid, AccountIndex, ProposalUuid)`. Claim UUIDs, proposal UUIDs and repertoire UUIDs are not accepted occurrence/content identities. Reject a request whose source kind or known artist scope contradicts the selected consumer. A completed all-negative account may have a null artist and no targets; retain that valid unresolved snapshot for enrollment rather than treating absence as contradictory ownership.
+
+Recording music reads exclude only the optional primary and additional
+`SourceActorAliases` properties before byte preflight and deserialization. The
+same SQL projection runs during initial preparation, publication reauthentication
+and historical correspondence review. Every original input group, binding,
+title, unresolved title, ticket and read-set value remains unchanged. The full
+immutable batch stays available from the recording proposal service for people
+normalization; excluded alias data must never be treated as complete empty
+support. This keeps unrelated people evidence out of the music snapshot budget
+without increasing its limit.
 
 Read current accepted images, their revisions, scope columns, correspondence history and active authorization heads in the same transaction as this reader. Each consumer then freezes one typed preparation containing its complete publication proposal and all allocated UUIDs. Use the existing retained-byte limits before loading source batches and history. Do not reconstruct a replacement image from public DTOs that intentionally mask unavailable references.
 
