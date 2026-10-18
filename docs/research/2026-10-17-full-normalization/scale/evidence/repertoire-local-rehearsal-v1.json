@@ -37,7 +37,8 @@
     "active_inferred_repertoire_policies": 0,
     "production_writes": 0,
     "paid_model_requests": 0,
-    "api_and_private_redis_stopped": true
+    "api_and_private_redis_stopped": true,
+    "executed_binaries_retained_in_immutable_private_copies": 4
   },
   "canonical_visibility": {
     "songs": 209,
@@ -173,19 +174,69 @@
       "sha256": "811a2527a974b437ab8c0dddd04756f454dcd4f74813e6dddd0de83ab0a9655c"
     },
     {
-      "path": "RelistenApi/bin/net10.0/RelistenApi.dll",
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/receipt.json",
+      "bytes": 4913,
+      "sha256": "87616e1f2eb06d1b7afdb57d7749cb62301a206b95222883c2606911bf721614"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/api/RelistenApi.dll",
       "bytes": 8197632,
       "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
     },
     {
-      "path": "RelistenIngestionWorker/bin/Debug/net10.0/RelistenApi.dll",
-      "bytes": 8197632,
-      "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/api/RelistenApi.deps.json",
+      "bytes": 188872,
+      "sha256": "7e0937992e44af55b42e5cca5c05b9ff354aba72287ff0ce4e665bfa78ffc291"
     },
     {
-      "path": "RelistenApiTests/bin/Debug/net10.0/RelistenApi.dll",
-      "bytes": 8197632,
-      "sha256": "d61e746613427c94f786bbf779a0f575035ce05559825c7b9abf428c4b035e2c"
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/api/RelistenApi.runtimeconfig.json",
+      "bytes": 401,
+      "sha256": "2854c873c21edc9fa7c2056f9d4744054aeb11f009d271702daa7794b74e895f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/worker/RelistenIngestionWorker.dll",
+      "bytes": 75264,
+      "sha256": "f680f9798737710d5eaaaaf3e7f79132cc094484bbc93999d594eb9a81a4d253"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/worker/RelistenIngestionWorker.deps.json",
+      "bytes": 80301,
+      "sha256": "4332bbc57cb3887e53c356b01bfc37946d280ba9e91d80d75fb78c4aa29348dd"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/worker/RelistenIngestionWorker.runtimeconfig.json",
+      "bytes": 369,
+      "sha256": "dd72603f49fc74ad956017904a955b25d7043d65291c0c7d033a2064e141622a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/tests/RelistenApiTests.dll",
+      "bytes": 7784448,
+      "sha256": "75c791637ca05bc7b6c7fae0fb46ee3654b2ddf174fd331b1eca53afd12a2731"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/tests/RelistenApiTests.deps.json",
+      "bytes": 107893,
+      "sha256": "dd3fb54af2e722810a9fa5b7d39f8842d2876126c0f103774c58894fb7523c16"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/tests/RelistenApiTests.runtimeconfig.json",
+      "bytes": 416,
+      "sha256": "4761a312947a31a30aec259d9ee6f10407d89806d812cd102f3b3aec250dc8b4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/capture/CaptureDictionaries.dll",
+      "bytes": 19968,
+      "sha256": "03205e08831561be16646039698ff9faa6d5547fafebff9cbff0ed3871fc7009"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/capture/CaptureDictionaries.deps.json",
+      "bytes": 80289,
+      "sha256": "00e8fe9ce2915d1c96d2fe52e7a592ce225c421992e8d8a4684a779718f6125c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-rehearsal-v4/executables/capture/CaptureDictionaries.runtimeconfig.json",
+      "bytes": 369,
+      "sha256": "dd72603f49fc74ad956017904a955b25d7043d65291c0c7d033a2064e141622a"
     }
   ],
   "limits": [

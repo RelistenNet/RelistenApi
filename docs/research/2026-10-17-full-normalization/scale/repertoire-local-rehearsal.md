@@ -80,6 +80,12 @@ per-invocation output, HTTP responses and retry receipts. The compact receipt
 links their byte counts and SHA-256 hashes. Original recording prose and full
 response bodies stay in ignored storage.
 
+The `executables/` directory retains the four executed assemblies and their
+dependency and runtime manifests. Its receipt records each original execution
+path and the saved file's hash, so later builds can replace `bin/` output without
+invalidating this evidence. Package assemblies remain in the normal dependency
+cache; these copies are not a standalone runtime distribution.
+
 The copy uses a read-only `pg_dump` and a restore into a new database, following
 the [Timescale logical restore procedure](https://www.tigerdata.com/docs/deploy/self-hosted/backup-and-restore/logical-backup).
 Migration 51 runs through the actual worker `--migrate` command. The capture
