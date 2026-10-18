@@ -33,48 +33,17 @@ public sealed partial class NormalizationWorkService
         IReadOnlyList<NormalizationInputContributionRevision>? expectedContributionRevisions = null
     )
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
-        if (contributions.Count is < 1 or > 1000)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(contributions),
-                "Prepare between 1 and 1000 contributors."
-            );
-        }
-        var prepared = contributions
-            .Select(PrepareReplacement)
-            .OrderBy(entry => entry.Replacement.Contributor.Provider, StringComparer.Ordinal)
-            .ThenBy(entry => entry.Replacement.Contributor.ResourceType, StringComparer.Ordinal)
-            .ThenBy(entry => entry.Replacement.Contributor.ProviderKey, StringComparer.Ordinal)
-            .ToArray();
-        if (
-            prepared.Select(entry => entry.Replacement.Contributor).Distinct().Count()
-            != prepared.Length
-        )
-        {
-            throw new ArgumentException(
-                "A batch replaces each contributor exactly once.",
-                nameof(contributions)
-            );
-        }
-        var expected = MergePreparedExpectations(prepared);
-        var membership =
-            expectedContributionRevisions == null
-                ? null
-                : NormalizeContributionRevisions(expectedContributionRevisions);
-        var requestHash = Hash(
-            JsonSerializer.SerializeToElement(
-                new
-                {
-                    mode = "contributed_inputs_batch_v1",
-                    subject,
-                    policyVersion,
-                    contributions = prepared,
-                    expectedConfigurationGeneration,
-                    expectedContributionRevisions = membership,
-                }
-            )
+        var preparedRequest = PrepareContributedBatchRequest(
+            subject,
+            policyVersion,
+            contributions,
+            expectedConfigurationGeneration,
+            expectedContributionRevisions
         );
+        var prepared = preparedRequest.Replacements;
+        var expected = preparedRequest.Expectations;
+        var membership = preparedRequest.Membership;
+        var requestHash = preparedRequest.RequestHash;
         return InTransaction(
             async (connection, transaction) =>
             {
@@ -125,6 +94,88 @@ public sealed partial class NormalizationWorkService
             cancellationToken
         );
     }
+
+    /// <summary>
+    /// Authenticates the original contributed admission protocol without writing or refreshing
+    /// Work. Domain recovery must not infer contributor ownership from an ordinary run whose
+    /// ticket happens to contain the same facts. Admission and recovery share this one encoder.
+    /// </summary>
+    internal static bool MatchesContributedBatchRequest(
+        string requestHash,
+        NormalizationSubjectKey subject,
+        string policyVersion,
+        IReadOnlyList<NormalizationPreparedInputContribution> contributions,
+        long? expectedConfigurationGeneration,
+        IReadOnlyList<NormalizationInputContributionRevision>? expectedContributionRevisions
+    ) =>
+        requestHash
+        == PrepareContributedBatchRequest(
+            subject,
+            policyVersion,
+            contributions,
+            expectedConfigurationGeneration,
+            expectedContributionRevisions
+        ).RequestHash;
+
+    private static PreparedContributedBatchRequest PrepareContributedBatchRequest(
+        NormalizationSubjectKey subject,
+        string policyVersion,
+        IReadOnlyList<NormalizationPreparedInputContribution> contributions,
+        long? expectedConfigurationGeneration,
+        IReadOnlyList<NormalizationInputContributionRevision>? expectedContributionRevisions
+    )
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
+        if (contributions.Count is < 1 or > 1000)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(contributions),
+                "Prepare between 1 and 1000 contributors."
+            );
+        }
+        var prepared = contributions
+            .Select(PrepareReplacement)
+            .OrderBy(entry => entry.Replacement.Contributor.Provider, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Replacement.Contributor.ResourceType, StringComparer.Ordinal)
+            .ThenBy(entry => entry.Replacement.Contributor.ProviderKey, StringComparer.Ordinal)
+            .ToArray();
+        if (
+            prepared.Select(entry => entry.Replacement.Contributor).Distinct().Count()
+            != prepared.Length
+        )
+        {
+            throw new ArgumentException(
+                "A batch replaces each contributor exactly once.",
+                nameof(contributions)
+            );
+        }
+        var expected = MergePreparedExpectations(prepared);
+        var membership =
+            expectedContributionRevisions == null
+                ? null
+                : NormalizeContributionRevisions(expectedContributionRevisions);
+        var requestHash = Hash(
+            JsonSerializer.SerializeToElement(
+                new
+                {
+                    mode = "contributed_inputs_batch_v1",
+                    subject,
+                    policyVersion,
+                    contributions = prepared,
+                    expectedConfigurationGeneration,
+                    expectedContributionRevisions = membership,
+                }
+            )
+        );
+        return new(prepared, expected, membership, requestHash);
+    }
+
+    private sealed record PreparedContributedBatchRequest(
+        PreparedContributionReplacement[] Replacements,
+        PreparedContributionExpectations Expectations,
+        NormalizationInputContributionRevision[]? Membership,
+        string RequestHash
+    );
 
     private static NormalizationInputContributionRevision[] NormalizeContributionRevisions(
         IEnumerable<NormalizationInputContributionRevision> revisions

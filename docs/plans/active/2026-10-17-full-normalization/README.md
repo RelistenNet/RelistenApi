@@ -19,7 +19,7 @@ keep original evidence separate from current observations. Source matching and
 publication must supply these preconditions before automatic acceptance can be
 enabled.
 
-Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source identity proposals and trusted review now pass 208 focused checks, two positive-review input round-trip checks and a nonempty migration-56 upgrade. Configuration recovery still needs authenticated contributed-request provenance; accepted support publication remains unimplemented. No policy is active.
+Source actor alias extraction retains explicit aliases and conditional performer-roster headings without creating recording credits or attendance claims. Migration 53 now adds alias authority storage and current alias readers, preserving existing reviewed and append-style assertions. All 81 focused checks pass, including a nonempty schema-52-to-53 upgrade. Candidate retrieval limits distinct resolved people, so repeated aliases cannot hide a rival. Six warm synthetic SQL probes pass; they measure local query execution, not production cost or full-service latency. The [source-actor plan](source-actor-aliases.md) and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json) explain the bounds and remaining work. Source identity proposals and trusted review now pass 208 focused checks, two positive-review input round-trip checks and a nonempty migration-56 upgrade. Configuration recovery now authenticates the actual contributed Work request, with 73 focused Work/recovery checks passing; accepted support publication remains unimplemented. No policy is active.
 
 Canonical alias writes now respect reviewed claims across all identities joined
 by current merges, while preserving original alias ownership and merge reversal.
@@ -32,8 +32,9 @@ accepted source publication.
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
 aliases or create identities. All 106 focused policy and 160 people regression
-checks pass. The source resolver and publisher still need to authenticate saved
-decisions and original observations; no source policy is active. The
+checks pass. The source resolver authenticates saved decisions and original
+observations. Accepted support publication remains required; no source policy is
+active. The
 [source contracts](source-actor-alias-contracts.md#evaluated-source-capability-implemented)
 explain qualification, shared snapshot reads and rollback.
 

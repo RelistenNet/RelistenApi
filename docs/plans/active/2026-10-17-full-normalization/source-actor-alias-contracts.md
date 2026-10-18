@@ -284,6 +284,21 @@ membership, reviews, policy and candidate facts. Preparation is immutable. New
 Work admission pins the original input generations, including revision
 round-trips; replay cannot refresh an old interpretation with today's stamps.
 
+Recovery authenticates the actual contributed Work request as well as the source
+owner, policy, complete ticket and admitted contributor revision vector. Matching
+headers alone cannot prove that the source resolver installed those bindings:
+ordinary Work can retain them. Admission and recovery share Work's canonical
+request encoder; the internal comparison opens no transaction and writes
+nothing. Multiple authenticated matches refuse ownership rather than selecting
+the latest attempt. The caller still checks the complete binding allocation.
+
+This requires a small shared Work refactor beyond the original domain-only
+change. Duplicating its hash construction would create two definitions of
+admission identity. Requiring a saved proposal batch would strand configuration
+admitted before cancellation or checkpoint-capacity refusal. Recovery therefore
+authenticates the original admission even when no batch was saved, without
+changing request bytes, replay hashes, lock order, schema or admission behavior.
+
 The source consumption projection omits only unrelated credit and title output.
 It preserves complete preparations, tickets, groups, alias scopes and decode
 issues, and checks its PostgreSQL text size before transfer. The full public

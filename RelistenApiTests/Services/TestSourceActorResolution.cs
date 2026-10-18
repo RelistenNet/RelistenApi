@@ -12,7 +12,7 @@ namespace RelistenApiTests.Services;
 
 /// <summary>Published extraction IDs feed durable role-free proposals without accepted identity changes.</summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestSourceActorResolution
+public sealed partial class TestSourceActorResolution
 {
     private const string Operator = "source-resolution-fixture-operator";
     private NormalizationDomainFixture fixture = null!;

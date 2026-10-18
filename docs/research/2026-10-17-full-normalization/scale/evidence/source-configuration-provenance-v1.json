@@ -1,0 +1,86 @@
+{
+  "version": "source-configuration-provenance-v1",
+  "state": "verified",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-configuration-provenance-v1/execution-verification-v1/manifest.json",
+    "sha256": "4bd348bbc770d07149d6377d193bcdbdd69578520330de747611eb26c1f6ca02"
+  },
+  "testRuns": [
+    {
+      "run": "source-configuration-provenance-baseline-v1",
+      "counters": {
+        "total": "4",
+        "executed": "4",
+        "passed": "3",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-configuration-provenance-fixed-v1",
+      "counters": {
+        "total": "73",
+        "executed": "73",
+        "passed": "73",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "source-configuration-provenance-regression-v1",
+      "counters": {
+        "total": "215",
+        "executed": "215",
+        "passed": "215",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "behavior": [
+    "Ordinary Work with identical facts and a reused resolver attempt UUID cannot prove source configuration ownership.",
+    "Actual contributed admission is authenticated through the same canonical encoder used for admission, with complete ticket/readset, owner, policy and contributor allocation.",
+    "Exact recovery and new extraction recognize genuine admission before any proposal checkpoint exists.",
+    "Trusted source review advances editorial clocks without losing genuine input allocation; historical evidence and original human receipts stay unchanged.",
+    "Historical request hashes and contributed replay remain compatible; no schema, version, lock-order or admission behavior changes."
+  ],
+  "review": "Fresh actual MAIN correctness and separate readability/code-simplifier review found no issues.",
+  "remaining": [
+    "Accepted source support publication and merged-alias visibility lifecycle.",
+    "Full-suite run, accuracy qualification, catalog cost, backfill and rollout.",
+    "No active source matching policy, production writes or deployment."
+  ]
+}

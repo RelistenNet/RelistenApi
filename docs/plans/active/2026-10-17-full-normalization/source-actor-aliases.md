@@ -87,10 +87,15 @@ As of 2026-10-18:
   All 208 focused checks pass, followed by two positive-review input round-trip
   checks and a nonempty 55-to-56 upgrade. These services preserve exact original
   evidence and create no accepted canonical support or recording credits.
-- [ ] Authenticate configuration recovery against the actual contributed Work
-  request. Matching revision headers alone cannot establish which protocol
-  installed the bindings; recovery must refuse unrelated Work admissions while
-  preserving retries after admission but before checkpoint storage.
+- [x] Authenticate configuration recovery against the actual contributed Work
+  request. The unrelated-admission regression fails on the earlier reader and
+  passes after correction, alongside 73 focused Work/recovery checks and 215
+  source, policy and review checks. Genuine admission before checkpoint storage
+  supports both exact resume and a new extraction. Review can advance editorial
+  clocks without losing ownership of the complete contributor allocation.
+  Original proof remains unchanged. The [verification
+  receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-configuration-provenance-v1.json)
+  retains the earlier failing behavior and corrected runs.
 - [ ] Implement accepted support publication, complete source-scope replacement,
   withdrawal, replay, partial progress and stale recovery.
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
@@ -100,8 +105,9 @@ Phase 2 adds storage and read compatibility: migration 53, typed ordinary alias
 outcomes, current visibility and `people-candidate-facts-v5`. The nonempty upgrade
 rehearsal preserves existing IDs, revisions, review history and candidate clocks.
 The source resolver and trusted review services are locally implemented through
-migrations 55 and 56. Configuration provenance hardening and complete accepted
-support publication remain required. No matching policy is activated.
+migrations 55 and 56. Configuration recovery authenticates the original
+contributed request and refuses ambiguous ownership. Complete accepted support
+publication remains required. No matching policy is activated.
 
 ### Verified storage and reader behavior
 
