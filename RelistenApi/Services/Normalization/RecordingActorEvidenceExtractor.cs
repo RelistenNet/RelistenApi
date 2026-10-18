@@ -73,17 +73,52 @@ public sealed class RecordingActorEvidenceExtractor
     )
     {
         var map = new VisibleTextMap(enclosingEvidence);
+        var parts = PrepareActors(actorText, enclosingEvidence, visibleStart, map);
+        var references = parts.Select(part => part.ReferenceUuid).ToArray();
+        var hints = ReadHints(map);
+        return parts.Select(part => Build(part, parts, references, hints, roles, map)).ToArray();
+    }
+
+    /// <summary>
+    /// Shares literal actor/alias parsing without manufacturing a role context. The caller owns
+    /// the source context and must keep these references scoped to their original field.
+    /// Contacts, profiles, kind and roster participation are deliberately absent from this result.
+    /// </summary>
+    internal IReadOnlyList<SourceActorAliasPhrase> ReadAliasPhrases(
+        string actorText,
+        NormalizationTextEvidence enclosingEvidence,
+        int visibleStart
+    )
+    {
+        var map = new VisibleTextMap(enclosingEvidence);
+        return PrepareActors(actorText, enclosingEvidence, visibleStart, map)
+            .Where(actor => actor.Aliases.Count > 0 && !actor.MappingUnavailable)
+            .Select(actor => new SourceActorAliasPhrase(
+                actor.Name,
+                actor.ReferenceUuid,
+                actor.Anchor,
+                actor.Aliases,
+                AliasRelationships(actor),
+                actor.Issues
+            ))
+            .ToArray();
+    }
+
+    private static PreparedActor[] PrepareActors(
+        string actorText,
+        NormalizationTextEvidence enclosingEvidence,
+        int visibleStart,
+        VisibleTextMap map
+    )
+    {
         var start = map.Text.IndexOf(
             actorText,
             Math.Min(visibleStart, map.Text.Length),
             StringComparison.Ordinal
         );
-        var parts = SplitActors(actorText)
+        return SplitActors(actorText)
             .Select(part => Prepare(part.Text, part.Start, start, map, enclosingEvidence))
             .ToArray();
-        var references = parts.Select(part => part.ReferenceUuid).ToArray();
-        var hints = ReadHints(map);
-        return parts.Select(part => Build(part, parts, references, hints, roles, map)).ToArray();
     }
 
     private static PreparedActor Prepare(
@@ -383,18 +418,7 @@ public sealed class RecordingActorEvidenceExtractor
             );
         }
         var relationships = new List<ActorCoReferenceFact<NormalizationTextEvidence>>();
-        foreach (var alias in actor.Aliases)
-        {
-            relationships.Add(
-                new(
-                    Key("explicit-alias", alias.Evidence[0]),
-                    ActorReferenceRelationship.ExplicitAlias,
-                    [actor.ReferenceUuid, alias.ReferenceUuid],
-                    [],
-                    [actor.Anchor, .. alias.Evidence]
-                )
-            );
-        }
+        relationships.AddRange(AliasRelationships(actor));
         var distinctRoles = roles.Distinct().ToArray();
         if (distinctRoles.Length > 1)
         {
@@ -455,6 +479,19 @@ public sealed class RecordingActorEvidenceExtractor
             )
         );
     }
+
+    private static IReadOnlyList<
+        ActorCoReferenceFact<NormalizationTextEvidence>
+    > AliasRelationships(PreparedActor actor) =>
+        actor
+            .Aliases.Select(alias => new ActorCoReferenceFact<NormalizationTextEvidence>(
+                Key("explicit-alias", alias.Evidence[0]),
+                ActorReferenceRelationship.ExplicitAlias,
+                [actor.ReferenceUuid, alias.ReferenceUuid],
+                [],
+                [actor.Anchor, .. alias.Evidence]
+            ))
+            .ToArray();
 
     private static IReadOnlyList<Hint> ReadHints(VisibleTextMap map)
     {
@@ -803,3 +840,13 @@ public sealed class RecordingActorEvidenceExtractor
         }
     }
 }
+
+/// <summary>Internal shared parser output, before credit or role-free source context is applied.</summary>
+internal sealed record SourceActorAliasPhrase(
+    string Name,
+    Guid ActorReferenceUuid,
+    NormalizationTextEvidence NameEvidence,
+    IReadOnlyList<ActorAliasFact<NormalizationTextEvidence>> Aliases,
+    IReadOnlyList<ActorCoReferenceFact<NormalizationTextEvidence>> Relationships,
+    IReadOnlyList<ActorEvidenceUnresolved<NormalizationTextEvidence>> Unresolved
+);
