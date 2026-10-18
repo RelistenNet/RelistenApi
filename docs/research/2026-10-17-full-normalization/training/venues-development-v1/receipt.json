@@ -1,0 +1,36 @@
+{
+  "blind_subset": {
+    "comparison_sha256": "6839b0b479a753e8ed624fcde76a9b4fcc09a6c339b2ed6b4e32c31b7c8f13ef",
+    "decision_agreements": 6,
+    "decision_disagreements": 0,
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/blind-review-input.jsonl",
+    "review_sha256": "68eed8a32ebdf31b695ae0a369f8398b95c59afc6ba898d84f7818fdb3e9df93",
+    "selection": "First six selected task IDs ordered by SHA-256 of UTF-8 task ID.",
+    "sha256": "d2e8a36260cb7b236183319e3055a9aea7cee882741f703f4b49e9c5d3967a32",
+    "status": "reviewed_and_compared_adjudication_pending"
+  },
+  "command": "python3 docs/research/2026-10-17-full-normalization/training/venues-development-v1/validate_labels.py",
+  "draft_decisions": {
+    "different_entities": 5,
+    "insufficient_evidence": 23,
+    "same_entity": 6
+  },
+  "identity_truth_validated": false,
+  "independent_adjudication": "pending",
+  "input_untouched": true,
+  "optimized_python_verification": {
+    "command": "PYTHONOPTIMIZE=1 python3 docs/research/2026-10-17-full-normalization/training/venues-development-v1/validate_labels.py",
+    "maximum_retained_words_per_primary_source": 14,
+    "regression_command": "python3 -O -m unittest discover -s docs/research/2026-10-17-full-normalization/training/venues-development-v1 -p 'test_validate_labels.py' -v",
+    "regression_source_sha256": "8ba44624fbd28a028d27aa9efab852430351230b7e6eaf7416127466c2a3cec7",
+    "regressions_failed": 0,
+    "regressions_passed": 5,
+    "span_units": "Unicode code points with explicit non-negative ordered bounds inside the original decoded field",
+    "status": "passed",
+    "validator_sha256": "f31a62c295f09f77c0208747a1d8e010bf982e09743085464f034590aa502b76"
+  },
+  "result": "passed",
+  "validated_artists": 66,
+  "validated_pairs": 34,
+  "validated_resources": 67
+}

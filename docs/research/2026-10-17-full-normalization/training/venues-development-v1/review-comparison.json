@@ -1,0 +1,82 @@
+{
+  "accuracy_estimated": false,
+  "all_labels_adjudicated": false,
+  "blind_input_sha256": "d2e8a36260cb7b236183319e3055a9aea7cee882741f703f4b49e9c5d3967a32",
+  "blind_review_sha256": "68eed8a32ebdf31b695ae0a369f8398b95c59afc6ba898d84f7818fdb3e9df93",
+  "comparisons": [
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "insufficient_evidence",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "insufficient_evidence",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:a312d03029e43e6cf4209dc636384d8ce747b4eb6ac8b572674d7f0ce170d4e4"
+    },
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "insufficient_evidence",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "insufficient_evidence",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:15cc801c7d32a83906a4f9117a62709df92af7267cef40097b8df1bba71fc60a"
+    },
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "insufficient_evidence",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "insufficient_evidence",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:0b2400999066a47d432768d8ab69a43f2552f1511d19db0e04615c474561ae0f"
+    },
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "insufficient_evidence",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "insufficient_evidence",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:9e782b538514f462b8ea87e125abb69f811315550ba7705048221588cb5d5bed"
+    },
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "same_entity",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "same_entity",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:2719cc58f9adc2ef7a763e2be1ebb8d5dfec064a5d2dd0294e293ad346110f4f"
+    },
+    {
+      "adjudication_status": "pending",
+      "blind_decision": "same_entity",
+      "decision_agreement": true,
+      "draft_changed": false,
+      "draft_decision": "same_entity",
+      "rationale_comparison": "Both judgments use the same retained premises evidence and preserve unresolved historical performance dates and room assignments.",
+      "task_id": "venues:a4591fa56662a1622ff74a71fd0e628bf436b75c33dfef8a61736c4628e03db6"
+    }
+  ],
+  "decision_agreements": 6,
+  "decision_disagreements": 0,
+  "draft_labels_sha256": "5108d963cecd7447c6f7eb5d2c483a21e31f62a1e7fcdbaea61f1ecb677e6f20",
+  "limits": [
+    "The second reviewer used the retained evidence and excerpts, without independent source acquisition.",
+    "Agreement between two Codex reviewers does not establish physical identity truth or production accuracy.",
+    "Both same-entity decisions concern named-premises reference identity, not dated recording or room assignments.",
+    "No different-entity draft was sampled in this six-case subset.",
+    "All original label adjudicator statuses remain pending."
+  ],
+  "review_decisions": {
+    "insufficient_evidence": 4,
+    "same_entity": 2
+  },
+  "reviewed_pairs": 6,
+  "reviewer": "codex-root-blinded-development",
+  "reviewer_statement": "Root saved these judgments before opening draft labels.",
+  "schema_version": "venue-development-blind-comparison-v1",
+  "selection": "First six selected task IDs ordered by SHA-256 of UTF-8 task ID.",
+  "status": "independent_development_review_compared"
+}

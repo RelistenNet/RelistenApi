@@ -1,0 +1,116 @@
+{
+  "created_at": "2026-10-17T23:53:48Z",
+  "decisions": {
+    "different_entities": 5,
+    "insufficient_evidence": 23,
+    "same_entity": 6
+  },
+  "evaluation_accuracy_estimated": false,
+  "files": {
+    "blind-review.jsonl": {
+      "bytes": 3803,
+      "rows": 6,
+      "sha256": "68eed8a32ebdf31b695ae0a369f8398b95c59afc6ba898d84f7818fdb3e9df93"
+    },
+    "evidence.jsonl": {
+      "bytes": 86975,
+      "rows": 67,
+      "sha256": "6c5decd6cfe70bf9c86b1fb527d5601a16f8a288ba612a9de4f1c7872af0632a"
+    },
+    "labels.jsonl": {
+      "bytes": 64555,
+      "rows": 34,
+      "sha256": "5108d963cecd7447c6f7eb5d2c483a21e31f62a1e7fcdbaea61f1ecb677e6f20"
+    },
+    "primary-sources.jsonl": {
+      "bytes": 14507,
+      "rows": 18,
+      "sha256": "a41d079dadd20540c1e47f92e99d8a0fbc9ac5ad8fd0f845de02a085ad6b5210"
+    },
+    "review-comparison.json": {
+      "bytes": 4127,
+      "sha256": "6839b0b479a753e8ed624fcde76a9b4fcc09a6c339b2ed6b4e32c31b7c8f13ef"
+    }
+  },
+  "independent_review": {
+    "blind_input_sha256": "d2e8a36260cb7b236183319e3055a9aea7cee882741f703f4b49e9c5d3967a32",
+    "comparison_file": "review-comparison.json",
+    "decision_agreements": 6,
+    "decision_disagreements": 0,
+    "different_entity_pairs_reviewed": 0,
+    "review_file": "blind-review.jsonl",
+    "reviewed_pairs": 6,
+    "status": "subset_compared_adjudication_pending"
+  },
+  "limits": [
+    "All original labels remain draft proposals; six decisions have separate blinded review, and independent adjudication remains pending.",
+    "Primary addresses support named-premises interpretation but do not establish every historic performance location.",
+    "Insufficient evidence is abstention, never a different-entity training label.",
+    "Group by connected evidence IDs, exact input families, and subsequently adjudicated venue/alias identities before any split.",
+    "Only retained catalog snapshot venue rows are included; upstream provider breadth is not established.",
+    "An initial schema-sampling command exposed one validation setlist row before filtering. It was not a venue pair and was not used for selection or labels. No held-out venue content was used."
+  ],
+  "local_supplement": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1",
+  "schema_version": "venue-development-pair-v1",
+  "selection": {
+    "candidate_reasons": {
+      "equal_folded_location": 13,
+      "equal_folded_name": 21
+    },
+    "eligibility": "family_partition=development; both evidence artist_partition=development and family_partition=development",
+    "eligible_development_pairs": 65,
+    "method": "Judgment selection for physical-name, locality, cross-city, same-city, missing-location, event/site, possible-history and room ambiguity; no random-sample or prevalence claim.",
+    "selected_ordinals": [
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      9,
+      10,
+      11,
+      13,
+      16,
+      17,
+      18,
+      19,
+      21,
+      24,
+      25,
+      26,
+      30,
+      31,
+      32,
+      34,
+      35,
+      37,
+      41,
+      43,
+      45,
+      46,
+      48,
+      49,
+      51,
+      59,
+      61,
+      62
+    ],
+    "selected_pairs": 34,
+    "selected_unique_artists": 66,
+    "selected_unique_resources": 67
+  },
+  "source_annotation_manifest_sha256": "925db125599f4c28d8cc4c7c7cb6b48727619c8336afc915d3beadf4e7821a93",
+  "source_files": {
+    "evidence.jsonl": {
+      "physical_lines": 18628,
+      "sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0"
+    },
+    "tasks.jsonl": {
+      "physical_lines": 19494,
+      "sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426"
+    }
+  },
+  "status": "draft_pending_independent_adjudication",
+  "usage": "development_experiments_only"
+}
