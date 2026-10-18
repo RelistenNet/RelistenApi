@@ -101,14 +101,23 @@ actual retained result, while captured dates, source ownership and playable-file
 links remain intact.
 
 The [contextual view](http://alecs-macbook-pro.tail09dbf.ts.net:18768/?context=1)
-now exposes 1,550 validated relationship proposals from an immutable midpoint
-of the 5,000-question Luna run. That midpoint covers 3,751 recording witnesses
-across 1,136 artists: 716 possible same-person links, 89 possible different-person
-links and 745 insufficient-evidence decisions. Those are model proposals with
-checked supporting quotes, not independently established identity labels. The
-remaining 820 processed questions were in failed batches; exact per-question
-recovery can retain valid siblings without another model request. The complete
-run and final recovery remain in progress.
+now exposes 2,318 validated relationship proposals from 2,460 processed questions:
+1,046 possible same-person links, 128 possible different-person links and 1,144
+insufficient-evidence decisions. These comparisons cover 3,909 recording witnesses
+across 1,177 artists. They are model proposals with checked supporting quotes,
+not independently established identity labels. The disk reserve stopped the
+planned 5,000-question run; 2,540 questions still need processing.
+
+The 86 failed batches contained independently valid answers. Exact per-question
+recovery retained 718 of them without another API request; 142 questions remain
+missing or rejected. A missing answer now leaves that question unresolved while
+preserving supported answers for the other known IDs. Duplicate or invented IDs
+still reject the response. This revises the initial whole-batch requirement:
+questions are independent, and actual nine-of-ten responses showed that requiring
+a complete set discarded valid evidence. All original responses and costs remain
+unchanged. The configured token-cost estimate is $0.66; the conservative ledger
+accounts for $0.71 including reservations. Exact usage and continuation coordinates remain
+in the retained job. Neither amount is an invoice.
 
 Prose and extraction errors still fragment names before identity matching can
 help. Use the broader contextual results to improve those failure classes. Do
@@ -174,17 +183,35 @@ now includes 300 Archive, 150 Phish and 220 Local retained inputs. All 670
 performance results bind to their existing recording/show homes. Local's
 220 directories resolve to 150 recordings through 3,060 exact media URL anchors;
 the root and directory revisions remain separate, jointly required evidence.
-The shared batch produced 152,445 outcomes. Its serving view contains only the
-2,010 provider outcomes: 670 proposed performances and 1,340 not-applicable
-composition/setlist results. No processing outcome failed.
+The new shared batch processed 6,250 supporting/provider rows and produced
+5,820 outcomes in 7.24 seconds. Its serving view contains only the 4,020 native
+outcomes across people, credits, venues, performances, compositions and setlists.
+The 1,800 supporting catalog outcomes stay outside this view. No processing
+outcome failed; missing facts remain explicit unresolved/not-applicable results.
+All 670 historical assignments and 3,060 Local media anchors remain unchanged.
+The view contains 2,204 proposed, 476 unresolved and 1,340 not-applicable results.
+People and credits each have 432 proposed and 238 unresolved recording inputs;
+those proposals retain 799 actor observations and 867 role-bearing credit claims.
+The venue results retain 670 unaccepted observations. Native name and venue
+searches both follow authenticated catalog keys into original playable files.
 
-Native decoded file observations remain distinct from catalog assignments and
-ordered passages. Native people, venue and file-content facts are retained
-inside those observations, but do not yet produce standalone domain results.
-Direct native people and venue projection is in progress. The
+Native people and credits now consume recording/file prose with the exact
+original citations. Native venues retain identifiers, coordinate kinds, locality
+alternatives and history prose. Selected Local root notes and decoder issues
+stay within their directory account; adjacent accounts cannot contribute facts.
+These native proposals remain separate from the older people/venue directory
+projections. Both native domains expose authenticated source/show keys. The
+reader's “Find playable files” action follows an exact key into the full-file
+reader; it does not move a file or infer a passage-to-audio alignment.
+
+Native decoded files still have no standalone file-content projection. Names or
+aliases mentioned without a recording credit also need direct native extraction;
+credit-bearing actor facts alone do not complete that coverage. The
 [native-wave guide](../../../research/2026-10-17-full-normalization/scale/native-provider-wave-v1.md)
-records the actual run and provider coverage. The
-[Local admission guide](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
+records the actual runs and provider coverage. The
+[native credit guide](../../../research/2026-10-17-full-normalization/scale/native-provider-credits.md)
+defines person and credit proposals, optional catalog links and original scopes.
+The [Local admission guide](../../../research/2026-10-17-full-normalization/scale/retained-local-shadow-inputs.md)
 defines exact root selection and catalog binding.
 
 The people adapter now retains direct source-anchor identity hypotheses with
@@ -234,10 +261,10 @@ Extraction proposals still require identity matching and accuracy evaluation.
 The latest consolidated normalization checks passed 1,186 tests with 39
 environment-dependent skips; 97 database integration tests passed separately.
 The later title/ordinary-row checks passed 163 tests. The current file reader
-passes 24 behavioral tests, and the people directory passes seven. Its HTTP
-checks follow an actual recording through its eight files and verify the
-original source, show and MP3 coordinates.
-These suites overlap; their counts are not a distinct-test total. The
+passes 28 behavioral tests. Native routing passed 106 boundary tests and 16 final
+venue cases; contextual people changes passed 21 C# and 16 Python checks. HTTP
+checks follow real native credits and venues through their exact catalog homes
+to playable files. These suites overlap; their counts are not a distinct-test total. The
 [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-native-local-integration-v1.json)
 pins the exact reports and source versions.
 
@@ -404,8 +431,8 @@ Jerry/Aadam rehearsal and full-file computation are complete. The full-file
 reader serves the verified correction from its existing index; indexing is
 temporarily paused to reserve capacity for the next domain jobs. The
 people directory supports cross-artist credit lookup and contextual Luna
-hypotheses. Shared venue and music lookup are available. Next, complete native
-domain extraction and broader title discovery, then improve physical-venue
+hypotheses. Shared venue and music lookup are available. Next, extend native
+file/alias extraction and complete broader title discovery, then improve physical-venue
 and composition evidence using the visible results. Physical venue
 history, legacy setlist order, importer provenance and independent accuracy
 qualification remain open; production acceptance follows that work.
