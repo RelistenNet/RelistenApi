@@ -4,6 +4,10 @@ The next completed milestone is the [usable full-catalog shadow delivery](shadow
 
 Run extraction, candidate retrieval and proposed normalization across the complete captured population now. Add missing domain adapters in parallel and audit resulting outputs by provider and failure class. Retain original evidence, unknowns and errors. Production publication is separate; production writes and deployment still require approval. The [standing goal amendment](goal.md) defines the intended outcome across turns.
 
+## Use these results to improve the working approach
+
+The [experimental development policy](goal.md#experimental-development-policy) governs this ledger. Use its results to finish usable features and choose the overall method. Historical packet sizes, incomplete adjudication and remaining small errors do not block local feature access. Preserve source truth, show inferred relationships as proposals and surface known issues. Explore more capable contextual approaches where the current rules/features are inadequate. Group related fixes, replay affected outputs and review at integration points; do not expand tests or provenance machinery solely to validate another tiny accuracy delta.
+
 ## What the completed experiments taught us
 
 - **Credits:** On the same 83 available fields and 67 draft taper/transferrer assertions, rules recover 60 assertions with four extras; the perceptron recovers 40 with ten extras; logistic regression recovers 36 with 16 extras; Luna recovers 64 with three extras. Luna corrects three whole fields and introduces no newly wrong field on that denominator. This favors rules as the current local baseline and supports expanding Luna comparisons. It does not justify deploying the current taggers. The original job retains 200 admitted attempts and $0.0146575 of configured accounting. [Matched experiment](../../../research/2026-10-17-full-normalization/training/credits-development-v1/matched-experiment-v1.json).

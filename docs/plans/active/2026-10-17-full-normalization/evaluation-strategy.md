@@ -6,6 +6,14 @@ Usable full-catalog shadow output is the next milestone, under the [delivery pla
 
 Audit real outputs to choose methods and acceptance policies. Scale model jobs using observed throughput, concurrency limits and authorized cost. The completed training experiments satisfy the instruction to try small models; further fitting is optional when it does not address a demonstrated delivery gap. The [coverage ledger](evaluation-milestone.md#coverage-ledger) guides broad audits rather than serial work admission.
 
+## Learn which overall approach works
+
+Follow the [experimental policy](goal.md#experimental-development-policy). Each experiment should answer a consequential question: can this method complete a feature, cover a missing cohort, separate a recurring ambiguity or remove a practical bottleneck? Compare complete outputs before polishing individual stages. Finish the simplest usable version and give Alec access while inspection and targeted corrections continue.
+
+When the existing features cannot distinguish correct and incorrect identities, try contextual reasoning or a different representation. Do not restrict exploration to thresholds on the same inadequate feature vector. Use a capable model on enough varied cases to learn whether the approach works, within the existing authorized job controls. Local rules, trained models and direct model-assisted resolution are options, not a mandatory sequence.
+
+A plausible inferred proposal can be inspected with its context, alternatives and known limitations before calibration or release adjudication. Keep it distinct from a directly observed fact and from an accepted production identity. Independent audits measure quality and guide revision; they are not approval gates for every experimental output. If an approach is weak, revise or replace it rather than investing in small gains indefinitely.
+
 ## Train and compare
 
 Build on the completed experiments and compare improved methods on broader independent evidence. Choose production methods after measuring their benefit. The [coverage ledger](evaluation-milestone.md#coverage-ledger) records each domain's completed evidence, gaps and next actions.
@@ -28,7 +36,7 @@ Include positive matches, plausible hard negatives, new-identity cases and insuf
 
 ## Measure Luna's incremental value
 
-Run local processing first. Send a stratified comparison sample to Luna that includes local failures, ambiguity and apparent successes. Independently judge sampled agreements as well as disagreements; agreement can repeat the same error.
+Reuse local processing as a baseline where useful. Test Luna or another suitable available model on a stratified comparison including local failures, ambiguity and apparent successes. A local-first runtime route is a choice to measure, not a restriction on exploring a different overall method. Independently judge sampled agreements as well as disagreements; agreement can repeat the same error.
 
 For each task/cohort, count local errors Luna corrects, new errors it introduces, unchanged results and unsupported answers. Measure accepted-match precision, automatic coverage at the required precision, candidate recall, extraction name/role accuracy, review volume, latency and cost. Include denominators and uncertainty. Report performance on new identities separately from familiar ones.
 

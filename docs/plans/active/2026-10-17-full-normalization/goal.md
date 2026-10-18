@@ -12,6 +12,22 @@ Verification serves integrated delivery: run focused behavioral checks for relev
 
 Continue beyond shadow delivery to independently qualified acceptance/routing, incremental refresh, correction/recovery verification, restored-catalog backfill rehearsal and rollout preparation. Production writes and deployment require approval. Do not mark the overall normalization goal complete on delivery of a report or shadow preview.
 
+## Experimental development policy
+
+Find a good overall normalization approach and a usable foundation that we can improve. This is challenging experimental work. Favor complete features and informative trials over perfecting individual components. A version with visible, understood mistakes can be useful for local inspection and deciding what to build next.
+
+Work in broad iterations: state the approach being tested and what would change the decision, implement the simplest complete path, expose its results, inspect representative successes and failures, then keep, revise or replace the approach. Finish cross-artist person lookup, shared venue lookup, song-to-playable-file search and supported setlist browsing as integrated features. Do not make another two-match improvement the milestone while those features remain unfinished.
+
+Explore promising alternatives with enough context and model capability to answer the question. Try contextual model reasoning, broader evidence acquisition or a different representation when lexical rules and tiny classifiers cannot distinguish the cases. Keep supported facts separate from inferred hypotheses, but allow plausible local proposals with visible reasons and alternatives. Calibrated probabilities, release-quality precision and independent adjudication of every case are not prerequisites for an experimental proposal or a reader Alec can use. Never invent source evidence or present a guess as a verified fact.
+
+Prioritize changes by their effect on feature completion, coverage, recurring errors, architecture or practical runtime. Isolated low-impact errors can remain in a visible known-issues list until the next integration pass. Do not start a tuning or compatibility project for each discovered imperfection. Stop and reconsider a method when repeated changes add machinery without improving the overall result. New evidence that can change the approach is a better reason to experiment than a target of eliminating every last error.
+
+Expose usable local results promptly. Block the affected operation for destructive behavior, lost source/playback references, unusable execution or misleading evidence. Keep other operations and domains available. Known semantic errors and incomplete audits are displayed alongside local results; they do not require withholding the whole reader. Production qualification and deployment remain separate requirements.
+
+Use the minimum verification that establishes the current change's observable contract. Group related fixes, run focused checks, then consolidate integration/regression checks. One pinned implementation and retained inputs normally suffice for an iteration. Add frozen copies, receipts, reviews and historical-state tests only when they resolve a concrete risk or are required by an existing contract. Improve common failure classes; avoid repeated review layers, artifact proliferation and duplicate full runs for small deltas.
+
+Report the working feature, what the broad trial taught us, the largest remaining weakness and the next consequential change. Include an accessible reader and examples when available. Keep test counts, small accuracy deltas and uncertainty notes subordinate to that explanation. The goal is an effective overall approach across imports that we can build on, followed by the work needed to release it.
+
 ## Implementation and writing standards
 
 Implement the intended outcome, adapting the plan when code or verification reveals a better approach. Follow through on correctness and maintainability issues; explain consequential departures and their trade-offs. Use the repository's existing `docs/` folders for plans, design, research and operational documentation; do not introduce a `personal/alecgorge/` documentation tree. Commit logical chunks as work proceeds, with a title and body that explain the problem, resulting behavior, reasoning and verification.

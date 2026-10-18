@@ -13,7 +13,7 @@ No automatic matching policy is active.
 
 This plan is for a Relisten engineer and the reviewer/operator who will deploy and troubleshoot the system. The [domain contracts](../../../design/2026-10-17-normalization-contracts.md) define identities, responsibilities and additive APIs. The [research record](../../../research/2026-10-17-full-normalization/README.md) owns the data audit; the [evaluation corpus](../../../research/2026-10-17-full-normalization/evaluation/README.md) retains examples and labels. Progress below distinguishes implemented local services from the automatic resolver, evaluation, backfill and rollout still required.
 
-## Next milestone: usable full-catalog shadow output
+## Next milestone: a usable experimental normalized catalog
 
 Deliver a browsable normalization result across the complete captured catalog and every applicable importer and domain. Run the existing methods now, add the missing domain adapters in parallel, and use sampled source audits to improve actual outputs. Labels, classifier experiments and publication-scale repairs no longer precede the first shadow pass. The [delivery plan](shadow-delivery.md) defines the result and execution sequence; the [standing goal amendment](goal.md) preserves Alec's instruction across turns.
 
@@ -22,6 +22,14 @@ A shadow result is a proposed interpretation in separate local artifacts or a di
 Reuse the completed experiments and existing services. Process the full captured population with streaming, resumable batches; run model-assisted work at measured throughput within existing spending authorization. Use independent domain agents, integrate their outputs into one reader, and fix broad failure classes. The [evaluation ledger](evaluation-milestone.md#coverage-ledger) guides audit coverage while delivery proceeds. It is no longer a sequence of small labeling prerequisites.
 
 The immediate proof is a runnable shadow command, growing real outputs across providers, and a browsable result Alec can inspect. Complete population accounting and per-domain audits follow in the same run. A plan, a packet of labels, a candidate export or a test count alone does not complete this milestone. Complete all required domains, then qualify production acceptance, rehearse backfill and prepare rollout. Production writes and deployment retain their existing approval requirements.
+
+## How to iterate
+
+This is experimental development. Deliver complete local features, learn from their broad results and improve the approach. The [experimental policy](goal.md#experimental-development-policy) governs the implementation and linked evaluation/delivery plans. It takes precedence over sequencing that would polish a small component before exposing a usable feature.
+
+Test promising contextual model approaches and representations at meaningful scale. Keep plausible inferred links visible as hypotheses with supporting context and alternatives; do not default to a nearly empty result merely because a production acceptance threshold is not yet calibrated. Preserve the distinction between observation and inference. Use working local person, venue, song/file and setlist features to judge whether the overall approach is worth building on.
+
+Make the reader available with known issues while audits and targeted corrections continue. Preserve source/playback references and essential execution checks. Group related fixes and verification; leave isolated low-impact errors visible until an integration pass. Further compatibility, optimization and evidence packaging must address a concrete contract or blocker. Report feature completion and what changes the method choice, rather than presenting every small match gain as a milestone.
 
 ## Progress
 
@@ -373,6 +381,8 @@ Fresh review identified stale publication, candidate-dependent cache reuse and u
 The earlier 30-table proposal excludes normalized people and defers composition reconciliation. It cannot be implemented unchanged for this scope. The colleague's catalogue terminology and audio thresholds also require adaptation rather than adoption. Populated text and non-orphan flags measure available evidence, not normalized truth or proven playability.
 
 ## Decision log
+
+- 2026-10-18, Alec: treat normalization as challenging experimental work. Find a good overall approach and usable foundation through broad feature iterations. Explore capable model/context alternatives, expose local results with known issues, and stop hyper-optimizing tiny improvements. The experimental policy in the standing goal governs future work; preserve essential data/playback protection and production approval.
 
 - 2026-10-18, Alec: deliver usable full-catalog shadow outputs next. The prior evaluation-first sequence is superseded. Process the complete captured population, integrate domains in parallel, scale model jobs to throughput and authorized cost, audit actual outputs and consolidate verification. Small packets, repeated compatibility work and optional classifier experiments must not block independent delivery. See [standing goal](goal.md) and [delivery execution](shadow-delivery.md).
 
