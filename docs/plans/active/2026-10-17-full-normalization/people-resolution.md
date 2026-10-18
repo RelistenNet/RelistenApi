@@ -3,12 +3,14 @@
 `NormalizationPeopleResolutionProcessor` connects a published recording extraction
 to global people candidates. It retains each claim, checked file scope, candidate
 snapshot and comparison in a durable proposal batch. This makes the same evidence
-available to evaluation and later automatic acceptance.
+available to evaluation and the separate accepted-credit consumer.
 
-The current processor publishes proposals. It has no active matching policy or
-accepted-credit writer. Automatic matching and identity creation remain required
-by the [main plan](README.md); they need independently evaluated policies and the
-accepted-credit reconciliation contract.
+The processor publishes proposals only; its decisions do not authorize accepted
+credits. The separate [accepted-credit consumer](people-acceptance.md)
+authenticates those proposals, applies evaluated policies and publishes through
+the identity and recording-credit owners. Automatic matching remains inactive.
+Independently evaluated policies and the remaining verification and rollout work
+in the [main plan](README.md) are still required.
 
 ## Public service contract
 

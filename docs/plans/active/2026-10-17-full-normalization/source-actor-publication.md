@@ -247,8 +247,10 @@ reads, full stage storage and per-claim retained scope copies still require cost
 work. The smaller passing cases and pure extraction timings do not establish
 catalog throughput.
 
-Apply migrations 53–57 in order. Migration 57 adds two retained application/stage
-tables and indexes; it does not reinterpret existing accepted authority. Deploy
+Apply migrations 53–58 in order. Migration 57 adds two retained application/stage
+tables and indexes; it does not reinterpret existing accepted authority. Migration
+58 adds component-wide canonical alias review visibility and its history indexes
+while preserving original assertions, support and review history. Deploy
 compatible readers and resume code together. Registration starts no processing
 or schedules. Automatic publication still requires evaluated policies, catalog
 cost verification and an explicit orchestration/rollout decision. Rollback stops
