@@ -8,12 +8,14 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import uuid
 
 import matched_credit_experiment as study
 import credit_tagger_experiment as tagger
+from test_luna_credit_field_report import SyntheticCohort
 
 
 def write(path, value):
@@ -341,6 +343,142 @@ class MatchedCreditCliTests(unittest.TestCase):
             self.assertEqual(fixture.call("failed"), 1)
         self.assertTrue((fixture.root / "failed/splits.json").exists())
         self.assertFalse((fixture.root / "failed/report.json").exists())
+
+
+class MatchedCohortTests(unittest.TestCase):
+    def test_cohort_cli_accepts_fresh_primary_and_fits_only_old84_before_scoring_every_new_field(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            path = root / "exclusions.json"
+            exclusions = json.loads(path.read_text())
+            exclusions["explicit_receipt_exclusions"] += [reference.labels[i]["label_id"] for i in range(11, 24)]
+            write(path, exclusions)
+            cohort = SyntheticCohort(root / "cohort", 6)
+            cohort.replace_field_with_skipped(0, "Alice <alice@example.org>")
+            cohort.outputs[1]["luna"]["fromCache"] = False
+            cohort.attempts.append({"uuid": str(uuid.uuid4()), "jobUuid": cohort.job_uuid,
+                                   "cacheKey": cohort.outputs[1]["luna"]["cacheKey"], "state": "succeeded"})
+            cohort.save()
+            argv = reference.argv("cohort-output") + [
+                "--cohort-plan", str(cohort.root / "plan.json"), "--cohort-plan-sha256", cohort.plan_sha,
+                "--cohort-comparison", str(cohort.comparison), "--cohort-comparison-sha256",
+                digest(cohort.comparison / "manifest.json")]
+            fitted = []
+            original = study.load_trainer
+
+            class SyntheticModel:
+                weights = {}
+                def decode(self, features):
+                    return ["O"] * len(features)
+                def to_json(self):
+                    return {"synthetic": True, "weights": self.weights}
+
+            def trainer_with_observed_fit(snapshot):
+                trainer = original(snapshot)
+                def fit(examples, roles, *args, **kwargs):
+                    fitted.append((tuple(example.key for example in examples), tuple(roles)))
+                    self.assertEqual(len(examples), 84)
+                    self.assertFalse(set(cohort.authenticated().labels) & {example.key for example in examples})
+                    self.assertFalse(any("New cohort actor" in example.text for example in examples))
+                    return {role: SyntheticModel() for role in roles}
+                trainer.fit_models = fit
+                trainer.fit_logistic_models = fit
+                return trainer
+
+            with patch.object(study, "load_trainer", side_effect=trainer_with_observed_fit), \
+                 patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(study.main(argv), 0)
+            self.assertEqual(len(fitted), 2, "one fit for each algorithm, not one per new partition/fold")
+            self.assertEqual(fitted[0], fitted[1])
+            output = root / "cohort-output"
+            value = json.loads((output / "report.json").read_text())
+            predictions = study.jsonl((output / "predictions.jsonl").read_bytes())
+            self.assertEqual(value["fields"], 6)
+            self.assertEqual(value["full_resolved_priority"]["methods"]["luna"]["true_positive"], 5)
+            self.assertEqual(value["full_resolved_priority"]["methods"]["luna"]["unavailable_fields"], 1)
+            self.assertEqual({row["label_id"] for row in predictions}, set(cohort.authenticated().labels))
+            self.assertEqual(value["training_reference"]["fit_fields"], 84)
+            self.assertFalse(value["training_reference"]["new_cohort_labels_used_for_fitting"])
+            self.assertEqual(value["cohort"]["artist_partition"], "test")
+            self.assertEqual(value["coverage"]["fields"]["contact_excluded"], 1)
+            self.assertEqual(value["coverage"]["fields"]["attempted_in_job"], 1)
+            self.assertEqual(value["coverage"]["attempts_in_job"], 1)
+            contact = next(row for row in predictions if row["label_id"] == cohort.labels[0]["label_id"])
+            self.assertIsNone(contact["methods"]["luna"])
+            self.assertEqual(contact["luna_unavailable_reason"], "contact_scope")
+            self.assertFalse(any(output.glob("models-fold-*")))
+            self.assertTrue((output / "models-frozen-development.json").exists())
+
+    def test_fresh_cohort_primary_cannot_bypass_replay_request_or_response_authentication(self):
+        alterations = ("uncached_replay", "different_replay_key", "different_replay_answer",
+                       "missing_request", "missing_response")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            for alteration in alterations:
+                with self.subTest(alteration=alteration):
+                    cohort = SyntheticCohort(root / alteration)
+                    output = cohort.outputs[0]
+                    output["luna"]["fromCache"] = False
+                    cohort.attempts.append({"uuid": str(uuid.uuid4()), "jobUuid": cohort.job_uuid,
+                                           "cacheKey": output["luna"]["cacheKey"], "state": "succeeded"})
+                    if alteration == "uncached_replay":
+                        output["cacheReplay"]["fromCache"] = False
+                    elif alteration == "different_replay_key":
+                        output["cacheReplay"]["cacheKey"] = "f" * 64
+                    elif alteration == "different_replay_answer":
+                        output["cacheReplay"]["extraction"] = {"credits": [], "unresolved": []}
+                    elif alteration == "missing_request":
+                        cohort.requests = [value for value in cohort.requests
+                                           if value["cacheKey"] != output["luna"]["cacheKey"]]
+                    else:
+                        cohort.requests[0]["responseJson"] = None
+                    cohort.save()
+                    argv = reference.argv("rejected-" + alteration) + [
+                        "--cohort-plan", str(cohort.root / "plan.json"), "--cohort-plan-sha256", cohort.plan_sha,
+                        "--cohort-comparison", str(cohort.comparison), "--cohort-comparison-sha256",
+                        digest(cohort.comparison / "manifest.json")]
+                    error = io.StringIO()
+                    with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                         patch.object(study, "fit_cohort_reference") as fit, \
+                         redirect_stdout(io.StringIO()), redirect_stderr(error):
+                        self.assertEqual(study.main(argv), 1)
+                    fit.assert_not_called()
+                    self.assertIn("Successful", error.getvalue())
+                    self.assertFalse((root / ("rejected-" + alteration)).exists())
+
+    def test_legacy100_still_requires_primary_cached_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = SyntheticStudy(Path(directory))
+            reference.outputs[0]["luna"]["fromCache"] = False
+            reference.save()
+            error = io.StringIO()
+            with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(error):
+                self.assertEqual(study.main(reference.argv()), 1)
+            self.assertIn("Successful answer lacks equal key-free cached replay", error.getvalue())
+            self.assertFalse((reference.root / "output").exists())
+
+    def test_wrong_reference_count_fails_before_any_fit(self):
+        reference = SimpleNamespace(examples=[SimpleNamespace(complete=True) for _ in range(83)])
+        reference.trainer = SimpleNamespace(fit_models=lambda *args: self.fail("unexpected fit"))
+        with self.assertRaisesRegex(ValueError, "84-field"):
+            study.fit_cohort_reference(reference, SimpleNamespace())
+
+    def test_exposed_old_excluded_id_cannot_be_used_as_tune_or_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = SimpleNamespace(labels={"old-excluded": {}})
+            for purpose in ("tune", "untouched_evaluation"):
+                inputs = SimpleNamespace(labels={"old-excluded": {}},
+                                         cohort=SimpleNamespace(plan={"purpose": purpose}))
+                with patch.object(study, "MatchedFields", return_value=reference), \
+                     patch.object(study, "CohortFields", return_value=inputs), \
+                     patch.object(study, "fit_cohort_reference") as fit:
+                    with self.assertRaisesRegex(ValueError, "already exposed"):
+                        study.run_cohort(SimpleNamespace(output=Path(directory) / "new"))
+                    fit.assert_not_called()
 
 
 if __name__ == "__main__":

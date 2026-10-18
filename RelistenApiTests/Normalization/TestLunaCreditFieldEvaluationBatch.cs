@@ -118,7 +118,7 @@ public sealed class TestLunaCreditFieldSelection
 }
 
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestLunaCreditFieldEvaluationBatch
+public sealed partial class TestLunaCreditFieldEvaluationBatch
 {
     private DbService db = null!;
     private NormalizationExtractionCacheService cache = null!;

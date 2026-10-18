@@ -2,6 +2,8 @@
 
 `luna-credit-fields` runs the existing credit extractors on all 100 frozen development fields. Each request contains one original field and no source-wide context. The comparison includes apparent local successes and failures, records current fallback routing, and proves that successful Luna responses can be replayed without an API key. It creates extraction proposals only; it writes no accepted people or recording credits.
 
+For new independently labeled populations, use the explicit [bounded cohort command](luna-credit-cohorts.md). The original 100-field command and its job limits remain unchanged.
+
 The [development labels](../../docs/research/2026-10-17-full-normalization/training/credits-development-v1/README.md) cover 78 sources and artists, all associated with Archive.org. They include structured names, compound credits, HTML, equipment and uncertain prose. This cohort does not establish coverage of other providers. The separate [source review](../../docs/research/2026-10-17-full-normalization/training/credits-luna-development-v1/README.md) preserves another reading of original fields before model outputs were available.
 
 ## Prepare the bounded run

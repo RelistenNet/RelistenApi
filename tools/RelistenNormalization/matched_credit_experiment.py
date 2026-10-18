@@ -15,8 +15,10 @@ import json
 import os
 from pathlib import Path
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 import uuid
+
+from luna_credit_field_report import CohortPlan, cohort_coverage
 
 VERSION = "matched-credit-development-v1"
 LOCAL_VERSION = "recording-credits-v4/recording-actor-evidence-v1"
@@ -176,14 +178,14 @@ class MatchedFields:
                 and additional and set(additional) <= set(excluded), "Missing or unknown exclusion")
         return sorted(excluded)
 
-    def _read_comparison(self, args):
+    def _read_comparison(self, args, *, expected_fields=100, expected_version="luna-credit-fields-v1"):
         path = args.comparison
         manifest_bytes = self.snapshot.read(path / "manifest.json")
         require(sha(manifest_bytes) == args.comparison_sha256, "Comparison manifest differs")
         self.manifest = json.loads(manifest_bytes)
-        require(self.manifest["version"] == "luna-credit-fields-v1"
+        require(self.manifest["version"] == expected_version
                 and self.manifest["state"] in {"completed", "completed_partial"}
-                and self.manifest["fields"] == 100, "Incomplete comparison population")
+                and self.manifest["fields"] == expected_fields, "Incomplete comparison population")
         selection = self.snapshot.json(path / "selection.json")
         require(selection == self.manifest["selection"], "Saved selection differs")
         require(selection["labelsSha256"] == sha(self.labels_bytes)
@@ -199,6 +201,7 @@ class MatchedFields:
         require(self.items.keys() == self.outputs.keys() == self.labels.keys(),
                 "Comparison omitted, duplicated or added a field")
         audit = json.loads(audit_bytes)
+        self.audit = audit
         self.requests = indexed(audit["requests"], "cacheKey")
         for request in self.requests.values():
             require(sha(request["renderedRequest"].encode()) == request["cacheKey"],
@@ -215,7 +218,8 @@ class MatchedFields:
                     and key == "credit-field:" + source_uuid + ":" + field
                     and item["taskId"] == label["task_id"] == "extract:source_sample:" + source_uuid
                     and item["sourceUuid"] == source_uuid
-                    and item["artistUuid"] == label["artist"]["uuid"]
+                    and item["artistUuid"] == (label["artist"]["uuid"] if expected_version == "luna-credit-fields-v1"
+                                              else str(uuid.UUID(label["artist"]["uuid"])))
                     and item["evidenceId"] == label["evidence_id"] == "source_sample:" + source_uuid,
                     "Source or artist identity differs")
             require(item["field"] == field and item["text"] == raw["field_text"]
@@ -243,7 +247,7 @@ class MatchedFields:
             "tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll"]["sha256"],
                 "Saved comparison used different binaries")
 
-    def saved_predictions(self, example):
+    def saved_predictions(self, example, *, require_primary_cached=True):
         item, output = self.items[example.key], self.outputs[example.key]
         no_text = item["noText"]
         require((output["state"] == "no_text") == no_text, "No-text outcome differs")
@@ -257,7 +261,9 @@ class MatchedFields:
         elif output["luna"] is not None and output["luna"]["state"] == "extracted":
             result = output["luna"]
             replay = output["cacheReplay"]
-            require(output["state"] == "extracted" and result["fromCache"] is True
+            require(output["state"] == "extracted"
+                    and (result["fromCache"] is True
+                         or not require_primary_cached and result["fromCache"] is False)
                     and replay["state"] == "extracted" and replay["fromCache"] is True
                     and replay["cacheKey"] == result["cacheKey"]
                     and replay["extraction"] == result["extraction"],
@@ -521,6 +527,153 @@ def run(args):
     return report
 
 
+class CohortFields(MatchedFields):
+    """Read predictions for an approved new population, with no training partition rewrite."""
+
+    def __init__(self, args, reference):
+        self.snapshot, self.trainer = reference.snapshot, reference.trainer
+        # The shared authenticator is also executable scoring source, so retain its bytes.
+        self.snapshot.read(Path(__file__).with_name("luna_credit_field_report.py"))
+        self.cohort = CohortPlan(args.cohort_plan, args.cohort_plan_sha256, self.snapshot.read)
+        self.labels_bytes, self.labels = self.cohort.labels_bytes, self.cohort.labels
+        self.raw_fields, self.receipt = self.cohort.fields, self.cohort.receipt
+        self.exclusions = self.cohort.exclusions
+        comparison_args = SimpleNamespace(
+            comparison=args.cohort_comparison, comparison_sha256=args.cohort_comparison_sha256,
+            labels=self.cohort.paths["labels"], fields=self.cohort.paths["fields"],
+            receipt=self.cohort.paths["receipt"])
+        self._read_comparison(comparison_args, expected_fields=self.cohort.plan["field_count"],
+                              expected_version="luna-credit-cohort-v1")
+        self.cohort.check_selection(self.labels_bytes, self.manifest["selection"])
+        self.examples = []
+        # The training loader deliberately accepts development only. Build evaluation
+        # features directly rather than disguising validation/test labels as development.
+        for key, label in self.labels.items():
+            text = self.raw_fields[key]["field_text"]
+            for assertion in label["answer"]["assertions"]:
+                self.trainer.validate_span(text, assertion["name"])
+                require(assertion["role"] in self.trainer.ROLE_NAMES.values(), "Invalid cohort role")
+                basis = assertion["role_basis"]
+                if basis["kind"] == "prose":
+                    self.trainer.validate_span(text, basis["span"])
+                else:
+                    require(basis["kind"] == "structured_field"
+                            and basis["field"] == label["field_path"].rsplit("/", 1)[-1],
+                            "Invalid cohort role evidence")
+            for unknown in label["answer"]["unknowns"]:
+                self.trainer.validate_span(text, unknown["span"])
+            tokens = self.trainer.tokenize(text)
+            example = self.trainer.Example(label, text, tokens,
+                self.trainer.token_features(tokens, label["field_path"].rsplit("/", 1)[-1]),
+                receipt_excluded=key in self.exclusions)
+            for role in {role for _, _, role in example.gold}:
+                self.trainer.gold_tags(example, role)
+            self.examples.append(example)
+        self.snapshot.verify()
+
+    def saved_predictions(self, example):
+        if example.key not in self.cohort.contact_ids:
+            # The first cohort comparison may own a fresh successful paid attempt.
+            # Its equal successful keyless replay and retained response are still required.
+            return super().saved_predictions(example, require_primary_cached=False)
+        item, output = self.items[example.key], self.outputs[example.key]
+        require(not item["noText"] and output["state"] == "not_requested_contact_scope"
+                and output["luna"] is None and output["cacheReplay"] is None
+                and output["currentRouting"]["state"] == "not_evaluated"
+                and output["currentRouting"]["reason"] == "contact_scope",
+                "Contact field was requested or routed")
+        return extraction_predictions(output["local"], item, self.trainer), None, "contact_scope"
+
+
+def fit_cohort_reference(reference, args):
+    """The new labels cannot affect the training population, role heads or vocabulary."""
+    training = [example for example in reference.examples if example.complete]
+    require(len(training) == 84, "Cohort scoring requires the frozen 84-field training reference")
+    roles = sorted({role for example in training for _, _, role in example.gold})
+    perceptron = reference.trainer.fit_models(training, roles, args.epochs, args.seed)
+    logistic = reference.trainer.fit_logistic_models(training, roles, seed=args.seed)
+    return training, perceptron, logistic
+
+
+def run_cohort(args):
+    require(not args.output.exists(), "Choose a new experiment output directory")
+    reference = MatchedFields(args)
+    inputs = CohortFields(args, reference)
+    require(inputs.cohort.plan["purpose"] == "development"
+            or not (reference.labels.keys() & inputs.labels.keys()),
+            "Tune/evaluation cohort overlaps an already exposed old development field")
+    trainer = reference.trainer
+    environment = training_environment(reference.snapshot)
+    saved = {example.key: inputs.saved_predictions(example) for example in inputs.examples}
+    training, perceptron, logistic = fit_cohort_reference(reference, args)
+    training_ids = sorted(example.key for example in training)
+    rows = []
+    for example in inputs.examples:
+        local, luna, reason = saved[example.key]
+        rows.append({"label_id": example.key, "field_sha256": example.label["field_sha256"],
+                     "field": example.label["field_path"].rsplit("/", 1)[-1],
+                     "complete_scoring": example.complete, "excluded_by_receipt": example.receipt_excluded,
+                     "gold": [{"name": example.text[start:end], "span": [start, end], "role": role}
+                              for start, end, role in example.gold],
+                     "methods": {"perceptron": trained_predictions(perceptron, example, trainer),
+                                 "logistic": trained_predictions(logistic, example, trainer),
+                                 "local": local, "luna": luna},
+                     "local_unresolved": inputs.outputs[example.key]["local"]["unresolved"],
+                     "luna_unavailable_reason": reason})
+    rows.sort(key=lambda row: row["label_id"])
+    reference.snapshot.verify()
+    args.output.mkdir(parents=True, exist_ok=False)
+    write_json(args.output / "models-frozen-development.json", {
+        "training_label_ids": training_ids,
+        "perceptron": {role: model.weights for role, model in perceptron.items()},
+        "logistic": {role: model.to_json() for role, model in logistic.items()},
+        "production_authorized": False,
+    })
+    with (args.output / "predictions.jsonl").open("x", encoding="utf-8") as target:
+        for row in rows:
+            target.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    report = {
+        "version": "matched-credit-cohort-v1", "state": "completed_cohort_scoring",
+        "production_authorized": False, "policy_activation_permitted": False,
+        "independent_accuracy_evaluation": False, "fields": len(rows),
+        "resolved_fields": sum(example.complete for example in inputs.examples),
+        "cohort": {"plan_sha256": inputs.cohort.sha256, "purpose": inputs.cohort.plan["purpose"],
+                   "artist_partition": inputs.cohort.plan["artist_partition"],
+                   "family_partition": inputs.cohort.plan["family_partition"],
+                   "provider_origin_fields": inputs.cohort.provider_counts},
+        "training_reference": {"fields": len(reference.examples), "fit_fields": len(training),
+            "labels_sha256": sha(reference.labels_bytes), "training_label_ids": training_ids,
+            "training_label_ids_sha256": sha(json.dumps(training_ids, separators=(",", ":")).encode()),
+            "roles": sorted(perceptron), "new_cohort_labels_used_for_fitting": False},
+        "full_resolved_priority": score(rows, trainer),
+        "shared_luna_available_priority": score(rows, trainer, shared=True),
+        "all_role_diagnostics": score(rows, trainer, priority=False),
+        "unresolved_positive_diagnostics": partial_positive_diagnostics(rows),
+        "provider_outcomes": dict(Counter(inputs.outputs[row["label_id"]]["state"] for row in rows)),
+        "coverage": cohort_coverage(inputs.cohort, inputs.outputs, inputs.audit, inputs.manifest),
+        "cohort_declared_assemblies": {key: inputs.manifest[key] for key in
+                                      ("extractorAssemblySha256", "runnerAssemblySha256")},
+        "environment": environment, "epochs": args.epochs, "seed": args.seed,
+        "input_and_source_files": reference.snapshot.receipts(),
+        "limits": ["Only the old 84 complete nonexcluded development fields fit these models. New labels supply scoring only.",
+                   "Declared cohort partitions remain unchanged; this command performs no tuning or model selection.",
+                   "Tune/evaluation label IDs cannot overlap the old100, including excluded fields. This does not prove complete unseen-identity disjointness; source/family partitions and unknown links remain operator evidence declarations.",
+                   "The old training comparison code receipt does not authenticate the new runner's compilation. The new comparison is bound by its approved manifest digest and retained request/output hashes.",
+                   "Known positives on incomplete fields are diagnostic only. Unavailable Luna outputs remain unavailable; fallback predictions are not Luna answers.",
+                   "Contact fields retain their full local/trained predictions but are not sent to Luna or evaluated through current routing; they are unavailable outputs, not empty answers.",
+                   "These are extraction measurements, not global identity accuracy or permission to activate a production policy."],
+    }
+    reference.snapshot.verify()
+    write_json(args.output / "report.pending.json", report)
+    artifacts = {("report.json" if path.name == "report.pending.json" else path.name):
+                 {"bytes": len(path.read_bytes()), "sha256": sha(path.read_bytes())}
+                 for path in sorted(args.output.iterdir()) if path.is_file()}
+    write_json(args.output / "artifacts.json", artifacts)
+    reference.snapshot.verify()
+    os.link(args.output / "report.pending.json", args.output / "report.json")
+    return report
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("labels", "receipt", "fields", "comparison", "code-receipt", "code-root",
@@ -531,10 +684,18 @@ def main(argv=None):
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=12)
     parser.add_argument("--seed", type=int, default=173)
+    parser.add_argument("--cohort-plan", type=Path)
+    parser.add_argument("--cohort-plan-sha256")
+    parser.add_argument("--cohort-comparison", type=Path)
+    parser.add_argument("--cohort-comparison-sha256")
     args = parser.parse_args(argv)
     try:
         require(1 <= args.epochs <= 100, "Epoch count is outside the experiment bound")
-        report = run(args)
+        cohort_values = (args.cohort_plan, args.cohort_plan_sha256,
+                         args.cohort_comparison, args.cohort_comparison_sha256)
+        require(all(value is None for value in cohort_values) or all(value is not None for value in cohort_values),
+                "Supply both cohort plan/comparison paths and their approved digests")
+        report = run(args) if args.cohort_plan is None else run_cohort(args)
     except (ValueError, OSError, KeyError, TypeError, RuntimeError, ImportError) as error:
         print("Matched credit experiment failed: " + type(error).__name__ + ": " + str(error), file=sys.stderr)
         return 1

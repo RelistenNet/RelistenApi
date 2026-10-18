@@ -20,6 +20,7 @@ if (
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
+        || (args.Length == 5 && args[0] == "luna-credit-cohort")
         || (
             args.Length == 5
             && args[0]
@@ -42,7 +43,8 @@ if (
             + "       RelistenNormalization people-source-context-baseline <repository-root> <bundle-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization actor-fields <fields.jsonl> <export-receipt.json> <frozen-bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>\n"
-            + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>"
+            + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>\n"
+            + "       RelistenNormalization luna-credit-cohort <plan.json> <plan-sha256> <new-output-directory> <job-uuid>"
     );
     return 2;
 }
@@ -204,10 +206,15 @@ try
         Console.WriteLine(JsonSerializer.Serialize(baseline));
         return 0;
     }
-    if (args[0] is "luna-credits" or "luna-credit-fields")
+    if (args[0] is "luna-credits" or "luna-credit-fields" or "luna-credit-cohort")
     {
         var fieldsMode = args[0] == "luna-credit-fields";
-        if (!Guid.TryParse(args[fieldsMode ? 5 : 3], out var jobUuid))
+        var cohortMode = args[0] == "luna-credit-cohort";
+        var jobIndex =
+            fieldsMode ? 5
+            : cohortMode ? 4
+            : 3;
+        if (!Guid.TryParse(args[jobIndex], out var jobUuid))
         {
             throw new ArgumentException("Use a valid bounded-job UUID.");
         }
@@ -215,15 +222,31 @@ try
         var cache = new NormalizationExtractionCacheService(db);
         var options = new LunaCreditExtractionOptions();
         using var http = new HttpClient();
-        if (fieldsMode)
+        if (fieldsMode || cohortMode)
         {
-            var fieldsReport = await new LunaCreditFieldEvaluationBatch(
+            var runner = new LunaCreditFieldEvaluationBatch(
                 http,
                 cache,
                 db,
                 options,
                 () => Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? ""
-            ).RunAsync(args[1], args[2], args[3], args[4], jobUuid, cancellation.Token);
+            );
+            var fieldsReport = cohortMode
+                ? await runner.RunCohortAsync(
+                    args[1],
+                    args[2],
+                    args[3],
+                    jobUuid,
+                    cancellation.Token
+                )
+                : await runner.RunAsync(
+                    args[1],
+                    args[2],
+                    args[3],
+                    args[4],
+                    jobUuid,
+                    cancellation.Token
+                );
             Console.WriteLine(JsonSerializer.Serialize(fieldsReport));
             return fieldsReport.State == "completed" ? 0 : 1;
         }

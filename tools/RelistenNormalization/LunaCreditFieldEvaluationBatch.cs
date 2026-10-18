@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Text.RegularExpressions;
 using Dapper;
 using Relisten;
 using Relisten.Api.Models.Normalization;
@@ -12,11 +11,11 @@ using Relisten.Data;
 namespace Relisten.Normalization.Batch;
 
 /// <summary>
-/// Compares exactly 100 complete development fields without sending label answers or source-wide
-/// context. The durable cache owns paid attempts; independent keyless passes prove cache reuse
-/// and expose the existing fallback policy. This runner publishes no catalog relationships.
+/// Compares the original 100 development fields or a separately authenticated bounded cohort,
+/// without sending label answers or source-wide context. The durable cache owns paid attempts;
+/// keyless passes prove cache reuse and expose existing routing. No catalog relationship is written.
 /// </summary>
-public sealed class LunaCreditFieldEvaluationBatch
+public sealed partial class LunaCreditFieldEvaluationBatch
 {
     public const string Version = "luna-credit-fields-v1";
     public const decimal CapUsd = 5m;
@@ -74,13 +73,27 @@ public sealed class LunaCreditFieldEvaluationBatch
             receiptPath,
             cancellationToken
         );
+        return await RunSelectionAsync(selection, newOutput, jobUuid, cancellationToken);
+    }
+
+    private async Task<LunaCreditFieldEvaluationReport> RunSelectionAsync(
+        LunaCreditFieldSelection selection,
+        string newOutput,
+        Guid jobUuid,
+        CancellationToken cancellationToken
+    )
+    {
+        var fieldCount = selection.Cohort?.Plan.FieldCount ?? FieldCount;
+        var capUsd = selection.Cohort?.Plan.CapUsd ?? CapUsd;
+        var maximumAttempts = selection.Cohort?.Plan.MaximumTotalAttempts ?? MaximumTotalAttempts;
+
         Directory.CreateDirectory(newOutput);
         await WriteJsonAsync(
             Path.Combine(newOutput, "selection.json"),
             selection,
             cancellationToken
         );
-        await cache.CreateJobAsync(jobUuid, CapUsd, cancellationToken, MaximumTotalAttempts);
+        await cache.CreateJobAsync(jobUuid, capUsd, cancellationToken, maximumAttempts);
 
         var results = new List<LunaCreditFieldResult>();
         var selectedKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -99,7 +112,14 @@ public sealed class LunaCreditFieldEvaluationBatch
         {
             // HTTP cancellation is already accounted by the cache. Export its durable ledger
             // without requiring the cancelled caller token; a completed manifest is never written.
-            await WriteReceiptsAsync(newOutput, jobUuid, selectedKeys, CancellationToken.None);
+            await WriteReceiptsAsync(
+                newOutput,
+                jobUuid,
+                selectedKeys,
+                fieldCount,
+                maximumAttempts,
+                CancellationToken.None
+            );
             throw;
         }
 
@@ -108,11 +128,14 @@ public sealed class LunaCreditFieldEvaluationBatch
             newOutput,
             jobUuid,
             selectedKeys,
+            fieldCount,
+            maximumAttempts,
             CancellationToken.None
         );
         cancellationToken.ThrowIfCancellationRequested();
         var complete = results.All(result =>
             result.State == "no_text"
+            || result.State == "not_requested_contact_scope"
             || (
                 result.Luna?.State == "extracted"
                 && result.CacheReplay is { State: "extracted", FromCache: true }
@@ -121,7 +144,7 @@ public sealed class LunaCreditFieldEvaluationBatch
         );
         var report = new LunaCreditFieldEvaluationReport(
             complete ? "completed" : "completed_partial",
-            Version,
+            selection.Cohort == null ? Version : CohortVersion,
             jobUuid,
             selection,
             options,
@@ -160,7 +183,8 @@ public sealed class LunaCreditFieldEvaluationBatch
                     typeof(LunaCreditFieldEvaluationBatch).Assembly.Location,
                     cancellationToken
                 )
-            )
+            ),
+            selection.Cohort == null ? null : CohortCoverage(selection, results, audit)
         );
         var manifest = Path.Combine(newOutput, "manifest.json");
         await WriteJsonAsync(manifest + ".writing", report, cancellationToken);
@@ -186,7 +210,20 @@ public sealed class LunaCreditFieldEvaluationBatch
             var fields = new Dictionary<string, string?> { [item.Field] = item.Text };
             var currentLocal = local.Extract(fields);
             LunaCreditFieldResult result;
-            if (item.NoText)
+            if (selection.Cohort != null && HasContact(item.Text))
+            {
+                // Keep the complete field/local result in this evaluation's denominator,
+                // but do not render, cache or request contact-bearing text from a provider.
+                result = new(
+                    item.LabelId,
+                    "not_requested_contact_scope",
+                    currentLocal,
+                    null,
+                    null,
+                    new("not_evaluated", currentLocal, Reason: "contact_scope")
+                );
+            }
+            else if (item.NoText)
             {
                 result = new(
                     item.LabelId,
@@ -264,20 +301,39 @@ public sealed class LunaCreditFieldEvaluationBatch
         string labelsPath,
         string fieldsPath,
         string receiptPath,
-        CancellationToken ct
+        CancellationToken ct,
+        LunaCreditCohortProfile? cohort = null
     )
     {
-        var labelsBytes = await ReadBoundedAsync(labelsPath, ct);
-        var fieldsBytes = await ReadBoundedAsync(fieldsPath, ct);
+        var fieldCount = cohort?.Plan.FieldCount ?? FieldCount;
+        var maximumBytes = cohort == null ? MaxFileBytes : MaximumCohortFileBytes;
+        var labelsBytes = await ReadBoundedAsync(labelsPath, ct, maximumBytes);
+        var fieldsBytes = await ReadBoundedAsync(fieldsPath, ct, maximumBytes);
         var receiptBytes = await ReadBoundedAsync(receiptPath, ct);
+        if (cohort != null)
+        {
+            Require(
+                Hash(labelsBytes) == cohort.Plan.Labels.Sha256
+                    && Hash(fieldsBytes) == cohort.Plan.Fields.Sha256
+                    && Hash(receiptBytes) == cohort.Plan.Receipt.Sha256,
+                "Cohort inputs differ from the frozen job plan."
+            );
+        }
         using var receipt = JsonDocument.Parse(receiptBytes);
         var root = receipt.RootElement;
-        Require(
-            root.GetProperty("status").GetString() == "draft_development"
-                && root.GetProperty("schema_version").GetString() == "credit-field-draft-v1"
-                && root.GetProperty("fields").GetInt32() == FieldCount,
-            "Use the complete 100-field development receipt."
-        );
+        if (cohort == null)
+        {
+            Require(
+                root.GetProperty("status").GetString() == "draft_development"
+                    && root.GetProperty("schema_version").GetString() == "credit-field-draft-v1"
+                    && root.GetProperty("fields").GetInt32() == FieldCount,
+                "Use the complete 100-field development receipt."
+            );
+        }
+        else
+        {
+            RequireCohortReceipt(root, cohort);
+        }
         Require(
             root.GetProperty("labels_sha256").GetString() == Hash(labelsBytes)
                 && root.GetProperty("raw_fields_sha256").GetString() == Hash(fieldsBytes),
@@ -287,8 +343,10 @@ public sealed class LunaCreditFieldEvaluationBatch
         var labels = ReadRows(labelsBytes).ToArray();
         var fields = ReadRows(fieldsBytes).ToArray();
         Require(
-            labels.Length == FieldCount && fields.Length == FieldCount,
-            "Exactly 100 complete fields are required."
+            labels.Length == fieldCount && fields.Length == fieldCount,
+            cohort == null
+                ? "Exactly 100 complete fields are required."
+                : "The complete declared cohort is required."
         );
         var byLabel = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var label in labels)
@@ -305,13 +363,20 @@ public sealed class LunaCreditFieldEvaluationBatch
                 "Unknown or duplicate field identifier."
             );
             var label = byLabel[labelId];
-            Require(
-                Text(label, "status") == "draft_development"
-                    && Text(label, "scope") == "complete_single_field"
-                    && Text(label, "family_partition") == "development"
-                    && Text(label, "artist_partition") == "development",
-                "Held-out or incomplete field supplied."
-            );
+            if (cohort == null)
+            {
+                Require(
+                    Text(label, "status") == "draft_development"
+                        && Text(label, "scope") == "complete_single_field"
+                        && Text(label, "family_partition") == "development"
+                        && Text(label, "artist_partition") == "development",
+                    "Held-out or incomplete field supplied."
+                );
+            }
+            else
+            {
+                RequireCohortLabel(label, cohort.Plan);
+            }
             var path = Text(field, "field_path");
             const string fieldPrefix = "/raw_record/row/";
             var fieldName = path.StartsWith(fieldPrefix, StringComparison.Ordinal)
@@ -353,7 +418,7 @@ public sealed class LunaCreditFieldEvaluationBatch
                 "Original field text changed."
             );
             Require(
-                !Regex.IsMatch(text, @"[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}"),
+                cohort != null || !HasContact(text),
                 "Contact-bearing text is outside this field comparison."
             );
             items.Add(
@@ -370,6 +435,10 @@ public sealed class LunaCreditFieldEvaluationBatch
                 )
             );
         }
+        if (cohort != null)
+        {
+            RequireCohortScope(items, cohort);
+        }
         var unique = items.Select(item => (item.Field, item.Text)).Distinct().Count();
         var nonemptyUnique = items
             .Where(item => !item.NoText)
@@ -382,7 +451,8 @@ public sealed class LunaCreditFieldEvaluationBatch
             Hash(receiptBytes),
             unique,
             nonemptyUnique,
-            items
+            items,
+            cohort
         );
     }
 
@@ -390,6 +460,8 @@ public sealed class LunaCreditFieldEvaluationBatch
         string output,
         Guid jobUuid,
         HashSet<string> selectedKeys,
+        int fieldCount,
+        int maximumAttempts,
         CancellationToken ct
     )
     {
@@ -415,8 +487,8 @@ public sealed class LunaCreditFieldEvaluationBatch
             var requests = (
                 await connection.QueryAsync<LunaCreditFieldRequestReceipt>(
                     new CommandDefinition(
-                        "SELECT sha256 AS \"CacheKey\",rendered_request AS \"RenderedRequest\",response_json AS \"ResponseJson\" FROM normalization.extraction_requests WHERE sha256=ANY(@keys) ORDER BY sha256 LIMIT 101",
-                        new { keys },
+                        "SELECT sha256 AS \"CacheKey\",rendered_request AS \"RenderedRequest\",response_json AS \"ResponseJson\" FROM normalization.extraction_requests WHERE sha256=ANY(@keys) ORDER BY sha256 LIMIT @requestLimit",
+                        new { keys, requestLimit = fieldCount + 1 },
                         transaction,
                         cancellationToken: ct
                     )
@@ -433,16 +505,16 @@ public sealed class LunaCreditFieldEvaluationBatch
                             output_tokens AS "OutputTokens",provider_request_id AS "ProviderRequestId",reason AS "Reason",
                             failure_stage AS "FailureStage",failed_response_body AS "FailedResponseBody"
                         FROM normalization.extraction_attempts WHERE job_uuid=@jobUuid
-                        ORDER BY created_at,uuid LIMIT 201
+                        ORDER BY created_at,uuid LIMIT @attemptLimit
                         """,
-                        new { jobUuid },
+                        new { jobUuid, attemptLimit = maximumAttempts + 1 },
                         transaction,
                         cancellationToken: ct
                     )
                 )
             ).ToArray();
             Require(
-                requests.Length <= FieldCount && attempts.Length <= MaximumTotalAttempts,
+                requests.Length <= fieldCount && attempts.Length <= maximumAttempts,
                 "Audit bounds exceeded; no truncated receipt is published."
             );
             transaction.Commit();
@@ -452,7 +524,11 @@ public sealed class LunaCreditFieldEvaluationBatch
         return audit;
     }
 
-    private static async Task<byte[]> ReadBoundedAsync(string path, CancellationToken ct)
+    private static async Task<byte[]> ReadBoundedAsync(
+        string path,
+        CancellationToken ct,
+        int maximumBytes = MaxFileBytes
+    )
     {
         await using var input = File.OpenRead(path);
         using var output = new MemoryStream();
@@ -461,7 +537,7 @@ public sealed class LunaCreditFieldEvaluationBatch
         while ((count = await input.ReadAsync(buffer, ct)) != 0)
         {
             Require(
-                output.Length + count <= MaxFileBytes,
+                output.Length + count <= maximumBytes,
                 "Field comparison input exceeds its byte bound."
             );
             output.Write(buffer, 0, count);
@@ -526,7 +602,9 @@ public sealed record LunaCreditFieldSelection(
     string ReceiptSha256,
     int UniqueFieldTuples,
     int UniqueNonemptyRequestInputs,
-    IReadOnlyList<LunaCreditFieldInput> Items
+    IReadOnlyList<LunaCreditFieldInput> Items,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        LunaCreditCohortProfile? Cohort = null
 );
 
 public sealed record LunaCreditFieldResult(
@@ -582,5 +660,7 @@ public sealed record LunaCreditFieldEvaluationReport(
     string ResultsSha256,
     string ReceiptsSha256,
     string ExtractorAssemblySha256,
-    string RunnerAssemblySha256
+    string RunnerAssemblySha256,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        LunaCreditCohortCoverage? CohortCoverage = null
 );

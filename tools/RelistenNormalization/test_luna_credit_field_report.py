@@ -1,18 +1,21 @@
 """Behavioral checks for the offline, priority-role development comparison."""
 
 import copy
+from collections import Counter
 import hashlib
 import json
 from pathlib import Path
 import tempfile
 import unittest
+import uuid
 
 import luna_credit_field_report as report
 
 
 def extraction(name="Renée 🌿", role="taper", field="taper"):
     return {"credits": [{"name": name, "role": role, "evidence": {
-        "field": field, "quote": name, "startCodePoint": 0, "endCodePoint": len(name)}}],
+        "field": field, "jsonPointer": "/" + field.replace("~", "~0").replace("/", "~1"),
+        "quote": name, "startCodePoint": 0, "endCodePoint": len(name)}}],
         "unresolved": []}
 
 
@@ -148,6 +151,229 @@ class CreditComparisonTests(unittest.TestCase):
             self.assertTrue((output / "report.json").exists())
             with self.assertRaisesRegex(ValueError, "new offline report"):
                 report.run(labels, source, output)
+
+
+class SyntheticCohort:
+    """A complete declared population; all inputs and provider receipts are synthetic."""
+
+    def __init__(self, root, count=3, purpose="untouched_evaluation"):
+        self.root, self.count = root, count
+        root.mkdir(parents=True)
+        self.labels, self.fields, self.items, self.outputs, self.scopes, self.requests = [], [], [], [], [], []
+        self.attempts = []
+        self.job_uuid = str(uuid.uuid4())
+        partition = {"development": "development", "tune": "validation", "untouched_evaluation": "test"}[purpose]
+        for index in range(count):
+            source = str(uuid.uuid5(uuid.NAMESPACE_URL, "new-cohort-source-" + str(index)))
+            artist = str(uuid.uuid5(uuid.NAMESPACE_URL, "new-cohort-artist-" + str(index)))
+            key, text = "credit-field:" + source + ":taper", "New cohort actor " + str(index)
+            digest = report.sha256(text.encode())
+            self.labels.append({"label_id": key, "task_id": "extract:source_sample:" + source,
+                "evidence_id": "source_sample:" + source, "scope": "complete_single_field",
+                "status": "draft_development" if purpose == "development" else "adjudicated",
+                "artist_partition": partition, "family_partition": partition,
+                "artist": {"uuid": artist}, "input_duplicate_family": "new-family-" + source,
+                "known_recording_family": "new-recording-" + source,
+                "resource": {"provider": "relisten_catalog_snapshot", "resource_type": "source", "resource_uuid": source},
+                "field_path": "/raw_record/row/taper", "field_sha256": digest, "field_codepoints": len(text),
+                "answer": {"exhaustive": True, "unresolved": False, "unknowns": [],
+                    "adjudicator": "synthetic-reviewer", "assertions": [{"role": "Taper",
+                        "name": {"start": 0, "end": len(text), "quote": text},
+                        "role_basis": {"kind": "structured_field", "field": "taper"}}]}})
+            self.fields.append({"label_id": key, "evidence_id": "source_sample:" + source,
+                "field_path": "/raw_record/row/taper", "field_sha256": digest, "field_text": text})
+            self.items.append({"labelId": key, "taskId": "extract:source_sample:" + source,
+                "evidenceId": "source_sample:" + source, "sourceUuid": source, "artistUuid": artist,
+                "field": "taper", "text": text, "fieldSha256": digest, "noText": False})
+            self.scopes.append({"label_id": key, "evidence_id": "source_sample:" + source,
+                "source_uuid": source, "artist_uuid": artist, "field": "taper", "field_sha256": digest,
+                "artist_partition": partition, "family_partition": partition,
+                "provider_origin": {"provider": "unknown", "kind": "unknown",
+                                    "evidence_sha256": None, "resource_key_sha256": None}})
+            request = json.dumps({"model": "gpt-6-luna", "input": [
+                {"role": "system", "content": "Extract luna-recording-credits-v2"},
+                {"role": "user", "content": json.dumps({"fields": {"taper": text}, "context": None})}]})
+            cache_key = report.sha256(request.encode())
+            answer = extraction(text)
+            luna = {"state": "extracted", "extraction": answer, "cacheKey": cache_key, "fromCache": True}
+            self.outputs.append({"labelId": key, "state": "extracted", "local": answer,
+                "luna": luna, "cacheReplay": dict(luna), "currentRouting": {"state": "local", "extraction": answer}})
+            self.requests.append({"cacheKey": cache_key, "renderedRequest": request,
+                "responseJson": json.dumps({"credits": [{"name": text, "role": "taper", "field": "taper",
+                    "quote": text, "start": 0, "end": len(text)}]})})
+        self.plan = {"schema_version": "luna-credit-cohort-job-v1", "purpose": purpose,
+            "field_count": count, "cap_usd": 30, "maximum_total_attempts": 1200,
+            "artist_partition": partition, "family_partition": partition}
+        self.save()
+
+    def save(self):
+        def data(name, value, jsonl=False):
+            raw = ("".join(json.dumps(row) + "\n" for row in value) if jsonl else json.dumps(value)).encode()
+            path = self.root / name
+            path.write_bytes(raw)
+            return {"path": name, "sha256": report.sha256(raw)}
+        self.plan["labels"] = data("labels.jsonl", self.labels, True)
+        self.plan["fields"] = data("fields.jsonl", self.fields, True)
+        self.scope = {"schema_version": "credit-cohort-scope-v1", "items": self.scopes}
+        self.plan["scope"] = data("scope.json", self.scope)
+        self.plan["receipt"] = data("receipt.json", {"schema_version": "credit-field-cohort-v1",
+            "status": "frozen_cohort", "purpose": self.plan["purpose"], "fields": self.count,
+            "labels_sha256": self.plan["labels"]["sha256"], "raw_fields_sha256": self.plan["fields"]["sha256"],
+            "scope_sha256": self.plan["scope"]["sha256"], "labels_frozen_before_predictions": True})
+        data("plan.json", self.plan)
+        self.plan_sha = report.sha256((self.root / "plan.json").read_bytes())
+        self.selection = {"labelsSha256": self.plan["labels"]["sha256"], "fieldsSha256": self.plan["fields"]["sha256"],
+            "receiptSha256": self.plan["receipt"]["sha256"], "items": self.items,
+            "cohort": {"planSha256": self.plan_sha, "plan": self.plan, "scope": self.scope}}
+        self.comparison = self.root / "comparison"
+        self.comparison.mkdir(exist_ok=True)
+        (self.comparison / "selection.json").write_text(json.dumps(self.selection))
+        results = "".join(json.dumps(row) + "\n" for row in self.outputs).encode()
+        receipts = json.dumps({"requests": self.requests, "attempts": self.attempts}).encode()
+        (self.comparison / "results.jsonl").write_bytes(results)
+        (self.comparison / "receipts.json").write_bytes(receipts)
+        self.manifest = {"version": "luna-credit-cohort-v1", "state": "completed", "fields": self.count,
+            "selection": self.selection, "states": dict(Counter(row["state"] for row in self.outputs)), "options": {"model": "gpt-6-luna"},
+            "resultsSha256": report.sha256(results), "receiptsSha256": report.sha256(receipts),
+            "extractorAssemblySha256": "a" * 64, "runnerAssemblySha256": "b" * 64,
+            "jobUuid": self.job_uuid, "job": {"uuid": self.job_uuid, "capUsd": 30, "accountedUsd": 0},
+            "paidAttempts": len(self.attempts),
+            "lunaFromCache": sum(row["luna"] is not None and row["luna"].get("fromCache") is True
+                                 for row in self.outputs),
+            "keylessReplayFromCache": sum(row["cacheReplay"] is not None
+                                           and row["cacheReplay"].get("fromCache") is True for row in self.outputs)}
+        (self.comparison / "manifest.json").write_text(json.dumps(self.manifest))
+
+    def authenticated(self):
+        return report.CohortPlan(self.root / "plan.json", self.plan_sha)
+
+    def replace_field_with_skipped(self, index, text):
+        previous_key = self.outputs[index]["luna"]["cacheKey"]
+        self.requests = [request for request in self.requests if request["cacheKey"] != previous_key]
+        digest = report.sha256(text.encode())
+        self.labels[index].update(field_sha256=digest, field_codepoints=len(text))
+        self.fields[index].update(field_text=text, field_sha256=digest)
+        self.items[index].update(text=text, fieldSha256=digest, noText=not text.strip())
+        self.scopes[index]["field_sha256"] = digest
+        local = {"credits": [], "unresolved": []}
+        self.labels[index]["answer"]["assertions"] = []
+        if text:
+            name = text.split()[0]
+            local = extraction(name)
+            self.labels[index]["answer"]["assertions"] = [{"role": "Taper",
+                "name": {"start": 0, "end": len(name), "quote": name},
+                "role_basis": {"kind": "structured_field", "field": "taper"}}]
+        contact = report.contact_bearing(text)
+        self.outputs[index].update(state="not_requested_contact_scope" if contact else "no_text",
+            local=local, luna=None, cacheReplay=None,
+            currentRouting={"state": "not_evaluated" if contact else "local", "extraction": local,
+                            "reason": "contact_scope" if contact else "no_text"})
+        self.save()
+
+
+class CohortComparisonTests(unittest.TestCase):
+    def test_all_600_declared_fields_are_scored_without_relabeling_test_partition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort", 600)
+            cohort = fixture.authenticated()
+            value = report.compare(cohort.labels_bytes, fixture.selection, fixture.outputs, cohort_plan=cohort)
+            self.assertEqual(value["fields"], 600)
+            self.assertEqual(value["methods"]["luna"]["true_positive"], 600)
+            self.assertEqual(value["cohort"]["purpose"], "untouched_evaluation")
+            self.assertEqual(value["cohort"]["artist_partition"], "test")
+            self.assertEqual(value["cohort"]["provider_origin_fields"], {"unknown": 600})
+            with self.assertRaisesRegex(ValueError, "Held-out"):
+                report.compare(cohort.labels_bytes, fixture.selection, fixture.outputs)
+            with self.assertRaisesRegex(ValueError, "every frozen field"):
+                report.compare(cohort.labels_bytes, fixture.selection, fixture.outputs[:-1], cohort_plan=cohort)
+
+    def test_plan_scope_labels_and_profile_cannot_silently_change_population(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort")
+            with self.assertRaisesRegex(ValueError, "approved digest"):
+                report.CohortPlan(fixture.root / "plan.json", "f" * 64)
+            cohort = fixture.authenticated()
+            changed = copy.deepcopy(fixture.selection)
+            changed["cohort"]["scope"]["items"].pop()
+            with self.assertRaisesRegex(ValueError, "another cohort"):
+                report.compare(cohort.labels_bytes, changed, fixture.outputs, cohort_plan=cohort)
+            fixture.scopes[0]["provider_origin"]["provider"] = "archive.org"
+            fixture.save()
+            with self.assertRaisesRegex(ValueError, "provenance"):
+                fixture.authenticated()
+
+    def test_tune_requires_adjudication_and_a_plan_relative_complete_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort", purpose="tune")
+            self.assertEqual(fixture.authenticated().plan["family_partition"], "validation")
+            fixture.labels[0]["answer"].pop("adjudicator")
+            fixture.save()
+            with self.assertRaisesRegex(ValueError, "adjudicator"):
+                fixture.authenticated()
+            fixture.labels[0]["answer"]["adjudicator"] = "synthetic-reviewer"
+            fixture.save()
+            fixture.plan["labels"]["path"] = "../labels.jsonl"
+            raw = json.dumps(fixture.plan).encode()
+            (fixture.root / "plan.json").write_bytes(raw)
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                report.CohortPlan(fixture.root / "plan.json", report.sha256(raw))
+
+    def test_new_report_requires_the_pinned_completed_manifest_before_creating_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort")
+            output = Path(directory) / "report"
+            kwargs = {"cohort_plan": fixture.root / "plan.json", "cohort_plan_sha256": fixture.plan_sha}
+            with self.assertRaisesRegex(ValueError, "manifest digest"):
+                report.run(fixture.root / "labels.jsonl", fixture.comparison, output, **kwargs)
+            self.assertFalse(output.exists())
+            manifest_sha = report.sha256((fixture.comparison / "manifest.json").read_bytes())
+            value = report.run(fixture.root / "labels.jsonl", fixture.comparison, output,
+                               comparison_sha256=manifest_sha, **kwargs)
+            self.assertEqual(value["fields"], 3)
+            self.assertTrue((output / "report.json").exists())
+
+    def test_contact_guard_matches_unicode_letters_numbers_and_two_letter_suffix(self):
+        self.assertTrue(report.contact_bearing("Recorded by Zoë <a+1@例.example>"))
+        self.assertTrue(report.contact_bearing("联系: 人@域.中国"))
+        self.assertFalse(report.contact_bearing("Device A @ B; no contact"))
+        self.assertFalse(report.contact_bearing("a@b.²²"))
+
+    def test_label_order_can_differ_but_scope_and_raw_field_order_cannot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort")
+            fixture.labels.reverse()
+            fixture.save()
+            cohort = fixture.authenticated()
+            cohort.check_selection(cohort.labels_bytes, fixture.selection)
+            fixture.scopes.reverse()
+            fixture.save()
+            with self.assertRaisesRegex(ValueError, "ordered population"):
+                fixture.authenticated()
+
+    def test_contact_and_no_text_remain_selected_but_are_not_luna_answers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = SyntheticCohort(Path(directory) / "cohort")
+            contact_text = "Alice <alice@example.org>"
+            fixture.replace_field_with_skipped(0, contact_text)
+            fixture.replace_field_with_skipped(1, "")
+            cohort = fixture.authenticated()
+            self.assertEqual(cohort.fields[fixture.labels[0]["label_id"]]["field_text"], contact_text)
+            value = report.compare(cohort.labels_bytes, fixture.selection, fixture.outputs, cohort_plan=cohort)
+            self.assertEqual(value["fields"], 3)
+            self.assertEqual(value["methods"]["luna"]["true_positive"], 1)
+            self.assertEqual(value["methods"]["luna"]["unavailable_fields"], 1)
+            self.assertEqual(value["methods"]["current_routing"]["unavailable_fields"], 1)
+            contact = next(row for row in value["diagnostics"] if row["label_id"] == fixture.labels[0]["label_id"])
+            self.assertIsNone(contact["predictions"]["luna"])
+            self.assertIsNone(contact["predictions"]["current_routing_with_local_on_failure"])
+            self.assertTrue(contact["predictions"]["local"])
+            job = str(uuid.uuid4())
+            key = fixture.outputs[2]["luna"]["cacheKey"]
+            coverage = report.cohort_coverage(cohort, report.indexed(fixture.outputs, "labelId"),
+                {"attempts": [{"jobUuid": job, "cacheKey": key}]}, {"jobUuid": job})
+            self.assertEqual(coverage["fields"], {"selected": 3, "eligible": 1,
+                "attempted_in_job": 1, "luna_available": 1, "contact_excluded": 1, "no_text": 1})
+            self.assertEqual(coverage["label_ids"]["contact_excluded"], [fixture.labels[0]["label_id"]])
 
 
 if __name__ == "__main__":
