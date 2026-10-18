@@ -1,0 +1,68 @@
+{
+  "annotation_evidence_sha256": "968505f1b24b67e710aeb3b0aefcbbdaca9c59b2eb9106567f0c04c9717ec5c0",
+  "annotation_pack": "local-dev/normalization-data/2026-10-17-cross-artist/annotation-v1",
+  "annotation_tasks_sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426",
+  "artists": 78,
+  "assertions": 105,
+  "blinded_subset_review": {
+    "answers_file": "blind-review.jsonl",
+    "answers_sha256": "5121ae163ba6a197ea75bcafad885f67ebfbbe7fd83dd14fa215963e7eb6deb9",
+    "comparison_file": "review-comparison.jsonl",
+    "comparison_sha256": "844b6ad33fb9e331a03658ed1f3a0f11706f3f64efedfac434f4830068cd3b6a",
+    "coverage_complete_fields": 20,
+    "draft_answers_visible_to_reviewer": false,
+    "fields": 20,
+    "initial_answers_path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/blind-review-answers.initial.jsonl",
+    "initial_answers_sha256": "bef1bc83886758e13e88b2013cb5d91422782ed6a449212508610fc8748b996d",
+    "input_path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/blind-review-fields.jsonl",
+    "input_sha256": "be94e34bceb3d7b426042dd5b57bfe2e7c76089f02272bb2d7a90f8d72af0b84",
+    "matching_name_role_sets": 20,
+    "review_kind": "separate Codex agent, original fields only; development judgment, not independent human adjudication",
+    "unresolved_comparisons": 1,
+    "validated_spans": 51
+  },
+  "configured_artist_provider_cohorts": {
+    "archive.org": 78
+  },
+  "draft_quality_review": {
+    "blinded": false,
+    "fields": 100,
+    "unresolved_findings": 0
+  },
+  "exhaustive_empty_assertion_fields": 21,
+  "field_counts": {
+    "description": 13,
+    "lineage": 22,
+    "source": 1,
+    "taper": 40,
+    "taper_notes": 4,
+    "transferrer": 20
+  },
+  "fields": 100,
+  "independent_review_complete": false,
+  "labeler": "codex-development-draft",
+  "labels_sha256": "5f2eb545f8d5d66b4750d74e883cc179e673e4775f5df9207fac027069599c12",
+  "policy_activation_permitted": false,
+  "raw_fields_path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-credits-v1/fields.jsonl",
+  "raw_fields_sha256": "652506634c3ff5a36010fcacd781b4e8c4fc003532778c03ef1ad58849f7bd44",
+  "recording_provider_ownership_labeled": false,
+  "schema_version": "credit-field-draft-v1",
+  "selection_policy": "manual-diversity-v1; intersection of existing family and artist development partitions; complete single fields; no contact-bearing selected fields",
+  "snapshot_sha256": "1bcfa40bfc666c1222b3ee876250b61a76cd9b9adbbb978b62db1d16952166a4",
+  "source_records": 78,
+  "status": "draft_development",
+  "strata": {
+    "compound_credit": 5,
+    "empty_field": 1,
+    "equipment_only": 20,
+    "html_credit": 5,
+    "organization_or_unresolved": 6,
+    "prose_credit": 12,
+    "structured_credit": 49,
+    "unknown_credit": 2
+  },
+  "training_excluded_label_ids": [
+    "credit-field:51c9ea75-94cf-ed09-87f0-7e5f05502160:description"
+  ],
+  "unresolved_fields": 15
+}
