@@ -1,0 +1,257 @@
+"""Venue lookup contracts over synthetic retained outcomes and native catalog homes."""
+from contextlib import redirect_stdout
+import gzip
+import io
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
+from shadow_reader import ShadowIndex
+
+from venue_directory import VenueDirectory, VenueDirectoryBuilder, file_hash
+
+
+def uid(number):
+    return f"00000000-0000-0000-0000-{number:012d}"
+
+
+def write_json(path, value):
+    path.write_text(json.dumps(value))
+
+
+def write_gzip(path, rows):
+    with gzip.open(path, "wt") as stream:
+        for row in rows:
+            stream.write(json.dumps(row) + "\n")
+
+
+class TestVenueDirectory(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.run = self.root / "run"
+        self.raw = self.root / "raw"
+        self.run.mkdir()
+        self.raw.mkdir()
+        (self.run / "venues").mkdir()
+        self.database = self.root / "venues.sqlite3"
+        self.artists = [(10, "Artist One"), (20, "Other Artist"), (30, "Ärtist Drei")]
+        self.rows = [self.venue(1, 10, "Greek Theatre", "Berkeley, CA", "one"),
+                     self.venue(2, 20, "Greek Theatre", "Los Angeles, CA", "two"),
+                     self.venue(3, 30, "Alte Bühne 100%_Hall", "Berlin", "room"),
+                     self.venue(4, 20, "Greek Theatre", "Berkeley, CA", "one")]
+        self.rows[0]["proposal"]["pastNames"] = [{"name": "Hearst Amphitheatre", "fromYear": 1900,
+            "toYear": None, "scope": "unknown", "relationship": "history_unspecified",
+            "evidenceField": "past_names", "evidenceQuote": "Hearst Amphitheatre", "evidenceOffset": 0, "evidenceLength": 18}]
+        write_json(self.run / "manifest.json", {"state": "completed", "methods": {"ShadowVenueAdapter": "retained-v1"}})
+        self.chunks()
+        prefix = [{"kind": "artist", "row": {"id": number, "uuid": uid(number), "name": name}} for number, name in self.artists]
+        sources = [self.source(101, 10, 1, 2, "unknown"), self.source(102, 10, 1, 1, "1999-02"), self.source(103, 20, 4, 4, None)]
+        source = self.raw / "sources.jsonl.gz"
+        write_gzip(source, prefix + sources)
+        receipt = self.raw / "sources.receipt.json"
+        write_json(receipt, {"state": "completed"})
+        write_json(self.raw / "core-inputs-manifest-v1.json", {
+            "plan": [{"id": "sources", "domain": "sources"}],
+            "completedShards": [{"shardId": "sources", "gzipPath": source.name,
+                "receipt": receipt.name, "receiptFingerprint": {"sha256": file_hash(receipt)},
+                "compressed": {"sha256": file_hash(source)}, "actualRows": 3}]})
+
+    def venue(self, number, artist, name, location, key):
+        return {"domain": "venues", "inputUuid": uid(number), "inputKey": "venue_sample:" + uid(number),
+            "inputKind": "venue_sample", "artistUuid": uid(artist), "artistName": dict(self.artists)[artist],
+            "method": "retained-v1", "outcome": "unresolved", "reason": "premises_unresolved",
+            "proposal": {"proposedPlaceKey": "venue:" + key, "displayName": name,
+                "scope": "room" if number == 3 else "place", "groupingBasis": "retained_venue_row",
+                "locality": {"originalWording": location, "city": location.split(",")[0], "region": None,
+                    "countryCode": None, "basis": "parsed_catalog_location"},
+                "pastNames": [], "protectedUnknowns": ["room_parent_unknown"], "enrichmentTasks": [],
+                "alternatives": [], "alternativeCount": 97, "alternativesTruncated": True, "acceptedIdentity": False},
+            "evidence": {"nativeVenue": {"id": number, "uuid": uid(number), "artist_id": artist,
+                "name": name, "location": location}}}
+
+    @staticmethod
+    def source(number, artist, venue, show_venue, date):
+        return {"kind": "source_sample", "row": {"uuid": uid(number), "artist_id": artist,
+            "venue_id": venue, "show_id": number + 1000, "display_date": date},
+            "show_context": {"id": number + 1000, "uuid": uid(number + 1000),
+                "venue_id": show_venue, "display_date": "uncertain show date"}}
+
+    def chunks(self):
+        write_gzip(self.run / "venues" / "100-a.jsonl.gz", self.rows)
+
+    def build(self, resume=False):
+        with redirect_stdout(io.StringIO()):
+            VenueDirectoryBuilder(self.run, self.raw, self.database, minimum_free=0).build(resume)
+        return VenueDirectory(self.database, "http://files/", "http://core/")
+
+    def test_cross_artist_search_keeps_namesakes_and_existing_hypotheses_separate(self):
+        directory = self.build()
+        result = directory.search({"q": "Greek"})
+        self.assertEqual(result["total"], 3)
+        self.assertEqual({r["place_key"] for r in result["rows"]}, {"venue:one", "venue:two"})
+        detail = directory.detail(uid(1), {})
+        self.assertEqual({r["uuid"] for r in detail["relatedRecords"]}, {uid(1), uid(4)})
+        self.assertFalse(detail["venue"]["accepted_identity"])
+        self.assertEqual(detail["venue"]["alternative_count"], 97)
+        self.assertTrue(detail["venue"]["alternatives_truncated"])
+
+    def test_history_locality_artist_and_literal_unicode_queries(self):
+        directory = self.build()
+        self.assertEqual(directory.search({"q": "Hearst"})["rows"][0]["uuid"], uid(1))
+        self.assertEqual(directory.search({"q": "Greek", "locality": "Berkeley", "artist": "Other"})["rows"][0]["uuid"], uid(4))
+        self.assertEqual(directory.search({"q": "BÜHNE 100%_", "artist": "ÄRTIST"})["rows"][0]["uuid"], uid(3))
+        self.assertEqual(directory.search({"q": "100%X"})["total"], 0)
+        self.assertEqual(directory.search({"scope": "room"})["total"], 1)
+
+    def test_native_recording_and_show_venue_links_preserve_each_home(self):
+        directory = self.build()
+        first = directory.detail(uid(1), {})
+        recordings = {r["source_uuid"]: r for r in first["recordings"]}
+        self.assertEqual(first["recordingsTotal"], 2)
+        self.assertEqual(recordings[uid(101)]["relationship"], "recording_venue")
+        self.assertEqual(recordings[uid(102)]["relationship"], "recording_and_show_venue")
+        self.assertEqual(recordings[uid(101)]["source_date"], "unknown")
+        self.assertEqual(recordings[uid(101)]["show_date"], "uncertain show date")
+        self.assertEqual(recordings[uid(102)]["source_date"], "1999-02")
+        self.assertIn("source%3A" + uid(101), recordings[uid(101)]["filesUrl"])
+        other = directory.detail(uid(2), {})["recordings"][0]
+        self.assertEqual(other["source_uuid"], uid(101))
+        self.assertEqual(other["relationship"], "show_venue")
+
+    def test_artist_filter_pagination_and_evidence_use_exact_retained_row(self):
+        directory = self.build()
+        first = directory.search({"q": "Greek", "limit": "1"})
+        second = directory.search({"q": "Greek", "limit": "1", "offset": "1"})
+        self.assertEqual(first["total"], 3)
+        self.assertNotEqual(first["rows"][0]["uuid"], second["rows"][0]["uuid"])
+        detail = directory.detail(uid(1), {"artist": uid(20)})
+        self.assertEqual(detail["recordingsTotal"], 0)
+        self.assertEqual(directory.evidence(uid(1)), self.rows[0])
+        self.assertEqual(directory.detail(uid(1), {})["venue"]["history"], self.rows[0]["proposal"]["pastNames"])
+        self.assertIsNone(directory.detail(uid(999), {}))
+
+    def test_later_result_retracts_historical_search_terms(self):
+        changed = json.loads(json.dumps(self.rows[0]))
+        changed["proposal"]["displayName"] = "New Hall"
+        changed["proposal"]["pastNames"] = []
+        write_gzip(self.run / "venues" / "200-b.jsonl.gz", [changed])
+        directory = self.build()
+        self.assertEqual(directory.search({"q": "Hearst"})["total"], 0)
+        self.assertEqual(directory.search({"q": "New Hall"})["rows"][0]["uuid"], uid(1))
+        self.assertEqual(directory.evidence(uid(1)), changed)
+
+    def test_storage_pause_preserves_checkpoint_then_resumes(self):
+        builder = VenueDirectoryBuilder(self.run, self.raw, self.database, minimum_free=0)
+        checks = 0
+        def space():
+            nonlocal checks
+            checks += 1
+            if checks == 3:
+                raise RuntimeError("disk reserve")
+        with redirect_stdout(io.StringIO()), patch.object(builder, "_space", side_effect=space):
+            with self.assertRaises(RuntimeError):
+                builder.build()
+        partial = VenueDirectory(self.database, "", "")
+        self.assertEqual(partial.stats()["buildState"], "paused")
+        self.assertEqual(partial.search({})["total"], 4)
+        finished = self.build(resume=True)
+        self.assertEqual(finished.stats()["buildState"], "completed")
+        self.assertEqual(finished.detail(uid(1), {})["recordingsTotal"], 2)
+
+    def test_population_search_is_not_limited_to_retained_twenty_alternatives(self):
+        self.rows.extend(self.venue(number, 20, "Greek Theatre", "Another City", str(number))
+                         for number in range(50, 75))
+        self.chunks()
+        directory = self.build()
+        result = directory.search({"q": "Greek", "offset": "20", "limit": "100"})
+        self.assertEqual(result["total"], 28)
+        self.assertEqual(len(result["rows"]), 8)
+
+    def test_contradictory_source_show_context_refuses_instead_of_moving_home(self):
+        source = self.raw / "sources.jsonl.gz"
+        with gzip.open(source, "rt") as stream:
+            rows = [json.loads(line) for line in stream]
+        rows[-1]["show_context"]["id"] = 999999
+        write_gzip(source, rows)
+        capture = self.raw / "core-inputs-manifest-v1.json"
+        manifest = json.loads(capture.read_text())
+        manifest["completedShards"][0]["compressed"]["sha256"] = file_hash(source)
+        write_json(capture, manifest)
+        with self.assertRaisesRegex(ValueError, "source/show context disagrees"):
+            self.build()
+        self.assertEqual(VenueDirectory(self.database, "", "").stats()["buildState"], "failed")
+
+    def test_generated_links_filter_actual_reader_to_the_recording_home(self):
+        directory = self.build()
+        run = self.root / "file-reader"
+        run.mkdir()
+        for domain in ("file_contents", "performances"):
+            (run / domain).mkdir()
+            records = []
+            for source in (101, 102):
+                records.append({"domain": domain, "inputKey": "track_sample:" + uid(source + 2000),
+                    "inputKind": "track_sample", "inputUuid": uid(source + 2000), "artistUuid": uid(10),
+                    "artistName": "Artist", "provider": "catalog", "outcome": "proposed", "reason": None,
+                    "method": "fixture", "entityKeys": ["source:" + uid(source)],
+                    "proposal": {"sourceUuid": uid(source), "mp3Url": "https://audio.invalid/" + str(source)}, "evidence": {}})
+            write_gzip(run / domain / "1.jsonl.gz", records)
+        reader = ShadowIndex(run)
+        reader.scan_once()
+        recording = directory.detail(uid(1), {"limit": "1"})["recordings"][0]
+        for url in (recording["filesUrl"], recording["coreUrl"]):
+            filters = {key: values[-1] for key, values in parse_qs(urlsplit(url).query).items()}
+            result = reader.search(filters)
+            self.assertEqual(result["total"], 1)
+            original = reader.detail(result["items"][0]["id"])["record"]
+            self.assertEqual(original["proposal"]["sourceUuid"], recording["source_uuid"])
+
+    def test_partial_source_checkpoint_does_not_report_uncomputed_counts_as_zero(self):
+        builder = VenueDirectoryBuilder(self.run, self.raw, self.database, minimum_free=0)
+        checks = 0
+        def space():
+            nonlocal checks
+            checks += 1
+            if checks == 4:
+                raise RuntimeError("disk reserve after committed source shard")
+        with redirect_stdout(io.StringIO()), patch.object(builder, "_space", side_effect=space):
+            with self.assertRaises(RuntimeError):
+                builder.build()
+        directory = VenueDirectory(self.database, "", "")
+        self.assertEqual(directory.stats()["recordings"], 3)
+        self.assertFalse(directory.stats()["countsReady"])
+        result = directory.detail(uid(1), {})
+        self.assertFalse(result["recordingsComplete"])
+        self.assertIsNone(result["venue"]["source_count"])
+        self.assertEqual(result["recordingsTotal"], 2)
+        self.assertTrue(all(r["source_count"] is None for r in directory.search({})["rows"]))
+
+    def test_partial_show_context_cannot_supply_an_unproven_show_home(self):
+        for case, (source_show_id, context_id) in enumerate(((None, 1103), (1103, None))):
+            with self.subTest(source_show_id=source_show_id, context_id=context_id):
+                source = self.source(103, 20, 4, 4, None)
+                source["row"]["show_id"] = source_show_id
+                source["show_context"]["id"] = context_id
+                path = self.raw / "sources.jsonl.gz"
+                write_gzip(path, [source])
+                capture = self.raw / "core-inputs-manifest-v1.json"
+                manifest = json.loads(capture.read_text())
+                manifest["completedShards"][0]["compressed"]["sha256"] = file_hash(path)
+                manifest["completedShards"][0]["actualRows"] = 1
+                write_json(capture, manifest)
+                database = self.root / ("partial-" + str(case) + ".sqlite3")
+                with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, "source/show context disagrees"):
+                    VenueDirectoryBuilder(self.run, self.raw, database, 0).build()
+
+    def test_changed_captured_source_bytes_are_refused(self):
+        with (self.raw / "sources.jsonl.gz").open("ab") as stream:
+            stream.write(b"changed")
+        with self.assertRaisesRegex(ValueError, "source chunk changed"):
+            self.build()
+
+
+if __name__ == "__main__":
+    unittest.main()
