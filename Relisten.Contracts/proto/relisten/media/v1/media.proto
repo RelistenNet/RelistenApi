@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package relisten.media.v1;
+
+import "relisten/common/v1/time.proto";
+
+option csharp_namespace = "Relisten.Media.V1";
+
+// Header of a feature blob, features/{md5}/{component}-v{N}.bin. Layout on disk:
+//
+//   "RLFT" | u32le header_len | FeatureBlobHeader (header_len bytes) | payload | u32le crc32
+//
+// The crc covers everything before it. See docs/formats.md §Feature blobs.
+message FeatureBlobHeader {
+  // Bumped on a change to the outer layout above. Readers reject unknown values.
+  uint32 format_version = 1;
+  string md5 = 2;
+  // "peaks", "cens", "tuning" or "chromaprint".
+  string component = 3;
+  uint32 component_version = 4;
+  string algo = 5;
+  string params_hash = 6;
+  // Decoder identity, so a decode change is detectable, e.g. "libmpg123/1.32.6+soxr/0.1.3".
+  string decoder = 7;
+  uint32 sample_rate = 8;
+  uint64 sample_count = 9;
+  repeated Section sections = 10;
+}
+
+enum DType {
+  DTYPE_UNSPECIFIED = 0;
+  DTYPE_U8 = 1;
+  DTYPE_U16 = 2;
+  DTYPE_U32 = 3;
+  DTYPE_I64 = 4;
+  DTYPE_F32 = 5;
+  DTYPE_F64 = 6;
+  // A struct of fields, each little-endian, described by `fields`.
+  DTYPE_RECORD = 7;
+}
+
+// A raw little-endian array inside the payload. Offsets are relative to payload start.
+message Section {
+  string name = 1;
+  DType dtype = 2;
+  repeated uint64 shape = 3;
+  repeated Field fields = 4;
+  uint64 offset = 5;
+  uint64 length = 6;
+}
+
+message Field {
+  string name = 1;
+  DType dtype = 2;
+}
+
+enum FileLineageKind {
+  FILE_LINEAGE_KIND_UNSPECIFIED = 0;
+  FILE_LINEAGE_KIND_SPLIT = 1;
+  FILE_LINEAGE_KIND_JOIN = 2;
+  FILE_LINEAGE_KIND_RETRIM = 3;
+  FILE_LINEAGE_KIND_REENCODE = 4;
+}
+
+// Old file time → new file time when upstream bytes change (data-model.md §2.1).
+// Stored in media.file_lineage.map; this message is its API form.
+message FileLineage {
+  string from_md5 = 1;
+  string to_md5 = 2;
+  FileLineageKind kind = 3;
+  // x = old file time, y = new file time.
+  relisten.common.v1.PiecewiseLinearMap map = 4;
+  // Old-file spans that matched nothing in to_md5.
+  repeated relisten.common.v1.Span unmatched = 5;
+  string algo = 6;
+  string params_hash = 7;
+}

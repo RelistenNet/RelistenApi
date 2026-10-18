@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The v1 contracts of the reality pipeline (relisten.reality.v1, relisten.media.v1,
+       relisten.common.v1). proto/ is copied verbatim from RelistenNet/string-theory, where the
+       contract tests live; see README.md. The private Relisten.Alignment package depends on a
+       package with this id, and this project satisfies it. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Relisten.Contracts</RootNamespace>
+    <!-- Grpc.Tools bundles only an x64 protoc for macOS; on Apple silicon use Homebrew's. -->
+    <Protobuf_ProtocFullPath Condition="'$(PROTOBUF_PROTOC)' == '' And Exists('/opt/homebrew/bin/protoc')">/opt/homebrew/bin/protoc</Protobuf_ProtocFullPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Protobuf Include="proto/relisten/**/*.proto" ProtoRoot="proto" GrpcServices="None" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.31.1" />
+    <PackageReference Include="Grpc.Tools" Version="2.71.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

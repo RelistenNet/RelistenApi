@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package relisten.reality.v1;
+
+import "relisten/common/v1/time.proto";
+
+option csharp_namespace = "Relisten.Reality.V1";
+
+// The diff from version from_version to to_version of one event's reality, written at
+// build time (data-model.md §5). Stored in reality.version_maps.body.
+message VersionMap {
+  string event_uuid = 1;
+  uint32 from_version = 2;
+  uint32 to_version = 3;
+  // x = old reality time, y = new reality time.
+  relisten.common.v1.PiecewiseLinearMap map = 4;
+  // Old-reality spans with no image in the new version (e.g. a de-duplicated overlap).
+  // Anything stored there is flagged when translated.
+  repeated relisten.common.v1.Span removed = 5;
+  // New-reality spans with no preimage (audio the old reference lacked).
+  repeated relisten.common.v1.Span inserted = 6;
+  repeated PerformanceLineage performances = 7;
+}
+
+enum LineageKind {
+  LINEAGE_KIND_UNSPECIFIED = 0;
+  LINEAGE_KIND_SAME = 1;
+  LINEAGE_KIND_SPLIT = 2;
+  LINEAGE_KIND_MERGE = 3;
+  LINEAGE_KIND_NEW = 4;
+  LINEAGE_KIND_GONE = 5;
+}
+
+// One edge. `new` has no from_uuid; `gone` has no to_uuid.
+message PerformanceLineage {
+  string from_uuid = 1;
+  string to_uuid = 2;
+  LineageKind kind = 3;
+  // Overlap as a share of the shorter performance.
+  double overlap = 4;
+}

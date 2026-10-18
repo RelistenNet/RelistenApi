@@ -1,0 +1,11 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+breaking:
+  # Within a package version (v1) changes are additive only. A breaking change is a new
+  # package (v2) living alongside v1. See docs/formats.md.
+  use:
+    - WIRE_JSON

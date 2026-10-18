@@ -1,0 +1,303 @@
+syntax = "proto3";
+
+package relisten.reality.v1;
+
+import "google/protobuf/timestamp.proto";
+import "relisten/common/v1/time.proto";
+
+option csharp_namespace = "Relisten.Reality.V1";
+
+// One immutable reality version of one event: the API and export view of what the
+// reality.* tables hold for (event_uuid, version). The tables are the source of truth;
+// this message is how the version travels (API, fixtures, golden tests).
+//
+// Times: *_us. Unless a field says "file", it is reality time in THIS version.
+message Reality {
+  // "relisten.reality/1". Redundant with the package for typed readers, but lets a stored
+  // blob identify itself.
+  string schema = 1;
+  string event_uuid = 2;
+  uint32 version = 3;
+  // sha256 hex of the canonical relisten.reality-inputs/1 manifest (docs/formats.md).
+  string inputs_hash = 4;
+  // Per-component algorithm versions, e.g. {"align": "1.0.0", "reality": "1.0.0"}.
+  map<string, string> algo = 5;
+  string params_hash = 6;
+  google.protobuf.Timestamp created_at = 7;
+
+  Reference reference = 8;
+  int64 duration_us = 9;
+
+  repeated Performance performances = 10;
+  // Derived segue chains with a fan name, e.g. "Scarlet > Fire". Not entities.
+  repeated Group groups = 11;
+  repeated SourceAlignment sources = 12;
+
+  Diagnostics diagnostics = 13;
+}
+
+// Reality's clock. `source_uuid` is the reference: the source whose files the clock follows
+// wherever it has audio. `layout` is the spine: spans that tile [0, duration_us) exactly, in
+// order, without overlap. In each span reality runs at that file's clock (slope 1), so the
+// spine says which audio *is* reality time t (data-model.md §3).
+//
+// Most spans are reference files. Where the reference repeats audio (a disc-split overlap)
+// the later file's span starts past the repeat (file_start_us > 0). Where other sources hold
+// music the reference lacks, a reality version may insert a span from one of their files;
+// the reference then has a Gap there, and the version map that grew it lists it as inserted.
+message Reference {
+  string source_uuid = 1;
+  repeated LayoutEntry layout = 2;
+}
+
+// Reality [start_us, start_us + file_end_us - file_start_us) plays file md5
+// [file_start_us, file_end_us).
+message LayoutEntry {
+  string md5 = 1;
+  // Reality time.
+  int64 start_us = 2;
+  // The source this file belongs to: the reference, or the source an inserted span came from.
+  string source_uuid = 3;
+  // File time.
+  int64 file_start_us = 4;
+  int64 file_end_us = 5;
+}
+
+message Performance {
+  // Minted once, carried forward across versions by overlap (catalogue.md).
+  string uuid = 1;
+  uint32 order = 2;
+  // Display only. What the performance *is* comes from performance.song claims.
+  string label = 3;
+  uint32 occurrence = 4;
+  int64 start_us = 5;
+  int64 end_us = 6;
+  // Evidence for the boundary at start_us. Absent for the first performance.
+  Boundary boundary_in = 7;
+  // Track-title evidence feeding the title matcher (PoC: label_claims).
+  repeated TitleEvidence title_evidence = 8;
+}
+
+message Boundary {
+  int64 t_us = 1;
+  bool silence = 2;
+  bool segue = 3;
+  uint32 segue_votes = 4;
+  // Sources covering the boundary.
+  uint32 covering = 5;
+  // Sources whose track break falls within 10 s of t_us.
+  uint32 agree_10s = 6;
+  int64 spread_us = 7;
+  repeated BoundaryVote votes = 8;
+}
+
+// One source's track break near the boundary, in reality time.
+message BoundaryVote {
+  string source_uuid = 1;
+  int64 t_us = 2;
+}
+
+message TitleEvidence {
+  string label = 1;
+  // Share of covering duration whose track titles name this label.
+  double support = 2;
+  repeated TitleClaim claims = 3;
+}
+
+message TitleClaim {
+  string source_uuid = 1;
+  string track_uuid = 2;
+  string md5 = 3;
+  string title = 4;
+  double share = 5;
+}
+
+message Group {
+  string label = 1;
+  repeated string performance_uuids = 2;
+}
+
+enum SourceKind {
+  SOURCE_KIND_UNSPECIFIED = 0;
+  SOURCE_KIND_SBD = 1;
+  SOURCE_KIND_AUD = 2;
+  SOURCE_KIND_MTX = 3;
+  SOURCE_KIND_FM = 4;
+}
+
+// How one source lands on this version's reality.
+message SourceAlignment {
+  string source_uuid = 1;
+  // Display only (the archive.org identifier). Never an id.
+  string upstream_identifier = 2;
+  SourceKind kind = 3;
+  bool is_reference = 4;
+  double coverage = 5;
+  repeated PerformanceCoverage performance_coverage = 6;
+  double median_speed = 7;
+  double tuning_cents = 8;
+  double pitch_vs_slope_cents = 9;
+  int64 unmapped_music_us = 10;
+
+  repeated SourceFile files = 11;
+  repeated Segment segments = 12;
+  repeated Gap gaps = 13;
+  repeated Unmapped unmapped = 14;
+  // Most of this source's music lands nowhere in this reality (thresholds in params_hash;
+  // never the reference). Another event on the date, a misfiled source, a broken transfer or
+  // an alignment failure: the flag doesn't say which. Causes are claims (source.event) or
+  // media.files.qa_flags, not reality fields.
+  bool orphan = 15;
+}
+
+message PerformanceCoverage {
+  string performance_uuid = 1;
+  double share = 2;
+}
+
+message SourceFile {
+  string track_uuid = 1;
+  string md5 = 2;
+  // Display only.
+  string name = 3;
+  string title = 4;
+  // File time.
+  int64 duration_us = 5;
+  repeated Piece pieces = 6;
+  uint32 anchors_raw = 7;
+  // Track order within the source at import time, as in the inputs manifest. With md5 it names
+  // this occurrence: a source can hold the same md5 twice, so the current track is resolved by
+  // (source, position, md5) through media.current_tracks; track_uuid is as of this build.
+  uint32 position = 8;
+  // Reference files only: reality time of this file's time 0 in the build's reference layout
+  // (alignment-spec.md §4), for every reference file, including one wholly inside a
+  // disc-split repeat that has no spine span. Tools that re-run alignment against this
+  // version rebuild its reference tape from these, never by re-running the layout. Explicit
+  // presence: 0 is a real start, absence means a blob written before this field.
+  optional int64 reference_start_us = 9;
+}
+
+// One contiguous file → reality mapping. A file with a splice or a dropout has several.
+message Piece {
+  // x = file time, y = reality time.
+  relisten.common.v1.PiecewiseLinearMap knots = 1;
+  uint32 anchors = 2;
+  double mean_inliers = 3;
+  double dtw_cost = 4;
+  double slope = 5;
+  double slope_jitter = 6;
+  double pitch_resid = 7;
+  uint32 dtw_segments = 8;
+}
+
+// A piece cut at performance boundaries. Identity: (event, version, track_uuid, ordinal).
+// Performance-relative times are not stored: reality_start_us - performance.start_us.
+message Segment {
+  string track_uuid = 1;
+  uint32 ordinal = 2;
+  string md5 = 3;
+  string performance_uuid = 4;
+  int64 file_start_us = 5;
+  int64 file_end_us = 6;
+  int64 reality_start_us = 7;
+  int64 reality_end_us = 8;
+  double speed = 9;
+  // Individual signals only. Any blended score is computed at read time.
+  Signals signals = 10;
+  // x = file time, y = reality time.
+  relisten.common.v1.PiecewiseLinearMap knots = 11;
+}
+
+message Signals {
+  double anchors_per_min = 1;
+  double dtw_cost = 2;
+  double slope = 3;
+  double slope_jitter = 4;
+  double pitch_resid = 5;
+}
+
+// A stretch of a performance this source doesn't cover.
+message Gap {
+  string performance_uuid = 1;
+  int64 reality_start_us = 2;
+  int64 reality_end_us = 3;
+}
+
+// A stretch of a file that maps nowhere. File time.
+message Unmapped {
+  string md5 = 1;
+  int64 start_us = 2;
+  int64 end_us = 3;
+  double level_db = 4;
+  bool music = 5;
+}
+
+// Build diagnostics. Not consumed by readers; kept for QA and the history UI.
+message Diagnostics {
+  repeated IdentityPair identity = 1;
+  repeated Triangulation triangulation = 2;
+  repeated ReferenceOverlap reference_overlaps = 3;
+  int64 audio_us = 4;
+}
+
+enum IdentityVerdict {
+  IDENTITY_VERDICT_UNSPECIFIED = 0;
+  IDENTITY_VERDICT_DIFFERENT_RECORDINGS = 1;
+  IDENTITY_VERDICT_SAME_RECORDING_REENCODED = 2;
+  IDENTITY_VERDICT_SUBSET_OF_SAME_RECORDING = 3;
+  IDENTITY_VERDICT_OVERLAPPING_SOURCE_MATERIAL = 4;
+}
+
+message IdentityPair {
+  string a_source_uuid = 1;
+  string b_source_uuid = 2;
+  double chromaprint_a_in_b = 3;
+  double chromaprint_b_in_a = 4;
+  double mean_score = 5;
+  uint32 identical_md5_files = 6;
+  IdentityVerdict verdict = 7;
+}
+
+// Maps source A to reality directly and via source B, and compares.
+message Triangulation {
+  string a_source_uuid = 1;
+  string b_source_uuid = 2;
+  uint32 points = 3;
+  int64 median_us = 4;
+  int64 p95_us = 5;
+  int64 max_us = 6;
+  repeated TriangulationPoint worst = 7;
+}
+
+message TriangulationPoint {
+  int64 error_us = 1;
+  string md5 = 2;
+  int64 file_us = 3;
+  int64 direct_us = 4;
+  int64 via_us = 5;
+}
+
+// Reference files whose audio overlaps (e.g. a repeated disc boundary); de-duplicated.
+message ReferenceOverlap {
+  string a_md5 = 1;
+  string b_md5 = 2;
+  int64 overlap_us = 3;
+}
+
+// A series (one date's events, a run, a festival; docs/catalogue.md §Events vs shows) played
+// as one timeline: its events' current realities back to back, in series position order.
+// Derived at read time and never stored. A position on this timeline is never stored either:
+// store the event's reality position (event_uuid, version, t_us), data-model.md §3.
+message SeriesTimeline {
+  string series_uuid = 1;
+  repeated SeriesEntry entries = 2;
+}
+
+message SeriesEntry {
+  string event_uuid = 1;
+  // The event's reality version this view was read from.
+  uint32 version = 2;
+  // Series time at which this event's reality time 0 sits.
+  int64 start_us = 3;
+  int64 duration_us = 4;
+}
