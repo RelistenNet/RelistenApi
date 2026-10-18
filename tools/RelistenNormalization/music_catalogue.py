@@ -27,7 +27,7 @@ VERSION = "music-catalogue-v2"
 DEFAULT_MAXIMUM_BYTES = 256 * 1024**2
 MAXIMUM_BYTES = 1024**3
 MINIMUM_FREE_BYTES = int(4.5 * 1024**3)
-MAXIMUM_LINE_BYTES = 16 * 1024**2
+MAXIMUM_LINE_BYTES = 32 * 1024**2
 PREFIXES = (b"repertoire:", b"composition:musicbrainz:", b"setlist:", b"setlist_account:")
 
 
@@ -281,14 +281,24 @@ class MusicCatalogueBuilder:
             with gzip.open(path, "rb") as stream:
                 line_no = 0
                 while target is not None:
-                    line = stream.readline(MAXIMUM_LINE_BYTES + 1)
+                    line_no += 1
+                    selected = line_no == target[0]
+                    read_bytes = MAXIMUM_LINE_BYTES + 1 if selected else min(MAXIMUM_LINE_BYTES, 64 * 1024)
+                    line = stream.readline(read_bytes)
                     if not line:
                         raise ValueError("An indexed witness line disappeared.")
-                    line_no += 1
-                    if len(line) > MAXIMUM_LINE_BYTES:
-                        raise CatalogueBuildPaused("A witness chunk exceeds the bounded line size.")
-                    if line_no != target[0]:
+                    if not selected:
+                        # The index counts physical lines. Drain unrelated bodies in
+                        # bounded fragments without decoding or retaining their JSON.
+                        while not line.endswith(b"\n"):
+                            line = stream.readline(read_bytes)
+                            if not line:
+                                break
                         continue
+                    if len(line) > MAXIMUM_LINE_BYTES:
+                        raise CatalogueBuildPaused(
+                            f"Selected music witness exceeds {MAXIMUM_LINE_BYTES} bytes: "
+                            f"scope={source['scope']!r}, chunk={relative!r}, line={line_no}.")
                     record = json.loads(line)
                     witnesses = list(target[1])
                     self._project_record(db, source_id, source, record, witnesses)

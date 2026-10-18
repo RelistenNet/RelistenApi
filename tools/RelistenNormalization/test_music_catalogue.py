@@ -316,6 +316,99 @@ class TestMusicCatalogue(unittest.TestCase):
         self.assertEqual(self.output.read_bytes(), before)
         self.assertFalse(list(self.root.glob("*.building")))
 
+    def test_selected_composition_witness_can_use_a_larger_bounded_line_budget(self):
+        stable = "repertoire:stable-before-line-budget"
+        self.chunk("repertoire", "050", self.record("repertoire", "song:stable",
+                   self.song(stable, "Stable"), [stable]))
+        self.build()
+        previous = self.output.read_bytes()
+        song_key = "repertoire:bounded-composition"
+        work_key = "composition:musicbrainz:bounded-composition"
+        mention = {"title": "Bounded composition", "repertoireEntityKeys": [song_key],
+                   "links": [self.work(work_key, "Bounded work")]}
+        selected = self.record("compositions", "file:bounded-composition", {"mentions": [mention]},
+                               [song_key, work_key])
+        selected["evidence"]["originalInputs"]["description"] = "SELECTED_PRIVATE_PADDING" + "x" * 4096
+        selected_bytes = len(json.dumps(selected, ensure_ascii=False).encode()) + 1
+        self.assertGreater(selected_bytes, 2048)
+        self.assertLess(selected_bytes, 8192)
+        self.chunk("compositions", "100", selected)
+        self.index.scan_once()
+        sources = [Source("catalogue", self.run, "http://127.0.0.1:1")]
+
+        with patch("music_catalogue.MAXIMUM_LINE_BYTES", 2048):
+            with self.assertRaises(CatalogueBuildPaused) as refused:
+                MusicCatalogueBuilder(sources, self.output, minimum_free_bytes=0).build()
+        self.assertIn("2048", str(refused.exception))
+        self.assertIn("compositions/100.jsonl.gz", str(refused.exception))
+        self.assertIn("line=1", str(refused.exception))
+        self.assertEqual(self.output.read_bytes(), previous)
+        with patch("music_catalogue.MAXIMUM_LINE_BYTES", 8192):
+            stats = MusicCatalogueBuilder(sources, self.output, minimum_free_bytes=0).build()
+
+        self.assertEqual(stats["maximum_line_bytes"], 8192)
+        work = self.catalogue().work(work_key)
+        self.assertEqual(work["title"], "Bounded work")
+        self.assertEqual([song["entity_key"] for song in work["songs"]], [song_key])
+        song = self.catalogue().song("catalogue", song_key)
+        self.assertEqual((song["title"], song["witness_chunk"], song["witness_line"]),
+                         ("Bounded composition", "compositions/100.jsonl.gz", 1))
+        self.assertIsNotNone(self.catalogue().song("catalogue", stable))
+        self.assertNotIn(b"SELECTED_PRIVATE_PADDING", self.output.read_bytes())
+        self.assertFalse(list(self.root.glob("*.building")))
+
+    def test_large_unselected_lines_are_drained_but_selected_overflow_preserves_the_catalogue(self):
+        marker = "UNSELECTED_PRIVATE_PADDING"
+        irrelevant = self.record("file_contents", "file:unselected-first", {"unrelated": marker + "x" * 24576}, [])
+        between = {**irrelevant, "inputKey": "file:unselected-between", "inputUuid": "file:unselected-between"}
+        first_key, second_key = "repertoire:after-large-line", "repertoire:after-another-large-line"
+        first = self.record("file_contents", "file:selected-first", {
+            "titleInterpretation": {"segments": [{"song": self.song(first_key, "First selected")}]}
+        }, [first_key])
+        second = self.record("file_contents", "file:selected-second", {
+            "titleInterpretation": {"segments": [{"song": self.song(second_key, "Second selected")}]}
+        }, [second_key])
+        self.chunk("file_contents", "100", irrelevant, first, between, second)
+        self.index.scan_once()
+        sources = [Source("catalogue", self.run, "http://127.0.0.1:1")]
+        original_loads = json.loads
+
+        def refuse_unselected_parse(value, *args, **kwargs):
+            text = value.decode() if isinstance(value, bytes) else value
+            if marker in text:
+                self.fail("Unselected oversized prose must be drained without JSON parsing")
+            return original_loads(value, *args, **kwargs)
+
+        with patch("music_catalogue.MAXIMUM_LINE_BYTES", 8192), \
+                patch("music_catalogue.json.loads", side_effect=refuse_unselected_parse):
+            MusicCatalogueBuilder(sources, self.output, minimum_free_bytes=0).build()
+
+        for key, title, line in ((first_key, "First selected", 2), (second_key, "Second selected", 4)):
+            song = self.catalogue().song("catalogue", key)
+            self.assertEqual((song["title"], song["witness_chunk"], song["witness_line"]),
+                             (title, "file_contents/100.jsonl.gz", line))
+        previous = self.output.read_bytes()
+        oversized = self.record("file_contents", "file:selected-overflow", {
+            "titleInterpretation": {"segments": [{"song": self.song("repertoire:overflow", "Overflow")}]}
+        }, ["repertoire:overflow"])
+        oversized["evidence"]["originalInputs"]["description"] = "SELECTED_OVERFLOW_PRIVATE" + "x" * 24576
+        skipped = {**irrelevant, "inputKey": "file:unselected-overflow-prefix", "inputUuid": "file:unselected-overflow-prefix"}
+        self.chunk("file_contents", "200", skipped, oversized)
+        self.index.scan_once()
+        with patch("music_catalogue.MAXIMUM_LINE_BYTES", 8192), \
+                patch("music_catalogue.json.loads", side_effect=refuse_unselected_parse):
+            with self.assertRaises(CatalogueBuildPaused) as refused:
+                MusicCatalogueBuilder(sources, self.output, minimum_free_bytes=0).build()
+
+        message = str(refused.exception)
+        self.assertIn("8192", message)
+        self.assertIn("scope='catalogue'", message)
+        self.assertIn("file_contents/200.jsonl.gz", message)
+        self.assertIn("line=2", message)
+        self.assertNotIn("SELECTED_OVERFLOW_PRIVATE", message)
+        self.assertEqual(self.output.read_bytes(), previous)
+        self.assertFalse(list(self.root.glob("*.building")))
+
     def test_multiple_chunks_reuse_private_staging_pages_under_a_small_cap(self):
         for chunk in range(55):
             records = []
