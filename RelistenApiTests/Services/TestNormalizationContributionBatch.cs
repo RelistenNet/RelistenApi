@@ -72,10 +72,33 @@ public sealed class TestNormalizationContributionBatch
         var limit = contributors ? new NormalizationInputContributionsLimits(1, 2) : new(2, 1);
         var read = () => fixture.Work.GetInputContributionsAsync(subject, limit);
 
-        await read.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*no partial snapshot*");
+        var error = (
+            await read.Should()
+                .ThrowAsync<NormalizationInputContributionsCapacityException>()
+                .WithMessage("*no partial snapshot*")
+        ).Which;
         var complete = await fixture.Work.GetInputContributionsAsync(subject, new(2, 2));
+        error
+            .Owner.Should()
+            .Be(
+                new NormalizationSubjectObservation(
+                    complete.Owner!.SubjectUuid,
+                    complete.Owner.DesiredGeneration,
+                    complete.Owner.EditorialRevision,
+                    complete.Owner.PublishedWorkUuid
+                )
+            );
+        error
+            .Membership.Should()
+            .Be(
+                new NormalizationInputContributionsCapacityStamp(
+                    2,
+                    2,
+                    complete
+                        .Contributions.Sum(contribution => contribution.Revision)
+                        .ToString(System.Globalization.CultureInfo.InvariantCulture)
+                )
+            );
         complete.Contributions.Should().HaveCount(2);
         complete.Contributions.Sum(state => state.Resources.Count).Should().Be(2);
     }
@@ -95,10 +118,25 @@ public sealed class TestNormalizationContributionBatch
         );
         var read = () => fixture.Work.GetInputContributionsAsync(subject, new(1, 1));
 
-        await read.Should()
-            .ThrowAsync<InvalidOperationException>()
-            .WithMessage("*no partial snapshot*");
+        var error = (
+            await read.Should()
+                .ThrowAsync<NormalizationInputContributionsCapacityException>()
+                .WithMessage("*no partial snapshot*")
+        ).Which;
         var complete = await fixture.Work.GetInputContributionsAsync(subject, new(1, 2));
+        error
+            .Owner.Should()
+            .Be(
+                new NormalizationSubjectObservation(
+                    complete.Owner!.SubjectUuid,
+                    complete.Owner.DesiredGeneration,
+                    complete.Owner.EditorialRevision,
+                    complete.Owner.PublishedWorkUuid
+                )
+            );
+        error
+            .Membership.Should()
+            .Be(new NormalizationInputContributionsCapacityStamp(0, 0, "0", 2));
         complete.Contributions.Should().BeEmpty();
         complete
             .UnmanagedBaseline!.Resources.Should()

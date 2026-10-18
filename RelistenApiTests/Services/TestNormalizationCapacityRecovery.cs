@@ -42,10 +42,23 @@ public sealed class TestNormalizationCapacityRecovery
         }
         var before = (await fixture.Work.GetSubjectAsync(owner))!;
         var limits = new NormalizationInputContributionsLimits(2, 1);
-        await FluentActions
-            .Invoking(() => fixture.Work.GetInputContributionsAsync(owner, limits))
-            .Should()
-            .ThrowAsync<InvalidOperationException>();
+        var failure = (
+            await FluentActions
+                .Invoking(() => fixture.Work.GetInputContributionsAsync(owner, limits))
+                .Should()
+                .ThrowAsync<NormalizationInputContributionsCapacityException>()
+        ).Which;
+        failure
+            .Owner.Should()
+            .Be(
+                new NormalizationSubjectObservation(
+                    before.SubjectUuid,
+                    before.DesiredGeneration,
+                    before.EditorialRevision,
+                    before.PublishedWorkUuid
+                )
+            );
+        failure.Membership.Should().Be(new NormalizationInputContributionsCapacityStamp(2, 2, "2"));
 
         // Admission releases the first contributor's keys. The second still owns the same
         // resource, so the union and owner stamp remain unchanged without publication.
@@ -61,6 +74,15 @@ public sealed class TestNormalizationCapacityRecovery
         retirement.DesiredGeneration.Should().Be(before.DesiredGeneration);
         recovered.Owner.Should().Be(before);
         recovered.Contributions.Should().HaveCount(2);
+        var repairedMembership = new NormalizationInputContributionsCapacityStamp(
+            recovered.Contributions.Count,
+            recovered.Contributions.Sum(contribution => (long)contribution.Resources.Count),
+            recovered
+                .Contributions.Sum(contribution => contribution.Revision)
+                .ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        repairedMembership.Should().Be(new NormalizationInputContributionsCapacityStamp(2, 1, "3"));
+        repairedMembership.Should().NotBe(failure.Membership);
         recovered
             .Contributions.Single(value => value.Contributor == firstContributor)
             .Resources.Should()

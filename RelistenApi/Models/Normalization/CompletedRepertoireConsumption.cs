@@ -51,6 +51,10 @@ public sealed record CompletedRepertoireConsumption(
     IReadOnlyList<CompletedRepertoireTarget> Targets
 );
 
+/// <summary>The complete retained account exceeds the consumer's declared capacity profile.</summary>
+public sealed class CompletedRepertoireConsumptionCapacityException(string message)
+    : InvalidOperationException(message);
+
 /// <summary>A newer acknowledgment is admitted; callers may wait without replacing the selected immutable receipt.</summary>
 public sealed class CompletedRepertoireConsumptionPendingException(
     Guid attemptUuid,

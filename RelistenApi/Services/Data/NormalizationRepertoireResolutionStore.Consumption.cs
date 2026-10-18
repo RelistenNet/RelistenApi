@@ -692,7 +692,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
     {
         if (inputs.Count > 100)
         {
-            throw new InvalidOperationException(
+            throw new CompletedRepertoireConsumptionCapacityException(
                 "The complete producer input set exceeds 100 revisions."
             );
         }
@@ -841,7 +841,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         {
             if (known.Count + pending.Length > 100000)
             {
-                throw new InvalidOperationException(
+                throw new CompletedRepertoireConsumptionCapacityException(
                     "The accepted repertoire redirect closure exceeds 100,000 identities."
                 );
             }
@@ -923,7 +923,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
                 // Charge every returned path entry before allocating either path array below.
                 if (++pathEntries > 100000)
                 {
-                    throw new InvalidOperationException(
+                    throw new CompletedRepertoireConsumptionCapacityException(
                         "The complete accepted repertoire paths exceed 100,000 entries."
                     );
                 }
@@ -953,7 +953,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         budget.Add(bound.Bytes, MaximumPreparationBytes);
         if (bound.Count != canonical.Length || bound.Largest > MaximumCheckpointBytes)
         {
-            throw new InvalidOperationException(
+            throw new CompletedRepertoireConsumptionCapacityException(
                 "The complete accepted repertoire assertion projection exceeds its bound."
             );
         }
@@ -1112,7 +1112,7 @@ public sealed partial class NormalizationRepertoireResolutionStore
         {
             if (bytes < 0 || bytes > phaseLimit || bytes > MaximumSummaryBytes - consumed)
             {
-                throw new InvalidOperationException(
+                throw new CompletedRepertoireConsumptionCapacityException(
                     "The complete repertoire consumption exceeds its bounded snapshot budget."
                 );
             }

@@ -91,7 +91,7 @@ public sealed partial class NormalizationWorkService
             || counts.Bindings > limits.MaximumBindings
         )
         {
-            throw ContributionSnapshotTooLarge();
+            throw ContributionSnapshotTooLarge(owner, counts);
         }
         var contributions = await ReadContributionStates(
             connection,
@@ -111,7 +111,7 @@ public sealed partial class NormalizationWorkService
             );
             if (bindings > limits.MaximumBindings)
             {
-                throw ContributionSnapshotTooLarge();
+                throw ContributionSnapshotTooLarge(owner, counts, bindings);
             }
             if (bindings != 0)
             {
@@ -153,8 +153,9 @@ public sealed partial class NormalizationWorkService
         c.QuerySingleAsync<ContributionBindingCounts>(
             new CommandDefinition(
                 """
-                WITH headers AS MATERIALIZED (SELECT uuid FROM normalization.work_input_contributions WHERE subject_uuid=@subjectUuid)
+                WITH headers AS MATERIALIZED (SELECT uuid,revision FROM normalization.work_input_contributions WHERE subject_uuid=@subjectUuid)
                 SELECT (SELECT count(*) FROM headers) AS "Contributors",
+                    (SELECT COALESCE(sum(revision::numeric),0)::text FROM headers) AS "RevisionSum",
                     (SELECT count(*) FROM normalization.work_contribution_inputs i JOIN headers h ON h.uuid=i.contribution_uuid)
                     +(SELECT count(*) FROM normalization.work_contribution_dependencies i JOIN headers h ON h.uuid=i.contribution_uuid)
                     +(SELECT count(*) FROM normalization.work_contribution_catalog_inputs i JOIN headers h ON h.uuid=i.contribution_uuid)
@@ -196,10 +197,40 @@ public sealed partial class NormalizationWorkService
             )
         );
 
-    private static InvalidOperationException ContributionSnapshotTooLarge() =>
+    /// <summary>Metadata-only retry observation; it grants no source or publication authority.</summary>
+    internal static async Task<NormalizationInputContributionsCapacityStamp> ReadInputContributionCapacityStampAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid subjectUuid,
+        CancellationToken ct
+    )
+    {
+        var counts = await CountContributionBindings(connection, transaction, subjectUuid, ct);
+        var unmanaged =
+            counts.Contributors == 0
+                ? await CountUnmanagedBindings(connection, transaction, subjectUuid, ct)
+                : 0;
+        return new(counts.Contributors, counts.Bindings, counts.RevisionSum, unmanaged);
+    }
+
+    private static NormalizationInputContributionsCapacityException ContributionSnapshotTooLarge(
+        SubjectRow owner,
+        ContributionBindingCounts counts,
+        long unmanagedBindings = 0
+    ) =>
         new(
-            "The complete input contribution snapshot exceeds its contributor or binding limit; no partial snapshot was returned."
+            new(
+                owner.Uuid,
+                owner.DesiredGeneration,
+                owner.EditorialRevision,
+                owner.PublishedWorkUuid
+            ),
+            new(counts.Contributors, counts.Bindings, counts.RevisionSum, unmanagedBindings)
         );
 
-    private sealed record ContributionBindingCounts(long Contributors, long Bindings);
+    private sealed record ContributionBindingCounts(
+        long Contributors,
+        string RevisionSum,
+        long Bindings
+    );
 }

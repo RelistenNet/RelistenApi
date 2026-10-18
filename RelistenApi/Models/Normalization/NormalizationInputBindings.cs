@@ -4,6 +4,27 @@ using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
+/// <summary>Counts and monotonic header revisions from the same snapshot, including retained empty contributors.</summary>
+public sealed record NormalizationInputContributionsCapacityStamp(
+    long Contributors,
+    long Bindings,
+    string RevisionSum,
+    long UnmanagedBindings = 0
+);
+
+/// <summary>A complete snapshot was refused; retry observes owner and membership changes without loading oversized rows.</summary>
+public sealed class NormalizationInputContributionsCapacityException(
+    NormalizationSubjectObservation owner,
+    NormalizationInputContributionsCapacityStamp membership
+)
+    : InvalidOperationException(
+        "The complete input contribution snapshot exceeds its contributor or binding limit; no partial snapshot was returned."
+    )
+{
+    public NormalizationSubjectObservation Owner { get; } = owner;
+    public NormalizationInputContributionsCapacityStamp Membership { get; } = membership;
+}
+
 /// <summary>
 /// Replaces one contributor's complete inputs and identity dependencies. A recording uses
 /// a stable contributor key; another recording cannot remove its bindings. Revision zero

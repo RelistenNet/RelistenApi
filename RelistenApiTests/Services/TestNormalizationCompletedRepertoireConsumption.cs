@@ -531,7 +531,7 @@ public sealed class TestNormalizationCompletedRepertoireConsumption
             await FluentActions
                 .Invoking(() => Read(completed.AttemptUuid))
                 .Should()
-                .ThrowAsync<InvalidOperationException>()
+                .ThrowAsync<CompletedRepertoireConsumptionCapacityException>()
                 .WithMessage("*paths exceed 100,000 entries*");
             return;
         }
@@ -579,7 +579,7 @@ public sealed class TestNormalizationCompletedRepertoireConsumption
         await FluentActions
             .Invoking(() => Read(completed.AttemptUuid))
             .Should()
-            .ThrowAsync<InvalidOperationException>()
+            .ThrowAsync<CompletedRepertoireConsumptionCapacityException>()
             .WithMessage("*bounded snapshot budget*");
     }
 
