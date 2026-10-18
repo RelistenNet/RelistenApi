@@ -37,6 +37,21 @@ public sealed partial class NormalizationRepertoireResolutionStore
         {
             return attempt;
         }
+        return await HydratePublicationProofAsync(c, t, attempt, requested, ct);
+    }
+
+    /// <summary>Loads bounded stage proof from an attempt read under this transaction's header lock.</summary>
+    internal async Task<RepertoireResolutionAttempt> HydratePublicationProofAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        RepertoireResolutionAttempt attempt,
+        RepertoireResolutionStage requested,
+        CancellationToken ct
+    )
+    {
+        // Publication holds the attempt header lock, which keeps stage checkpoints fixed
+        // in this transaction. Reuse its immutable preparation and stage evidence across
+        // ACK pages, then load each page and paired creation write through the bounded reader.
         var ids = attempt
             .Stages.Where(value =>
                 value.StageUuid == requested.StageUuid
@@ -52,7 +67,9 @@ public sealed partial class NormalizationRepertoireResolutionStore
         {
             if (ids.Contains(stages[index].StageUuid))
             {
-                stages[index] = (await ReadStage(c, t, attemptUuid, stages[index].StageUuid, ct))!;
+                stages[index] = (
+                    await ReadStage(c, t, attempt.AttemptUuid, stages[index].StageUuid, ct)
+                )!;
             }
         }
         return attempt with { Stages = stages };

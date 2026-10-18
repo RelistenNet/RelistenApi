@@ -306,11 +306,7 @@ public sealed partial class NormalizationRepertoireResolutionProcessor
             )
         )
         {
-            var proof =
-                await store.ReadForPublicationAsync(c, t, attempt.AttemptUuid, ct, page.StageUuid)
-                ?? throw new NormalizationConflictException(
-                    "The saved source decision page is unavailable."
-                );
+            var proof = await store.HydratePublicationProofAsync(c, t, attempt, page, ct);
             var full = proof.Stages.Single(value => value.StageUuid == page.StageUuid);
             NormalizedMusicService.RequireRepertoirePageDecisions(proof, full);
             if (
