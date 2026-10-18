@@ -8,6 +8,7 @@ if (
     !(
         (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
         || (args.Length == 5 && args[0] == "luna-credits")
+        || (args.Length == 4 && args[0] == "musicbrainz-acquire")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
     )
 )
@@ -15,6 +16,7 @@ if (
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
+            + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>\n"
             + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>"
     );
@@ -30,6 +32,47 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "musicbrainz-acquire")
+    {
+        if (!Guid.TryParse(args[3], out var commandUuid) || commandUuid == Guid.Empty)
+        {
+            throw new ArgumentException("Use a nonempty acquisition command UUID.");
+        }
+        var db = NormalizationLocalDatabase.Create();
+        var evidence = new NormalizationEvidenceService(db);
+        var store = new NormalizationMusicBrainzInputStore(db);
+        using var http = new HttpClient(
+            new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = System.Net.DecompressionMethods.None,
+                MaxResponseHeadersLength = 64,
+            }
+        );
+        var service = new NormalizationMusicBrainzInputService(
+            http,
+            store,
+            evidence,
+            new MusicBrainzAcquisitionOptions
+            {
+                UserAgent = "RelistenNormalization.Operator/1.0 (https://relisten.net)",
+            }
+        );
+        var acquisition = await new MusicBrainzAcquisitionBatch(service, store, evidence).RunAsync(
+            args[1],
+            args[2],
+            commandUuid,
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                acquisition,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return acquisition.State == "completed" ? 0 : 1;
+    }
     if (args[0] == "venue-pair-baseline")
     {
         var baseline = await new VenuePairBaselineBatch().RunAsync(
@@ -109,6 +152,8 @@ catch (Exception exception)
                 or InvalidDataException
                 or UnauthorizedAccessException
                 or ArgumentException
+                or NormalizationConflictException
+                or OperationCanceledException
     )
 {
     Console.Error.WriteLine(exception.Message);

@@ -49,3 +49,7 @@ This command runs offline. It reads only task/evidence correspondence and retain
 `baseline.jsonl` preserves each `task_id`, ordered `evidence_ids`, and the actual comparison with features, rules, candidate status and disposition. Label decisions, primary-source rationales and split links are excluded from matching. The linked labels, evidence and split-link files are fingerprinted against their exact manifest entries; split links are never interpreted as matcher evidence.
 
 The completed `manifest.json` records the projection version, original bundle/file hashes, executed API and runner assembly hashes, and output hash/count. Inputs have byte, row and name bounds. A failed or cancelled run publishes no completed manifest; an output prefix can remain as `baseline.partial.jsonl`. Retry in a new directory. These comparisons support development experiments against the real implementation; they do not measure production accuracy or activate automatic matching.
+
+## Retained MusicBrainz acquisition
+
+Use [`musicbrainz-acquire`](musicbrainz-acquire.md) for a bounded work, recording or artist lookup through the public acquisition service. The mode uses a dedicated local database, returns immediately when admission is pending, and exports exact responses, retained input, typed observations and hashes. It does not accept catalog identity links.
