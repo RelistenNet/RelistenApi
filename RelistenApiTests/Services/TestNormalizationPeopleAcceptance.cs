@@ -15,7 +15,7 @@ namespace RelistenApiTests.Services;
 /// not evaluated production artifacts.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
-public sealed class TestNormalizationPeopleAcceptance
+public sealed partial class TestNormalizationPeopleAcceptance
 {
     private const string Operator = "acceptance-fixture-operator";
     private NormalizationDomainFixture fixture = null!;
@@ -818,7 +818,12 @@ public sealed class TestNormalizationPeopleAcceptance
         (await people.ReadCreditContextAsync(source.SourceUuid)).Credits.Should().ContainSingle();
     }
 
-    private async Task ActivatePolicy(double matchThreshold = 1.5, bool allowCreation = false)
+    private async Task ActivatePolicy(
+        double matchThreshold = 1.5,
+        bool allowCreation = false,
+        double contactWeight = 0,
+        double profileWeight = 0
+    )
     {
         var artifact = new PeopleAcceptancePolicyArtifact(
             Guid.NewGuid(),
@@ -830,7 +835,7 @@ public sealed class TestNormalizationPeopleAcceptance
             NormalizationRecordingExtractor.Version,
             NormalizedPeopleService.CreditContextVersion,
             ["retained_credit"],
-            new(0, 1, 1, 1, matchThreshold, 0.5),
+            new(0, 1, 1, 1, matchThreshold, 0.5, contactWeight, profileWeight),
             allowCreation
                 ? new(PeopleResolutionPolicyEvaluator.CreationClassifierVersion, 0.25)
                 : null,

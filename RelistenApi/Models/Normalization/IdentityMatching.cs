@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -64,7 +65,9 @@ public sealed record PersonMatchRecord(
     string? Kind,
     IReadOnlyList<IdentityMatchingName> Names,
     IReadOnlyList<MatchingExternalIdentity> ExternalIdentities,
-    IReadOnlySet<Guid> ArtistUuids
+    IReadOnlySet<Guid> ArtistUuids,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        PersonActorMatchContext? ActorContext = null
 );
 
 /// <summary>

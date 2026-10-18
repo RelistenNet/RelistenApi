@@ -165,9 +165,8 @@ public sealed partial class NormalizationPeopleResolutionStore
         NormalizationRecordingCreditProposal proposal
     )
     {
-        var querySupported = NormalizationPeopleResolutionDecisionService.CanQueryName(
-            proposal.Mention.Name
-        );
+        var projection = PeopleActorProjection.Project(proposal.Mention, Guid.Empty);
+        var querySupported = projection.Query != null;
         if (snapshot == null)
         {
             if (querySupported)
@@ -183,8 +182,7 @@ public sealed partial class NormalizationPeopleResolutionStore
             || snapshot.Version != NormalizationCandidateService.FactsVersion
             || snapshot.Query.Domain != IdentityMatchingDomain.People
             || snapshot.Query.ArtistUuid != null
-            || !snapshot.Query.Names.SequenceEqual(new[] { proposal.Mention.Name })
-            || snapshot.Query.ExternalIdentities.Count != 0
+            || !Equal(snapshot.Query, projection.Query)
             || snapshot.ReadSet.CandidateUniverses.Count != 1
             || snapshot.ReadSet.CandidateUniverses[0].Universe
                 != NormalizationCandidateUniverseKey.People

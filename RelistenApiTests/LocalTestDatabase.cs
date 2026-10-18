@@ -158,6 +158,10 @@ internal static class LocalTestDatabase
             Migrations.AddMusicBrainzSearchProfiles.SchemaSql,
             commandTimeout: 120
         );
+        await catalog.ExecuteAsync(
+            Migrations.AddAcceptedRecordingActorContext.SchemaSql,
+            commandTimeout: 120
+        );
     }
 
     public static async Task DropAsync()

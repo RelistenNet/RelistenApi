@@ -1,233 +1,195 @@
-# Retain actor evidence for global people matching
+# Use source actor evidence for global people matching
 
-Extend people matching to use explicit aliases, attributed profiles, contacts and
-supported actor context from retained recording metadata. Preserve what each
-source actually claims. A shared email, handle, project page or name can retrieve
-candidates and support comparison; equality does not establish canonical identity.
+People matching can use explicit aliases, attributed profiles, contacts and actor
+context from retained recording metadata. Preserve what each source claims. A
+shared email, handle, project page or name can retrieve candidates and support
+comparison; equality does not establish a canonical identity.
 
-## Implementation status
+The extraction, accepted-context, retrieval and comparison changes are implemented.
+The solution builds; all 238 focused checks and 1,933 broader API and normalization
+regressions pass, with 24 existing tour-contract skips in the broader run. Fresh
+correctness and readability reviews are clean. Large-catalog query performance
+and independently retained primary pages still require verification and implementation,
+respectively. No real policy is activated by this work. Keep the existing
+[people acceptance](people-acceptance.md) ownership, evaluated-policy authority,
+publication fences and recovery protocol. Playback and public APIs stay compatible.
 
-The extraction slice now adds optional `ActorFacts` to local and retained credit
-mentions. `RecordingActorEvidenceExtractor` retains explicit `aka`/`also known as`
-aliases, joint roles and coordinated actors, attached email-shaped contacts,
-supported profile URLs and explicit parenthesized person/group descriptions.
-Unknown URL namespaces and unattributed hints remain unresolved. All fact kinds
-report nonexhaustive coverage; missing facts do not prove absence. This version
-attaches facts within one original role-bearing clause. Cross-field and independent
-page relationships still require the binding contract below.
+## What the source can establish
 
-Retained mapping preserves raw Unicode code-point citations and namespaces actor
-references by input revision and field location. Proposal storage validates nested
-citations against the original credited clause and its existing account/file scope.
-The raw producer is `recording-credits-v3/recording-actor-evidence-v1`;
+The [development discovery](../../../research/2026-10-17-full-normalization/scale/evidence/people-identity-discovery-v2.json)
+contains 38 family hypotheses across 207 recordings and 172 artists. Thirty-four
+have credited contact, profile or owner corroboration; four retain attachment or
+person-versus-project ambiguity. These are development hypotheses, not accepted
+global identities or an independently evaluated launch result.
+
+`CreditMention` and `RetainedCreditMention` have optional, null-omitted `ActorFacts`.
+Old terminal JSON remains readable. `RecordingActorEvidenceExtractor` retains:
+
+- Explicit `aka` and `also known as` aliases, including the relation's original
+  marker. Equal strings elsewhere do not inherit that relationship.
+- Joint roles for one actor and distinct coordinated source references. These
+  source-local UUIDs never identify canonical people or prove global inequality.
+- Attached email-shaped contacts and supported profile URLs. Literal wording,
+  lookup keys and attachment evidence remain separate.
+- Explicit person/group descriptions and role context. Kind remains unknown when
+  the source does not establish it, or when its statements conflict.
+- Unsupported namespaces, uncertain alias boundaries and unattributed hints as
+  unresolved evidence.
+
+This version attaches facts within one original role-bearing clause. A nearby
+uploader, generic contact, performer roster or project website does not establish
+an actor attachment. Bare adjacent URLs and email-shaped URL query values cannot
+become a credited actor's contact. Every fact kind reports nonexhaustive coverage;
+an empty list does not prove absence. Cross-field or independent-page relations
+need explicit binding and original input receipts before use.
+
+Retained mapping preserves original Unicode code-point spans before HTML/entity
+rewriting. It namespaces actor and fact UUIDs by the actual input revision and
+field location, keeping identical array entries and Local root accounts separate.
+Proposal storage validates every nested citation against its original credited
+clause and existing account/file scope. It does not turn a valid quote into
+semantic identity authority.
+
+The raw producer is `recording-credits-v3/recording-actor-evidence-v1`.
 `retained-recording-credits-v2` and `recording-extraction-v4` fingerprint its output
-and coordinate mapping. Old null-omitted terminal JSON remains readable. The
-solution builds, and 219 focused extraction, retained-input, evidence-storage and
-people-resolution tests pass. Fresh correctness and readability reviews are clean.
+and coordinate mapping. A recorded version is part of the evidence contract.
 
-Candidate queries, accepted contextual indexes, actor-aware scoring and independent
-primary-page capture below remain proposed. This slice enables no policy and writes
-no accepted actor context. Keep the existing [people acceptance](people-acceptance.md)
-ownership, authority and publication fences. Playback and public APIs stay compatible.
+## Derive and authenticate one complete query
 
-## Evidence and current gaps
+`PeopleActorProjection.Project` is the shared deterministic projection used by the
+resolution processor, proposal validator and acceptance applier. It derives:
 
-The [latest development discovery](../../../research/2026-10-17-full-normalization/scale/evidence/people-identity-discovery-v2.json) contains 38 family hypotheses across 207
-recordings and 172 artists. Thirty-four have credited contact, profile or owner
-corroboration; four retain attachment or person-versus-project ambiguity. These
-are source-grounded development hypotheses, not 38 accepted global identities or
-an independently evaluated launch result. Preserve each family's evidence and uncertainty.
+1. Ordinary query names from the primary credit and explicit aliases. An alias is
+   not a provider-qualified handle merely because it resembles one.
+2. `NormalizationCandidateQuery.PeopleHints`, containing typed nonunique contact
+   and profile routes. Other identity domains reject these routes.
+3. The comparison record, including source kind, contextual agreements and
+   unresolved attachment diagnostics. It constructs no canonical external IDs.
 
-Before this extraction increment, `RetainedCreditMention` contained a name, role,
-supporting span and optional role wording. Contact text survived only in the raw
-quote after removal from the display name. Typed actor facts now preserve that
-context. The resolver still queries one ordinary name and projects no incoming
-external identities. Accepted aliases have no handle namespace, and existing
-external-ID rows do not encode provider authority or account ownership.
+The query supports at most 16 names, 16 contacts and 16 profiles. Unsupported or
+excess terms remain in the original facts and make the incoming projection
+incomplete. They cannot silently disappear from a pool used to authorize creation.
+`QueryFingerprint` covers the full query, projection version and default fact
+limits. Equal names with different contacts cannot share a cached candidate pool.
+The applier also reproduces each saved query when it rereads candidate facts.
 
-`NormalizationCandidateService` indexes accepted names, aliases and qualified IDs.
-It cannot retrieve by nonexclusive contact/profile context. The existing accepted
-`person_external_identities` table has a unique provider/type/key contract; do not
-put shared contacts or project accounts there to gain an index.
+Before acceptance, the applier reruns the supported recorded extraction against
+its original retained bytes and checked bindings. It compares every credit,
+including absent actor facts, plus unresolved credits and decoder issues. This
+rejects a changed lookup key, invented attachment or stripped unknown passage
+even when its citations are valid. It does not read newer input heads or refresh
+old catalog clocks. Unsupported historical producers remain audit-readable and
+cannot newly publish context under the current producer contract.
 
-## Additive extraction contracts
+## Accepted context belongs to contributor support
 
-Add optional, null-omitted `CreditedActorFacts` to each retained credit mention.
-Keep existing terminal JSON readable. The proposed container records its original
-input/account/file anchor and a source-local actor UUID, with these typed members:
+Only the guarded application writer creates accepted actor context, after the
+actual accepted credit and contributor support exist. Public reconciliation
+accepts no actor-fact JSON. Pending, protected and unrelated reassigned credits
+cannot acquire context through this path.
 
-- `ActorAliasFact`: stable fact UUID, original alias wording, explicit same-actor
-  relationship and exact relation citations. An `aka` statement connects only the
-  actor expressions it names; identical strings elsewhere do not inherit that link.
-- `ActorProfileFact`: stable UUID, literal URL/handle, supported provider/namespace,
-  normalized lookup key, relationship and citations. Relationships distinguish an
-  attributed credited-actor profile from an explicit primary-owner statement.
-- `ActorContactFact`: stable UUID, contact type, lookup key, credited relationship
-  and citations. A contact for a recording is different from a contact attributed
-  to its named taper. Neither is a canonical person identifier.
-- `ActorKindFact`: explicit `person` or `group`, supporting context and citations.
-  Unknown remains null. A crew, project or organization must not become a person
-  because its credited name resembles a human name.
-- `ActorCoReferenceFact`: source-local actor/mention UUID endpoints, explicit
-  relationship and citations. Preserve distinct coordinated actors and undivided
-  compound expressions. Group IDs are not canonical person UUIDs.
+Migration 48 stores the original typed payload in `recording_actor_contexts`, with
+its actual credit/support UUIDs, original person, contributor, extraction,
+proposal, input, application and introducing Work receipts. It also records the
+accepted credit's original revision and basis. Name, contact and profile tables
+are disposable lookup projections into these immutable facts. Shared keys are
+allowed. `person_external_identities` retains its existing qualified-identity
+contract; contacts and project accounts do not belong there.
 
-Attach a fact only when its evidence connects it to that credited actor. A nearby
-uploader, generic contact link, roster member or website is insufficient. A musician
-roster can support an expressed actor's kind without proving that the musician
-made the recording or matches an existing person.
+`NormalizedPeopleService.GetRecordingActorContextsAsync(sourceUuid)` reads active
+accepted source assertions on the primary. A reviewed merge preserves context
+when its original person and the current credit's person resolve to the same
+canonical identity. An unrelated reassignment or retraction excludes that context
+from retrieval without rewriting historical evidence.
 
-Include `ActorEvidenceCoverage(Kind, Complete, Fields)` for each fact kind. An empty
-list with complete cited field coverage differs from an unrun or uncertain extractor.
-Absent coverage means unknown. The actor UUID and co-reference endpoints are scoped
-to the original retained account and extractor version; they never identify a person globally.
+Reconciliation adds context in the accepted-credit transaction. An explicitly
+complete scope can retire its own contributor support and lookup entries. Unknown,
+missing, partial or failed extraction cannot clear prior support. Other
+contributors, unmanaged claims and reviewed decisions remain in force. Retirement
+retains the typed facts and introducing/retiring Work receipts; it does not erase
+source history.
 
-Use a cohesive actor-evidence extractor alongside the current role parser. It
-consumes original retained fields and role-bearing anchors, and emits facts plus
-unresolved attachments. A name-normalization pass cannot create relation evidence.
-Retain exact Unicode code-point spans before HTML/entity rewriting; cite original
-attributes or raw text rather than invented DOM-text offsets. Do not copy all
-contacts in a recording onto every actor.
+## Retrieve rivals and retain the facts used to compare them
 
-Use closed, versioned provider URL/handle normalizers. Unsupported URL forms retain
-literal wording and unknown qualification. Preserve opaque key case unless that
-provider's documented contract permits normalization. Treat contact lookup keys as
-internal supporting data; avoid adding public contact fields or logging their values.
+`NormalizationCandidateService` unions accepted names, canonical qualified IDs,
+source names/aliases and nonexclusive context hits before resolving redirects.
+Contact and profile hits survive the ordinary name limit, including rivals that
+share a crew address or account. Their route has its own limit-plus-one bound.
+`ContextCandidatesTruncated` is separate from `NameCandidatesTruncated`; either
+makes the candidate snapshot incomplete.
 
-## One shared candidate projection
+`FindPeopleFactsAsync` reads selection, full actor context, candidate epochs,
+catalog clocks and owner observations in one primary repeatable-read transaction.
+`PersonCandidateFacts.ActorEvidence` preserves the original support owner and
+acceptance receipts alongside the typed facts. This projection is separate from
+bounded artist witnesses: a few examples cannot substitute for complete actor
+assertions. Reverse redirects retain original provenance.
 
-Add a deterministic `PeopleActorProjection` used by the resolution processor,
-proposal-store validator and acceptance applier. Its responsibilities are:
+Default actor bounds are 5,000 contexts and 4 MiB of rendered fact JSON per
+candidate, plus the existing per-kind assertion and per-assertion citation bounds.
+SQL omits payloads beyond the byte prefix before returning them to the client.
+Every omission blocks automatic acceptance. Owner observations and the people
+epoch still fence omitted facts. Context, lookup and support changes advance that
+epoch even when the accepted credit row itself does not change. A prior empty
+lookup therefore becomes stale when a new rival appears.
 
-1. Build a bounded global `NormalizationCandidateQuery` from the primary name and
-   supported aliases, retaining the facts that justify each added query term.
-2. Project matching names, qualified handles, kind and contextual features from
-   those same authenticated facts. Bare aliases remain ordinary names.
-3. Reproduce the query and matching projection during validation. A caller cannot
-   introduce an extra profile/contact key through a supplied candidate snapshot.
+Comparison exposes nonunique contact/profile agreement separately from name,
+artist and canonical-ID features. Unequal shared keys do not prove different
+people. Hint overlap can make a pair comparable; it supplies no automatic matching
+rule, authoritative identifier or exclusive ownership claim.
 
-Add optional `PeopleCandidateHints` to the query for typed profile/handle and
-contact lookups. Other domains reject that member. Keep `ExternalIdentities` for
-its existing qualified-ID contract; a contact match must not set `IdentifiesEntity`,
-`ExclusiveWithinEntity` or an authoritative-ID rule.
+## Evaluation, publication and operation
 
-The processor currently caches by name. Replace that key with the entire frozen
-query fingerprint, including names, hints, qualification, limits and projection
-version. Two equal names with different profile evidence require separate pools.
-The current single-name/zero-ID validation must use the shared projection too.
+The closed linear scorer has optional contact/profile agreement weights, both zero
+by default. New scorer, retrieval and candidate-facts versions require new verified
+evaluation artifacts. Existing artifacts cannot silently authorize these features.
+Use independent evaluation and the agreed trusted operator contract; do not add
+per-label human approval gates. Fixture policies prove mechanics in isolated test
+databases and never authorize runtime acceptance.
 
-Union name, canonical-ID and contextual hits before redirect resolution. Context
-lookup values are nonunique: return rivals sharing a crew contact or profile.
-Bound each retrieval route with limit-plus-one and retain its reason. Add explicit
-context-pool truncation to `NormalizationCandidateSet`; `Complete` must account
-for every route and fact limit. Never drop excess aliases or hints silently, or
-interpret a bounded empty pool as proof that a new identity should be created.
+Canonical kind and its schema/default are unchanged. The existing person-only
+creation capability reviews explicit group, conflicting-kind and credited-project
+evidence it cannot classify. This preserves uncertainty; it does not permanently
+restrict future evaluated person/group creation or co-reference capabilities.
 
-## Accepted context and indexed retrieval
+Identity and accepted-credit owners remain separate. Publication consumes the
+original extraction/proposal stamps, complete contributor CAS, candidate epochs,
+reviewed context and observed owners. Candidate write scopes lock before owners;
+policy revocation and accepted writes are checked atomically. Cancellation or a
+stale observation leaves prior accepted data intact. Retrying a terminal
+application returns its saved receipt; changed evidence requires a new attempt.
 
-Store accepted actor context with the recording's contributor support, not as an
-implicit canonical-person merge. Add a specialized typed assertion set associated
-with the actual stored credit/support UUID, extraction receipt, extractor version
-and introducing Work receipt. Keep exact citations and the stated relationship.
-A coalesced credit can retain independent facts from several contributors.
+Deploy migration 48 before this code. It adds no people, active policy or background
+job. Revoke an active policy to stop new automatic writes. Preserve context history
+when rolling back code; old readers ignore the additive tables and optional fields.
+No public contact fields or new playback behavior are introduced.
 
-Reuse the typed actor-fact payload in the immutable extraction checkpoint. Add a
-closed lookup projection referencing its extraction/proposal/fact UUIDs and the
-actual support UUID, with introducing/retiring Work receipts. Index kind, namespace
-and lookup key; join current support and accepted credits to the resolved person.
-Validate each projection against its referenced typed fact; the index is not matching
-authority. No second evidence store or cross-domain assertion framework is needed.
+Verification covers actual retained extraction through guarded acceptance, shared
+key rivals, source aliases without common tokens, complete-query caching,
+truncation and byte limits, semantic tampering with valid quotes, reviewed merges
+and reassignments, unknown versus explicit clears, contributor isolation and
+transaction rollback/recovery. Large-corpus query performance still needs measured
+execution plans; passing fixtures alone does not establish catalog-scale cost.
 
-Reconciliation adds these facts in the accepted-credit transaction after the real
-stored credit UUID is known. Pending/protected claims do not create accepted
-retrieval support. Retiring one contributor removes only that support's current
-context. Other contributors, unmanaged support, reviewed facts and history remain.
-Corrections replace only explicitly complete actor-evidence kinds/fields; missing,
-partial or failed extraction cannot clear prior context. Retain the original and
-superseding Work receipts. Unsupported old extractor versions cannot silently
-supply a newly authoritative feature.
+## Next: independently retained primary pages
 
-Read all eligible actor assertions in the existing people-facts repeatable-read
-snapshot. Return typed facts with original support owner, assertion UUID, revision,
-basis, extractor version and full citations. Expose them as additive `PersonCandidateFacts.ActorEvidence`
-contexts keyed by actual support, contributor and extraction/fact UUIDs, retaining
-the typed actor facts and provenance. Preserve reverse redirects and all consumed
-owner observations. Witness examples cannot replace complete assertion
-coverage; an assertion cap must make automatic comparison incomplete.
+An outbound URL or research excerpt is not a runtime input receipt. Capture exact
+page bytes, URL, representation and observation metadata through
+`NormalizationEvidenceService` before using an external primary page.
 
-These are accepted historical source assertions, not proof of current account
-ownership. If a policy needs a current primary-owner statement, require the fresh
-independently retained page binding below. Do not label an old citation current
-merely because its accepted person or credit still exists.
+Add a typed `ActorPrimaryPageBinding` that retains the original recording input,
+page input, actor anchor, cited link and owner/actor statement, outcome and complete
+input references. A supported URL transformation must connect the recording link
+to the captured page. Several actors, project accounts, unattached first-person
+speech or an unproved redirect remain ambiguous. Page author or uploader identity
+alone does not establish the credited person.
 
-## Independently retained primary pages
+Keep these supporting inputs separate from playback binding. Extend producer,
+extractor, preparation, store and read-set validation together; no arbitrary page
+may enter an extraction group. A changed page or linking input makes the original
+preparation stale. Retries must not substitute a newer receipt into saved facts.
 
-A research excerpt or outbound link is not a runtime input receipt. Before using
-an external primary page, capture its exact bytes, representation, URL and observation
-metadata through `NormalizationEvidenceService`.
-
-Add typed `ActorPrimaryPageBinding`: original recording input, page input, actor
-anchor, cited linking statement, cited owner/actor statement, binding outcome and
-complete consumed input references. A supported URL transformation must connect
-the retained recording link to the captured page. A page mentioning several actors,
-a project account, a redirect without retained proof or an unattached first-person
-statement remains ambiguous. Do not infer a person from the page author or uploader.
-
-Represent these as explicit actor-evidence supporting inputs, separate from playback
-binding. Current recording preparations allow only their defined recording inputs
-and Local root support; extend that contract deliberately. The producer, store,
-extractor and read-set validator must retain the exact page revision and original
-resource generation alongside the recording input. No arbitrary supporting page
-may enter a group. A changed page or parent-link input makes admission/publication
-stale; retries cannot substitute a newer page receipt into saved facts.
-A generation does not detect age. Historical statements apply at observation time;
-any current-ownership feature also needs an evaluated maximum observation age in
-the policy, with its saved expiry checked at preparation and publication. Without
-that contract the statement remains a historical hint, not current ownership.
-
-## Scoring, publication and compatibility
-
-Extend `PersonMatchRecord` additively with typed contextual facts. Retain all pair
-features and whole-pool rival decisions. Score explicit alias agreement, attributed
-profile agreement, contact agreement, supported kind and artist/role context
-separately. A weak hint cannot become a verified entity ID through projection.
-Conflicting person/project evidence and attachment uncertainty remain reviewable.
-
-New features require new independent evaluation and a registered artifact that
-names their versions and applicability. Existing development authorization permits
-Codex judgments; it does not make uncertain hypotheses truth. Use the agreed trusted
-operator/evaluation contract, without introducing per-label human approval gates.
-Creation and co-reference remain separately evaluated capabilities. Fixture policies
-exercise mechanics in isolated databases and do not activate runtime acceptance.
-
-Keep identity and accepted-credit owners separate. Reuse the applier's original
-extraction/proposal observations, complete contribution CAS, candidate epochs,
-reviewed-context observations and atomic active-policy check. Declare and lock the
-people candidate write scope before owner locks; advance its epoch within the
-accepted-write transaction. New lookup rows must be fenced even when a prior query
-found no candidates. Include every consumed
-support owner and page input in the appropriate complete read set. Do not refresh
-owner metadata around old actor facts.
-
-## Implementation and verification
-
-Change extraction models/parser/retained remapping first, then the shared projection,
-query validation and full-query cache. Add the accepted support schema and indexes,
-people-facts projection and guarded reconciliation writes together. Extend primary
-page capture/binding before enabling that feature. Finally extend the fixed scorer
-and policy artifact versions, and evaluate against complete candidate sets.
-
-Bump the actor extractor, recording extraction, query projection/retrieval,
-candidate-facts and scorer versions where their behavior changes. Pin them in saved
-preparations and policy artifacts; retain old terminal replay. The migration adds
-no accepted identities, default policy or background job. Revoke a policy to stop
-new automatic writes; retain evidence and correct accepted data through existing
-review/reconciliation contracts.
-
-Verify explicit aliases with no shared name tokens; equal names with different
-contacts; shared crew contacts and project profiles; unsupported URL forms; roster
-kind without taper attribution; disjoint actors in one field; and unknown attachment.
-Verify whole-query caching, rival/truncation behavior, reverse redirects, changed
-supporting pages, source corrections, reviewed exclusions and rollback. Verify that
-retiring one contributor removes its lookup support while another remains, and that
-no contact/profile equality allocates, merges or reclassifies a canonical person.
+Accepted context is historical source evidence. A claim about current account
+ownership also needs an evaluated maximum observation age, saved expiry and checks
+at preparation and publication. Input generations detect changes, not age. Without
+that contract, an old owner statement remains a historical hint.

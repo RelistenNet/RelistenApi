@@ -26,7 +26,8 @@ public sealed partial class NormalizationCandidateService(DbService db)
         CancellationToken cancellationToken = default
     )
     {
-        var names = ValidateQuery(query);
+        var frozen = FreezeFactsQuery(query);
+        var names = ValidateQuery(frozen);
         // One primary snapshot keeps names, redirects and current revisions consistent. The
         // transaction-local threshold cannot leak through a pooled connection to another job.
         await using var connection = db.CreateConnection(false, false);
@@ -45,7 +46,7 @@ public sealed partial class NormalizationCandidateService(DbService db)
         var result = await FindInSnapshotAsync(
             connection,
             transaction,
-            query,
+            frozen,
             names,
             cancellationToken
         );
@@ -100,7 +101,19 @@ public sealed partial class NormalizationCandidateService(DbService db)
             query,
             cancellationToken
         );
-        var raw = nameHits.Concat(identifierHits).ToArray();
+        var actorNameHits = await FindActorNames(
+            connection,
+            transaction,
+            query,
+            names,
+            cancellationToken
+        );
+        var contextHits = await FindActorHints(connection, transaction, query, cancellationToken);
+        var raw = nameHits
+            .Concat(actorNameHits)
+            .Concat(identifierHits)
+            .Concat(contextHits)
+            .ToArray();
         var current = await ResolveTargets(connection, transaction, domain, raw, cancellationToken);
         return BuildResult(query, raw, current);
     }
@@ -156,9 +169,19 @@ public sealed partial class NormalizationCandidateService(DbService db)
                 "Identifiers require provider, resource type and exact provider key."
             );
         }
-        if (names.Length == 0 && query.ExternalIdentities.Count == 0)
+        ValidatePeopleHints(query);
+        if (
+            names.Length == 0
+            && query.ExternalIdentities.Count == 0
+            && (
+                query.PeopleHints == null
+                || query.PeopleHints.Contacts.Count + query.PeopleHints.Profiles.Count == 0
+            )
+        )
         {
-            throw new ArgumentException("Supply a name or a qualified identifier.");
+            throw new ArgumentException(
+                "Supply a name, a qualified identifier or a people context lookup."
+            );
         }
         return names;
     }
@@ -316,22 +339,39 @@ public sealed partial class NormalizationCandidateService(DbService db)
                 }
             )
             .ToArray();
-        var names = hits.Where(hit => hit.Reasons.Any(reason => reason != "provider_identity"))
+        static bool ContextReason(string reason) =>
+            reason is "recording_contact" or "recording_profile";
+        var names = hits.Where(hit =>
+                hit.Reasons.Any(reason => reason != "provider_identity" && !ContextReason(reason))
+            )
             .OrderByDescending(hit => hit.NameSimilarity)
             .ThenBy(hit => hit.Uuid)
             .ToArray();
         var retained = names.Take(query.NameLimit).Select(hit => hit.Uuid).ToHashSet();
+        var contextHits = hits.Where(hit => hit.Reasons.Any(ContextReason))
+            .OrderBy(hit => hit.Uuid)
+            .ToArray();
+        var retainedContext = contextHits
+            .Take(query.PeopleHints?.Limit ?? 0)
+            .Select(hit => hit.Uuid)
+            .ToHashSet();
         var selected = hits.Where(hit =>
-                retained.Contains(hit.Uuid) || hit.Reasons.Contains("provider_identity")
+                retained.Contains(hit.Uuid)
+                || hit.Reasons.Contains("provider_identity")
+                || retainedContext.Contains(hit.Uuid)
             )
             .OrderByDescending(hit => hit.Reasons.Contains("provider_identity"))
+            .ThenByDescending(hit => hit.Reasons.Any(ContextReason))
             .ThenByDescending(hit => hit.NameSimilarity)
             .ThenBy(hit => hit.Uuid)
             .ToArray();
         return new(
             query.Domain,
             selected,
-            raw.Any(hit => hit.PoolTruncated) || names.Length > query.NameLimit
+            raw.Any(hit => !hit.ContextLookup && hit.PoolTruncated)
+                || names.Length > query.NameLimit,
+            raw.Any(hit => hit.ContextLookup && hit.PoolTruncated)
+                || contextHits.Length > (query.PeopleHints?.Limit ?? 0)
         );
     }
 
@@ -341,6 +381,7 @@ public sealed partial class NormalizationCandidateService(DbService db)
         public double Score { get; set; }
         public string Reason { get; set; } = "";
         public bool PoolTruncated { get; set; }
+        public bool ContextLookup { get; set; }
     }
 
     private sealed record TargetRow(

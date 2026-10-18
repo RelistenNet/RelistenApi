@@ -383,6 +383,8 @@ public sealed class PeopleResolutionPolicyService(
                 scorer.NameSimilarityWeight,
                 scorer.ExactNameWeight,
                 scorer.ArtistOverlapWeight,
+                scorer.ContactAgreementWeight,
+                scorer.ProfileAgreementWeight,
                 scorer.MatchThreshold,
                 scorer.MinimumRunnerUpMargin,
             }.All(double.IsFinite)

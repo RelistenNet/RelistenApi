@@ -14,6 +14,9 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed class IdentityCandidateMatcher
 {
+    /// <summary>Pin this feature contract in people projections and evaluated policies.</summary>
+    public const string PeopleActorFeaturesVersion = "people-actor-context-features-v1";
+
     public IdentityCandidateComparison ComparePeople(
         PersonMatchRecord claim,
         PersonMatchRecord candidate,
@@ -39,6 +42,7 @@ public sealed class IdentityCandidateMatcher
                 : IdentityFeatureAgreement.Differs,
             "Shared artists help rank people; different artists do not contradict a global identity."
         );
+        CompareActorContext(pair, claim.ActorContext, candidate.ActorContext);
 
         if (pair.ExactName && pair.QualifiedHandle)
         {
@@ -47,6 +51,73 @@ public sealed class IdentityCandidateMatcher
 
         return pair.Finish(policy);
     }
+
+    private static void CompareActorContext(
+        Comparison pair,
+        PersonActorMatchContext? claim,
+        PersonActorMatchContext? candidate
+    )
+    {
+        if (claim == null && candidate == null)
+        {
+            return;
+        }
+
+        pair.CompareSupportingKeys(
+            "actor_contact",
+            (claim?.Contacts ?? []).ToHashSet(),
+            (candidate?.Contacts ?? []).ToHashSet(),
+            "Equal contact keys are nonexclusive source context; different contacts do not contradict identity."
+        );
+
+        var leftProfiles = claim?.Profiles ?? [];
+        var rightProfiles = candidate?.Profiles ?? [];
+        var leftKeys = leftProfiles.Select(ProfileKey).ToHashSet();
+        var rightKeys = rightProfiles.Select(ProfileKey).ToHashSet();
+        pair.CompareSupportingKeys(
+            "actor_profile",
+            leftKeys,
+            rightKeys,
+            "Profile keys agree only within their provider and namespace; shared accounts are not entity identifiers."
+        );
+
+        var sameRelationship = leftProfiles
+            .Select(profile => (Key: ProfileKey(profile), profile.Relationship))
+            .Intersect(
+                rightProfiles.Select(profile => (Key: ProfileKey(profile), profile.Relationship))
+            )
+            .Any();
+        pair.Add(
+            "actor_profile_relationship",
+            !leftKeys.Overlaps(rightKeys) ? IdentityFeatureAgreement.Missing
+                : sameRelationship ? IdentityFeatureAgreement.Agrees
+                : IdentityFeatureAgreement.Differs,
+            "Source relationships remain distinct; attributed profiles and owner statements grant no identifier authority here."
+        );
+
+        if (claim?.HasAttachmentUncertainty == true || candidate?.HasAttachmentUncertainty == true)
+        {
+            pair.Add(
+                "actor_attachment_uncertainty",
+                IdentityFeatureAgreement.Missing,
+                "At least one source retains unresolved actor attachment; nearby hints do not establish attribution."
+            );
+        }
+        if (claim?.HasConflictingKind == true || candidate?.HasConflictingKind == true)
+        {
+            pair.Add(
+                "actor_kind_conflict",
+                IdentityFeatureAgreement.Conflicts,
+                "A source retains conflicting explicit person and group descriptions."
+            );
+        }
+    }
+
+    // Lookup producers normalize provider names. Preserve opaque account-key and namespace
+    // case; source relationships are separate features rather than part of account equality.
+    private static (string Provider, string Namespace, string LookupKey) ProfileKey(
+        PeopleProfileLookup profile
+    ) => (profile.Provider.ToLowerInvariant(), profile.Namespace, profile.LookupKey);
 
     public IdentityCandidateComparison CompareVenues(
         VenueMatchRecord claim,
@@ -462,6 +533,26 @@ public sealed class IdentityCandidateMatcher
         public void Add(string name, IdentityFeatureAgreement agreement, string reason)
         {
             features.Add(new(name, agreement, reason));
+        }
+
+        public void CompareSupportingKeys<T>(
+            string name,
+            IReadOnlySet<T> leftKeys,
+            IReadOnlySet<T> rightKeys,
+            string reason
+        )
+        {
+            var shared = leftKeys.Overlaps(rightKeys);
+            // Supporting hints admit a pair for comparison without proposing any acceptance
+            // rule. Equal contacts or project accounts can belong to several different people.
+            isCandidate |= shared;
+            Add(
+                name,
+                leftKeys.Count == 0 || rightKeys.Count == 0 ? IdentityFeatureAgreement.Missing
+                    : shared ? IdentityFeatureAgreement.Agrees
+                    : IdentityFeatureAgreement.Differs,
+                reason
+            );
         }
 
         public IdentityFeatureAgreement CompareValue<T>(

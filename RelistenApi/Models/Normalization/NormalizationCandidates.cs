@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -13,7 +14,9 @@ public sealed record NormalizationCandidateQuery(
     IReadOnlyList<MatchingExternalIdentity> ExternalIdentities,
     Guid? ArtistUuid = null,
     int NameLimit = 100,
-    double MinimumNameSimilarity = 0.25
+    double MinimumNameSimilarity = 0.25,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        PeopleCandidateHints? PeopleHints = null
 );
 
 /// <summary>
@@ -37,5 +40,7 @@ public sealed record NormalizationCandidateHit(
 public sealed record NormalizationCandidateSet(
     IdentityMatchingDomain Domain,
     IReadOnlyList<NormalizationCandidateHit> Items,
-    bool NameCandidatesTruncated
+    bool NameCandidatesTruncated,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        bool ContextCandidatesTruncated = false
 );

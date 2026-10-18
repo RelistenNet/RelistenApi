@@ -132,7 +132,9 @@ public sealed partial class NormalizedPeopleService
                     workUuid,
                     reconciliation,
                     true,
-                    ct
+                    ct,
+                    actorContextStage: stage,
+                    applicationAttemptUuid: applicationAttemptUuid
                 );
                 await applications.WriteStagePublishedAsync(
                     c,

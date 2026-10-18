@@ -417,47 +417,31 @@ public sealed class TestNormalizationPeopleResolution
     public async Task TruncatedPoolRetainsRivalsAndCannotBecomeAnAutomaticChoice()
     {
         var name = "Truncated " + Guid.NewGuid().ToString("N");
-        await Person(name);
-        await Person(name);
         var source = await Source(name);
         var extraction = await Extract(source);
-        var preparation = await Preparation(extraction);
-        var input = preparation.Inputs.Single();
-        var proposal = input.Claims.Single().Proposal;
-        var limited = await candidates.FindPeopleFactsAsync(
-            new(IdentityMatchingDomain.People, [name], [], NameLimit: 1)
-        );
-        limited.Selection.NameCandidatesTruncated.Should().BeTrue();
-        preparation = preparation with
+        var proposal = extraction.Extraction.Credits.Single();
+        var query = PeopleActorProjection.Project(proposal.Mention, extraction.ArtistUuid).Query!;
+        var rivals = new List<Guid>();
+        // Exercise the processor's supported query, rather than submitting a narrower
+        // caller-selected pool that its semantic query validator must reject.
+        for (var index = 0; index <= query.NameLimit; index++)
         {
-            Inputs =
-            [
-                input with
-                {
-                    Claims =
-                    [
-                        decisions.Compare(
-                            proposal,
-                            input.OriginalInput.Binding,
-                            limited,
-                            preparation.CreditContext
-                        ),
-                    ],
-                },
-            ],
-        };
-        var attempt = await store.GetOrCreateAttemptAsync(
-            Guid.NewGuid(),
-            extraction.AttemptUuid,
-            NormalizationPeopleResolutionProcessor.Version
-        );
-        await store.SavePreparationAsync(attempt.AttemptUuid, preparation);
-        var result = await processor.ResolveRecordingAsync(
-            attempt.AttemptUuid,
-            extraction.AttemptUuid
-        );
+            rivals.Add(await Person(name));
+        }
+
+        var result = await processor.ResolveRecordingAsync(Guid.NewGuid(), extraction.AttemptUuid);
+
+        result.Result!.Disposition.Should().Be(NormalizationPeopleResolutionDisposition.Published);
         var claim = result.Preparation!.Inputs.Single().Claims.Single();
-        claim.Candidates!.Complete.Should().BeFalse();
+        claim.Candidates!.Query.Should().BeEquivalentTo(query);
+        claim.Candidates.Selection.NameCandidatesTruncated.Should().BeTrue();
+        claim.Candidates.Selection.Items.Should().HaveCountGreaterThan(1);
+        claim.Candidates.Selection.Items.Should().OnlyContain(hit => rivals.Contains(hit.Uuid));
+        claim
+            .Comparisons.Select(pair => pair.CandidateUuid)
+            .Should()
+            .BeEquivalentTo(claim.Candidates.Selection.Items.Select(hit => (Guid?)hit.Uuid));
+        claim.Candidates.Complete.Should().BeFalse();
         claim.Decision.Action.Should().Be(PeopleResolutionAction.Unresolved);
         claim.Decision.AutomaticAcceptanceAuthorized.Should().BeFalse();
     }

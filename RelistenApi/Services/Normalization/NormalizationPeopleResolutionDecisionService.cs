@@ -11,7 +11,11 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed class NormalizationPeopleResolutionDecisionService(IdentityCandidateMatcher matcher)
 {
-    public const string Version = "people-resolution-baseline-v1";
+    public const string Version =
+        "people-resolution-baseline-v2/"
+        + PeopleActorProjection.Version
+        + "/"
+        + IdentityCandidateMatcher.PeopleActorFeaturesVersion;
 
     public NormalizationPeopleResolutionClaim Compare(
         NormalizationRecordingCreditProposal proposal,
@@ -35,13 +39,8 @@ public sealed class NormalizationPeopleResolutionDecisionService(IdentityCandida
             proposal.FileOrigin == null ? null
             : scope.HasValue ? null
             : file?.Binding.Reason ?? "missing_file_binding";
-        var claim = new PersonMatchRecord(
-            null,
-            null,
-            [new(proposal.Mention.Name)],
-            [],
-            new System.Collections.Generic.HashSet<Guid> { artist }
-        );
+        var projection = PeopleActorProjection.Project(proposal.Mention, artist);
+        var claim = projection.Record;
         bool SameClaim(RecordingCredit credit) =>
             credit.Role == Role(proposal.Mention.Role)
             && credit.ScopeTrackUuid == scope
@@ -67,7 +66,9 @@ public sealed class NormalizationPeopleResolutionDecisionService(IdentityCandida
                 ) || context.ReviewedExclusions.Any(value => SameClaim(value.Claim.Credit))
             );
         var comparisons = (candidates?.Facts ?? [])
-            .Select(candidate => matcher.ComparePeople(claim, Candidate(candidate)))
+            .Select(candidate =>
+                matcher.ComparePeople(claim, PeopleActorProjection.Candidate(candidate))
+            )
             .ToArray();
         return new(
             proposal,
@@ -79,6 +80,8 @@ public sealed class NormalizationPeopleResolutionDecisionService(IdentityCandida
             reviewed ? new(PeopleResolutionAction.Review, "reviewed_credit_claim")
                 : candidates == null
                     ? new(PeopleResolutionAction.Unresolved, "unsupported_credit_query")
+                : !projection.Complete
+                    ? new(PeopleResolutionAction.Unresolved, "incomplete_actor_projection")
                 : Decide(scopeIssue, candidates.Complete, comparisons)
         );
     }
@@ -110,24 +113,6 @@ public sealed class NormalizationPeopleResolutionDecisionService(IdentityCandida
         var key = Relisten.Data.NormalizedPeopleService.NameKey(name.Trim());
         return key.EnumerateRunes().Count() is >= 1 and <= 200 && key.Any(char.IsLetterOrDigit);
     }
-
-    private static PersonMatchRecord Candidate(PersonCandidateFacts candidate) =>
-        new(
-            candidate.Hit.Uuid,
-            candidate.Header.Kind,
-            candidate
-                .IdentityClosure.Select(header => new IdentityMatchingName(header.DisplayText))
-                .Concat(candidate.Aliases.Select(alias => new IdentityMatchingName(alias.Wording)))
-                .ToArray(),
-            candidate
-                .ExternalIdentities.Select(identity => new MatchingExternalIdentity(
-                    identity.Provider,
-                    identity.ResourceType,
-                    identity.ProviderKey
-                ))
-                .ToArray(),
-            candidate.ArtistContexts.Select(context => context.ArtistUuid).ToHashSet()
-        );
 
     private static PeopleResolutionDecision Decide(
         string? scopeIssue,

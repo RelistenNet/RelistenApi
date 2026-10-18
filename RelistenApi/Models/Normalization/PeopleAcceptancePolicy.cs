@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -10,7 +11,11 @@ public sealed record PeopleAcceptanceLinearScorer(
     double ExactNameWeight,
     double ArtistOverlapWeight,
     double MatchThreshold,
-    double MinimumRunnerUpMargin
+    double MinimumRunnerUpMargin,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        double ContactAgreementWeight = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        double ProfileAgreementWeight = 0
 );
 
 /// <summary>

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Relisten.Api.Models.Normalization;
+using Relisten.Normalization;
 
 namespace Relisten.Data;
 
@@ -41,9 +42,8 @@ public sealed partial class NormalizationPeopleResolutionApplier
                     }
                 }
                 else if (
-                    Relisten.Normalization.NormalizationPeopleResolutionDecisionService.CanQueryName(
-                        claim.Proposal.Mention.Name
-                    )
+                    PeopleActorProjection.Project(claim.Proposal.Mention, claim.ArtistUuid).Query
+                    != null
                 )
                 {
                     throw new NormalizationConflictException(
@@ -131,6 +131,57 @@ public sealed partial class NormalizationPeopleResolutionApplier
                     "Original recording associations changed after resolution."
                 );
             }
+            RequireOriginalActorFacts(proposal, prepared, input, decoded, retained, roots, ct);
+        }
+    }
+
+    private static void RequireOriginalActorFacts(
+        NormalizationPeopleResolutionBatch proposal,
+        NormalizationRecordingPreparedInput prepared,
+        NormalizationInputRevision input,
+        ProviderDecodeResult decoded,
+        IReadOnlyDictionary<Guid, NormalizationInputRevision> retained,
+        IReadOnlyDictionary<Guid, ProviderDecodeResult> roots,
+        CancellationToken ct
+    )
+    {
+        var saved = proposal.Preparation.Inputs.Single(value =>
+            value.OriginalInput.Contributor == prepared.Contributor
+        );
+        var claims = saved.Claims.Select(claim => claim.Proposal).ToArray();
+
+        // A valid quote does not prove that an alias, normalized key or attachment was
+        // extracted from it. Reproduce current actor assertions from these original bytes,
+        // never a current input head, before they can become accepted searchable context.
+        var extractor = new NormalizationRecordingExtractor(new(), new());
+        NormalizationRecordingExtraction reproduced;
+        if (input.Resource.Provider == "local")
+        {
+            var rootUuid = prepared.Binding.SupportingInputs!.Single().InputRevisionUuid;
+            reproduced = extractor.ExtractLocal(
+                input,
+                decoded,
+                prepared.Binding,
+                retained[rootUuid],
+                roots[rootUuid],
+                ct
+            );
+        }
+        else
+        {
+            reproduced = extractor.Extract(input, decoded, prepared.Binding, ct);
+        }
+        PeopleActorProjection.RequireOriginalActorFacts(claims, reproduced.Credits);
+        if (
+            !PeopleAcceptanceApplicationStore.Same(
+                saved.UnresolvedCredits,
+                reproduced.UnresolvedCredits
+            ) || !PeopleAcceptanceApplicationStore.Same(saved.DecodeIssues, reproduced.DecodeIssues)
+        )
+        {
+            throw new NormalizationConflictException(
+                "Actor acceptance requires the original complete credit extraction and unresolved context."
+            );
         }
     }
 }

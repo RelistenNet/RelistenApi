@@ -164,17 +164,16 @@ public sealed partial class NormalizationPeopleResolutionProcessor(
             {
                 ct.ThrowIfCancellationRequested();
                 NormalizationCandidateFactsSnapshot<PersonCandidateFacts>? facts = null;
-                if (
-                    NormalizationPeopleResolutionDecisionService.CanQueryName(proposal.Mention.Name)
-                )
+                var query = PeopleActorProjection
+                    .Project(proposal.Mention, input.Binding.Recording.Value!.ArtistUuid)
+                    .Query;
+                if (query != null)
                 {
-                    if (!cache.TryGetValue(proposal.Mention.Name, out facts))
+                    var key = PeopleActorProjection.QueryFingerprint(query);
+                    if (!cache.TryGetValue(key, out facts))
                     {
-                        facts = await candidates.FindPeopleFactsAsync(
-                            new(IdentityMatchingDomain.People, [proposal.Mention.Name], []),
-                            cancellationToken: ct
-                        );
-                        cache.Add(proposal.Mention.Name, facts);
+                        facts = await candidates.FindPeopleFactsAsync(query, cancellationToken: ct);
+                        cache.Add(key, facts);
                     }
                 }
                 claims.Add(decisions.Compare(proposal, input.Binding, facts, context));

@@ -15,7 +15,7 @@ namespace Relisten.Data;
 public sealed partial class NormalizationCandidateService
 {
     /// <summary>Projection version included in lookup fingerprints and retained matching receipts.</summary>
-    public const string FactsVersion = "candidate-facts-v2";
+    public const string FactsVersion = "candidate-facts-v3";
 
     /// <summary>
     /// Reads global person candidates, original-owner assertions and exact accepted-credit
@@ -180,6 +180,13 @@ public sealed partial class NormalizationCandidateService
         {
             Names = Array.AsReadOnly(query.Names.ToArray()),
             ExternalIdentities = Array.AsReadOnly(query.ExternalIdentities.ToArray()),
+            PeopleHints = query.PeopleHints is { } hints
+                ? hints with
+                {
+                    Contacts = Array.AsReadOnly(hints.Contacts.ToArray()),
+                    Profiles = Array.AsReadOnly(hints.Profiles.ToArray()),
+                }
+                : null,
         };
 
     private static CandidateFactsLimits ValidateFactsLimits(CandidateFactsLimits limits)
@@ -194,6 +201,8 @@ public sealed partial class NormalizationCandidateService
             || limits.MaximumWitnessesPerArtist is < 0 or > 32
             || limits.MaximumMissingContextWitnesses is < 0 or > 64
             || limits.MaximumParentClosure is < 1 or > 10000
+            || limits.MaximumActorContexts is < 1 or > 10000
+            || limits.MaximumActorEvidenceBytes is < 1 or > 32 * 1024 * 1024
         )
         {
             throw new ArgumentOutOfRangeException(

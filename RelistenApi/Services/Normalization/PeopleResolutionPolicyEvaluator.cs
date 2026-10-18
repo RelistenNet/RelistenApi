@@ -12,8 +12,13 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed class PeopleResolutionPolicyEvaluator
 {
-    public const string ScorerVersion = "people-name-artist-linear-v2";
-    public const string RetrievalVersion = "people-name-retrieval-v1";
+    public const string ScorerVersion =
+        "people-actor-context-linear-v3/"
+        + PeopleActorProjection.Version
+        + "/"
+        + IdentityCandidateMatcher.PeopleActorFeaturesVersion;
+    public const string RetrievalVersion =
+        "people-actor-retrieval-v2/" + PeopleActorProjection.Version;
     public const string CreationClassifierVersion = "single-alphabetic-full-name-person-v1";
 
     /// <summary>
@@ -73,6 +78,10 @@ public sealed class PeopleResolutionPolicyEvaluator
         if (claim.Candidates is not { Complete: true } snapshot)
         {
             return Result(PeopleResolutionAction.Unresolved, "incomplete_candidate_facts");
+        }
+        if (claim.Decision.Reason == "incomplete_actor_projection")
+        {
+            return Result(PeopleResolutionAction.Unresolved, "incomplete_actor_projection");
         }
         var candidateIds = snapshot.Facts.Select(fact => fact.Hit.Uuid).ToHashSet();
         if (
@@ -214,6 +223,29 @@ public sealed class PeopleResolutionPolicyEvaluator
         }
 
         var creation = artifact.Creation;
+        var actor = claim.Proposal.Mention.ActorFacts;
+        if (
+            creation != null
+            && (
+                actor?.Kind?.Kind == "group"
+                || actor?.Profiles.Any(profile =>
+                    profile.Relationship == ActorProfileRelationship.CreditedProjectProfile
+                ) == true
+                || actor?.Unresolved.Any(issue =>
+                    issue.Reason
+                        is "conflicting_actor_kind"
+                            or "ambiguous_alias_boundary"
+                            or "actor_text_mapping_unavailable"
+                ) == true
+            )
+        )
+        {
+            return Result(
+                PeopleResolutionAction.Review,
+                "unsupported_creation_actor_evidence",
+                scores
+            );
+        }
         if (creation == null)
         {
             return Result(PeopleResolutionAction.Review, "creation_capability_unavailable", scores);
@@ -295,7 +327,9 @@ public sealed class PeopleResolutionPolicyEvaluator
             scorer.Intercept
             + scorer.NameSimilarityWeight * pair.NameTokenSimilarity
             + scorer.ExactNameWeight * (Agrees("name") ? 1 : 0)
-            + scorer.ArtistOverlapWeight * (Agrees("artist_context") ? 1 : 0);
+            + scorer.ArtistOverlapWeight * (Agrees("artist_context") ? 1 : 0)
+            + scorer.ContactAgreementWeight * (Agrees("actor_contact") ? 1 : 0)
+            + scorer.ProfileAgreementWeight * (Agrees("actor_profile") ? 1 : 0);
         return new(pair.CandidateUuid!.Value, value, reasons.Count == 0, reasons);
     }
 

@@ -56,7 +56,9 @@ public sealed partial class NormalizedPeopleService
         Guid workUuid,
         RecordingCreditReconciliation reconciliation,
         bool allowPartialAdditions,
-        CancellationToken ct
+        CancellationToken ct,
+        PeopleAcceptanceStage? actorContextStage = null,
+        Guid? applicationAttemptUuid = null
     )
     {
         await c.ExecuteAsync(
@@ -76,6 +78,23 @@ public sealed partial class NormalizedPeopleService
         if (owner.Kind != "recording" || owner.EntityUuid != reconciliation.SourceUuid)
         {
             throw new ArgumentException("Credit reconciliation requires its recording owner.");
+        }
+        ActorContextPublication? actorContext = null;
+        if (actorContextStage != null)
+        {
+            if (!allowPartialAdditions || applicationAttemptUuid == null)
+            {
+                throw new ArgumentException(
+                    "Actor context requires the guarded accepted application stage."
+                );
+            }
+            actorContext = PrepareActorContextPublication(
+                workUuid,
+                applicationAttemptUuid.Value,
+                batch,
+                actorContextStage,
+                owner.Ticket
+            );
         }
         await ValidatePublicationEvidenceAsync(
             c,
@@ -127,10 +146,12 @@ public sealed partial class NormalizedPeopleService
                     reconciliation.SourceUuid,
                     replacement,
                     ct,
-                    requireAcceptedForRetirement: allowPartialAdditions
+                    requireAcceptedForRetirement: allowPartialAdditions,
+                    actorContext: actorContext
                 )
             );
         }
+        await RetireUnsupportedActorContexts(c, t, reconciliation.SourceUuid, ct);
         await RetireUnsupportedCredits(c, t, workUuid, reconciliation.SourceUuid, ct);
         return outcomes;
     }
@@ -369,7 +390,8 @@ public sealed partial class NormalizedPeopleService
         Guid sourceUuid,
         RecordingCreditContributorReplacement replacement,
         CancellationToken ct,
-        bool requireAcceptedForRetirement = false
+        bool requireAcceptedForRetirement = false,
+        ActorContextPublication? actorContext = null
     )
     {
         var kept = new HashSet<Guid>();
@@ -451,6 +473,18 @@ public sealed partial class NormalizedPeopleService
                     )
                 );
                 kept.Add(support);
+                await WriteAcceptedActorContexts(
+                    c,
+                    t,
+                    workUuid,
+                    actorContext,
+                    replacement.Contributor,
+                    incoming,
+                    actual,
+                    support,
+                    evidence,
+                    ct
+                );
             }
         }
         // Only a complete scope can retire support, and unchanged exact citations retain

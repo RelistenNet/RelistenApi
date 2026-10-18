@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -14,6 +15,8 @@ public sealed record CandidateFactsLimits
     public int MaximumCandidates { get; init; } = 256;
     public int MaximumIdentityClosure { get; init; } = 1024;
     public int MaximumAssertionsPerKind { get; init; } = 5000;
+    public int MaximumActorContexts { get; init; } = 5000;
+    public int MaximumActorEvidenceBytes { get; init; } = 4 * 1024 * 1024;
     public int MaximumEvidencePerAssertion { get; init; } = 256;
     public int MaximumArtistContexts { get; init; } = 10000;
     public int MaximumRoleBasisGroupsPerArtist { get; init; } = 128;
@@ -85,6 +88,7 @@ public sealed record NormalizationCandidateFactsSnapshot<T>(
 {
     public bool Complete =>
         !Selection.NameCandidatesTruncated
+        && !Selection.ContextCandidatesTruncated
         && !Issues.Any(issue => issue.PreventsAutomaticAcceptance);
 }
 
@@ -182,6 +186,9 @@ public sealed record PersonCandidateFacts
     public IReadOnlyList<CandidateRedirectFact> Redirects { get; init; } = [];
     public IReadOnlyList<CandidateNameFact> Aliases { get; init; } = [];
     public IReadOnlyList<CandidateExternalIdentityFact> ExternalIdentities { get; init; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CandidateActorEvidenceFact>? ActorEvidence { get; init; }
     public IReadOnlyList<PersonArtistContextFact> ArtistContexts { get; init; } = [];
     public long MissingSourceCreditCount { get; init; }
     public long MissingArtistCreditCount { get; init; }
