@@ -97,9 +97,9 @@ class TestPeopleContext(unittest.TestCase):
             db.executescript(
                 """CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT);
                 CREATE TABLE groups(id TEXT PRIMARY KEY,display_name TEXT);
-                CREATE TABLE credits(id INTEGER PRIMARY KEY,group_id TEXT,source_uuid TEXT,artist_uuid TEXT);
+                CREATE TABLE credits(id INTEGER PRIMARY KEY,group_id TEXT,source_uuid TEXT,artist_uuid TEXT,name TEXT,role TEXT,credit_key TEXT,evidence TEXT);
                 INSERT INTO groups VALUES('a','Alex'),('b','Alex Smith');
-                INSERT INTO credits VALUES(1,'a','source-1','artist-a'),(2,'b','source-2','artist-b');"""
+                INSERT INTO credits VALUES(1,'a','source-1','artist-a','Alex','transferrer',NULL,'{"field":"description","quote":"Transferred by Alex"}'),(2,'b','source-2','artist-b','Alex','transferrer',NULL,'{"field":"description","quote":"Transferred by Alex"}');"""
             )
         self.run = self.root / "run"
         self.run.mkdir()
@@ -111,6 +111,8 @@ class TestPeopleContext(unittest.TestCase):
                 "sourceUuid": source,
                 "artistUuid": artist,
                 "name": "Alex",
+                "roles": ["transferrer"],
+                "creditKey": None,
                 "evidence": [{"field": "description", "quote": "Transferred by Alex"}],
             }
 
@@ -292,6 +294,10 @@ class TestPeopleContext(unittest.TestCase):
                 "creditId": credit["id"],
                 "sourceUuid": source,
                 "artistUuid": credit["artist_uuid"],
+                "name": credit["name"],
+                "roles": [credit["role"]],
+                "creditKey": credit["credit_key"],
+                "evidence": [json.loads(credit["evidence"])],
             }
 
         questions = [
@@ -373,6 +379,16 @@ class TestPeopleContext(unittest.TestCase):
             directory.stats()["peopleContext"]["invalidatedByCreditReplacement"], 1
         )
         self.assertEqual(directory.stats()["creditedRecordings"], 3)
+
+    def test_reused_credit_id_with_changed_quote_rejects_old_context(self):
+        database = self.contextual_run()
+        with closing(sqlite3.connect(database)) as db, db:
+            db.execute(
+                "UPDATE credits SET evidence=? WHERE id=1",
+                (encoded({"field": "description", "quote": "New quotation for Alex"}),),
+            )
+        with self.assertRaisesRegex(ValueError, "credited source"):
+            PeopleContextProjection(database, self.run).apply()
 
     def test_changed_source_owner_rejects_whole_projection(self):
         database = self.contextual_run()

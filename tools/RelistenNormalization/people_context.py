@@ -563,13 +563,35 @@ class PeopleContextProjection:
                 for side in ("left", "right"):
                     actor = question[side]
                     credit = db.execute(
-                        "SELECT group_id,source_uuid,artist_uuid FROM credits WHERE id=?",
+                        "SELECT group_id,source_uuid,artist_uuid,name,role,credit_key,evidence FROM credits WHERE id=?",
                         (actor["creditId"],),
                     ).fetchone()
-                    if credit != (
-                        actor["groupId"],
-                        actor["sourceUuid"],
-                        actor["artistUuid"],
+                    # The typed context excerpt carries field/span coordinates;
+                    # a raw credit may also include a JSON pointer to that field.
+                    evidence = json.loads(credit[6]) if credit else {}
+                    if (
+                        credit is None
+                        or credit[:4]
+                        != (
+                            actor["groupId"],
+                            actor["sourceUuid"],
+                            actor["artistUuid"],
+                            actor["name"],
+                        )
+                        or credit[4] not in actor["roles"]
+                        or credit[5] != actor.get("creditKey")
+                        or not any(
+                            all(
+                                evidence.get(key) == excerpt.get(key)
+                                for key in (
+                                    "field",
+                                    "quote",
+                                    "startCodePoint",
+                                    "endCodePoint",
+                                )
+                            )
+                            for excerpt in actor["evidence"]
+                        )
                     ):
                         raise ValueError(
                             "Contextual witness no longer matches its credited source"
