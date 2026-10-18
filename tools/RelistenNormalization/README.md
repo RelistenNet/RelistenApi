@@ -53,3 +53,7 @@ The completed `manifest.json` records the projection version, original bundle/fi
 ## Retained MusicBrainz acquisition
 
 Use [`musicbrainz-acquire`](musicbrainz-acquire.md) for a bounded work, recording or artist lookup through the public acquisition service. The mode uses a dedicated local database, returns immediately when admission is pending, and exports exact responses, retained input, typed observations and hashes. It does not accept catalog identity links.
+
+## Bounded MusicBrainz candidate search
+
+Use [`musicbrainz-search`](musicbrainz-search.md) to freeze cited literal query variants and stable page commands, acquire at most one search page per invocation, and resume explicitly in a new output directory. Receipts retain partial/failed coverage, all observed hits, and the original response/capture provenance. External coverage always remains incomplete; hydration and correspondence acceptance are separate work.

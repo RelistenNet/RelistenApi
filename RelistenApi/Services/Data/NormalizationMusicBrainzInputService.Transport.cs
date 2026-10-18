@@ -180,10 +180,18 @@ public sealed partial class NormalizationMusicBrainzInputService
             var text = new UTF8Encoding(false, true).GetString(bytes);
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || root.TryGetProperty("error", out _))
+            {
+                return dispatch.Profile.SearchDescriptor == null
+                    ? "invalid_entity_envelope"
+                    : "invalid_search_envelope";
+            }
+            if (dispatch.Profile.SearchDescriptor is { } search)
+            {
+                return ValidateSearchEnvelope(root, search);
+            }
             if (
-                root.ValueKind != JsonValueKind.Object
-                || root.TryGetProperty("error", out _)
-                || !root.TryGetProperty("id", out var id)
+                !root.TryGetProperty("id", out var id)
                 || id.ValueKind != JsonValueKind.String
                 || !Guid.TryParseExact(id.GetString(), "D", out var uuid)
                 || uuid.ToString("D") != dispatch.Profile.Resource.ProviderKey

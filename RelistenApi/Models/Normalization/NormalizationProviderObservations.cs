@@ -225,5 +225,9 @@ public sealed record ProviderDecodeResult
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<MusicBrainzArtistObservation>? MusicBrainzArtists { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MusicBrainzSearchPageObservation>? MusicBrainzSearchPages { get; init; }
+
     public IReadOnlyList<ProviderDecodeIssue> Issues { get; init; } = [];
 }

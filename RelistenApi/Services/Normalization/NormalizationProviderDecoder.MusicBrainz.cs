@@ -269,10 +269,11 @@ public sealed partial class NormalizationProviderDecoder
 
     private static IReadOnlyList<MusicBrainzAliasObservation>? ReadMusicBrainzAliases(
         ProviderObservationReader reader,
-        JsonElement root
+        JsonElement root,
+        string parentPointer = ""
     )
     {
-        var values = MusicBrainzArray(reader, root, "aliases");
+        var values = MusicBrainzArray(reader, root, "aliases", parentPointer);
         if (values == null)
         {
             return null;
@@ -281,7 +282,8 @@ public sealed partial class NormalizationProviderDecoder
         var index = 0;
         foreach (var value in values.Value.EnumerateArray())
         {
-            var pointer = "/aliases/" + (index++).ToString(CultureInfo.InvariantCulture);
+            var pointer =
+                parentPointer + "/aliases/" + (index++).ToString(CultureInfo.InvariantCulture);
             if (value.ValueKind != JsonValueKind.Object)
             {
                 reader.Issue("expected_object", pointer);
@@ -304,10 +306,11 @@ public sealed partial class NormalizationProviderDecoder
 
     private static IReadOnlyList<MusicBrainzIswcObservation>? ReadMusicBrainzIswcs(
         ProviderObservationReader reader,
-        JsonElement root
+        JsonElement root,
+        string parentPointer = ""
     )
     {
-        var values = MusicBrainzStrings(reader, root, "iswcs", "");
+        var values = MusicBrainzStrings(reader, root, "iswcs", parentPointer);
         if (values == null)
         {
             return null;
@@ -397,10 +400,11 @@ public sealed partial class NormalizationProviderDecoder
 
     private static IReadOnlyList<MusicBrainzArtistCreditObservation>? ReadMusicBrainzArtistCredits(
         ProviderObservationReader reader,
-        JsonElement root
+        JsonElement root,
+        string parentPointer = ""
     )
     {
-        var values = MusicBrainzArray(reader, root, "artist-credit");
+        var values = MusicBrainzArray(reader, root, "artist-credit", parentPointer);
         if (values == null)
         {
             return null;
@@ -409,7 +413,10 @@ public sealed partial class NormalizationProviderDecoder
         var index = 0;
         foreach (var value in values.Value.EnumerateArray())
         {
-            var pointer = "/artist-credit/" + (index++).ToString(CultureInfo.InvariantCulture);
+            var pointer =
+                parentPointer
+                + "/artist-credit/"
+                + (index++).ToString(CultureInfo.InvariantCulture);
             if (value.ValueKind != JsonValueKind.Object)
             {
                 reader.Issue("expected_object", pointer);

@@ -10,7 +10,7 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed partial class NormalizationProviderDecoder
 {
-    public const string Version = "provider-observations-v4";
+    public const string Version = "provider-observations-v5";
 
     /// <summary>
     /// Requires a known provider/resource/capture-version contract. Unsupported versions
@@ -28,6 +28,12 @@ public sealed partial class NormalizationProviderDecoder
             input.CaptureVersion
         ) switch
         {
+            ("musicbrainz.org", "work-search", "musicbrainz-work-search-json-v1") =>
+                DecodeMusicBrainzSearch,
+            ("musicbrainz.org", "recording-search", "musicbrainz-recording-search-json-v1") =>
+                DecodeMusicBrainzSearch,
+            ("musicbrainz.org", "artist-search", "musicbrainz-artist-search-json-v1") =>
+                DecodeMusicBrainzSearch,
             ("musicbrainz.org", "work", "musicbrainz-work-json-v1") => DecodeMusicBrainzWork,
             ("musicbrainz.org", "recording", "musicbrainz-recording-work-json-v1") =>
                 DecodeMusicBrainzRecording,

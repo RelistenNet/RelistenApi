@@ -91,7 +91,7 @@ public sealed partial class NormalizationMusicBrainzInputStore
         );
     }
 
-    internal Task<MusicBrainzAcquisition> FinishAttemptAsync(
+    internal Task<MusicBrainzCommandSnapshot> FinishAttemptAsync(
         MusicBrainzDispatch dispatch,
         NormalizationCaptureResult? capture,
         string? reason,

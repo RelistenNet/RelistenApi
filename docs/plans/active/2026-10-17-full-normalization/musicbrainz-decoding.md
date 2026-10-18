@@ -12,11 +12,11 @@ The resource provider is `musicbrainz.org`. Its key must be a nonempty lowercase
 | `recording` | `musicbrainz-recording-work-json-v1` | Recording lookup with `inc=work-rels artist-credits` |
 | `artist` | `musicbrainz-artist-json-v1` | Artist lookup with `inc=aliases` |
 
-These names identify the representation the caller retained. The decoder cannot recover HTTP parameters from JSON. A future adapter must validate and record the actual request profile before using these capture versions. Changing a profile requires an explicit compatibility decision or a new capture version.
+These names identify the representation the caller retained. The decoder cannot recover HTTP parameters from JSON. The acquisition adapter validates and retains the actual fixed request profile before using these capture versions. Changing a profile requires an explicit compatibility decision or a new capture version.
 
-The requested resource MBID must agree with the root `id`. An invalid resource key throws. A nonobject root, provider `error`, missing or malformed root ID, or root identity mismatch produces cited issues and no MusicBrainz observations. Unsupported resource/capture combinations, including search, throw `NotSupportedException`. A retained 503 error body cannot become artist absence; the decoder does not itself know HTTP status.
+The requested resource MBID must agree with the root `id`. An invalid resource key throws. A nonobject root, provider `error`, missing or malformed root ID, or root identity mismatch produces cited issues and no MusicBrainz observations. Unsupported resource/capture combinations throw `NotSupportedException`. The separate [search decoder contract](musicbrainz-candidate-search.md) supports hashed query-page resources; those pages do not use an entity MBID as their resource key. A retained 503 error body cannot become artist absence; the decoder does not itself know HTTP status.
 
-The decoder version is `provider-observations-v4`. Existing processing fingerprints include that version. Historical terminal attempts remain replayable through their existing attempt contracts; new interpretation uses the current fingerprint.
+The decoder version is `provider-observations-v5`. Existing processing fingerprints include that version. Historical terminal attempts remain replayable through their existing attempt contracts; new interpretation uses the current fingerprint.
 
 ## Typed facts and citations
 
@@ -40,6 +40,6 @@ A null collection means the field was absent or invalid; malformed shapes also p
 
 The focused fixture `TestNormalizationProviderDecoderMusicBrainz` uses exact development response bodies with a compact URL/time/status/hash manifest. It checks external recording-to-work relationships, distinct author roles, person/group references, same-title unresolved candidates, unknown relationship details, missing versus empty lists, errors, malformed fields, resource/profile rejection and exact nested citations. The retained failure and same-title examples are source observations, not adjudicated matching labels.
 
-The [bounded acquisition service](musicbrainz-acquisition-contract.md) retains these three lookup profiles with durable HTTP receipts, original-generation CAS and provider-wide admission outside downstream transactions. Search acquisition and its runtime decoder remain required work. Search needs its own exact query/page resource contract and must expose incomplete pages and external freshness limits.
+The [bounded acquisition service](musicbrainz-acquisition-contract.md) retains these three lookup profiles with durable HTTP receipts, original-generation CAS and provider-wide admission outside downstream transactions. The [typed search acquisition/decoder and frozen local operator plan](musicbrainz-candidate-search.md) now expose exact query/page resources, bounded coverage and external freshness limits. Search fixtures are synthetic pending the separately bounded provider probe; hydration and authenticated catalog-to-work correspondence remain required work.
 
 A resolver must separately establish any connection between a Relisten claim and an external recording/work, consume the complete original read set, and compare all retrieved candidates. These decoders supply no catalog bridge, complete-author assertion, automatic policy or measured accuracy. Independent development labels and adjudicated evaluation are required before activating automatic acceptance.

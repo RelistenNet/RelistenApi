@@ -2,7 +2,7 @@
 
 `musicbrainz-acquire` drives the public acquisition service once and exports a reproducible receipt. It supports fixed work, recording and artist lookups. These external assertions do not establish catalog artist, person, repertoire or composition links. Search and automatic identity acceptance remain separate work.
 
-Use a dedicated local database named `relisten_normalization_*` on `localhost` or `127.0.0.1`, supplied through `RELISTEN_NORMALIZATION_DATABASE_URL`. Initialize its `normalization` schema and apply migrations **18 and 43** before invoking this mode. It does not need the Luna extraction cache migrations, initialize a database, start an API host or run ingestion. All processes using the same database share the MusicBrainz admission/cooldown row. Separate databases cannot coordinate that provider limit; use one dedicated database for this experiment.
+Use a dedicated local database named `relisten_normalization_*` on `localhost` or `127.0.0.1`, supplied through `RELISTEN_NORMALIZATION_DATABASE_URL`. Initialize its `normalization` schema and apply migrations **18, 43 and 47** before invoking this mode. The current shared store requires migration 47 even for lookup-only commands. It does not need the Luna extraction cache migrations, initialize a database, start an API host or run ingestion. All processes using the same database share the MusicBrainz admission/cooldown row. Separate databases cannot coordinate that provider limit; use one dedicated database for this experiment.
 
 Create a request file with the existing typed lookup fields:
 

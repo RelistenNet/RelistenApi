@@ -1,5 +1,6 @@
 using System;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Transactions;
@@ -40,21 +41,28 @@ public sealed partial class NormalizationMusicBrainzInputService
     )
     {
         RequireAcquisitionContext(commandUuid, ct);
-        var previous = await store.GetAsync(commandUuid, ct);
+        var previous = await store.GetCommandAsync(commandUuid, "lookup", ct);
         if (previous != null)
         {
-            if (previous.Request != request)
+            if (previous.ToLookup().Request != request)
             {
                 throw new NormalizationConflictException(
                     "The MusicBrainz command UUID already belongs to another request."
                 );
             }
-            return await ResumeCommandAsync(previous, ct);
+            return (await ResumeCommandAsync(previous, ct)).ToLookup();
         }
 
         var profile = MusicBrainzHttpPolicy.Profile(request);
-        var command = await store.GetOrCreateAsync(commandUuid, request, profile, Version, ct);
-        return await ResumeCommandAsync(command, ct);
+        var command = await store.GetOrCreateCommandAsync(
+            commandUuid,
+            "lookup",
+            JsonSerializer.Serialize(request),
+            profile,
+            Version,
+            ct
+        );
+        return (await ResumeCommandAsync(command, ct)).ToLookup();
     }
 
     public async Task<MusicBrainzAcquisition> ResumeAsync(
@@ -64,12 +72,12 @@ public sealed partial class NormalizationMusicBrainzInputService
     {
         RequireAcquisitionContext(commandUuid, ct);
         var command =
-            await store.GetAsync(commandUuid, ct)
+            await store.GetCommandAsync(commandUuid, "lookup", ct)
             ?? throw new ArgumentException(
                 "The MusicBrainz acquisition command does not exist.",
                 nameof(commandUuid)
             );
-        return await ResumeCommandAsync(command, ct);
+        return (await ResumeCommandAsync(command, ct)).ToLookup();
     }
 
     public Task<MusicBrainzAcquisition?> GetAsync(
@@ -77,8 +85,8 @@ public sealed partial class NormalizationMusicBrainzInputService
         CancellationToken ct = default
     ) => store.GetAsync(commandUuid, ct);
 
-    private async Task<MusicBrainzAcquisition> ResumeCommandAsync(
-        MusicBrainzAcquisition command,
+    private async Task<MusicBrainzCommandSnapshot> ResumeCommandAsync(
+        MusicBrainzCommandSnapshot command,
         CancellationToken ct
     )
     {
@@ -86,12 +94,16 @@ public sealed partial class NormalizationMusicBrainzInputService
         {
             return command;
         }
-        if (command.AcquisitionVersion != Version)
+        if (
+            command.AcquisitionVersion
+            != (command.RequestKind == "lookup" ? Version : SearchVersion)
+        )
         {
-            return await store.FailAsync(
+            return await store.FailCommandAsync(
                 command.CommandUuid,
                 "unsupported_acquisition_version",
-                ct
+                ct,
+                command.RequestKind
             );
         }
 
@@ -114,7 +126,7 @@ public sealed partial class NormalizationMusicBrainzInputService
         return await CompleteSavedResponseAsync(step.Dispatch, saved, ct);
     }
 
-    private async Task<MusicBrainzAcquisition> CompleteSavedResponseAsync(
+    private async Task<MusicBrainzCommandSnapshot> CompleteSavedResponseAsync(
         MusicBrainzDispatch dispatch,
         MusicBrainzSavedResponse saved,
         CancellationToken ct

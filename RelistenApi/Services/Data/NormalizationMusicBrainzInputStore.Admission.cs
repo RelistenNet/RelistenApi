@@ -263,13 +263,12 @@ public sealed partial class NormalizationMusicBrainzInputStore
         CancellationToken ct
     )
     {
-        var request = command.Request;
-        if (request.CacheMode != MusicBrainzCacheMode.ReuseFresh)
+        if (command.CacheMode != MusicBrainzCacheMode.ReuseFresh)
         {
             return false;
         }
         var profile = command.Profile;
-        var maximumAge = request.MaximumCacheAge!.Value;
+        var maximumAge = command.MaximumCacheAge!.Value;
         // Any explicit positive age is valid, including a span longer than the UTC date range.
         var oldest =
             maximumAge.Ticks >= now.Ticks

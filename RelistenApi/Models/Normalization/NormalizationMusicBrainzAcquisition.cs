@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -104,7 +106,9 @@ internal static class MusicBrainzAcquisitionLimits
 internal sealed record MusicBrainzRequestProfile(
     NormalizationResourceKey Resource,
     string CaptureVersion,
-    string RequestUrl
+    string RequestUrl,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        MusicBrainzSearchDescriptor? SearchDescriptor = null
 );
 
 internal sealed record MusicBrainzDispatch(
@@ -121,7 +125,60 @@ internal sealed record MusicBrainzDispatch(
 );
 
 internal sealed record MusicBrainzAcquisitionStep(
-    MusicBrainzAcquisition Acquisition,
+    MusicBrainzCommandSnapshot Acquisition,
     MusicBrainzDispatch? Dispatch = null,
     MusicBrainzSavedResponse? SavedResponse = null
 );
+
+/// <summary>The provider protocol state is shared; typed public projections never reinterpret another command kind.</summary>
+internal sealed record MusicBrainzCommandSnapshot(
+    Guid CommandUuid,
+    string RequestKind,
+    string RequestJson,
+    MusicBrainzRequestProfile Profile,
+    string AcquisitionVersion,
+    MusicBrainzAcquisitionState State,
+    DateTimeOffset? NotBefore,
+    MusicBrainzAcquisitionResult? Result,
+    IReadOnlyList<MusicBrainzAcquisitionAttempt> Attempts
+)
+{
+    internal MusicBrainzAcquisition ToLookup()
+    {
+        RequireKind("lookup");
+        return new(
+            CommandUuid,
+            JsonSerializer.Deserialize<MusicBrainzLookupRequest>(RequestJson)!,
+            AcquisitionVersion,
+            State,
+            NotBefore,
+            Result,
+            Attempts
+        );
+    }
+
+    internal MusicBrainzSearchAcquisition ToSearch()
+    {
+        RequireKind("search");
+        return new(
+            CommandUuid,
+            JsonSerializer.Deserialize<MusicBrainzSearchPageRequest>(RequestJson)!,
+            Profile.SearchDescriptor!,
+            AcquisitionVersion,
+            State,
+            NotBefore,
+            Result,
+            Attempts
+        );
+    }
+
+    internal void RequireKind(string expected)
+    {
+        if (RequestKind != expected)
+        {
+            throw new NormalizationConflictException(
+                "The command UUID belongs to another MusicBrainz request kind."
+            );
+        }
+    }
+}

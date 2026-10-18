@@ -18,19 +18,37 @@ namespace Relisten.Data;
 /// </summary>
 public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
 {
-    internal Task<MusicBrainzAcquisition> GetOrCreateAsync(
+    internal async Task<MusicBrainzAcquisition> GetOrCreateAsync(
         Guid commandUuid,
         MusicBrainzLookupRequest request,
         MusicBrainzRequestProfile profile,
         string acquisitionVersion,
         CancellationToken ct = default
+    ) =>
+        (
+            await GetOrCreateCommandAsync(
+                commandUuid,
+                "lookup",
+                JsonSerializer.Serialize(request),
+                profile,
+                acquisitionVersion,
+                ct
+            )
+        ).ToLookup();
+
+    internal Task<MusicBrainzCommandSnapshot> GetOrCreateCommandAsync(
+        Guid commandUuid,
+        string requestKind,
+        string requestJson,
+        MusicBrainzRequestProfile profile,
+        string acquisitionVersion,
+        CancellationToken ct
     )
     {
         if (commandUuid == Guid.Empty)
         {
             throw new ArgumentException("A stable command UUID is required.", nameof(commandUuid));
         }
-        var requestJson = JsonSerializer.Serialize(request);
         var profileJson = JsonSerializer.Serialize(profile);
         ArgumentException.ThrowIfNullOrWhiteSpace(acquisitionVersion);
 
@@ -41,13 +59,14 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
                 await c.ExecuteAsync(
                     new CommandDefinition(
                         """
-                        INSERT INTO normalization.musicbrainz_commands(command_uuid,request,profile,acquisition_version)
-                        VALUES(@commandUuid,@requestJson::jsonb,@profileJson::jsonb,@acquisitionVersion)
+                        INSERT INTO normalization.musicbrainz_commands(command_uuid,request_kind,request,profile,acquisition_version)
+                        VALUES(@commandUuid,@requestKind,@requestJson::jsonb,@profileJson::jsonb,@acquisitionVersion)
                         ON CONFLICT DO NOTHING
                         """,
                         new
                         {
                             commandUuid,
+                            requestKind,
                             requestJson,
                             profileJson,
                             acquisitionVersion,
@@ -59,7 +78,10 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
                 var command = await RequireCommand(c, t, commandUuid, ct);
                 // Replay checks frozen request facts, but terminal commands are not reinterpreted using
                 // the caller's current acquisition version or profile defaults.
-                if (!SameJson(command.RequestJson, requestJson))
+                if (
+                    command.RequestKind != requestKind
+                    || !SameJson(command.RequestJson, requestJson)
+                )
                 {
                     throw new NormalizationConflictException(
                         "MusicBrainz command UUID belongs to another request."
@@ -83,11 +105,17 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
         );
     }
 
-    public Task<MusicBrainzAcquisition?> GetAsync(
+    public async Task<MusicBrainzAcquisition?> GetAsync(
         Guid commandUuid,
         CancellationToken ct = default
+    ) => (await GetCommandAsync(commandUuid, "lookup", ct))?.ToLookup();
+
+    internal Task<MusicBrainzCommandSnapshot?> GetCommandAsync(
+        Guid commandUuid,
+        string expectedKind,
+        CancellationToken ct
     ) =>
-        db.WithWriteConnection<MusicBrainzAcquisition?>(async connection =>
+        db.WithWriteConnection<MusicBrainzCommandSnapshot?>(async connection =>
         {
             var c = (NpgsqlConnection)connection;
             await using var t = await c.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
@@ -99,6 +127,12 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
                 )
             );
             var command = await ReadCommand(c, t, commandUuid, false, ct);
+            if (command != null && command.RequestKind != expectedKind)
+            {
+                throw new NormalizationConflictException(
+                    "The command UUID belongs to another MusicBrainz request kind."
+                );
+            }
             var result = command == null ? null : await ReadAcquisition(c, t, command, ct);
             await t.CommitAsync(ct);
             return result;
@@ -112,10 +146,17 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
             ReadResponse((NpgsqlConnection)connection, null, attemptUuid, ct)
         );
 
-    internal Task<MusicBrainzAcquisition> FailAsync(
+    internal async Task<MusicBrainzAcquisition> FailAsync(
         Guid commandUuid,
         string reason,
         CancellationToken ct = default
+    ) => (await FailCommandAsync(commandUuid, reason, ct, "lookup")).ToLookup();
+
+    internal Task<MusicBrainzCommandSnapshot> FailCommandAsync(
+        Guid commandUuid,
+        string reason,
+        CancellationToken ct,
+        string expectedKind
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
@@ -124,6 +165,12 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
             {
                 await LockGate(c, t, ct);
                 var command = await RequireCommand(c, t, commandUuid, ct);
+                if (command.RequestKind != expectedKind)
+                {
+                    throw new NormalizationConflictException(
+                        "The command UUID belongs to another MusicBrainz request kind."
+                    );
+                }
                 if (command.ResultJson == null)
                 {
                     // A terminal command does not revoke an in-flight request's admission lease.
@@ -200,7 +247,7 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
         c.QuerySingleOrDefaultAsync<CommandRow>(
             new CommandDefinition(
                 $"""
-                SELECT command_uuid AS "CommandUuid",request::text AS "RequestJson",profile::text AS "ProfileJson",
+                SELECT command_uuid AS "CommandUuid",request_kind AS "RequestKind",request::text AS "RequestJson",profile::text AS "ProfileJson",
                     acquisition_version AS "AcquisitionVersion",state AS "State",not_before AS "NotBefore",result::text AS "ResultJson"
                 FROM normalization.musicbrainz_commands WHERE command_uuid=@commandUuid {(
                     locked ? "FOR UPDATE" : ""
@@ -241,7 +288,7 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
             )
         ).ToArray();
 
-    private static async Task<MusicBrainzAcquisition> ReadAcquisition(
+    private static async Task<MusicBrainzCommandSnapshot> ReadAcquisition(
         NpgsqlConnection c,
         NpgsqlTransaction? t,
         CommandRow command,
@@ -251,7 +298,9 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
         var attempts = await ReadAttempts(c, t, command.CommandUuid, ct);
         return new(
             command.CommandUuid,
-            command.Request,
+            command.RequestKind,
+            command.RequestJson,
+            command.Profile,
             command.AcquisitionVersion,
             Enum.Parse<MusicBrainzAcquisitionState>(command.State),
             command.NotBefore == null ? null : new DateTimeOffset(command.NotBefore.Value),
@@ -307,14 +356,23 @@ public sealed partial class NormalizationMusicBrainzInputStore(DbService db)
     private sealed class CommandRow
     {
         public Guid CommandUuid { get; init; }
+        public string RequestKind { get; init; } = null!;
         public string RequestJson { get; init; } = null!;
         public string ProfileJson { get; init; } = null!;
         public string AcquisitionVersion { get; init; } = null!;
         public string State { get; set; } = null!;
         public DateTime? NotBefore { get; set; }
         public string? ResultJson { get; set; }
-        public MusicBrainzLookupRequest Request =>
-            JsonSerializer.Deserialize<MusicBrainzLookupRequest>(RequestJson)!;
+        public MusicBrainzCacheMode CacheMode =>
+            RequestKind == "lookup"
+                ? JsonSerializer.Deserialize<MusicBrainzLookupRequest>(RequestJson)!.CacheMode
+                : JsonSerializer.Deserialize<MusicBrainzSearchPageRequest>(RequestJson)!.CacheMode;
+        public TimeSpan? MaximumCacheAge =>
+            RequestKind == "lookup"
+                ? JsonSerializer.Deserialize<MusicBrainzLookupRequest>(RequestJson)!.MaximumCacheAge
+                : JsonSerializer
+                    .Deserialize<MusicBrainzSearchPageRequest>(RequestJson)!
+                    .MaximumCacheAge;
         public MusicBrainzRequestProfile Profile =>
             JsonSerializer.Deserialize<MusicBrainzRequestProfile>(ProfileJson)!;
     }

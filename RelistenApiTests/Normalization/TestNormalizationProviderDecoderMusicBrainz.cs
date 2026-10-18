@@ -19,7 +19,7 @@ public sealed class TestNormalizationProviderDecoderMusicBrainz
         var result = decoder.Decode(input);
         var work = result.MusicBrainzWorks.Should().ContainSingle().Subject;
 
-        result.DecoderVersion.Should().Be("provider-observations-v4");
+        result.DecoderVersion.Should().Be("provider-observations-v5");
         work.Origin.Item.Should().Be(input.Resource);
         work.Origin.Scope.Should().Be(ProviderObservationScope.ResourceItem);
         work.Work.Identity.Identity.Should().Be(input.Resource);
@@ -548,7 +548,7 @@ public sealed class TestNormalizationProviderDecoderMusicBrainz
             "musicbrainz-work-search-json-v1"
         );
         var search = () => decoder.Decode(searchInput);
-        search.Should().Throw<NotSupportedException>();
+        search.Should().Throw<ArgumentException>();
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var cancelled = () => decoder.Decode(captured, cancellation.Token);

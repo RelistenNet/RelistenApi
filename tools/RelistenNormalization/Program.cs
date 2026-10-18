@@ -9,6 +9,7 @@ if (
         (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
         || (args.Length == 5 && args[0] == "luna-credits")
         || (args.Length == 4 && args[0] == "musicbrainz-acquire")
+        || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
     )
 )
@@ -17,6 +18,7 @@ if (
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
+            + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
             + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>\n"
             + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>"
     );
@@ -32,11 +34,11 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
-    if (args[0] == "musicbrainz-acquire")
+    if (args[0] is "musicbrainz-acquire" or "musicbrainz-search")
     {
         if (!Guid.TryParse(args[3], out var commandUuid) || commandUuid == Guid.Empty)
         {
-            throw new ArgumentException("Use a nonempty acquisition command UUID.");
+            throw new ArgumentException("Use a nonempty MusicBrainz command or plan UUID.");
         }
         var db = NormalizationLocalDatabase.Create();
         var evidence = new NormalizationEvidenceService(db);
@@ -59,6 +61,23 @@ try
                 UserAgent = "RelistenNormalization.Operator/1.0 (https://relisten.net)",
             }
         );
+        if (args[0] == "musicbrainz-search")
+        {
+            var search = await new MusicBrainzSearchBatch(service, store, evidence).RunAsync(
+                args[1],
+                args[2],
+                commandUuid,
+                args.Length == 5 ? args[4] : null,
+                cancellation.Token
+            );
+            Console.WriteLine(
+                JsonSerializer.Serialize(
+                    search,
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web)
+                )
+            );
+            return search.State == "completed" ? 0 : 1;
+        }
         var acquisition = await new MusicBrainzAcquisitionBatch(service, store, evidence).RunAsync(
             args[1],
             args[2],
