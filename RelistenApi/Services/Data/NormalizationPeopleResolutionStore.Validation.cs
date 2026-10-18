@@ -189,7 +189,13 @@ public sealed partial class NormalizationPeopleResolutionStore
             || snapshot.ReadSet.CandidateUniverses[0].Generation < 0
             || snapshot.Facts.Select(fact => fact.Hit.Uuid).Distinct().Count()
                 != snapshot.Facts.Count
-            || snapshot.Facts.Any(fact => fact.ActorMatchingFacts == null)
+            || snapshot.Facts.Any(fact =>
+                fact.ActorMatchingFacts == null
+                || fact.AcceptedAliasMatchingNames == null
+                || fact.AliasMatchingNamesComplete == null
+            )
+            || snapshot.Complete
+                && snapshot.Facts.Any(fact => fact.AliasMatchingNamesComplete != true)
             || snapshot.Complete
                 && !snapshot
                     .Facts.Select(fact => fact.Hit.Uuid)

@@ -18,7 +18,7 @@ public sealed class PeopleResolutionPolicyEvaluator
         + "/"
         + IdentityCandidateMatcher.PeopleActorFeaturesVersion;
     public const string RetrievalVersion =
-        "people-actor-retrieval-v2/" + PeopleActorProjection.Version;
+        "people-actor-retrieval-v3/" + PeopleActorProjection.Version;
     public const string CreationClassifierVersion = "single-alphabetic-full-name-person-v1";
 
     /// <summary>
@@ -90,7 +90,11 @@ public sealed class PeopleResolutionPolicyEvaluator
             || snapshot.Selection.Domain != IdentityMatchingDomain.People
             || snapshot.Query.ArtistUuid != null
             || candidateIds.Count != snapshot.Facts.Count
-            || snapshot.Facts.Any(fact => fact.ActorMatchingFacts == null)
+            || snapshot.Facts.Any(fact =>
+                fact.ActorMatchingFacts == null
+                || fact.AcceptedAliasMatchingNames == null
+                || fact.AliasMatchingNamesComplete != true
+            )
             || !candidateIds.SetEquals(snapshot.Selection.Items.Select(hit => hit.Uuid))
             || claim.Comparisons.Count != candidateIds.Count
             || claim.Comparisons.Any(pair =>

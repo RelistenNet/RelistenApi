@@ -68,7 +68,12 @@ public sealed partial class NormalizationCandidateService
                             identity.DecisionUuid
                         ))
                         .ToArray(),
-                    Aliases = aliases,
+                    Aliases = aliases.Witnesses,
+                    AcceptedAliasMatchingNames = aliases.MatchingNames,
+                    AliasMatchingNamesComplete = aliases.MatchingComplete,
+                    AliasAssertionCount = aliases.AssertionCount,
+                    AliasSupportCount = aliases.SupportCount,
+                    AliasEvidenceTruncated = aliases.WitnessesTruncated,
                     ExternalIdentities = identifiers,
                     ArtistContexts = credits.Artists,
                     MissingSourceCreditCount = credits.MissingSource,
@@ -149,43 +154,6 @@ public sealed partial class NormalizationCandidateService
             context.AddOwner(identity.OwnerSubjectUuid, candidate);
         }
         return retained;
-    }
-
-    private static async Task<CandidateNameFact[]> ReadPersonAliases(
-        NpgsqlConnection c,
-        NpgsqlTransaction t,
-        Guid candidate,
-        Guid[] members,
-        CandidateFactsLimits limits,
-        CandidateFactsContext context,
-        CancellationToken ct
-    )
-    {
-        var rows = (
-            await c.QueryAsync<PersonFactAliasRow>(
-                new CommandDefinition(
-                    """
-                    SELECT a.uuid AS "Uuid",a.person_uuid AS "StoredIdentityUuid",a.wording AS "Wording",
-                        owner.uuid AS "OwnerSubjectUuid",a.revision AS "Revision",a.basis AS "Basis",
-                        a.input_revision_uuid AS "InputRevisionUuid",a.json_pointer AS "JsonPointer",
-                        a.start_code_point AS "StartCodePoint",a.end_code_point AS "EndCodePoint",a.quote AS "Quote"
-                    FROM normalization.person_aliases a LEFT JOIN normalization.work_subjects owner ON owner.domain='people'
-                        AND owner.subject_kind='person' AND owner.subject_uuid=a.person_uuid
-                    WHERE a.person_uuid=ANY(@members) AND a.state='accepted' ORDER BY a.uuid LIMIT @take
-                    """,
-                    new { members, take = limits.MaximumAssertionsPerKind + 1 },
-                    t,
-                    cancellationToken: ct
-                )
-            )
-        ).ToArray();
-        if (rows.Length > limits.MaximumAssertionsPerKind)
-        {
-            context.AddIssue(CandidateFactsIssueKind.AssertionLimit, candidate, "person_alias");
-        }
-        return rows.Take(limits.MaximumAssertionsPerKind)
-            .Select(row => new CandidateNameFact(row.Provenance, row.Wording))
-            .ToArray();
     }
 
     private static async Task<CandidateExternalIdentityFact[]> ReadPersonIdentifiers(
@@ -613,11 +581,6 @@ public sealed partial class NormalizationCandidateService
                 Basis,
                 [new(InputRevisionUuid, JsonPointer, StartCodePoint, EndCodePoint, Quote)]
             );
-    }
-
-    private sealed class PersonFactAliasRow : PersonFactAssertionRow
-    {
-        public string Wording { get; init; } = null!;
     }
 
     private sealed class PersonFactIdentifierRow : PersonFactAssertionRow

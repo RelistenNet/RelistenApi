@@ -16,7 +16,7 @@ public sealed partial class NormalizationCandidateService
 {
     /// <summary>Projection version included in lookup fingerprints and retained matching receipts.</summary>
     public const string FactsVersion = "candidate-facts-v3";
-    public const string PeopleFactsVersion = "people-candidate-facts-v4";
+    public const string PeopleFactsVersion = "people-candidate-facts-v5";
 
     /// <summary>
     /// Reads global person candidates, original-owner assertions and exact accepted-credit
@@ -122,12 +122,20 @@ public sealed partial class NormalizationCandidateService
             limits = limits with
             {
                 MaximumActorMatchingBytes = limits.MaximumActorMatchingBytes ?? 4 * 1024 * 1024,
+                MaximumAliasMatchingNames = limits.MaximumAliasMatchingNames ?? 5000,
+                MaximumAliasMatchingBytes = limits.MaximumAliasMatchingBytes ?? 4 * 1024 * 1024,
+                MaximumAliasEvidenceBytes = limits.MaximumAliasEvidenceBytes ?? 4 * 1024 * 1024,
             };
         }
-        else if (limits.MaximumActorMatchingBytes != null)
+        else if (
+            limits.MaximumActorMatchingBytes != null
+            || limits.MaximumAliasMatchingNames != null
+            || limits.MaximumAliasMatchingBytes != null
+            || limits.MaximumAliasEvidenceBytes != null
+        )
         {
             throw new ArgumentException(
-                "Actor matching limits apply only to people facts.",
+                "Actor and alias matching limits apply only to people facts.",
                 nameof(requestedLimits)
             );
         }
@@ -219,6 +227,9 @@ public sealed partial class NormalizationCandidateService
             || limits.MaximumActorContexts is < 1 or > 10000
             || limits.MaximumActorEvidenceBytes is < 1 or > 32 * 1024 * 1024
             || limits.MaximumActorMatchingBytes is < 256 or > 32 * 1024 * 1024
+            || limits.MaximumAliasMatchingNames is < 1 or > 10000
+            || limits.MaximumAliasMatchingBytes is < 1 or > 32 * 1024 * 1024
+            || limits.MaximumAliasEvidenceBytes is < 1 or > 32 * 1024 * 1024
         )
         {
             throw new ArgumentOutOfRangeException(

@@ -312,7 +312,7 @@ public sealed class TestNormalizationPeopleFacts
         else if (bound == "alias")
         {
             await AddAlias(person, "Second " + person.Person.DisplayName);
-            limits = limits with { MaximumAssertionsPerKind = 1 };
+            limits = limits with { MaximumAliasMatchingNames = 1 };
             expected = CandidateFactsIssueKind.AssertionLimit;
         }
         else if (bound == "identifier")
@@ -912,7 +912,7 @@ public sealed class TestNormalizationPeopleFacts
             ct.ThrowIfCancellationRequested();
             var waiting = await fixture.Db.WithWriteConnection(c =>
                 c.ExecuteScalarAsync<bool>(
-                    "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%normalization.person_aliases%')"
+                    "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock' AND query LIKE '%normalization.current_person_aliases%')"
                 )
             );
             if (waiting)

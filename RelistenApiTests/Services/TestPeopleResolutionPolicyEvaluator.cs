@@ -12,7 +12,7 @@ public sealed class TestPeopleResolutionPolicyEvaluator
     private readonly PeopleResolutionPolicyEvaluator evaluator = new();
 
     [Test]
-    public void PriorPeopleFactsAttestationCannotAuthorizeTheV4AggregateRecipe()
+    public void PriorPeopleFactsAttestationCannotAuthorizeTheCurrentAggregateRecipe()
     {
         var policy = Policy();
         policy = policy with
@@ -33,7 +33,7 @@ public sealed class TestPeopleResolutionPolicyEvaluator
     }
 
     [Test]
-    public void V4CandidateCannotReplaceItsCompleteAggregateWithRawWitnesses()
+    public void CandidateCannotReplaceItsCompleteActorAggregateWithRawWitnesses()
     {
         var claim = Claim("Dave Sorochty", Pair(1, exact: true, sharedArtist: true));
         claim = claim with
@@ -42,6 +42,39 @@ public sealed class TestPeopleResolutionPolicyEvaluator
             {
                 Facts = claim
                     .Candidates.Facts.Select(fact => fact with { ActorMatchingFacts = null })
+                    .ToArray(),
+            },
+        };
+
+        var result = Evaluate(claim);
+
+        result.Action.Should().Be(PeopleResolutionAction.Unresolved);
+        result.Reason.Should().Be("inconsistent_candidate_projection");
+    }
+
+    [TestCase("names_absent")]
+    [TestCase("completeness_absent")]
+    [TestCase("incomplete_names")]
+    public void V5AcceptanceRequiresTheCompleteAliasAggregate(string missingPart)
+    {
+        var claim = Claim("Fixture Person", Pair(1, exact: true, sharedArtist: true));
+        claim = claim with
+        {
+            Candidates = claim.Candidates! with
+            {
+                Facts = claim
+                    .Candidates.Facts.Select(fact =>
+                        fact with
+                        {
+                            AcceptedAliasMatchingNames = missingPart == "names_absent" ? null : [],
+                            AliasMatchingNamesComplete = missingPart switch
+                            {
+                                "completeness_absent" => null,
+                                "incomplete_names" => false,
+                                _ => true,
+                            },
+                        }
+                    )
                     .ToArray(),
             },
         };
@@ -453,6 +486,8 @@ public sealed class TestPeopleResolutionPolicyEvaluator
                 Hit = hit,
                 Header = new(hit.Uuid, name, 1, hit.OwnerSubjectUuid, "person"),
                 ActorMatchingFacts = new(false, [], [], [], [], [], false, false),
+                AcceptedAliasMatchingNames = [],
+                AliasMatchingNamesComplete = true,
             })
             .ToArray();
         var snapshot = new NormalizationCandidateFactsSnapshot<PersonCandidateFacts>(

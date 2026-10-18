@@ -58,8 +58,14 @@ As of 2026-10-18:
   production builder; historical all-null absence supplies no clear. The three
   subsequent large-recording checks pass with all 5,001 files and 10,002
   mappings, unchanged retry and historical review/replay.
-- [ ] Implement migration, canonical alias write outcomes and compatible current
-  alias readers, including complete distinct names and every support owner.
+- [x] Verify phase 2 storage and read compatibility: migration 53, typed canonical
+  alias outcomes and current readers are integrated. All 81 focused checks pass,
+  including the nonempty schema-52-to-53 upgrade. Six warm synthetic SQL probes
+  verify distinct-person retrieval and explicit semantic-name overflow. The
+  broader run passes 313 checks with one historical-producer fixture failure;
+  correcting that fixture to preserve absent alias data is followed by 27
+  passing targeted checks. The broader and full suites have not been rerun
+  after that correction.
 - [ ] Implement immutable source assignment decisions, qualified policy
   applicability and trusted source review.
 - [ ] Implement accepted support publication, complete source-scope replacement,
@@ -67,8 +73,54 @@ As of 2026-10-18:
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
   bounds, and enable it through the normal evaluated rollout process.
 
-No source-actor identity assignment or accepted alias-support lifecycle is
-implemented by the proposal integration. It activates no matching policy.
+Phase 2 adds storage and read compatibility: migration 53, typed ordinary alias
+outcomes, current visibility and `people-candidate-facts-v5`. The nonempty upgrade
+rehearsal preserves existing IDs, revisions, review history and candidate clocks.
+No source-actor resolver, assignment-review service, complete producer-scope map
+or accepted support publication route is implemented. No matching policy is
+activated.
+
+### Verified storage and reader behavior
+
+Migration 53 gives existing alias assertions independent baseline support and
+adds source assignment, contributor support and trusted review history tables.
+The nonempty upgrade preserves existing UUIDs, revisions, review history and
+candidate clocks. `current_person_aliases` exposes accepted assertions with
+reviewed, baseline or current managed authority; `resolved_person_aliases` uses
+that same visibility rule. The typed ordinary alias writer respects reviewed
+name claims even when a new assertion uses another UUID or citation. These are
+storage and reader contracts, not a source-assignment publication service.
+
+People snapshots now use `people-candidate-facts-v5`. Candidate retrieval applies
+its limit after original assertions and redirect targets have been grouped into
+distinct resolved people. It scans all threshold matches; bounding the returned
+identities does not bound database rows visited. Matching names, bounded original
+witnesses and all supporting owner observations remain separate. Repeated copies
+of one name consume witness space without hiding a different person or making
+semantic name membership incomplete.
+
+The [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-authority-v1.json)
+retains failed and corrected runs. The broader regression run passes 313 of 314
+checks. Its remaining historical-producer fixture is corrected to preserve the
+optional alias account's original absence; all 27 targeted compatibility checks
+then pass. Neither the broader suite nor the full suite has been rerun after
+that correction.
+
+Six local synthetic PostgreSQL plans execute in **60.266–68.630 ms**, using the
+`person_candidate_alias` index. They visit 10,000–10,002 threshold-matching alias
+rows, report no shared reads or temporary blocks in the warm plans, and use at
+most 853 KiB for a sort. These measurements cover SQL execution only; full-service
+latency and production cost remain unmeasured. A separate case with 10,000
+different matching names correctly returns `Complete=false` at the 5,000-name
+semantic bound while `NameCandidatesTruncated=false`. Its person list is
+complete; its matching facts are not, so automatic acceptance remains blocked.
+The probe cleanup completes without error.
+
+Deploy migration 53 before the corresponding binary. Keep the current-alias
+readers on every candidate and resolved-alias path during rollback. Retain the
+authority and history tables; do not substitute raw alias-table reads or rewrite
+old assertions. Source-actor acceptance remains inactive while the later phases
+below are implemented and verified.
 
 The corrected producer is `source-actor-aliases-v2/recording-actor-evidence-v1`.
 An unfamiliar coordinated instrument row can retain roster context only under
@@ -287,6 +339,11 @@ formatter check before each commit.
 - Full-field structure matters: a rejected earlier suffix can hide a later
   valid alias. A regression consisting only of the alias line cannot prove
   roster coverage.
+- Complete matching names alone do not make candidate retrieval complete. The
+  earlier raw-row lookahead reported truncation after reading repeated aliases
+  for one person. People retrieval now groups original and resolved identities
+  before its candidate limit. The warm synthetic plans above measure this scan;
+  production cost remains unmeasured.
 - Reuse canonical `person_aliases` and metadata review. A second global alias
   store would split authority and visibility.
 - Keep one stable producer contribution per person. Per-source support and
@@ -299,10 +356,11 @@ formatter check before each commit.
 ## Outcomes and remaining work
 
 The proposal path, full-field grammar correction and development-cohort
-verification pass. Assignment, managed support,
-source review, current alias readers, candidate aggregation and accepted
-publication remain unimplemented. Complete this program as a connected lifecycle;
-do not declare normalization complete after extraction or offline comparison.
+verification pass. Phase 2 storage, current alias readers and distinct-person
+retrieval pass their focused checks and local query rehearsal. Source assignment,
+trusted source review and accepted support publication remain unimplemented. The
+next phase must connect original assertions to evaluated decisions and trusted
+review before publishing or retiring managed support.
 
 Rollback must stop new source-actor acceptance while retaining tables, original
 proof and support history. Keep the current-alias predicate deployed or use a

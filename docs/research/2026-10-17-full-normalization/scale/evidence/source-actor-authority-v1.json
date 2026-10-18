@@ -1,0 +1,291 @@
+{
+  "version": "source-actor-authority-v1",
+  "state": "local_storage_and_read_compatibility_verified",
+  "migration": 53,
+  "people_facts_version": "people-candidate-facts-v5",
+  "execution_packet": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/manifest.json",
+    "bytes": 49134,
+    "sha256": "bd89c0c33c8c45497fa4b68dc9944cfb3e416731e00ae65e4c4587db6e7c313d"
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/broader-v1/source-actor-authority-broader-v1.trx",
+      "bytes": 247945,
+      "sha256": "df19ff15d2866a6f052b84bf32402694d7fb32981146132dfcafbec43369c808",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/distinct-broader-v1/source-actor-authority-distinct-broader-v1.trx",
+      "bytes": 444411,
+      "sha256": "829bdc1a056ebd2443bab89443669b82809a19386de730fa35a1c0de853da8ea",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/distinct-focused-v1/source-actor-authority-distinct-focused-v1.trx",
+      "bytes": 112981,
+      "sha256": "fd240c908c7f8d69c77d7788b0935e463833641959dd7f48e83d3af5c08a572b",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/distinct-query-probe-v3/receipt.json",
+      "bytes": 17543552,
+      "sha256": "854aab6ee583c17ee9b3d94b60f9bdab6628f9765eb2bbb08233db8235813368",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/distinct-query-probe-v3/receipt.json.cleanup.json",
+      "bytes": 75,
+      "sha256": "a490096ba02d2109753e1154808cbe44d6d69ef13ed387044cf3f5373313b19e",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/distinct-query-probe-v3/summary.json",
+      "bytes": 3878,
+      "sha256": "f50b15f91583bbc8874942554e1598a0ad19f59d8742736c38d842f843aac095",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/duplicate-diagnostic-v1/source-actor-duplicate-alias-diagnostic-v1.trx",
+      "bytes": 6426,
+      "sha256": "edf10a5a9a68c515b05b24d82b07494aea55883f490b02c85b25db391080f70b",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/focused-v1/source-actor-authority-focused-v1.trx",
+      "bytes": 130825,
+      "sha256": "313da710a793633ea9a0c6249e8f4eb4466bf57c0dbe22953dde9f4cfb3e7103",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/legacy-producer-compatibility-v1/source-actor-legacy-producer-compatibility-v1.trx",
+      "bytes": 42194,
+      "sha256": "4e72bbfd1e3376f21082b6da2cc1cad1d9d252299b045b57c5cb3af4c05e2bd2",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/other-focused-v1/source-actor-authority-other-focused-v1.trx",
+      "bytes": 102392,
+      "sha256": "35995c8726212e6bd2ce15b7148a11f79bfc8bd05504964dcb1b02d2330d946a",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/execution/upgrade-v2/source-actor-authority-upgrade-v2.trx",
+      "bytes": 4504,
+      "sha256": "d72b540f67649f37cea612d9226f240d87e8adef52604a405ba2f4a46bb92d33",
+      "kind": "actual_execution"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-distinct-people-query-probe-v1.log",
+      "bytes": 10381,
+      "sha256": "3d1d5d286247613ccd1bda15f2b51089b24eabd0a5c30a579590e9d97167b1ef",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-distinct-people-query-probe-v2.log",
+      "bytes": 14820,
+      "sha256": "98d54be6d36d05196acf27595f200716aa5b68c8ff3fc778657b4f8c5542a330",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-distinct-people-query-probe-v3.log",
+      "bytes": 14459,
+      "sha256": "d5061340f0c22d4779f5bf36bf2904d665ec7e244957abe032c67532043bfe94",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-broader-v1.log",
+      "bytes": 844,
+      "sha256": "fddaf2788d403f42c2003d7f7fb1f3c7047d270b401fb44acd741410537c02f4",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-distinct-broader-v1.log",
+      "bytes": 6008,
+      "sha256": "dab40464f7e051bb738a38cef4173a53332c38150d93233132f08a033e1f029a",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-distinct-focused-v1.log",
+      "bytes": 12471,
+      "sha256": "f4f61266724a396cbb29ae053f7c818fc58b151d6b70a6be21ad26d8882ab9ac",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-distinct-format-v1.log",
+      "bytes": 30,
+      "sha256": "21dae923190c3e821739ef76f6e31ae193ad98ba05bd40c31ef4d143b9a53bed",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-focused-v1.log",
+      "bytes": 27240,
+      "sha256": "f6e8ab8d2f668263c5b5991ad33290d5fac89d2ef740d9376cf922ae86e74220",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-format-v1.log",
+      "bytes": 30,
+      "sha256": "de1178bc676ea5cc5a4bc158cf1af8c29a95e7f2bc5a89a2ce7c9c1d64edd978",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-format-v2.log",
+      "bytes": 30,
+      "sha256": "937c65f379fd84621500947acc6222b092ff0a16c6474898acc546d53c3d1542",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-format-v3.log",
+      "bytes": 30,
+      "sha256": "49165b1e83d119aff2074a17c8333aaf32300963caac96fd7da811e3909a7fd2",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-other-focused-v1.log",
+      "bytes": 855,
+      "sha256": "b84aad8a5079f174a6120fadf01d73a2dc5d0d3b1661852b254ea400220f2de9",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-upgrade-v1.log",
+      "bytes": 12434,
+      "sha256": "edfacba8d8f6c49f1970ca53b5202857783ac8f86bfbb1f86128ba342f38b268",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-authority-upgrade-v2.log",
+      "bytes": 12210,
+      "sha256": "aa1498bdd1cbdd389730b126b7ead31b7ae7aaa0dd5a499e1ec4aae3366d5511",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-duplicate-alias-diagnostic-v1.log",
+      "bytes": 14977,
+      "sha256": "61acad4fc5fb1936daf3f2dbc39016e14f8e232cca6aceaa9bfa6a66914f6f40",
+      "kind": "actual_log"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-authority-v1/verification-v1/logs/relisten-source-actor-legacy-producer-compatibility-v1.log",
+      "bytes": 12244,
+      "sha256": "2a1953eb174537636eb0479ed8c416d513866016dfd3913a6b2c712f5da2208b",
+      "kind": "actual_log"
+    }
+  ],
+  "test_runs": [
+    {
+      "id": "broader-v1",
+      "total": 180,
+      "passed": 180,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "artifact": "broader-v1/source-actor-authority-broader-v1.trx"
+    },
+    {
+      "id": "distinct-broader-v1",
+      "total": 314,
+      "passed": 313,
+      "failed": 1,
+      "skipped": 0,
+      "failed_tests": [
+        "UnsupportedRecordedProducerCannotPublishNewIndexedActorContext"
+      ],
+      "artifact": "distinct-broader-v1/source-actor-authority-distinct-broader-v1.trx"
+    },
+    {
+      "id": "distinct-focused-v1",
+      "total": 81,
+      "passed": 81,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "artifact": "distinct-focused-v1/source-actor-authority-distinct-focused-v1.trx"
+    },
+    {
+      "id": "duplicate-diagnostic-v1",
+      "total": 1,
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "failed_tests": [
+        "TenThousandDuplicateAssertionsKeepCompleteNamesWithBoundedWitnesses"
+      ],
+      "artifact": "duplicate-diagnostic-v1/source-actor-duplicate-alias-diagnostic-v1.trx"
+    },
+    {
+      "id": "focused-v1",
+      "total": 74,
+      "passed": 68,
+      "failed": 6,
+      "skipped": 0,
+      "failed_tests": [
+        "CanonicalNaturalNameVetoSurvivesNewUuidsAndChangedCitations(\"retract\")",
+        "AuthorityRowsPermitRetirementOnlyAndKeepImmutableHistory",
+        "TenThousandDuplicateAssertionsKeepCompleteNamesWithBoundedWitnesses",
+        "CanonicalNaturalNameVetoSurvivesNewUuidsAndChangedCitations(\"reject\")",
+        "SourceReviewCasRequiresTrustedReceiptNextRevisionAndRetainsEveryState",
+        "UnmanagedAuthorityIsAppendOnlyAndAnEmptyWriteDoesNotAdvanceClocks"
+      ],
+      "artifact": "focused-v1/source-actor-authority-focused-v1.trx"
+    },
+    {
+      "id": "legacy-producer-compatibility-v1",
+      "total": 27,
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "artifact": "legacy-producer-compatibility-v1/source-actor-legacy-producer-compatibility-v1.trx"
+    },
+    {
+      "id": "other-focused-v1",
+      "total": 73,
+      "passed": 73,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "artifact": "other-focused-v1/source-actor-authority-other-focused-v1.trx"
+    },
+    {
+      "id": "upgrade-v2",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "failed_tests": [],
+      "artifact": "upgrade-v2/source-actor-authority-upgrade-v2.trx"
+    }
+  ],
+  "query_probe": {
+    "queries": 6,
+    "sql_execution_ms_min": 60.266,
+    "sql_execution_ms_max": 68.63,
+    "alias_index": "person_candidate_alias",
+    "alias_index_used_all_cases": true,
+    "threshold_alias_rows_min": 10000,
+    "threshold_alias_rows_max": 10002,
+    "shared_read_blocks": 0,
+    "temp_read_blocks": 0,
+    "temp_written_blocks": 0,
+    "maximum_sort_kib": 853,
+    "different_matching_names": 10000,
+    "semantic_name_limit": 5000,
+    "overflow_complete": false,
+    "overflow_name_candidates_truncated": false,
+    "cleanup_error": null,
+    "qualification": "Warm local synthetic PostgreSQL SQL execution only. Full-service latency and production cost are unmeasured."
+  },
+  "compatibility": [
+    "Nonempty schema 52 to 53 upgrade preserves existing UUIDs, revisions, review history and candidate clocks.",
+    "Historical unsupported producer fixture preserves optional source alias account absence; its original failed run and corrected targeted run remain distinct.",
+    "Current alias readers require migration 53 and managed-support visibility on rollback."
+  ],
+  "scope_limits": [
+    "No source-actor resolver, accepted assignment, trusted source-review service, complete producer-scope map or accepted support publication route is implemented.",
+    "No matching policy is activated and no identity accuracy claim follows from these tests.",
+    "Earlier full suite: 3052 passed,24 skipped,1 failed; it predates the music projection and later corrections and has not been rerun.",
+    "Focused test run totals overlap; do not sum them as unique coverage.",
+    "Current source snapshots and original freezes are retained separately; historical runs are not relabeled as executions of current bytes."
+  ]
+}

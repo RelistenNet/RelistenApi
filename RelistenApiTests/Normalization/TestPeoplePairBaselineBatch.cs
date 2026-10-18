@@ -151,6 +151,8 @@ public sealed class TestPeoplePairLearnedScorerParity
             Hit = hit,
             Header = new(hit.Uuid, name, 1, hit.OwnerSubjectUuid, "person"),
             ActorMatchingFacts = new(false, [], [], [], [], [], false, false),
+            AcceptedAliasMatchingNames = [],
+            AliasMatchingNamesComplete = true,
         };
         var snapshot = new NormalizationCandidateFactsSnapshot<PersonCandidateFacts>(
             NormalizationCandidateService.PeopleFactsVersion,

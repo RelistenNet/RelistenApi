@@ -186,119 +186,50 @@ public sealed partial class NormalizedPeopleService(DbService db, NormalizationW
         CancellationToken ct
     )
     {
-        var inserted = 0;
-        foreach (var originalAlias in aliases)
+        var changed = 0;
+        foreach (var alias in aliases)
         {
-            var alias = originalAlias;
-            ValidateAutomaticMetadataBasis(alias.Basis);
-            await ValidateNameEvidenceAsync(
+            var outcome = await WriteAutomaticAliasAsync(
                 connection,
                 transaction,
-                alias.Wording,
-                alias.Evidence,
+                workUuid,
+                alias,
+                created,
                 ct
             );
-            if (
-                !created.Contains(alias.PersonUuid)
-                && !await connection.ExecuteScalarAsync<bool>(
-                    new CommandDefinition(
-                        "SELECT EXISTS(SELECT 1 FROM normalization.person_aliases WHERE uuid=@Uuid)",
-                        alias,
-                        transaction,
-                        cancellationToken: ct
-                    )
-                )
-            )
+            if (outcome.Disposition == CanonicalPersonAliasWriteDisposition.ConflictingUuid)
             {
-                await ValidateWorkOwnerAsync(
-                    connection,
-                    transaction,
-                    workUuid,
-                    "people",
-                    "person",
-                    alias.PersonUuid,
-                    ct
+                throw new NormalizationConflictException(
+                    "Metadata assertion UUID is already bound to different facts, identity, basis or evidence."
                 );
             }
-            var state = await AutomaticMetadataState(
-                connection,
-                transaction,
-                "person_aliases",
-                "person_uuid",
-                alias.PersonUuid,
-                "name_key=@key OR uuid=@Uuid",
-                new
-                {
-                    key = NameKey(alias.Wording),
-                    alias.Uuid,
-                    alias.Wording,
-                },
-                alias.Evidence,
-                ct,
-                exactFactPredicate: "wording=@Wording",
-                basis: alias.Basis,
-                assertionUuid: alias.Uuid
-            );
-            if (state == null)
+            if (!outcome.Accepted)
             {
+                // Pending metadata is retained history and advances the identity revision
+                // on insertion, but never grants authority for current alias support.
+                if (outcome.AssertionInserted)
+                {
+                    changed++;
+                }
                 continue;
             }
-            if (state == "pending")
-            {
-                alias = alias with { Uuid = Guid.NewGuid() };
-            }
-            inserted += await connection.ExecuteAsync(
+
+            // Append publication is independent authority even when the raw accepted
+            // assertion was introduced by a managed producer and is currently hidden.
+            var supportAdded = await connection.ExecuteAsync(
                 new CommandDefinition(
-                    """
-                    INSERT INTO normalization.person_aliases(uuid,person_uuid,wording,name_key,input_revision_uuid,json_pointer,start_code_point,end_code_point,quote,state,basis)
-                    VALUES(@Uuid,@PersonUuid,@Wording,@nameKey,@InputRevisionUuid,@JsonPointer,@StartCodePoint,@EndCodePoint,@Quote,@state,@Basis)
-                    ON CONFLICT(uuid) DO NOTHING
-                    """,
-                    new
-                    {
-                        state,
-                        alias.Basis,
-                        alias.Uuid,
-                        alias.PersonUuid,
-                        alias.Wording,
-                        nameKey = NameKey(alias.Wording),
-                        alias.Evidence.InputRevisionUuid,
-                        alias.Evidence.JsonPointer,
-                        alias.Evidence.StartCodePoint,
-                        alias.Evidence.EndCodePoint,
-                        alias.Evidence.Quote,
-                    },
+                    "INSERT INTO normalization.person_alias_unmanaged_support(alias_uuid,introduced_work_uuid) VALUES(@uuid,@workUuid) ON CONFLICT DO NOTHING",
+                    new { uuid = outcome.AliasUuid!.Value, workUuid },
                     transaction,
                     cancellationToken: ct
                 )
             );
-            if (
-                !await connection.ExecuteScalarAsync<bool>(
-                    new CommandDefinition(
-                        "SELECT person_uuid=@PersonUuid AND wording=@Wording AND input_revision_uuid=@InputRevisionUuid AND json_pointer=@JsonPointer AND start_code_point IS NOT DISTINCT FROM @StartCodePoint::integer AND end_code_point IS NOT DISTINCT FROM @EndCodePoint::integer AND quote IS NOT DISTINCT FROM @Quote::text FROM normalization.person_aliases WHERE uuid=@Uuid",
-                        new
-                        {
-                            alias.Uuid,
-                            alias.PersonUuid,
-                            alias.Wording,
-                            alias.Evidence.InputRevisionUuid,
-                            alias.Evidence.JsonPointer,
-                            alias.Evidence.StartCodePoint,
-                            alias.Evidence.EndCodePoint,
-                            alias.Evidence.Quote,
-                        },
-                        transaction,
-                        cancellationToken: ct
-                    )
-                )
-            )
+            if (outcome.AcceptedFactChanged || supportAdded != 0)
             {
-                throw new NormalizationConflictException(
-                    "Alias UUID is already bound to different wording, identity or evidence."
-                );
+                changed++;
             }
         }
-        return inserted;
+        return changed;
     }
 
     public Task<NormalizationReviewResult> ApplyDecisionAsync(

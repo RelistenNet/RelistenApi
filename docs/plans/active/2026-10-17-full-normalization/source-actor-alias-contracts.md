@@ -9,13 +9,14 @@ claim or person/group decision.
 The assertion types, shared pure/retained extractors, optional recording proposal
 scopes, explicit offline proposal mode and role-free proposal projection exist.
 The [implementation plan](source-actor-aliases.md#progress-and-current-state)
-records executed grammar and cohort verification. The assignment, managed
-support, source review-state, current alias projection and
-candidate lifecycle specified below are implementation requirements, not
-existing accepted matching behavior. Names for those future service/table
-contracts are proposed. Existing credit/metadata processing, review and API reads
-already work locally; extend their authority and recovery conventions for this
-new input form.
+records executed grammar and cohort verification. Migration 53, typed canonical
+alias outcomes and current alias readers are integrated. The solution builds.
+All 81 focused storage, reader and candidate-selection checks pass, including
+a nonempty upgrade/backfill rehearsal. Broader post-fix verification is running.
+The resolver, source-review entrypoints, complete producer-scope map and accepted
+source publication lifecycle remain required.
+Existing credit/metadata processing, review and API reads supply the authority
+and recovery conventions. No source-actor matching policy is activated.
 
 ## 1. Current proposal shape and exact source identity
 
@@ -206,6 +207,14 @@ independently reviewed canonical alias.
 
 ## 4. Additive storage and canonical write outcomes
 
+Phase 2 source implements migration 53 (`AddSourceActorAliasAuthority`) and the
+internal `WriteAutomaticAliasAsync` canonical writer. The nonempty pre-53
+upgrade/backfill rehearsal and 81 focused checks pass. Broader post-fix service
+verification and query-cost measurements are running. There is no public managed
+support insertion or source-assignment service in this phase. Object-shaped
+receipt JSON is not an evaluated-policy credential; the later accepted writer
+must authenticate the complete saved stage before using these records.
+
 Reuse `normalization.person_aliases` as the canonical assertion store. Add the
 following domain-specific records in one additive migration:
 
@@ -213,7 +222,9 @@ following domain-specific records in one additive migration:
    with source/contributor/resource/field/producer coordinates, retained input,
    containing extraction attempt and scoped assertion key, original assertion
    JSON/hash, original person, source-resolution/extraction owners, application,
-   stage, authority receipt and introduced/retired Work UUIDs. One current link
+   stage, authority receipt and introduced/retired Work UUIDs. The contributor
+   here identifies the original source/extraction input, not the stable
+   person-owned Work producer in section 5. One current link
    per source/contributor/revision/producer/assertion key prevents concurrent
    bindings to different identities. Retain full evidence and origins.
 2. `person_alias_contributor_support`: immutable links from an assignment to
@@ -234,15 +245,21 @@ following domain-specific records in one additive migration:
 
 Assignments and support allow only the typed current-to-retired transition;
 retain historical rows. Review state changes only under the trusted review
-transaction. There is no FK to recording credits, fabricated role, person
+transaction. Its operation FK and receipt validation are deferred to commit:
+Work runs the domain callback before appending its immutable review receipt.
+Coordinates remain immutable and the CAS revision advances immediately.
+A future source `reassign` command maps to Work's existing `replace` action;
+phase 2 does not add a new common Work action. There is no FK to recording credits, fabricated role, person
 metadata deletion or duplicate global alias store. Unmanaged *alias support*
 is distinct from Work's `UnmanagedBaseline`; preserve both contracts explicitly.
 
-Refactor [WriteAliases and AutomaticMetadataState](../../../../RelistenApi/Services/Data/NormalizedPeopleService.cs)
-only enough to produce a typed `PersonAliasWriteOutcome`: accepted with actual
-UUID, exact reusable duplicate, pending, protected reviewed claim or conflicting
-UUID. A null automatic state currently conflates duplicate and protected cases;
-it cannot authorize support. Attach current support only to confirmed accepted
+The alias-specific writer replaces the alias use of
+[AutomaticMetadataState](../../../../RelistenApi/Services/Data/NormalizedPeopleService.Metadata.cs)
+with `CanonicalPersonAliasWriteOutcome`: accepted with actual UUID, exact
+reusable duplicate, pending, protected reviewed claim or conflicting UUID.
+The shared helper remains unchanged for external IDs and venues. Its nullable
+result does not distinguish a duplicate from a protected reviewed claim, so it
+cannot authorize source support. Attach current support only to confirmed accepted
 rows. Pending/protected/conflicting writes do not make their scope a successful
 replacement and cannot retire prior support as if they succeeded.
 
@@ -254,6 +271,12 @@ retry. Automatic support retirement must not add a metadata-review retraction
 to `person_aliases_history`.
 
 ## 5. One complete producer contribution per person
+
+This is a required phases 3–4 publication contract, not an implemented phase 2
+service. Migration 53 permits many source-specific authority rows without one
+Work contributor per source. Phase 2 fixtures exercise 1,001 independent support
+owners in the reader; they do not prove a configured complete producer map or
+many-claim checkpoint publication.
 
 Use `(people, person, OriginalPersonUuid)` and one stable contributor:
 `("relisten", "source_actor_aliases", "person_metadata")`. Partition that key by
@@ -367,8 +390,8 @@ represent partial alias publication.
 
 ## 7. Current visibility, review and candidate universes
 
-Add `current_person_aliases`: accepted canonical rows with at least one remaining
-authority—reviewed basis, unmanaged support or active accepted source support.
+Migration 53 installs `current_person_aliases`: accepted canonical rows with at
+least one remaining authority—reviewed basis, unmanaged support or active accepted source support.
 Last managed support disappearance leaves the raw row retained but not current;
 independent authority keeps it visible. Re-adding valid support can restore
 visibility without erasing history.
@@ -387,21 +410,58 @@ visibility transitions, including retirement and reactivation. Alias-row
 triggers miss support-only changes. Declaring a write scope locks a clock; it
 does not itself advance the revision.
 
+Managed assignment/support inserts and retirements update each affected original
+person revision once per statement; the existing people trigger advances both
+universes. Ordinary append publication retains its existing person revision
+ownership, including new-person revision 1. Its append-only unmanaged-support
+trigger advances only the two universes, so the service does not double-bump a
+person. Source support retirement does not write canonical review history.
+
 ## 8. Complete matching names and original owner observations
 
-Introduce a new people facts contract when supported role-free aliases become
-readable. Proposed `AcceptedAliasMatchingNames` is required and semantically
-complete: distinct exact wording, `StringComparer.Ordinal`, deterministic sort.
-Normalize names downstream. Keep bounded raw `Aliases` witnesses with explicit
-`AliasEvidenceTruncated`, assertion/support counts and separate evidence-byte
-and distinct-name semantic limits. Follow the existing people-v4 separation of
+The authored `people-candidate-facts-v5` contract adds
+`AcceptedAliasMatchingNames` and `AliasMatchingNamesComplete`. New v5 snapshots
+must contain both; the policy evaluator refuses absent or incomplete names.
+Stored resolution proposals may retain an explicitly incomplete aggregate with
+blocking issues, so bounded negative outcomes remain auditable. The names are
+semantically complete: distinct exact wording sorted by `StringComparer.Ordinal`.
+Normalize names downstream. Keep bounded raw `Aliases` witnesses with
+`AliasEvidenceTruncated`,
+`AliasAssertionCount` and `AliasSupportCount`. `AliasSupportCount` counts active
+managed assignment/support pairs, not inferred independent corroboration.
+Matching-name and witness budgets are separate. The default distinct-name limit
+is 5,000 and matching/witness byte budgets are 4 MiB each; witness count uses the
+existing `MaximumAssertionsPerKind`. The witness-byte measure is the UTF-8 JSON
+size of the stored canonical alias rows, not a public response wire-size claim. The matching-byte preflight uses a
+conservative JSON-encoding upper bound before names are materialized. It may
+refuse an input whose eventual encoded bytes would fit; it never truncates a
+claimed complete name set. Follow the existing people-v4 separation of
 complete matching values and bounded witnesses.
+
+People name retrieval now uses `people-actor-retrieval-v3`. It applies the
+similarity threshold to canonical names and current aliases, groups original
+person scores, resolves redirects, then limits distinct terminal people with
+one lookahead. Repeated assertions, spelling variants and retired originals
+cannot consume another person's place. Name/alias reasons and maximum scores
+remain available. Genuine distinct-person overflow still makes the pool
+incomplete. Other identity domains retain their existing retrieval query.
+
+This query reads all threshold-qualified name rows before limiting people.
+The returned-identity bound is not a database scan bound. Retain actual plans,
+buffer counts and latency at narrow and broad thresholds before setting batch
+concurrency. A timeout or cancellation supplies no complete candidate pool;
+do not fall back to the crowded raw-alias-row limit. Historical policies retain
+their original retrieval version and require new evaluation for v3.
 
 Repeated proof rows do not consume distinct-name capacity or increase matching
 confidence. Do not reject 10,000 identical alias assertions under a 5,000-name
-bound. A missing aggregate is not an empty alias set. New policy/application
-versions require explicit semantic completeness. These fields describe aliases;
-they do not add `PersonArtistContextFact` credits or manufacture credited actor
+bound. A missing aggregate is not an empty alias set. Added fields are nullable
+and omitted when absent to preserve old serialized snapshots. Historical projection
+can still read its old witnesses, but v5 policy/application validation requires
+explicit semantic completeness. New processing fingerprints include v5;
+existing evaluated v4 policy artifacts cannot authorize v5 acceptance.
+
+These fields describe aliases; they do not add `PersonArtistContextFact` credits or manufacture credited actor
 context. `PeopleActorProjection.Candidate` must consume the complete aggregate
 under the new contract.
 
@@ -429,8 +489,8 @@ admission/publication through the actual services.
 
 ## 9. Migration, versioning, operation and rollback
 
-Choose the next additive migration number. Backfill unmanaged authority and
-install the current/resolved alias projections in the same transaction before
+Apply additive migration 53 before deploying the v5/current-alias readers.
+Backfill unmanaged authority and install the current/resolved alias projections in the same transaction before
 new readers use them. Preserve old aliases, reviewed metadata, identity and
 source UUIDs, credits, playback URLs and public v3 response shapes. Deploy
 storage/read compatibility first with source-actor acceptance disabled.
@@ -452,6 +512,13 @@ alias citations and retain ambiguous references separately. Keep old targets and
 source/view artifacts unchanged. Expanded coverage still requires independent
 identity evaluation and public C# numerical parity even if the five feature
 meanings remain unchanged.
+
+Phase 2 changes no extraction or input producer version, credit/title identity,
+public v3 response shape or matching-policy activation. The current pure/retained
+source-alias producer remains `source-actor-aliases-v2/recording-actor-evidence-v1`.
+The new people facts version changes candidate/query and processing fingerprints;
+new policies need an evaluation for that contract. Exact terminal receipt replay
+remains separate from unfinished processing under a new version.
 
 Enable accepted publication only after the full support/review/read lifecycle,
 scale and checkpoint tests and a qualified evaluated policy are ready. Monitor

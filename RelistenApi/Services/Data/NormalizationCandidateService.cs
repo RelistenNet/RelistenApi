@@ -82,7 +82,9 @@ public sealed partial class NormalizationCandidateService(DbService db)
                 : (
                     await connection.QueryAsync<RawHit>(
                         new CommandDefinition(
-                            BuildNameQuery(domain),
+                            query.Domain == IdentityMatchingDomain.People
+                                ? PeopleNameQuery
+                                : BuildNameQuery(domain),
                             new
                             {
                                 names,
@@ -431,13 +433,7 @@ public sealed partial class NormalizationCandidateService(DbService db)
                     "x.state='accepted'",
                     [
                         new("people", "uuid", "name_key", "true", "name"),
-                        new(
-                            "person_aliases",
-                            "person_uuid",
-                            "name_key",
-                            "x.state='accepted'",
-                            "alias"
-                        ),
+                        new("current_person_aliases", "person_uuid", "name_key", "true", "alias"),
                     ]
                 ),
                 IdentityMatchingDomain.Venues => new(

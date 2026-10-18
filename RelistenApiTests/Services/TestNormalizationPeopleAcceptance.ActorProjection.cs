@@ -117,7 +117,10 @@ public sealed partial class TestNormalizationPeopleAcceptance
         var extraction = await PublishForgedActorExtraction(
             source,
             credits => credits,
-            NormalizationRecordingProcessor.Version + "/unsupported-fixture"
+            NormalizationRecordingProcessor.Version + "/unsupported-fixture",
+            // Historical producers have no parallel alias account. Preserve that absence
+            // so this fixture reaches the accepted actor-context version check.
+            alterExtraction: value => value with { SourceActorAliases = null }
         );
         var resolution = await resolver.ResolveRecordingAsync(
             Guid.NewGuid(),

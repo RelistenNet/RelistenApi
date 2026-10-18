@@ -24,6 +24,17 @@ public sealed record CandidateFactsLimits
     // existing limits serialization and candidate-facts-v3 query fingerprints stay exact.
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? MaximumActorMatchingBytes { get; init; }
+
+    // Materialized only for people v5. Duplicate assertions consume witness capacity,
+    // never distinct matching-name capacity. Evidence bytes bound complete raw witnesses.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaximumAliasMatchingNames { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaximumAliasMatchingBytes { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaximumAliasEvidenceBytes { get; init; }
     public int MaximumEvidencePerAssertion { get; init; } = 256;
     public int MaximumArtistContexts { get; init; } = 10000;
     public int MaximumRoleBasisGroupsPerArtist { get; init; } = 128;
@@ -192,6 +203,26 @@ public sealed record PersonCandidateFacts
     public IReadOnlyList<CandidateIdentityHeader> IdentityClosure { get; init; } = [];
     public IReadOnlyList<CandidateRedirectFact> Redirects { get; init; } = [];
     public IReadOnlyList<CandidateNameFact> Aliases { get; init; } = [];
+
+    // Historical snapshots omit these fields. A v5 reader always supplies the aggregate
+    // and its completeness flag; an omitted witness never removes a matching name.
+    // AliasSupportCount counts active managed links; reviewed/unmanaged authority stays
+    // independent. Matching bytes use a conservative encoded JSON upper bound.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? AcceptedAliasMatchingNames { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AliasMatchingNamesComplete { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? AliasAssertionCount { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? AliasSupportCount { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? AliasEvidenceTruncated { get; init; }
+
     public IReadOnlyList<CandidateExternalIdentityFact> ExternalIdentities { get; init; } = [];
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

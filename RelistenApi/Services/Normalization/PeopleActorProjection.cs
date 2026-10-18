@@ -150,7 +150,12 @@ public static class PeopleActorProjection
             candidate.Header.Kind,
             candidate
                 .IdentityClosure.Select(header => new IdentityMatchingName(header.DisplayText))
-                .Concat(candidate.Aliases.Select(alias => new IdentityMatchingName(alias.Wording)))
+                .Concat(
+                    (
+                        candidate.AcceptedAliasMatchingNames
+                        ?? candidate.Aliases.Select(alias => alias.Wording)
+                    ).Select(wording => new IdentityMatchingName(wording))
+                )
                 .Concat(names.Select(name => new IdentityMatchingName(name)))
                 .ToArray(),
             candidate
