@@ -88,13 +88,20 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
     /// This entrypoint does not certify database snapshot provenance. Retain the
     /// export's original evidence separately, and use separate runs for catalogs
     /// whose numeric artist, source or show IDs have different meanings.
+    /// When providerInputsOnly is true, all context is observed but only provider_input
+    /// rows produce outcomes. The processing scope is part of the resumable run identity.
     /// </remarks>
+    /// <exception cref="InvalidDataException">
+    /// A resumed run has different input bytes, adapter versions or processing scope.
+    /// Changed inputs or scope require a new output directory.
+    /// </exception>
     public async Task RunRowsInlineAsync(
         string snapshotPath,
         string outputDirectory,
         bool resume = false,
         string? providerInputsPath = null,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        bool providerInputsOnly = false
     )
     {
         var inputHash = await HashAsync(snapshotPath, ct);
@@ -105,10 +112,14 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             new(snapshotPath, providerInputsPath),
             null,
             outputDirectory,
-            "rows-inline/" + inputHash + "/" + providerHash,
+            (providerInputsOnly ? "native-rows-inline/" : "rows-inline/")
+                + inputHash
+                + "/"
+                + providerHash,
             resume,
             null,
-            ct
+            ct,
+            providerInputsOnly
         );
     }
 
@@ -119,7 +130,8 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         string identity,
         bool resume,
         ShadowCatalogCapture? capture,
-        CancellationToken ct
+        CancellationToken ct,
+        bool providerInputsOnly = false
     )
     {
         var methods = adapters.ToDictionary(
@@ -159,7 +171,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             },
             CancellationToken.None
         );
-        await inputs.ObserveAsync(adapters, extractionsPath, ct);
+        await inputs.ObserveAsync(adapters, extractionsPath, ct, providerInputsOnly);
         var population = new
         {
             snapshotPath = inputs.SnapshotPaths.Count == 1
@@ -170,6 +182,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             providerInputsPath = inputs.ProviderInputsPath,
             capture = capture?.Descriptor,
             extractionMode = extractionsPath == null ? "inline" : "external",
+            processingScope = providerInputsOnly ? "provider_inputs_only" : "all_applicable_inputs",
             inputKinds = inputs.InputKinds,
             expectedOutcomes = inputs.ExpectedOutcomes,
             census = inputs.Population,
@@ -183,7 +196,15 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
                 : "All selected retained raw inputs. Each shard has its own snapshot. Census totals can describe a larger catalog.",
         };
         await run.SaveAsync(run.CompletedLine, "running", population, ct);
-        await ProcessRowsAsync(inputs, extractionsPath, run, outputDirectory, population, ct);
+        await ProcessRowsAsync(
+            inputs,
+            extractionsPath,
+            run,
+            outputDirectory,
+            population,
+            ct,
+            providerInputsOnly
+        );
     }
 
     private async Task ProcessRowsAsync(
@@ -192,7 +213,8 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         ShadowCatalogRun run,
         string outputDirectory,
         object population,
-        CancellationToken ct
+        CancellationToken ct,
+        bool providerInputsOnly
     )
     {
         long line = 0;
@@ -209,7 +231,16 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
                     continue;
                 }
 
-                await run.WriteInputAsync(ProcessAdapters(inputs, row));
+                if (
+                    !providerInputsOnly
+                    || row.Record.GetProperty("kind").GetString() == "provider_input"
+                )
+                {
+                    await run.WriteInputAsync(ProcessAdapters(inputs, row));
+                }
+
+                // Checkpoints address the original stream, including context rows. Skipping
+                // their output must not shift the provider boundaries used by a later resume.
                 completedLine = line;
                 if (line % 2000 == 0)
                 {

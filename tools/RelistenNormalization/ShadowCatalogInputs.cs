@@ -41,7 +41,8 @@ internal sealed class ShadowCatalogInputs
     internal async Task ObserveAsync(
         IReadOnlyList<IShadowCatalogAdapter> adapters,
         string? extractionsPath,
-        CancellationToken ct
+        CancellationToken ct,
+        bool providerInputsOnly = false
     )
     {
         await foreach (var record in ReadRecordsAsync(ct, retainFrames: true))
@@ -59,10 +60,13 @@ internal sealed class ShadowCatalogInputs
 
             foreach (var adapter in adapters)
             {
-                foreach (var domain in adapter.DomainsFor(kind))
+                if (!providerInputsOnly || kind == "provider_input")
                 {
-                    var key = Provider(record) + "|" + domain;
-                    ExpectedOutcomes[key] = ExpectedOutcomes.GetValueOrDefault(key) + 1;
+                    foreach (var domain in adapter.DomainsFor(kind))
+                    {
+                        var key = Provider(record) + "|" + domain;
+                        ExpectedOutcomes[key] = ExpectedOutcomes.GetValueOrDefault(key) + 1;
+                    }
                 }
 
                 ObserveAdapter(adapter, record);

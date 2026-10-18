@@ -31,7 +31,7 @@ if (
         )
         || (
             args.Length is 3 or 4
-            && args[0] is "shadow-inline" or "shadow-rows"
+            && args[0] is "shadow-inline" or "shadow-rows" or "shadow-native"
             && (args.Length == 3 || args[3] == "--resume")
         )
         || (args.Length == 5 && args[0] == "luna-credit-cohort")
@@ -50,6 +50,7 @@ if (
             + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
+            + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -112,7 +113,7 @@ try
         return 0;
     }
 
-    if (args[0] is "shadow" or "shadow-inline" or "shadow-rows")
+    if (args[0] is "shadow" or "shadow-inline" or "shadow-rows" or "shadow-native")
     {
         var nativeObservations = new ShadowProviderObservations();
         var geographyManifest = Environment.GetEnvironmentVariable(
@@ -130,6 +131,7 @@ try
             geography == null ? new ShadowVenueAdapter() : new ShadowVenueAdapter(geography),
             new ShadowNativePeopleAdapter(nativeObservations),
             new ShadowNativeVenueAdapter(nativeObservations, geography),
+            new ShadowNativeFileContentsAdapter(nativeObservations),
             new ShadowRepertoireAdapter(),
             new ShadowCompositionAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
@@ -138,14 +140,15 @@ try
         ]);
         var providerInputs = Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PROVIDER_INPUTS");
         var outputDirectory = args[0] == "shadow" ? args[3] : args[2];
-        if (args[0] == "shadow-rows")
+        if (args[0] is "shadow-rows" or "shadow-native")
         {
             await shadow.RunRowsInlineAsync(
                 args[1],
                 outputDirectory,
                 resume: args.Length == 4,
                 providerInputsPath: providerInputs,
-                ct: cancellation.Token
+                ct: cancellation.Token,
+                providerInputsOnly: args[0] == "shadow-native"
             );
         }
         else if (args[0] == "shadow-inline")
