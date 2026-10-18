@@ -8,27 +8,46 @@ This milestone chooses the next implementations and acceptance policies. It is a
 
 - **Credits:** On the same 83 available fields and 67 draft taper/transferrer assertions, rules recover 60 assertions with four extras; the perceptron recovers 40 with ten extras; logistic regression recovers 36 with 16 extras; Luna recovers 64 with three extras. Luna corrects three whole fields and introduces no newly wrong field on that denominator. This favors rules as the current local baseline and supports expanding Luna comparisons. It does not justify deploying the current taggers. The original job retains 200 admitted attempts and $0.0146575 of configured accounting. [Matched experiment](../../../research/2026-10-17-full-normalization/training/credits-development-v1/matched-experiment-v1.json).
 - **People:** Retaining independently attributed source views makes explicit aliases usable. The first name/artist experiment misses six aliases; adding supported source context reduces the errors to two on the same 81 resolved drafts. The subsequent source-view comparison retains 100 eligible relationship units, including 27 positive and two negative cross-artist units. Logistic regression and boosted trees each miss two positives and classify no negative as positive at the diagnostic cutoff. The 295 source-view comparisons are correlated representations of those judgments. Next expand independent identity evidence and hard negatives, rather than multiplying views. [People comparison](../../../research/2026-10-17-full-normalization/training/people-adjudicated-training-v1/README.md).
-- **Venues:** Both trained models classify the same-name Oakland/Boulder Fox Theater draft as a likely match. Names and raw location similarity need stronger premises, locality and historical context. The current 34 drafts have only 11 resolved pairs in ten groups; independent adjudication is pending. Resolve labels and add dated evidence before fitting the next comparison. [Venue experiment](../../../../tools/RelistenNormalization/venue-matcher-experiment.md).
+- **Venues:** Both trained models classify the same-name Oakland/Boulder Fox Theater draft as a likely match. Names and raw location similarity need stronger premises, locality and historical context. The initial 34 drafts had only 11 resolved pairs in ten groups. Independent adjudication now supplies 24 supported answers; the current report below preserves the resulting errors and unresolved cases. [Venue experiment](../../../../tools/RelistenNormalization/venue-matcher-experiment.md).
 - **Compositions:** The existing strict-intersection selection supplies two questions, no supported catalog-to-work labels and no trained composition comparison. The MusicBrainz pilot retains two external recording-to-work bridges; their corresponding Relisten recording identities remain unsupported. Acquire those catalog bridges and writer-role evidence, then compare real candidate retrieval and matching. [Composition inventory](../../../research/2026-10-17-full-normalization/scale/composition-development-selection.md) and [acquisition pilot](../../../research/2026-10-17-full-normalization/composition-enrichment-pilot.md).
 
 These results remain development evidence. Their common limitation is the breadth and independence of identity labels. The work below closes that gap without discarding completed experiments.
 
 ## Current execution
 
-The [frozen baseline](../../../research/2026-10-17-full-normalization/scale/evidence/matching-baseline-20261018-v1.json)
-retains 79 source files and authenticates 25 prior experiment artifacts. The new
-people packet contains 200 unanswered questions, 162 complete source contexts
-and 156 artists, grouped into 28 connected source/hypothesis units. Two independent
-reviewers are investigating the 34 venue tasks against primary sources before
-adjudication. The native Local/Trey capture retains 220 official directory responses
-for 150 selected date families; all 150 joined notes fields match the local catalog
-bytes. The cohort runner change supports the larger credit comparison while
-preserving the original 100-field run. New answers and comparisons remain pending.
+The [expanded comparison report](../../../research/2026-10-17-full-normalization/scale/matching-progress-20261018.md)
+records the first completed people and venue results. The people comparison now
+covers 200 relationship questions from 156 artists: 86 have supported answers and
+114 remain insufficient. Both frozen trained models get 85 of the 86 supported
+answers right. The concentration of answers in a few identity groups and missing
+same-name negatives prevent a catalog-wide accuracy claim.
 
-These are execution states, not completed expanded comparisons. The composition
-and full venue selections remain acquisition work. Infrastructure outcomes stay
-in their separate receipts, including the [distinct-person timeout](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-thousand-target-batch-v1.json),
-and do not suspend these independent experiments.
+The venue comparison has 24 supported answers and ten unknowns; both trained
+models make two false matches and miss three supported matches. A separate
+retrieval experiment searches all 216,331 legacy venue records. Both methods find
+23 of 32 known directed counterpart records within their first 100 results. This
+measures counterpart-row retrieval, not physical-venue recall. Its 600 new queries
+across 600 artists still need identity labels.
+
+The credit capture now retains all 600 complete native fields: 300 Archive fields
+from 300 artists, 150 Phish fields and 150 Local/Trey fields. Archive and Phish
+answers and the independent final Local adjudication are frozen. The larger runner
+preserves the legacy experiment and authenticates current native fields separately
+from catalog snapshots. The new paired comparison is running with a $30 cap and
+1,200-attempt limit; 124 email-shaped fields are excluded from Luna requests but
+remain in local extraction and coverage. No completed new Luna score is claimed.
+
+The composition and repertoire selection retains 120 composition claims from 40
+artists and 60 repertoire parents from 50 artists, with complete selected context
+and song dictionaries. Preparing actual public-contract exports exposed dictionary-free
+recordings and unordered legacy setlist membership. Preserve these cases and their
+limits; they are acquisition and evaluation inputs, not completed music matching.
+
+The [current broad API regression](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
+passes. The [1,001-source scale case](../../../research/2026-10-17-full-normalization/scale/evidence/source-owner-thousand-one-terminal-v1.json)
+reached its one-hour cancellation limit during initial publication, before its
+preservation assertions. Publication cost remains separate required work before
+backfill; it does not suspend offline matching evaluation.
 
 ## First expanded comparisons
 
@@ -59,7 +78,7 @@ Update each entry with the completed experiment receipt, independent decision de
 | --- | --- | --- |
 | Credited tapers and transferrers | Matched rules, two trained extractors and Luna comparison on retained fields; exact name/role spans and durable extraction run support. | Expand independent whole-field answers, unfamiliar prose/HTML and verified non-Archive sources. Measure role extraction separately from people matching. |
 | Global people and aliases | Source-view rules/model comparison; public linear-scoring parity; supported alias/context features. | More independent identity families, cross-artist hard negatives, ambiguous aliases and unseen identities; actual full-pool retrieval and creation/kind/co-reference outcomes. |
-| Physical venues, locality and history | Real venue drafts, operator excerpts and two trained lexical models; reviewed storage and resolver lifecycle. | Adjudicate drafts, acquire dated premises/room/locality context and evaluate actual candidates, relocations and historical names. A current address cannot determine an old performance's venue. |
+| Physical venues, locality and history | Independent answers for 34 questions, saved-model comparison and full-index candidate retrieval; reviewed storage and resolver lifecycle. | Label the 600 new queries; improve duplicate-observation grouping and historical alias retrieval; evaluate dated premises, rooms and relocations. A current address cannot determine an old performance's venue. |
 | Artist repertoire | Qualified identifiers, dictionaries and visibly provisional title-derived identities; real-source publication through v3. | Independently evaluate title parsing, artist-scoped identity and dictionary-free artists; include equal titles, repeats, snippets and changed provider dictionaries. |
 | Cross-artist compositions | Retained external work/author data and correspondence/publication contracts. | Build independently supported local claim-to-work answers and supported writer-role assertions, keeping author-list completeness explicit; compare retrieval, rules, trained models and Luna on covers, same titles, arrangements, medleys and conflicting credits. |
 | Performances | Local Phish/Jerry/Aadam import and v3 proofs include stable UUIDs, a reviewed early/late split and playable unresolved assignments. | Evaluate automatic assignment across providers, date uncertainty, venue changes and separate performances. Sets within one concert stay within that performance; uncertain same-day recordings remain playable under the default show. |

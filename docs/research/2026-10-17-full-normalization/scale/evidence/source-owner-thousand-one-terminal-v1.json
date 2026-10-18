@@ -1,0 +1,22 @@
+{
+  "kind": "source-owner-thousand-one-terminal-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "002f0d4",
+  "productionApiCode": "0cf5977",
+  "status": "Failed at one-hour CancelAfter while initially publishing sources; incomplete-source preservation phase was not reached.",
+  "verification": {
+    "passed": 0,
+    "failed": 1,
+    "cancelAfterMs": 3600000,
+    "requestedSources": 1001,
+    "finalCommittedSources": null
+  },
+  "qualification": "The control receipt was captured while running and remains unchanged. Terminal TRX/log own the outcome. No terminal DB count was captured. This shared-host run does not establish data loss or isolated throughput.",
+  "nextAction": "Investigate publication cost before backfill. Continue independent offline matching evaluation. Do not rerun the unchanged case or treat the three-source control as full-scale verification.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-18-source-owner-thousand-one-v1/manifest.json",
+    "sha256": "3594daf2a8e24b2b4c26e5c70eadb76b2ff2c39a95f0520fd314893c2f71b95d"
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

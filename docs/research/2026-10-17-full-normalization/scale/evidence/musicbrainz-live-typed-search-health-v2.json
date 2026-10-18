@@ -1,0 +1,58 @@
+{
+  "kind": "musicbrainz-live-typed-search-health-v2",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "6b474bd",
+  "httpResults": {
+    "work": [
+      503,
+      200
+    ],
+    "recording": [
+      200
+    ],
+    "artist": [
+      200
+    ]
+  },
+  "profiles": [
+    {
+      "directory": "work-output",
+      "manifestSha256": "a26cc9770a0ca8fdc084ac794b5048984f83a84fe73823d526b36c69507a02ca",
+      "state": "pending",
+      "unhydratedEntities": 0,
+      "externalUniverseComplete": false,
+      "hydrationImplemented": false
+    },
+    {
+      "directory": "work-resume-v1",
+      "manifestSha256": "c8a545c401257c10002af49032d2fdde1ea1e3b692247a04d8da602e24373e77",
+      "state": "completed_partial",
+      "unhydratedEntities": 6,
+      "externalUniverseComplete": false,
+      "hydrationImplemented": false
+    },
+    {
+      "directory": "recording-output",
+      "manifestSha256": "17d6e944b4d64ef8de710e89826c32323652b68c34c109d842a7746e7060be46",
+      "state": "pending",
+      "unhydratedEntities": 50,
+      "externalUniverseComplete": false,
+      "hydrationImplemented": false
+    },
+    {
+      "directory": "artist-output",
+      "manifestSha256": "70c5ef8b4e483fe565025768b03433e4358907b668d71631ee7689d6f593ebd2",
+      "state": "completed",
+      "unhydratedEntities": 4,
+      "externalUniverseComplete": false,
+      "hydrationImplemented": false
+    }
+  ],
+  "qualification": "Three typed profiles issue actual HTTP requests. Work503 is retained and the same plan resumes to200. Search hits remain unhydrated; this is live transport/decoding/recovery evidence, not complete candidate acquisition or matching accuracy. The work response has PageDecodeIssues. Recording pagination is incomplete; no external universe is marked complete.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-18-musicbrainz-health-v2/health-manifest.json",
+    "sha256": "6e9825b1b731b84538309aec127b7b3c20c7829a6b56672a0f1b2b8b9052e72a"
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

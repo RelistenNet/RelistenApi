@@ -97,9 +97,13 @@ and [composition resolver](composition-resolution.md) retain complete alternativ
 policy observations and authenticated publication stages. [Composition authorship](composition-authorship.md)
 keeps full author sets and roles distinct. [MusicBrainz decoding](musicbrainz-decoding.md)
 and [bounded acquisition](musicbrainz-acquisition-contract.md) retain exact responses,
-cache age, alternatives and recovery. The [live search probe](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-search-local-v1.json)
-timed out before headers; successful live search verification and acquisition
-outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
+cache age, alternatives and recovery. The historical [live search probe](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-search-local-v1.json)
+timed out before headers. The [current typed health check](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-live-typed-search-health-v2.json)
+retains successful work, recording and artist HTTP responses, including recovery
+of the same work plan from HTTP 503 to 200. The work result still reports decoding
+issues; recording pagination and entity hydration remain incomplete. These checks
+verify transport and retained outcomes, not complete acquisition or identity
+matching. Acquisition outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
 production matching implementations and independent qualification remain required.
 People's linear scorer and repertoire's qualified-identifier path do not complete
 matching across the other domains.
@@ -144,19 +148,21 @@ last complete observation. It does not exercise interrupted recovery or replace
 the required 1,001-source case. The [1,000-distinct-person target-batch run](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-thousand-target-batch-v1.json)
 reached its one-hour cancellation limit before completion on older binaries. Its
 last retained snapshot has 1,195 committed stages; that is not a terminal count.
-The strengthened 1,001-source run remains live. Publication-cost repairs remain
-required before backfill and proceed separately from offline matching evaluation.
+The strengthened [1,001-source run](../../../research/2026-10-17-full-normalization/scale/evidence/source-owner-thousand-one-terminal-v1.json)
+also reached its one-hour cancellation limit while publishing the initial sources.
+It did not reach the incomplete-source mutation or preservation assertions. No final
+committed-source count was captured. Publication-cost repairs remain required before
+backfill and proceed separately from offline matching evaluation.
 
-The latest completed [broad suite](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-target-batch-v1.json)
-excludes `SourceAliasScale` and `PeopleFactsSnapshotScale`. It records 3,640 passes,
-no failures and 28 actual unexecuted entries; the console's 24 skips omit four
-explicit cases. It includes the correction for the earlier [historical fixture
-failure](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-alias58-v1.json).
-That passing run precedes typed-stage JSON reuse and the strengthened source-retention
-fixture. A separate current-code broad run started on October 18 and remains live;
-its completion and the explicit checks remain required. Production code is pinned
-at `0cf5977`; subsequent changes through `002f0d4` are tests and documentation.
-Each receipt owns the exact binaries and execution scope.
+The [current broad API suite](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
+passes with 3,644 tests, no failures and 28 actual unexecuted entries. It excludes
+`SourceAliasScale` and `PeopleFactsSnapshotScale`; the console's 24 skips omit four
+explicit cases. This run includes production code `0cf5977` and the strengthened
+source-retention fixture at `002f0d4`. The new evaluation tools at `6b474bd` pass
+81 distinct focused .NET cases and 60 Python cases separately. Counts across
+verification receipts overlap and must not be summed. Scale failures and remaining
+explicit checks retain their own scope; broad regression does not establish
+matching accuracy or catalog throughput.
 
 ### Evidence available for matching evaluation
 

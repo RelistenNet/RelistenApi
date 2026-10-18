@@ -39,7 +39,7 @@ dotnet run --project tools/RelistenNormalization -- luna-credit-cohort \
 
 All input authentication completes before job creation or provider requests. Only the original one-field dictionary enters the model request, with null context. Labels and provenance do not enter the prompt.
 
-Contact-bearing fields remain in the output with their complete original text and local extraction. They produce no rendered request, cache entry or HTTP call: Luna and replay are null, state is `not_requested_contact_scope`, and routing is `not_evaluated`. Empty fields receive `no_text`. Report these cases separately from usable Luna predictions.
+Fields caught by the email-shaped contact check remain in the output with their complete original text and local extraction. They produce no rendered request, cache entry or HTTP call: Luna and replay are null, state is `not_requested_contact_scope`, and routing is `not_evaluated`. This check does not detect every form of contact information. Empty fields receive `no_text`. Report these cases separately from usable Luna predictions.
 
 The output retains the authenticated selection, per-field results, complete bounded attempt receipts and a final manifest. Coverage distinguishes selected fields, eligible fields, fields linked to this job's admitted attempts, usable predictions, contact exclusions and empty fields. A cache hit paid by another job is available without adding an attempt to this job.
 

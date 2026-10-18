@@ -1,0 +1,32 @@
+{
+  "kind": "full-suite-current-v1",
+  "observedDate": "2026-10-18",
+  "sourceCommit": "002f0d4",
+  "productionApiCode": "0cf5977",
+  "status": "Current API broad regression passed. New evaluation tools have separate focused verification.",
+  "verification": {
+    "passed": 3644,
+    "failed": 0,
+    "notExecuted": 28,
+    "actualEntries": 3672,
+    "filter": "TestCategory!=SourceAliasScale&TestCategory!=PeopleFactsSnapshotScale",
+    "startTime": "2026-10-18T08:56:45.6707420-07:00",
+    "finishTime": "2026-10-18T09:36:50.4963180-07:00",
+    "apiAssemblySha256": "63d4f5aac7b31a66ce8a3e86116b1c78c7a976ec8076346fc2d347e12fd6978d",
+    "testAssemblySha256": "a956f996b715646abfb1c4f50de9cb55535f0301fb46fb42c6e50c8ecb9eb1f9"
+  },
+  "qualification": "TRX individual outcomes, not aggregate Counters, own unexecuted counts. Console excludes four Explicit entries. New evaluation tool changes208cf59/d9eb268/6b474bd are verified separately; broad API code is unchanged. Scale profiles are excluded and remain separately qualified.",
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/full-suite-current-v1/runtime-v1/manifest.json",
+    "sha256": "769b5208bca75f80e0bd764da201a2f57fc9c37b42ef1f8be7e053653e462efa"
+  },
+  "toolVerification": {
+    "sourceCommit": "6b474bd",
+    "dotnetDistinctPassed": 81,
+    "pythonPassed": 60,
+    "manifest": "local-dev/normalization-data/2026-10-18-native-credit-tool-verification-v1/manifest.json",
+    "sha256": "d0187d052c87f30d4982ef9db0ae6b5fa16c0da882fd66b77cbfc3165ec96381"
+  },
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}
