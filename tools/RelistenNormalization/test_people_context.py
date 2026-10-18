@@ -9,13 +9,22 @@ import sqlite3
 import tempfile
 import unittest
 import threading
+from types import SimpleNamespace
+from unittest.mock import patch
+from uuid import uuid4
+import sys
 from http.server import ThreadingHTTPServer
 from urllib.request import urlopen
 from urllib.error import HTTPError
 
 import test_people_directory as directory_fixtures
 
-from people_context import PeopleContextPreparation, PeopleContextProjection
+from people_context import (
+    PeopleContextContinuationPreparation,
+    PeopleContextPreparation,
+    PeopleContextProjection,
+    main,
+)
 from people_directory import CreditOverlay, PeopleDirectory, encoded, handler_for
 
 
@@ -305,6 +314,192 @@ class TestPeopleContext(unittest.TestCase):
             2,
         )
 
+    def continuation_runs(self):
+        database = self.contextual_run()
+        original = self.run
+        original_row = json.loads((original / "results.jsonl").read_text())
+        original_row["input"]["batchId"] = "recorded"
+        original_row["result"]["batchId"] = "recorded"
+        pending_row = json.loads(encoded(original_row))
+        pending_row["input"]["batchId"] = "pending"
+        pending_row["input"]["questions"][0]["questionId"] = "pair-2"
+        pending_row["result"].update(batchId="pending", state="unresolved", decisions=[])
+        original_inputs = (
+            encoded(original_row["input"]) + "\n" + encoded(pending_row["input"]) + "\n"
+        ).encode()
+        (original / "inputs.jsonl").write_bytes(original_inputs)
+        original_results = (encoded(original_row) + "\n").encode()
+        (original / "results.jsonl").write_bytes(original_results)
+        original_job = str(uuid4())
+        original_manifest = {
+            "state": "cancelled", "jobUuid": original_job,
+            "method": "luna-people-context-v1",
+            "inputBatches": 2, "questions": 2, "completedBatches": 1,
+            "accountedUsd": 0.01, "knownActualUsd": 0.01,
+            "inputSha256": hashlib.sha256(original_inputs).hexdigest(),
+            "resultsSha256": hashlib.sha256(original_results).hexdigest(),
+        }
+        (original / "manifest.json").write_text(encoded(original_manifest))
+        (original / "continuation.json").write_text(encoded({
+            "jobUuid": original_job, "inputPath": str(original / "inputs.jsonl"),
+            "inputSha256": original_manifest["inputSha256"],
+            "completedBatchIds": ["recorded"], "pendingBatchIds": ["pending"],
+            "recordedQuestions": 1, "pendingQuestions": 1,
+        }))
+        PeopleContextProjection(database, original).apply()
+        old_recovery = self.root / "old-recovery"
+        old_recovery.mkdir()
+        (old_recovery / "results.jsonl").write_bytes(original_results)
+        (old_recovery / "manifest.json").write_text(encoded({
+            "state": "completed", "jobUuid": original_job, "originalRun": str(original),
+            "resultsSha256": original_manifest["resultsSha256"],
+            "accountedUsd": 0, "knownActualUsd": 0,
+            "originalJobAccountedUsdAfter": 0.01,
+            "recoveredDecisions": 1, "rejectedQuestions": 2,
+        }))
+        PeopleContextProjection(database, old_recovery).apply()
+        new_job = str(uuid4())
+        with patch(
+            "people_context.shutil.disk_usage",
+            return_value=SimpleNamespace(free=10 * 1024**3),
+        ):
+            plan = PeopleContextContinuationPreparation(
+                original, self.root / "preparation", new_job
+            ).prepare()
+        run = self.root / "continued"
+        run.mkdir()
+        plan_bytes = (self.root / "preparation" / "plan.json").read_bytes()
+        (run / "continuation-plan.json").write_bytes(plan_bytes)
+        reference = {
+            key: plan[key]
+            for key in ("newJobUuid", "originalJobUuid", "originalManifestSha256")
+        }
+        reference["planSha256"] = hashlib.sha256(plan_bytes).hexdigest()
+        (run / "continuation-reference.json").write_text(encoded(reference))
+        (run / "inputs.jsonl").write_bytes(Path(plan["pendingInputsPath"]).read_bytes())
+        new_results = (encoded(pending_row) + "\n").encode()
+        (run / "results.jsonl").write_bytes(new_results)
+        new_manifest = {
+            "state": "completed_partial", "jobUuid": new_job,
+            "method": "luna-people-context-v1",
+            "inputBatches": 1, "questions": 1, "completedBatches": 1,
+            "inputSha256": plan["pendingInputsSha256"],
+            "resultsSha256": hashlib.sha256(new_results).hexdigest(),
+            "accountedUsd": 0.05, "knownActualUsd": 0.04,
+        }
+        (run / "manifest.json").write_text(encoded(new_manifest))
+        recovered = self.root / "new-recovery"
+        recovered.mkdir()
+        pending_row["result"].update(
+            state="proposed", decisions=original_row["result"]["decisions"]
+        )
+        pending_row["result"]["decisions"][0]["questionId"] = "pair-2"
+        recovered_results = (encoded(pending_row) + "\n").encode()
+        (recovered / "results.jsonl").write_bytes(recovered_results)
+        (recovered / "manifest.json").write_text(encoded({
+            "state": "completed", "jobUuid": new_job, "originalRun": str(run),
+            "originalManifestSha256": hashlib.sha256(
+                (run / "manifest.json").read_bytes()
+            ).hexdigest(),
+            "resultsSha256": hashlib.sha256(recovered_results).hexdigest(),
+            "accountedUsd": 0, "knownActualUsd": 0,
+            "originalJobAccountedUsdAfter": 0.05,
+            "recoveredDecisions": 1, "rejectedQuestions": 3,
+        }))
+        return database, run, recovered
+
+    def test_new_job_continuation_keeps_coverage_costs_and_recovery_counts(self):
+        database, run, recovered = self.continuation_runs()
+        primary = PeopleContextProjection(database, run).apply()
+        self.assertEqual(primary["processedQuestions"], 2)
+        self.assertEqual(primary["plannedQuestions"], 2)
+        self.assertEqual(primary["recoveredDecisions"], 1)
+        self.assertEqual(primary["rejectedQuestions"], 2)
+        self.assertAlmostEqual(primary["accountedUsd"], 0.06)
+        self.assertEqual(primary["knownTokenCostUsd"], 0.05)
+        self.assertEqual(primary["originalJob"]["accountedUsd"], 0.01)
+        self.assertEqual(primary["currentJob"]["accountedUsd"], 0.05)
+        for attachment in [recovered, recovered, run]:
+            summary = PeopleContextProjection(database, attachment).apply()
+            self.assertEqual(summary["processedQuestions"], 2)
+            self.assertEqual(summary["plannedQuestions"], 2)
+            self.assertEqual(summary["decisions"], 2)
+            self.assertEqual(summary["recoveredDecisions"], 2)
+            self.assertEqual(summary["rejectedQuestions"], 5)
+            self.assertEqual(summary["originalJob"]["recovery"]["rejectedQuestions"], 2)
+            self.assertEqual(summary["currentJob"]["recovery"]["rejectedQuestions"], 3)
+            self.assertAlmostEqual(summary["accountedUsd"], 0.06)
+            self.assertEqual(summary["knownTokenCostUsd"], 0.05)
+            self.assertEqual(summary["executionState"], "completed_partial")
+        directory = PeopleDirectory(database, "http://files.test/", "http://core.test/")
+        self.assertIsNotNone(directory.relationship("pair-1"))
+        self.assertIsNotNone(directory.relationship("pair-2"))
+
+    def test_continuation_attachment_authenticates_receipt_scope_and_new_run(self):
+        database, run, recovered = self.continuation_runs()
+        PeopleContextProjection(database, run).apply()
+        originals = {
+            p: p.read_bytes()
+            for folder in [run, recovered, self.run]
+            for p in folder.iterdir()
+        }
+        with closing(sqlite3.connect(database)) as db:
+            before = db.execute(
+                "SELECT value FROM metadata WHERE key='peopleContext'"
+            ).fetchone()[0]
+        for change in [
+            "plan_bytes", "plan_scope", "original_manifest",
+            "new_input", "new_result", "recovery_job", "missing_plan",
+        ]:
+            with self.subTest(change=change):
+                target = run
+                if change == "plan_bytes":
+                    path = run / "continuation-plan.json"
+                    path.write_bytes(path.read_bytes() + b" ")
+                elif change == "plan_scope":
+                    plan_path = run / "continuation-plan.json"
+                    plan = json.loads(plan_path.read_bytes())
+                    plan["recordedQuestions"] = 100
+                    plan_path.write_text(encoded(plan))
+                    reference_path = run / "continuation-reference.json"
+                    reference = json.loads(reference_path.read_text())
+                    reference["planSha256"] = hashlib.sha256(plan_path.read_bytes()).hexdigest()
+                    reference_path.write_text(encoded(reference))
+                elif change == "original_manifest":
+                    path = self.run / "manifest.json"
+                    path.write_bytes(path.read_bytes() + b" ")
+                elif change == "new_input":
+                    path = run / "inputs.jsonl"
+                    path.write_bytes(path.read_bytes() + b" ")
+                elif change == "new_result":
+                    path = run / "results.jsonl"
+                    row = json.loads(path.read_bytes())
+                    row["input"]["questions"][0]["questionId"] = "unplanned"
+                    path.write_text(encoded(row) + "\n")
+                    manifest_path = run / "manifest.json"
+                    manifest = json.loads(manifest_path.read_bytes())
+                    manifest["resultsSha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+                    manifest_path.write_text(encoded(manifest))
+                elif change == "recovery_job":
+                    target = recovered
+                    path = recovered / "manifest.json"
+                    manifest = json.loads(path.read_bytes())
+                    manifest["jobUuid"] = str(uuid4())
+                    path.write_text(encoded(manifest))
+                else:
+                    (run / "continuation-plan.json").unlink()
+                with self.assertRaises((ValueError, FileNotFoundError)):
+                    PeopleContextProjection(database, target).apply()
+                with closing(sqlite3.connect(database)) as db:
+                    self.assertEqual(
+                        db.execute(
+                            "SELECT value FROM metadata WHERE key='peopleContext'"
+                        ).fetchone()[0],
+                        before,
+                    )
+                for path, data in originals.items():
+                    path.write_bytes(data)
+
     def test_credit_replacement_invalidates_only_relationships_using_replaced_source(
         self,
     ):
@@ -438,6 +633,264 @@ class TestPeopleContext(unittest.TestCase):
             PeopleContextProjection(database, self.run).apply()
         directory = PeopleDirectory(database, "http://files.test/", "http://core.test/")
         self.assertEqual(directory.relationships("a", {})["total"], 0)
+
+
+class TestPeopleContextContinuation(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.run = self.root / "original"
+        self.run.mkdir()
+        self.output = self.root / "pending"
+        self.original_job = str(uuid4())
+        self.new_job = str(uuid4())
+        # Different formatting, CRLF and a final unterminated line expose any
+        # accidental reserialization or reordering during pending extraction.
+        self.lines = [
+            b'{ "batchId" : "first", "questions" : [{"questionId":"q1","name":"Jos\xc3\xa9"}] }\r\n',
+            b'{"batchId":"completed","questions":[{"questionId":"q2"}]}\n',
+            b'{"questions":[{"questionId":"q3"},{"questionId":"q4"}], "batchId":"last"}',
+        ]
+        (self.run / "inputs.jsonl").write_bytes(b"".join(self.lines))
+        completed = json.loads(self.lines[1])
+        self.rows = [
+            {
+                "input": completed,
+                "result": {"batchId": "completed", "state": "unresolved"},
+            }
+        ]
+        self.write_results()
+        self.manifest = {
+            "state": "cancelled",
+            "jobUuid": self.original_job,
+            "method": "luna-people-context-v1",
+            "inputBatches": 3,
+            "questions": 4,
+            "completedBatches": 1,
+        }
+        self.continuation = {
+            "jobUuid": self.original_job,
+            "state": "awaiting_storage_decision",
+            "inputPath": str(self.run / "inputs.jsonl"),
+            "completedBatchIds": ["completed"],
+            "pendingBatchIds": ["first", "last"],
+            "recordedQuestions": 1,
+            "pendingQuestions": 3,
+            "unrecordedAttempts": [{"batchId": "first", "reservedUsd": 0.1}],
+        }
+        self.seal()
+        disk = patch(
+            "people_context.shutil.disk_usage",
+            return_value=SimpleNamespace(free=10 * 1024**3),
+        )
+        disk.start()
+        self.addCleanup(disk.stop)
+
+    def write_results(self):
+        (self.run / "results.jsonl").write_text(
+            "".join(encoded(row) + "\n" for row in self.rows), encoding="utf-8"
+        )
+
+    def seal(self):
+        for field, filename in [
+            ("inputSha256", "inputs.jsonl"),
+            ("resultsSha256", "results.jsonl"),
+        ]:
+            self.manifest[field] = hashlib.sha256(
+                (self.run / filename).read_bytes()
+            ).hexdigest()
+        self.continuation["inputSha256"] = self.manifest["inputSha256"]
+        self.write_metadata()
+
+    def write_metadata(self):
+        (self.run / "manifest.json").write_text(encoded(self.manifest))
+        (self.run / "continuation.json").write_text(encoded(self.continuation))
+
+    def prepare(self):
+        return PeopleContextContinuationPreparation(
+            self.run, self.output, self.new_job
+        ).prepare()
+
+    def test_copies_only_pending_original_bytes_and_seals_complete_plan(self):
+        original_files = {p.name: p.read_bytes() for p in self.run.iterdir()}
+        plan = self.prepare()
+        pending = (self.output / "pending-inputs.jsonl").read_bytes()
+        self.assertEqual(pending, self.lines[0] + self.lines[2])
+        self.assertEqual(
+            [json.loads(line)["batchId"] for line in pending.splitlines()],
+            ["first", "last"],
+        )
+        self.assertEqual(json.loads((self.output / "plan.json").read_text()), plan)
+        self.assertEqual((plan["pendingBatches"], plan["pendingQuestions"]), (2, 3))
+        self.assertEqual((plan["recordedBatches"], plan["recordedQuestions"]), (1, 1))
+        self.assertEqual(plan["newJobUuid"], self.new_job)
+        self.assertEqual(plan["originalJobUuid"], self.original_job)
+        self.assertEqual(plan["pendingInputsSha256"], hashlib.sha256(pending).hexdigest())
+        for field, filename in [
+            ("originalManifestSha256", "manifest.json"),
+            ("continuationSha256", "continuation.json"),
+            ("originalInputSha256", "inputs.jsonl"),
+            ("originalResultsSha256", "results.jsonl"),
+        ]:
+            self.assertEqual(
+                plan[field], hashlib.sha256(original_files[filename]).hexdigest()
+            )
+        self.assertEqual(
+            {p.name: p.read_bytes() for p in self.run.iterdir()}, original_files
+        )
+
+    def test_refuses_changed_retained_files_before_creating_output(self):
+        for filename in ["inputs.jsonl", "results.jsonl"]:
+            with self.subTest(filename=filename):
+                path = self.run / filename
+                original = path.read_bytes()
+                path.write_bytes(original + b"\n")
+                with self.assertRaisesRegex(ValueError, "hashes"):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+                path.write_bytes(original)
+
+    def test_refuses_result_with_changed_batch_input_or_result_id(self):
+        for change in ["input", "result", "unknown", "duplicate"]:
+            with self.subTest(change=change):
+                original = json.loads(encoded(self.rows))
+                if change == "input":
+                    self.rows[0]["input"]["questions"][0]["name"] = "changed witness"
+                elif change == "result":
+                    self.rows[0]["result"]["batchId"] = "first"
+                elif change == "unknown":
+                    self.rows[0]["input"]["batchId"] = "unknown"
+                else:
+                    self.rows.append(self.rows[0])
+                self.write_results()
+                self.seal()
+                with self.assertRaisesRegex(ValueError, "exact original input"):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+                self.rows = original
+
+    def test_refuses_false_or_duplicate_pending_and_completed_ids(self):
+        for field, value in [
+            ("pendingBatchIds", ["first", "completed"]),
+            ("pendingBatchIds", ["first"]),
+            ("pendingBatchIds", ["first", "last", "last"]),
+            ("completedBatchIds", []),
+            ("recordedQuestions", 2),
+            ("pendingQuestions", 4),
+        ]:
+            with self.subTest(field=field, value=value):
+                original = self.continuation[field]
+                self.continuation[field] = value
+                self.write_metadata()
+                with self.assertRaises(ValueError):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+                self.continuation[field] = original
+
+    def test_refuses_duplicate_or_missing_question_ids_and_duplicate_batch_ids(self):
+        for change in ["duplicate_question", "missing_question", "duplicate_batch"]:
+            with self.subTest(change=change):
+                batch = json.loads(self.lines[2])
+                if change == "duplicate_question":
+                    batch["questions"][0]["questionId"] = "q1"
+                elif change == "missing_question":
+                    del batch["questions"][0]["questionId"]
+                else:
+                    batch["batchId"] = "first"
+                (self.run / "inputs.jsonl").write_bytes(
+                    self.lines[0] + self.lines[1] + encoded(batch).encode()
+                )
+                self.seal()
+                with self.assertRaises((ValueError, KeyError)):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+
+    def test_refuses_unsealed_run_changed_method_or_wrong_continuation_job(self):
+        for owner, field, value in [
+            (self.manifest, "state", "running"),
+            (self.manifest, "method", "other-method"),
+            (self.manifest, "completedBatches", 2),
+            (self.continuation, "jobUuid", str(uuid4())),
+            (self.continuation, "inputSha256", "wrong"),
+            (self.continuation, "inputPath", str(self.root / "other-inputs.jsonl")),
+        ]:
+            with self.subTest(field=field):
+                original = owner[field]
+                owner[field] = value
+                self.write_metadata()
+                with self.assertRaises(ValueError):
+                    self.prepare()
+                self.assertFalse(self.output.exists())
+                owner[field] = original
+
+    def test_refuses_empty_pending_population_and_reused_or_empty_job(self):
+        self.rows = [
+            {
+                "input": json.loads(line),
+                "result": {"batchId": json.loads(line)["batchId"]},
+            }
+            for line in self.lines
+        ]
+        self.write_results()
+        self.manifest["completedBatches"] = 3
+        self.continuation.update(
+            completedBatchIds=["first", "completed", "last"],
+            pendingBatchIds=[],
+            recordedQuestions=4,
+            pendingQuestions=0,
+        )
+        self.seal()
+        with self.assertRaisesRegex(ValueError, "partition"):
+            self.prepare()
+        for job in [self.original_job, "00000000-0000-0000-0000-000000000000"]:
+            with self.subTest(job=job), self.assertRaises(ValueError):
+                PeopleContextContinuationPreparation(self.run, self.output, job).prepare()
+        self.assertFalse(self.output.exists())
+
+    def test_preserves_existing_output_and_refuses_low_disk_before_writes(self):
+        self.output.mkdir()
+        marker = self.output / "keep"
+        marker.write_bytes(b"original")
+        with self.assertRaises(FileExistsError):
+            self.prepare()
+        self.assertEqual(marker.read_bytes(), b"original")
+        marker.unlink()
+        self.output.rmdir()
+        with patch(
+            "people_context.shutil.disk_usage",
+            return_value=SimpleNamespace(free=5905580031),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "5.5 GiB"):
+                self.prepare()
+        self.assertFalse(self.output.exists())
+
+    def test_cli_prepares_without_database_and_preserves_legacy_requirements(self):
+        args = [
+            "people_context.py",
+            "--continue-from", str(self.run),
+            "--output", str(self.output),
+            "--job-uuid", self.new_job,
+        ]
+        with patch.object(sys, "argv", args), patch("builtins.print"):
+            main()
+        self.assertTrue((self.output / "plan.json").exists())
+        for invalid in [
+            ["--output", str(self.root / "legacy")],
+            ["--continue-from", str(self.run), "--output", str(self.output)],
+            ["--database", "db", "--output", "out", "--job-uuid", self.new_job],
+            [
+                "--continue-from", str(self.run), "--output", "out",
+                "--job-uuid", self.new_job, "--attach",
+            ],
+        ]:
+            with (
+                self.subTest(args=invalid),
+                patch.object(sys, "argv", ["people_context.py"] + invalid),
+                patch("sys.stderr"),
+                self.assertRaises(SystemExit),
+            ):
+                main()
 
 
 if __name__ == "__main__":

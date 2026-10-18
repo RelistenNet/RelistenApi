@@ -11,7 +11,10 @@ if (
             && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
-        || (args.Length == 4 && args[0] is "people-context" or "people-context-recover")
+        || (
+            args.Length == 4
+            && args[0] is "people-context" or "people-context-recover" or "people-context-continue"
+        )
         || (args.Length == 5 && args[0] == "admit-retained-local")
         || (args.Length == 3 && args[0] is "shadow-compositions-acquire" or "retained-http-inputs")
         || (
@@ -69,6 +72,7 @@ if (
             + "       RelistenNormalization luna-credit-cohort <plan.json> <plan-sha256> <new-output-directory> <job-uuid>"
             + "\n       RelistenNormalization people-context <batches.jsonl> <new-output-directory> <job-uuid>"
             + "\n       RelistenNormalization people-context-recover <completed-run-directory> <new-output-directory> <job-uuid>"
+            + "\n       RelistenNormalization people-context-continue <plan.json> <plan-sha256> <new-output-directory>"
     );
     return 2;
 }
@@ -246,6 +250,22 @@ try
             )
         );
         return contextReport.State == "completed" ? 0 : 1;
+    }
+    if (args[0] == "people-context-continue")
+    {
+        var continuationReport = await new PeopleContextContinuation().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                continuationReport,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return continuationReport.State == "completed" ? 0 : 1;
     }
     if (args[0] == "people-context-recover")
     {

@@ -172,7 +172,20 @@ dotnet tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll \
 
 A cancelled run retains all prepared inputs and the hash of its completed result prefix. Recovery verifies the recorded number of completed batches, without treating unrecorded inputs as failed responses. Its projection preserves the stopped execution state even though recovery itself completed. Recovery retained 718 supported decisions without new calls or spend. Known token cost for the original job was $0.6608652 at configured rates; the ledger retained $0.7115587 including uncertain cost reservations. These values are not invoice totals.
 
-The retained `continuation.json` lists completed and pending batch IDs against the original input hash, plus attempts whose results were not recorded. It authorizes no restart. After storage is resolved, an explicit continuation can stream only pending inputs under the same job/cache limits. Completed batches must not be processed again, and uncertain-attempt reservations must remain accounted.
+The retained `continuation.json` lists completed and pending batch IDs against the original input hash, plus attempts whose results were not recorded. The stopped job stays closed. Prepare a new job containing only those pending batches:
+
+```sh
+python3 tools/RelistenNormalization/people_context.py \
+  --continue-from <sealed-original-run> --output <new-preparation-directory> \
+  --job-uuid <new-job-uuid>
+shasum -a 256 <new-preparation-directory>/plan.json
+dotnet tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll \
+  people-context-continue <new-preparation-directory>/plan.json <plan-sha256> <new-run-directory>
+```
+
+The plan pins the original manifest, results, continuation receipt and exact pending input bytes. Admission authenticates the complete original partition before creating the new job. The new job has a $10 reservation ceiling, 508 maximum attempts, a 30-minute execution limit and a 5.5 GiB free-space floor. The attempt ceiling permits two attempts for each of the 254 pending batches; the shared cache still enforces two attempts per request across both jobs. Completed batches are excluded. The old ledger keeps all charges, including uncertain cancellation reservations; cached valid responses require no new request. Output retains the validated plan bytes and its hash even when execution is cancelled.
+
+Run keyless `people-context-recover` on the **new run** with its new job UUID after execution settles. Attach the new primary output, then its recovery output, using the existing `--attach` command. Keep the original run and its recovery already attached; do not reattach that older summary afterward. Attachment authenticates both sealed jobs, preserves their separate costs and recovery counts, and reports distinct processed question IDs against the original 5,000-question population. The original 142 rejected or missing answers remain visible; processing the pending population does not repair those answers. Every new recovery independently validates each known question and preserves unsupported or absent decisions. These remain proposals for inspection, without identity activation or transitive merging.
 
 The projection records distinct question IDs per job separately from successful decisions. Overlapping snapshots and recovery do not increase processed coverage; a later continuation containing disjoint pending questions does. Only compact IDs are stored, without another copy of question prose.
 

@@ -17,14 +17,16 @@ public sealed class PeopleContextBatch
 
     /// <summary>
     /// Reads at most 500 JSONL batches and 5,000 questions before admitting requests. Uses the
-    /// dedicated local normalization database, a $25/1,000-attempt job and four concurrent calls.
+    /// dedicated local normalization database and four concurrent calls. Defaults allow a
+    /// $25/1,000-attempt job; a continuation supplies tighter authenticated limits.
     /// Failed model responses are recorded individually while unrelated batches continue.
     /// </summary>
     public async Task<PeopleContextBatchReport> RunAsync(
         string inputPath,
         string outputDirectory,
         Guid jobUuid,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        PeopleContextBatchLimits? limits = null
     )
     {
         if (jobUuid == Guid.Empty)
@@ -36,7 +38,51 @@ public sealed class PeopleContextBatch
             throw new IOException("Choose a new output directory.");
         }
 
-        var batches = await ReadInputsAsync(inputPath, cancellationToken);
+        limits ??= new();
+        if (
+            limits.CapUsd <= 0
+            || limits.CapUsd > 25m
+            || limits.MaximumTotalAttempts is < 1 or > 1000
+            || limits.MaximumDuration <= TimeSpan.Zero
+            || limits.MinimumFreeBytes < 0
+        )
+        {
+            throw new ArgumentException("People-context limits must be positive.");
+        }
+        RequireFreeSpace(outputDirectory, limits.MinimumFreeBytes);
+        using var execution = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        if (limits.MaximumDuration is { } duration)
+        {
+            execution.CancelAfter(duration);
+        }
+        cancellationToken = execution.Token;
+        byte[]? exactInputs = null;
+        if (limits.ExactInputSha256 is { } expectedInput)
+        {
+            if (new FileInfo(inputPath).Length > 100_001_000)
+            {
+                throw new InvalidDataException(
+                    "Pending contextual inputs exceed their byte bound."
+                );
+            }
+            exactInputs = await File.ReadAllBytesAsync(inputPath, cancellationToken);
+            if (
+                !StringComparer.OrdinalIgnoreCase.Equals(
+                    Convert.ToHexStringLower(SHA256.HashData(exactInputs)),
+                    expectedInput
+                )
+            )
+            {
+                throw new InvalidDataException(
+                    "Pending contextual inputs changed after validation."
+                );
+            }
+        }
+        using var inputReader =
+            exactInputs == null
+                ? new StreamReader(inputPath)
+                : new StreamReader(new MemoryStream(exactInputs, writable: false));
+        var batches = await ReadInputsAsync(inputReader, cancellationToken);
         var db = NormalizationLocalDatabase.Create();
         var cache = new NormalizationExtractionCacheService(db);
         using var http = new HttpClient();
@@ -46,13 +92,29 @@ public sealed class PeopleContextBatch
             () => Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? ""
         );
         Directory.CreateDirectory(outputDirectory);
-        await File.WriteAllTextAsync(
-            Path.Combine(outputDirectory, "inputs.jsonl"),
-            string.Join("\n", batches.Select(batch => JsonSerializer.Serialize(batch, Json)))
-                + "\n",
-            cancellationToken
+        if (exactInputs == null)
+        {
+            await File.WriteAllTextAsync(
+                Path.Combine(outputDirectory, "inputs.jsonl"),
+                string.Join("\n", batches.Select(batch => JsonSerializer.Serialize(batch, Json)))
+                    + "\n",
+                cancellationToken
+            );
+        }
+        else
+        {
+            await File.WriteAllBytesAsync(
+                Path.Combine(outputDirectory, "inputs.jsonl"),
+                exactInputs,
+                cancellationToken
+            );
+        }
+        await cache.CreateJobAsync(
+            jobUuid,
+            limits.CapUsd,
+            cancellationToken,
+            maximumTotalAttempts: limits.MaximumTotalAttempts
         );
-        await cache.CreateJobAsync(jobUuid, 25m, cancellationToken, maximumTotalAttempts: 1000);
 
         var states = new Dictionary<string, int>(StringComparer.Ordinal);
         var completed = 0;
@@ -76,6 +138,11 @@ public sealed class PeopleContextBatch
                 },
                 async (batch, ct) =>
                 {
+                    if (AvailableFreeBytes(outputDirectory) < limits.MinimumFreeBytes)
+                    {
+                        execution.Cancel();
+                        ct.ThrowIfCancellationRequested();
+                    }
                     var result = await matcher.MatchAsync(jobUuid, batch, ct);
                     // Once HTTP settles, append its receipt even if the caller cancels while waiting.
                     await writerGate.WaitAsync(CancellationToken.None);
@@ -138,14 +205,13 @@ public sealed class PeopleContextBatch
     }
 
     private static async Task<IReadOnlyList<PeopleContextBatchInput>> ReadInputsAsync(
-        string path,
+        TextReader reader,
         CancellationToken cancellationToken
     )
     {
         var batches = new List<PeopleContextBatchInput>();
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var questions = 0;
-        using var reader = new StreamReader(path);
         string? line;
         while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
         {
@@ -178,7 +244,27 @@ public sealed class PeopleContextBatch
         await using var stream = File.OpenRead(path);
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream));
     }
+
+    private static long AvailableFreeBytes(string path) =>
+        new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace;
+
+    private static void RequireFreeSpace(string output, long minimumBytes)
+    {
+        if (AvailableFreeBytes(output) < minimumBytes)
+        {
+            throw new IOException("People-context execution requires its free-space reserve.");
+        }
+    }
 }
+
+/// <summary>Legacy defaults stay unchanged; a continuation supplies tighter durable job limits.</summary>
+public sealed record PeopleContextBatchLimits(
+    decimal CapUsd = 25m,
+    int MaximumTotalAttempts = 1000,
+    TimeSpan? MaximumDuration = null,
+    long MinimumFreeBytes = 0,
+    string? ExactInputSha256 = null
+);
 
 /// <summary>Witness coordinates remain attached to every decision, including cached proposals.</summary>
 public sealed record PeopleContextBatchRow(
