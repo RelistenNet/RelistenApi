@@ -1,0 +1,32 @@
+{
+  "version": "people-pair-baseline-v1",
+  "projectionVersion": "people-mentions-name-artist-five-v1",
+  "actorFeaturesVersion": "people-actor-context-features-v1",
+  "featureOrder": ["name_token_similarity", "exact_name", "artist_overlap", "contact_agreement", "profile_agreement"],
+  "manifest": {
+    "file": "manifest.json",
+    "completionState": "completed",
+    "fields": ["state", "version", "projectionVersion", "actorFeaturesVersion", "featureOrder", "bundleManifestSha256", "inputFiles", "baselineFile", "baselineSha256", "questions", "pairs", "allTasks", "matcherAssemblySha256", "runnerAssemblySha256", "artifacts", "missingContext", "policyActivationPermitted"],
+    "inputFilesValue": {"sha256": "lowercase SHA256", "bytes": "integer byte count", "rows": "physical JSONL nonempty row count; null for JSON"},
+    "artifactsValue": {"path": "absolute executing assembly path", "bytes": "integer byte count", "sha256": "lowercase SHA256"},
+    "policyActivationPermitted": false,
+    "counts": "Diagnostic source counts, never hardcoded population requirements; questions excludes actor_kind, allTasks includes every grouping bridge."
+  },
+  "baselineRow": {
+    "file": "baseline.jsonl",
+    "fields": ["taskId", "taskKind", "focusMentionId", "candidateMentionId", "focusEvidenceId", "candidateEvidenceId", "sameRecording", "declaredCandidateCount", "features", "comparison", "projectionSupported", "projectionIssue"],
+    "features": "Five finite doubles in featureOrder; never annotation answers, IDs, rationales or grouping keys.",
+    "comparison": "Actual policy-free IdentityCandidateMatcher.ComparePeople DTO; camelCase members and snake_case enum strings. CandidateUuid is null because a source mention is not a canonical identity.",
+    "projectionSupported": "Both original mention_kind values are name.",
+    "projectionIssue": "null for supported projection; unsupported_mention_expression otherwise.",
+    "sameRecording": "Exact equality of retained evidence IDs; use this for true cross-recording cohorts rather than taskKind alone.",
+    "pool": "Every declared candidate is exported, including insufficient labels and unsupported expressions. No answer is copied to this exchange."
+  },
+  "trainingJoin": {
+    "key": ["taskId", "candidateMentionId"],
+    "authenticate": "Verify pinned bundle/source/labels and baseline manifests, pair hash, artifact hashes, exact edge set, focal ownership, declared pool count and numeric vector against actual comparison.",
+    "groupBeforeFilter": "Call the people bundle validator build_split_components on all tasks, including actor_kind and unknown bridges.",
+    "targets": "Only resolved same_entity/different_entities with supported projection enter fitting. Insufficient/unsupported remain output, never negatives.",
+    "runtimeMapping": "Logistic decision_function raw logits map to existing PeopleAcceptanceLinearScorer fields; no thresholds, margins, attestation, activation or creation are supplied by this exchange."
+  }
+}

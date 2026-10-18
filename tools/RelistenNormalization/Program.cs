@@ -11,7 +11,7 @@ if (
         || (args.Length == 4 && args[0] == "musicbrainz-acquire")
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
-        || (args.Length == 5 && args[0] == "actor-fields")
+        || (args.Length == 5 && args[0] is "actor-fields" or "people-pair-baseline")
     )
 )
 {
@@ -20,6 +20,7 @@ if (
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
+            + "       RelistenNormalization people-pair-baseline <repository-root> <bundle-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization actor-fields <fields.jsonl> <export-receipt.json> <frozen-bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>\n"
             + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>"
@@ -36,6 +37,23 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "people-pair-baseline")
+    {
+        var baseline = await new PeoplePairBaselineBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            args[4],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                baseline,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return 0;
+    }
     if (args[0] == "actor-fields")
     {
         var actorReport = await new ActorFieldReplayBatch().RunAsync(
