@@ -73,6 +73,9 @@ produce matcher features or complete the grouping needed for fitting.
 The [adjudicated source exporter](people-adjudicated-baseline.md) reads those
 source selectors without opening the target file. It exports actual comparisons,
 all endpoint diagnostics and source-local grouping bridges for the trainer.
+The [independent source-view exporter](people-view-baseline.md) retains separate
+field views and every supported comparison between them. Its top manifest marks
+completion; the unchanged comparator remains available beside those outputs.
 The [combined training comparison](people-adjudicated-trainer/README.md) joins
 the separate targets after grouping, counts repeated actor pairs once and
 reports conflicting or unsupported examples without turning them into negatives.

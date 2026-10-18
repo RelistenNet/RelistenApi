@@ -1,0 +1,144 @@
+{
+  "version": "people-view-baseline-v1",
+  "projectionVersion": "people-independent-source-views-v1",
+  "featureOrder": [
+    "name_token_similarity",
+    "exact_name",
+    "artist_overlap",
+    "contact_agreement",
+    "profile_agreement"
+  ],
+  "completionAuthority": "TOP manifest.json with state completed; comparator/manifest.json alone is incomplete for this mode",
+  "layout": {
+    "comparator": "comparator/manifest.json",
+    "endpointViews": "endpoint-views.jsonl",
+    "bags": "view-bags.jsonl",
+    "leafPairs": "view-pairs.jsonl"
+  },
+  "viewKeyFields": [
+    "kind",
+    "evidenceId",
+    "field",
+    "referenceUuid",
+    "anchor",
+    "fieldSha256"
+  ],
+  "viewKeyKinds": {
+    "source_actor": "referenceUuid nonnull; anchor and fieldSha256 null",
+    "source_selector": "referenceUuid null; exact anchor and original fieldSha256 nonnull"
+  },
+  "viewFields": [
+    "key",
+    "selectorIndexes",
+    "projection",
+    "facts"
+  ],
+  "endpointFields": [
+    "endpointId",
+    "evidenceId",
+    "artistUuid",
+    "mentionKind",
+    "coverage",
+    "matchRecordsAgree",
+    "issues",
+    "selectors",
+    "variants",
+    "views"
+  ],
+  "coverage": {
+    "complete": "every selector has one eligible view; same scoped reference deduplicated only within this endpoint",
+    "partial": "some eligible views and missing/incomplete selectors",
+    "ambiguous": "at least one selector has multiple source actor hypotheses",
+    "unattributed": "an unowned selector remains unresolved, even with one nearby actor",
+    "unsupported": "no eligible views and no more specific coverage status"
+  },
+  "matchRecordsAgree": "null for no views; otherwise structural equality of all entire PersonMatchRecord values, never an identity assertion",
+  "eligibleViews": "per selector, one independently attributed actor with complete query projection, or one exact actor_name name-only fallback; ambiguous/unowned alternatives remain only in variants",
+  "edgeId": "JSON-encoded string array [taskId,candidateEndpointId]; decode as JSON rather than splitting text",
+  "bagFields": [
+    "edgeId",
+    "taskId",
+    "taskKind",
+    "focusEndpointId",
+    "candidateEndpointId",
+    "leftCoverage",
+    "rightCoverage",
+    "leftViewCount",
+    "rightViewCount",
+    "expectedLeafPairs",
+    "complete"
+  ],
+  "completeBag": "both endpoint coverage values complete and at least one view each; no implication that different view records agree",
+  "leafFields": [
+    "edgeId",
+    "taskId",
+    "focusEndpointId",
+    "candidateEndpointId",
+    "leftViewKey",
+    "rightViewKey",
+    "comparison",
+    "features"
+  ],
+  "leafPrimaryKey": [
+    "edgeId",
+    "leftViewKey",
+    "rightViewKey"
+  ],
+  "leafMeaning": "actual ComparePeople for each eligible left/right combination, including leaves from partial bags; no per-leaf target inherited",
+  "manifestFields": [
+    "state",
+    "version",
+    "projectionVersion",
+    "featureOrder",
+    "packageManifestSha256",
+    "inputFiles",
+    "comparatorManifest",
+    "baseline",
+    "endpointViews",
+    "bags",
+    "leafPairs",
+    "grouping",
+    "bridges",
+    "counts",
+    "runtimeArtifacts",
+    "versions",
+    "limits",
+    "policyActivationPermitted"
+  ],
+  "artifactFields": [
+    "path",
+    "bytes",
+    "sha256",
+    "rows"
+  ],
+  "countsFields": [
+    "tasks",
+    "endpoints",
+    "edges",
+    "views",
+    "leafPairs",
+    "completeBags",
+    "partialBags",
+    "unsupportedBags"
+  ],
+  "countMeaning": "partialBags: not complete but at least one leaf; unsupportedBags: zero leaves",
+  "limits": {
+    "maximumViews": 100000,
+    "maximumLeafPairs": 1000000,
+    "maximumOutputBytesPerArtifact": 134217728
+  },
+  "trainingBoundary": "separate trainer authenticates complete bags and all original tasks/bridges before target join; final full-pair-overlap unit total weight 1, only complete identical-five-vector bags initially eligible",
+  "targetsRead": false,
+  "canonicalIdentitySupplied": false,
+  "policyActivationPermitted": false,
+  "versionFields": [
+    "comparatorVersion",
+    "comparatorProjectionVersion",
+    "actorFeaturesVersion",
+    "creditExtractorVersion",
+    "actorEvidenceVersion",
+    "actorProjectionVersion",
+    "sourceContextVersion",
+    "sourceReferenceVersion"
+  ]
+}
