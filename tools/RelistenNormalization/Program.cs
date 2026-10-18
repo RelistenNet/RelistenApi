@@ -114,6 +114,12 @@ try
 
     if (args[0] is "shadow" or "shadow-inline" or "shadow-rows")
     {
+        var nativeObservations = new ShadowProviderObservations();
+        var geographyManifest = Environment.GetEnvironmentVariable(
+            "RELISTEN_SHADOW_VENUE_GEOGRAPHY"
+        );
+        var geography =
+            geographyManifest == null ? null : ShadowVenueGeography.Load(geographyManifest);
         var shadow = new ShadowCatalogBatch([
             new ShadowPeopleAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
@@ -121,9 +127,9 @@ try
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL"),
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_CANDIDATES")
             ),
-            new ShadowVenueAdapter(
-                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_VENUE_GEOGRAPHY")
-            ),
+            geography == null ? new ShadowVenueAdapter() : new ShadowVenueAdapter(geography),
+            new ShadowNativePeopleAdapter(nativeObservations),
+            new ShadowNativeVenueAdapter(nativeObservations, geography),
             new ShadowRepertoireAdapter(),
             new ShadowCompositionAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
