@@ -1129,6 +1129,9 @@ class PeopleDirectory:
                 row["key"]: json.loads(row["value"])
                 for row in db.execute("SELECT * FROM metadata")
             }
+            # Checkpoints include private locator indexes and file pins. Expose
+            # their compact publication summary, not the resumable writer state.
+            result.pop("sourceRefreshProgress", None)
             counts = result.pop("directoryStats", None)
             if counts is None:
                 raise ValueError(
@@ -1240,6 +1243,8 @@ class PeopleDirectory:
                 values + [limit, offset],
             ).fetchall()
             result["recordings"] = []
+            source_run = json.loads(db.execute("SELECT value FROM metadata WHERE key='sourceRun'").fetchone()[0])
+            refreshed = db.execute("SELECT 1 FROM metadata WHERE key='sourceRefresh'").fetchone() is not None
             for source in sources:
                 source_uuid = source[0]
                 credits = [
@@ -1253,9 +1258,10 @@ class PeopleDirectory:
                 for credit in credits:
                     credit["evidence"] = json.loads(credit["evidence"])
                     credit["aliases"] = json.loads(credit["aliases"])
+                    credit["originRun"] = credit["origin_run"] or source_run
                     credit["sourceEvidenceUrl"] = (
                         "/api/credit?" + urlencode({"id": credit["id"]})
-                        if credit["origin_run"] or db.execute("SELECT 1 FROM metadata WHERE key='sourceRefresh'").fetchone()
+                        if credit["origin_run"] or refreshed
                         else self.core_url
                         + "?"
                         + urlencode(
@@ -1526,7 +1532,7 @@ class PeopleDirectory:
             raise ValueError("Retained credit source does not match the directory")
         credit["evidence"] = json.loads(credit["evidence"])
         credit["aliases"] = json.loads(credit["aliases"])
-        return {"credit": credit, "retainedOutcome": outcome}
+        return {"credit": credit, "retainedOutcome": outcome, "originRun": run}
 
     @staticmethod
     def _home(db, source_uuid):

@@ -712,7 +712,9 @@ class TestSourceDirectoryRefresh(unittest.TestCase):
         def get(path):
             with urlopen(base + path) as response:
                 return json.load(response)
-        self.assertTrue(get('/api/stats')['capabilities']['sourceActors'])
+        stats = get('/api/stats')
+        self.assertTrue(stats['capabilities']['sourceActors'])
+        self.assertNotIn('sourceRefreshProgress', stats)
         group = get('/api/people?q=Raven')['groups'][0]
         self.assertEqual((group['credit_count'], group['source_actor_count']), (0, 2))
         detail = get('/api/person?id=' + group['id'] + '&limit=1')
