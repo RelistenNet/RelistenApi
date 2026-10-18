@@ -30,6 +30,11 @@
     "review-comparison.json": {
       "bytes": 4127,
       "sha256": "6839b0b479a753e8ed624fcde76a9b4fcc09a6c339b2ed6b4e32c31b7c8f13ef"
+    },
+    "split-links.jsonl": {
+      "bytes": 3268,
+      "rows": 2,
+      "sha256": "3141d0fb22b913e806c2d847fbeb3aea5c6d00d341742b13af201ed3f1521028"
     }
   },
   "independent_review": {
@@ -110,6 +115,18 @@
       "physical_lines": 19494,
       "sha256": "d1cedcdc10b8efe923aee37cada9bd18345246379d068c2d8d3d915b2a9c9426"
     }
+  },
+  "split_grouping": {
+    "all_components_after_links": 28,
+    "all_components_before_links": 31,
+    "all_pairs": 34,
+    "identity_assertion": false,
+    "link_file": "split-links.jsonl",
+    "matcher_feature": false,
+    "method": "Build connected components from all selected labels, including insufficient_evidence, using existing split_group_ids plus additive split-only links. Only then select resolved pairs for fitting.",
+    "resolved_components_after_links": 10,
+    "resolved_pairs": 11,
+    "usage": "split_only"
   },
   "status": "draft_pending_independent_adjudication",
   "usage": "development_experiments_only"

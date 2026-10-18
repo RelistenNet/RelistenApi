@@ -82,13 +82,25 @@ aliases, and event/site or room ambiguity. It is a judgment sample, with no
 catalog prevalence claim. All resources come from the catalog snapshot; this
 bundle does not establish upstream provider coverage.
 
-Before splitting any derived experiment, form connected groups from
-`split_group_ids`: original resource IDs, exact-input families, and the retained
-venue hypotheses. Extend those groups with adjudicated venue identities and
-aliases. A negative pair can connect two venue groups; keeping that connected
-component together is conservative. These groups are development aids, not
-accepted canonical venue IDs. Do not promote any of these resources to a scored
-validation or test set after using them for development.
+Before splitting any derived experiment, form connected groups from all 34
+pairs, including unresolved pairs. Use each label's `split_group_ids` and the
+additive links in `split-links.jsonl`. Then select resolved pairs for fitting.
+The validator's `build_split_components` function performs that grouping.
+
+The additive links keep Camp KeeWanee/Camp Kee-Wanee context together across
+Wormtown and StrangeCreek tasks, and 8x10/8x10 Club context together across two
+Baltimore tasks. Exact retained names support each link. These links control
+only data separation: `identity_assertion` and `matcher_feature` are false.
+They assert no shared room, physical premises identity, or event. They change
+none of the 34 label decisions and must not become matcher features.
+
+The links reduce the complete bundle from 31 connected components to 28.
+Selecting the 11 resolved pairs afterward leaves 10 represented components.
+Unresolved pairs can connect tasks and therefore must remain in the grouping
+step even when excluded from model fitting. Extend the groups with subsequently
+adjudicated venue identities and aliases. A negative pair can also connect two
+venue groups; keeping that component together is conservative. Do not promote
+these development resources to a scored validation or test set.
 
 An initial schema-sampling command exposed one validation setlist row before
 filtering. That row was outside this venue task and was not used for selection
@@ -103,7 +115,7 @@ python3 docs/research/2026-10-17-full-normalization/training/venues-development-
 
 It checks hashes, partition eligibility, original task/resource correspondence,
 exact field spans, source references, class counts, and the saved blind-review
-comparison. It cannot establish
+comparison, and split-only link grouping. It cannot establish
 venue identity; that requires independent evidence review.
 
 The validator raises `ValueError` for failed checks, including when Python runs
@@ -117,3 +129,8 @@ python3 -O -m unittest discover -s docs/research/2026-10-17-full-normalization/t
 Those checks cover a valid optimized run, an out-of-range Unicode span that
 Python slicing would otherwise clamp, a held-out partition, changed source
 bytes, and U+2028/U+2029 separators inside physical JSONL records.
+
+The grouping regressions also verify that uncertain shared context stays in one
+component and that the CLI rejects an omitted links file even after its outer
+hash receipt is refreshed. Those checks prevent a future matcher experiment
+from silently ignoring the additive grouping requirements.

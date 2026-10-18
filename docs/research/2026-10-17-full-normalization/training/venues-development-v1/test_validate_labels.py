@@ -91,6 +91,30 @@ class TestVenueLabelValidation(unittest.TestCase):
             self.run_validator(annotation), "Changed annotation file: evidence.jsonl",
         )
 
+    def test_shared_uncertain_context_cannot_cross_split_components(self):
+        labels = [item for _, _, item in VALIDATOR.rows(BUNDLE / "labels.jsonl")]
+        links = [item for _, _, item in VALIDATOR.rows(BUNDLE / "split-links.jsonl")]
+        components = VALIDATOR.build_split_components(labels, links)
+        for link in links:
+            self.assertEqual(len({components[task_id] for task_id in link["task_ids"]}), 1)
+        self.assertEqual(len(set(components.values())), 28)
+
+        # Unknown pairs must participate before resolved training rows are
+        # selected; they can carry links between otherwise separate examples.
+        resolved = [label for label in labels if label["answer"]["decision"] != "insufficient_evidence"]
+        self.assertEqual(len(resolved), 11)
+        self.assertEqual(len({components[label["task_id"]] for label in resolved}), 10)
+
+    def test_omitted_split_links_are_rejected_after_refreshing_file_hash(self):
+        path = self.bundle / "split-links.jsonl"
+        path.write_bytes(b"")
+        manifest = json.loads((self.bundle / "manifest.json").read_text())
+        manifest["files"]["split-links.jsonl"].update(
+            sha256=VALIDATOR.digest(b""), bytes=0, rows=0,
+        )
+        (self.bundle / "manifest.json").write_text(json.dumps(manifest))
+        self.require_rejection(self.run_validator(), "Venue split grouping differs")
+
     def test_unicode_line_separators_remain_inside_physical_records(self):
         path = self.root / "unicode.jsonl"
         value = {"text": "A\u2028B\u2029C\U0001f3b8"}

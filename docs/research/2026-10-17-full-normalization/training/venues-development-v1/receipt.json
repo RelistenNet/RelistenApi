@@ -22,14 +22,28 @@
     "command": "PYTHONOPTIMIZE=1 python3 docs/research/2026-10-17-full-normalization/training/venues-development-v1/validate_labels.py",
     "maximum_retained_words_per_primary_source": 14,
     "regression_command": "python3 -O -m unittest discover -s docs/research/2026-10-17-full-normalization/training/venues-development-v1 -p 'test_validate_labels.py' -v",
-    "regression_source_sha256": "8ba44624fbd28a028d27aa9efab852430351230b7e6eaf7416127466c2a3cec7",
+    "regression_source_sha256": "14303f8f20706d57a074f7ce3b978901466dfca5bb46d047f063f83e3ff61dd2",
     "regressions_failed": 0,
-    "regressions_passed": 5,
+    "regressions_passed": 7,
     "span_units": "Unicode code points with explicit non-negative ordered bounds inside the original decoded field",
     "status": "passed",
-    "validator_sha256": "f31a62c295f09f77c0208747a1d8e010bf982e09743085464f034590aa502b76"
+    "validator_sha256": "f74ab73c709a34c0fe39651cc04464bb1c4f5176d6a05a9462db541c9639b88a"
   },
   "result": "passed",
+  "split_grouping_verification": {
+    "all_components_after_links": 28,
+    "all_components_before_links": 31,
+    "all_pairs": 34,
+    "identity_assertion": false,
+    "identity_labels_changed": false,
+    "link_file": "split-links.jsonl",
+    "link_sha256": "3141d0fb22b913e806c2d847fbeb3aea5c6d00d341742b13af201ed3f1521028",
+    "matcher_feature": false,
+    "resolved_components_after_links": 10,
+    "resolved_pairs": 11,
+    "rule": "Group all pairs, including unresolved pairs, before selecting resolved fitting rows.",
+    "status": "passed"
+  },
   "validated_artists": 66,
   "validated_pairs": 34,
   "validated_resources": 67

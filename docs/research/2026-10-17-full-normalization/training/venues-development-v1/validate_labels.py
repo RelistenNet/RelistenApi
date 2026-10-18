@@ -33,6 +33,82 @@ def rows(path):
             yield number, line.rstrip(b"\r\n"), json.loads(line)
 
 
+def build_split_components(labels, links):
+    """Group all tasks before selecting resolved labels for fitting.
+
+    Shared context only controls data separation. It does not assert that the
+    linked venue references identify the same premises or supply model features.
+    """
+    groups = {}
+    neighbors = {label["task_id"]: set() for label in labels}
+    for label in labels:
+        for group_id in label["split_group_ids"]:
+            groups.setdefault(group_id, set()).add(label["task_id"])
+    for link in links:
+        groups.setdefault(link["split_group_id"], set()).update(link["task_ids"])
+    for tasks in groups.values():
+        first = min(tasks)
+        for task_id in tasks:
+            neighbors[first].add(task_id)
+            neighbors[task_id].add(first)
+
+    components = {}
+    for task_id in sorted(neighbors):
+        if task_id in components:
+            continue
+        pending = [task_id]
+        while pending:
+            member = pending.pop()
+            if member in components:
+                continue
+            components[member] = task_id
+            pending.extend(neighbors[member] - components.keys())
+    return components
+
+
+def validate_split_links(labels, evidence, links, expected):
+    by_task = {label["task_id"]: label for label in labels}
+    seen_groups = set()
+    for link in links:
+        group_id = link["split_group_id"]
+        require(group_id not in seen_groups, "Duplicate venue split-only group")
+        seen_groups.add(group_id)
+        require(group_id.startswith("venue_hypothesis:"))
+        require(link["identity_assertion"] is False and link["matcher_feature"] is False)
+        require(link["usage"] == "split_only")
+        require(len(set(link["task_ids"])) == len(link["task_ids"]) >= 2)
+        require(set(link["task_ids"]) <= by_task.keys(), "Unknown task in venue split-only link")
+        require(link["literal_context"])
+        require(all(text in link["rationale"] for text in link["literal_context"]),
+                "Venue split-only rationale omits literal name context")
+        require({item["task_id"] for item in link["supporting_names"]} == set(link["task_ids"]))
+        for support in link["supporting_names"]:
+            require(support["evidence_id"] in by_task[support["task_id"]]["evidence_ids"])
+            fields = evidence[support["evidence_id"]]["fields"]
+            name = next(field["text"] for field in fields if field["path"] == "/raw_record/row/name")
+            require(support["field_path"] == "/raw_record/row/name")
+            require(support["unit"] == "unicode_code_points")
+            require(type(support["start"]) is int and type(support["end"]) is int)
+            require(0 <= support["start"] <= support["end"] <= len(name))
+            require(name[support["start"]:support["end"]] == support["quote"])
+            require(any(text in support["quote"] for text in link["literal_context"]),
+                    "Venue split-only link lacks literal name support")
+
+    before = build_split_components(labels, [])
+    components = build_split_components(labels, links)
+    resolved = [label for label in labels if label["answer"]["decision"] != "insufficient_evidence"]
+    counts = {
+        "all_pairs": len(labels),
+        "all_components_before_links": len(set(before.values())),
+        "all_components_after_links": len(set(components.values())),
+        "resolved_pairs": len(resolved),
+        "resolved_components_after_links": len({components[label["task_id"]] for label in resolved}),
+    }
+    for name, count in counts.items():
+        require(count == expected[name], f"Venue split grouping differs: {name}")
+    return counts
+
+
 def validate_bundle(bundle, raw, local):
     manifest = json.loads((bundle / "manifest.json").read_text())
     for name, expected in manifest["files"].items():
@@ -119,6 +195,9 @@ def validate_bundle(bundle, raw, local):
     require(len(labels) == manifest["selection"]["selected_pairs"])
     require(len(evidence) == manifest["selection"]["selected_unique_resources"])
     require(len({item["artist"]["uuid"] for item in evidence.values()}) == manifest["selection"]["selected_unique_artists"])
+    links = [item for _, _, item in rows(bundle / "split-links.jsonl")]
+    split_counts = validate_split_links(labels, evidence, links, manifest["split_grouping"])
+
     review = [item for _, _, item in rows(bundle / "blind-review.jsonl")]
     comparison = json.loads((bundle / "review-comparison.json").read_text())
     by_task = {item["task_id"]: item for item in labels}
@@ -149,7 +228,8 @@ def validate_bundle(bundle, raw, local):
     require(dict(Counter(item["decision"] for item in review)) == comparison["review_decisions"])
     print(json.dumps({"validated_pairs": len(labels), "validated_resources": len(evidence),
                       "draft_decisions": counts, "blind_review_agreements": agreements,
-                      "blind_review_disagreements": len(review) - agreements}, sort_keys=True))
+                      "blind_review_disagreements": len(review) - agreements,
+                      "split_grouping": split_counts}, sort_keys=True))
 
 
 def main():
