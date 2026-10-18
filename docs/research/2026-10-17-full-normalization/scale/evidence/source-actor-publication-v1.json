@@ -1,0 +1,49 @@
+{
+  "version": "source-actor-publication-v1",
+  "state": "focused_verified_capacity_incomplete",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-publication-v1/execution-verification-v1/manifest.json",
+    "sha256": "c1e79b51a41d3a28b1e9b0fc02ab3585a7de750a586c47a808d73af1c13d3938"
+  },
+  "publicContracts": [
+    "SourceActorAliasApplicationService.ApplyAsync accepts only application and published resolution UUIDs; saved stage IDs drive admission and canonical publication.",
+    "Application reads return bounded stage headers; GetStageAsync returns the complete immutable original proof.",
+    "Complete original-person source maps retain positive support, clears, incomplete observations and trusted withdrawal authority."
+  ],
+  "verification": {
+    "publisherOwnerUpgradeCases": 106,
+    "combinedPassed": 198,
+    "combinedFailed": 0,
+    "latestReplayAndSmallScalePassed": 6,
+    "latestReplayAndSmallScaleFailed": 0,
+    "genuineUpgrade": "Nonempty schema 56 to 57 preserves native aliases, canonical UUIDs, accepted history, original Work/review receipts and exact replay."
+  },
+  "behavior": [
+    "Machine assignments require their actual pinned policy and complete current candidate facts. Trusted source review does not override canonical alias review.",
+    "Ordinary replacement adds accepted new names before retiring old support. Ambiguity or protected names preserve the prior complete field.",
+    "Authenticated human rejection or reassignment can withdraw exact disproved support first; failed replacement cannot resurrect it.",
+    "New stages preserve original acceptance proof while observing current source, review, identity, support and recognized peer allocation facts.",
+    "Certificates authenticate actual published Work, owner, application version, request hash and complete original ticket; missing both fields uses full legacy proof, contradictory metadata refuses.",
+    "Planning projects complete committed maps without decoding unrelated old source proof; current membership and support still match exactly. Under-Work publication and audit retain full validation.",
+    "Corrupt certificates detected during preparation produce the existing terminal Stale result; direct certificate reads still reject them. Accepted authority and full receipts remain unchanged; exact terminal replay preserves the result."
+  ],
+  "peerConfigurationDecision": "A new complete stage re-prepares recognized current peer projections under the existing Work replacement API, advancing supplied contributor headers by one. Original accepted peer proof and allocation keys remain unchanged; saved stages are never restamped.",
+  "capacity": {
+    "checkpointMaximumBytes": 33554432,
+    "firstThousandClaimPublication": {
+      "committed": true,
+      "supports": 3000
+    },
+    "completeRepeatVerified": false,
+    "repeatFailure": "checkpoint_capacity_exceeded in second source resolution",
+    "thousandPeopleVerified": false,
+    "thousandAndOnePublicSupportsVerified": false,
+    "evidence": "source-actor-publication-capacity-baseline-v1.json"
+  },
+  "review": "Fresh independent correctness and readability review traced success, protected ordinary replacement and interruption/recovery. Two minor review notes were addressed and the stronger replay cases pass.",
+  "remaining": [
+    "Share complete repeated resolver candidate facts within the unchanged checkpoint bound; verify genuine old-format recovery.",
+    "Complete 1,000-claim repeat, 1,000-person and 1,001-source-support cases and catalog cost checks.",
+    "Merged-alias visibility, full suite, independent matching evaluation, automatic policy selection, backfill and rollout."
+  ]
+}

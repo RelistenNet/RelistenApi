@@ -1,0 +1,91 @@
+{
+  "version": "source-actor-publication-capacity-baseline-v1",
+  "state": "interrupted_for_measured_performance_defect",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-publication-v1/capacity-baseline-v1/manifest.json",
+    "sha256": "14fabd4b88dde2e43358f15e1f21cf326575bcfe32769ea17a79203afe751de9"
+  },
+  "claimCount": 1000,
+  "firstApplication": {
+    "committed": true,
+    "activeSupports": 3000,
+    "encodedStoredStageBytes": [
+      11768806,
+      13820268
+    ]
+  },
+  "repeatApplication": {
+    "state": "second_source_resolution_running",
+    "terminalTestResult": null
+  },
+  "retainedAssignments": {
+    "count": 1000,
+    "expandedOriginalScopeBytes": 2648988000,
+    "storedScopeBytes": 382600000
+  },
+  "explain": {
+    "planningMilliseconds": 3.498,
+    "executionMilliseconds": 13416.384,
+    "aggregateSharedHitBlocks": 1928740,
+    "aggregateSharedReadBlocks": 0,
+    "note": "One exact support-count query against the live disposable test database while its repeat resolver was also active; not an isolated throughput benchmark."
+  },
+  "terminalRun": {
+    "elapsedSeconds": 744.05,
+    "exitCode": 1,
+    "reason": "Root interrupted the baseline after identifying the repeated structural-proof read defect. No final TRX or test pass. Testhost and connection were confirmed stopped.",
+    "memoryNote": "Wrapper time statistics do not describe testhost peak memory; do not use them as whole-test memory."
+  },
+  "remaining": [
+    "Repair repeated committed-proof reads without discarding original evidence.",
+    "Rerun the complete 1,000-claim repeat, 1,000-person and 1,001-source-support public cases.",
+    "Measure catalog-scale database cost and independently evaluate matching accuracy before activating policies."
+  ],
+  "distinctPersonBaseline": {
+    "executionPacket": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-publication-v1/distinct-person-baseline-v1/manifest.json",
+      "sha256": "0472965491e9c6034eadb31b304e9f7926a5960413baa23e2ee72673b2349399"
+    },
+    "people": 1000,
+    "progress": {
+      "stages": 9,
+      "committedStages": 9,
+      "lastCompletedAt": "2026-10-18T12:45:02.756046+00:00",
+      "firstCompletedAt": "2026-10-18T12:42:44.074373+00:00",
+      "storedStageTransportBytes": 88576624
+    },
+    "terminalRun": {
+      "elapsedSeconds": 199.7,
+      "exitCode": 1,
+      "reason": "Interrupted after measuring repeated proof reads and committed progress; not a completed test.",
+      "logSha256": "1e669140ca34db1831fcf0ba60b7c595dbdad4f5925d62ef7b51df23ba0db505"
+    },
+    "observations": [
+      "Initial resolution completed. Distinct person publication makes committed progress, but retains about9.85MBstageJSON perperson.",
+      "Current planner rereads complete earlier map stages and reevaluates all remaining distinct candidate queries. These call counts are inferred from pinned source, not instrumented runtime query counts."
+    ]
+  },
+  "certifiedQuery": {
+    "executionPacket": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-publication-v1/certified-support-plan-v1/manifest.json",
+      "sha256": "419994ba7dd8f05dc676ea50f5a8d14493fb1b29b3c35368ae08a73225fe2833"
+    },
+    "executionMilliseconds": 31.381,
+    "sharedHitBlocks": 6928,
+    "activeSupports": 3000,
+    "invalidProofs": 0,
+    "note": "Comparable local synthetic support count; both query measurements ran alongside their application. Does not establish whole-application or catalog throughput."
+  },
+  "latestCompleteRepeatAttempt": {
+    "executionPacket": {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-publication-v1/thousand-claim-capacity-confirmed-v1/manifest.json",
+      "sha256": "4fca7bfd96d467aec6fa76ced506eb2126d6b59a6940190f6b1a8f8229b8ecc7"
+    },
+    "passed": 0,
+    "failed": 1,
+    "reason": "checkpoint_capacity_exceeded",
+    "phase": "second source resolution",
+    "elapsedSeconds": 150.35,
+    "noSecondApplication": true
+  }
+}

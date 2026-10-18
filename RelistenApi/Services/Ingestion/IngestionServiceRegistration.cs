@@ -57,6 +57,8 @@ public static class IngestionServiceRegistration
         services.AddSingleton<SourceActorResolutionDecisionService>();
         services.AddScoped<SourceActorReviewStore>();
         services.AddScoped<SourceActorReviewService>();
+        services.AddScoped<SourceActorAliasApplicationStore>();
+        services.AddScoped<SourceActorAliasApplicationService>();
         services.AddScoped<NormalizationPeopleResolutionApplier>();
         services.AddSingleton<PeopleResolutionPolicyEvaluator>();
         services.AddSingleton<NormalizationPeopleResolutionDecisionService>();

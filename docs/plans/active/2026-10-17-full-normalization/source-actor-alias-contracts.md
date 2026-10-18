@@ -378,7 +378,7 @@ retain historical rows. Review state changes only under the trusted review
 transaction. Its operation FK and receipt validation are deferred to commit:
 Work runs the domain callback before appending its immutable review receipt.
 Coordinates remain immutable and the CAS revision advances immediately.
-A future source `reassign` command maps to Work's existing `replace` action;
+The source `reassign` command maps to Work's existing `replace` action;
 phase 2 does not add a new common Work action. There is no FK to recording credits, fabricated role, person
 metadata deletion or duplicate global alias store. Unmanaged *alias support*
 is distinct from Work's `UnmanagedBaseline`; preserve both contracts explicitly.
@@ -402,11 +402,11 @@ to `person_aliases_history`.
 
 ## 5. One complete producer contribution per person
 
-This is a required phases 3–4 publication contract, not an implemented phase 2
-service. Migration 53 permits many source-specific authority rows without one
-Work contributor per source. Phase 2 fixtures exercise 1,001 independent support
-owners in the reader; they do not prove a configured complete producer map or
-many-claim checkpoint publication.
+Migration 57 implements the complete person map through retained application
+and stage storage. Migration 53 owns source-specific authority rows. Earlier
+reader fixtures with 1,001 independent support owners do not by themselves prove
+complete-map publication or many-claim checkpoint capacity; the public publisher
+needs its own scale verification.
 
 Use `(people, person, OriginalPersonUuid)` and one stable contributor:
 `("relisten", "source_actor_aliases", "person_metadata")`. Partition that key by
@@ -451,23 +451,29 @@ raise the 32 MiB cap or omit provenance to make it appear supported.
 
 ## 6. Accepted publication, replacement and recovery
 
-Add a typed writer on `NormalizedPeopleService` that loads an immutable saved
-person stage. Proposed entrypoints are:
+The local implementations use these service entrypoints:
 
 ```csharp
-Task<SourceActorResolutionResult> ResolveAsync(
+// SourceActorResolutionService
+Task<SourceActorResolutionAttempt> ResolveAsync(
     Guid attemptUuid, Guid extractionAttemptUuid, CancellationToken ct = default);
-Task<SourceActorAliasApplicationResult> ApplyAsync(
+// SourceActorAliasApplicationService
+Task<SourceActorAliasApplication> ApplyAsync(
     Guid applicationAttemptUuid, Guid resolutionAttemptUuid, CancellationToken ct = default);
+// NormalizedPeopleService
 Task<NormalizationPublicationResult> PublishSourceActorAliasStageAsync(
-    Guid applicationAttemptUuid, Guid stageUuid, CancellationToken ct = default);
-Task<NormalizationReviewResult> ApplySourceActorDecisionAsync(
-    SourceActorIdentityDecision command, string trustedOperator, CancellationToken ct = default);
+    Guid applicationUuid, Guid stageUuid, CancellationToken ct = default);
+// SourceActorReviewService
+Task<NormalizationReviewResult> ApplyAsync(
+    Guid operationUuid, Guid preparationUuid, string reason,
+    string trustedOperator, CancellationToken ct = default);
 ```
 
-These are future domain services, not current interfaces. Follow existing people
-attempt/application/stage conventions rather than a generic graph engine. The
-accepted writer accepts IDs, not caller-supplied assertions, candidates or policy.
+The [publication guide](source-actor-publication.md) explains header-only
+application reads, individual full-proof audit reads, stage ownership and
+operator recovery. The accepted writer takes IDs, not caller-supplied assertions,
+candidates or policy. Trusted review first uses the existing typed preparation
+service; there is no additional caller-built source-decision writer.
 Within Work publication, authenticate the original extraction, scoped assertion,
 allowed policy/review receipt, candidate snapshot, review CAS, complete producer
 scope map and original read set. Source-resolution and extraction owners remain
@@ -476,8 +482,14 @@ observed dependencies; a source owner does not own another person's metadata.
 Preserving a peer/append alias keeps its last accepted fact; it does not publish
 a new interpretation of the peer's older source. New or replaced alias writes
 must cite the exact input revision consumed by the new ticket. Do not copy old
-citations onto current input heads or refresh unconsumed peer observations.
-Conflicting original proofs require a new complete preparation.
+citations onto current input heads or refresh a saved stage's observations.
+A new complete preparation can explicitly re-prepare recognized peer/native
+baseline configuration from the current accepted projection in one snapshot.
+Keep original acceptance proof separate. Existing Work semantics advance every
+explicitly prepared contributor header under its current revision precondition;
+peer keys and accepted semantic output remain unchanged. Unknown producers
+require typed proof and refuse otherwise. This supplies coherent current reads
+without a new generic Work API. Conflicting observations require new preparation.
 
 The transaction creates/reuses assignments, writes primary and explicit alias
 names through canonical review protection, attaches support to actual accepted
@@ -503,11 +515,18 @@ reassignment retires old support before publishing the new binding; report
 committed old/new stages separately if continuation fails.
 
 Every stage publishes one original person owner. After earlier stages commit,
-reread derived candidates and re-evaluate the remaining assertions under the
+reread derived candidates and re-evaluate remaining machine assertions under the
 same pinned policy, which must still be active. Save a new immutable preparation
 for that next stage. Earlier aliases can change pools and winners. Copying old
 winners with newer stamps is not re-evaluation. Keep original extraction/assertion
 facts unchanged and respect existing/reviewed assignment conflicts.
+
+Committed names retain their original acceptance receipts. A finalization that
+uses only those receipts does not renew old machine authority or consume an
+unused candidate pool. Deactivation holds new machine acceptance; it can still
+permit such finalization when current source, review, target and name/support
+checks succeed. Historical trusted negatives can withdraw exact old bindings
+before an application reports its source as stale.
 
 Exact attempt/stage/Work UUID replay returns saved outcomes. A crash before
 commit writes neither aliases/support nor watermark. A crash between person

@@ -96,8 +96,17 @@ As of 2026-10-18:
   Original proof remains unchanged. The [verification
   receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-configuration-provenance-v1.json)
   retains the earlier failing behavior and corrected runs.
-- [ ] Implement accepted support publication, complete source-scope replacement,
-  withdrawal, replay, partial progress and stale recovery.
+- [x] Implement local accepted support publication, complete source-scope
+  replacement, withdrawal, replay, partial progress and stale recovery. The
+  [publication guide](source-actor-publication.md) covers the service contracts.
+  All 106 publisher, owner-read and nonempty 56-to-57 upgrade checks pass within
+  the combined 198-case run. Six follow-up replay and smaller-scale cases also
+  pass. The first 1,000-claim publication commits all 3,000 name-evidence
+  supports. Its repeat now reaches the resolver's checkpoint size limit after
+  the structural-proof query repair. The
+  [capacity baseline](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
+  retains the interrupted run and measured query cost. Full large-case
+  verification remains required after repair; no source policy is active.
 - [ ] Evaluate the complete source-actor route, verify its scale and checkpoint
   bounds, and enable it through the normal evaluated rollout process.
 
@@ -107,7 +116,8 @@ rehearsal preserves existing IDs, revisions, review history and candidate clocks
 The source resolver and trusted review services are locally implemented through
 migrations 55 and 56. Configuration recovery authenticates the original
 contributed request and refuses ambiguous ownership. Complete accepted support
-publication remains required. No matching policy is activated.
+publication is locally implemented in migration 57. Larger capacity, cost and
+merged-alias visibility verification remain required. No matching policy is activated.
 
 ### Verified storage and reader behavior
 
@@ -384,12 +394,13 @@ formatter check before each commit.
 
 ## Outcomes and remaining work
 
-The proposal path, full-field grammar correction and development-cohort
-verification pass. Phase 2 storage, current alias readers and distinct-person
-retrieval pass their focused checks and local query rehearsal. Source assignment,
-trusted source review and accepted support publication remain unimplemented. The
-next phase must connect original assertions to evaluated decisions and trusted
-review before publishing or retiring managed support.
+The proposal path, full-field grammar correction, trusted source review and
+accepted support publisher pass their focused local lifecycle checks. The
+nonempty migration-57 rehearsal preserves existing canonical UUIDs, independent
+native support and Work/review receipts, then publishes through the new service.
+Scale verification must cover both many sources supporting one person and a
+source naming many people. Component-wide visibility for aliases accepted before
+a merge, independent matching evaluation and rollout remain required.
 
 Rollback must stop new source-actor acceptance while retaining tables, original
 proof and support history. Keep the current-alias predicate deployed or use a
