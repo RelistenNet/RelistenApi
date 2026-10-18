@@ -26,7 +26,35 @@ Review and unresolved decisions publish an empty `AcknowledgeDecision` Work stag
 
 Names and raw locality are retained claims. A city string is not a resolved geographic key, and city or unknown coordinates are not a venue pin. Imported row UUIDs and unqualified slugs do not identify a physical venue. Room parents, historical names, dates, addresses, relocation and multiple applicable location assertions cannot be guessed from a convenient name match. A physical relocation creates a new canonical venue; a conflated imported row needs individual performance overrides before any safe default.
 
-This increment implements fixture-only matching and creation classifiers to verify the durable protocol. Literal name/locality agreement is explicitly a test classifier, not geographic resolution or a production rule. Fixture creation requires an explicit `[site] ` marker and a separately evaluated creation capability; it does not infer site or room from ordinary provider text. No production policy is registered or activated. The 34 development drafts are not deployment authority. Independent adjudication, separately grouped evaluation, dated room/relocation negatives and measured candidate recall remain required before introducing and activating real rules, small-model or Luna classifiers.
+The `supported-physical-venue-identity-v1` rule now compares processor-derived physical identity evidence. A qualified physical identifier or supported premises correspondence can propose a match; incomplete location, conflicting authorities and unresolved room parents remain review cases. The original fixture classifiers remain separate: literal name/locality agreement and the `[site] ` creation marker verify the durable protocol without establishing a physical identity. No production policy is registered or activated. Independent adjudication, separately grouped evaluation, dated room/relocation negatives and measured candidate recall remain required for qualification.
+
+### Retained locality and place evidence
+
+Additive `ResolveImportedVenueAsync` and `ResolveShowAsync` overloads accept a
+list of `VenueResolutionSupportReference` values. Each value names exact retained
+geography/place input revision UUIDs and, optionally, a candidate venue UUID.
+A null candidate UUID refers to the source claim. These references supply input
+evidence; callers cannot mark an identity or locality as qualified. Preparation
+loads the original revisions and generations, derives `SupportedFacts`, and adds
+those inputs to the normal Work read set. Recapture invalidates publication even
+when the response bytes are unchanged. Old requests omit the new nullable fields
+and retain their serialized form.
+
+`NormalizationVenueSupportIntake` reads complete GeoNames locality-search JSON
+under `geonames-venue-locality-search-json-v1`. `GeographyResource(city, country,
+region)` defines the exact resource key. Resolution requires one supported town
+after matching the claim's structured city, country and region; raw city labels
+or centroids cannot supply that result. A MusicBrainz place detail response under
+`musicbrainz-venue-place-json-v1` can qualify an already asserted matching place
+identifier. Its `Venue` type does not establish whether the premises is a site
+or a room. Exact supporting response citations remain on the derived projection.
+
+The bridge makes those contracts executable, but existing imported rows still
+lack structured addresses and explicit MusicBrainz place links. Acquisition and
+provider decoding must retain those facts where available. A same-name place
+search cannot manufacture a source association or broad coverage. The shadow
+GeoNames reference remains a separate proposal input; it does not become a
+durable accepted locality merely because it is available on disk.
 
 When that same recording/account is reprocessed under a genuinely new publication and acquires a performance, the bound context captures its earlier observation subscription. The new bound assignment or negative acknowledgment publishes first and enrolls the new source proof under the show owner. A final empty `SupersedeObservation` stage then clears only this resolver's obsolete observation contribution, preserving independent peers. Its authority is the immutable successful bound handoff receipt, not a claim that the old source became current. The old attempt is never relabeled or rewritten. Later source changes invalidate the show owner, without leaving a second obsolete watcher pending forever. An already retired or unrelated observation owner does not add another retirement stage.
 

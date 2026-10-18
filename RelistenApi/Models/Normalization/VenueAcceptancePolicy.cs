@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
 /// <summary>
 /// Immutable applicability contract. Registration records independently evaluated evidence;
-/// only the reviewed active pointer authorizes a processor publication. No production rule is
-/// implemented by this first fixture contract. Collection order participates in both hashes.
+/// only the reviewed active pointer authorizes a processor publication. Fixture and physical-identity
+/// rules have separate applicability versions. Collection order participates in both hashes.
 /// </summary>
 public sealed record VenueAcceptancePolicyArtifact(
     Guid Uuid,
@@ -95,7 +96,26 @@ public sealed record VenueCorrespondenceFacts(
     string ProcessorVersion,
     string SourceContextVersion,
     string CandidateFactsVersion,
-    string MatcherVersion
+    string MatcherVersion,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        VenueSupportedCorrespondenceFacts? SupportedFacts = null
+);
+
+/// <summary>
+/// Processor-authenticated physical identity projections. Each projection retains citations for
+/// authority qualification and resolved geography in addition to the original venue assertions.
+/// Names, identifiers, addresses and historical intervals must still match the complete retained
+/// observations. A city label or a centroid is not a resolved locality or a physical identifier.
+/// Publication must retain these supporting inputs in its ordinary Work dependencies.
+/// </summary>
+public sealed record VenueSupportedCorrespondenceFacts(
+    SupportedVenueMatchProjection Source,
+    IReadOnlyList<SupportedVenueMatchProjection> Candidates
+);
+
+public sealed record SupportedVenueMatchProjection(
+    VenueMatchRecord Match,
+    IReadOnlyList<NormalizedEvidenceReference> Evidence
 );
 
 public enum VenueCorrespondenceAction

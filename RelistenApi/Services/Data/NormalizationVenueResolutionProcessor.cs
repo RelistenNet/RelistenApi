@@ -54,6 +54,42 @@ public sealed partial class NormalizationVenueResolutionProcessor(
             ct
         );
 
+    /// <summary>Use exact retained provider evidence; callers cannot supply qualification flags.</summary>
+    public Task<VenueResolutionAttempt> ResolveImportedVenueAsync(
+        Guid attemptUuid,
+        Guid importedVenueUuid,
+        IReadOnlyList<VenueResolutionSupportReference> support,
+        CancellationToken ct = default
+    ) =>
+        StartAsync(
+            attemptUuid,
+            new(
+                VenueResolutionRequestKind.ImportedVenue,
+                importedVenueUuid,
+                Support: support.ToArray()
+            ),
+            null,
+            ct
+        );
+
+    /// <summary>Enrich the original published account without replacing its source coordinates.</summary>
+    public Task<VenueResolutionAttempt> ResolveShowAsync(
+        Guid attemptUuid,
+        VenueShowClaimReference reference,
+        IReadOnlyList<VenueResolutionSupportReference> support,
+        CancellationToken ct = default
+    ) =>
+        StartAsync(
+            attemptUuid,
+            new(
+                VenueResolutionRequestKind.ShowObservation,
+                Show: reference,
+                Support: support.ToArray()
+            ),
+            null,
+            ct
+        );
+
     public Task<VenueResolutionAttempt?> GetAsync(
         Guid attemptUuid,
         CancellationToken ct = default
@@ -85,7 +121,7 @@ public sealed partial class NormalizationVenueResolutionProcessor(
     )
     {
         var attempt = await store.GetAsync(uuid, ct);
-        if (attempt != null && attempt.Request != request)
+        if (attempt != null && !NormalizationVenueResolutionStore.Same(attempt.Request, request))
         {
             throw new NormalizationConflictException(
                 "The venue attempt belongs to another source claim."
@@ -371,6 +407,22 @@ public sealed partial class NormalizationVenueResolutionProcessor(
             SourceDecisionReadSet(source, context, policy.Active, inputs),
             new([], [], [], [], null, [], [], [policy.OwnerObservation], []),
         ]);
+        var support =
+            source.Claim == null || attempt.Request.Support == null
+                ? null
+                : await PrepareSupportedFactsAsync(
+                    source.Claim,
+                    context,
+                    attempt.Request.Support,
+                    ct
+                );
+        if (support != null)
+        {
+            read = MergeVenueReadSets([
+                read,
+                new(support.Inputs, [], [], [], null, [], [], [], []),
+            ]);
+        }
         var status =
             source.Claim?.CatalogUuid == null ? VenueResolutionPreparationStatus.SourceUnbound
             : SupportsQuery(Query(source.Claim.Observation))
@@ -378,7 +430,7 @@ public sealed partial class NormalizationVenueResolutionProcessor(
             : VenueResolutionPreparationStatus.UnsupportedQuery;
         return await store.SavePreparationAsync(
             attempt.AttemptUuid,
-            new(source, context, read, policy.Active, status, policy.OwnerObservation),
+            new(source, context, read, policy.Active, status, policy.OwnerObservation, support),
             ct
         );
     }
@@ -390,7 +442,7 @@ public sealed partial class NormalizationVenueResolutionProcessor(
     {
         var prep = attempt.Preparation!;
         var claim = prep.Source.Claim!;
-        var source = SourceMatch(claim);
+        var source = prep.Support?.Facts.Source.Match ?? SourceMatch(claim);
         var pool = prep
             .Context.Candidates.Facts.Concat(prep.Context.AssignmentTargets)
             .DistinctBy(fact => fact.Header.Uuid)
@@ -398,7 +450,12 @@ public sealed partial class NormalizationVenueResolutionProcessor(
             .ToArray();
         var matcher = new IdentityCandidateMatcher();
         var comparisons = pool.Select(target =>
-                matcher.CompareVenues(source, CandidateMatch(target))
+                matcher.CompareVenues(
+                    source,
+                    prep.Support?.Facts.Candidates.Single(value =>
+                        value.Match.Uuid == target.Header.Uuid
+                    ).Match ?? CandidateMatch(target)
+                )
             )
             .ToArray();
         var facts = new VenueCorrespondenceFacts(
@@ -410,9 +467,12 @@ public sealed partial class NormalizationVenueResolutionProcessor(
             comparisons,
             prep.Context.Complete,
             Version,
-            VenueResolutionPolicyEvaluator.SourceContextVersion,
+            prep.Support == null
+                ? VenueResolutionPolicyEvaluator.SourceContextVersion
+                : VenueResolutionPolicyEvaluator.SupportedSourceContextVersion,
             NormalizationCandidateService.FactsVersion,
-            VenueResolutionPolicyEvaluator.MatcherVersion
+            VenueResolutionPolicyEvaluator.MatcherVersion,
+            prep.Support?.Facts
         );
         var decision =
             prep.Policy == null

@@ -106,8 +106,10 @@ those false diagnostics while preserving the same response and all relationships
 it also preserves historical negative review across the producer change. Its 624
 distinct targeted checks pass. Recording pagination and entity hydration remain
 incomplete; complete acquisition and identity matching require their own evidence.
-Acquisition outage/process-termination checks remain open. Venue and composition acceptance currently have fixture-only rule adapters;
-production matching implementations and independent qualification remain required.
+Acquisition outage/process-termination checks remain open. Venue physical-identity
+and affirmative recording-to-work rules are implemented alongside the fixture
+adapters. Retained provider evidence and original generations feed their decisions.
+Broad evidence coverage and independent qualification remain required before activation.
 People's linear scorer and repertoire's qualified-identifier path do not complete
 matching across the other domains.
 

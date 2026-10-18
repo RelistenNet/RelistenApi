@@ -594,6 +594,26 @@ public sealed partial class NormalizationVenueResolutionStore(DbService db)
                 && (!show.AccountIndex.HasValue || show.AccountIndex >= 0),
             _ => false,
         };
+        if (
+            request.Support is { } support
+            && (
+                support.Count == 0
+                || support.Select(value => value.CandidateVenueUuid).Distinct().Count()
+                    != support.Count
+                || support.Any(value =>
+                    value.CandidateVenueUuid == Guid.Empty
+                    || value.GeographyInputRevisionUuid == Guid.Empty
+                    || value.PlaceInputRevisionUuid == Guid.Empty
+                    || value.GeographyInputRevisionUuid == null
+                        && value.PlaceInputRevisionUuid == null
+                )
+            )
+        )
+        {
+            throw new ArgumentException(
+                "Venue support identifies distinct source/candidate coordinates and retained evidence revisions."
+            );
+        }
         if (!valid)
         {
             throw new ArgumentException(

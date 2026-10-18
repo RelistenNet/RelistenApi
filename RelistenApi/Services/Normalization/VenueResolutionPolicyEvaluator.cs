@@ -7,11 +7,11 @@ using Relisten.Data;
 namespace Relisten.Normalization;
 
 /// <summary>
-/// Evaluates the entire prepared pool, not an isolated matcher proposal. Its implemented rules
-/// are disposable-fixture classifiers demonstrating the publication protocol. Literal locality
-/// equality here is explicitly not geographic resolution or a production identity rule.
+/// Evaluates the complete prepared pool. Physical identity rules require qualified identifiers or
+/// supported address and geographic facts. Fixture locality rules remain separately versioned.
+/// Every positive result is a proposal; registry activation and publication are separate.
 /// </summary>
-public sealed class VenueResolutionPolicyEvaluator
+public sealed partial class VenueResolutionPolicyEvaluator
 {
     public const string ProcessorVersion = "venue-resolution-processor-v1";
     public const string SourceContextVersion = "venue-resolution-context-v1";
@@ -19,12 +19,27 @@ public sealed class VenueResolutionPolicyEvaluator
     public const string FixtureRuleId = "fixture-exact-name-raw-locality-v1";
     public const string FixtureCreationRuleId = "fixture-explicit-site-marker-v1";
 
+    public const string PhysicalIdentityRuleId = "supported-physical-venue-identity-v1";
+    public const string SupportedSourceContextVersion = "venue-resolution-supported-context-v1";
+
     public static bool Supports(VenueAcceptancePolicyArtifact artifact) =>
+        SupportsFixture(artifact) || SupportsPhysicalIdentity(artifact);
+
+    private static bool SupportsFixture(VenueAcceptancePolicyArtifact artifact) =>
         artifact.FixtureOnly
         && artifact.MatchingRuleId == FixtureRuleId
         && (artifact.CreationRuleId == null || artifact.CreationRuleId == FixtureCreationRuleId)
         && artifact.ProcessorVersion == ProcessorVersion
         && artifact.SourceContextVersion == SourceContextVersion
+        && artifact.CandidateFactsVersion == NormalizationCandidateService.FactsVersion
+        && artifact.MatcherVersion == MatcherVersion;
+
+    private static bool SupportsPhysicalIdentity(VenueAcceptancePolicyArtifact artifact) =>
+        !artifact.FixtureOnly
+        && artifact.MatchingRuleId == PhysicalIdentityRuleId
+        && artifact.CreationRuleId == null
+        && artifact.ProcessorVersion == ProcessorVersion
+        && artifact.SourceContextVersion == SupportedSourceContextVersion
         && artifact.CandidateFactsVersion == NormalizationCandidateService.FactsVersion
         && artifact.MatcherVersion == MatcherVersion;
 
@@ -36,7 +51,7 @@ public sealed class VenueResolutionPolicyEvaluator
         var artifact = policy.Artifact;
         if (
             !Supports(artifact)
-            || !policy.Evaluation.FixtureOnly
+            || policy.Evaluation.FixtureOnly != artifact.FixtureOnly
             || facts.ProcessorVersion != artifact.ProcessorVersion
             || facts.SourceContextVersion != artifact.SourceContextVersion
             || facts.CandidateFactsVersion != artifact.CandidateFactsVersion
@@ -59,6 +74,11 @@ public sealed class VenueResolutionPolicyEvaluator
         )
         {
             return Review(artifact.MatchingRuleId, "incomplete_or_inconsistent_candidate_pool", []);
+        }
+
+        if (artifact.MatchingRuleId == PhysicalIdentityRuleId)
+        {
+            return EvaluatePhysicalIdentity(facts, artifact);
         }
 
         var decisions = facts.Candidates.Select(candidate => Compare(facts, candidate)).ToArray();

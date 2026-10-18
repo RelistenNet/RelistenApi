@@ -46,6 +46,189 @@ public sealed class TestNormalizationVenueResolution
     public void Stop() => fixture?.Dispose();
 
     [Test]
+    public async Task RetainedProviderSupportIsDerivedAndItsOriginalGenerationsFencePublication()
+    {
+        var name = UniqueName();
+        var imported = await Imported(name, "San Francisco, CA");
+        var placeUuid = Guid.NewGuid();
+        var input = await fixture.CaptureJson(
+            JsonSerializer.Serialize(
+                new
+                {
+                    name,
+                    city = "San Francisco",
+                    country = "US",
+                    region = "CA",
+                    address = "1805 Geary Boulevard",
+                    place = placeUuid,
+                }
+            ),
+            "venues",
+            "/name"
+        );
+        var target = new CanonicalVenue(Guid.NewGuid(), name);
+        await fixture.PublishVenues(
+            venues,
+            input,
+            new(
+                [target],
+                [new(Guid.NewGuid(), target.Uuid, name, null, null, null, input.Reference)],
+                [
+                    new(
+                        Guid.NewGuid(),
+                        target.Uuid,
+                        "San Francisco, CA",
+                        "US",
+                        "CA",
+                        "San Francisco",
+                        "1805 Geary Boulevard",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        input.Reference with
+                        {
+                            JsonPointer = "/city",
+                        }
+                    ),
+                ],
+                [
+                    new(
+                        target.Uuid,
+                        "musicbrainz.org",
+                        "place",
+                        placeUuid.ToString("D"),
+                        input.Reference with
+                        {
+                            JsonPointer = "/place",
+                        }
+                    ),
+                ],
+                [],
+                []
+            )
+        );
+        var evidence = new NormalizationEvidenceService(fixture.Db);
+        var geographyResource = NormalizationVenueSupportIntake.GeographyResource(
+            "San Francisco",
+            "US",
+            "CA"
+        );
+        var geographyPayload = JsonSerializer.Serialize(
+            new
+            {
+                totalResultsCount = 1,
+                geonames = new[]
+                {
+                    new
+                    {
+                        geonameId = 5391959,
+                        name = "San Francisco",
+                        toponymName = "San Francisco",
+                        countryCode = "US",
+                        adminCode1 = "CA",
+                        fcl = "P",
+                    },
+                },
+            }
+        );
+        var geography = await evidence.CaptureInputAsync(
+            new(
+                Guid.NewGuid(),
+                geographyResource,
+                Encoding.UTF8.GetBytes(geographyPayload),
+                "application/json",
+                NormalizationVenueSupportIntake.GeographyCaptureVersion,
+                0,
+                DateTimeOffset.UtcNow
+            )
+        );
+        var place = await evidence.CaptureInputAsync(
+            new(
+                Guid.NewGuid(),
+                new("musicbrainz.org", "place", placeUuid.ToString("D")),
+                Encoding.UTF8.GetBytes(
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            id = placeUuid,
+                            type = "Venue",
+                            name,
+                        }
+                    )
+                ),
+                "application/json",
+                NormalizationVenueSupportIntake.PlaceCaptureVersion,
+                0,
+                DateTimeOffset.UtcNow
+            )
+        );
+        var processor = Processor();
+        var attemptUuid = Guid.NewGuid();
+        VenueResolutionSupportReference[] support =
+        [
+            new(target.Uuid, geography.Revision.Uuid, place.Revision.Uuid),
+        ];
+
+        var prepared = await processor.ResolveImportedVenueAsync(attemptUuid, imported, support);
+
+        var projection = prepared.Preparation!.Support!.Facts.Candidates.Single(value =>
+            value.Match.Uuid == target.Uuid
+        );
+        projection.Match.ExternalIdentities.Single().IdentifiesEntity.Should().BeTrue();
+        projection
+            .Match.LocationAssertions!.Single()
+            .Location.LocalityKey.Should()
+            .Be("geonames:5391959");
+        prepared
+            .Preparation.ReadSet.Inputs.Should()
+            .Contain(value =>
+                value.RevisionUuid == geography.Revision.Uuid
+                && value.Generation == geography.Fetch.ResourceGeneration
+            );
+        prepared
+            .Preparation.ReadSet.Inputs.Should()
+            .Contain(value =>
+                value.RevisionUuid == place.Revision.Uuid
+                && value.Generation == place.Fetch.ResourceGeneration
+            );
+        // Legacy imported rows have no structured city/address or supported physical ID. Supplying
+        // another venue's evidence must not turn the source's matching name into an association.
+        prepared
+            .Preparation.Support.Facts.Source.Match.ExternalIdentities.Should()
+            .NotContain(value => value.IdentifiesEntity);
+        var evaluated = await processor.ResolveImportedVenueAsync(
+            attemptUuid,
+            imported,
+            support.ToArray()
+        );
+        evaluated
+            .Decision!.Facts.SupportedFacts.Should()
+            .BeEquivalentTo(prepared.Preparation.Support.Facts);
+        evaluated.Decision.Decision.Reason.Should().Be("acceptance_policy_inactive");
+
+        await evidence.CaptureInputAsync(
+            new(
+                Guid.NewGuid(),
+                geographyResource,
+                Encoding.UTF8.GetBytes(geographyPayload),
+                "application/json",
+                NormalizationVenueSupportIntake.GeographyCaptureVersion,
+                geography.Fetch.ResourceGeneration,
+                DateTimeOffset.UtcNow
+            )
+        );
+        var finished = await Finish(() =>
+            processor.ResolveImportedVenueAsync(attemptUuid, imported, support)
+        );
+
+        finished.Result!.Disposition.Should().Be(VenueResolutionDisposition.Stale);
+        finished.Preparation!.Support.Should().BeEquivalentTo(prepared.Preparation.Support);
+        (await Assignments(imported)).Should().BeEmpty();
+    }
+
+    [Test]
     public async Task ArtistlessImportedClaimMatchesGlobalVenueAndRetainsItsOriginalEvidence()
     {
         var name = UniqueName();

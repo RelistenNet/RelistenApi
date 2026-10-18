@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Relisten.Api.Models.Normalization;
 
@@ -28,7 +29,27 @@ public sealed record VenueShowClaimReference(
 public sealed record VenueResolutionRequest(
     VenueResolutionRequestKind Kind,
     Guid? ImportedVenueUuid = null,
-    VenueShowClaimReference? Show = null
+    VenueShowClaimReference? Show = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<VenueResolutionSupportReference>? Support = null
+);
+
+/// <summary>
+/// Names retained provider evidence, not a proposed identity match. A null candidate UUID means
+/// the original source; other UUIDs must already belong to the complete candidate read set.
+/// Geography is a complete GeoNames search response for exact structured city/country/region.
+/// Physical authority is a MusicBrainz place response linked by an original place identifier.
+/// </summary>
+public sealed record VenueResolutionSupportReference(
+    Guid? CandidateVenueUuid = null,
+    Guid? GeographyInputRevisionUuid = null,
+    Guid? PlaceInputRevisionUuid = null
+);
+
+/// <summary>Frozen derived projections and the exact provider resource generations they consumed.</summary>
+public sealed record VenueResolutionSupportPreparation(
+    VenueSupportedCorrespondenceFacts Facts,
+    IReadOnlyList<NormalizationInputDependency> Inputs
 );
 
 public sealed record VenueResolutionClaim(
@@ -115,7 +136,9 @@ public sealed record VenueResolutionPreparation(
     VenueResolutionReadSet ReadSet,
     ActiveVenueAcceptancePolicy? Policy,
     VenueResolutionPreparationStatus Status = VenueResolutionPreparationStatus.Ready,
-    NormalizationSubjectObservation? PolicyOwnerObservation = null
+    NormalizationSubjectObservation? PolicyOwnerObservation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        VenueResolutionSupportPreparation? Support = null
 );
 
 /// <summary>A processor-issued decision is authority only when loaded and authenticated by the writer.</summary>

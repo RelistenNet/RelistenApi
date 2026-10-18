@@ -62,6 +62,22 @@ Each call advances one phase and invokes at most one acquisition command. Acquis
 
 ## Validation and acceptance
 
+The `title-accepted-performer-recording-work-v1` rule implements affirmative
+correspondence using an accepted artist, matching title and an explicit retained
+recording-to-work relationship. It does not require complete authorship or claim
+that external search found every possible work. The processor supplies a
+`CompositionRetainedRecordingInventory` from its durable hydration checkpoints.
+Every retained recording must decode consistently, including recordings whose
+work was not hydrated. A matching recording that names another work remains a
+rival; omitted relationship classifications, malformed targets and contradictory
+provenance require review. Unacquired alternatives remain coverage limits rather
+than evidence that no alternative exists.
+
+Fixture policies omit the additive inventory so historical facts and hashes stay
+unchanged. The historical hash test pins decoder v7 explicitly. Current rule
+evaluation uses the current decoder contract and requires independent policy
+qualification and activation before publication; no production policy is enabled.
+
 Root runs focused PostgreSQL/fake-HTTP tests, then relevant compatibility tests and the full suite. Tests must cover a supported fixture positive without source MBID or complete authorship; same-title rivals; wrong claim/evidence/receipt/target; performer versus writer and person versus catalog artist; pending transport and saved-response recovery; cancellation; stale raw/catalog/candidate/editorial/policy state; rollback; exact replay; composition creation races and post-own-write continuation. Existing qualified-ID, complete-writer and reviewed contracts remain supported.
 
 Apply migration 49 before enabling these services. Pause resolver and accepted music writers before rollback to a binary that cannot authenticate these stages. Retain attempts, checkpoints, policy receipts and accepted history. No schedules or production policies start automatically.
