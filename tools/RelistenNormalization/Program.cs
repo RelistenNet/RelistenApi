@@ -100,7 +100,8 @@ try
             new ShadowPeopleAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_CREDITS"),
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_LUNA_INPUT_SHA256"),
-                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL")
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_MODEL"),
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_PEOPLE_CANDIDATES")
             ),
             new ShadowVenueAdapter(
                 Environment.GetEnvironmentVariable("RELISTEN_SHADOW_VENUE_GEOGRAPHY")

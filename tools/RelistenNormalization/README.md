@@ -89,6 +89,25 @@ identify the captured audio host; an artist's configured providers alone do not
 identify which importer produced a row. The [shadow delivery plan](../../docs/plans/active/2026-10-17-full-normalization/shadow-delivery.md)
 tracks the remaining full-file processing, provider coverage and audits.
 
+### Compare distinct accepted people
+
+`RELISTEN_SHADOW_PEOPLE_CANDIDATES=<path>#sha256=<digest>` adds an offline
+candidate snapshot to a new shadow run. `ShadowPeopleCandidateSnapshots.ExportAsync`
+reads distinct queries through `NormalizationCandidateService.FindPeopleFactsAsync`;
+the caller saves the returned bytes and their SHA-256. Each query has its own
+read-only transaction. `Serialize` accepts already retained typed snapshots.
+Both preserve the original limits, issues, owner observations and candidate
+generations. The file does not assert current freshness.
+
+The adapter uses each actor's exact projected query. A missing query is unknown;
+a complete empty result has no accepted candidates. Neither creates a person.
+Comparisons use full accepted alias and actor matching aggregates, even when
+supporting prose witnesses were bounded. Each resolved person UUID appears once
+in a query's candidate pool. Canonical comparisons remain separate from recording
+witness rankings and carry a snapshot locator instead of copying the full facts
+into each result. New snapshot bytes change the method identity and require a new
+run. Automatic acceptance still requires the evaluated production policy.
+
 ## Credit and file-title extraction
 
 Run the recording-credit and file-title extractors over a scale capture without starting the API or ingestion worker:

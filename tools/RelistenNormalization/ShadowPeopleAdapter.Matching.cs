@@ -14,31 +14,30 @@ public sealed partial class ShadowPeopleAdapter
         IReadOnlyList<ShadowPersonRelationship> Links,
         ShadowPeopleRelationshipCoverage Coverage,
         ShadowPeopleIdentityDecision Decision
-    ) Relationships(ActorAccount actor)
+    ) Relationships(ActorAccount actor, string extractionIdentity)
     {
-        var accountCandidates = LookupKeys(actor.Match)
-            .Where(accounts.ContainsKey)
-            .SelectMany(key => accounts[key].Values)
-            .Select(witnesses => witnesses.ForSource(actor.Person.SourceUuid))
-            .OfType<ActorAccount>()
-            .ToArray();
-        var nameCandidates = actor
-            .Match.Names.Select(name => NormalizedPeopleService.NameKey(name.Wording))
-            .Where(names.ContainsKey)
-            .SelectMany(key => names[key].Values)
-            .Select(witnesses => witnesses.ForSource(actor.Person.SourceUuid))
-            .OfType<ActorAccount>()
-            .ToArray();
+        var accountCandidates = RetrieveActors(
+            LookupKeys(actor.Match)
+                .Where(accounts.ContainsKey)
+                .SelectMany(key => accounts[key].Values),
+            actor.Person.SourceUuid
+        );
+        var nameCandidates = RetrieveActors(
+            actor
+                .Match.Names.Select(name => NormalizedPeopleService.NameKey(name.Wording))
+                .Where(names.ContainsKey)
+                .SelectMany(key => names[key].Values),
+            actor.Person.SourceUuid
+        );
         var accountKeys = accountCandidates
-            .Select(candidate => candidate.Person.EntityKey)
+            .Select(candidate => candidate.Account.Person.EntityKey)
             .ToHashSet(StringComparer.Ordinal);
         var nameKeys = nameCandidates
-            .Select(candidate => candidate.Person.EntityKey)
+            .Select(candidate => candidate.Account.Person.EntityKey)
             .ToHashSet(StringComparer.Ordinal);
         var candidates = accountCandidates
             .Concat(nameCandidates)
-            .DistinctBy(candidate => candidate.Person.EntityKey)
-            .Where(candidate => candidate.Person.SourceUuid != actor.Person.SourceUuid)
+            .DistinctBy(candidate => candidate.Account.Person.EntityKey)
             .ToArray();
 
         // Compare the entire retrieved pool. The limit applies only to repeated
@@ -59,45 +58,82 @@ public sealed partial class ShadowPeopleAdapter
             actor.Person.EntityKey,
             candidates.Length,
             compared.Length,
-            candidates.Count(candidate => nameKeys.Contains(candidate.Person.EntityKey)),
-            candidates.Count(candidate => accountKeys.Contains(candidate.Person.EntityKey)),
-            candidates.Count(candidate => candidate.Person.ArtistUuid != actor.Person.ArtistUuid),
+            candidates.Count(candidate => nameKeys.Contains(candidate.Account.Person.EntityKey)),
+            candidates.Count(candidate => accountKeys.Contains(candidate.Account.Person.EntityKey)),
+            candidates.Count(candidate =>
+                candidate.Account.Person.ArtistUuid != actor.Person.ArtistUuid
+            ),
             links.Length
         );
-        return (links, coverage, Decide(actor, compared, coverage));
+        return (links, coverage, Decide(actor, compared, coverage, extractionIdentity));
     }
 
-    private ComparedActor Compare(ActorAccount actor, ActorAccount candidate)
+    private static RetrievedActor[] RetrieveActors(
+        IEnumerable<ActorWitnesses> buckets,
+        Guid sourceUuid
+    ) =>
+        buckets
+            .Distinct()
+            .Select(bucket =>
+                bucket.ForSource(sourceUuid) is { } actor ? new RetrievedActor(actor, bucket) : null
+            )
+            .OfType<RetrievedActor>()
+            .ToArray();
+
+    private ComparedActor Compare(ActorAccount actor, RetrievedActor retrieved)
     {
+        var candidate = retrieved.Account;
         var comparison = matcher.ComparePeople(actor.Match, candidate.Match);
-        bool Agrees(string feature) =>
-            comparison.Features.Any(value =>
-                value.Name == feature && value.Agreement == IdentityFeatureAgreement.Agrees
-            );
-        var uncertain =
-            !actor.ProjectionComplete
-            || !candidate.ProjectionComplete
-            || actor.Match.ActorContext?.HasAttachmentUncertainty == true
-            || candidate.Match.ActorContext?.HasAttachmentUncertainty == true;
-        var conflict = comparison.Features.Any(feature =>
-            feature.Agreement == IdentityFeatureAgreement.Conflicts
+        var support = IdentitySupport(
+            actor.Match,
+            candidate.Match,
+            comparison,
+            actor.ProjectionComplete && candidate.ProjectionComplete
         );
-        var accountAgrees = Agrees("actor_contact") || Agrees("actor_profile");
-        var attributedAccount =
-            Agrees("actor_contact")
-            || ProfileKeys(actor.Match).Intersect(ProfileKeys(candidate.Match)).Any();
-        var supported = Agrees("name") && !uncertain && !conflict && attributedAccount;
         var kind =
-            supported ? "proposed_same_person"
-            : conflict ? "unresolved_conflicting_actor_facts"
-            : uncertain ? "unresolved_actor_attachment"
-            : accountAgrees ? "unresolved_shared_account"
+            support.Supported ? "proposed_same_person"
+            : support.HasConflict ? "unresolved_conflicting_actor_facts"
+            : support.Uncertain ? "unresolved_actor_attachment"
+            : support.AccountAgrees ? "unresolved_shared_account"
             : "unresolved_name_match";
         var score =
             identityModel == null
                 ? null
                 : PeopleResolutionPolicyEvaluator.ScorePair(comparison, identityModel.Scorer);
-        return new(candidate, comparison, score, supported, conflict, kind);
+        return new(
+            candidate,
+            comparison,
+            score,
+            support.Supported,
+            support.HasConflict,
+            kind,
+            retrieved.Witnesses
+        );
+    }
+
+    private static IdentitySupportAssessment IdentitySupport(
+        PersonMatchRecord actor,
+        PersonMatchRecord candidate,
+        IdentityCandidateComparison comparison,
+        bool projectionComplete
+    )
+    {
+        bool Agrees(string feature) =>
+            comparison.Features.Any(value =>
+                value.Name == feature && value.Agreement == IdentityFeatureAgreement.Agrees
+            );
+        var uncertain =
+            !projectionComplete
+            || actor.ActorContext?.HasAttachmentUncertainty == true
+            || candidate.ActorContext?.HasAttachmentUncertainty == true;
+        var conflict = comparison.Features.Any(feature =>
+            feature.Agreement == IdentityFeatureAgreement.Conflicts
+        );
+        var accountAgrees = Agrees("actor_contact") || Agrees("actor_profile");
+        var attributedAccount =
+            Agrees("actor_contact") || ProfileKeys(actor).Intersect(ProfileKeys(candidate)).Any();
+        var supported = Agrees("name") && !uncertain && !conflict && attributedAccount;
+        return new(supported, conflict, uncertain, accountAgrees);
     }
 
     private static ShadowPersonRelationship Relationship(ActorAccount actor, ComparedActor pair) =>
@@ -122,7 +158,8 @@ public sealed partial class ShadowPeopleAdapter
     private ShadowPeopleIdentityDecision Decide(
         ActorAccount actor,
         ComparedActor[] candidates,
-        ShadowPeopleRelationshipCoverage coverage
+        ShadowPeopleRelationshipCoverage coverage,
+        string extractionIdentity
     )
     {
         var supported = candidates
@@ -184,7 +221,8 @@ public sealed partial class ShadowPeopleAdapter
                     ranked.Length == 0 ? "no_eligible_candidate"
                         : topKeys.Length > 1 ? "tied_candidate_witnesses"
                         : "unique_ranked_witness"
-                )
+                ),
+            Hypothesis: BuildHypothesis(actor, candidates, coverage, extractionIdentity)
         );
     }
 
@@ -197,10 +235,14 @@ public sealed partial class ShadowPeopleAdapter
     {
         private ActorAccount first;
         private ActorAccount? second;
+        private readonly HashSet<Guid> sources = [];
+
+        internal IReadOnlySet<Guid> SourceUuids => sources;
 
         internal ActorWitnesses(ActorAccount actor)
         {
             first = actor;
+            sources.Add(actor.Person.SourceUuid);
         }
 
         internal ActorAccount? ForSource(Guid sourceUuid) =>
@@ -208,6 +250,8 @@ public sealed partial class ShadowPeopleAdapter
 
         internal void Remember(ActorAccount actor)
         {
+            sources.Add(actor.Person.SourceUuid);
+
             if (actor.Person.SourceUuid == first.Person.SourceUuid)
             {
                 if (Before(actor, first))
@@ -243,7 +287,17 @@ public sealed partial class ShadowPeopleAdapter
         PeopleIdentityPairScore? Score,
         bool Supported,
         bool HasConflict,
-        string Kind
+        string Kind,
+        ActorWitnesses Witnesses
+    );
+
+    private sealed record RetrievedActor(ActorAccount Account, ActorWitnesses Witnesses);
+
+    private sealed record IdentitySupportAssessment(
+        bool Supported,
+        bool HasConflict,
+        bool Uncertain,
+        bool AccountAgrees
     );
 }
 
@@ -261,7 +315,11 @@ public sealed record ShadowPeopleIdentityDecision(
     bool ProjectionComplete,
     IReadOnlyList<ShadowPeopleCandidateOutcome> CandidateOutcomes,
     ShadowPeopleRanking? Ranking,
-    bool QualifiedForAutomaticAcceptance = false
+    bool QualifiedForAutomaticAcceptance = false,
+    [property: System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    )]
+        ShadowPeopleIdentityHypothesis? Hypothesis = null
 );
 
 /// <summary>Compact outcome for every retrieved witness, including omitted detailed prose.</summary>

@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T21:09:47.297359+00:00",
+  "scope": "Source-actor identity hypotheses and optional accepted-person candidate comparisons in the offline shadow adapter. No production data or acceptance policy changed.",
+  "implemented": [
+    "Direct unaccepted anchor hypotheses with exact observed-source membership counts and bounded cited examples; no transitive grouping.",
+    "Byte-pinned public candidate snapshots retain original queries, full matching aggregates, limits, issues and read sets.",
+    "Canonical comparisons retain distinct resolved person UUIDs separately from source-witness ranking. Missing queries and complete empty pools remain distinct."
+  ],
+  "verification": {
+    "finalFocusedAndBatch": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-people-bridge-verification-v1/people-bridge-final-unit.trx",
+        "bytes": 134026,
+        "sha256": "f91cbe3f67530dcb8e611d8a04e0b16bac85ee63af915eab6f5062770bda0540"
+      },
+      "counters": {
+        "total": "89",
+        "executed": "86",
+        "passed": "86",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "databaseIntegration": {
+      "artifact": {
+        "path": "local-dev/normalization-data/2026-10-18-normalization-people-bridge-verification-v1/people-bridge-database.trx",
+        "bytes": 7412,
+        "sha256": "271ff859d347f488d500f532b34e592e25403251a39d71efd50f1aec30f2bd6f"
+      },
+      "counters": {
+        "total": "3",
+        "executed": "3",
+        "passed": "3",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    "sourceOverlay": {
+      "path": "local-dev/normalization-data/2026-10-18-normalization-people-bridge-verification-v1/source-overlay.json",
+      "bytes": 212491,
+      "sha256": "1df8e61d8ad8998557f729bf035381e5c9c22675e2889f5434eb9f31b10ec68d"
+    },
+    "freshCorrectnessAndReadabilityReview": {
+      "path": "/tmp/normalization-people-bridge-integrated-review-v1/manifest.json",
+      "bytes": 1089,
+      "sha256": "6fd43fadbad1ba3303ba84658f1a705d115fc0eeb62d6e8a4d0a2952f9c3aeab"
+    }
+  },
+  "globalDiagnostic": {
+    "request": {
+      "path": "/tmp/normalization-people-global-identity-bridge-v1/request.json",
+      "bytes": 7606,
+      "sha256": "99f7c84a912d261f2b54cf6112c07c25fa79a3a7cae213bbd2b83d1ab64047c0"
+    },
+    "execution": {
+      "path": "/tmp/normalization-people-global-identity-bridge-v1/execution.json",
+      "bytes": 2046,
+      "sha256": "365876499abd801d1f9e1fd3c171bb537429420944be56ee6a0fd2b730447d87"
+    },
+    "result": {
+      "path": "/tmp/normalization-people-global-identity-bridge-v1/execution-result.json",
+      "bytes": 163,
+      "sha256": "f0ad0903b1f79be47b7fc7e0279358ca6a0a50cd248be3c41613169aea578bd2"
+    },
+    "receipt": {
+      "path": "/tmp/normalization-people-global-identity-bridge-v1/actual-run/receipt.json",
+      "bytes": 8750,
+      "sha256": "242e07eaa295c0d8958dc450b4bfb8102515d6c863e9ec6c850ca21f837ce4a0"
+    },
+    "outputAudit": {
+      "path": "/tmp/normalization-people-global-identity-bridge-v1/output-audit.json",
+      "bytes": 2508,
+      "sha256": "949b6c5fc52e6186171536b3d92f423c4f0fb598452e9b7954fd43b6c36e93b9"
+    },
+    "retainedExecutionAssemblies": {
+      "path": "local-dev/normalization-data/2026-10-18-normalization-people-bridge-verification-v1/global-diagnostic-runtime.json",
+      "bytes": 1373,
+      "sha256": "57f3f1681ceb2b18f99c89cb598e40ce49beccd942c249ed574380009cc19536"
+    },
+    "sourceOverlayAtExecution": {
+      "path": "local-dev/normalization-data/2026-10-18-normalization-people-bridge-verification-v1/source-overlay-before-count-fastpath.json",
+      "bytes": 212440,
+      "sha256": "bca357860215686a7bfe7d43d1f7119f82c1922eea3bad84e6a043b742bbdf19"
+    },
+    "indexedSources": 292523,
+    "processedSources": 7,
+    "actorMentions": 14,
+    "comparedWitnesses": 2075,
+    "rawScoresBitwiseIdenticalToPriorRun": 2075,
+    "independentScoreArithmeticChecks": 904,
+    "failures": 0,
+    "newAnchorHypotheses": 2,
+    "reportedSourcesPerHypothesis": 2369,
+    "independentlyReconstructedCompleteSourceUnion": false,
+    "independentlyReconciledSupportedFactsPerHypothesis": 485,
+    "independentlyReconciledArtistsPerHypothesis": 403,
+    "canonicalSnapshotUnavailableActors": 14,
+    "qualification": "Complete retained-source index, selected outputs only. Counts are observed membership, not independent identity truth or matching accuracy. The equivalent single-bucket count optimization followed this diagnostic; final focused tests and source/math review verify that change."
+  },
+  "rollout": {
+    "adapterVersion": "shadow-people-v4",
+    "acceptedSnapshotsSetting": "RELISTEN_SHADOW_PEOPLE_CANDIDATES=<path>#sha256=<digest>",
+    "resumeCompatibility": "Changed adapter or candidate artifact requires a new shadow run. Existing result chunks and readers remain usable.",
+    "databaseMigrationRequired": false,
+    "automaticAcceptanceEnabled": false,
+    "productionWrites": false
+  }
+}

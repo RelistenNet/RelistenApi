@@ -55,6 +55,36 @@ policies must distinguish a match to an existing person, identity creation,
 ambiguity, incomplete retrieval and insufficient evidence. Keep the complete
 candidate decision; a similarity score alone cannot authorize publication.
 
+## Connect shadow results to person identities
+
+Recording-level actor keys identify quoted assertions. They do not identify
+distinct people. Keep witness rankings as diagnostics, and retain direct,
+cited identity hypotheses separately. A hypothesis has an original source
+anchor and extractor/method identity. Its handle grants no canonical UUID or
+acceptance authority. Do not merge namesakes, infer identity through a chain of
+pairwise links, or use repeated copies as independent corroboration.
+
+Count distinct supporting recordings from actual observed membership, with
+bounded examples for inspection. Repeated roles and local/model interpretations
+from one recording count once. Separate matching-fact support from evidence
+that two assertions describe the same person. These descriptive counts do not
+change the frozen identity scorer or its five features.
+
+When accepted people exist, export exact `FindPeopleFactsAsync` results through
+`ShadowPeopleCandidateSnapshots`. The shadow adapter compares each resolved
+`Hit.Uuid` once, using `PeopleActorProjection.Candidate` and its complete matching
+aggregates. Preserve original query hashes, limits, issues and read sets in the
+pinned artifact; each result references that snapshot without repeating its full
+prose. Missing queries, complete empty pools and incomplete pools stay distinct.
+The export can contain separate read-only transactions and asserts no global
+snapshot or current freshness.
+
+This export is optional for new people. The accepted-credit consumer already
+supports stable, checkpointed identity creation under its separately qualified
+creation policy. Shadow hypotheses supply evidence for evaluation; they do not
+skip creation, review or publication contracts. A model ranking and a unique
+source witness cannot substitute for a distinct accepted-person candidate pool.
+
 ## Original receipts and recovery
 
 Derive the extraction observation from its saved publication ticket:

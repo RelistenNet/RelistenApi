@@ -28,21 +28,28 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         "taper_notes",
     ];
     private readonly HashSet<Guid> observedSources = [];
+    private readonly Dictionary<Guid, string> observedExtractionIdentities = new();
     private readonly ShadowLunaCreditEvidence? luna;
     private readonly ShadowPeopleIdentityModel? identityModel;
 
     public ShadowPeopleAdapter() { }
 
-    /// <summary>Load optional pinned Luna evidence and an offline trained identity-ranking model.</summary>
+    /// <summary>Load optional pinned extraction, ranking and accepted-person candidate inputs.</summary>
     /// <param name="identityModelPath">Optional &lt;models-path&gt;#sha256=&lt;digest&gt; of the trainer's portable model. Scores provide ranking, never acceptance authority.</param>
+    /// <param name="acceptedCandidatesPath">Optional &lt;snapshots-path&gt;#sha256=&lt;digest&gt; of original public people candidate reads.</param>
     public ShadowPeopleAdapter(
         string? lunaOutputDirectory,
         string? expectedExtractionSha256,
-        string? identityModelPath = null
+        string? identityModelPath = null,
+        string? acceptedCandidatesPath = null
     )
     {
         identityModel =
             identityModelPath == null ? null : new ShadowPeopleIdentityModel(identityModelPath);
+        acceptedCandidates =
+            acceptedCandidatesPath == null
+                ? null
+                : new ShadowPeopleCandidateSnapshots(acceptedCandidatesPath);
         if (lunaOutputDirectory is null && expectedExtractionSha256 is null)
         {
             return;
@@ -57,13 +64,15 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
     }
 
     public string Version =>
-        "shadow-people-v3/global-retrieval="
+        "shadow-people-v4/global-retrieval="
         + PeopleActorProjection.Version
         + "/"
         + IdentityCandidateMatcher.PeopleActorFeaturesVersion
         + (luna is null ? "" : "/luna:" + luna.Identity)
         + "/model:"
-        + (identityModel?.Identity ?? "none");
+        + (identityModel?.Identity ?? "none")
+        + "/canonical:"
+        + (acceptedCandidates?.Identity ?? "none");
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind == "source_sample" ? Domains : [];
@@ -96,6 +105,7 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         {
             return;
         }
+        observedExtractionIdentities.Add(extraction.ResourceUuid, ExtractionIdentity(extraction));
 
         var model = luna?.Resolve(extraction);
         foreach (var actor in LocalActors(extraction).Concat(ModelActors(extraction, model)))
@@ -116,13 +126,19 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                 + actor.ProjectionComplete
                 + ":"
                 + signature;
+            var witnesses = RememberMatchingFacts(signature, actor);
             foreach (var lookup in LookupKeys(actor.Match))
             {
-                Remember(accounts, lookup, signature, actor);
+                Remember(accounts, lookup, signature, witnesses);
             }
             foreach (var name in actor.Match.Names)
             {
-                Remember(names, NormalizedPeopleService.NameKey(name.Wording), signature, actor);
+                Remember(
+                    names,
+                    NormalizedPeopleService.NameKey(name.Wording),
+                    signature,
+                    witnesses
+                );
             }
         }
     }
@@ -131,7 +147,7 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         Dictionary<string, Dictionary<string, ActorWitnesses>> index,
         string key,
         string signature,
-        ActorAccount actor
+        ActorWitnesses witnesses
     )
     {
         if (!index.TryGetValue(key, out var bucket))
@@ -139,15 +155,7 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
             bucket = new();
             index.Add(key, bucket);
         }
-        if (!bucket.TryGetValue(signature, out var witnesses))
-        {
-            witnesses = new ActorWitnesses(actor);
-            bucket.Add(signature, witnesses);
-        }
-        else
-        {
-            witnesses.Remember(actor);
-        }
+        bucket.TryAdd(signature, witnesses);
     }
 
     public IEnumerable<ShadowCatalogResult> Process(ShadowCatalogInput input)
@@ -197,9 +205,13 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         var model = luna?.Resolve(extraction, input.Row);
         var modelActors = ModelActors(extraction, model).ToArray();
         var actors = LocalActors(extraction).Concat(modelActors).ToArray();
-        var comparisons = actors.Select(Relationships).ToArray();
+        var extractionIdentity = ExtractionIdentity(extraction);
+        var comparisons = actors
+            .Select(actor => Relationships(actor, extractionIdentity))
+            .ToArray();
         var relationships = comparisons.SelectMany(result => result.Links).ToArray();
         var people = actors.Select(actor => actor.Person).ToArray();
+        var canonicalDecisions = actors.Select(CanonicalDecision).ToArray();
         var credits = (extraction.CreditExtraction?.Credits ?? [])
             .Select(credit => new ShadowRecordingCredit(
                 ShadowCatalogIdentity.Key(
@@ -229,6 +241,16 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
             );
         var personKeys = people
             .Select(person => person.EntityKey)
+            .Concat(
+                comparisons
+                    .Select(result => result.Decision.Hypothesis?.ProposalHandle)
+                    .OfType<string>()
+            )
+            .Concat(
+                canonicalDecisions
+                    .SelectMany(decision => decision.Candidates)
+                    .Select(candidate => candidate.EntityKey)
+            )
             .Concat(
                 comparisons
                     .SelectMany(result => result.Decision.CandidateOutcomes)
@@ -263,7 +285,8 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                     comparisons.Select(result => result.Coverage).ToArray(),
                     observedSources.Contains(input.Uuid),
                     modelInterpretation,
-                    comparisons.Select(result => result.Decision).ToArray()
+                    comparisons.Select(result => result.Decision).ToArray(),
+                    canonicalDecisions
                 ),
                 new
                 {
@@ -340,7 +363,8 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                 person,
                 projected.Record,
                 citations,
-                ProjectionComplete: projected.Complete
+                ProjectionComplete: projected.Complete,
+                Query: projected.Query
             );
         }
 
@@ -369,7 +393,8 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                     .Concat(assertion.Aliases.SelectMany(alias => alias.Evidence))
                     .Distinct()
                     .ToArray(),
-                ProjectionComplete: projected.Complete
+                ProjectionComplete: projected.Complete,
+                Query: projected.Query
             );
         }
     }
@@ -398,7 +423,14 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                 "retained_luna_extraction"
             );
             var projected = PeopleActorProjection.Project(credit, extraction.ArtistUuid);
-            yield return new(person, projected.Record, [credit.Evidence], true, projected.Complete);
+            yield return new(
+                person,
+                projected.Record,
+                [credit.Evidence],
+                true,
+                projected.Complete,
+                projected.Query
+            );
         }
     }
 
@@ -540,7 +572,8 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         PersonMatchRecord Match,
         IReadOnlyList<NormalizationTextEvidence> Evidence,
         bool ModelDerived = false,
-        bool ProjectionComplete = true
+        bool ProjectionComplete = true,
+        NormalizationCandidateQuery? Query = null
     );
 }
 
@@ -578,7 +611,9 @@ public sealed record ShadowPeopleProposal(
     bool GlobalIndexIncludesSource,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         ShadowLunaCreditInterpretation? ModelInterpretation = null,
-    IReadOnlyList<ShadowPeopleIdentityDecision>? IdentityDecisions = null
+    IReadOnlyList<ShadowPeopleIdentityDecision>? IdentityDecisions = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        IReadOnlyList<ShadowCanonicalPeopleDecision>? CanonicalIdentityDecisions = null
 );
 
 /// <summary>Counts compact matching-fact witnesses, not accepted identities or all catalog people.</summary>
