@@ -1,118 +1,115 @@
-# Native provider shadow wave, 2026-10-18
+# Native provider shadow waves, 2026-10-18
 
-The original native provider wave produced 2,010 actual outcomes from 670
-retained recording responses: 300 Archive.org,
-150 Phish.in and 220 Local directories. All 670 performance proposals preserve
-the admitted historical source and show UUID. The remaining 1,340 outcomes are
-`not_applicable`: 670 composition results without work claims and 670 setlist
-results without ordered accounts. There were no processing failures.
-
-Archive.org and Phish.in use `retained_historical_catalog_source` associations.
-Local uses `retained_local_exact_media`; all 3,060 retained media anchors remain
-bound to their original source/file/set UUIDs. The unchanged joint
-`local_root_input` is retained before its directory inputs. Root evidence and
-individual directory accounts keep separate scopes. These historical bindings
-do not certify current provider freshness or accept canonical identities.
-
-The shared `ShadowCatalogBatch` processed 61,330 ordinary derived input rows:
-4,379 artists, 16,605 songs, 38,475 legacy setlists, 600 exact source/show pairs,
-one supporting Local root and 670 native responses. Context UUID and numeric-ID
-conflicts were rejected. All catalog context belongs to the existing retained
-production capture namespace. The derived input makes no new snapshot claim.
-
-The complete run produced 152,445 outcomes in 9.64 seconds. Its 150,435 context
-outcomes remain outside the provider reader and do not replace the full catalog.
-Only the 2,010 `provider_input` outcomes enter this view. Optional people-ranking,
-composition and geography evidence was unset. The Local v5 side runtime and
-repertoire v6 were unchanged during execution; no primary build, provider fetch,
-paid call or database access was required. Inputs, output, reader cache and local
-receipts occupied about 76 MiB after indexing, within the 100 MiB wave cap.
-
-## Original wave routing limit
-
-Native recording accounts retain 27,967 Archive.org, 3,112 Phish.in and 3,060
-Local file observations, with provider text, file and venue evidence. They create
-no standalone native `people`, `credits`, `venues` or `file_contents` outcomes in
-that run. Its people adapter processed `source_sample`, so supporting catalog
-credit outputs could not establish native-credit integration. The
-follow-on below consumes the typed decoded observations with their original
-input UUIDs, pointers and scopes.
-
-Existing entrypoints are
-[ProviderRecordingObservation](../../../../RelistenApi/Models/Normalization/NormalizationProviderObservations.cs),
-[RetainedRecordingCreditExtractor.Extract](../../../../RelistenApi/Services/Normalization/RetainedRecordingCreditExtractor.cs)
-and
-[NormalizationRecordingExtractor.Extract](../../../../RelistenApi/Services/Normalization/NormalizationRecordingExtractor.cs).
-The latter already traverses recording/file text and produces bound-file title
-proposals without allocating canonical people or song identities.
-
-## Local run evidence
-
-The ignored execution directory is
-`local-dev/normalization-data/2026-10-18-shadow-native-provider-wave-execution-v1/`.
-Its compact `README.md` explains the scripts and single-use paths. `request.json`
-records the command, explicit environment and runtime hashes; `result.json`
-records completion and unchanged runtime pins; `native-wave-receipt.json` records
-the counts and historical-binding checks. `reader-health.json` records successful
-HTML, provider-filter, detail and complete 2,010-row index checks.
-
-The full run is `2026-10-18-shadow-native-provider-wave-v1`; its output manifest
-SHA-256 is `90982657dec701d6e5921bbbf006bcc93f0b0ded669bef9b22804ee3ad247216`.
-The separate `2026-10-18-shadow-native-provider-reader-v1` projection preserves
-actual provider-result line bytes. The runtime side-directory lease was released
-after completion; any later replay must verify its recorded pins and use new
-output paths.
-
-## Native people, credits and venues follow-on
-
-The [native reader](http://alecs-macbook-pro.tail09dbf.ts.net:18771/) now serves
-4,020 actual results across six domains for the same 670 responses. It uses the
-minimal 6,250-row input: 4,379 artists, 600 sources, 600 shows, the unchanged Local
-root and 670 provider inputs. Songs and legacy setlists were omitted because the
-native adapters make no ordered-setlist or authored-work assertions. The full
-run produced 5,820 outcomes in 7.24 seconds; 1,800 catalog context outcomes stay
-outside this reader. The original view and complete run remain retained.
+The [native file reader](http://alecs-macbook-pro.tail09dbf.ts.net:18771/?view=files)
+serves the current retained run directly: 4,690 outcomes across seven domains for
+670 recording responses: 300 Archive.org, 150 Phish.in and 220 Local directories.
+It includes all 34,139 decoded file observations: 27,967 Archive.org, 3,112
+Phish.in and 3,060 Local. These include provider attachments and files without
+titles, so the inventory count is not a playable-track or identified-song count.
+No parent or child processing result failed.
 
 | Domain | Proposed results | Unresolved results | Not applicable |
 | --- | ---: | ---: | ---: |
-| People | 432 | 238 | 0 |
+| People | 433 | 237 | 0 |
 | Credits | 432 | 238 | 0 |
 | Venues | 670 | 0 | 0 |
+| File contents | 293 | 377 | 0 |
 | Performances | 670 | 0 | 0 |
 | Compositions | 0 | 0 | 670 |
 | Setlists | 0 | 0 | 670 |
 
-The people results contain 799 actor observations and 867 credit claims, all
-recording-scoped in this sample. These are observations, not distinct accepted
-people. The extractor covers recording/file credit fields and aliases attached
-to role-bearing actors. Pure role-free alias prose is still unrouted; the
-existing `RetainedSourceActorAliasExtractor` and
-`NormalizationRecordingSourceActorAliasBuilder` are not consumed by this native
-adapter. This sample does not establish file-scope extraction coverage.
+File parents retain every child even when one title needs review. The individual
+file outcomes are 13,162 proposed, 20,726 unresolved and 251 not applicable.
+Original decoded file objects and recording origins match the prior recording
+accounts in their original order. File ordinals address observations; they do
+not establish musical occurrences, audio boundaries or performance order.
 
-Venue results contain 670 observations with historical recording links, 503 name
-browse hypotheses and 504 name/locality browse hypotheses. These keys support
-retrieval; they do not establish physical venue, room or relocation identity.
-Every native actor/credit disables automatic acceptance and every venue remains
-unaccepted. Optional model, global people, composition and geography references
-were unset. Native standalone `file_contents` outcomes remain absent.
+Native people now include two original, scoped alias observations: Andrew S.
+with “bazillion” and Pat Myers with “DATPAT,” both from Local captures. The
+previous 799 role-bearing actors, 867 credit claims, all 670 performance proposal
+payloads and all 3,060 Local media anchors remain unchanged. There are 801 actor
+observations in total, not 801 accepted people. Alias-only actors do not create
+recording roles or merge people. The [native people and credit guide](native-provider-credits.md)
+explains evidence scopes and parser coverage; [native file contents](../../../../tools/RelistenNormalization/native-files.md)
+explains title interpretation, catalog links and playback.
 
-Checks covered every original input revision and artist, all 670 unchanged
-performance proposal payloads and all 3,060 unchanged Local media anchors. All
-native source/show links preserve the admitted UUIDs. HTTP checks found the full
-4,020-row index with no lag, people/credit search for Marc Millman and venue
-search for The Marquee. The existing file reader returned 32 Archive.org files
-and 16 Local files from representative source links, including playback URLs;
-no audio or upstream metadata was fetched. The reader retains the full-file
-reader at port 18767 for these links.
+All 670 venue observations remain unaccepted. Their 503 name and 504 name/locality
+browse hypotheses support retrieval without establishing premises, rooms or
+relocations. People and credit observations also disable automatic acceptance.
+Title proposals, equal names and browse keys do not establish canonical identity
+or semantic accuracy.
 
-Execution evidence lives in
-`local-dev/normalization-data/2026-10-18-shadow-native-domain-wave-execution-v1/`:
-`result.json`, `native-domain-receipt.json` and `reader-health.json`. The full
-run is `2026-10-18-shadow-native-domain-wave-v1`; its manifest SHA-256 is
-`0161c1f7b78e13d6a43f804729cd226b5064f6ca5bafd68015aa7fd75eee12e7`.
-The provider projection `2026-10-18-shadow-native-domain-reader-v1` preserves
-actual result line bytes. Runtime pins stayed unchanged. The process used
-5,683,441 new artifact bytes before reader indexing and observed at least
-5,034,799,104 free bytes, above its 4.5 GiB reserve. The side runtime lease was
-released after execution.
+## Input and execution
+
+`shadow-native` reused the immutable original full input: 61,330 ordinary derived
+rows containing 4,379 artists, 16,605 songs, 38,475 legacy setlists, 600 source/show
+pairs, one joint Local root and 670 provider responses. All dictionary, source,
+show and root context was observed. The recorded processing scope is
+`provider_inputs_only`: only provider rows emitted results. The run needs no
+separate context-output copy or provider-only projection. Its retained production
+capture namespace is unchanged; the derived input makes no new snapshot claim.
+
+Archive.org and Phish.in retain their historical catalog source/show bindings.
+Local retains its exact root/directory account and media anchors. All 3,060 Local
+file outcomes preserve the exact track, source-set and playback associations.
+Archive.org and Phish.in file observations remain inspectable without guessed
+legacy track UUIDs. Literal provider locators remain separate from catalog audio.
+These bindings do not certify current provider freshness.
+
+The bounded run and one resume completed in 16.09 seconds. SIGINT caught the child
+running after its first completed file chunk, during finalization after all
+61,330 inputs and 4,690 outcomes. The interrupted checkpoint retained those
+counts; one resume with identical input and method pins completed with exactly
+4,690 raw and logical results, seven per provider input. This verifies
+finalization recovery, not recovery from a partially processed native prefix. A
+separate focused partial-processing test was pending when this run was recorded.
+
+Input and runtime hashes stayed unchanged. Optional model, global people,
+composition and geography references were unset. No build, paid call, provider
+fetch or database access was required. Compute artifacts used 10,930,846 new bytes
+before reader indexing, below the 128 MiB cap. Minimum observed free space was
+5,006,696,448 bytes, above the 4.5 GiB reserve. The runtime lease was released.
+
+## Reader and evidence
+
+The completed run is
+`local-dev/normalization-data/2026-10-18-shadow-native-domain-wave-v2/`.
+Reader QA indexed its actual outputs directly: 4,690 parent outcomes and 34,139
+children from 670 file parents, seven completed chunks, no pending or failed
+chunks. At QA shutdown, the SQLite cache occupied 14,659,584 bytes; cutover
+reused that cache. Private port 18772 API and 390-pixel browser checks covered file search,
+late file titles, exact song/home filters, provider links and catalog audio.
+The QA reader and guard were stopped cleanly; that port is closed.
+
+The controlled cutover verified and stopped only the owned six-domain reader
+PID 488. PID 6508 now serves the new run and the same completed cache on private
+port 18771, with the full-file reader at port 18767 retained for catalog links.
+Post-cutover HTTP checks confirmed 4,690 outcomes, 34,139 children, 670 file
+parents and no index lag. A source/title query found “I Am the Walrus”; an exact
+repertoire-key query included that child. Its detail retained the original parent
+revision, file ordinal, native key, catalog track UUID and captured MP3 reference.
+No audio was fetched. The old run, view and cache remain unchanged.
+
+The compact execution evidence is in
+`local-dev/normalization-data/2026-10-18-shadow-native-domain-wave-execution-v2/`:
+`request.json`, `result.json`, `native-domain-receipt.json` and
+`reader-health.json`. The output manifest SHA-256 is `9576cc04a0ef9608b1fe06297b999e1a765e504792735b5643375b4c90ebeedb`.
+The receipt checks all original revisions and artists, all seven outcomes per
+input, the complete decoded file inventory, unchanged historical payloads and
+scoped alias growth. It does not certify title interpretation or identity truth.
+
+## Retained earlier waves
+
+The original `2026-10-18-shadow-native-provider-wave-v1` produced 152,445 outcomes
+from the same full input in 9.64 seconds. Its separate reader projection served
+2,010 native results: 670 proposed performances and 1,340 not-applicable
+composition/setlist results. The 150,435 context outputs stayed outside that
+view. People, credits, venues and files were not standalone native domains yet.
+
+The first `2026-10-18-shadow-native-domain-wave-v1` used a minimal 6,250-row input
+without songs or legacy setlists. It produced 5,820 outcomes in 7.24 seconds;
+its six-domain reader served 4,020 native results and excluded 1,800 context
+outputs. That wave introduced native people, credits and venues. Pure role-free
+aliases and standalone file contents were still absent. Its searches and source
+links reached playable records through the full-file reader at port 18767.
+Both earlier full runs, projections and execution receipts remain retained.
