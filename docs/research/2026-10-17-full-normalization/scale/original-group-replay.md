@@ -43,8 +43,9 @@ python3 -B docs/research/2026-10-17-full-normalization/scale/scripts/replay_orig
 The [completed replay receipt](evidence/original-group-replay-v1.json) records
 86,655 recovered resources and all 18,628 matching annotation headers. Of the
 122 discovered recordings, 29 have verified development tuples across 21 artists.
-Two already belong to the strict allowlist; the other 27 can support a separate
-bounded context capture. Twenty-three recordings remain held out, nine occur
+Two already belong to the strict allowlist. The
+[expanded context capture](expanded-venue-context.md) now supplies dates for all
+29, including the other 27. Twenty-three recordings remain held out, nine occur
 only in nested context, and 61 are absent from the original standalone source
 selection. No partition or label changed.
 

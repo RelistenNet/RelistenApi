@@ -1,0 +1,188 @@
+{
+  "schema_version": "expanded-venue-context-local-v1",
+  "state": "completed_preparation_capture_and_contract_probe",
+  "selection": {
+    "additional_verified_recordings": 27,
+    "already_in_strict_allowlist": 2,
+    "source_artists": 21,
+    "source_resources": 29,
+    "venue_resources": 67
+  },
+  "preparation_receipt": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-preparation-v1/receipt.json",
+    "bytes": 14745,
+    "sha256": "a4bbdcb638e1f18ef6fa1039f7b8476c6c0076b79a0e25b39d1296eee6f98a01"
+  },
+  "captures": [
+    {
+      "kind": "authenticated_date_context",
+      "usage": "development_context_only",
+      "snapshot_utc": "2026-10-18T04:14:13.156771+00:00",
+      "completed_at": "2026-10-18T04:14:14.062082+00:00",
+      "read_only": true,
+      "replica_in_recovery": true,
+      "migration_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "venues": 67,
+      "unchanged_venue_metadata": 67,
+      "recordings": 29,
+      "artists": 21,
+      "statuses": {
+        "authenticated": 29
+      },
+      "all_other_identity_guards_pass": true,
+      "recordings_with_all_three_dates": 29,
+      "recordings_with_all_three_dates_null": 0,
+      "source_venue_references": 29,
+      "show_venue_references": 27,
+      "selected_venues_with_date_references": 21,
+      "selected_venues_without_date_references": 46
+    },
+    {
+      "kind": "wrong_expected_show_uuid_contract_probe",
+      "usage": "contract_probe_not_training",
+      "snapshot_utc": "2026-10-18T04:15:44.224608+00:00",
+      "completed_at": "2026-10-18T04:15:45.11824+00:00",
+      "read_only": true,
+      "replica_in_recovery": true,
+      "migration_versions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "venues": 67,
+      "unchanged_venue_metadata": 67,
+      "recordings": 29,
+      "artists": 21,
+      "statuses": {
+        "discovery_show_uuid_changed": 29
+      },
+      "all_other_identity_guards_pass": true,
+      "recordings_with_all_three_dates": 0,
+      "recordings_with_all_three_dates_null": 29
+    }
+  ],
+  "verification": {
+    "optimized_synthetic_tests_passed": 13,
+    "all_preparation_input_and_output_hashes_authenticated": true,
+    "executed_queries_equal_prepared_queries": true,
+    "captures_have_read_only_replica_and_completion_markers": true,
+    "all_selected_source_uuids_match_allowlist": true,
+    "partitions_changed": false,
+    "labels_changed": false,
+    "policies_changed": false,
+    "production_writes": 0,
+    "paid_requests": 0
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-preparation-v1/receipt.json",
+      "bytes": 14745,
+      "sha256": "a4bbdcb638e1f18ef6fa1039f7b8476c6c0076b79a0e25b39d1296eee6f98a01"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-preparation-v1/source-allowlist.json",
+      "bytes": 17857,
+      "sha256": "bb0e5ef65b10adc06b30d6cd8dc885affe79da0d04ceb8b99eba924d9d3e3feb"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-preparation-v1/venue-allowlist.json",
+      "bytes": 34815,
+      "sha256": "429cd2883b5b4c10e1ffc2649f5b9d774cfaac8ec72e89c6491602ac1b31105d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-preparation-v1/strict-context.sql",
+      "bytes": 54661,
+      "sha256": "55cb02f16b2946e5e9f1ac730a5d56cfed0f545faf8064c1822bfaf61da920a9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-capture-v1/executed.sql",
+      "bytes": 54661,
+      "sha256": "55cb02f16b2946e5e9f1ac730a5d56cfed0f545faf8064c1822bfaf61da920a9"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-capture-v1/query.json",
+      "bytes": 417,
+      "sha256": "3f0ab929f1841530a19b8abde56f6dc7bfde3f0116cbd59c260261c81ecad2b2"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-capture-v1/snapshot.jsonl",
+      "bytes": 107355,
+      "sha256": "00bf80cba13badccf35e30b336997dfae36dd61f501da176e680fd89e773a9ef"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-capture-v1/executed.sql",
+      "bytes": 56865,
+      "sha256": "846afb5a243096e81e2a207055eca13d0ccf0d0de5077774dfc95d644372f357"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-capture-v1/query.json",
+      "bytes": 433,
+      "sha256": "8bf01087a9f8b2c4635dd3e567315df79cd83715a8d379074c3fa4fdb6695c56"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-capture-v1/snapshot.jsonl",
+      "bytes": 107093,
+      "sha256": "82a743bd35f39158ae0411978026b5c597f9c2aa544bc62e49cb8376dcd0356f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-preparation-v1/receipt.json",
+      "bytes": 2391,
+      "sha256": "0b37f123521265a8a3e551528785e9fdf9eebc30d557fe3077a34a11c39d3ec0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-preparation-v1/source-allowlist.json",
+      "bytes": 20177,
+      "sha256": "3f0539ab4fb5fb3f2dc7b591c5f66181253ce7fbbc973fadf5a6795ea7d0421a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/expanded-context-show-uuid-probe-preparation-v1/show-uuid-mismatch.sql",
+      "bytes": 56865,
+      "sha256": "846afb5a243096e81e2a207055eca13d0ccf0d0de5077774dfc95d644372f357"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/prepare_expanded_venue_context.py",
+      "bytes": 13225,
+      "sha256": "626b9b1f391b3a67c6ff7376f87e5a371694d91df4a165ce1f1b57d373fa9ff0"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_prepare_expanded_venue_context.py",
+      "bytes": 12366,
+      "sha256": "5cb69b9752e30a03614f038d0eb7bce578581467137d7d6f0b4e97c0662c8872"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/sql/venue-context-expanded.sql",
+      "bytes": 8816,
+      "sha256": "56bf79aea40bdf857778f62d9657229b7c58cfa51ac8ed21f1902e7753c91383"
+    }
+  ],
+  "limits": [
+    "Date context covers 29 development recordings across 21 artists and 21 of 67 selected venue records; 46 venues still have no date reference in this packet. Source and show venue references remain separate (29 and 27).",
+    "The same 67 venue metadata records remain unchanged. Observed dates establish neither physical venue identity nor historical venue lifetimes.",
+    "The 27 additional recordings retain their original development partitions. The 23 held-out, nine context-only and 61 absent standalone sources remain excluded.",
+    "The UUID probe changes only the expected discovery show UUID for the same 29 selected sources. It is a contract test, not evidence that real assignments changed and not a training input.",
+    "Preparation authenticates frozen original files by byte hash without decoding their payloads. The separate prerequisite grouping replay decoded the frozen capture programmatically as documented in its own receipt.",
+    "These captures change no labels, matching policies, catalog assignments or accepted identities; matching accuracy remains unevaluated by this packet."
+  ]
+}
