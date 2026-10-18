@@ -65,7 +65,30 @@ The matched rules/perceptron/logistic/Luna comparison uses the existing argument
 --cohort-plan-sha256 PLAN_SHA256
 --cohort-comparison NEW_COHORT_OUTPUT_DIRECTORY
 --cohort-comparison-sha256 COMPLETED_MANIFEST_SHA256
+--cohort-luna-version luna-recording-credits-v3
 ```
+
+`--cohort-luna-version` selects the expected extractor revision for the new cohort.
+It accepts `luna-recording-credits-v2` or `luna-recording-credits-v3` and defaults to
+v2 when omitted. Supply this flag only with all four cohort arguments. Each
+successful retained request must name the selected revision in its system
+instructions. Mixed revisions fail authentication before model fitting or output
+creation. The scorer never chooses a revision from returned predictions.
+
+The completed run manifest's `lunaExtractorVersion` must also match the selected
+revision. Historical v2 manifests may omit this property; v3 manifests must declare
+it. Missing or conflicting v3 declarations fail before scoring.
+
+The report records `cohort.luna_extractor_version_expected` and
+`cohort.luna_extractor_version_effective`. The effective revision is null when no
+nonempty field has an authenticated successful Luna response. Contact exclusions
+and deterministic empty-field results do not establish an effective model revision.
+
+The extractor revision identifies the request and extraction contract. It is
+separate from the API model name, retained assembly/source hashes and trained
+local-model weights. Selecting v3 does not change the old 100-field comparison or
+its v2 code receipt. The training reference stays v2 and retains its original
+labels, inputs and source/binary authentication.
 
 This mode fits the two trained extractors once on the old study's 84 complete, nonexcluded development fields, freezes the fit IDs and models, then scores the new cohort. It does not fit on the new answers. The direct field-overlap guard does not establish separation of whole identity or recording families; retain the selection ledger for that purpose.
 

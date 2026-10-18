@@ -14,6 +14,7 @@ from importlib.metadata import version as package_version
 import json
 import os
 from pathlib import Path
+import re
 import sys
 from types import ModuleType, SimpleNamespace
 import uuid
@@ -22,7 +23,9 @@ from luna_credit_field_report import CohortPlan, cohort_coverage
 
 VERSION = "matched-credit-development-v1"
 LOCAL_VERSION = "recording-credits-v4/recording-actor-evidence-v1"
+# The old 100-field reference and its source/binary receipt remain fixed at v2.
 LUNA_VERSION = "luna-recording-credits-v2"
+COHORT_LUNA_VERSIONS = (LUNA_VERSION, "luna-recording-credits-v3")
 PRIORITY_ROLES = {"Taper", "Transferrer"}
 METHODS = ("perceptron", "logistic", "local", "luna")
 CODE_PATHS = {
@@ -106,6 +109,7 @@ class MatchedFields:
 
     def __init__(self, args):
         self.snapshot = InputSnapshot()
+        self.luna_version = LUNA_VERSION
         self.snapshot.read(Path(__file__))
         self.trainer = load_trainer(self.snapshot)
         self.labels_bytes = self.snapshot.read(args.labels)
@@ -280,9 +284,12 @@ class MatchedFields:
             require(len(user) == 1 and json.loads(user[0]["content"]) == {
                 "fields": {item["field"]: item["text"]}, "context": None},
                 "Luna request used a different field or extra context")
+            system_versions = {
+                version for entry in rendered["input"] if entry["role"] == "system"
+                for version in re.findall(r"\bluna-recording-credits-v[0-9]+\b", entry["content"])
+            }
             require(rendered["model"] == self.manifest["options"]["model"]
-                    and any(LUNA_VERSION in entry["content"] for entry in rendered["input"]
-                            if entry["role"] == "system"), "Wrong Luna request version/model")
+                    and system_versions == {self.luna_version}, "Wrong Luna request version/model")
             luna = extraction_predictions(result["extraction"], item, self.trainer)
             validate_response_binding(request, luna, item, self.trainer)
         else:
@@ -548,6 +555,8 @@ class CohortFields(MatchedFields):
 
     def __init__(self, args, reference):
         self.snapshot, self.trainer = reference.snapshot, reference.trainer
+        self.luna_version = args.cohort_luna_version
+        require(self.luna_version in COHORT_LUNA_VERSIONS, "Unsupported cohort Luna extractor version")
         # The shared authenticator is also executable scoring source, so retain its bytes.
         self.snapshot.read(Path(__file__).with_name("luna_credit_field_report.py"))
         self.cohort = CohortPlan(args.cohort_plan, args.cohort_plan_sha256, self.snapshot.read)
@@ -560,6 +569,9 @@ class CohortFields(MatchedFields):
             receipt=self.cohort.paths["receipt"])
         self._read_comparison(comparison_args, expected_fields=self.cohort.plan["field_count"],
                               expected_version="luna-credit-cohort-v1")
+        # Historical v2 exports predate this declaration; v3 must declare its revision.
+        require(self.manifest.get("lunaExtractorVersion", LUNA_VERSION) == self.luna_version,
+                "Cohort manifest Luna extractor version differs from the expected version")
         self.cohort.check_selection(self.labels_bytes, self.manifest["selection"])
         self.examples = []
         # The training loader deliberately accepts development only. Build evaluation
@@ -657,8 +669,12 @@ def run_cohort(args):
         "cohort": {"plan_sha256": inputs.cohort.sha256, "purpose": inputs.cohort.plan["purpose"],
                    "artist_partition": inputs.cohort.plan["artist_partition"],
                    "family_partition": inputs.cohort.plan["family_partition"],
-                   "provider_origin_fields": inputs.cohort.provider_counts},
+                   "provider_origin_fields": inputs.cohort.provider_counts,
+                   "luna_extractor_version_expected": inputs.luna_version,
+                   "luna_extractor_version_effective": inputs.luna_version if any(
+                       output["state"] == "extracted" for output in inputs.outputs.values()) else None},
         "training_reference": {"fields": len(reference.examples), "fit_fields": len(training),
+            "luna_extractor_version": LUNA_VERSION,
             "labels_sha256": sha(reference.labels_bytes), "training_label_ids": training_ids,
             "training_label_ids_sha256": sha(json.dumps(training_ids, separators=(",", ":")).encode()),
             "roles": sorted(perceptron), "new_cohort_labels_used_for_fitting": False},
@@ -714,6 +730,8 @@ def main(argv=None):
     parser.add_argument("--cohort-plan-sha256")
     parser.add_argument("--cohort-comparison", type=Path)
     parser.add_argument("--cohort-comparison-sha256")
+    parser.add_argument("--cohort-luna-version", choices=COHORT_LUNA_VERSIONS,
+                        help=f"Expected new cohort extractor version (default: {LUNA_VERSION})")
     args = parser.parse_args(argv)
     try:
         require(1 <= args.epochs <= 100, "Epoch count is outside the experiment bound")
@@ -721,6 +739,9 @@ def main(argv=None):
                          args.cohort_comparison, args.cohort_comparison_sha256)
         require(all(value is None for value in cohort_values) or all(value is not None for value in cohort_values),
                 "Supply both cohort plan/comparison paths and their approved digests")
+        require(args.cohort_luna_version is None or args.cohort_plan is not None,
+                "Use --cohort-luna-version only with the complete cohort arguments")
+        args.cohort_luna_version = args.cohort_luna_version or LUNA_VERSION
         report = run(args) if args.cohort_plan is None else run_cohort(args)
     except (ValueError, OSError, KeyError, TypeError, RuntimeError, ImportError) as error:
         print("Matched credit experiment failed: " + type(error).__name__ + ": " + str(error), file=sys.stderr)

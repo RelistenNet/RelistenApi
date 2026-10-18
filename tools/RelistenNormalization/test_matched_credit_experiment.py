@@ -37,6 +37,26 @@ def evidence(field, text, start=0, end=None):
             "endCodePoint": end, "quote": text[start:end]}
 
 
+def set_request_versions(fixture, versions, *, declared_version=None):
+    """Keep synthetic request hashes and response references consistent after a version change."""
+    for request, version in zip(fixture.requests, versions, strict=True):
+        previous = request["cacheKey"]
+        rendered = json.loads(request["renderedRequest"])
+        for entry in rendered["input"]:
+            if entry["role"] == "system":
+                entry["content"] = "Extract recording credits, version " + version
+        request["renderedRequest"] = json.dumps(rendered)
+        request["cacheKey"] = hashlib.sha256(request["renderedRequest"].encode()).hexdigest()
+        for output in fixture.outputs:
+            for name in ("luna", "cacheReplay"):
+                if output[name] is not None and output[name]["cacheKey"] == previous:
+                    output[name]["cacheKey"] = request["cacheKey"]
+    fixture.save()
+    if declared_version is not None:
+        fixture.manifest["lunaExtractorVersion"] = declared_version
+        write(fixture.comparison / "manifest.json", fixture.manifest)
+
+
 class SyntheticStudy:
     """Exactly 100 synthetic fields authenticate the same boundary as the real frozen pack."""
 
@@ -190,6 +210,7 @@ class MatchedCreditCliTests(unittest.TestCase):
         self.assertEqual(report["full_resolved_priority"]["methods"]["luna"]["unavailable_fields"], 1)
         self.assertEqual(report["shared_luna_available_priority"]["resolved_fields"], 96)
         self.assertEqual(report["all_role_diagnostics"]["methods"]["luna"]["status"], "not_evaluated")
+        self.assertEqual(report["versions"]["luna"], "luna-recording-credits-v2")
         excluded = {fixture.labels[i]["label_id"] for i in (4, 5, 8)}
         assignment = {}
         for fold in report["folds"]:
@@ -346,6 +367,150 @@ class MatchedCreditCliTests(unittest.TestCase):
 
 
 class MatchedCohortTests(unittest.TestCase):
+    def cohort_argv(self, reference, cohort, *, version=None):
+        argv = reference.argv("cohort-output") + [
+            "--cohort-plan", str(cohort.root / "plan.json"), "--cohort-plan-sha256", cohort.plan_sha,
+            "--cohort-comparison", str(cohort.comparison), "--cohort-comparison-sha256",
+            digest(cohort.comparison / "manifest.json")]
+        return argv if version is None else argv + ["--cohort-luna-version", version]
+
+    def test_explicit_v3_cohort_scores_new_answers_and_keeps_the_v2_training_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            exclusions = json.loads((root / "exclusions.json").read_text())
+            exclusions["explicit_receipt_exclusions"] += [reference.labels[i]["label_id"] for i in range(11, 24)]
+            write(root / "exclusions.json", exclusions)
+            cohort = SyntheticCohort(root / "cohort")
+            set_request_versions(cohort, ["luna-recording-credits-v3"] * len(cohort.requests),
+                                 declared_version="luna-recording-credits-v3")
+
+            with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(study.main(self.cohort_argv(
+                    reference, cohort, version="luna-recording-credits-v3")), 0)
+
+            report = json.loads((root / "cohort-output/report.json").read_text())
+            self.assertEqual(report["cohort"]["luna_extractor_version_expected"], "luna-recording-credits-v3")
+            self.assertEqual(report["cohort"]["luna_extractor_version_effective"], "luna-recording-credits-v3")
+            self.assertEqual(report["training_reference"]["luna_extractor_version"], "luna-recording-credits-v2")
+            self.assertEqual(report["training_reference"]["fit_fields"], 84)
+            self.assertEqual(report["full_resolved_priority"]["methods"]["luna"]["true_positive"], 3)
+
+    def test_wrong_or_mixed_cohort_versions_fail_before_fitting_or_creating_output(self):
+        cases = [("luna-recording-credits-v3", ["luna-recording-credits-v2"] * 3),
+                 (None, ["luna-recording-credits-v3"] * 3),
+                 ("luna-recording-credits-v3", ["luna-recording-credits-v3",
+                                               "luna-recording-credits-v2", "luna-recording-credits-v3"]),
+                 ("luna-recording-credits-v3", ["luna-recording-credits-v30"] * 3),
+                 ("luna-recording-credits-v3", ["luna-recording-credits-v3 and luna-recording-credits-v2"] * 3)]
+        for expected, actual in cases:
+            with self.subTest(expected=expected, actual=actual), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                reference = SyntheticStudy(root)
+                cohort = SyntheticCohort(root / "cohort")
+                set_request_versions(cohort, actual, declared_version=expected)
+                error = io.StringIO()
+                with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                     patch.object(study, "fit_cohort_reference") as fit, \
+                     redirect_stdout(io.StringIO()), redirect_stderr(error):
+                    self.assertEqual(study.main(self.cohort_argv(reference, cohort, version=expected)), 1)
+                fit.assert_not_called()
+                self.assertIn("Wrong Luna request version/model", error.getvalue())
+                self.assertFalse((root / "cohort-output").exists())
+
+    def test_v3_cohort_cannot_replace_the_old_v2_code_reference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            reference.code_receipt["luna_extractor_version"] = "luna-recording-credits-v3"
+            reference.save()
+            cohort = SyntheticCohort(root / "cohort")
+            set_request_versions(cohort, ["luna-recording-credits-v3"] * len(cohort.requests),
+                                 declared_version="luna-recording-credits-v3")
+            error = io.StringIO()
+            with patch.object(study, "fit_cohort_reference") as fit, \
+                 redirect_stdout(io.StringIO()), redirect_stderr(error):
+                self.assertEqual(study.main(self.cohort_argv(
+                    reference, cohort, version="luna-recording-credits-v3")), 1)
+            fit.assert_not_called()
+            self.assertIn("Wrong extractor versions", error.getvalue())
+            self.assertFalse((root / "cohort-output").exists())
+
+    def test_no_model_answers_leave_effective_version_unset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            exclusions = json.loads((root / "exclusions.json").read_text())
+            exclusions["explicit_receipt_exclusions"] += [reference.labels[i]["label_id"] for i in range(11, 24)]
+            write(root / "exclusions.json", exclusions)
+            cohort = SyntheticCohort(root / "cohort", 2)
+            cohort.replace_field_with_skipped(0, "Alice <alice@example.org>")
+            cohort.replace_field_with_skipped(1, "")
+            set_request_versions(cohort, [], declared_version="luna-recording-credits-v3")
+            with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(study.main(self.cohort_argv(
+                    reference, cohort, version="luna-recording-credits-v3")), 0)
+            report = json.loads((root / "cohort-output/report.json").read_text())
+            self.assertEqual(report["cohort"]["luna_extractor_version_expected"], "luna-recording-credits-v3")
+            self.assertIsNone(report["cohort"]["luna_extractor_version_effective"])
+            self.assertEqual(report["coverage"]["fields"]["contact_excluded"], 1)
+            self.assertEqual(report["coverage"]["fields"]["no_text"], 1)
+            self.assertEqual(report["full_resolved_priority"]["methods"]["luna"]["available_fields"], 1)
+
+    def test_legacy_requests_stay_v2_when_retained_request_hashes_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            reference = SyntheticStudy(root)
+            set_request_versions(reference, ["luna-recording-credits-v3"] * len(reference.requests))
+            error = io.StringIO()
+            with patch.object(study, "training_environment", return_value={"synthetic": True}), \
+                 redirect_stdout(io.StringIO()), redirect_stderr(error):
+                self.assertEqual(study.main(reference.argv()), 1)
+            self.assertIn("Wrong Luna request version/model", error.getvalue())
+            self.assertFalse((root / "output").exists())
+
+    def test_cohort_manifest_must_declare_the_selected_revision_except_historical_v2(self):
+        cases = [("luna-recording-credits-v3", None),
+                 ("luna-recording-credits-v3", "luna-recording-credits-v2"),
+                 (None, "luna-recording-credits-v3")]
+        for expected, declared in cases:
+            with self.subTest(expected=expected, declared=declared), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                reference = SyntheticStudy(root)
+                cohort = SyntheticCohort(root / "cohort")
+                set_request_versions(cohort, [expected or study.LUNA_VERSION] * len(cohort.requests),
+                                     declared_version=declared)
+                error = io.StringIO()
+                with patch.object(study, "fit_cohort_reference") as fit, \
+                     redirect_stdout(io.StringIO()), redirect_stderr(error):
+                    self.assertEqual(study.main(self.cohort_argv(reference, cohort, version=expected)), 1)
+                fit.assert_not_called()
+                self.assertIn("Cohort manifest Luna extractor version differs", error.getvalue())
+                self.assertFalse((root / "cohort-output").exists())
+
+    def test_version_flag_requires_complete_cohort_arguments(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = SyntheticStudy(Path(directory))
+            for version in study.COHORT_LUNA_VERSIONS:
+                with self.subTest(version=version), patch.object(study, "run") as legacy, \
+                     patch.object(study, "run_cohort") as cohort, \
+                     redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(study.main(reference.argv() + ["--cohort-luna-version", version]), 1)
+                    legacy.assert_not_called()
+                    cohort.assert_not_called()
+
+    def test_unsupported_cohort_version_is_rejected_by_the_cli(self):
+        with tempfile.TemporaryDirectory() as directory:
+            reference = SyntheticStudy(Path(directory))
+            with patch.object(study, "run") as legacy, patch.object(study, "run_cohort") as cohort, \
+                 redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                study.main(reference.argv() + ["--cohort-luna-version", "luna-recording-credits-v4"])
+            self.assertEqual(error.exception.code, 2)
+            legacy.assert_not_called()
+            cohort.assert_not_called()
+
     def test_cohort_scores_literal_gold_that_bio_taggers_cannot_represent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -495,6 +660,8 @@ class MatchedCohortTests(unittest.TestCase):
             self.assertFalse(value["training_reference"]["new_cohort_labels_used_for_fitting"])
             self.assertEqual(value["cohort"]["artist_partition"], "test")
             self.assertEqual(value["cohort"]["provider_origin_fields"], {"unknown": 5, "local": 1})
+            self.assertEqual(value["cohort"]["luna_extractor_version_expected"], "luna-recording-credits-v2")
+            self.assertEqual(value["cohort"]["luna_extractor_version_effective"], "luna-recording-credits-v2")
             native = next(row for row in predictions if row["label_id"] == cohort.labels[1]["label_id"])
             self.assertEqual(native["methods"]["luna"][0]["display_name"], "Native River")
             self.assertEqual(value["coverage"]["fields"]["contact_excluded"], 1)
