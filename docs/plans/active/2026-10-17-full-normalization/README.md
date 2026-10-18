@@ -31,6 +31,8 @@ Test promising contextual model approaches and representations at meaningful sca
 
 Make the reader available with known issues while audits and targeted corrections continue. Preserve source/playback references and essential execution checks. Group related fixes and verification; leave isolated low-impact errors visible until an integration pass. Further compatibility, optimization and evidence packaging must address a concrete contract or blocker. Report feature completion and what changes the method choice, rather than presenting every small match gain as a milestone.
 
+Keep growing catalog knowledge separate from the code that applies it. Follow the [domain-boundary guidance](goal.md#maintainable-domain-boundaries): provider extraction, domain resolution and orchestration have distinct responsibilities; local and runtime paths share matching policy; scoped alias/history data can grow without turning the resolver into a list of evaluation-specific conditions. Simplify demonstrated duplication at integration milestones while the usable catalog remains available.
+
 ## Progress
 
 Local storage, processing, review, accepted publication and additive reads are
