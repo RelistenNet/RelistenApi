@@ -141,6 +141,70 @@ See [recording processing](../plans/active/2026-10-17-full-normalization/recordi
 for examples, receipt fields, failures and rollback. Keep production execution
 disabled until the normalization rollout is verified.
 
+### Repertoire resolution commands
+
+Use `--normalize-repertoire` for explicit repertoire operations on a writable
+catalog with migrations through 51. This is separate from recording extraction.
+Resolution can publish artist-scoped song identities and imported-song mappings,
+including visible provisional `title_derived` entries. It does not publish global
+compositions, setlist occurrences or file contents, change playback identities,
+start workers or schedules, or call providers or Luna. Keep production execution
+disabled until evaluation and rollout are verified.
+
+Resolve one exact retained source using a new attempt UUID and a JSON request file:
+
+```sh
+dotnet run --project RelistenIngestionWorker -- \
+  --normalize-repertoire resolve --attempt "$repertoire_attempt_uuid" \
+  --request /path/to/repertoire-request.json
+```
+
+For example, a previously captured dictionary uses this shape. Replace the sample
+UUID with its actual saved fetch UUID:
+
+```json
+{
+  "source": {
+    "kind": "imported_dictionary",
+    "fetchUuid": "00000000-0000-0000-0000-000000000001"
+  }
+}
+```
+
+The request may include `expectedArtistUuid` as an ownership constraint. The
+[repertoire contract](../plans/active/2026-10-17-full-normalization/repertoire-resolution.md#public-processor-contract)
+also defines `recording_titles`, `setlist_passages` and `provider_dictionary` source
+coordinates. Retained captures and published extraction attempts must already
+exist. The processor authenticates their original evidence; a filename or caller
+does not supply matching authority. Unknown JSON members and request files over
+16 KiB are rejected before catalog services are resolved.
+
+Reuse the attempt UUID and exact source request after interruption. JSON summaries
+go to stdout; diagnostics go to stderr. Exit 0 means the operation settled, which
+can include review and unresolved claims. Inspect those counts. Exit 2 means the
+attempt remains pending or is stale. Pending work resumes with the same request;
+stale work needs a new attempt through its registration. Exit 1 is an invalid,
+missing or failed request; cancellation returns 130. Saved resolver receipts
+remain authoritative when a process stops before printing its summary.
+
+```sh
+dotnet run --project RelistenIngestionWorker -- \
+  --normalize-repertoire get --attempt "$repertoire_attempt_uuid"
+dotnet run --project RelistenIngestionWorker -- \
+  --normalize-repertoire retry --attempt "$new_repertoire_attempt_uuid" \
+  --registration "$repertoire_registration_uuid"
+```
+
+Read bounded pages with `decisions --attempt ATTEMPT_UUID`, `pending` or `recovery`.
+Each accepts `--limit` from 1 through 200 and an optional `--after` UUID from the
+prior `next_cursor`. `pending` lists source registrations invalidated by changed
+evidence or policy; `recovery` lists unfinished and eligible stale attempts.
+These reads do not run resolution. Output omits source wording and full candidate
+preparations. The command handles one retained request at a time; it does not
+capture dictionaries, discover extraction accounts or establish full backfill
+coverage. Durable catalog pages and the all-artist coverage check remain separate
+work.
+
 ## Configuration
 
 | Setting | Use |

@@ -26,12 +26,13 @@ try
 }
 catch (FormatException)
     when (args.Any(argument =>
-            argument == "--normalize-recordings"
+            argument is "--normalize-recordings" or "--normalize-repertoire"
             || argument.StartsWith("--normalize-recordings=", StringComparison.Ordinal)
+            || argument.StartsWith("--normalize-repertoire=", StringComparison.Ordinal)
         )
     )
 {
-    Console.Error.WriteLine("Invalid recording command options. Each option requires a value.");
+    Console.Error.WriteLine("Invalid normalization command options. Each option requires a value.");
     Environment.ExitCode = 1;
     return;
 }
@@ -52,6 +53,7 @@ var operations = new[]
     "taperssection-status",
     "collection-discover",
     "normalize-recordings",
+    "normalize-repertoire",
 }
     .Where(key => builder.Configuration[key] != null)
     .ToArray();
@@ -99,9 +101,9 @@ try
         return;
     }
 
-    if (operations[0] == "normalize-recordings")
+    if (operations[0] is "normalize-recordings" or "normalize-repertoire")
     {
-        Environment.ExitCode = await RunRecordingNormalizationAsync(
+        Environment.ExitCode = await RunNormalizationCommandAsync(
             host.Services,
             builder.Configuration
         );
@@ -130,7 +132,7 @@ catch (Exception error)
 
 static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
 {
-    RequireRecordingOptionValues(arguments);
+    RequireNormalizationOptionValues(arguments);
     var switches = new[]
     {
         "--register-schedules",
@@ -180,7 +182,11 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     builder.Services.AddTemporalIngestionWorkers(builder.Configuration);
     builder.Services.AddScoped<IngestionOperatorCommands>();
     builder.Services.AddScoped<NormalizationRecordingCommand>();
-    if (builder.Configuration["normalize-recordings"] != null)
+    builder.Services.AddScoped<NormalizationRepertoireCommand>();
+    if (
+        builder.Configuration["normalize-recordings"] != null
+        || builder.Configuration["normalize-repertoire"] != null
+    )
     {
         // Operator receipts use stdout as a JSON stream; diagnostics remain on stderr.
         builder.Services.Configure<ConsoleLoggerOptions>(options =>
@@ -191,21 +197,32 @@ static HostApplicationBuilder CreateWorkerBuilder(string[] arguments)
     return builder;
 }
 
-static void RequireRecordingOptionValues(string[] arguments)
+static void RequireNormalizationOptionValues(string[] arguments)
 {
     if (
         !arguments.Any(argument =>
-            argument == "--normalize-recordings"
+            argument is "--normalize-recordings" or "--normalize-repertoire"
             || argument.StartsWith("--normalize-recordings=", StringComparison.Ordinal)
+            || argument.StartsWith("--normalize-repertoire=", StringComparison.Ordinal)
         )
     )
     {
         return;
     }
 
-    // The configuration provider silently ignores a trailing key without a value. A recording
-    // command must reject that request before it can resolve services or select recordings.
-    var options = new[] { "--normalize-recordings", "--artist", "--after", "--limit" };
+    // The configuration provider silently ignores a trailing key without a value. Reject
+    // incomplete normalization selectors before resolving services or opening request files.
+    var options = new[]
+    {
+        "--normalize-recordings",
+        "--normalize-repertoire",
+        "--artist",
+        "--after",
+        "--limit",
+        "--attempt",
+        "--request",
+        "--registration",
+    };
     for (var index = 0; index < arguments.Length; index++)
     {
         if (
@@ -216,7 +233,7 @@ static void RequireRecordingOptionValues(string[] arguments)
             )
         )
         {
-            throw new FormatException("Recording command options require values.");
+            throw new FormatException("Normalization command options require values.");
         }
     }
 }
@@ -266,13 +283,31 @@ static bool ValidateOperationSelection(
         return false;
     }
 
+    if (configuration["normalize-recordings"] == null && configuration["artist"] != null)
+    {
+        Console.Error.WriteLine(
+            "Artist selection requires --normalize-recordings. Use the repertoire source request's artist constraint for resolution."
+        );
+        return false;
+    }
+
     if (
         configuration["normalize-recordings"] == null
-        && new[] { "artist", "after", "limit" }.Any(key => configuration[key] != null)
+        && configuration["normalize-repertoire"] == null
+        && new[] { "after", "limit" }.Any(key => configuration[key] != null)
+    )
+    {
+        Console.Error.WriteLine("After and limit options require a normalization command.");
+        return false;
+    }
+
+    if (
+        configuration["normalize-repertoire"] == null
+        && new[] { "attempt", "request", "registration" }.Any(key => configuration[key] != null)
     )
     {
         Console.Error.WriteLine(
-            "Artist, after-source and limit options require --normalize-recordings."
+            "Attempt, request and registration options require --normalize-repertoire."
         );
         return false;
     }
@@ -280,11 +315,12 @@ static bool ValidateOperationSelection(
     return true;
 }
 
-static async Task<int> RunRecordingNormalizationAsync(
+static async Task<int> RunNormalizationCommandAsync(
     IServiceProvider services,
     IConfiguration configuration
 )
 {
+    var repertoire = configuration["normalize-repertoire"] != null;
     using var cancellation = new CancellationTokenSource();
     ConsoleCancelEventHandler cancel = (_, args) =>
     {
@@ -294,16 +330,27 @@ static async Task<int> RunRecordingNormalizationAsync(
     Console.CancelKeyPress += cancel;
     try
     {
-        var request = NormalizationRecordingCommand.Parse(configuration);
-        using var scope = services.CreateScope();
-        return await scope
+        // Parsing precedes scoped catalog resolution, including bounded repertoire request I/O.
+        if (repertoire)
+        {
+            var request = NormalizationRepertoireCommand.Parse(configuration);
+            using var scope = services.CreateScope();
+            return await scope
+                .ServiceProvider.GetRequiredService<NormalizationRepertoireCommand>()
+                .RunAsync(request, Console.Out, cancellation.Token);
+        }
+        var recordingRequest = NormalizationRecordingCommand.Parse(configuration);
+        using var recordingScope = services.CreateScope();
+        return await recordingScope
             .ServiceProvider.GetRequiredService<NormalizationRecordingCommand>()
-            .RunAsync(request, Console.Out, cancellation.Token);
+            .RunAsync(recordingRequest, Console.Out, cancellation.Token);
     }
     catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
     {
         Console.Error.WriteLine(
-            "Recording processing canceled. Retry the same page UUID and selectors to resume."
+            repertoire
+                ? "Repertoire processing canceled. Resume the same attempt and source request; inspect its retained receipt before creating a retry."
+                : "Recording processing canceled. Retry the same page UUID and selectors to resume."
         );
         return 130;
     }
@@ -320,7 +367,9 @@ static async Task<int> RunRecordingNormalizationAsync(
     {
         SentrySdk.CaptureException(error);
         Console.Error.WriteLine(
-            "Recording processing failed. Inspect the retained page, attempts and failure receipts before retrying."
+            repertoire
+                ? "Repertoire processing failed. Inspect the retained attempt and stages before retrying."
+                : "Recording processing failed. Inspect the retained page, attempts and failure receipts before retrying."
         );
         return 1;
     }
