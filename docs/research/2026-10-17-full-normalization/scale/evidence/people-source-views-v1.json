@@ -1,0 +1,144 @@
+{
+  "state": "verified_people_independent_source_view_development_comparison",
+  "source_export_commit": "492e8d7",
+  "trainer_commit": "5da020e",
+  "source_projection": "people-independent-source-views-v1",
+  "all_source_tasks": 229,
+  "source_endpoints": 318,
+  "source_views": 322,
+  "declared_relationship_bags": 219,
+  "leaf_comparisons": 295,
+  "complete_bags": 175,
+  "partial_bags": 17,
+  "zero_leaf_bags": 27,
+  "relationship_units": 215,
+  "eligible_fit_units": 100,
+  "eligible_same": 74,
+  "eligible_different": 26,
+  "eligible_cross_artist_same": 27,
+  "eligible_cross_artist_different": 2,
+  "unknown_only_units": 71,
+  "ambiguous_source_selector_units": 6,
+  "incomplete_bag_units": 17,
+  "unsupported_only_units": 21,
+  "unit_training_weight": 1,
+  "leaf_identity_targets_inherited": false,
+  "grouping_before_targets": true,
+  "old_mode_behavior_artifacts_byte_exact": 7,
+  "synthetic_python_tests_passed": 47,
+  "new_export_csharp_tests_passed": 9,
+  "compatibility_csharp_tests_passed": 178,
+  "logistic": {
+    "false_negatives": 2,
+    "false_positives": 0,
+    "diagnostic_cutoff": 0.5,
+    "mean_log_loss": 0.11621668562930668
+  },
+  "boosted": {
+    "false_negatives": 2,
+    "false_positives": 0,
+    "diagnostic_cutoff": 0.5,
+    "mean_log_loss": 0.19940404112347906
+  },
+  "public_csharp_final_logistic_parity": {
+    "scored_leaves": 295,
+    "maximum_absolute_logit_error": 4.440892098500626e-16,
+    "absolute_tolerance": 1e-12,
+    "relative_tolerance": 1e-12,
+    "fixture_actions": [
+      "review"
+    ],
+    "not_a_candidate_rejections_preserved": 43,
+    "candidate_facts_version": "people-candidate-facts-v4",
+    "retained_runtime_files": 126,
+    "api_assembly_sha256": "9d8516816b9fc8837c5d6371da8ec52e15f4cbad3346b4a551cdbc76221907d9",
+    "scope": "Frozen source-view runtime; excludes later owner-clock-index changes."
+  },
+  "limits": [
+    "Agent development judgments and correlated source families do not establish release accuracy.",
+    "Only complete bags with uniform numeric features contribute to fitting; partial, ambiguous, conflicting and differing-feature units remain explicit.",
+    "The diagnostic one-half cutoff is not an automatic publication threshold.",
+    "The valid source audit is independent-audit-v2; v1 is excluded."
+  ],
+  "release_accuracy_established": false,
+  "policy_activation_permitted": false,
+  "accepted_identity_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/manifest.json",
+      "bytes": 18936,
+      "sha256": "373c9089b3b0c16a75248158d4cca34a90b1da6cd8fa3f16a1b17f4f91ba68ca"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/prepared-v1/source/endpoints.jsonl",
+      "bytes": 225298,
+      "sha256": "c9335702f7f848563974f3d29eff36cef6344378b21f5aeef0a8afdb06637aa8"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/csharp-baseline/manifest.json",
+      "bytes": 3356,
+      "sha256": "14ad1100e084e6aab0a8a37aa53af65822863a474d1dec7f86d9f01cc663f894"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/csharp-baseline/view-bags.jsonl",
+      "bytes": 143442,
+      "sha256": "15ec3ca497b291dd078f3d40d1bdb4afa41f304b4d4617bc9c984664da4fcdef"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/csharp-baseline/view-pairs.jsonl",
+      "bytes": 694037,
+      "sha256": "25e2de2c8becee44957a192744b7e617c3c02671238326e9bdcfa053c3fbb9ea"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/logistic-boosted-v1/report.json",
+      "bytes": 40811,
+      "sha256": "1d7f7245d8fbc719ab64a87d27b8b08e393b77e9c216b967d7be45cb7f62ca9a"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/logistic-boosted-v1/relationship-units.json",
+      "bytes": 425292,
+      "sha256": "9947665d717a15f8587d1f1c0f2c08e84ddc85c08800de95f9219629b8e65642"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/logistic-boosted-v1/models.json",
+      "bytes": 1699167,
+      "sha256": "ddfe841ad516d62a0fdcf679611b2d0b8c97253d0cf5e8682affeaa2fd18feed"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/independent-audit-v2/receipt.json",
+      "bytes": 42829,
+      "sha256": "1566f6cd96879b6d586bc9f09b465e9b8fca7cc47738ce0377af5449a41bf50c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/fit-audit-v1/receipt.json",
+      "bytes": 99282,
+      "sha256": "f83e3b1e032bc2fea1c2138204e784a5b1c73fecc59fff4f88d4e2634b636acc"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/parity-audit-v1/receipt.json",
+      "bytes": 103822,
+      "sha256": "0572313eadd4c1c1bce6ac939a7f1a21574d5f95ba7331ca6707a88608599701"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/execution-verification-v1/receipt.json",
+      "bytes": 4983,
+      "sha256": "3fdd9dc33785a6a23b30af82917f38ec32f2e7ff0ba7adbed8edad1fc35b48f7"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-selection-full-development-v2-independent-audit-v1/receipt.json",
+      "bytes": 10575,
+      "sha256": "b55cea9524234a91ec26dda31e4f7e6f680587d9370f1efec0e8ce347c7e8844"
+    }
+  ],
+  "development_capture_foundation": {
+    "permitted_original_recordings": 2184,
+    "artists": 1765,
+    "components": 2172,
+    "synthetic_tests_passed": 19,
+    "prior_selection_artifacts_byte_exact": 8,
+    "original_record_bytes_unchanged": true,
+    "scope": "Previously permitted development frame, separate from the fitted cohort.",
+    "catalog_calibration_permitted": false,
+    "identity_family_closure": "unqualified"
+  }
+}

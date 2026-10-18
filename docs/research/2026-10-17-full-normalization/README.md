@@ -94,15 +94,34 @@ with exact final C# scoring and unchanged original name-only output. Contact and
 profile agreements remain absent in this cohort; the separately adjudicated
 source-reference questions supply the next development inputs.
 
-The [combined people comparison](training/people-adjudicated-training-v1/README.md)
-now reaches actual source-only C# export, grouped fitting and public runtime
-score checks. All 219 declared edges survive; 167 are supported and 52 remain
-unresolved. Deduplication yields 215 distinct pair units, including 92 eligible
-labeled units. Both models retain two false negatives and zero false positives
-at the diagnostic cutoff. Independent audits verify target provenance, component
-exclusion and every score. Public final-model parity passes with maximum error
-4.44e-16. Only 19 positive and two negative eligible units span artists, so broader
-source views and independent evaluation remain required before calibration.
+The [people source-view comparison](training/people-adjudicated-training-v1/README.md)
+retains all 219 declared relationships, 322 independently attributed views and
+295 view-pair comparisons. Grouping yields 215 relationship units, with 100
+eligible labeled units: 74 positive and 26 negative judgments. Both models
+retain two false negatives and zero false positives at the diagnostic cutoff.
+Public final-model parity checks all 295 view pairs within 1e-12, with review-only
+actions and 43 preserved noncandidate rejections. Independent audits verify
+source anchors, target provenance, grouping and scores. The
+[source-view receipt](scale/evidence/people-source-views-v1.json) pins the evidence;
+the earlier 92-unit single-view comparison remains available separately. Only
+27 positive and two negative eligible units span artists. Broader independent
+identity evidence and source-supported aliases remain necessary before
+catalog-wide calibration. The separate
+[development selection tool](../../../tools/RelistenNormalization/people-evaluation-selection/README.md)
+now passes 19 cases and retains all 2,184 permitted original recordings across
+1,765 artists and 2,172 components without changing their bytes. This prior-exposed
+development frame remains separate from the fitted cohort and from catalog-wide
+calibration.
+
+The [people capacity fixture](scale/people-candidate-capacity.md) retains complete
+distinct matching facts and all 6,789 owner observations across 6,788 recording
+owners. Two accounts are service-published sentinels; 6,786 are mechanical
+relational copies, not identity labels. Owner-only invalidation and genuine
+sentinel retraction pass. A linear owner-clock index passes 25 public cases
+without SQL or lock-order changes. The default 10,000-binding metadata limit
+still refuses the fixture's 13,584 stored bindings. A larger explicit read
+succeeds, but full people-pipeline recovery, many-claim checkpoint capacity and
+backfill throughput remain unverified.
 
 The [local MusicBrainz search receipt](scale/evidence/musicbrainz-search-local-v1.json) verifies retained timeout outcomes and explicit retry across four invocations. No successful page was received. Successful live search verification and evaluated catalog-to-work matching remain open; the [correspondence processor](../../plans/active/2026-10-17-full-normalization/composition-resolution.md) is implemented. Unavailable results are not an empty candidate set.
 

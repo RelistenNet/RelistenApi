@@ -1,99 +1,108 @@
-# Compare broader people matching evidence
+# Compare people identities across source views
 
-The original 168 questions and 61 separately adjudicated questions now form one
-authenticated development package. It preserves 229 tasks, 318 source endpoints,
-227 complete source records and 219 declared identity edges. It now reaches
-actual C# comparison, grouped model training and the public C# scorer. Source
-selectors and identity targets remain separate; answers cannot choose the actor
-used for a feature comparison.
+The people development comparison now retains separately attributed source views
+instead of requiring every field to identify the same local actor reference. Its
+100 eligible relationship units contain 74 same-actor and 26 different-actor
+judgments. Both trained models miss two positive judgments and make no
+false-positive classifications at the diagnostic one-half cutoff. This is
+working extraction, training and runtime integration; broader independent
+identity evidence is still required before automatic acceptance.
 
-The [receipt](../../scale/evidence/people-adjudicated-training-inputs-v1.json)
-pins the actual package, verification logs and independent audit. The
-[preparation tool](../../../../../tools/RelistenNormalization/people-adjudicated-training/README.md)
-defines inputs, output schemas and the reproducible command.
+The [source-view receipt](../../scale/evidence/people-source-views-v1.json)
+pins the source export, models, execution records and independent audits. The
+[trainer guide](../../../../../tools/RelistenNormalization/people-adjudicated-trainer/source-views.md)
+defines the executable contract and commands. No identity policy is activated.
 
-## Implemented and verified
+## Inputs and responsibilities
 
-All 15 optimized-Python preparation cases pass. The actual preparation revalidates
-the original source bundle and both final review receipts. Independent audit
-rebuilds all source records, 367 exact selectors, complete candidate pools,
-adjudication provenance and provisional grouping. Original labels and packets
+The authenticated development package preserves the original 168 tasks and 61
+separately adjudicated questions: 229 tasks, 318 source endpoints, 227 complete
+source records and 219 declared identity comparisons. Source selectors identify
+exact name, alias, contact or profile spans. Identity answers remain separate and
+cannot choose the actor used to construct features. Original packets and labels
 remain unchanged.
 
-The separate [source-reference API](../../../../../tools/RelistenNormalization/people-source-reference.md)
-selects actors from exact contact/profile spans. It distinguishes attached actors,
-competing references, unowned hints and absent extraction. All 17 new cases and
-102 existing C# cases pass. These tests verify attribution mechanics; the combined
-source exporter passes 150 focused C# checks. Its actual output preserves all
-219 edges: 167 supported and 52 explicitly unresolved. Seven comparisons have
-contact agreement; none has profile agreement. Only 12 of the 61 added
-declarations currently have executable source associations.
+The [preparation receipt](../../scale/evidence/people-adjudicated-training-inputs-v1.json)
+and [preparation tool](../../../../../tools/RelistenNormalization/people-adjudicated-training/README.md)
+cover source and review authentication. The
+[source-reference API](../../../../../tools/RelistenNormalization/people-source-reference.md)
+distinguishes attached actors, competing references, unowned hints and missing
+extraction. Names, contacts and profiles are evidence for comparison, not global
+identity keys.
 
 Targets contain 115 same-entity, 26 different-entity and 78 unknown judgments.
-They include original drafts and correlated examples, rather than independent
-identity samples. The controls add two cross-recording negatives and two
-within-recording co-credit distinctions. The new reviews remain agent development
-judgments, outside untouched release evaluation.
+They include original drafts and correlated examples. The added reviews are
+agent development judgments; they are not untouched release evaluation. Only
+two negative controls span recordings.
 
-## Fit distinct relationship units
+## Retain independent views without multiplying labels
 
-The [comparison receipt](../../scale/evidence/people-adjudicated-comparison-v1.json)
-pins the actual export, trained models, public score checks and independent audits.
-All 229 tasks enter grouping before targets are read. Sixty-five source-reference
-bridges remain within the original 93 components. Each actor reference includes
-its original evidence, field and local UUID; naked UUIDs cannot connect sources.
+The actual C# export retains 322 source views and 295 view-pair comparisons
+across all 219 declarations. Each declaration forms a relationship bag: the
+complete set of comparisons between its eligible left and right source views.
+There are 175 complete bags, 17 partial bags and 27 bags with no executable
+comparison. Partial and ambiguous source associations remain visible.
 
-The [combined trainer](../../../../../tools/RelistenNormalization/people-adjudicated-trainer/README.md)
-passes 21 optimized-Python contracts. It finds 215 distinct pairs, with four
-repeated declarations. Its 92 eligible fit units contain 66 positive and 26
-negative labels. Another 71 pairs are unknown only; 52 have unsupported
-projections. No conflicting or different-feature units occur in this run; the
-contract excludes them when present. Original unknown judgments stay unknown.
+Actor-reference keys include their original evidence, field and local UUID.
+Name-only views retain exact source coordinates. Neither field priority nor a
+union of contact values creates a synthetic actor. All 229 tasks, source groups
+and scoped bridges enter grouping before targets are read. Bags that share a
+full unordered actor pair merge transitively; sharing just one actor does not
+merge relationships.
 
-Each eligible unit contributes once. Both trained models miss two positive
-draft labels and make no false-positive classifications at the diagnostic
-one-half cutoff. Logistic mean log loss is 0.12578336407289936; boosted-tree loss
-is 0.21181699218723646. The missed pairs are Jon Cunningham/Corn Mo and Andy
-Moresi/Hot Dog, whose roster wording supplies no parsed alias context.
+The trainer retains 215 relationship units. It fits only complete bags whose
+numerical feature vectors agree, with one total training weight per final unit.
+Conflicting targets, differing features and genuine selector ambiguity remain
+explicit exclusions. Unknown judgments stay unknown, and individual view pairs
+do not inherit identity labels. Actual rule disagreement is retained separately
+from numerical agreement; it cannot produce an invented rule winner.
 
-Independent audit authenticates all target row links and checks every portable
-score. Each fold excludes the entire source component, including unknown tasks.
-All 219 original diagnostic rows survive. Final-model scores remain separate
-from held-component predictions.
+## Results and verification
 
-## Verify the public runtime
+The 100 eligible units include 27 positive and two negative units spanning
+artists. Another 71 units have only unknown judgments; 17 have incomplete bag
+coverage, six have selector ambiguity and 21 have only unsupported bags. These
+are relationship units, not 100 statistically independent identities.
 
-The public `PeopleResolutionPolicyEvaluator` scores all 167 supported comparisons
-against the final logistic model; 52 unsupported comparisons remain explicit
-skips. Maximum raw-logit error is 4.440892098500626e-16, within absolute and
-relative tolerance 1e-12. This checks the final model exchange, separately from
-held-component evaluation.
+Logistic mean log loss is 0.11621668562930668; boosted-tree loss is
+0.19940404112347906. Both models retain two false negatives and zero false
+positives at the diagnostic cutoff. The unresolved alias cases remain Jon
+Cunningham/Corn Mo and Andy Moresi/Hot Dog. The cutoff is a comparison aid, not a
+publication threshold.
 
-The synthetic fixture uses people v4 facts and cannot match or create identities.
-All returned actions are `review`. Independent audit verifies 103 retained
-runtime files and model/API alignment. No matching policy is activated.
+All 47 Python cases, nine new C# export cases and 178 compatibility cases pass.
+Independent audits verify source anchors, all Cartesian view pairs, target
+provenance, component exclusion and portable scores. The earlier
+[single-view comparison](../../scale/evidence/people-adjudicated-comparison-v1.json)
+remains available separately: it has 92 eligible units, including 66 positive
+and 26 negative judgments. Its seven behavioral artifacts replay byte for byte.
+The additional views improve source coverage without adding identity judgments.
 
-## Remaining coverage and implementation
+## Public runtime and remaining work
 
-These are distinct pair units, not 92 statistically independent identities.
-Only 19 positive and two negative eligible units span artists. The selected
-development cohort cannot calibrate catalog-wide automatic matching, and its
-diagnostic cutoff is not a publication threshold.
+The public `PeopleResolutionPolicyEvaluator` scores all 295 final-model view
+comparisons. Maximum raw-logit difference is 4.440892098500626e-16, within absolute
+and relative tolerance 1e-12. All actions remain `review`; 43 noncandidate
+rejections remain intact. The fixture cannot match or create identities.
+Independent audit authenticates 126 retained runtime files. This parity result
+covers the frozen source-view runtime, separately from held-component evaluation
+and later owner-clock-index changes.
 
-The source audit finds 26 endpoints with separately attributed views across
-fields and one with competing actors within a selector. Another 30 endpoints
-lack contact/profile attribution. These endpoint counts differ from the 52
-unresolved relationship edges. A new export will retain independent views,
-partial coverage and streamed comparisons without field priority or contact
-union. Copied field combinations must not become extra training labels.
+The [selection tool](../../../../../tools/RelistenNormalization/people-evaluation-selection/README.md)
+passes 19 cases and preserves all 2,184 previously permitted original recordings
+across 1,765 artists and 2,172 components. Its eight prior selection artifacts
+and original record bytes remain unchanged. This is the development capture
+foundation, separate from the fitted cohort. It does not yet prove that all
+recordings of one credited actor stay in the same evaluation component. It cannot
+calibrate the full catalog.
 
-Broaden source coverage and independent identity, artist, time and format
-evaluation under the [evaluation strategy](../../../../plans/active/2026-10-17-full-normalization/evaluation-strategy.md).
-The retained artist-balanced capture is not an unbiased calibration frame.
-Parser improvements, automatic acceptance and Luna routing need separate
-evaluated evidence.
+Broaden independent identity, artist, time and format coverage under the
+[evaluation strategy](../../../../plans/active/2026-10-17-full-normalization/evaluation-strategy.md).
+Improve source-supported alias extraction and compare selective Luna processing
+on local successes as well as failures before selecting acceptance or fallback
+routing policies.
 
 The ignored directory
-`local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/`
-retains preparation, source exports, fitted models, public score checks and
-their independent audits. Historical failed attempts remain preserved.
+`local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-adjudicated-v1/independent-views-v1/`
+retains the authenticated export, trained models, public score checks and valid
+independent audits linked by the receipt.

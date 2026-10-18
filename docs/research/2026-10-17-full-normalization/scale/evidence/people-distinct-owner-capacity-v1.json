@@ -1,0 +1,66 @@
+{
+  "state": "verified_distinct_owner_capacity_and_clock_index_contracts",
+  "distinct_owner_fixture_commit": "6182031",
+  "owner_clock_index_commit": "8ec9946",
+  "recording_owners": 6788,
+  "owner_observations": 6789,
+  "service_published_sentinels": 2,
+  "mechanically_copied_accounts": 6786,
+  "mechanical_copy_scope": "Relational capacity mechanics, not identity labels or upstream publications.",
+  "reader_sizes_serialized_utf8_bytes": {
+    "distinct_matching_aggregate": 498,
+    "owner_observations": 1072663,
+    "full_snapshot": 1081730,
+    "acknowledgment_ticket": 1073278
+  },
+  "retained_raw_witnesses": 1,
+  "all_original_owner_stamps_preserved": true,
+  "owner_only_review_invalidates_original_admission": true,
+  "candidate_universe_unchanged_during_owner_review": true,
+  "genuine_sentinel_retraction": "service_retracted",
+  "metadata_capacity": {
+    "default_maximum_contributors": 100,
+    "default_maximum_stored_bindings": 10000,
+    "stored_owner_bindings": 13578,
+    "total_stored_bindings": 13584,
+    "distinct_owner_union": 6789,
+    "explicit_read_maximum_bindings": 100000,
+    "default_read_refused": true,
+    "explicit_larger_read_succeeded": true,
+    "pipeline_recovery_established": false
+  },
+  "saved_retraction_checkpoint": {
+    "preparation_json_text_bytes": 5850,
+    "batch_json_text_bytes": 7886,
+    "scope": "Actual empty-credit retraction; does not measure a many-claim checkpoint."
+  },
+  "clock_index": {
+    "new_public_cases_passed": 3,
+    "existing_owner_observation_cases_passed": 21,
+    "distinct_owner_people_case_passed": 1,
+    "total_public_cases_passed": 25,
+    "lookup": "Linear construction and keyed lookup of original owner observations.",
+    "sql_or_lock_order_changes": false,
+    "measured_speedup_claimed": false
+  },
+  "limits": [
+    "Serialized byte sizes do not measure network bytes, peak memory, database I/O or throughput.",
+    "Seed timing includes assertions and is not a benchmark.",
+    "Default contribution bounds and many-claim checkpoint capacity remain unresolved."
+  ],
+  "identity_accuracy_established": false,
+  "pipeline_capacity_recovery_established": false,
+  "policy_activation_permitted": false,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-owner-scale-distinct-v1/run-v3/receipt.json",
+      "bytes": 6917,
+      "sha256": "ee3f8fae1745a9f4338c0b4507a1fdd2b853c8bb4b5b8cccf7591851b64c69fe"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-owner-clock-index-v1/receipt.json",
+      "bytes": 3837,
+      "sha256": "6344eadf0d52d3e51fe010999def666c424a71ce7e750f31f360ee6c648edab3"
+    }
+  ]
+}

@@ -1,62 +1,82 @@
 # Scale people matching by distinct facts
 
-The people candidate reader now separates complete distinct matching facts from
-bounded raw evidence examples. Repeated supporting accounts no longer consume
-the distinct-fact budget. The previous v3 reader capped raw evidence at 5,000
-contexts and 4 MiB, making the whole snapshot incomplete when either limit was
-exceeded. Retrying unchanged input could not resolve that condition.
+The people candidate reader separates complete distinct matching facts from
+bounded raw evidence examples. A local fixture now verifies 6,788 recording
+owners and all 6,789 owner observations, including owner-only review changes and
+a genuine accepted-credit retraction. The remaining capacity barrier is the
+default contribution-binding budget and unmeasured many-claim checkpoints.
+An explicit larger metadata read does not establish pipeline recovery.
 
-The [read-only capacity probe](evidence/people-candidate-capacity-v1.json) confirms
-that the catalog contains credit metadata at this scale. One exact stored label
-appears in 5,671 taper/transferrer field entries across 2,995 recordings and 489
-artists; another appears 5,483 times. Credit fields contain a literal Charlie
-Miller name reference on 6,788 recordings across 86 artists. Exact labels and name
-references do not establish canonical identities. They can contain compound
-credits, projects or namesakes. Raw field sizes likewise do not measure serialized
-accepted actor facts. The probe supports a capacity test, not an identity decision
-or a claim of production normalization failures.
+The [capacity receipt](evidence/people-distinct-owner-capacity-v1.json) pins the
+executed fixture, source, binaries and focused test logs. These checks establish
+publication and freshness mechanics, not identity accuracy or throughput.
 
-## Revised contract
+## Why repeated support must not exhaust matching facts
 
-People candidate facts contain complete distinct matching facts: credited
-names and aliases, contact tuples, profile tuples including relationship, context
-presence, attachment uncertainty and kind-conflict information. Keep canonical
-kind, qualified identifiers and exact artist membership separately. Source kind
-assertions cannot replace canonical kind.
+The [read-only catalog probe](evidence/people-candidate-capacity-v1.json) finds
+one exact credit label in 5,671 taper/transferrer entries across 2,995 recordings
+and 489 artists; another appears 5,483 times. Credit fields contain a literal
+Charlie Miller reference on 6,788 recordings across 86 artists. Those labels can
+contain compound credits, projects or namesakes. They justify a capacity test,
+not a canonical identity decision or a claim of production failures.
 
-Return bounded original evidence examples alongside those complete facts. Repeated
-accounts must not exhaust a distinct-fact budget. Genuine overflow of semantic
-sets or aggregate output remains explicit and blocks automatic acceptance. Record
-total context count, witness count and witness truncation separately so operators
-can distinguish missing matching facts from omitted repeated evidence.
+The previous reader capped raw evidence at 5,000 contexts and 4 MiB. The current
+people v4 contract instead returns complete distinct names, aliases, contact and
+profile tuples, context presence, attachment uncertainty and kind conflicts.
+Canonical kind, qualified identifiers and exact artist membership remain
+separate. Other domains retain candidate facts v3; old policy attestations cannot
+silently authorize the people v4 contract.
 
-Retain every active-context owner observation, the original snapshot clocks,
-accepted-credit/support joins, redirects and correction/retraction behavior.
-Bounding raw witnesses cannot discard freshness checks. The global people epoch
-alone does not prove that owner-only editorial changes are covered.
+Repeated accounts do not consume the distinct-fact budget. Genuine semantic or
+aggregate overflow remains explicit and blocks automatic acceptance. Bounded
+original witnesses accompany complete matching facts, with total contexts,
+witness counts and truncation reported separately.
 
-The people-only candidate-facts version is v4; other domains keep v3.
-New people policies must identify the new contract. Old attestations cannot
-silently authorize it. No policy is active.
+## Preserve every owner's freshness
 
-## Implementation and verification
+The reader validates original payload hashes and reads active accounts
+sequentially. It retains every active owner observation, accepted credit/support
+join, redirect and correction/retraction relationship. A bounded witness list
+cannot omit freshness checks; the global people epoch alone cannot detect every
+owner-only editorial change.
 
-The implementation reads active accounts sequentially, validates each
-original payload hash, and accumulates distinct facts, complete owner stamps and
-bounded witnesses. This preserves existing integrity checks without adding a
-second SQL canonical-hashing protocol. Streaming avoids retaining every raw
-account at once; it does not establish bounded total database bytes, work or
-owner-stamp output. Measure those costs before rollout.
+The distinct-owner fixture uses two service-published sentinel accounts and
+6,786 mechanical relational copies. The copies test joins and capacity; they are
+neither independently verified people nor upstream publications. The reader
+retains one raw witness, a 498-byte distinct matching aggregate and 1,072,663
+bytes of owner observations. The full snapshot serializes to 1,081,730 UTF-8
+bytes; its acknowledgment ticket is 1,073,278 bytes. These are serialized sizes,
+not network traffic, peak memory, database I/O or throughput measurements.
 
-Focused verification passes 126 matching/policy cases and 152 database cases.
-The database fixture reads 5,002 supporting accounts beyond the old count and
-byte limits while preserving complete matching facts. Tests also cover unique
-unwitnessed aliases/contacts, owner-only changes with an unchanged people epoch,
-retraction and genuine semantic overflow. Small complete aggregates preserve
-the raw projection's comparisons. Nonpeople version and serialization contracts
-remain unchanged. These checks establish mechanics, not identity accuracy or
-production throughput.
+An unwitnessed owner's review change invalidates admission using the original
+observations even while the candidate universe stays unchanged. Retraction of a
+genuine service-published sentinel removes its unique semantics. The owner-clock
+index builds keyed lookups in linear work and preserves the same observations;
+it changes neither SQL nor lock order. Three new public cases, 21 existing owner
+observation cases and the distinct-owner people fixture pass. No measured
+speedup is claimed.
 
-The [people actor contract](../../../plans/active/2026-10-17-full-normalization/people-actor-evidence.md)
-defines the current reader. The [implementation receipt](evidence/people-candidate-aggregation-v1.json) retains the executed
-source, binary and test-log hashes alongside the read-only volume probe.
+## Resolve the remaining pipeline limits
+
+This fixture stores 13,584 contribution bindings, including 13,578 owner bindings
+for a distinct union of 6,789 owners. The default metadata budget is 10,000 stored
+bindings, so the default read correctly refuses it. An explicit 100,000-binding
+read succeeds, but the people processing entrypoint has not yet demonstrated
+recovery at that size. Keep stored membership counts distinct from the deduplicated
+owner union when choosing limits.
+
+The saved retraction has a 5,850-byte preparation and a 7,886-byte batch in JSON
+text. It is an actual empty-credit retraction, not a measurement of a large
+many-claim checkpoint. Verify realistic extraction, preparation, admission,
+publication and retry with the intended default contribution bounds before
+backfill. Measure database work and owner-stamp growth through that full path.
+Seed timings include assertions and cannot establish throughput.
+
+The earlier [aggregation receipt](evidence/people-candidate-aggregation-v1.json)
+retains 126 matching/policy and 152 database checks, including 5,002 supporting
+accounts beyond the old raw limits, unwitnessed aliases and contacts, semantic
+overflow and nonpeople compatibility. The distinct-owner test covers the
+additional owner-stamp burden. The
+[people actor contract](../../../plans/active/2026-10-17-full-normalization/people-actor-evidence.md)
+defines the reader and policy-version boundary. No identity matching policy is
+activated.
