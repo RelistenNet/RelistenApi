@@ -23,7 +23,7 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-VERSION = "people-name-directory-v3"
+VERSION = "people-name-directory-v4"
 
 
 def name_key(name):
@@ -37,6 +37,14 @@ def group_id(key):
 
 def encoded(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def retained_actor_facts(record, credit):
@@ -229,6 +237,11 @@ class DirectoryBuilder:
                 ),
             )
         }
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone():
+            counts["catalogGroups"] = counts["groups"]
+            counts["groups"] += db.execute(
+                "SELECT count(*) FROM native_groups n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)"
+            ).fetchone()[0]
         db.execute(
             "INSERT OR REPLACE INTO metadata VALUES('directoryStats',?)",
             (encoded(counts),),
@@ -424,6 +437,208 @@ class CreditOverlay:
                     yield str(chunk.relative_to(self.run)), line, json.loads(text)
 
 
+class NativePeopleOverlay:
+    """Add native observations beside catalog credits, never replacing their authority.
+
+    This is one replaceable native population. Only compact actor facts and original
+    locators are stored; the original output owns projections and provider evidence.
+    Native artist/source coordinates stay in the run namespace, including Local.
+    """
+
+    MAXIMUM_PARENTS = 2_000
+    MAXIMUM_DECODED_BYTES = 64 * 1024**2
+
+    def __init__(self, run, database, native_url, minimum_free=4.5 * 1024**3):
+        self.run = Path(run).resolve()
+        self.database = Path(database).resolve()
+        parsed = urlsplit(native_url)
+        parsed.port
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None
+                or parsed.path not in {"", "/"} or parsed.query or parsed.fragment
+                or any(ord(character) < 33 or character == "\\" for character in native_url)):
+            raise ValueError("Native reader must be an HTTP(S) origin")
+        self.native_url = native_url.rstrip("/") + "/"
+        self.writer = DirectoryBuilder(run, database, minimum_free)
+
+    def apply(self):
+        manifest_bytes = (self.run / "manifest.json").read_bytes()
+        manifest = json.loads(manifest_bytes)
+        if manifest.get("state") != "completed" or not manifest.get("inputIdentity"):
+            raise ValueError("Native overlay requires a completed, identified run")
+        namespace = manifest["inputIdentity"]
+        method = manifest.get("methods", {}).get("ShadowNativePeopleAdapter")
+        if not method:
+            raise ValueError("Native people producer is missing")
+        expected_people = sum(item["processed"] for item in manifest.get("counts", []) if item["domain"] == "people")
+        if expected_people > self.MAXIMUM_PARENTS:
+            raise ValueError("Native overlay exceeds the 2000-parent projection bound")
+        people, people_pins, people_bytes = self._population("people", method, self.MAXIMUM_DECODED_BYTES)
+        credits, credit_pins, credit_bytes = self._population("credits", method, self.MAXIMUM_DECODED_BYTES - people_bytes)
+        if people.keys() != credits.keys():
+            raise ValueError("Native people and credit populations differ")
+        for domain, population in (("people", people), ("credits", credits)):
+            expected = {item["provider"]: item["processed"] for item in manifest.get("counts", [])
+                        if item["domain"] == domain}
+            actual = {}
+            for _, _, record in population.values():
+                actual[record["provider"]] = actual.get(record["provider"], 0) + 1
+            if not expected or actual != expected:
+                raise ValueError("Native population differs from the completed run counts")
+        self.writer._check_space()
+        with closing(sqlite3.connect(self.database)) as db, db:
+            # DDL and replacement share one transaction, so a bad new observation
+            # leaves the prior population and all catalog/context tables intact.
+            db.execute("BEGIN")
+            self._schema(db)
+            for table in ("native_credits", "native_actors", "native_names", "native_groups"):
+                db.execute("DELETE FROM " + table)
+            for key, (chunk, line, record) in people.items():
+                self.writer._check_space()
+                other = credits[key][2]
+                for field in ("inputUuid", "artistUuid", "artistName", "provider"):
+                    if record.get(field) != other.get(field):
+                        raise ValueError("Native paired outcome headers differ")
+                self._add_parent(db, namespace, record, other, chunk, line)
+            self._summarize(db)
+            counts = {
+                label: db.execute(query).fetchone()[0]
+                for label, query in (
+                    ("actors", "SELECT count(*) FROM native_actors"),
+                    ("creditMentions", "SELECT count(*) FROM native_credits"),
+                    ("aliasActors", "SELECT count(*) FROM native_actors WHERE role_free=1"),
+                    ("recordingAccounts", "SELECT count(DISTINCT recording_key) FROM native_actors"),
+                    ("artistContexts", "SELECT count(DISTINCT artist_key) FROM native_actors"),
+                )
+            }
+            counts.update(parents=len(people), run=str(self.run), readerUrl=self.native_url,
+                          namespace=namespace, manifestSha256=hashlib.sha256(manifest_bytes).hexdigest(),
+                          chunks=people_pins + credit_pins, method=method,
+                          bounds=dict(parents=self.MAXIMUM_PARENTS, decodedBytes=self.MAXIMUM_DECODED_BYTES),
+                          decodedBytes=people_bytes + credit_bytes)
+            db.execute("INSERT OR REPLACE INTO metadata VALUES('nativeDirectory',?)", (encoded(counts),))
+            # Reuse the existing small count snapshot; base credits and homes are
+            # deliberately not rescanned or rewritten by this additive phase.
+            stats = json.loads(db.execute("SELECT value FROM metadata WHERE key='directoryStats'").fetchone()[0])
+            stats["catalogGroups"] = stats.get("catalogGroups", stats["groups"])
+            stats["groups"] = stats["catalogGroups"] + db.execute(
+                "SELECT count(*) FROM native_groups n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)"
+            ).fetchone()[0]
+            db.execute("UPDATE metadata SET value=? WHERE key='directoryStats'", (encoded(stats),))
+            if (self.run / "manifest.json").read_bytes() != manifest_bytes:
+                raise ValueError("Native run manifest changed during projection")
+        return counts
+
+    def _population(self, domain, method, maximum_bytes):
+        parents, pins, decoded_bytes = {}, [], 0
+        for chunk in sorted((self.run / domain).glob("*.jsonl.gz")):
+            before = file_sha256(chunk)
+            with gzip.open(chunk, "rb") as stream:
+                line = 0
+                while text := stream.readline(maximum_bytes - decoded_bytes + 1):
+                    line += 1
+                    decoded_bytes += len(text)
+                    if decoded_bytes > maximum_bytes:
+                        raise ValueError("Native overlay exceeds the 64 MiB decoded projection bound")
+                    record = json.loads(text)
+                    if (record.get("domain") != domain or record.get("inputKind") != "provider_input"
+                            or record.get("method") != method or record.get("outcome") == "failed"):
+                        raise ValueError("Native overlay contains an unsupported or failed outcome")
+                    parents[record["inputKey"]] = (str(chunk.relative_to(self.run)), line, record)
+                    if len(parents) > self.MAXIMUM_PARENTS:
+                        raise ValueError("Native overlay exceeds the 2000-parent projection bound")
+            if file_sha256(chunk) != before:
+                raise ValueError("Native chunk changed during projection")
+            pins.append(dict(path=str(chunk.relative_to(self.run)), sha256=before))
+        return parents, pins, decoded_bytes
+
+    @staticmethod
+    def _schema(db):
+        for statement in (
+            """CREATE TABLE IF NOT EXISTS native_groups(id TEXT PRIMARY KEY,name_key TEXT,display_name TEXT,
+                actor_count INTEGER,credit_count INTEGER,recording_count INTEGER,artist_count INTEGER)""",
+            """CREATE TABLE IF NOT EXISTS native_names(group_id TEXT,wording TEXT,lookup TEXT,basis TEXT,
+                PRIMARY KEY(group_id,wording,basis))""",
+            "CREATE INDEX IF NOT EXISTS native_names_lookup ON native_names(lookup)",
+            """CREATE TABLE IF NOT EXISTS native_actors(id TEXT PRIMARY KEY,group_id TEXT,actor_key TEXT,
+                input_key TEXT,input_uuid TEXT,input_revision_uuid TEXT,recording_key TEXT,
+                recording_origin TEXT,file_origin TEXT,catalog_source_uuid TEXT,catalog_show_uuid TEXT,
+                binding_reason TEXT,artist_key TEXT,artist_uuid TEXT,artist_name TEXT,provider TEXT,
+                name TEXT,aliases TEXT,evidence TEXT,role_free INTEGER,chunk TEXT,line INTEGER)""",
+            "CREATE INDEX IF NOT EXISTS native_actors_group ON native_actors(group_id,artist_key,id)",
+            """CREATE TABLE IF NOT EXISTS native_credits(id TEXT PRIMARY KEY,actor_id TEXT,role TEXT,
+                original_role TEXT,evidence TEXT)""",
+            "CREATE INDEX IF NOT EXISTS native_credits_actor ON native_credits(actor_id)",
+        ):
+            db.execute(statement)
+
+    @staticmethod
+    def _add_parent(db, namespace, record, credit_record, chunk, line):
+        actors = {}
+        for actor in (record.get("proposal") or {}).get("people", []):
+            key = actor["entityKey"]
+            if key in actors:
+                raise ValueError("Repeated native actor key")
+            if actor.get("automaticAcceptanceAuthorized"):
+                raise ValueError("Native directory accepts proposals only")
+            aliases = actor.get("aliases", [])
+            if not isinstance(actor["name"], str) or any(not isinstance(alias, str) for alias in aliases):
+                raise ValueError("Native names must retain literal wording")
+            lookup = name_key(actor["name"])
+            if not lookup:
+                raise ValueError("Native actor lacks usable wording")
+            identifier = group_id(lookup)
+            actor_id = "native-actor:" + hashlib.sha256(encoded([namespace, record["inputKey"], key]).encode()).hexdigest()
+            artist_key = "native-artist:" + hashlib.sha256(encoded([namespace, record["artistUuid"]]).encode()).hexdigest()
+            origin = actor["recordingOrigin"]
+            recording_key = encoded([namespace, record["inputKey"], origin])
+            role_free = actor.get("sourceActorAlias") is not None
+            if role_free and (actor.get("actorFacts") is not None or actor.get("kind") is not None):
+                raise ValueError("Role-free actor carries credited facts or kind")
+            db.execute("INSERT OR IGNORE INTO native_groups VALUES(?,?,?,0,0,0,0)",
+                       (identifier, lookup, actor["name"]))
+            db.execute("INSERT OR IGNORE INTO native_names VALUES(?,?,?,?)",
+                       (identifier, actor["name"], lookup, "native_name"))
+            for alias in aliases:
+                db.execute("INSERT OR IGNORE INTO native_names VALUES(?,?,?,?)",
+                           (identifier, alias, name_key(alias), "explicit_source_alias"))
+            db.execute("INSERT INTO native_actors VALUES(" + ",".join("?" for _ in range(22)) + ")", (
+                actor_id, identifier, key, record["inputKey"], record["inputUuid"], actor["inputRevisionUuid"],
+                recording_key, encoded(origin), encoded(actor.get("fileOrigin")), actor.get("catalogSourceUuid"),
+                actor.get("catalogShowUuid"), actor.get("catalogBindingReason"), artist_key,
+                record["artistUuid"], record["artistName"], record["provider"], actor["name"],
+                encoded(aliases), encoded(actor.get("evidence", [])), int(role_free), chunk, line))
+            actors[key] = (actor_id, actor)
+        seen = {}
+        for credit in (credit_record.get("proposal") or {}).get("credits", []):
+            key = credit["entityKey"]
+            if key in seen:
+                if credit != seen[key]:
+                    raise ValueError("Native credit key has contradictory facts")
+                continue
+            seen[key] = credit
+            if credit.get("personEntityKey") not in actors:
+                raise ValueError("Native credit has no corresponding actor")
+            actor_id, actor = actors[credit["personEntityKey"]]
+            if actor.get("sourceActorAlias") is not None or any(
+                credit.get(field) != actor.get(field) for field in
+                ("name", "inputRevisionUuid", "recordingOrigin", "fileOrigin", "catalogSourceUuid", "catalogShowUuid")
+            ):
+                raise ValueError("Native credit changes its actor scope")
+            if not isinstance(credit.get("role"), str) or not credit["role"]:
+                raise ValueError("Native credit lacks an observed role")
+            db.execute("INSERT INTO native_credits VALUES(?,?,?,?,?)", (
+                encoded([record["inputKey"], key]), actor_id, credit["role"], credit.get("originalRole"), encoded(credit.get("evidence"))))
+
+    @staticmethod
+    def _summarize(db):
+        db.execute("""UPDATE native_groups SET
+            actor_count=(SELECT count(*) FROM native_actors a WHERE a.group_id=native_groups.id),
+            credit_count=(SELECT count(*) FROM native_credits c JOIN native_actors a ON a.id=c.actor_id WHERE a.group_id=native_groups.id),
+            recording_count=(SELECT count(DISTINCT recording_key) FROM native_actors a WHERE a.group_id=native_groups.id),
+            artist_count=(SELECT count(DISTINCT artist_key) FROM native_actors a WHERE a.group_id=native_groups.id)""")
+
+
 class SourceHomeEnrichment:
     """Add captured recording homes without rebuilding credits or changing ownership.
 
@@ -543,24 +758,40 @@ class PeopleDirectory:
             result.update(filesUrl=self.files_url, coreUrl=self.core_url)
             return result
 
+    @staticmethod
+    def _population_sql(db):
+        """Union retrieval names while keeping catalog and native counters separate."""
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='native_groups'").fetchone():
+            return "WITH directory_groups AS (SELECT * FROM groups), directory_names AS (SELECT * FROM names) "
+        return """WITH directory_groups AS (
+            SELECT g.*,coalesce(n.actor_count,0) native_actor_count,
+                coalesce(n.credit_count,0) native_credit_count,
+                coalesce(n.recording_count,0) native_recording_count,
+                coalesce(n.artist_count,0) native_artist_count
+            FROM groups g LEFT JOIN native_groups n ON n.id=g.id
+            UNION ALL
+            SELECT n.id,n.name_key,n.display_name,0,0,0,n.actor_count,n.credit_count,n.recording_count,n.artist_count
+            FROM native_groups n WHERE NOT EXISTS(SELECT 1 FROM groups g WHERE g.id=n.id)
+            ), directory_names AS (SELECT * FROM names UNION SELECT * FROM native_names) """
+
     def search(self, parameters):
         offset, limit = self.page(parameters)
         query = name_key(parameters.get("q", ""))
         # instr gives literal substring search, including names containing % or _.
         where = (
-            "WHERE EXISTS(SELECT 1 FROM names n WHERE n.group_id=g.id AND instr(n.lookup,?)>0)"
+            "WHERE EXISTS(SELECT 1 FROM directory_names n WHERE n.group_id=g.id AND instr(n.lookup,?)>0)"
             if query
             else ""
         )
         values = [query] if query else []
         with closing(self.connect()) as db:
             total = db.execute(
-                f"SELECT count(*) FROM groups g {where}", values
+                self._population_sql(db) + f"SELECT count(*) FROM directory_groups g {where}", values
             ).fetchone()[0]
             groups = [
                 dict(row)
                 for row in db.execute(
-                    f"SELECT g.* FROM groups g {where} ORDER BY recording_count DESC,id LIMIT ? OFFSET ?",
+                    self._population_sql(db) + f"SELECT g.* FROM directory_groups g {where} ORDER BY recording_count DESC,id LIMIT ? OFFSET ?",
                     values + [limit, offset],
                 )
             ]
@@ -577,7 +808,7 @@ class PeopleDirectory:
         artist = parameters.get("artist", "")
         with closing(self.connect()) as db:
             row = db.execute(
-                "SELECT * FROM groups WHERE id=?", (identifier,)
+                self._population_sql(db) + "SELECT * FROM directory_groups WHERE id=?", (identifier,)
             ).fetchone()
             if row is None:
                 return None
@@ -586,7 +817,7 @@ class PeopleDirectory:
             result["names"] = [
                 dict(row)
                 for row in db.execute(
-                    "SELECT wording,basis FROM names WHERE group_id=? ORDER BY basis,wording",
+                    self._population_sql(db) + "SELECT wording,basis FROM directory_names WHERE group_id=? ORDER BY basis,wording",
                     (identifier,),
                 )
             ]
@@ -608,8 +839,8 @@ class PeopleDirectory:
             result["relatedGroups"] = [
                 dict(row)
                 for row in db.execute(
-                    """SELECT DISTINCT g.id,g.display_name,g.recording_count FROM names mine
-                JOIN names other ON mine.lookup=other.lookup JOIN groups g ON g.id=other.group_id
+                    self._population_sql(db) + """SELECT DISTINCT g.id,g.display_name,g.recording_count FROM directory_names mine
+                JOIN directory_names other ON mine.lookup=other.lookup JOIN directory_groups g ON g.id=other.group_id
                 WHERE mine.group_id=? AND other.group_id<>? ORDER BY g.recording_count DESC,g.id LIMIT 30""",
                     (identifier, identifier),
                 )
@@ -663,7 +894,80 @@ class PeopleDirectory:
                     }
                 )
             result.update(offset=offset, limit=limit)
+            result.update(self._native_observations(db, identifier, parameters))
             return result
+
+    def _native_observations(self, db, identifier, parameters):
+        empty = dict(nativeObservations=[], nativeTotal=0, nativeArtists=[])
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE name='native_actors'").fetchone():
+            return empty
+        offset, limit = self.page({"offset": parameters.get("nativeOffset", "0"), "limit": parameters.get("limit", "30")})
+        artist = parameters.get("nativeArtist", "")
+        where = "group_id=?" + (" AND artist_key=?" if artist else "")
+        values = [identifier] + ([artist] if artist else [])
+        metadata = json.loads(db.execute("SELECT value FROM metadata WHERE key='nativeDirectory'").fetchone()[0])
+        result = dict(nativeTotal=db.execute("SELECT count(*) FROM native_actors WHERE " + where, values).fetchone()[0],
+                      nativeOffset=offset, nativeLimit=limit,
+                      nativeArtists=[dict(row) for row in db.execute(
+                          "SELECT artist_key,artist_name,count(*) observations FROM native_actors WHERE group_id=? GROUP BY artist_key ORDER BY artist_name,artist_key",
+                          (identifier,))], nativeObservations=[])
+        for row in db.execute("SELECT * FROM native_actors WHERE " + where + " ORDER BY id LIMIT ? OFFSET ?", values + [limit, offset]):
+            actor = dict(row)
+            for field in ("recording_origin", "file_origin", "aliases", "evidence"):
+                actor[field] = json.loads(actor[field])
+            actor["credits"] = [dict(credit) for credit in db.execute(
+                "SELECT role,original_role,evidence FROM native_credits WHERE actor_id=? ORDER BY id", (actor["id"],))]
+            for credit in actor["credits"]:
+                credit["evidence"] = json.loads(credit["evidence"])
+            actor["sourceEvidenceUrl"] = "/api/native-actor?" + urlencode({"id": actor["id"]})
+            # This is deliberately the native input's file result, not a guessed
+            # production home or a claim that every input file belongs to this actor.
+            actor["inputFilesUrl"] = metadata["readerUrl"] + "?" + urlencode({"domain": "file_contents", "q": actor["input_uuid"]})
+            actor["originRun"] = metadata["run"]
+            actor["catalogNamespace"] = metadata["namespace"]
+            result["nativeObservations"].append(actor)
+        return result
+
+    def native_actor(self, identifier):
+        """Load one original actor by its retained key, scope and physical line."""
+        with closing(self.connect()) as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE name='native_actors'").fetchone():
+                return None
+            row = db.execute("SELECT * FROM native_actors WHERE id=?", (identifier,)).fetchone()
+            if row is None:
+                return None
+            indexed = dict(row)
+            metadata = json.loads(db.execute("SELECT value FROM metadata WHERE key='nativeDirectory'").fetchone()[0])
+        run = Path(metadata["run"])
+        path = (run / indexed["chunk"]).resolve()
+        expected = next(pin["sha256"] for pin in metadata["chunks"] if pin["path"] == indexed["chunk"])
+        try:
+            actual = file_sha256(path)
+        except OSError as error:
+            raise ValueError("Original native chunk is unavailable") from error
+        if not path.is_relative_to(run) or actual != expected:
+            raise ValueError("Original native chunk changed")
+        with gzip.open(path, "rt", encoding="utf-8") as stream:
+            for line, text in enumerate(stream, 1):
+                if line == indexed["line"]:
+                    record = json.loads(text)
+                    break
+            else:
+                raise ValueError("Original native outcome is unavailable")
+        if (record.get("domain"), record.get("inputKind"), record.get("inputKey"), record.get("inputUuid")) != (
+                "people", "provider_input", indexed["input_key"], indexed["input_uuid"]):
+            raise ValueError("Original native parent coordinates differ")
+        actors = [actor for actor in (record.get("proposal") or {}).get("people", []) if actor.get("entityKey") == indexed["actor_key"]]
+        if len(actors) != 1:
+            raise ValueError("Original native actor is unavailable or ambiguous")
+        actor = actors[0]
+        if (actor.get("inputRevisionUuid"), actor.get("recordingOrigin"), actor.get("fileOrigin")) != (
+                indexed["input_revision_uuid"], json.loads(indexed["recording_origin"]), json.loads(indexed["file_origin"])):
+            raise ValueError("Original native actor scope differs")
+        return dict(actor=actor, parent={key: record[key] for key in
+                    ("inputKey", "inputUuid", "artistUuid", "artistName", "provider", "method")},
+                    originRun=metadata["run"], catalogNamespace=metadata["namespace"],
+                    basis="native_source_observation", acceptedIdentity=False)
 
     def relationships(self, identifier, parameters):
         """Page witnessed pair proposals; name groups and recordings stay independent."""
@@ -837,6 +1141,11 @@ def handler_for(directory):
                             404, encoded({"error": "Unknown relationship"}).encode()
                         )
                         return
+                elif url.path == "/api/native-actor":
+                    result = directory.native_actor(parameters.get("id", ""))
+                    if result is None:
+                        self.respond(404, encoded({"error": "Unknown native actor"}).encode())
+                        return
                 elif url.path == "/api/credit":
                     result = directory.credit(int(parameters.get("id", "")))
                     if result is None:
@@ -873,6 +1182,10 @@ def main():
     overlay.add_argument("--run", required=True)
     overlay.add_argument("--selection", required=True)
     overlay.add_argument("--database", required=True)
+    native = sub.add_parser("overlay-native")
+    native.add_argument("--run", required=True)
+    native.add_argument("--database", required=True)
+    native.add_argument("--native-url", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
     serve.add_argument("--files-url", required=True)
@@ -891,6 +1204,8 @@ def main():
             encoded(CreditOverlay(args.run, args.selection, args.database).apply()),
             flush=True,
         )
+    elif args.command == "overlay-native":
+        print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:
         directory = PeopleDirectory(args.database, args.files_url, args.core_url)
         print(

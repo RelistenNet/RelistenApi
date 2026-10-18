@@ -2,10 +2,12 @@
 
 import gzip
 import json
+import sqlite3
 from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlsplit
 
@@ -15,6 +17,7 @@ from http.server import ThreadingHTTPServer
 
 from people_directory import (
     CreditOverlay,
+    NativePeopleOverlay,
     DirectoryBuilder,
     PeopleDirectory,
     group_id,
@@ -84,6 +87,176 @@ class TestPeopleDirectory(unittest.TestCase):
                 stream.write(json.dumps(row) + "\n")
         DirectoryBuilder(self.root, self.database, minimum_free=0).build()
         return PeopleDirectory(self.database, "http://files.test/", "http://core.test/")
+
+    def native_actor(self, key, name="Native Pat", aliases=None, role_free=False, file_origin=None):
+        origin = {"item": {"provider": "local", "resourceType": "directory_metadata", "providerKey": "[\"catalog\",\"one\"]"},
+                  "evidence": {"inputRevisionUuid": "root-input", "jsonPointer": "/data/1970-xx-xx/0"}}
+        return dict(entityKey=key, name=name, aliases=aliases or [], kind=None,
+                    inputRevisionUuid="root-input", recordingOrigin=origin, fileOrigin=file_origin,
+                    catalogSourceUuid="source-1", catalogShowUuid="native-show",
+                    catalogBindingReason=None, evidence=[dict(inputRevisionUuid="root-input", jsonPointer="/data/1970-xx-xx/0/taper_notes", quote=name)],
+                    actorFacts=None, sourceActorAlias={"name": name} if role_free else None,
+                    automaticAcceptanceAuthorized=False)
+
+    def native_run(self, actors, credits=None, provider="local"):
+        run = self.root / "native"
+        run.mkdir(exist_ok=True)
+        method = "shadow-native-people-v2/test"
+        (run / "manifest.json").write_text(json.dumps(dict(state="completed", inputIdentity="separate-local-capture",
+            methods={"ShadowNativePeopleAdapter": method}, counts=[dict(domain=domain, provider=provider, processed=1) for domain in ("people", "credits")])))
+        header = dict(inputKind="provider_input", inputKey="provider_input:directory-input", inputUuid="directory-input",
+                      artistUuid="artist-a", artistName="Native artist", provider=provider, method=method, outcome="proposed")
+        if credits is None:
+            credits = [dict(entityKey="native-credit:" + actor["entityKey"], personEntityKey=actor["entityKey"],
+                            role="taper", originalRole="Taped by", **{field: actor[field] for field in
+                            ("name", "inputRevisionUuid", "recordingOrigin", "fileOrigin", "catalogSourceUuid", "catalogShowUuid")},
+                            evidence=actor["evidence"][0]) for actor in actors if actor["sourceActorAlias"] is None]
+        for domain, proposal in (("people", {"people": actors}), ("credits", {"credits": credits})):
+            (run / domain).mkdir(exist_ok=True)
+            with gzip.open(run / domain / "1.jsonl.gz", "wt") as stream:
+                stream.write(json.dumps(dict(header, domain=domain, proposal=proposal)) + "\n")
+        return run
+
+    def test_native_names_aliases_and_role_proposals_share_lookup_without_inflating_catalog_counts(self):
+        (self.root / "performances").mkdir()
+        with gzip.open(self.root / "performances" / "1.jsonl.gz", "wt") as stream:
+            stream.write(json.dumps(dict(inputKind="source_sample", inputUuid="source-1", outcome="proposed",
+                proposal=dict(sourceUuid="source-1", showUuid="production-show", literalDate="1970-xx-xx"))) + "\n")
+        directory = self.build([("source-1", "artist-a", [self.credit("source-1", "artist-a", "Native Pat", "taper")])])
+        before = directory.stats()
+        with directory.connect() as db:
+            base_homes = [tuple(row) for row in db.execute("SELECT * FROM source_homes")]
+        with sqlite3.connect(self.database) as db:
+            db.execute("CREATE TABLE context_relationships(id TEXT PRIMARY KEY, decision TEXT)")
+            db.execute("INSERT INTO context_relationships VALUES('existing-question','retained decision')")
+        role = self.native_actor("native:role")
+        alias = self.native_actor("native:alias", aliases=["Lark"], role_free=True)
+        file_actor = self.native_actor("native:file", "File Avery", file_origin={"evidence": {"jsonPointer": "/files/0"}})
+        file_actor["catalogSourceUuid"] = None
+        file_actor["catalogShowUuid"] = None
+        run = self.native_run([role, alias, file_actor])
+        with gzip.open(run / "credits" / "1.jsonl.gz", "rt") as stream:
+            repeated = json.load(stream)
+        repeated["proposal"]["credits"].append(repeated["proposal"]["credits"][0])
+        with gzip.open(run / "credits" / "1.jsonl.gz", "wt") as stream:
+            stream.write(json.dumps(repeated) + "\n")
+        result = NativePeopleOverlay(run, self.database, "http://native.test/", minimum_free=0).apply()
+
+        self.assertEqual((result["actors"], result["creditMentions"], result["aliasActors"], result["recordingAccounts"]), (3, 2, 1, 1))
+        stats = directory.stats()
+        for field in ("credits", "creditedRecordings", "creditedArtists", "sourceRows"):
+            self.assertEqual(stats[field], before[field])
+        matched = directory.search({"q": "Lark"})["groups"]
+        self.assertEqual(len(matched), 1)
+        detail = directory.detail(matched[0]["id"], {})
+        self.assertEqual((detail["credit_count"], detail["recording_count"], detail["native_credit_count"]), (1, 1, 1))
+        self.assertEqual(detail["nativeTotal"], 2)
+        self.assertEqual(len(detail["recordings"]), 1)
+        self.assertEqual(detail["recordings"][0]["capturedHome"]["showUuid"], "production-show")
+        self.assertTrue(all("capturedHome" not in item and "playableFilesUrl" not in item for item in detail["nativeObservations"]))
+        with directory.connect() as db:
+            self.assertEqual([tuple(row) for row in db.execute("SELECT * FROM source_homes")], base_homes)
+            self.assertEqual(tuple(db.execute("SELECT * FROM context_relationships").fetchone()), ("existing-question", "retained decision"))
+        observed = detail["nativeObservations"]
+        self.assertTrue(all(item["artist_key"] != item["artist_uuid"] for item in observed))
+        self.assertEqual([len(item["credits"]) for item in observed if item["role_free"]], [0])
+        self.assertTrue(all(item["inputFilesUrl"].startswith("http://native.test/") for item in observed))
+        self.assertTrue(all(parse_qs(urlsplit(item["inputFilesUrl"]).query)["q"] == ["directory-input"] for item in observed))
+        filtered = directory.detail(matched[0]["id"], {"nativeArtist": observed[0]["artist_key"], "limit": "1"})
+        self.assertEqual(filtered["nativeTotal"], 2)
+        self.assertEqual(len(filtered["nativeObservations"]), 1)
+        self.assertEqual(directory.detail(group_id(name_key("File Avery")), {})["recordings"], [])
+        unbound = directory.detail(group_id(name_key("File Avery")), {})["nativeObservations"][0]
+        self.assertIsNone(unbound["catalog_source_uuid"])
+        self.assertEqual(unbound["file_origin"]["evidence"]["jsonPointer"], "/files/0")
+        retained = directory.native_actor(observed[0]["id"])
+        self.assertEqual(retained["actor"]["recordingOrigin"], role["recordingOrigin"])
+        self.assertEqual(retained["originRun"], str(run.resolve()))
+        self.assertFalse(retained["acceptedIdentity"])
+
+    def test_native_account_counts_preserve_distinct_origin_locations_on_one_resource(self):
+        directory = self.build([])
+        first = self.native_actor("first", "Alice", role_free=True)
+        second = self.native_actor("second", "Bob", role_free=True)
+        second["recordingOrigin"]["evidence"]["jsonPointer"] = "/data/1970-xx-xx/1"
+        run = self.native_run([first, second])
+        counts = NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        self.assertEqual(counts["recordingAccounts"], 2)
+        self.assertEqual(directory.stats()["creditedRecordings"], 0)
+
+    def test_native_replay_removes_old_aliases_and_preserves_catalog_context_and_ids(self):
+        directory = self.build([("source-1", "artist-a", [self.credit("source-1", "artist-a", "Catalog Pat", "taper")])])
+        with directory.connect() as db:
+            base_credit = dict(db.execute("SELECT * FROM credits").fetchone())
+        run = self.native_run([self.native_actor("native:old", "Old Name", aliases=["Old Alias"], role_free=True)])
+        NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        old = directory.detail(group_id(name_key("Old Name")), {})["nativeObservations"][0]["id"]
+        self.native_run([self.native_actor("native:new", "New Name", role_free=True)])
+        NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+
+        self.assertEqual(directory.search({"q": "Old Alias"})["total"], 0)
+        self.assertIsNone(directory.native_actor(old))
+        self.assertEqual(directory.search({"q": "New Name"})["total"], 1)
+        with directory.connect() as db:
+            self.assertEqual(dict(db.execute("SELECT * FROM credits").fetchone()), base_credit)
+        self.assertEqual(directory.stats()["credits"], 1)
+
+    def test_native_invalid_scope_or_missing_population_rolls_back_prior_projection(self):
+        directory = self.build([])
+        actor = self.native_actor("native:stable", role_free=True)
+        run = self.native_run([actor])
+        NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        prior = directory.detail(group_id(name_key(actor["name"])), {})
+        bad_credit = dict(entityKey="bad-credit", personEntityKey=actor["entityKey"], role="taper")
+        self.native_run([actor], [bad_credit])
+        with self.assertRaises(ValueError):
+            NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        self.assertEqual(directory.detail(prior["id"], {})["nativeTotal"], 1)
+        (run / "credits" / "1.jsonl.gz").unlink()
+        with self.assertRaises(ValueError):
+            NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        self.assertEqual(directory.stats()["nativeDirectory"]["actors"], 1)
+
+    def test_native_projection_bounds_refuse_before_replacing_prior_population(self):
+        directory = self.build([])
+        run = self.native_run([self.native_actor("retained", role_free=True)])
+        NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        with patch.object(NativePeopleOverlay, "MAXIMUM_DECODED_BYTES", 64):
+            with self.assertRaisesRegex(ValueError, "decoded projection bound"):
+                NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        manifest = json.loads((run / "manifest.json").read_text())
+        manifest["counts"][0]["processed"] = 2001
+        (run / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "parent projection bound"):
+            NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        self.assertEqual(directory.stats()["nativeDirectory"]["actors"], 1)
+
+    def test_native_actor_endpoint_verifies_original_chunk_and_http_unknown_ids(self):
+        directory = self.build([])
+        actor = self.native_actor("native:alias", aliases=["Alias"], role_free=True)
+        run = self.native_run([actor])
+        NativePeopleOverlay(run, self.database, "http://native.test", minimum_free=0).apply()
+        identifier = directory.detail(group_id(name_key(actor["name"])), {})["nativeObservations"][0]["id"]
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler_for(directory))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = "http://127.0.0.1:" + str(server.server_port)
+            with urlopen(url + "/api/native-actor?id=" + identifier) as response:
+                self.assertEqual(json.load(response)["actor"], actor)
+            with self.assertRaises(HTTPError) as error:
+                urlopen(url + "/api/native-actor?id=missing")
+            self.assertEqual(error.exception.code, 404)
+            error.exception.close()
+            (run / "people" / "1.jsonl.gz").write_bytes(b"changed")
+            with self.assertRaises(HTTPError) as error:
+                urlopen(url + "/api/native-actor?id=" + identifier)
+            self.assertEqual(error.exception.code, 400)
+            error.exception.close()
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
 
     def test_cross_artist_group_counts_sources_once_and_preserves_each_role_and_quote(
         self,

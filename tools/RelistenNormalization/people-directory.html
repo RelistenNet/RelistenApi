@@ -219,11 +219,12 @@
           node(
             "p",
             count(g.recording_count) +
-              " recordings · " +
+              " catalog recordings · " +
               count(g.artist_count) +
-              " artists · " +
+              " catalog artists · " +
               count(g.credit_count) +
-              " credit mentions",
+              " catalog credit mentions" +
+              (g.native_actor_count ? " · " + count(g.native_actor_count) + " native actor observations · " + count(g.native_credit_count) + " native role mentions" : ""),
             "counts",
           ),
         );
@@ -367,6 +368,58 @@
       if (previous) previous.replaceWith(section);
       else $("results").append(section);
     }
+    function nativeObservations(data, parameters) {
+      if (!data.nativeTotal && !data.nativeArtists?.length) return;
+      const section = node("section");
+      section.append(node("h2", "Native provider observations"), node("p",
+        "These original actor accounts are separate from catalog credit counts and contextual comparisons. A native observation may repeat a catalog credit; the counts are not additive. Native capture UUIDs do not establish a production home or a shared person identity."));
+      const select = node("select");
+      select.setAttribute("aria-label", "Filter native observations by artist context");
+      const all = node("option", "All native artist contexts");
+      all.value = "";
+      select.append(all);
+      for (const artist of data.nativeArtists) {
+        const option = node("option", artist.artist_name + " (" + count(artist.observations) + " observations)");
+        option.value = artist.artist_key;
+        select.append(option);
+      }
+      select.value = parameters.nativeArtist || "";
+      select.onchange = () => setLocation({...parameters, nativeArtist: select.value, nativeOffset: 0});
+      section.append(select, node("p", count(data.nativeTotal) + " original actor observations in this view", "counts"));
+      for (const actor of data.nativeObservations) {
+        const card = node("article", undefined, "card");
+        const scope = actor.file_origin ? "Original file account"
+          : actor.input_revision_uuid !== actor.input_uuid ? "Selected supporting root account" : "Original recording account";
+        card.append(node("h3", actor.name + " · " + actor.artist_name),
+          node("p", actor.provider + " · " + scope),
+          node("p", actor.role_free ? "Role-free alias assertion · no recording credit role"
+            : "Native credit proposals: " + actor.credits.map(credit => credit.role).join(", ")));
+        if (actor.aliases.length) card.append(node("p", "Explicit source aliases: " + actor.aliases.join(" · ")));
+        for (const evidence of actor.evidence) {
+          if (evidence.quote) card.append(node("blockquote", evidence.quote));
+        }
+        const original = node("details");
+        original.append(node("summary", "Original native scope and citations"), node("pre", JSON.stringify({
+          inputKey: actor.input_key, inputRevisionUuid: actor.input_revision_uuid,
+          recordingOrigin: actor.recording_origin, fileOrigin: actor.file_origin,
+          catalogSourceUuidInNativeCapture: actor.catalog_source_uuid,
+          catalogShowUuidInNativeCapture: actor.catalog_show_uuid,
+          bindingReason: actor.binding_reason, originRun: actor.originRun,
+          catalogNamespace: actor.catalogNamespace, evidence: actor.evidence,
+        }, null, 2)));
+        card.append(link("Inspect original actor evidence", actor.sourceEvidenceUrl), document.createTextNode(" · "),
+          link("Browse this input's files", actor.inputFilesUrl), original);
+        section.append(card);
+      }
+      const controls = node("div", undefined, "controls");
+      if (data.nativeOffset) controls.append(pageButton("Previous native observations", () =>
+        setLocation({...parameters, nativeOffset: Math.max(0, data.nativeOffset - data.nativeLimit)})));
+      if (data.nativeOffset + data.nativeLimit < data.nativeTotal) controls.append(pageButton("Next native observations", () =>
+        setLocation({...parameters, nativeOffset: data.nativeOffset + data.nativeLimit})));
+      section.append(controls);
+      $("results").append(section);
+    }
+
     async function detail(p) {
       let d = await get("/api/person?" + new URLSearchParams(p));
       $("status").textContent = "";
@@ -377,15 +430,15 @@
         node(
           "p",
           count(d.recording_count) +
-            " recordings across " +
+            " catalog recordings across " +
             count(d.artist_count) +
-            " artists. This is an inferred name group; inspect the credits before treating it as one person.",
+            " catalog artists. Shared wording retrieves observations; this name group may contain different people.",
         ),
       );
       header.append(
         node(
           "p",
-          "Roles: " +
+          "Catalog credit roles: " +
             d.roles
               .map(
                 (r) =>
@@ -407,7 +460,7 @@
       header.append(
         node(
           "p",
-          "Credited names and aliases: " + spellings.join(" · "),
+          "Source names and explicit aliases: " + spellings.join(" · "),
           "counts",
         ),
       );
@@ -452,6 +505,7 @@
       );
       $("results").append(header);
       await relationships(p.id);
+      nativeObservations(d, p);
       for (let r of d.recordings) {
         let card = node("article", undefined, "card"),
           names = [
@@ -562,6 +616,11 @@
               count(s.modelCreditMentions) +
               " retained Luna credit proposals"
             : "");
+        if (s.nativeDirectory) {
+          const native = s.nativeDirectory;
+          $("coverage").append(node("span", " · native overlay: " + count(native.actors) + " actor observations, "
+            + count(native.creditMentions) + " role mentions and " + count(native.aliasActors) + " role-free alias actors (separate counts)"));
+        }
         if (s.peopleContext) {
           let context = s.peopleContext;
           $("coverage").append(

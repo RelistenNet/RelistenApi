@@ -53,6 +53,65 @@ Credits keep their actual occurrence key and `interpretation_basis`. `retained_l
 
 Overlay credit evidence links open `/api/credit` on this directory. That endpoint reads the exact retained source outcome at its stored run, chunk and physical line. Model person keys therefore do not point to the older core reader, where those keys do not exist. The endpoint retains the model's source-field evidence and extraction provenance without claiming that a proposed person identity has been accepted.
 
+## Add native provider actors without replacing catalog credits
+
+The v4 reader can add a completed native shadow population to this same directory.
+The native wave v2 currently retains 670 paired people/credit outcomes: 801 original
+actor observations, including two role-free alias actors, and 867 role mentions.
+These source observations are exposed development evidence, not accepted people or
+an accuracy result. The existing catalog credit and Luna/context counts stay separate.
+The same underlying credit may occur in both captures; their counts are not additive
+unique-credit totals.
+
+```sh
+python3 tools/RelistenNormalization/people_directory.py overlay-native \
+  --run local-dev/normalization-data/2026-10-18-shadow-native-domain-wave-v2 \
+  --native-url http://alecs-macbook-pro.tail09dbf.ts.net:18771/ \
+  --database local-dev/normalization-data/2026-10-18-people-directory-v1/directory.sqlite3
+```
+
+This explicit command replaces only the previous native overlay in one transaction.
+It validates completed provider/domain counts, paired headers and producer methods,
+then retains original actor keys, credit-to-actor scopes, source citations and chunk
+locators in compact `native_*` tables. It does not rebuild the full catalog, copy
+provider payloads, alter catalog credits or source homes, or attach native actors to
+existing contextual decisions. It checks the 4.5 GiB disk reserve before and during
+projection. This bounded projection accepts at most 2,000 native parents and
+64 MiB of combined decoded people/credit output, including retained replay rows.
+It refuses a larger population before changing the database instead of truncating
+facts. These are local projection bounds, not a normalization policy or full-catalog
+coverage claim. The current 670-parent input is 44,577,474 decoded bytes. A failed
+replacement leaves the prior native population available.
+
+Name and explicit-alias search includes both populations. Equal wording shares a
+retrieval group; catalog counts and native actor/role/account counts remain distinct.
+A role-free alias actor has no recording role, kind or attendance assertion. Repeated
+fields, file assertions and selected Local root accounts retain their exact original
+scope. Native account counts distinguish original origin locations and enclosing
+inputs, even when the provider resource is the same; they are not performance counts.
+
+Native artist filters use capture-qualified keys. Original artist and optional source
+UUIDs remain visible as coordinates **within that native capture**. They are never
+joined to production source homes simply because a numeric ID or UUID matches.
+This matters for Local captures from a different catalog namespace. Unbound actors
+remain searchable and retain their provider recording/file citations.
+
+Group pages show a separate native section with its own artist filter and pagination.
+“Inspect original actor evidence” opens `/api/native-actor?id=…`, which checks the
+retained chunk hash, parent coordinates, original actor key and recording/file scope
+before returning the complete original actor. “Browse this input's files” opens the
+native reader's original input result. That broad link does not imply every file in
+the input belongs to the selected actor or original recording account. It never
+substitutes a production MP3 home. The metadata `/api/stats.nativeDirectory` retains
+the native run, manifest/chunk hashes, producer, input namespace and separate counts.
+
+`/api/person` adds `nativeObservations`, `nativeTotal`, `nativeOffset`, `nativeLimit`
+and `nativeArtists`. `nativeArtist` selects a capture-qualified artist context;
+`nativeOffset` pages native actors independently of the catalog `offset`. Original
+catalog/context endpoints and their witness ownership remain unchanged. A later
+catalog credit overlay can still replace its selected sources without removing native
+observations or importing them into model-context questions.
+
 ## HTTP contract
 
 `GET /` serves the phone-friendly page. The following endpoints return JSON:
