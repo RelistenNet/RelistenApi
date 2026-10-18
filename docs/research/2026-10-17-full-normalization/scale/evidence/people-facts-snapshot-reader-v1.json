@@ -1,0 +1,50 @@
+{
+  "version": "people-facts-snapshot-reader-v1",
+  "state": "public_contracts_verified_full_scale_pending",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-facts-snapshot-reader-v1/execution-verification-v1/manifest.json",
+    "sha256": "282a1866bd68370b235543f46fd8595cb5b89caea5ee7a97ae1fb0d6a593f706"
+  },
+  "runs": [
+    {
+      "name": "people-snapshot-reader-targeted-v1",
+      "passed": 18,
+      "failed": 0,
+      "note": "Included again in the final broad run after source57 wiring."
+    },
+    {
+      "name": "people-snapshot-reader-oversize-v1",
+      "passed": 1,
+      "failed": 0,
+      "note": "A synthetic 33 MiB credit citation published through the service is returned completely and bypasses retention."
+    },
+    {
+      "name": "people-snapshot-reader-services-v1",
+      "passed": 262,
+      "failed": 0,
+      "notExecuted": 0
+    }
+  ],
+  "uniquePassingCases": 263,
+  "behavior": [
+    "Reuse only the last complete person body within its exact live database-enforced read-only repeatable-read transaction.",
+    "Replay all body-local owner and artist requirements and ordered issues. Each query retrieves its actual hits, limits, negative scope and final read set.",
+    "Changing limits, eviction, closure overflow and encoded retention above 32 MiB use ordinary complete reads. The optimization introduces no semantic refusal or truncated facts.",
+    "Source proposal preparation and each machine publication cohort dispose their own reader inside the original snapshot.",
+    "No public API, schema, policy, semantic version, Work hash or publication-capacity changes."
+  ],
+  "verification": [
+    "Exact cached/ordinary snapshot equality across query reasons, overlapping candidates, empty results and normalized limits.",
+    "Missing owners, missing catalog clocks, malformed actor evidence and incomplete closures retain blocking diagnostics.",
+    "Review changes stay on the original snapshot and become visible in a new snapshot.",
+    "Reader lifetime, rollback, commit, disposal, cancellation and oversize bypass.",
+    "Source resolution, publication and people acceptance regression paths."
+  ],
+  "review": "Fresh independent correctness and separate readability/simplifier reviews found no issues.",
+  "limits": [
+    "These results do not measure throughput, process memory savings or matching accuracy.",
+    "Full-size publication, migration58, full suite, independent evaluation and catalog backfill/rollout remain required."
+  ],
+  "productionWrites": 0,
+  "automaticPoliciesActivated": 0
+}

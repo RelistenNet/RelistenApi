@@ -28,13 +28,16 @@ public sealed partial class SourceActorResolutionService
 
         public async Task<PreparedCandidates> BuildAsync(CancellationToken ct)
         {
+            // One reader spans only this already database-enforced read-only RR callback.
+            // Every distinct query still retrieves its own pool and final owner/catalog stamps.
+            using var reader = await candidates.CreatePeopleFactsSnapshotReaderAsync(c, t, ct);
             var inputs = new List<SourceActorResolutionInput>();
             foreach (var input in source.Inputs)
             {
                 var scopes = new List<SourceActorResolutionScope>();
                 foreach (var scope in input.Scopes)
                 {
-                    scopes.Add(await BuildScopeAsync(input, scope, ct));
+                    scopes.Add(await BuildScopeAsync(input, scope, reader, ct));
                 }
                 var revision =
                     membership
@@ -57,6 +60,7 @@ public sealed partial class SourceActorResolutionService
         private async Task<SourceActorResolutionScope> BuildScopeAsync(
             SourceActorResolutionInput input,
             SourceActorResolutionScope scope,
+            NormalizationCandidateService.PeopleFactsSnapshotReader reader,
             CancellationToken ct
         )
         {
@@ -73,7 +77,7 @@ public sealed partial class SourceActorResolutionService
                 ct.ThrowIfCancellationRequested();
                 var assertion = original.Extraction.Assertions[index];
                 var projection = PeopleActorProjection.Project(assertion, artist);
-                var slot = await ReadCandidateSlotAsync(projection.Query, ct);
+                var slot = await ReadCandidateSlotAsync(projection.Query, reader, ct);
                 var coordinates = new SourceActorAliasCoordinates(
                     source.Extraction.SourceUuid,
                     input.OriginalInput.Contributor,
@@ -103,6 +107,7 @@ public sealed partial class SourceActorResolutionService
 
         private async Task<int?> ReadCandidateSlotAsync(
             NormalizationCandidateQuery? query,
+            NormalizationCandidateService.PeopleFactsSnapshotReader reader,
             CancellationToken ct
         )
         {
@@ -115,7 +120,7 @@ public sealed partial class SourceActorResolutionService
             {
                 return existing;
             }
-            var facts = await candidates.FindPeopleFactsInSnapshotAsync(c, t, query, ct: ct);
+            var facts = await reader.FindAsync(query, ct: ct);
             var added = pools.Count;
             pools.Add(facts);
             cache.Add(key, added);

@@ -48,6 +48,14 @@ service checks and two small lifecycle cases pass, including eight new behavior
 checks. The [cohort verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-person-cohort-v1.json)
 records the accepted partial-progress behavior and remaining full-size cost work.
 
+Source matching and publication now reuse complete person facts within one
+verified read-only database snapshot. Every query retains its own hits and
+complete owner observations; oversized bodies take the ordinary full read. All
+262 affected service checks and the separate large-credit case pass. The
+[snapshot-reader contract](candidate-facts.md#reuse-people-facts-within-one-snapshot)
+and [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/people-facts-snapshot-reader-v1.json)
+explain the bounds. Full-size cost measurements remain required.
+
 Canonical alias writes now respect reviewed claims across all identities joined
 by current merges, while preserving original alias ownership and merge reversal.
 All 16 alias-write and 101 metadata/candidate checks pass. A related correction

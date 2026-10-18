@@ -48,6 +48,9 @@ public sealed partial class SourceActorAliasApplicationService
             CancellationToken ct
         )
         {
+            // Reuse complete person bodies only within this database-enforced read-only
+            // snapshot. Every distinct query still supplies its own hits and owner reads.
+            using var reader = await candidates.CreatePeopleFactsSnapshotReaderAsync(c, t, ct);
             var unwritten = source
                 .Claims.Where(value => !committed.Claims.ContainsKey(value.Claim))
                 .ToArray();
@@ -70,7 +73,7 @@ public sealed partial class SourceActorAliasApplicationService
             // failure can follow this independent commit; it cannot produce completion.
             foreach (var planned in unwritten)
             {
-                var claim = await RefreshAsync(c, t, planned.Claim, ct);
+                var claim = await RefreshAsync(c, t, reader, planned.Claim, ct);
                 if (claim?.Decision.Action != SourceActorResolutionAction.MatchExisting)
                 {
                     continue;
@@ -96,7 +99,7 @@ public sealed partial class SourceActorAliasApplicationService
                         )
                     )
                     {
-                        await RefreshAsync(c, t, other.Claim, ct);
+                        await RefreshAsync(c, t, reader, other.Claim, ct);
                     }
                 }
                 return new SelectedMachinePerson(BuildSource(), person);
@@ -110,6 +113,7 @@ public sealed partial class SourceActorAliasApplicationService
         private async Task<SourceActorResolutionClaim?> RefreshAsync(
             NpgsqlConnection c,
             NpgsqlTransaction t,
+            NormalizationCandidateService.PeopleFactsSnapshotReader reader,
             SourceActorAliasClaimReference reference,
             CancellationToken ct
         )
@@ -149,7 +153,7 @@ public sealed partial class SourceActorAliasApplicationService
                 if (!querySlots.TryGetValue(key, out var found))
                 {
                     found = pools.Count;
-                    pools.Add(await candidates.FindPeopleFactsInSnapshotAsync(c, t, query, ct: ct));
+                    pools.Add(await reader.FindAsync(query, ct: ct));
                     querySlots.Add(key, found);
                 }
                 slot = found;

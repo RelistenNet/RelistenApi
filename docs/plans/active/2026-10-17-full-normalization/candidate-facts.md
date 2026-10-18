@@ -79,7 +79,7 @@ Original identity owners and returned witness owners supply observations; the
 global people generation fences omitted or newly arriving credit contributors.
 Do not infer disjoint artist histories from missing catalog context.
 
-People snapshots use `people-candidate-facts-v4`. `ActorMatchingFacts` retains
+People snapshots use `people-candidate-facts-v5`. `ActorMatchingFacts` retains
 distinct source names, aliases, contacts, profiles and uncertainty separately
 from bounded `ActorEvidence` examples. All eligible actor accounts contribute
 matching facts and original owner observations, including accounts omitted from
@@ -145,6 +145,29 @@ checks the original snapshot, including empty candidate pools. New rivals,
 changed assertions, source artist changes and editorial corrections cannot be
 justified by attaching fresher clocks to the old result. Reload the complete
 facts snapshot after a stale admission.
+
+## Reuse people facts within one snapshot
+
+Source identity matching can use an internal `PeopleFactsSnapshotReader` for
+several queries in the same transaction. Its factory verifies the exact live
+connection and transaction, repeatable-read isolation and PostgreSQL's actual
+read-only setting. The caller disposes the reader before that transaction ends.
+It owns no transaction and cannot be reused across publication stages.
+
+The reader can retain the last person's complete fact body, normalized limits,
+required owners and artists, and body diagnostics. Each query still retrieves
+its own candidates, scores, reasons, negative lookup scope and final owner/catalog
+observations. It attaches the actual query hit to the reused body. It never
+reconstructs complete ownership from bounded examples or borrows another query's
+whole read set. Returned collections are read-only to internal consumers.
+
+A changed header or limit, an evicted person, an overflowing identity closure,
+or an encoded body above 32 MiB uses the ordinary full read. This retention budget
+does not truncate returned facts or introduce a capacity refusal. It bounds
+encoded retained content, not managed heap usage or process memory. Source
+proposal preparation and person-cohort publication each create their own reader
+inside their existing read-only snapshot. Saved proofs, query hashes, processing
+versions and admission checks are unchanged.
 
 ## Verification and rollout
 

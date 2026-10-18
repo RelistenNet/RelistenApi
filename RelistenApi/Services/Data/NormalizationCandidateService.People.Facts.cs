@@ -23,71 +23,57 @@ public sealed partial class NormalizationCandidateService
         var facts = new List<PersonCandidateFacts>();
         foreach (var hit in selection.Items)
         {
-            var identities = await ReadPersonIdentities(c, t, hit.Uuid, limits, context, ct);
-            var members = identities.Select(identity => identity.Uuid).ToArray();
-            var aliases = await ReadPersonAliases(c, t, hit.Uuid, members, limits, context, ct);
-            var identifiers = await ReadPersonIdentifiers(
-                c,
-                t,
-                hit.Uuid,
-                members,
-                limits,
-                context,
-                ct
-            );
-            var credits = await ReadPersonCreditContexts(
-                c,
-                t,
-                hit.Uuid,
-                members,
-                limits,
-                context,
-                ct
-            );
-            var actors = await ReadPersonActorEvidence(
-                c,
-                t,
-                hit.Uuid,
-                members,
-                limits,
-                context,
-                ct
-            );
-
-            facts.Add(
-                new PersonCandidateFacts
-                {
-                    Hit = hit,
-                    Header = identities.Single(identity => identity.Uuid == hit.Uuid).Header,
-                    IdentityClosure = identities.Select(identity => identity.Header).ToArray(),
-                    Redirects = identities
-                        .Where(identity => identity.SurvivorUuid.HasValue)
-                        .Select(identity => new CandidateRedirectFact(
-                            identity.Uuid,
-                            identity.SurvivorUuid!.Value,
-                            identity.DecisionUuid
-                        ))
-                        .ToArray(),
-                    Aliases = aliases.Witnesses,
-                    AcceptedAliasMatchingNames = aliases.MatchingNames,
-                    AliasMatchingNamesComplete = aliases.MatchingComplete,
-                    AliasAssertionCount = aliases.AssertionCount,
-                    AliasSupportCount = aliases.SupportCount,
-                    AliasEvidenceTruncated = aliases.WitnessesTruncated,
-                    ExternalIdentities = identifiers,
-                    ArtistContexts = credits.Artists,
-                    MissingSourceCreditCount = credits.MissingSource,
-                    MissingArtistCreditCount = credits.MissingArtist,
-                    MissingContextWitnesses = credits.MissingWitnesses,
-                    MissingContextWitnessesTruncated = credits.MissingWitnessesTruncated,
-                    ActorEvidence = actors.Witnesses,
-                    ActorMatchingFacts = actors.MatchingFacts,
-                    ActorContextCount = actors.ContextCount,
-                    ActorEvidenceTruncated = actors.WitnessesTruncated,
-                }
-            );
+            facts.Add(await ReadPersonFactsAsync(c, t, hit, limits, context, ct));
         }
         return facts.ToArray();
+    }
+
+    private static async Task<PersonCandidateFacts> ReadPersonFactsAsync(
+        NpgsqlConnection c,
+        NpgsqlTransaction t,
+        NormalizationCandidateHit hit,
+        CandidateFactsLimits limits,
+        CandidateFactsContext context,
+        CancellationToken ct
+    )
+    {
+        var identities = await ReadPersonIdentities(c, t, hit.Uuid, limits, context, ct);
+        var members = identities.Select(identity => identity.Uuid).ToArray();
+        var aliases = await ReadPersonAliases(c, t, hit.Uuid, members, limits, context, ct);
+        var identifiers = await ReadPersonIdentifiers(c, t, hit.Uuid, members, limits, context, ct);
+        var credits = await ReadPersonCreditContexts(c, t, hit.Uuid, members, limits, context, ct);
+        var actors = await ReadPersonActorEvidence(c, t, hit.Uuid, members, limits, context, ct);
+
+        return new PersonCandidateFacts
+        {
+            Hit = hit,
+            Header = identities.Single(identity => identity.Uuid == hit.Uuid).Header,
+            IdentityClosure = identities.Select(identity => identity.Header).ToArray(),
+            Redirects = identities
+                .Where(identity => identity.SurvivorUuid.HasValue)
+                .Select(identity => new CandidateRedirectFact(
+                    identity.Uuid,
+                    identity.SurvivorUuid!.Value,
+                    identity.DecisionUuid
+                ))
+                .ToArray(),
+            Aliases = aliases.Witnesses,
+            AcceptedAliasMatchingNames = aliases.MatchingNames,
+            AliasMatchingNamesComplete = aliases.MatchingComplete,
+            AliasAssertionCount = aliases.AssertionCount,
+            AliasSupportCount = aliases.SupportCount,
+            AliasEvidenceTruncated = aliases.WitnessesTruncated,
+            ExternalIdentities = identifiers,
+            ArtistContexts = credits.Artists,
+            MissingSourceCreditCount = credits.MissingSource,
+            MissingArtistCreditCount = credits.MissingArtist,
+            MissingContextWitnesses = credits.MissingWitnesses,
+            MissingContextWitnessesTruncated = credits.MissingWitnessesTruncated,
+            ActorEvidence = actors.Witnesses,
+            ActorMatchingFacts = actors.MatchingFacts,
+            ActorContextCount = actors.ContextCount,
+            ActorEvidenceTruncated = actors.WitnessesTruncated,
+        };
     }
 
     private static async Task<PersonFactIdentityRow[]> ReadPersonIdentities(

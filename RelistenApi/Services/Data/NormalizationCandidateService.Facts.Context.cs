@@ -18,7 +18,7 @@ public sealed partial class NormalizationCandidateService
     /// </summary>
     private sealed class CandidateFactsContext
     {
-        private readonly HashSet<(Guid SubjectUuid, Guid? CandidateUuid)> _owners = [];
+        private readonly HashSet<CandidateOwnerRequest> _owners = [];
         private readonly HashSet<Guid> _artists = [];
         private readonly List<CandidateFactsIssue> _issues = [];
 
@@ -32,7 +32,7 @@ public sealed partial class NormalizationCandidateService
                 return;
             }
 
-            _owners.Add((subjectUuid.Value, candidateUuid));
+            _owners.Add(new(subjectUuid.Value, candidateUuid));
         }
 
         public void AddArtist(Guid artistUuid)
@@ -50,6 +50,27 @@ public sealed partial class NormalizationCandidateService
             if (!_issues.Contains(issue))
             {
                 _issues.Add(issue);
+            }
+        }
+
+        // Capture body requirements before final owner/catalog reads. Those later reads
+        // add query-union diagnostics and must never become a cached body's issues.
+        public CandidateFactsRequirements CaptureRequirements() =>
+            new(_owners.ToArray(), _artists.ToArray(), _issues.ToArray());
+
+        public void Include(CandidateFactsRequirements requirements)
+        {
+            foreach (var owner in requirements.Owners)
+            {
+                AddOwner(owner.SubjectUuid, owner.CandidateUuid);
+            }
+            foreach (var artist in requirements.Artists)
+            {
+                AddArtist(artist);
+            }
+            foreach (var issue in requirements.Issues)
+            {
+                AddIssue(issue.Kind, issue.CandidateUuid, issue.FactKind);
             }
         }
 
@@ -145,4 +166,12 @@ public sealed partial class NormalizationCandidateService
             return rows;
         }
     }
+
+    private sealed record CandidateOwnerRequest(Guid SubjectUuid, Guid? CandidateUuid);
+
+    private sealed record CandidateFactsRequirements(
+        IReadOnlyList<CandidateOwnerRequest> Owners,
+        IReadOnlyList<Guid> Artists,
+        IReadOnlyList<CandidateFactsIssue> Issues
+    );
 }
