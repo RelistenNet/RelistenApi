@@ -214,7 +214,7 @@ public sealed partial class NormalizationPeopleResolutionApplier
         IReadOnlyDictionary<Guid, PeopleAcceptanceClaimDecision> decisions
     )
     {
-        if (input.DecodeIssues.Any(RecordingCreditDecodeIssues.AffectsCredits))
+        if (input.DecodeIssues.Any(RecordingActorDecodeIssues.AffectsActorEvidence))
         {
             return "incomplete_decode";
         }

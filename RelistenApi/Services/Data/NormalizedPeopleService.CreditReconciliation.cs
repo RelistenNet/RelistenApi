@@ -261,7 +261,7 @@ public sealed partial class NormalizedPeopleService
                 (
                     allowPartialAdditions
                         ? extraction.DecodeIssues.Any(
-                            Relisten.Normalization.RecordingCreditDecodeIssues.AffectsCredits
+                            Relisten.Normalization.RecordingActorDecodeIssues.AffectsActorEvidence
                         )
                         : extraction.DecodeIssues.Count != 0
                 )

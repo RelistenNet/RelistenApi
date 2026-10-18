@@ -4,16 +4,17 @@ using Relisten.Api.Models.Normalization;
 namespace Relisten.Normalization;
 
 /// <summary>
-/// Separates credit coverage failures from retained playback and venue diagnostics. A source
-/// can have usable taper evidence without a show or playable file. Actual file association
-/// remains the checked binder's responsibility; an unbound credit cannot widen its scope.
-/// Unknown issue kinds remain blocking until their credit effect is understood.
+/// Separates actor-evidence failures from playback and venue diagnostics. Credits and source
+/// aliases can have usable evidence without a show or playable file. Actual file association
+/// remains the checked binder's responsibility; an unbound claim cannot widen its scope.
+/// Unknown issue kinds remain blocking until their effect on actor evidence is understood.
 /// </summary>
-internal static class RecordingCreditDecodeIssues
+internal static class RecordingActorDecodeIssues
 {
+    // Retain the existing credit-processing version: the shared issue policy is unchanged.
     internal const string Version = "recording-credit-decode-issues-v1";
 
-    internal static bool AffectsCredits(ProviderDecodeIssue issue) =>
+    internal static bool AffectsActorEvidence(ProviderDecodeIssue issue) =>
         issue.Code switch
         {
             "missing_recording_show_context"

@@ -38,7 +38,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
         + "/"
         + NormalizationRecordingExtractor.Version
         + "/retirement-coverage-v1/"
-        + RecordingCreditDecodeIssues.Version
+        + RecordingActorDecodeIssues.Version
         + "/negative-decision-enrollment-v1";
     private readonly NormalizationEvidenceService evidence = new(db);
     private readonly NormalizationProviderDecoder decoder = new();
@@ -215,7 +215,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
                 )
                 || creditStage.Facts.Inputs.Any(input =>
                     input.UnresolvedCredits.Count != 0
-                    || input.DecodeIssues.Any(RecordingCreditDecodeIssues.AffectsCredits)
+                    || input.DecodeIssues.Any(RecordingActorDecodeIssues.AffectsActorEvidence)
                 )
                 || (creditStage.ScopeCoverage ?? []).Any(scope => !scope.Complete)
             )
@@ -376,7 +376,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
             input.Claims.Count + input.UnresolvedCredits.Count
         );
         var creditCoverageComplete = !facts.Inputs.Any(input =>
-            input.DecodeIssues.Any(RecordingCreditDecodeIssues.AffectsCredits)
+            input.DecodeIssues.Any(RecordingActorDecodeIssues.AffectsActorEvidence)
         );
         return facts
             .Inputs.SelectMany(input => input.Claims)
