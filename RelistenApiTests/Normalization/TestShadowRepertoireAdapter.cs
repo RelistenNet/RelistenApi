@@ -310,6 +310,136 @@ public sealed class TestShadowRepertoireAdapter
         run.Should().Throw<InvalidDataException>();
     }
 
+    [TestCase("banter - inviting out Funky Dawgs", "not_applicable")]
+    [TestCase("14 Stage Banter", "not_applicable")]
+    [TestCase("gatrios2011-12-17s2t05.matrix.kindrecordings.mp3", "unresolved")]
+    [TestCase("01 Set 1 Part 1", "unresolved")]
+    [TestCase("Music Never Stopped (09:23.55)", "unresolved")]
+    [TestCase("Banter - A Story", "unresolved")]
+    public void ObservedRecordingLabelsDoNotCreateProvisionalSongs(string title, string outcome)
+    {
+        var input = Track(title);
+        var original = new TrackTitleExtractor().Extract(ArtistUuid, title);
+        var result = new ShadowRepertoireAdapter().Process(input).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be(outcome);
+        result.EntityKeys.Should().BeEmpty();
+        track.Segments.Should().OnlyContain(segment => segment.Song == null);
+        track.OriginalTitle.Should().Be(title);
+        track.Extraction.Should().BeEquivalentTo(original);
+        track
+            .Segments.Select(segment => segment.Evidence)
+            .Should()
+            .BeEquivalentTo(original.Segments.Select(segment => segment.Evidence));
+    }
+
+    [Test]
+    public void NumericFootnoteCannotBecomeAnotherSongAfterAKnownSong()
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var song = Guid.NewGuid();
+        adapter.Observe(Song(song, "Little Betty Boop"));
+        var result = adapter.Process(Track("Little Betty Boop->(1,6)")).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("unresolved");
+        track.Segments.Should().HaveCount(2);
+        track.Segments[0].Song!.LegacySongUuid.Should().Be(song);
+        track.Segments[1].Song.Should().BeNull();
+        track.Segments[1].Evidence.Quote.Should().Be("(1,6)");
+        track.Segments[1].Outcome.Should().Be("unresolved");
+        result.EntityKeys.Should().Equal(ShadowRepertoireAdapter.KnownEntityKey(song));
+    }
+
+    [Test]
+    public void DurationOnOneCompoundMentionDoesNotHideTheOtherKnownSong()
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var song = Guid.NewGuid();
+        adapter.Observe(Song(song, "Lazy Lightnin'"));
+        var title = "Lazy Lightnin' > Supplication (12:55)";
+        var result = adapter.Process(Track(title)).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("unresolved");
+        track.Segments[0].Song!.LegacySongUuid.Should().Be(song);
+        track.Segments[1].Song.Should().BeNull();
+        track.Segments[1].Evidence.Quote.Should().Be("Supplication (12:55)");
+        track.Extraction!.OriginalTitle.Should().Be(title);
+        result.EntityKeys.Should().Equal(ShadowRepertoireAdapter.KnownEntityKey(song));
+    }
+
+    [Test]
+    public void TransitionResidueStaysUnresolvedWithoutChangingTheProducerSpan()
+    {
+        var result = new ShadowRepertoireAdapter()
+            .Process(Track("Here We Go <-> In the Air Tonight"))
+            .Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("unresolved");
+        track.Segments[0].Song.Should().BeNull();
+        track.Segments[0].Evidence.Quote.Should().Be("Here We Go <");
+        track.Segments[1].Song!.Name.Should().Be("In the Air Tonight");
+        track.Extraction!.Segments[0].Evidence.Quote.Should().Be("Here We Go <");
+    }
+
+    [TestCase("banter - inviting out Funky Dawgs")]
+    [TestCase("14 Stage Banter")]
+    [TestCase("gatrios2011-12-17s2t05.matrix.kindrecordings")]
+    [TestCase("Set 1 Part 1")]
+    [TestCase("(1,6)")]
+    [TestCase("Music Never Stopped (09:23.55)")]
+    [TestCase("Stage Banter")]
+    public void LiteralDictionaryIdentitySurvivesRecordingLabelGuards(string title)
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var song = Guid.NewGuid();
+        adapter.Observe(Song(song, title));
+        var result = adapter.Process(Track(title)).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("proposed");
+        track.Segments.Single().Song!.LegacySongUuid.Should().Be(song);
+        track.Segments.Single().Song!.Basis.Should().Be("captured_artist_dictionary");
+        track
+            .Extraction.Should()
+            .BeEquivalentTo(new TrackTitleExtractor().Extract(ArtistUuid, title));
+        result.EntityKeys.Should().Contain(ShadowRepertoireAdapter.KnownEntityKey(song));
+    }
+
+    [TestCase("Banter Song")]
+    [TestCase("Stage Banter Blues")]
+    [TestCase("Set Me Free")]
+    [TestCase("Set the Controls for the Heart of the Sun")]
+    [TestCase("Part of Me")]
+    [TestCase("The Matrix")]
+    public void WordsThatAlsoAppearInRecordingLabelsDoNotSuppressMusicalTitles(string title)
+    {
+        var result = new ShadowRepertoireAdapter().Process(Track(title)).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("proposed");
+        track.Segments.Single().Song!.Name.Should().Be(title);
+        track.Segments.Single().Song!.Basis.Should().Be("title_derived");
+    }
+
+    [Test]
+    public void ExistingNormalizedDictionaryCorrespondenceSurvivesTransitionResidue()
+    {
+        var adapter = new ShadowRepertoireAdapter();
+        var song = Guid.NewGuid();
+        adapter.Observe(Song(song, "Here We Go"));
+        var result = adapter.Process(Track("Here We Go <-> In the Air Tonight")).Single();
+        var track = (ShadowRepertoireTrack)result.Proposal!;
+
+        result.Outcome.Should().Be("proposed");
+        track.Segments[0].Song!.LegacySongUuid.Should().Be(song);
+        track.Segments[0].Evidence.Quote.Should().Be("Here We Go <");
+        track.Segments[1].Song!.Name.Should().Be("In the Air Tonight");
+    }
+
     private static JsonElement Song(Guid uuid, string name) =>
         JsonSerializer.SerializeToElement(
             new

@@ -25,6 +25,39 @@ and independent matching audits remain incomplete. Domain quality and model-enri
 
 ## Completed recording and venue ranges
 
+The current integration adds pinned geographic reference data, links external
+setlist accounts to existing show UUIDs where the evidence identifies one show,
+and acquires composition evidence across the repertoire through the existing
+MusicBrainz service. The isolated build and 185 behavior tests passed. These
+changes preserve playback ownership and do not enable production acceptance.
+The [integration receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-relationship-enrichment-v1.json)
+records the code, tests, file audit and storage measurements.
+
+The first 50,000-file pass processed 233,210 outcomes, including the shared song
+dictionary, without a processing failure. Independent reference and citation
+checks found no mismatches. An exposed review of 150 examples found false
+provisional songs from banter descriptions, filenames, set labels and numeric
+annotations. The shared repertoire interpretation now suppresses those labels
+without losing supported neighboring songs or exact dictionary identities.
+Composition and file-content interpretations use the same policy. A second
+real-data replay confirmed the eight reported cases. This exposed review identifies failure classes; it
+does not estimate matching accuracy.
+
+The raw capture completed all 118 ranges: 5,064,097 files, no missing expected
+rows and no UUID or parent-coordinate drift. The capture includes 21 files added
+since its earlier metadata inventory. Full-population replay is running at
+`local-dev/normalization-data/2026-10-18-shadow-full-population-v2/`, with frozen
+Luna results, geographic data and 535 retained MusicBrainz inputs. The acquisition
+job continues independently; later responses require a new replay selection.
+
+Full-file output also needs a storage check. Equivalent stronger-compression
+copies reduced this pass from 46.83 MB to 26.97 MB. New output uses stronger
+gzip compression. The measured compact index projects to about 4.08 GB for the
+file population, so output and a full new reader together do not yet fit above
+the laptop's disk reserve. Keep the existing reader available while completing
+output and resolving reader storage; do not silently omit files from a claimed
+full-population view.
+
 The [full recording/venue reader](http://alecs-macbook-pro.tail09dbf.ts.net:18765/)
 shows the completed 15-range core pass: 292,523 recordings, 216,332 venues,
 16,605 repertoire songs and 38,475 legacy setlists, plus one ordered provider

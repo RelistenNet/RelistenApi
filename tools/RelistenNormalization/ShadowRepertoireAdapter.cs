@@ -23,13 +23,37 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         @"^(?:https?://|(?:disc|track|t)\s*\d+\b|\d{4}[-_.]\d{2}[-_.]\d{2})|^(?:\d+|[a-z])$|^\d{1,3}\s+-\s+|\b(?:unknown|unidentified|interpolat(?:ion|ed)|tease|recorded by|taped by)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     );
+    private static readonly Regex BanterLabel = new(
+        @"^(?:\d{1,3}[.)]?\s+)?(?:stage\s+)?banter(?:\s*[-:–—]\s*(?<description>.+))?[.!]?$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+    private static readonly Regex RecordingFilename = new(
+        @"^\S*\d{4}[-_.]\d{2}[-_.]\d{2}(?:[._-]?[sd]\d+)?[._-]?t\d+(?:[._-][\p{L}\p{N}._-]+)*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+    private static readonly Regex RecordingDivision = new(
+        @"^(?:set|disc|part)\s*(?:\d+|[ivx]+)(?:\s*[-,:]?\s*(?:set|part)\s*(?:\d+|[ivx]+))*$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    );
+    private static readonly Regex NumericAnnotation = new(
+        @"^\(\s*\d+(?:\s*[,;]\s*\d+)*\s*\)$",
+        RegexOptions.CultureInvariant
+    );
+    private static readonly Regex DurationSuffix = new(
+        @"\(\s*\d{1,3}:\d{2}(?:[.:]\d+)?\s*\)\s*$",
+        RegexOptions.CultureInvariant
+    );
+    private static readonly Regex TransitionResidue = new(
+        @"^[<>→]+|[<>→]+$",
+        RegexOptions.CultureInvariant
+    );
     private readonly Dictionary<
         (long ArtistId, string Title),
         Dictionary<Guid, CapturedSong>
     > songs = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v2";
+    public string Version => "shadow-repertoire-v3";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -234,6 +258,23 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     )
     {
         var title = segment.Title ?? segment.Evidence.Quote;
+        var trimmedTitle = title.Trim();
+        IReadOnlyList<ShadowRepertoireCandidate> candidates =
+            artistUuid == Guid.Empty ? [] : Candidates(artistId, artistUuid, title);
+        // Literal dictionary wording preserves an existing identity even when the producer
+        // calls that wording a control label. Punctuation-normalized correspondence alone
+        // cannot override an explicit content label (for example Banter, versus Banter).
+        var literalDictionaryMatch = candidates.Any(candidate =>
+            string.Equals(
+                candidate.Song.Name.Normalize(NormalizationForm.FormC).Trim(),
+                trimmedTitle.Normalize(NormalizationForm.FormC),
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+        if (literalDictionaryMatch)
+        {
+            return DictionarySegment();
+        }
         if (segment.Kind is TrackContentKind.Nonmusic or TrackContentKind.Speech)
         {
             return Segment("not_applicable", "extractor_reports_non_song_content");
@@ -248,8 +289,8 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             return Segment("unresolved", "missing_artist_identity");
         }
 
-        // Decorated controls can reach the producer's default Song class. Do not
-        // turn them into songs merely because an imported dictionary has that label.
+        // Decorated controls can reach the producer's default Song class. A normalized
+        // imported label supplies no additional evidence that such a mention is musical.
         var normalized = NormalizeTitle(title);
         if (
             normalized
@@ -265,23 +306,24 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             return Segment("not_applicable", "shadow_guard_explicit_control_label");
         }
 
-        var candidates = Candidates(artistId, artistUuid, title);
-        if (candidates.Count > 1)
+        var banter = BanterLabel.Match(trimmedTitle);
+        if (banter.Success)
         {
+            var description = banter.Groups["description"].Value;
+            var clearlySpoken =
+                description.Length == 0
+                || description.StartsWith("inviting out ", StringComparison.OrdinalIgnoreCase);
             return Segment(
-                "unresolved",
-                "multiple_artist_dictionary_entries",
-                candidates: candidates
+                clearlySpoken ? "not_applicable" : "unresolved",
+                clearlySpoken
+                    ? "shadow_guard_explicit_banter_label"
+                    : "shadow_guard_banter_description"
             );
         }
-        if (candidates.Count == 1)
+
+        if (candidates.Count > 0)
         {
-            return Segment(
-                "proposed",
-                "unique_title_correspondence_is_not_identity_acceptance",
-                candidates[0].Song,
-                candidates
-            );
+            return DictionarySegment();
         }
         if (segment.Kind == TrackContentKind.Jam)
         {
@@ -295,6 +337,11 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             normalized.Length == 0
             || normalized is "intro" or "intros" or "outro" or "interlude"
             || OpaqueOrUnparsedTitle.IsMatch(title)
+            || RecordingFilename.IsMatch(trimmedTitle)
+            || RecordingDivision.IsMatch(trimmedTitle)
+            || NumericAnnotation.IsMatch(trimmedTitle)
+            || DurationSuffix.IsMatch(title)
+            || TransitionResidue.IsMatch(trimmedTitle)
             || title.Contains('/')
             || title.Count(character => character == '(')
                 != title.Count(character => character == ')')
@@ -308,6 +355,20 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
             "title_derived_identity_within_captured_artist_dictionary",
             new(ProvisionalEntityKey(artistUuid, title), artistUuid, null, title, "title_derived")
         );
+
+        ShadowRepertoireSegment DictionarySegment() =>
+            candidates.Count > 1
+                ? Segment(
+                    "unresolved",
+                    "multiple_artist_dictionary_entries",
+                    candidates: candidates
+                )
+                : Segment(
+                    "proposed",
+                    "unique_title_correspondence_is_not_identity_acceptance",
+                    candidates[0].Song,
+                    candidates
+                );
 
         ShadowRepertoireSegment Segment(
             string outcome,

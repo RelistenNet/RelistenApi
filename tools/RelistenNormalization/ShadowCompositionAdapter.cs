@@ -19,6 +19,7 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
     };
     private readonly ShadowCompositionEvidence evidence;
     private readonly IdentityCandidateMatcher matcher = new();
+    private readonly ShadowRepertoireAdapter repertoireInterpretation = new();
     private readonly Dictionary<Guid, ShadowCompositionProof[]> proofsByOriginal;
     private readonly Dictionary<
         (Guid Artist, string Title),
@@ -29,7 +30,11 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
 
     // The batch checkpoints adapter versions. Changing admitted evidence must reject a
     // resumption rather than mixing already-written rows with a different proof wave.
-    public string Version => "shadow-composition-v2/primary=" + (evidence.ManifestSha256 ?? "none");
+    public string Version =>
+        "shadow-composition-v3/repertoire="
+        + repertoireInterpretation.Version
+        + "/primary="
+        + (evidence.ManifestSha256 ?? "none");
 
     /// <param name="primaryEvidencePath">
     /// Optional caller-selected &lt;manifest-path&gt;#sha256=&lt;digest&gt;. Null omits the source-reviewed
@@ -53,6 +58,7 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
 
     public void Observe(JsonElement record)
     {
+        repertoireInterpretation.Observe(record);
         ObserveCompositionContext(record);
 
         if (
@@ -291,15 +297,37 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
         foreach (var segment in parsed.Segments)
         {
             ValidateTitleEvidence(parsed.OriginalTitle, segment.Evidence);
-            if (segment.Kind == TrackContentKind.Song && segment.Title != segment.Evidence.Quote)
+            if (segment.Title != null && segment.Title != segment.Evidence.Quote)
             {
                 throw new InvalidDataException(
-                    "Song interpretation differs from its exact title evidence."
+                    "Content interpretation differs from its exact title evidence."
                 );
             }
             var kind = JsonNamingPolicy.SnakeCaseLower.ConvertName(segment.Kind.ToString());
-            if (segment.Kind is TrackContentKind.Speech or TrackContentKind.Nonmusic)
+            var repertoireMention = repertoireInterpretation.ResolveTitleMention(
+                input.Artist.Id,
+                input.Artist.Uuid,
+                segment
+            );
+            if (repertoireMention.Song != null || repertoireMention.CandidateSongs.Count > 0)
             {
+                result.Add(
+                    Resolve(
+                        input,
+                        segment.Title ?? segment.Evidence.Quote,
+                        kind,
+                        "/row/title",
+                        segment.Evidence,
+                        null,
+                        repertoireMention
+                    )
+                );
+            }
+            else
+            {
+                // Keep the producer's title and exact span even when the shared shadow
+                // interpretation withholds a song identity. Provider work facts cannot turn
+                // a suppressed file label into an authored composition mention.
                 result.Add(
                     new(
                         segment.Title,
@@ -307,35 +335,17 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
                         "/row/title",
                         segment.Evidence,
                         [],
-                        "not_applicable",
-                        "non_authored_content",
+                        repertoireMention.Outcome == "not_applicable"
+                            ? "not_applicable"
+                            : "unresolved",
+                        repertoireMention.Outcome == "not_applicable"
+                            ? "non_authored_content"
+                            : "repertoire_title_interpretation_required",
                         [],
                         [],
-                        "The extraction reports speech or nonmusic; no authored-work identity follows."
+                        repertoireMention.Reason
+                            ?? "The repertoire interpretation supplies no song identity."
                     )
-                );
-            }
-            else if (
-                segment.Kind != TrackContentKind.Song
-                || string.IsNullOrWhiteSpace(segment.Title)
-            )
-            {
-                result.Add(
-                    Unresolved(
-                        segment.Title,
-                        kind,
-                        "/row/title",
-                        segment.Evidence,
-                        [],
-                        "named_content_required",
-                        []
-                    )
-                );
-            }
-            else
-            {
-                result.Add(
-                    Resolve(input, segment.Title, kind, "/row/title", segment.Evidence, null)
                 );
             }
         }
@@ -364,7 +374,8 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
         string kind,
         string pointer,
         NormalizationTextEvidence? localEvidence,
-        Guid? songUuid
+        Guid? songUuid,
+        ShadowRepertoireSegment? repertoireMention = null
     )
     {
         if (string.IsNullOrWhiteSpace(title))
@@ -380,12 +391,24 @@ public sealed partial class ShadowCompositionAdapter : IShadowCatalogAdapter
             );
         }
 
-        var known = repertoire.GetValueOrDefault((input.Artist.Id, NormalizeTitle(title))) ?? [];
+        var known =
+            repertoireMention == null
+                ? repertoire.GetValueOrDefault((input.Artist.Id, NormalizeTitle(title))) ?? []
+                : repertoireMention
+                    .CandidateSongs.Select(song => song.LegacySongUuid)
+                    .Append(repertoireMention.Song?.LegacySongUuid)
+                    .Where(uuid => uuid.HasValue)
+                    .Select(uuid => uuid.GetValueOrDefault())
+                    .ToHashSet();
         var repertoireKeys =
             songUuid is { } exactSong ? new[] { ShadowRepertoireAdapter.KnownEntityKey(exactSong) }
-            : known.Count > 0
-                ? known.Order().Select(ShadowRepertoireAdapter.KnownEntityKey).ToArray()
-            : new[] { ShadowRepertoireAdapter.ProvisionalEntityKey(input.Artist.Uuid, title) };
+            : repertoireMention?.Song is { } interpretedSong ? new[] { interpretedSong.EntityKey }
+            : repertoireMention
+                ?.CandidateSongs.Select(song => song.EntityKey)
+                .Distinct()
+                .Order()
+                .ToArray()
+                ?? [];
         var anchor = songUuid ?? input.Uuid;
         var retainedCandidates =
             evidence.CandidateContexts.GetValueOrDefault((input.Artist.Uuid, NormalizeTitle(title)))

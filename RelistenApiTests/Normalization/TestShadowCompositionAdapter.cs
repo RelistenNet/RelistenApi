@@ -166,7 +166,7 @@ public sealed class TestShadowCompositionAdapter
             Packet(Proof(song, Guid.NewGuid(), "Shared Song"))
         );
         adapter.Observe(song.Record);
-        var track = Track(artist, "Shared Song > Unknown Song");
+        var track = Track(artist, "Shared Song > Uncatalogued Song");
 
         var result = adapter.Process(track).Single();
         var proposal = Proposal(result);
@@ -600,6 +600,171 @@ public sealed class TestShadowCompositionAdapter
         observe.Should().NotThrow();
         adapter.Process(invalid).Single().Outcome.Should().Be("failed");
         adapter.Process(song).Single().Outcome.Should().Be("proposed");
+    }
+
+    [TestCase("banter - inviting out Funky Dawgs", "not_applicable")]
+    [TestCase("14 Stage Banter", "not_applicable")]
+    [TestCase("gatrios2011-12-17s2t05.matrix.kindrecordings.mp3", "unresolved")]
+    [TestCase("01 Set 1 Part 1", "unresolved")]
+    [TestCase("Music Never Stopped (09:23.55)", "unresolved")]
+    [TestCase("(1,6)", "unresolved")]
+    [TestCase("Banter - A Story", "unresolved")]
+    public void SuppressedRepertoireTitlesKeepSourceClaimsWithoutSongOrCompositionKeys(
+        string title,
+        string outcome
+    )
+    {
+        var artist = Artist(1, "Performer");
+        var mbid = Guid.NewGuid();
+        var track = Track(artist, title);
+        var original = new TrackTitleExtractor().Extract(artist.Uuid, title);
+        var adapter = new ShadowCompositionAdapter();
+        adapter.Observe(ArtistContext(artist, mbid));
+        adapter.Observe(track.Record);
+        foreach (var segment in original.Segments)
+        {
+            // Even a retained external work path must not reinterpret a suppressed label.
+            adapter.Observe(
+                ProviderRecording(
+                    artist,
+                    mbid,
+                    segment.Title ?? segment.Evidence.Quote,
+                    Guid.NewGuid()
+                ).Record
+            );
+        }
+
+        var result = adapter.Process(track).Single();
+        var mentions = Proposal(result).Mentions;
+        result.Outcome.Should().Be(outcome);
+        result.EntityKeys.Should().BeEmpty();
+        mentions
+            .Should()
+            .OnlyContain(mention =>
+                mention.RepertoireEntityKeys.Count == 0 && mention.Links.Count == 0
+            );
+        mentions
+            .Select(mention => mention.Title)
+            .Should()
+            .Equal(original.Segments.Select(segment => segment.Title));
+        mentions
+            .Select(mention => mention.LocalTitleEvidence)
+            .Should()
+            .BeEquivalentTo(original.Segments.Select(segment => segment.Evidence));
+        track.Row.GetProperty("title").GetString().Should().Be(title);
+    }
+
+    [Test]
+    public void CompoundSupportedSongKeepsItsWorkWhileNumericFootnoteGetsNoSongKey()
+    {
+        var artist = Artist(1, "Performer");
+        var song = Song(artist, "Little Betty Boop");
+        var work = Guid.NewGuid();
+        var adapter = new ShadowCompositionAdapter(Packet(Proof(song, work, "Little Betty Boop")));
+        adapter.Observe(song.Record);
+        var result = adapter.Process(Track(artist, "Little Betty Boop->(1,6)")).Single();
+        var mentions = Proposal(result).Mentions;
+
+        result.Outcome.Should().Be("proposed");
+        mentions.Should().HaveCount(2);
+        mentions[0].Links.Single().MusicBrainzWorkMbid.Should().Be(work);
+        mentions[0]
+            .RepertoireEntityKeys.Should()
+            .Equal(ShadowRepertoireAdapter.KnownEntityKey(song.Uuid));
+        mentions[1].Outcome.Should().Be("unresolved");
+        mentions[1].RepertoireEntityKeys.Should().BeEmpty();
+        mentions[1].Links.Should().BeEmpty();
+        mentions[1].LocalTitleEvidence!.Quote.Should().Be("(1,6)");
+        result
+            .EntityKeys.Should()
+            .BeEquivalentTo([
+                ShadowRepertoireAdapter.KnownEntityKey(song.Uuid),
+                ShadowCompositionAdapter.WorkKey(work),
+            ]);
+    }
+
+    [Test]
+    public void OrdinaryAndCompoundNamesUseTheSharedRepertoireKeys()
+    {
+        var artist = Artist(1, "Performer");
+        var ordinary = Track(artist, "Part of Me");
+        var adapter = new ShadowCompositionAdapter();
+        var ordinaryResult = adapter.Process(ordinary).Single();
+        ordinaryResult
+            .EntityKeys.Should()
+            .Equal(ShadowRepertoireAdapter.ProvisionalEntityKey(artist.Uuid, "Part of Me"));
+
+        var first = Song(artist, "Morning");
+        var second = Song(artist, "Evening");
+        var firstWork = Guid.NewGuid();
+        var secondWork = Guid.NewGuid();
+        adapter = new ShadowCompositionAdapter(
+            Packet(Proof(first, firstWork, "Morning"), Proof(second, secondWork, "Evening"))
+        );
+        adapter.Observe(first.Record);
+        adapter.Observe(second.Record);
+        var result = adapter.Process(Track(artist, "Morning > Evening")).Single();
+        Proposal(result)
+            .Mentions.Select(mention => mention.Outcome)
+            .Should()
+            .Equal("proposed", "proposed");
+        result
+            .EntityKeys.Should()
+            .BeEquivalentTo([
+                ShadowRepertoireAdapter.KnownEntityKey(first.Uuid),
+                ShadowRepertoireAdapter.KnownEntityKey(second.Uuid),
+                ShadowCompositionAdapter.WorkKey(firstWork),
+                ShadowCompositionAdapter.WorkKey(secondWork),
+            ]);
+        adapter.Version.Should().Contain("repertoire=" + new ShadowRepertoireAdapter().Version);
+    }
+
+    [TestCase("Stage Banter")]
+    [TestCase("Set 1 Part 1")]
+    public void ExactDictionaryTitleWinsTheSharedGuardForComposition(string title)
+    {
+        var artist = Artist(1, "Performer");
+        var song = Song(artist, title);
+        var work = Guid.NewGuid();
+        var adapter = new ShadowCompositionAdapter(Packet(Proof(song, work, title)));
+        adapter.Observe(song.Record);
+        var result = adapter.Process(Track(artist, title)).Single();
+        result.Outcome.Should().Be("proposed");
+        result
+            .EntityKeys.Should()
+            .BeEquivalentTo([
+                ShadowRepertoireAdapter.KnownEntityKey(song.Uuid),
+                ShadowCompositionAdapter.WorkKey(work),
+            ]);
+    }
+
+    [TestCase("Stage Banter", TrackContentKind.Speech)]
+    [TestCase("Intro", TrackContentKind.Unknown)]
+    public void NonSongTitleCannotBorrowAnotherDictionarySongsComposition(
+        string originalTitle,
+        TrackContentKind kind
+    )
+    {
+        var artist = Artist(1, "Performer");
+        var song = Song(artist, "Other Song");
+        var adapter = new ShadowCompositionAdapter(
+            Packet(Proof(song, Guid.NewGuid(), "Other Song"))
+        );
+        adapter.Observe(song.Record);
+        var original = new TrackTitleExtractor().Extract(artist.Uuid, originalTitle);
+        var borrowed = original with
+        {
+            Segments = [original.Segments.Single() with { Kind = kind, Title = "Other Song" }],
+        };
+        var track = Track(artist, originalTitle) with
+        {
+            Extraction = JsonSerializer.SerializeToElement(
+                new { titleExtraction = borrowed },
+                Json
+            ),
+        };
+        Action process = () => adapter.Process(track).ToArray();
+        process.Should().Throw<InvalidDataException>();
     }
 
     private static JsonElement ArtistContext(ShadowCatalogArtist artist, Guid musicBrainzId) =>

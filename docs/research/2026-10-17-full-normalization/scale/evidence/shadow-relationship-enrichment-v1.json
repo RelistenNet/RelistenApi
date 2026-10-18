@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-18T19:58:12.354369+00:00",
+  "implementationCommit": "9ec2c1c89fda373cc69dc061de15ed54256385bf",
+  "scope": "Shared geography, existing-show account associations and durable cross-artist composition acquisition. No production writes or accepted identity policy.",
+  "verification": {
+    "buildExitCode": 0,
+    "buildLog": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-enrichment-verification-v1/build.log",
+      "sha256": "f43af4975e1262c960a9ed9537ee18f688cd1c68c3390e1b0d2200e4ae017cd9"
+    },
+    "testCounters": {
+      "total": "149",
+      "executed": "149",
+      "passed": "149",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "tests": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-enrichment-verification-v1/shadow-enrichment.trx",
+      "sha256": "91ba1bb56beb18df2c502644c15fc65100067626b860134883f43199a7df51ea"
+    },
+    "sourceOverlay": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-enrichment-verification-v1/source-overlay.json",
+      "sha256": "af0ce49805be594a61dd97d18a6b0aab04617e5ecc05b31b125050cceb784cb5"
+    }
+  },
+  "completedFileProbe": {
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-first-file-range-v1/manifest.json",
+      "sha256": "2b1d5a392896214ba18f5d9ae0fd1389c1a8362a8669e4991d5d9f81147e1586"
+    },
+    "files": 50000,
+    "sharedSongs": 16605,
+    "outcomes": 233210,
+    "processingFailures": 0,
+    "execution": {
+      "exitCode": 0,
+      "elapsedSeconds": 8.01157254097052,
+      "freeBytesAfter": 9290248192,
+      "compressedOutputBytes": 46828051
+    }
+  },
+  "storageMeasurement": {
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-first-file-storage-measurement-v1/manifest.json",
+      "sha256": "86f294738be93c74a01ab41551b9672bb12f1cf26aa8899805613ad903a0817b"
+    },
+    "originalGzipBytes": 46828051,
+    "equivalentLevel6GzipBytes": 26965114,
+    "compactIndexBytes": 47837184,
+    "qualification": "First range spans ten artists and Archive playback. Projection is not measured full-catalog storage. Full new output plus index does not fit above current disk reserve."
+  },
+  "independentOutputAudit": {
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-first-file-output-audit-v1/manifest.json",
+      "sha256": "fc1b0cae5e658efd546b3f826fcf35b73c6214bb4c4a6261868b1c7efa7a05f3"
+    },
+    "reviewedExamples": 150,
+    "qualification": "Exposed development audit, not an accuracy estimate. Reference and citation checks found no mismatches; descriptive banter, filenames, set labels and annotations need title proposal corrections."
+  },
+  "playbackOwnershipCensus": {
+    "metadataFiles": 5064076,
+    "directSourceAndSetPointer": 4906420,
+    "setOnly": 0,
+    "neitherPointer": 157656,
+    "missingReferencedSets": 0,
+    "directVsSetOwnerDisagreements": 0
+  },
+  "rawCaptureAtReceipt": {
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-enrichment-verification-v1/raw-capture-at-checkpoint.json",
+      "sha256": "f0281f3110ababb2a31e3886bb4978e81242da880791bdba1d75900d3a203721"
+    },
+    "originalMutableManifest": "local-dev/normalization-data/2026-10-18-shadow-full-raw-v1/manifest.json",
+    "state": "partial",
+    "files": 5000000,
+    "pendingShards": 3
+  },
+  "compositionAcquisitionStarted": {
+    "executionRequest": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-catalog-acquisition-execution-v1/request.json",
+      "sha256": "8a3351720f9074104980a377fc621c084e0370c9d1c170d91b5a221b942d0b6a"
+    },
+    "operatorRequest": {
+      "path": "local-dev/normalization-data/2026-10-18-composition-catalog-acquisition-request-v1/request.json",
+      "sha256": "a30d76a2c5f0dcab70b6610e7ff8f71aee6e0963bda3fc77aefc2c4862e5564f"
+    },
+    "originalInputs": 444,
+    "originalCommands": 462,
+    "maximumServiceCalls": 2000,
+    "maximumDuration": "00:45:00",
+    "state": "running at receipt creation"
+  },
+  "openWork": [
+    "Complete full-population replay and audit its outputs.",
+    "Audit geographic, people, composition and performance matching accuracy.",
+    "Provide full new reader within measured storage constraints.",
+    "Qualify automatic acceptance, restored-catalog API behavior and rollout."
+  ],
+  "completedRawCapture": {
+    "manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-enrichment-verification-v1/raw-capture-completed.json",
+      "sha256": "04eff1257182e525fc8df213ff25966f16ee6aa28ae924cd1dce81452c2d0745"
+    },
+    "state": "completed_declared_ranges",
+    "files": 5064097,
+    "shards": 118,
+    "pendingShards": 0,
+    "compressedBytes": 944805218,
+    "missingRows": 0,
+    "extraRows": 23,
+    "uuidDriftRows": 0,
+    "coordinateDriftEntries": 0
+  },
+  "titlePolicyCorrection": {
+    "testCounters": {
+      "total": "185",
+      "executed": "185",
+      "passed": "185",
+      "failed": "0",
+      "error": "0",
+      "timeout": "0",
+      "aborted": "0",
+      "inconclusive": "0",
+      "passedButRunAborted": "0",
+      "notRunnable": "0",
+      "notExecuted": "0",
+      "disconnected": "0",
+      "warning": "0",
+      "completed": "0",
+      "inProgress": "0",
+      "pending": "0"
+    },
+    "tests": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-title-policy-verification-v1/shadow-title-policy.trx",
+      "sha256": "fa4125436c596ef39369f3c8a56b907268db9593bfdb7bd8783d78d12898c192"
+    },
+    "sourceOverlay": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-title-policy-verification-v1/source-overlay-v3.json",
+      "sha256": "a5600ef66b4834f83c0b309051d07e97873c2102787506d00d3fc2c2ae37190e"
+    },
+    "buildLog": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-title-policy-verification-v1/build.log",
+      "sha256": "70e463ebdd2b66c7a648e88806b7884a3effcfd9d4c0cb34099b03d2454fca59"
+    },
+    "actualReplayManifest": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-first-file-range-v2/manifest.json",
+      "sha256": "02caeef4936e931c01717d68a6201c53bc5cf2f9ac646b3eb789ffb0d9452917"
+    },
+    "actualReplayResult": {
+      "exitCode": 0,
+      "elapsedSeconds": 10.902934749959968,
+      "gzipOutputBytes": 31076061,
+      "freeBytesAfter": 8811331584
+    },
+    "scope": "Shared repertoire v3 guards prevent unsupported label-derived song/work identities; exact dictionary links and supported compound neighbors survive. Original extraction spans remain unchanged. Eight reported cases rechecked against actual output."
+  },
+  "fullPopulationReplayStarted": {
+    "request": {
+      "path": "local-dev/normalization-data/2026-10-18-shadow-full-population-execution-v2/request.json",
+      "sha256": "4d3deeee91a6a5bdab973728eca21436ae3b57a1af8ce072d893e1b4beafd3d0"
+    },
+    "state": "running at receipt update",
+    "outputPath": "local-dev/normalization-data/2026-10-18-shadow-full-population-v2",
+    "fullNewReaderPublished": false
+  }
+}

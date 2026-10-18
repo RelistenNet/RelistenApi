@@ -9,7 +9,7 @@ input. The [sample reader](http://alecs-macbook-pro.tail09dbf.ts.net:18764/) add
 Luna interpretations for 2,000 recordings to its 258,987 outcomes. Both runs
 completed without processing failures. An input can produce several outcomes;
 these counts are not distinct normalized identities or matching-accuracy results.
-Full capture and replay of roughly 5.1 million files remain in progress.
+Raw capture is complete for 5,064,097 files. Full file normalization is in progress.
 
 The original sample run lives in
 `local-dev/normalization-data/2026-10-18-shadow-catalog-v1/`.
