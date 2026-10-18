@@ -14,6 +14,7 @@ from urllib.request import urlopen
 from http.server import ThreadingHTTPServer
 
 from people_directory import (
+    CreditOverlay,
     DirectoryBuilder,
     PeopleDirectory,
     group_id,
@@ -307,6 +308,129 @@ class TestPeopleDirectory(unittest.TestCase):
             self.assertEqual(response["total"], 1)
             result = reader.detail(response["items"][0]["id"])["record"]
             self.assertEqual(result["proposal"]["sourceUuid"], recording["sourceUuid"])
+
+    def test_selected_source_overlay_preserves_other_sources_homes_and_model_evidence(
+        self,
+    ):
+        (self.root / "performances").mkdir()
+        with gzip.open(self.root / "performances" / "1.jsonl.gz", "wt") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "inputKind": "source_sample",
+                        "inputUuid": "one",
+                        "outcome": "proposed",
+                        "proposal": {
+                            "sourceUuid": "one",
+                            "showUuid": "show-one",
+                            "literalDate": "1972-00-00",
+                        },
+                    }
+                )
+                + "\n"
+            )
+        directory = self.build(
+            [
+                (
+                    "one",
+                    "artist-a",
+                    [
+                        self.credit(
+                            "one", "artist-a", "Old Name", "taper", alias="Old Alias"
+                        )
+                    ],
+                ),
+                (
+                    "two",
+                    "artist-b",
+                    [
+                        self.credit(
+                            "two", "artist-b", "Old Name", "taper", alias="Keep Alias"
+                        )
+                    ],
+                ),
+            ]
+        )
+        home = directory.detail(group_id(name_key("Old Name")), {})["recordings"][0][
+            "capturedHome"
+        ]
+        overlay = self.root / "overlay"
+        (overlay / "credits").mkdir(parents=True)
+        (overlay / "manifest.json").write_text(json.dumps({"state": "completed"}))
+        selection = overlay / "selection.json"
+        selection.write_text(json.dumps({"sourceUuids": ["one"]}))
+        local, local_facts = self.credit(
+            "one", "artist-a", "Rob Berger", "taper", alias="New Alias"
+        )
+        model, model_facts = self.credit("one", "artist-a", "Rob Berger", "transferrer")
+        local["entityKey"] = "credit:local"
+        model.update(
+            entityKey="credit:model", interpretationBasis="retained_luna_extraction"
+        )
+        outcome = {
+            "inputKind": "source_sample",
+            "inputUuid": "one",
+            "artistUuid": "artist-a",
+            "artistName": "artist-a",
+            "proposal": {"credits": [local, model]},
+            "evidence": {
+                "creditExtraction": {"credits": [local_facts]},
+                "model": {
+                    "originalLunaResult": {"extraction": {"credits": [model_facts]}}
+                },
+            },
+        }
+        with gzip.open(overlay / "credits" / "1.jsonl.gz", "wt") as stream:
+            stream.write(json.dumps(outcome) + "\n")
+        CreditOverlay(overlay, selection, self.database, minimum_free=0).apply()
+        self.assertEqual(directory.search({"q": "Old Alias"})["total"], 0)
+        self.assertEqual(directory.search({"q": "Keep Alias"})["total"], 1)
+        old = directory.detail(group_id(name_key("Old Name")), {})
+        self.assertEqual(old["recording_count"], 1)
+        self.assertEqual(old["recordings"][0]["sourceUuid"], "two")
+        detail = directory.detail(group_id(name_key("Rob Berger")), {})
+        self.assertEqual(detail["recording_count"], 1)
+        recording = detail["recordings"][0]
+        self.assertEqual(recording["capturedHome"], home)
+        self.assertEqual(
+            {credit["role"] for credit in recording["credits"]},
+            {"taper", "transferrer"},
+        )
+        self.assertEqual(
+            {credit["interpretation_basis"] for credit in recording["credits"]},
+            {None, "retained_luna_extraction"},
+        )
+        model_credit = next(
+            credit for credit in recording["credits"] if credit["interpretation_basis"]
+        )
+        self.assertEqual(model_credit["evidence"], model["evidence"])
+        self.assertEqual(model_credit["aliases"], [])
+        self.assertTrue(model_credit["sourceEvidenceUrl"].startswith("/api/credit?"))
+        retained = directory.credit(model_credit["id"])
+        self.assertEqual(retained["retainedOutcome"], outcome)
+        self.assertEqual(retained["credit"]["source_uuid"], "one")
+        self.assertEqual(directory.stats()["creditedRecordings"], 2)
+        self.assertEqual(directory.stats()["modelCreditMentions"], 1)
+        failed = self.root / "failed-overlay"
+        (failed / "credits").mkdir(parents=True)
+        (failed / "manifest.json").write_text(json.dumps({"state": "completed"}))
+        with gzip.open(failed / "credits" / "1.jsonl.gz", "wt") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "inputKind": "source_sample",
+                        "inputUuid": "one",
+                        "outcome": "failed",
+                    }
+                )
+                + "\n"
+            )
+        with self.assertRaises(ValueError):
+            CreditOverlay(failed, selection, self.database, minimum_free=0).apply()
+        self.assertEqual(
+            directory.credit(model_credit["id"])["retainedOutcome"], outcome
+        )
+        self.assertEqual(directory.stats()["modelCreditMentions"], 1)
 
 
 if __name__ == "__main__":

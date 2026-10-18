@@ -356,7 +356,16 @@
         }
         for (let c of r.credits) {
           let section = node("details"),
-            summary = node("summary", c.name + " · " + c.role);
+            summary = node(
+              "summary",
+              c.name +
+                " · " +
+                c.role +
+                " · " +
+                (c.interpretation_basis === "retained_luna_extraction"
+                  ? "Luna proposal"
+                  : "Local parser"),
+            );
           section.append(summary);
           if (c.evidence)
             section.append(
@@ -406,7 +415,12 @@
           count(s.creditedArtists) +
           " artists with credits · " +
           count(s.groups) +
-          " draft name groups";
+          " draft name groups" +
+          (s.modelCreditMentions
+            ? " · " +
+              count(s.modelCreditMentions) +
+              " retained Luna credit proposals"
+            : "");
         for (let issue of s.knownIssues) $("issues").append(node("li", issue));
       })
       .catch((e) => ($("coverage").textContent = e.message));

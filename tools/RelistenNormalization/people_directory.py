@@ -12,6 +12,7 @@ the HTTP contract, coverage limits and links to the source and playable-file rea
 """
 
 import argparse
+from contextlib import closing
 import gzip
 import hashlib
 import json
@@ -22,7 +23,7 @@ import sqlite3
 import unicodedata
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-VERSION = "people-name-directory-v2"
+VERSION = "people-name-directory-v3"
 
 
 def name_key(name):
@@ -54,7 +55,7 @@ class DirectoryBuilder:
         if self.output.exists():
             raise FileExistsError(self.output)
         self._check_space()
-        with sqlite3.connect(self.output) as db:
+        with closing(sqlite3.connect(self.output)) as db, db:
             db.executescript("""
                 PRAGMA journal_mode=DELETE;
                 CREATE TABLE metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -68,7 +69,8 @@ class DirectoryBuilder:
                 CREATE TABLE credits(id INTEGER PRIMARY KEY, group_id TEXT NOT NULL,
                     source_uuid TEXT NOT NULL, artist_uuid TEXT, name TEXT, role TEXT,
                     person_key TEXT, evidence TEXT, aliases TEXT,
-                    chunk TEXT NOT NULL, line INTEGER NOT NULL);
+                    chunk TEXT NOT NULL, line INTEGER NOT NULL,
+                    interpretation_basis TEXT, credit_key TEXT, origin_run TEXT);
                 CREATE INDEX credits_source ON credits(source_uuid);
             """)
             source_rows = 0
@@ -103,38 +105,8 @@ class DirectoryBuilder:
                     encoded({"chunks": index + 1, "sourceRows": source_rows}),
                     flush=True,
                 )
-            # Build the searchable spellings only from the surviving source results.
-            # A replay that removes an alias must remove its search hit as well.
-            db.execute(
-                "INSERT OR IGNORE INTO names SELECT c.group_id,c.name,g.name_key,'credited_name' FROM credits c JOIN groups g ON g.id=c.group_id"
-            )
-            for identifier, aliases_json in db.execute(
-                "SELECT group_id,aliases FROM credits WHERE aliases<>'[]'"
-            ):
-                for alias in json.loads(aliases_json):
-                    wording = alias["wording"]
-                    if name_key(wording):
-                        db.execute(
-                            "INSERT OR IGNORE INTO names VALUES(?,?,?,?)",
-                            (
-                                identifier,
-                                wording,
-                                name_key(wording),
-                                "explicit_source_alias",
-                            ),
-                        )
-            db.executescript("""
-                CREATE INDEX credits_group_source ON credits(group_id,source_uuid);
-                DELETE FROM groups WHERE NOT EXISTS(SELECT 1 FROM credits WHERE credits.group_id=groups.id);
-                DELETE FROM names WHERE group_id NOT IN(SELECT id FROM groups);
-                CREATE INDEX credits_group_artist ON credits(group_id,artist_uuid);
-                CREATE INDEX names_lookup ON names(lookup);
-                UPDATE groups SET
-                    recording_count=(SELECT count(DISTINCT source_uuid) FROM credits c WHERE c.group_id=groups.id),
-                    artist_count=(SELECT count(DISTINCT artist_uuid) FROM credits c WHERE c.group_id=groups.id),
-                    credit_count=(SELECT count(*) FROM credits c WHERE c.group_id=groups.id);
-                CREATE INDEX groups_recordings ON groups(recording_count DESC,id);
-            """)
+            self._rebuild_groups(db)
+            self._refresh_stats(db)
             metadata = {
                 "version": VERSION,
                 "sourceRun": str(self.run),
@@ -165,16 +137,84 @@ class DirectoryBuilder:
         )
         return metadata
 
+    def _rebuild_groups(self, db):
+        db.execute("DELETE FROM names")
+        # Build the searchable spellings only from the surviving source results.
+        # A replay that removes an alias must remove its search hit as well.
+        db.execute(
+            "INSERT OR IGNORE INTO names SELECT c.group_id,c.name,g.name_key,'credited_name' FROM credits c JOIN groups g ON g.id=c.group_id"
+        )
+        for identifier, aliases_json in db.execute(
+            "SELECT group_id,aliases FROM credits WHERE aliases<>'[]'"
+        ):
+            for alias in json.loads(aliases_json):
+                wording = alias["wording"]
+                if name_key(wording):
+                    db.execute(
+                        "INSERT OR IGNORE INTO names VALUES(?,?,?,?)",
+                        (
+                            identifier,
+                            wording,
+                            name_key(wording),
+                            "explicit_source_alias",
+                        ),
+                    )
+        # execute keeps this phase inside the caller's transaction. executescript
+        # would commit source replacements before their counts become consistent.
+        for statement in (
+            "CREATE INDEX IF NOT EXISTS credits_group_source ON credits(group_id,source_uuid)",
+            "DELETE FROM groups WHERE NOT EXISTS(SELECT 1 FROM credits WHERE credits.group_id=groups.id)",
+            "DELETE FROM names WHERE group_id NOT IN(SELECT id FROM groups)",
+            "CREATE INDEX IF NOT EXISTS credits_group_artist ON credits(group_id,artist_uuid)",
+            "CREATE INDEX IF NOT EXISTS names_lookup ON names(lookup)",
+            """UPDATE groups SET
+                recording_count=(SELECT count(DISTINCT source_uuid) FROM credits c WHERE c.group_id=groups.id),
+                artist_count=(SELECT count(DISTINCT artist_uuid) FROM credits c WHERE c.group_id=groups.id),
+                credit_count=(SELECT count(*) FROM credits c WHERE c.group_id=groups.id)""",
+            "CREATE INDEX IF NOT EXISTS groups_recordings ON groups(recording_count DESC,id)",
+        ):
+            db.execute(statement)
+
     def _check_space(self):
         if shutil.disk_usage(self.output.parent).free < self.minimum_free:
             raise RuntimeError(
                 "Directory build stopped to preserve the host disk reserve"
             )
 
-    def _add_record(self, db, record, chunk, line):
-        facts = (record.get("evidence", {}).get("creditExtraction") or {}).get(
-            "credits", []
+    @staticmethod
+    def _ensure_credit_provenance_columns(db):
+        columns = {column[1] for column in db.execute("PRAGMA table_info(credits)")}
+        for column in ("interpretation_basis", "credit_key", "origin_run"):
+            if column not in columns:
+                db.execute(f"ALTER TABLE credits ADD COLUMN {column} TEXT")
+
+    @staticmethod
+    def _refresh_stats(db):
+        # Counts change only when the projection writer replaces credits. Keep
+        # cold full-table scans out of HTTP requests and commit counts with data.
+        counts = {
+            key: db.execute(query).fetchone()[0]
+            for key, query in (
+                ("groups", "SELECT count(*) FROM groups"),
+                (
+                    "creditedRecordings",
+                    "SELECT count(DISTINCT source_uuid) FROM credits",
+                ),
+                ("creditedArtists", "SELECT count(DISTINCT artist_uuid) FROM credits"),
+                ("credits", "SELECT count(*) FROM credits"),
+                (
+                    "modelCreditMentions",
+                    "SELECT count(*) FROM credits WHERE interpretation_basis='retained_luna_extraction'",
+                ),
+            )
+        }
+        db.execute(
+            "INSERT OR REPLACE INTO metadata VALUES('directoryStats',?)",
+            (encoded(counts),),
         )
+        return counts
+
+    def _add_record(self, db, record, chunk, line, origin_run=None):
         for credit in (record.get("proposal") or {}).get("credits", []):
             key = name_key(credit["name"])
             if not key:
@@ -184,10 +224,18 @@ class DirectoryBuilder:
                 "INSERT OR IGNORE INTO groups(id,name_key,display_name) VALUES(?,?,?)",
                 (identifier, key, credit["name"]),
             )
+            # Aliases belong to the interpretation that supplied this credit. An
+            # equal name/quote from another extractor supplies no additional alias.
+            evidence = record.get("evidence", {})
+            if credit.get("interpretationBasis") == "retained_luna_extraction":
+                retained = (evidence.get("model") or {}).get("originalLunaResult") or {}
+                extraction = retained.get("extraction") or {}
+            else:
+                extraction = evidence.get("creditExtraction") or {}
             actor_facts = next(
                 (
                     item.get("actorFacts") or {}
-                    for item in facts
+                    for item in extraction.get("credits", [])
                     if item.get("name") == credit["name"]
                     and item.get("role") == credit["role"]
                     and item.get("evidence") == credit.get("evidence")
@@ -203,7 +251,7 @@ class DirectoryBuilder:
                 )
             db.execute(
                 """INSERT INTO credits(group_id,source_uuid,artist_uuid,name,role,person_key,
-                evidence,aliases,chunk,line) VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                evidence,aliases,chunk,line,interpretation_basis,credit_key,origin_run) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     identifier,
                     credit["sourceUuid"],
@@ -215,8 +263,116 @@ class DirectoryBuilder:
                     encoded(aliases),
                     chunk,
                     line,
+                    credit.get("interpretationBasis"),
+                    credit.get("entityKey"),
+                    origin_run,
                 ),
             )
+
+
+class CreditOverlay:
+    """Replace a selected source population with its complete retained credits.
+
+    A replay outcome already contains both local and model interpretations. Replace
+    the source's old credits together, then rebuild the derived directory once.
+    Source homes and the remaining catalog credits stay intact.
+    """
+
+    def __init__(self, run, selection, database, minimum_free=4.5 * 1024**3):
+        self.run = Path(run).resolve()
+        self.selection = Path(selection).resolve()
+        self.database = Path(database).resolve()
+        self.writer = DirectoryBuilder(self.run, self.database, minimum_free)
+
+    def apply(self):
+        manifest = json.loads((self.run / "manifest.json").read_text())
+        if manifest["state"] != "completed":
+            raise ValueError("Credit overlay requires a completed retained run")
+        sources = json.loads(self.selection.read_text())["sourceUuids"]
+        selected = set(sources)
+        if len(selected) != len(sources):
+            raise ValueError("Credit selection contains duplicate source UUIDs")
+        observed = set()
+        chunks = sorted((self.run / "credits").glob("*.jsonl.gz"))
+        for _, _, record in self._records(chunks):
+            source_uuid = record["inputUuid"]
+            if record.get("outcome") == "failed":
+                raise ValueError(
+                    "Failed credit outcomes cannot replace existing credits"
+                )
+            if (
+                source_uuid not in selected
+                or record.get("inputKind") != "source_sample"
+            ):
+                raise ValueError(
+                    "Credit outcome is outside the selected source population"
+                )
+            if any(
+                credit["sourceUuid"] != source_uuid
+                for credit in (record.get("proposal") or {}).get("credits", [])
+            ):
+                raise ValueError("Credit outcome changes recording ownership")
+            observed.add(source_uuid)
+        if observed != selected:
+            raise ValueError("Credit overlay is missing selected source outcomes")
+        self.writer._check_space()
+        with closing(sqlite3.connect(self.database)) as db, db:
+            if any(
+                not db.execute(
+                    "SELECT 1 FROM processed_sources WHERE uuid=?", (source,)
+                ).fetchone()
+                for source in selected
+            ):
+                raise ValueError(
+                    "Credit overlay includes a source outside this directory"
+                )
+            self.writer._ensure_credit_provenance_columns(db)
+            for chunk, line, record in self._records(chunks):
+                self.writer._check_space()
+                db.execute(
+                    "DELETE FROM credits WHERE source_uuid=?", (record["inputUuid"],)
+                )
+                self.writer._add_record(
+                    db, record, chunk, line, origin_run=str(self.run)
+                )
+            self.writer._rebuild_groups(db)
+            self.writer._refresh_stats(db)
+            metadata = {
+                "version": VERSION,
+                "creditOverlaySources": len(selected),
+                "creditOverlayRun": str(self.run),
+                "creditOverlayManifestSha256": hashlib.sha256(
+                    (self.run / "manifest.json").read_bytes()
+                ).hexdigest(),
+                "creditOverlaySelectionSha256": hashlib.sha256(
+                    self.selection.read_bytes()
+                ).hexdigest(),
+            }
+            issues = json.loads(
+                db.execute(
+                    "SELECT value FROM metadata WHERE key='knownIssues'"
+                ).fetchone()[0]
+            )
+            metadata["knownIssues"] = [
+                issue
+                for issue in issues
+                if not issue.startswith("This source run predates")
+            ]
+            model_issue = "Luna tags identify retained model credit proposals on selected recordings. Their quoted evidence is preserved; person identities remain unverified."
+            if model_issue not in metadata["knownIssues"]:
+                metadata["knownIssues"].append(model_issue)
+            db.executemany(
+                "INSERT OR REPLACE INTO metadata VALUES(?,?)",
+                [(key, encoded(value)) for key, value in metadata.items()],
+            )
+            db.commit()
+        return metadata
+
+    def _records(self, chunks):
+        for chunk in chunks:
+            with gzip.open(chunk, "rt", encoding="utf-8") as stream:
+                for line, text in enumerate(stream, 1):
+                    yield str(chunk.relative_to(self.run)), line, json.loads(text)
 
 
 class SourceHomeEnrichment:
@@ -237,7 +393,7 @@ class SourceHomeEnrichment:
         manifest_sha = hashlib.sha256(
             (self.run / "manifest.json").read_bytes()
         ).hexdigest()
-        with sqlite3.connect(self.database) as db:
+        with closing(sqlite3.connect(self.database)) as db, db:
             expected = db.execute(
                 "SELECT value FROM metadata WHERE key='sourceManifestSha256'"
             ).fetchone()
@@ -245,6 +401,11 @@ class SourceHomeEnrichment:
                 raise ValueError(
                     "Recording homes must come from the same completed core run"
                 )
+            DirectoryBuilder._ensure_credit_provenance_columns(db)
+            if not db.execute(
+                "SELECT 1 FROM metadata WHERE key='directoryStats'"
+            ).fetchone():
+                DirectoryBuilder._refresh_stats(db)
             db.execute("""CREATE TABLE IF NOT EXISTS source_homes(
                 source_uuid TEXT PRIMARY KEY, show_uuid TEXT, literal_date TEXT,
                 performance_type TEXT, performance_label TEXT, outcome TEXT,
@@ -319,21 +480,17 @@ class PeopleDirectory:
         )
 
     def stats(self):
-        with self.connect() as db:
+        with closing(self.connect()) as db:
             result = {
                 row["key"]: json.loads(row["value"])
                 for row in db.execute("SELECT * FROM metadata")
             }
-            result.update(
-                groups=db.execute("SELECT count(*) FROM groups").fetchone()[0],
-                creditedRecordings=db.execute(
-                    "SELECT count(DISTINCT source_uuid) FROM credits"
-                ).fetchone()[0],
-                creditedArtists=db.execute(
-                    "SELECT count(DISTINCT artist_uuid) FROM credits"
-                ).fetchone()[0],
-                credits=db.execute("SELECT count(*) FROM credits").fetchone()[0],
-            )
+            counts = result.pop("directoryStats", None)
+            if counts is None:
+                raise ValueError(
+                    "Directory count snapshot is missing; refresh the projection"
+                )
+            result.update(counts)
             result.update(filesUrl=self.files_url, coreUrl=self.core_url)
             return result
 
@@ -347,7 +504,7 @@ class PeopleDirectory:
             else ""
         )
         values = [query] if query else []
-        with self.connect() as db:
+        with closing(self.connect()) as db:
             total = db.execute(
                 f"SELECT count(*) FROM groups g {where}", values
             ).fetchone()[0]
@@ -369,7 +526,7 @@ class PeopleDirectory:
     def detail(self, identifier, parameters):
         offset, limit = self.page(parameters)
         artist = parameters.get("artist", "")
-        with self.connect() as db:
+        with closing(self.connect()) as db:
             row = db.execute(
                 "SELECT * FROM groups WHERE id=?", (identifier,)
             ).fetchone()
@@ -433,7 +590,9 @@ class PeopleDirectory:
                     credit["evidence"] = json.loads(credit["evidence"])
                     credit["aliases"] = json.loads(credit["aliases"])
                     credit["sourceEvidenceUrl"] = (
-                        self.core_url
+                        "/api/credit?" + urlencode({"id": credit["id"]})
+                        if credit["origin_run"]
+                        else self.core_url
                         + "?"
                         + urlencode(
                             {"domain": "credits", "entityKey": credit["person_key"]}
@@ -456,6 +615,33 @@ class PeopleDirectory:
                 )
             result.update(offset=offset, limit=limit)
             return result
+
+    def credit(self, identifier):
+        """Return an overlay credit's exact retained source outcome on demand."""
+        with closing(self.connect()) as db:
+            row = db.execute(
+                "SELECT * FROM credits WHERE id=?", (identifier,)
+            ).fetchone()
+            if row is None:
+                return None
+            credit = dict(row)
+            run = credit["origin_run"] or json.loads(
+                db.execute(
+                    "SELECT value FROM metadata WHERE key='sourceRun'"
+                ).fetchone()[0]
+            )
+        with gzip.open(Path(run) / credit["chunk"], "rt", encoding="utf-8") as stream:
+            for line, text in enumerate(stream, 1):
+                if line == credit["line"]:
+                    outcome = json.loads(text)
+                    break
+            else:
+                raise ValueError("Retained credit outcome is unavailable")
+        if outcome["inputUuid"] != credit["source_uuid"]:
+            raise ValueError("Retained credit source does not match the directory")
+        credit["evidence"] = json.loads(credit["evidence"])
+        credit["aliases"] = json.loads(credit["aliases"])
+        return {"credit": credit, "retainedOutcome": outcome}
 
     @staticmethod
     def _home(db, source_uuid):
@@ -502,12 +688,17 @@ def handler_for(directory):
                             404, encoded({"error": "Unknown draft group"}).encode()
                         )
                         return
+                elif url.path == "/api/credit":
+                    result = directory.credit(int(parameters.get("id", "")))
+                    if result is None:
+                        self.respond(404, encoded({"error": "Unknown credit"}).encode())
+                        return
                 else:
                     self.respond(404, b'{"error":"Not found"}')
                     return
                 self.respond(200, encoded(result).encode())
-            except ValueError:
-                self.respond(400, b'{"error":"offset and limit must be integers"}')
+            except ValueError as error:
+                self.respond(400, encoded({"error": str(error)}).encode())
 
         def respond(self, status, body, content_type="application/json; charset=utf-8"):
             self.send_response(status)
@@ -529,6 +720,10 @@ def main():
     homes = sub.add_parser("enrich-homes")
     homes.add_argument("--run", required=True)
     homes.add_argument("--database", required=True)
+    overlay = sub.add_parser("overlay-credits")
+    overlay.add_argument("--run", required=True)
+    overlay.add_argument("--selection", required=True)
+    overlay.add_argument("--database", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--database", required=True)
     serve.add_argument("--files-url", required=True)
@@ -541,6 +736,11 @@ def main():
     elif args.command == "enrich-homes":
         print(
             encoded(SourceHomeEnrichment(args.run, args.database).enrich()), flush=True
+        )
+    elif args.command == "overlay-credits":
+        print(
+            encoded(CreditOverlay(args.run, args.selection, args.database).apply()),
+            flush=True,
         )
     else:
         directory = PeopleDirectory(args.database, args.files_url, args.core_url)
