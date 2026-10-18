@@ -95,6 +95,7 @@ public sealed partial class NormalizationPeopleResolutionProcessor(
         var original = NormalizationRecordingReadSet.Inputs(extraction.Preparation);
         var membership = await work.GetInputContributionsAsync(
             Owner(attempt.SourceUuid),
+            limits: PeopleResolutionCapacity.ContributionMembership,
             cancellationToken: ct
         );
         var contributors = original.Select(input => input.Contributor).ToHashSet();
@@ -116,7 +117,7 @@ public sealed partial class NormalizationPeopleResolutionProcessor(
         {
             var configured = await store.GetConfiguredPreparationAsync(
                 attempt.SourceUuid,
-                membership.Owner!.DesiredGeneration,
+                membership,
                 ct
             );
             if (configured == null || !OwnsConfiguredBindings(membership, configured))

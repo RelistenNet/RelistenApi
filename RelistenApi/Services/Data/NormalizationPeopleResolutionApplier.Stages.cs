@@ -19,7 +19,11 @@ public sealed partial class NormalizationPeopleResolutionApplier
     {
         var creation = decision.Creation!;
         var owner = new NormalizationSubjectKey("people", "person", creation.PersonUuid);
-        var membership = await work.GetInputContributionsAsync(owner, cancellationToken: ct);
+        var membership = await work.GetInputContributionsAsync(
+            owner,
+            limits: PeopleResolutionCapacity.ContributionMembership,
+            cancellationToken: ct
+        );
         if (membership.UnmanagedBaseline != null || membership.Contributions.Any(HasFacts))
         {
             return null;
@@ -62,6 +66,7 @@ public sealed partial class NormalizationPeopleResolutionApplier
     {
         var membership = await work.GetInputContributionsAsync(
             new("people", "recording", application.SourceUuid),
+            limits: PeopleResolutionCapacity.ContributionMembership,
             cancellationToken: ct
         );
         if (membership.UnmanagedBaseline != null)
@@ -112,7 +117,7 @@ public sealed partial class NormalizationPeopleResolutionApplier
         {
             var configured = await store.GetConfiguredStageAsync(
                 application.SourceUuid,
-                membership.Owner!.DesiredGeneration,
+                membership,
                 ct
             );
             if (configured == null || !OwnsConfiguredBindings(membership, configured.Contributions))
@@ -186,6 +191,7 @@ public sealed partial class NormalizationPeopleResolutionApplier
         await RevalidateOriginalInputsAsync(proposal, ct);
         var membership = await work.GetInputContributionsAsync(
             new("people", "recording", application.SourceUuid),
+            limits: PeopleResolutionCapacity.ContributionMembership,
             cancellationToken: ct
         );
         if (membership.UnmanagedBaseline != null)

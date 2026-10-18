@@ -137,10 +137,12 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
 
     // A complete consumer may replace its own earlier binding keys, but must not erase
     // bindings installed by another protocol under the same contributor. Configuration
-    // generation identifies the exact key set; no current facts or clocks are refreshed here.
+    // generation identifies the union only. Contributor revisions identify the admitted
+    // allocation, including untouched tombstones; no facts or owner clocks are refreshed.
+    // Missing/null historical membership arrays are unsupported, not an empty initial membership.
     internal Task<NormalizationPeopleResolutionPreparation?> GetConfiguredPreparationAsync(
         Guid sourceUuid,
-        long generation,
+        NormalizationInputContributionsSnapshot membership,
         CancellationToken ct
     ) =>
         db.WithWriteConnection<NormalizationPeopleResolutionPreparation?>(async c =>
@@ -151,11 +153,49 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     SELECT a.preparation::text FROM normalization.people_resolution_attempts a
                     JOIN normalization.work_runs r ON r.uuid=a.attempt_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
+                    CROSS JOIN LATERAL (
+                        SELECT CASE WHEN jsonb_typeof(a.preparation->'ExpectedContributions')='array'
+                                THEN a.preparation->'ExpectedContributions' END AS prior_headers,
+                            CASE WHEN jsonb_typeof(a.preparation->'Inputs')='array'
+                                THEN a.preparation->'Inputs' END AS replacements
+                    ) AS checkpoint
                     WHERE s.domain='people' AND s.subject_kind='recording_resolution' AND s.subject_uuid=@sourceUuid
-                        AND (r.ticket->>'DesiredGeneration')::bigint=@generation AND a.preparation IS NOT NULL
+                        AND (r.ticket->>'DesiredGeneration')::bigint=@generation
+                        AND checkpoint.prior_headers IS NOT NULL AND checkpoint.replacements IS NOT NULL
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM jsonb_to_recordset(@contributions::jsonb)
+                                AS observed("Contributor" jsonb,"Revision" bigint)
+                            FULL JOIN (
+                                SELECT item->'OriginalInput'->'Contributor' AS contributor,
+                                    (item->>'ExpectedContributionRevision')::bigint+1 AS revision
+                                FROM jsonb_array_elements(checkpoint.replacements) AS replacement(item)
+                                UNION ALL
+                                SELECT prior."Contributor",prior."Revision"
+                                FROM jsonb_to_recordset(checkpoint.prior_headers)
+                                    AS prior("Contributor" jsonb,"Revision" bigint)
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM jsonb_array_elements(checkpoint.replacements) AS replacement(item)
+                                    WHERE item->'OriginalInput'->'Contributor'=prior."Contributor"
+                                )
+                            ) AS admitted ON observed."Contributor"=admitted.contributor
+                            WHERE observed."Revision" IS DISTINCT FROM admitted.revision
+                        ) AND a.preparation IS NOT NULL
                     ORDER BY a.created_at DESC,a.attempt_uuid DESC LIMIT 1
                     """,
-                    new { sourceUuid, generation },
+                    new
+                    {
+                        sourceUuid,
+                        generation = membership.Owner!.DesiredGeneration,
+                        contributions = JsonSerializer.Serialize(
+                            membership.Contributions.Select(
+                                value => new NormalizationInputContributionRevision(
+                                    value.Contributor,
+                                    value.Revision
+                                )
+                            )
+                        ),
+                    },
                     cancellationToken: ct
                 )
             );

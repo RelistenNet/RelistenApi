@@ -193,9 +193,13 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
             ct
         );
 
+    // The owner generation describes a UNION of keys, not their allocation to contributors.
+    // Match the complete admitted revision vector: replacements advance once; untouched peers
+    // and empty tombstones retain their prior revisions. Admission may precede publication.
+    // Historical payloads without both arrays cannot prove this identity and remain unsupported.
     internal Task<PeopleAcceptanceStage?> GetConfiguredStageAsync(
         Guid sourceUuid,
-        long generation,
+        NormalizationInputContributionsSnapshot membership,
         CancellationToken ct
     ) =>
         db.WithWriteConnection<PeopleAcceptanceStage?>(async c =>
@@ -206,11 +210,49 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     SELECT a.stage::text FROM normalization.people_acceptance_stages a
                     JOIN normalization.work_runs r ON r.uuid=a.work_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
+                    CROSS JOIN LATERAL (
+                        SELECT CASE WHEN jsonb_typeof(a.stage->'ExpectedContributions')='array'
+                                THEN a.stage->'ExpectedContributions' END AS prior_headers,
+                            CASE WHEN jsonb_typeof(a.stage->'Contributions')='array'
+                                THEN a.stage->'Contributions' END AS replacements
+                    ) AS checkpoint
                     WHERE s.domain='people' AND s.subject_kind='recording' AND s.subject_uuid=@sourceUuid
                         AND (r.ticket->>'DesiredGeneration')::bigint=@generation
+                        AND checkpoint.prior_headers IS NOT NULL AND checkpoint.replacements IS NOT NULL
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM jsonb_to_recordset(@contributions::jsonb)
+                                AS observed("Contributor" jsonb,"Revision" bigint)
+                            FULL JOIN (
+                                SELECT item->'Contribution'->'Contributor' AS contributor,
+                                    (item->'Contribution'->>'ExpectedRevision')::bigint+1 AS revision
+                                FROM jsonb_array_elements(checkpoint.replacements) AS replacement(item)
+                                UNION ALL
+                                SELECT prior."Contributor",prior."Revision"
+                                FROM jsonb_to_recordset(checkpoint.prior_headers)
+                                    AS prior("Contributor" jsonb,"Revision" bigint)
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM jsonb_array_elements(checkpoint.replacements) AS replacement(item)
+                                    WHERE item->'Contribution'->'Contributor'=prior."Contributor"
+                                )
+                            ) AS admitted ON observed."Contributor"=admitted.contributor
+                            WHERE observed."Revision" IS DISTINCT FROM admitted.revision
+                        )
                     ORDER BY a.work_uuid LIMIT 1
                     """,
-                    new { sourceUuid, generation },
+                    new
+                    {
+                        sourceUuid,
+                        generation = membership.Owner!.DesiredGeneration,
+                        contributions = JsonSerializer.Serialize(
+                            membership.Contributions.Select(
+                                value => new NormalizationInputContributionRevision(
+                                    value.Contributor,
+                                    value.Revision
+                                )
+                            )
+                        ),
+                    },
                     cancellationToken: ct
                 )
             );
