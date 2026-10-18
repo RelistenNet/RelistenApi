@@ -71,7 +71,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     > songs = [];
     private readonly IdentityCandidateMatcher matcher = new();
 
-    public string Version => "shadow-repertoire-v5";
+    public string Version => "shadow-repertoire-v6";
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind is "song_sample" or "track_sample" ? ["repertoire"] : [];
@@ -277,8 +277,11 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     {
         var title = segment.Title ?? segment.Evidence.Quote;
         var trimmedTitle = title.Trim();
+        var normalized = NormalizeTitle(title);
         IReadOnlyList<ShadowRepertoireCandidate> candidates =
-            artistUuid == Guid.Empty ? [] : Candidates(artistId, artistUuid, title);
+            artistUuid == Guid.Empty || normalized.Length == 0
+                ? []
+                : Candidates(artistId, artistUuid, title);
         // Literal dictionary wording preserves an existing identity even when the producer
         // calls that wording a control label. Punctuation-normalized correspondence alone
         // cannot override an explicit content label (for example Banter, versus Banter).
@@ -303,10 +306,13 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         {
             return Segment("unresolved", "missing_artist_identity");
         }
+        if (normalized.Length == 0)
+        {
+            return Segment("unresolved", "shadow_guard_title_needs_interpretation");
+        }
 
         // Decorated controls can reach the producer's default Song class. A normalized
         // imported label supplies no additional evidence that such a mention is musical.
-        var normalized = NormalizeTitle(title);
         if (
             normalized
             is "banter"
@@ -361,8 +367,7 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         // obvious controls and opaque labels from becoming provisional song identities;
         // they preserve the actual extraction rather than rewriting its producer output.
         if (
-            normalized.Length == 0
-            || normalized is "intro" or "intros" or "outro" or "interlude"
+            normalized is "intro" or "intros" or "outro" or "interlude"
             || OpaqueOrUnparsedTitle.IsMatch(title)
             || RecordingFilename.IsMatch(trimmedTitle)
             || IsCompactDateRecordingLabel(trimmedTitle)
@@ -423,7 +428,8 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
         string title
     )
     {
-        if (!songs.TryGetValue((artistId, NormalizeTitle(title)), out var matches))
+        var normalized = NormalizeTitle(title);
+        if (normalized.Length == 0 || !songs.TryGetValue((artistId, normalized), out var matches))
         {
             return [];
         }
@@ -444,7 +450,15 @@ public sealed class ShadowRepertoireAdapter : IShadowCatalogAdapter
     private void AddSong(JsonElement row, string inputKey, string pointer)
     {
         var name = row.GetProperty("name").GetString() ?? "";
-        var key = (row.GetProperty("artist_id").GetInt64(), NormalizeTitle(name));
+        var normalized = NormalizeTitle(name);
+        // Keep the imported identity in dictionary/setlist results, but an empty lookup
+        // value cannot distinguish that row from unrelated punctuation-only file titles.
+        if (normalized.Length == 0)
+        {
+            return;
+        }
+
+        var key = (row.GetProperty("artist_id").GetInt64(), normalized);
         if (!songs.TryGetValue(key, out var matches))
         {
             matches = [];

@@ -8,7 +8,7 @@ using Relisten.Normalization.Batch;
 namespace RelistenApiTests.Normalization;
 
 [TestFixture]
-public sealed class TestShadowRepertoireAdapter
+public sealed partial class TestShadowRepertoireAdapter
 {
     private static readonly Guid ArtistUuid = Guid.Parse("aeec435d-a70d-41b5-93ca-e65791f77839");
     private static readonly Guid FileUuid = Guid.Parse("0296bd66-62a3-4676-9b1b-899286f004b1");
