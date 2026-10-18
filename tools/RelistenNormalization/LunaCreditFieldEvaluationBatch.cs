@@ -665,4 +665,7 @@ public sealed record LunaCreditFieldEvaluationReport(
     string RunnerAssemblySha256,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         LunaCreditCohortCoverage? CohortCoverage = null
-);
+)
+{
+    public string LunaExtractorVersion { get; init; } = LunaRecordingCreditExtractor.Version;
+}

@@ -111,6 +111,96 @@ public sealed class TestLunaFailureDiagnostics
     }
 
     [Test]
+    public async Task InvalidSiblingRetainsWholeResponseAndPublishesNoPartialCache()
+    {
+        var job = Guid.NewGuid();
+        var fields = new Dictionary<string, string?>
+        {
+            ["description"] = "Taped by Ari; transferred by Bea",
+        };
+        using var good = JsonDocument.Parse(
+            Normalization.TestLunaRecordingCredits.Credit(
+                "Ari",
+                "taper",
+                "description",
+                "Taped by Ari"
+            )
+        );
+        using var bad = JsonDocument.Parse(
+            Normalization.TestLunaRecordingCredits.Credit(
+                "Bea",
+                "taper",
+                "description",
+                "transferred by Bea"
+            )
+        );
+        var body = Envelope(
+            JsonSerializer.Serialize(
+                new
+                {
+                    credits = new[]
+                    {
+                        good.RootElement.GetProperty("credits")[0],
+                        bad.RootElement.GetProperty("credits")[0],
+                    },
+                }
+            )
+        );
+        var handler = new EnvelopeHandler(body);
+        using var http = new HttpClient(handler);
+        await cache.CreateJobAsync(job, 5m);
+
+        var result = await Extractor(http).ExtractAsync(job, fields, auditLocalSuccess: true);
+
+        result.State.Should().Be("unresolved");
+        result.Reason.Should().Be("invalid_response");
+        (await cache.GetCachedResponseAsync(Request(fields))).Should().BeNull();
+        var attempt = await ReadAttempt(job);
+        attempt.Stage.Should().Be("credit_support");
+        attempt.Body.Should().Equal(body);
+        attempt.Actual.Should().Be(.000015m);
+        handler.Calls.Should().Be(1);
+    }
+
+    [Test]
+    public async Task NewVersionCannotConsumeOrReplaceAnOlderRequestCache()
+    {
+        var job = Guid.NewGuid();
+        var fields = Fields();
+        var currentRequest = Request(fields);
+        // Model the former version's distinct rendered request. Exact historical
+        // prompt bytes remain in the retained v2 run; this test exercises cache isolation.
+        var formerRequest = currentRequest.Replace(
+            LunaRecordingCreditExtractor.Version,
+            "luna-recording-credits-v2",
+            StringComparison.Ordinal
+        );
+        const string formerResponse = "{\"credits\":[]}";
+        await cache.CreateJobAsync(job, 5m);
+        var former = await Claim(job, formerRequest);
+        await cache.CompleteAsync(
+            former.AttemptUuid!.Value,
+            new(formerResponse, "former-version", 0, 0),
+            0m
+        );
+        var handler = new EnvelopeHandler(Envelope(Credit(fields["taper"]!)));
+        using var http = new HttpClient(handler);
+
+        var result = await Extractor(http).ExtractAsync(job, fields, auditLocalSuccess: true);
+        var replay = await Extractor(http, () => "")
+            .ExtractAsync(job, fields, auditLocalSuccess: true);
+
+        result.State.Should().Be("extracted");
+        result.FromCache.Should().BeFalse();
+        result.Extraction.Credits.Should().ContainSingle();
+        replay.FromCache.Should().BeTrue();
+        replay.Extraction.Should().BeEquivalentTo(result.Extraction);
+        handler.Calls.Should().Be(1);
+        (await cache.GetCachedResponseAsync(formerRequest)).Should().Be(formerResponse);
+        (await cache.GetCachedResponseAsync(currentRequest)).Should().NotBeNull();
+    }
+
+    [Test]
     public async Task RetriedSuccessKeepsFailedEvidenceAndReplaysWithoutAnotherPaidRequest()
     {
         var job = Guid.NewGuid();

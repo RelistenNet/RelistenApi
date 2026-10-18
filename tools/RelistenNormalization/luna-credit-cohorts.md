@@ -30,6 +30,27 @@ catalog snapshot text.
 
 ## Run and recover
 
+The current extractor is `luna-recording-credits-v3`. Structured taper and
+transferrer fields supply their named role. Prose quotes must attribute the role
+to the proposed actor; another person's role elsewhere in the text is insufficient.
+Explicit named tape/DAT/CD conversion and CD extraction can supply Transferrer.
+Encoding, mastering, uploading, receiving audio or supplying process information
+alone cannot. Credited personal handles are retained; email addresses are excluded
+from credited names. None of these proposals resolves a global person identity.
+
+Quotes and names stay literal, including aliases, misspellings and HTML. A unique
+quote can use null coordinates, which the validator derives from the original
+field. Repeated quotes require an exact Unicode codepoint range. Wrong supplied
+coordinates are rejected. One unsupported credit refuses the whole response;
+valid siblings are not published as a partial cache result. Failed paid responses
+retain their body, measured usage and classified failure, including validation
+timeouts.
+
+The rendered request includes the extractor version, so v3 uses separate cache
+keys without a database migration. Existing v2 evidence remains unchanged. The
+cohort audits local successes as well as failures; production fallback admission
+has not changed and still needs routing evaluation.
+
 Use the dedicated local database and cache migrations described in the legacy guide. The tool reads `OPENAI_API_KEY` from its process environment. Choose a new job UUID and output directory:
 
 ```sh
