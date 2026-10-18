@@ -30,6 +30,10 @@ Each job has a durable $25 cap. Reuse its UUID and a new output directory after 
 
 The command validates the complete local extraction receipt before any paid call. It saves `selection.json`, then flushes each result to `results.jsonl`. A completed attempt publishes `manifest.json` with states, cache reuse, input hash and spend. Classified unresolved requests produce `completed_partial`. Cancellation or an unexpected failure leaves an inspectable prefix without a completed manifest. Results remain proposals; this command cannot accept a global person or taper/transferrer match.
 
+## Matched-field Luna comparison
+
+Use [`luna-credit-fields`](luna-credit-fields.md) to compare the current local parser and Luna on the same 100 frozen development fields, with a separate $5 job cap. It retains all outcomes, keyless cache replay and current fallback routing. The offline scorer verifies frozen inputs and reports exact taper/transferrer names and roles, corrections, new errors and unavailable responses. Uncertain fields supply no negative labels. The guide covers preparation, scoring and recovery.
+
 ## Actual venue pair baseline
 
 Export the current C# `IdentityCandidateMatcher.CompareVenues` results for a retained venue development bundle:

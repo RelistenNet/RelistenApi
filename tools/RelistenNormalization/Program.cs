@@ -1,7 +1,4 @@
 using System.Text.Json;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging.Abstractions;
-using Relisten;
 using Relisten.Api.Models.Normalization;
 using Relisten.Data;
 using Relisten.Normalization;
@@ -11,13 +8,15 @@ if (
     !(
         (args.Length == 3 && args[0] is "extract" or "venue-pair-baseline")
         || (args.Length == 5 && args[0] == "luna-credits")
+        || (args.Length == 6 && args[0] == "luna-credit-fields")
     )
 )
 {
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
-            + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>"
+            + "       RelistenNormalization luna-credits <extractions.jsonl> <new-output-directory> <job-uuid> <records-per-cohort>\n"
+            + "       RelistenNormalization luna-credit-fields <labels.jsonl> <fields.jsonl> <receipt.json> <new-output-directory> <job-uuid>"
     );
     return 2;
 }
@@ -41,42 +40,37 @@ try
         Console.WriteLine(JsonSerializer.Serialize(baseline));
         return 0;
     }
-    if (args[0] == "luna-credits")
+    if (args[0] is "luna-credits" or "luna-credit-fields")
     {
-        if (!Guid.TryParse(args[3], out var jobUuid) || !int.TryParse(args[4], out var perCohort))
+        var fieldsMode = args[0] == "luna-credit-fields";
+        if (!Guid.TryParse(args[fieldsMode ? 5 : 3], out var jobUuid))
         {
-            throw new ArgumentException("Use a job UUID and integer records per cohort.");
+            throw new ArgumentException("Use a valid bounded-job UUID.");
         }
-        var databaseUrl = Environment.GetEnvironmentVariable("RELISTEN_NORMALIZATION_DATABASE_URL");
-        if (
-            !Uri.TryCreate(databaseUrl, UriKind.Absolute, out var database)
-            || database.Scheme != "postgresql"
-            || database.Host is not ("127.0.0.1" or "localhost")
-            || !database.AbsolutePath.StartsWith(
-                "/relisten_normalization_",
-                StringComparison.Ordinal
-            )
-        )
-        {
-            throw new ArgumentException(
-                "Set RELISTEN_NORMALIZATION_DATABASE_URL to a dedicated local relisten_normalization_* database with migrations applied."
-            );
-        }
-        var db = new DbService(
-            databaseUrl!,
-            null,
-            null,
-            Host.CreateApplicationBuilder(
-                new HostApplicationBuilderSettings { EnvironmentName = Environments.Production }
-            ).Environment,
-            NullLogger<DbService>.Instance
-        );
+        var db = NormalizationLocalDatabase.Create();
         var cache = new NormalizationExtractionCacheService(db);
+        var options = new LunaCreditExtractionOptions();
         using var http = new HttpClient();
+        if (fieldsMode)
+        {
+            var fieldsReport = await new LunaCreditFieldEvaluationBatch(
+                http,
+                cache,
+                db,
+                options,
+                () => Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? ""
+            ).RunAsync(args[1], args[2], args[3], args[4], jobUuid, cancellation.Token);
+            Console.WriteLine(JsonSerializer.Serialize(fieldsReport));
+            return fieldsReport.State == "completed" ? 0 : 1;
+        }
+        if (!int.TryParse(args[4], out var perCohort))
+        {
+            throw new ArgumentException("Use an integer records per cohort.");
+        }
         var extractor = new LunaRecordingCreditExtractor(
             http,
             cache,
-            new LunaCreditExtractionOptions(),
+            options,
             () => Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? ""
         );
         var result = await new LunaCreditEvaluationBatch(extractor, cache).RunAsync(
