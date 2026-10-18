@@ -16,29 +16,39 @@ public sealed partial class NormalizationPeopleResolutionStore
         CancellationToken ct = default
     )
     {
-        var json = Serialize(batch);
-        var frozen = JsonSerializer.Deserialize<NormalizationPeopleResolutionBatch>(json)!;
         return InTransaction(
             async (c, t) =>
             {
-                var work = await ReadWork(c, t, frozen.AttemptUuid, ct);
-                var row = await Require(c, t, frozen.AttemptUuid, ct);
-                RequireBatchHeader(row, frozen);
+                var work = await ReadWork(c, t, batch.AttemptUuid, ct);
+                var row = await Require(c, t, batch.AttemptUuid, ct);
+                RequireBatchHeader(row, batch);
                 if (row.Disposition != null)
                 {
                     return row.ToAttempt();
                 }
-                RequireWork(work, frozen);
-                if (!Same(row.PreparationJson, JsonSerializer.Serialize(frozen.Preparation)))
+                RequireWork(work, batch);
+                if (
+                    !PeopleCheckpointCodec.EquivalentPreparation(
+                        row.PreparationJson == null
+                            ? null
+                            : PeopleCheckpointCodec.ReadPreparation(row.PreparationJson),
+                        batch.Preparation
+                    )
+                )
                 {
                     throw new NormalizationConflictException(
                         "Resolution proposals require their exact saved preparation."
                     );
                 }
-                var previous = await ReadBatch(c, t, frozen.AttemptUuid, ct);
+                var previous = await ReadBatch(c, t, batch.AttemptUuid, ct);
                 if (previous != null)
                 {
-                    if (!Same(previous, json))
+                    if (
+                        !PeopleCheckpointCodec.EquivalentBatch(
+                            PeopleCheckpointCodec.ReadBatch(previous),
+                            batch
+                        )
+                    )
                     {
                         throw new NormalizationConflictException(
                             "A different resolution checkpoint already belongs to this attempt."
@@ -46,6 +56,8 @@ public sealed partial class NormalizationPeopleResolutionStore
                     }
                     return row.ToAttempt();
                 }
+                var json = PeopleCheckpointCodec.WriteBatch(batch);
+                var frozen = PeopleCheckpointCodec.ReadBatch(json);
                 if (
                     !NormalizationPeopleResolutionReadSet.IsComplete(
                         frozen.Ticket,
@@ -82,16 +94,27 @@ public sealed partial class NormalizationPeopleResolutionStore
         CancellationToken ct = default
     )
     {
-        var json = Serialize(batch);
+        // Publication changes state only. The saved checkpoint already passed its original
+        // format's write budget; applying a new-format guard here would break legacy recovery.
         var work = await ReadWork(c, t, batch.AttemptUuid, ct);
         RequireWork(work, batch);
         var row = await Require(c, t, batch.AttemptUuid, ct);
+        var savedBatch = await ReadBatch(c, t, batch.AttemptUuid, ct);
         RequireBatchHeader(row, batch);
         if (
             work!.State != "running"
             || row.Disposition != null
-            || !Same(row.PreparationJson, JsonSerializer.Serialize(batch.Preparation))
-            || !Same(await ReadBatch(c, t, batch.AttemptUuid, ct), json)
+            || !PeopleCheckpointCodec.EquivalentPreparation(
+                row.PreparationJson == null
+                    ? null
+                    : PeopleCheckpointCodec.ReadPreparation(row.PreparationJson),
+                batch.Preparation
+            )
+            || savedBatch == null
+            || !PeopleCheckpointCodec.EquivalentBatch(
+                PeopleCheckpointCodec.ReadBatch(savedBatch),
+                batch
+            )
         )
         {
             throw new NormalizationConflictException(

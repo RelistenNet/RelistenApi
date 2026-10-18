@@ -92,17 +92,36 @@ inactive-policy acknowledgment, preservation of unresolved Archive support and
 later genuine withdrawal of only that contributor. Empty peer revisions remain
 unchanged across new processing passes.
 
-## Resolve many-claim checkpoint capacity
+## Many-claim checkpoint verification
 
 The contribution budget does not change the 32 MiB preparation, batch, plan and
-stage checkpoint limits or their repeated candidate snapshots. Many-claim
-capacity and catalog-wide database cost remain required work before backfill.
+stage limits. The [checkpoint storage contract](../../../plans/active/2026-10-17-full-normalization/checkpoint-format.md)
+now shares repeated exact evidence within each immutable checkpoint, preserving
+expanded service results and every original owner observation. All 147 focused
+people cases pass; a separate 259-case extraction and compatibility run also
+repeats the final multi-role recovery test.
 
-The initial pipeline run, which later failed its final withdrawal assertion,
+That final test retains eight claims, seven query snapshots and two contributors
+against 6,788 recording owners. Its four expanded DTOs contain 46,818,028,
+47,892,643, 47,901,045 and 49,511,152 UTF-8 bytes. The stored preparation, batch,
+plan and stage occupy 6,296,877, 6,338,560, 6,347,365 and 6,898,350 bytes as
+PostgreSQL JSON text. The test interrupts after preparation, plan and admission,
+then verifies publication, exact replay and new configured processing. All eight
+credits remain accepted; incomplete retirement coverage from untyped prose
+correctly remains unresolved.
+
+These are fixture storage and recovery measurements. Two seed accounts are real
+service publications; 6,786 are mechanical relational copies. The measurements
+establish neither identity accuracy nor catalog-wide database cost, throughput or
+peak memory. The [verification receipt](evidence/people-checkpoint-capacity-v1.json)
+keeps final measurements separate from earlier runs. Database cost remains
+required work before backfill.
+
+The earlier contribution-pipeline run, which later failed its final withdrawal assertion,
 recorded a 12,329,300-byte preparation, 13,458,513-byte batch and 15,138,915-byte
 stage as PostgreSQL JSON text. Those measurements remain attached to that failed
-run. The passing V2 runs use minimal console logging and retain no fresh numeric
-size output. Their success does not establish many-claim capacity, physical
+run. Its passing V2 runs use minimal console logging and retain no fresh numeric
+size output. Those earlier runs do not establish many-claim capacity, physical
 storage cost, peak memory or throughput. Seed timings include assertions.
 
 The earlier [aggregation receipt](evidence/people-candidate-aggregation-v1.json)

@@ -40,9 +40,10 @@ accepted credits. The service loads and authenticates the original proposal.
 A repeated application UUID resumes its immutable request or returns its terminal
 receipt. Binding that UUID to another proposal conflicts.
 
-Use one small application checkpoint with the immutable header, initial plan,
-per-stage preparations, identity publication receipts and
-terminal result. Existing Work receipts remain authoritative for publication.
+An application groups an immutable request, initial plan, separately saved stage
+preparations, publication receipts and terminal result. Each plan and stage is
+an independently bounded checkpoint; the application is not one size-limited
+row. Existing Work receipts remain authoritative for publication.
 The result records per-claim actions and credit publication receipts, distinguishing
 `Applied`, `Review`, `Unresolved` and `Stale`, including partial progress. It must
 not describe a pending reviewed claim as an accepted credit.
@@ -235,6 +236,25 @@ recordings, known families and aliases before splits. Follow the
 [evaluation strategy](evaluation-strategy.md) for held-out artists, identities,
 later recordings and unfamiliar formats. Measure retrieval recall and whole-pool
 match/create errors, not pair accuracy alone. Thresholds come from that evidence.
+
+## Checkpoint storage and compatibility
+
+The [people checkpoint contract](checkpoint-format.md) defines private
+`people-checkpoint-v2` storage for plans and stages, alongside resolution
+preparations and batches. It shares exact repeated evidence within each value,
+retains every original observation and preserves expanded public DTOs, semantic
+hashes and separate tickets. The 32 MiB limit per stored checkpoint is unchanged.
+Existing winners and replay are checked under the row lock before new-write
+admission; state-only publication does not reapply that admission limit.
+
+Historical expanded payloads and compact payloads can coexist. Decode each before
+checking its original contributor headers and complete facts. A later stage's
+fresh derived facts remain separate from earlier preparations. The current binary
+reads both formats and writes compact checkpoints, with no format feature flag.
+Pause people writers, deploy compatible binaries to every reader and resume path,
+then resume processing. Before rollback, pause writers and use a reader-compatible
+release; never rewrite immutable checkpoints or refresh their clocks to make an
+older binary accept them.
 
 ## Verification, rollout and recovery
 

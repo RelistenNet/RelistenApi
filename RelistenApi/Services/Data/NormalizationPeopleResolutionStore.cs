@@ -1,7 +1,6 @@
 using System;
 using System.Data;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,7 +16,7 @@ namespace Relisten.Data;
 /// </summary>
 public sealed partial class NormalizationPeopleResolutionStore(DbService db)
 {
-    public const int MaximumCheckpointBytes = 32 * 1024 * 1024;
+    public const int MaximumCheckpointBytes = PeopleCheckpointCodec.MaximumCheckpointBytes;
     private const string Columns = """
         attempt_uuid AS "AttemptUuid",source_uuid AS "SourceUuid",extraction_attempt_uuid AS "ExtractionAttemptUuid",
         processing_version AS "ProcessingVersion",preparation::text AS "PreparationJson",
@@ -117,9 +116,7 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     cancellationToken: ct
                 )
             );
-            return json == null
-                ? null
-                : JsonSerializer.Deserialize<NormalizationPeopleResolutionBatch>(json);
+            return json == null ? null : PeopleCheckpointCodec.ReadBatch(json);
         });
 
     /// <summary>Returns historical computed proposals independently of current publication or terminal outcome.</summary>
@@ -130,9 +127,7 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
         db.WithWriteConnection<NormalizationPeopleResolutionBatch?>(async c =>
         {
             var json = await ReadBatch((NpgsqlConnection)c, null, attemptUuid, ct);
-            return json == null
-                ? null
-                : JsonSerializer.Deserialize<NormalizationPeopleResolutionBatch>(json);
+            return json == null ? null : PeopleCheckpointCodec.ReadBatch(json);
         });
 
     // A complete consumer may replace its own earlier binding keys, but must not erase
@@ -154,10 +149,17 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     JOIN normalization.work_runs r ON r.uuid=a.attempt_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
                     CROSS JOIN LATERAL (
-                        SELECT CASE WHEN jsonb_typeof(a.preparation->'ExpectedContributions')='array'
-                                THEN a.preparation->'ExpectedContributions' END AS prior_headers,
-                            CASE WHEN jsonb_typeof(a.preparation->'Inputs')='array'
-                                THEN a.preparation->'Inputs' END AS replacements
+                        SELECT CASE
+                            WHEN a.preparation->>'Format'=@checkpointFormat
+                                AND a.preparation->>'Kind'=@checkpointKind THEN a.preparation->'Value'
+                            WHEN NOT (a.preparation ? 'Format') THEN a.preparation
+                        END AS payload
+                    ) AS stored
+                    CROSS JOIN LATERAL (
+                        SELECT CASE WHEN jsonb_typeof(stored.payload->'ExpectedContributions')='array'
+                                THEN stored.payload->'ExpectedContributions' END AS prior_headers,
+                            CASE WHEN jsonb_typeof(stored.payload->'Inputs')='array'
+                                THEN stored.payload->'Inputs' END AS replacements
                     ) AS checkpoint
                     WHERE s.domain='people' AND s.subject_kind='recording_resolution' AND s.subject_uuid=@sourceUuid
                         AND (r.ticket->>'DesiredGeneration')::bigint=@generation
@@ -187,6 +189,8 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     {
                         sourceUuid,
                         generation = membership.Owner!.DesiredGeneration,
+                        checkpointFormat = PeopleCheckpointCodec.FormatVersion,
+                        checkpointKind = PeopleCheckpointCodec.PreparationKind,
                         contributions = JsonSerializer.Serialize(
                             membership.Contributions.Select(
                                 value => new NormalizationInputContributionRevision(
@@ -199,9 +203,7 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                     cancellationToken: ct
                 )
             );
-            return json == null
-                ? null
-                : JsonSerializer.Deserialize<NormalizationPeopleResolutionPreparation>(json);
+            return json == null ? null : PeopleCheckpointCodec.ReadPreparation(json);
         });
 
     /// <summary>First preparation wins; a concurrent caller resumes that original instead of replacing its facts.</summary>
@@ -211,8 +213,6 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
         CancellationToken ct = default
     )
     {
-        var json = Serialize(preparation);
-        var frozen = JsonSerializer.Deserialize<NormalizationPeopleResolutionPreparation>(json)!;
         return InTransaction(
             async (c, t) =>
             {
@@ -221,6 +221,10 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                 {
                     return row.ToAttempt();
                 }
+                // A saved legacy winner is returned before new-format admission. Its old
+                // immutable value must not fail replay because a new envelope adds overhead.
+                var json = PeopleCheckpointCodec.WritePreparation(preparation);
+                var frozen = PeopleCheckpointCodec.ReadPreparation(json);
                 await ValidatePreparation(c, t, row.ToAttempt(), frozen, ct);
                 await c.ExecuteAsync(
                     new CommandDefinition(
@@ -258,8 +262,6 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
             );
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(reason);
-        var expectedJson =
-            expected.Preparation == null ? null : JsonSerializer.Serialize(expected.Preparation);
         return InTransaction(
             async (c, t) =>
             {
@@ -274,7 +276,15 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                         "Resolution completion does not match its original request."
                     );
                 }
-                if (row.Disposition != null || !Same(row.PreparationJson, expectedJson))
+                if (
+                    row.Disposition != null
+                    || !PeopleCheckpointCodec.EquivalentPreparation(
+                        row.PreparationJson == null
+                            ? null
+                            : PeopleCheckpointCodec.ReadPreparation(row.PreparationJson),
+                        expected.Preparation
+                    )
+                )
                 {
                     return row.ToAttempt();
                 }
@@ -365,18 +375,6 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                 JsonSerializer.Deserialize<JsonElement>(right)
             );
 
-    private static string Serialize<T>(T value)
-    {
-        var json = JsonSerializer.Serialize(value);
-        if (Encoding.UTF8.GetByteCount(json) > MaximumCheckpointBytes)
-        {
-            throw new ArgumentException(
-                "People resolution checkpoint exceeds 32 MiB; no candidates or claims were truncated."
-            );
-        }
-        return json;
-    }
-
     private sealed class Row
     {
         public Guid AttemptUuid { get; init; }
@@ -395,9 +393,7 @@ public sealed partial class NormalizationPeopleResolutionStore(DbService db)
                 ProcessingVersion,
                 PreparationJson == null
                     ? null
-                    : JsonSerializer.Deserialize<NormalizationPeopleResolutionPreparation>(
-                        PreparationJson
-                    ),
+                    : PeopleCheckpointCodec.ReadPreparation(PreparationJson),
                 Disposition == null
                     ? null
                     : new(

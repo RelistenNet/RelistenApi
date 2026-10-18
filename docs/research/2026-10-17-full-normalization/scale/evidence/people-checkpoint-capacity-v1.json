@@ -1,0 +1,63 @@
+{
+  "state": "focused_storage_and_recovery_verified_full_suite_one_capacity_failure",
+  "storage_format": "people-checkpoint-v2",
+  "checkpoint_limit_mib_unchanged": 32,
+  "tests": {
+    "focused_codec_passed": 22,
+    "people_regressions_passed": 147,
+    "final_extraction_compatibility_and_checkpoint_passed": 259,
+    "counts_overlap": true,
+    "full_suite": {
+      "passed": 3052,
+      "skipped": 24,
+      "failed": 1,
+      "duration": "27m24s",
+      "failure": "EveryInputGroupSurvivesConflictOrMoreThanTenThousandAgreeingCorrespondences(5001,False)",
+      "reason": "materialization_capacity_exceeded",
+      "investigation": "Recording materialization rejected before preparation; exact consumption budget pending focused reproduction.",
+      "trx": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-extraction-v1/full-suite-checkpoint-alias-v1/normalization-full-suite-v1.trx"
+    }
+  },
+  "actual_multi_role_fixture": {
+    "claims": 8,
+    "contributors": 2,
+    "expandedDtoUtf8Bytes": {
+      "Preparation": 46818028,
+      "Batch": 47892643,
+      "Plan": 47901045,
+      "Stage": 49511152
+    },
+    "postgresJsonTextBytes": {
+      "Preparation": 6296877,
+      "Batch": 6338560,
+      "Plan": 6347365,
+      "Stage": 6898350,
+      "Ticket": 1129682
+    },
+    "servicePublishedSeedSentinels": 2,
+    "mechanicallyCopiedSeedAccounts": 6786,
+    "resolutionRecovery": true,
+    "recoveryBeforeStageAdmission": true,
+    "recoveryAfterStageAdmission": true
+  },
+  "contracts_preserved": [
+    "Expanded public DTOs and semantic hashes",
+    "Complete original owner observations and per-contributor ownership",
+    "Legacy first winner and mixed-format recovery",
+    "Stale-owner rejection and contributor-only withdrawal",
+    "Unknown formats and genuinely distinct overflow fail without truncation"
+  ],
+  "measurement_limits": {
+    "postgres_json_text_is_not_codec_admission_bytes": true,
+    "numeric_codec_admission_bytes_recorded": false,
+    "identity_accuracy_established": false,
+    "catalog_cost_throughput_or_peak_memory_established": false
+  },
+  "initial_failures": {
+    "codec_legacy_default": "One test expected true after omitting DecisionOnly; established historical default is false. Production codec unchanged.",
+    "large_partial_outcome": "All eight credits were accepted; prior untyped description support lacked retirement proof. Test now requires Unresolved and verifies exact accepted credits, incomplete scopes and unchanged contexts."
+  },
+  "private_execution_packet": "local-dev/normalization-data/2026-10-17-cross-artist/people-checkpoint-capacity-v1/execution-v1",
+  "production_writes": false,
+  "policy_activation": false
+}

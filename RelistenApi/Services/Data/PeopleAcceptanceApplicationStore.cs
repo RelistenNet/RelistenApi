@@ -17,7 +17,7 @@ namespace Relisten.Data;
 /// </summary>
 public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
 {
-    internal const int MaximumCheckpointBytes = 32 * 1024 * 1024;
+    internal const int MaximumCheckpointBytes = PeopleCheckpointCodec.MaximumCheckpointBytes;
 
     public Task<PeopleAcceptanceApplication?> GetApplicationAsync(
         Guid applicationAttemptUuid,
@@ -84,13 +84,13 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
         CancellationToken ct
     )
     {
-        var json = Serialize(plan);
         return InTransaction(
             async (c, t) =>
             {
                 var current = (await Read(c, t, uuid, true, ct))!;
                 if (current.Result == null && current.Plan == null)
                 {
+                    var json = PeopleCheckpointCodec.WritePlan(plan);
                     await c.ExecuteAsync(
                         new CommandDefinition(
                             "UPDATE normalization.people_acceptance_applications SET plan=@json::jsonb WHERE attempt_uuid=@uuid",
@@ -117,7 +117,6 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
         {
             throw new ArgumentException("A stage is saved before Work admission.");
         }
-        var json = Serialize(stage);
         return InTransaction(
             async (c, t) =>
             {
@@ -127,6 +126,7 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     && !current.Stages.Any(s => s.WorkUuid == stage.WorkUuid)
                 )
                 {
+                    var json = PeopleCheckpointCodec.WriteStage(stage);
                     await c.ExecuteAsync(
                         new CommandDefinition(
                             "INSERT INTO normalization.people_acceptance_stages(work_uuid,application_uuid,ordinal,stage) VALUES(@WorkUuid,@uuid,@ordinal,@json::jsonb)",
@@ -211,10 +211,24 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     JOIN normalization.work_runs r ON r.uuid=a.work_uuid
                     JOIN normalization.work_subjects s ON s.uuid=r.subject_uuid
                     CROSS JOIN LATERAL (
-                        SELECT CASE WHEN jsonb_typeof(a.stage->'ExpectedContributions')='array'
-                                THEN a.stage->'ExpectedContributions' END AS prior_headers,
-                            CASE WHEN jsonb_typeof(a.stage->'Contributions')='array'
-                                THEN a.stage->'Contributions' END AS replacements
+                        SELECT CASE
+                            WHEN a.stage->>'Format'=@checkpointFormat AND a.stage->>'Kind'=@checkpointKind
+                                THEN a.stage->'Value'
+                            WHEN NOT (a.stage ? 'Format') THEN a.stage
+                        END AS payload,
+                            (a.stage->>'Format'=@checkpointFormat AND a.stage->>'Kind'=@checkpointKind)
+                                IS TRUE AS compact
+                    ) AS stored
+                    CROSS JOIN LATERAL (
+                        SELECT CASE WHEN jsonb_typeof(stored.payload->'ExpectedContributions')='array'
+                                THEN stored.payload->'ExpectedContributions' END AS prior_headers,
+                            CASE WHEN jsonb_typeof(stored.payload->'Contributions')='array' THEN
+                                CASE WHEN stored.compact THEN (
+                                    SELECT COALESCE(jsonb_agg(item->'Value' ORDER BY ordinal),'[]'::jsonb)
+                                    FROM jsonb_array_elements(stored.payload->'Contributions')
+                                        WITH ORDINALITY AS contribution(item,ordinal)
+                                ) ELSE stored.payload->'Contributions' END
+                            END AS replacements
                     ) AS checkpoint
                     WHERE s.domain='people' AND s.subject_kind='recording' AND s.subject_uuid=@sourceUuid
                         AND (r.ticket->>'DesiredGeneration')::bigint=@generation
@@ -244,6 +258,8 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     {
                         sourceUuid,
                         generation = membership.Owner!.DesiredGeneration,
+                        checkpointFormat = PeopleCheckpointCodec.FormatVersion,
+                        checkpointKind = PeopleCheckpointCodec.StageKind,
                         contributions = JsonSerializer.Serialize(
                             membership.Contributions.Select(
                                 value => new NormalizationInputContributionRevision(
@@ -256,7 +272,7 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                     cancellationToken: ct
                 )
             );
-            return json == null ? null : JsonSerializer.Deserialize<PeopleAcceptanceStage>(json);
+            return json == null ? null : PeopleCheckpointCodec.ReadStage(json);
         });
 
     internal Task<NormalizationWorkTicket?> ReadPublishedTicketAsync(
@@ -296,7 +312,10 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
                 var current = (await Read(c, t, expected.AttemptUuid, true, ct))!;
                 // A concurrent worker may already have saved or published the winning next stage.
                 // An older local failure cannot terminalize that newer recovery checkpoint.
-                if (current.Result != null || !Same(current, expected))
+                if (
+                    current.Result != null
+                    || !PeopleCheckpointCodec.EquivalentApplication(current, expected)
+                )
                 {
                     return current;
                 }
@@ -374,10 +393,10 @@ public sealed partial class PeopleAcceptanceApplicationStore(DbService db)
             row.ResolutionAttemptUuid,
             row.SourceUuid,
             row.Version,
-            row.Plan == null ? null : JsonSerializer.Deserialize<PeopleAcceptancePlan>(row.Plan),
+            row.Plan == null ? null : PeopleCheckpointCodec.ReadPlan(row.Plan),
             stages
                 .Select(s =>
-                    JsonSerializer.Deserialize<PeopleAcceptanceStage>(s.Stage)! with
+                    PeopleCheckpointCodec.ReadStage(s.Stage) with
                     {
                         Ticket =
                             s.Ticket == null

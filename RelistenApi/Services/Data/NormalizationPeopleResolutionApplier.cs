@@ -143,7 +143,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
         // Enrolling newer provider clocks would acknowledge work that was never evaluated.
         await RevalidateOriginalInputsAsync(proposal, ct);
         var authenticated = await ReadDerivedFactsAsync(proposal.Preparation, ct);
-        if (!PeopleAcceptanceApplicationStore.Same(authenticated, proposal.Preparation))
+        if (!PeopleCheckpointCodec.EquivalentPreparation(authenticated, proposal.Preparation))
         {
             throw new NormalizationConflictException(
                 "Proposal facts do not match their authenticated original snapshots."

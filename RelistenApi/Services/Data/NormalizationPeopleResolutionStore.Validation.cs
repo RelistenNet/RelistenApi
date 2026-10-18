@@ -142,7 +142,7 @@ public sealed partial class NormalizationPeopleResolutionStore
             // Reproduce only this version's deterministic comparison proposal. Caller-supplied
             // policy objects, selected identities and automatic authority cannot enter storage.
             if (
-                !Equal(
+                !PeopleCheckpointCodec.EquivalentClaim(
                     claim,
                     decisions.Compare(
                         proposal,

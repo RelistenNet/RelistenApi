@@ -84,12 +84,16 @@ batch and all accepted credits. Exact replay retains the original result.
 
 Migration 39 adds the people-resolution attempt and checkpoint store. Apply its
 preceding contract migrations before using the processor. Registration starts no
-imports, schedules or public normalized reads. Binary rollback stops resolution
-while retaining attempts, proposals, evidence and accepted data.
+imports, schedules or public normalized reads. The
+[checkpoint format contract](checkpoint-format.md) requires pausing people writers,
+deploying compatible binaries to every reader and resume path, then resuming
+processing. Rollback also requires a compatible reader and retains all history.
 
 The store allows 1,000 credit claims across the complete extraction and 32 MiB
-per preparation or batch checkpoint. Candidate reads use their existing explicit
-bounds. An unsupported name query retains null candidate facts and its reason;
+per preparation or batch checkpoint. Private `people-checkpoint-v2` storage
+shares exact repeated evidence and original observations within that value;
+public readers still return every claim's complete expanded snapshot. Candidate
+reads use their existing explicit bounds. An unsupported name query retains null candidate facts and its reason;
 it is distinct from a successful empty search. Other claims can still be compared.
 Oversized complete work fails without silently dropping claims.
 
