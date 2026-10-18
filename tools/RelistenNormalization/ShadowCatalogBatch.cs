@@ -33,9 +33,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         );
         if (manifest.RootElement.GetProperty("inputSha256").GetString() != inputHash)
         {
-            throw new InvalidDataException(
-                "Extraction and catalog snapshot do not correspond."
-            );
+            throw new InvalidDataException("Extraction and catalog snapshot do not correspond.");
         }
 
         var providerHash =
