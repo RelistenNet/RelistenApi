@@ -69,7 +69,20 @@ public sealed partial class NormalizationWorkService
                 "Owner observations require consumed candidate universes from the same facts snapshot."
             );
         }
-        if (!expected.All(input => subjects.Any(subject => MatchesObservation(input, subject))))
+        if (expected.Length == 0)
+        {
+            return;
+        }
+
+        // LockSubjects returns one row per primary-key UUID, already locked in UUID order.
+        // Index that fixed snapshot once; scanning it per observation holds every lock longer.
+        var subjectsByUuid = subjects.ToDictionary(subject => subject.Uuid);
+        if (
+            !expected.All(input =>
+                subjectsByUuid.TryGetValue(input.SubjectUuid, out var subject)
+                && MatchesObservation(input, subject)
+            )
+        )
         {
             throw new NormalizationConflictException(
                 "Observed owners changed after their facts were read; reload the complete snapshot."
@@ -89,13 +102,23 @@ public sealed partial class NormalizationWorkService
     private static bool OwnerObservationsAreCurrent(
         NormalizationWorkTicket ticket,
         IReadOnlyList<SubjectRow> subjects
-    ) =>
-        (ticket.OwnerObservations ?? []).All(input =>
+    )
+    {
+        var observations = ticket.OwnerObservations ?? [];
+        if (observations.Count == 0)
+        {
+            return true;
+        }
+
+        var subjectsByUuid = subjects.ToDictionary(subject => subject.Uuid);
+        return observations.All(input =>
             // Admission may configure the observing owner itself. Its original stamp stays in
             // the audit ticket; IsCurrent checks the configured primary ticket state instead.
             input.SubjectUuid == ticket.SubjectUuid
-            || subjects.Any(subject => MatchesObservation(input, subject))
+            || subjectsByUuid.TryGetValue(input.SubjectUuid, out var subject)
+                && MatchesObservation(input, subject)
         );
+    }
 
     private static Task ConfigureOwnerObservations(
         NpgsqlConnection connection,
