@@ -313,6 +313,193 @@ public sealed class TestShadowNativePeopleAdapter
         }
     }
 
+    [Test]
+    public void RoleFreeAliasesKeepRepeatedUnicodeFieldsAndFileAccountsDistinct()
+    {
+        const string prose = "🎵\nPersonnel:\nZoë aka Lark - vocals";
+        var revision = Input(
+            new("archive.org", "item_metadata", "alias-item"),
+            "archive-item-response-v1",
+            JsonSerializer.Serialize(
+                new
+                {
+                    metadata = new
+                    {
+                        identifier = "alias-item",
+                        description = new[] { prose, prose },
+                    },
+                    files = new[]
+                    {
+                        new
+                        {
+                            name = "one.mp3",
+                            description = "Personnel:\nFile Avery aka Wren - guitar",
+                        },
+                        new { name = "two.mp3", description = "File Morgan aka Jay - bass" },
+                    },
+                }
+            )
+        );
+        var adapter = new ShadowNativePeopleAdapter();
+        var results = adapter.Process(PlainInput(revision)).ToArray();
+        var proposal = People(results);
+
+        proposal.People.Select(person => person.Name).Should().Equal("Zoë", "Zoë", "File Avery");
+        proposal.People.Select(person => person.EntityKey).Should().OnlyHaveUniqueItems();
+        proposal
+            .People.Should()
+            .OnlyContain(person =>
+                person.Kind == null
+                && person.ActorFacts == null
+                && person.SourceActorAlias != null
+                && !person.AutomaticAcceptanceAuthorized
+            );
+        proposal.People[0].Projection.Query!.Names.Should().Equal("Zoë", "Lark");
+        proposal.People[0].Projection.Record.ActorContext.Should().BeNull();
+        proposal
+            .People[0]
+            .SourceActorAlias!.Relationships.Should()
+            .OnlyContain(value => value.Roles.Count == 0);
+        proposal.People.Take(2).Should().OnlyContain(person => person.FileOrigin == null);
+        proposal.People[2].FileOrigin!.Evidence.JsonPointer.Should().Be("/files/0");
+        var assertions = proposal
+            .SourceActorAliases.SelectMany(scope => scope.Extraction.Assertions)
+            .ToArray();
+        assertions
+            .Select(assertion => assertion.NameEvidence.JsonPointer)
+            .Should()
+            .Equal("/metadata/description/0", "/metadata/description/1", "/files/0/description");
+        var unsupported = proposal.SourceActorAliases.Single(scope =>
+            scope.FileOrigin?.Evidence.JsonPointer == "/files/1"
+        );
+        unsupported.Extraction.Assertions.Should().BeEmpty();
+        unsupported.Extraction.Unresolved.Should().NotBeEmpty();
+        unsupported.Extraction.Scopes.Should().OnlyContain(scope => !scope.Complete);
+        Credits(results).Credits.Should().BeEmpty();
+        results.Single(result => result.Domain == "credits").Outcome.Should().Be("unresolved");
+        results.Single(result => result.Domain == "people").Outcome.Should().Be("proposed");
+        results
+            .Single(result => result.Domain == "people")
+            .EntityKeys.Should()
+            .Contain(ShadowCatalogIdentity.Key("person_name", "lark"));
+        using var document = NormalizationRetainedDocument.Open(revision);
+        foreach (
+            var evidence in proposal
+                .People.SelectMany(person => person.Evidence)
+                .Concat(
+                    proposal
+                        .SourceActorAliases.SelectMany(scope => scope.Extraction.Unresolved)
+                        .SelectMany(issue => issue.Evidence)
+                )
+        )
+        {
+            document.ValidateEvidence(evidence);
+        }
+        JsonSerializer
+            .Serialize(People(adapter.Process(PlainInput(revision))))
+            .Should()
+            .Be(JsonSerializer.Serialize(proposal));
+    }
+
+    [Test]
+    public void AliasProposalsDoNotChangeExistingRoleCreditsOrTheirRetrievalKeys()
+    {
+        var resource = new NormalizationResourceKey("archive.org", "item_metadata", "credit-item");
+        var baseline = Input(
+            resource,
+            "archive-item-response-v1",
+            """{"metadata":{"identifier":"credit-item","taper":"Native Pat"},"files":[]}"""
+        );
+        var enriched = Input(
+            resource,
+            baseline.CaptureVersion,
+            JsonSerializer.Serialize(
+                new
+                {
+                    metadata = new
+                    {
+                        identifier = "credit-item",
+                        taper = "Native Pat",
+                        description = "Personnel:\nZoë aka Lark - vocals",
+                    },
+                    files = Array.Empty<object>(),
+                }
+            ),
+            uuid: baseline.Uuid
+        );
+        var adapter = new ShadowNativePeopleAdapter();
+        var before = adapter.Process(PlainInput(baseline)).ToArray();
+        var after = adapter.Process(PlainInput(enriched)).ToArray();
+
+        JsonSerializer
+            .Serialize(after.Single(result => result.Domain == "credits").Proposal)
+            .Should()
+            .Be(
+                JsonSerializer.Serialize(
+                    before.Single(result => result.Domain == "credits").Proposal
+                )
+            );
+        after
+            .Single(result => result.Domain == "credits")
+            .EntityKeys.Should()
+            .Equal(before.Single(result => result.Domain == "credits").EntityKeys);
+        People(after)
+            .People.Single(person => person.Name == "Native Pat")
+            .Should()
+            .BeEquivalentTo(People(before).People.Single());
+        People(after)
+            .People.Single(person => person.Name == "Zoë")
+            .SourceActorAlias.Should()
+            .NotBeNull();
+    }
+
+    [Test]
+    public void MissingLocalRootRetainsDirectoryAliasesAndRecoverySelectsOnlyItsAccount()
+    {
+        var (root, directory) = LocalInput(
+            selectedNotes: "Personnel:\nRoot Alice aka Raven - vocals",
+            adjacentNotes: 42,
+            directoryNotes: "Personnel:\nDirectory Sam aka Finch - guitar"
+        );
+        var adapter = new ShadowNativePeopleAdapter();
+        var partial = People(adapter.Process(directory));
+
+        partial.People.Should().ContainSingle().Which.Name.Should().Be("Directory Sam");
+        partial.People.Single().CatalogSourceUuid.Should().BeNull();
+        partial
+            .SourceActorAliases.Should()
+            .ContainSingle()
+            .Which.InputRevisionUuid.Should()
+            .Be(directory.Uuid);
+        partial.InputIssues.Should().Contain(issue => issue.Code == "missing_retained_local_root");
+
+        adapter.Observe(root);
+        var recovered = People(adapter.Process(directory));
+
+        recovered
+            .People.Select(person => person.Name)
+            .Should()
+            .Equal("Directory Sam", "Root Alice");
+        recovered.InputIssues.Should().BeEmpty();
+        recovered
+            .SourceActorAliases.Select(scope => scope.InputRevisionUuid)
+            .Should()
+            .Equal(directory.Uuid, root.GetProperty("row").GetProperty("uuid").GetGuid());
+        var actor = recovered.People.Single(person => person.Name == "Root Alice");
+        actor
+            .SourceActorAlias!.NameEvidence.JsonPointer.Should()
+            .Be("/data/2020-01-02/0/taper_notes");
+        actor.CatalogSourceUuid.Should().Be(Source);
+        using var document = NormalizationRetainedDocument.Open(
+            root.GetProperty("input").Deserialize<NormalizationInputRevision>(Json)!
+        );
+        foreach (var evidence in actor.Evidence)
+        {
+            document.ValidateEvidence(evidence);
+        }
+        Credits(adapter.Process(directory)).Credits.Should().BeEmpty();
+    }
+
     private static ShadowNativePeopleProposal People(IEnumerable<ShadowCatalogResult> results) =>
         (ShadowNativePeopleProposal)results.Single(result => result.Domain == "people").Proposal!;
 
@@ -323,13 +510,14 @@ public sealed class TestShadowNativePeopleAdapter
         NormalizationResourceKey resource,
         string version,
         string json,
-        string? sha256 = null
+        string? sha256 = null,
+        Guid? uuid = null
     )
     {
         var bytes = Encoding.UTF8.GetBytes(json);
         return new()
         {
-            Uuid = Guid.NewGuid(),
+            Uuid = uuid ?? Guid.NewGuid(),
             Resource = resource,
             Payload = bytes,
             Sha256 = sha256 ?? Hash(bytes),
@@ -420,7 +608,8 @@ public sealed class TestShadowNativePeopleAdapter
 
     private static (JsonElement Root, ShadowCatalogInput Directory) LocalInput(
         object? selectedNotes = null,
-        object? adjacentNotes = null
+        object? adjacentNotes = null,
+        string directoryNotes = "Transferred by Directory Sam"
     )
     {
         var root = Input(
@@ -451,7 +640,9 @@ public sealed class TestShadowNativePeopleAdapter
         var directory = Input(
             NormalizationProviderResources.LocalDirectory("trey", "target"),
             "local-http-json-v1",
-            """{"tracks":[{"mp3":"song.mp3"}],"txts":["Transferred by Directory Sam"]}"""
+            JsonSerializer.Serialize(
+                new { tracks = new[] { new { mp3 = "song.mp3" } }, txts = new[] { directoryNotes } }
+            )
         );
         var rootArtifact = new RetainedHttpArtifact(
             "root.json",

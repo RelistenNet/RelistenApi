@@ -9,20 +9,25 @@ namespace Relisten.Normalization.Batch;
 /// recording and file coordinates stay distinct from optional historical catalog links.
 /// Actor references and account agreements grant no cross-recording identity authority.
 /// </summary>
-public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observations = null)
-    : IShadowCatalogAdapter
+public sealed partial class ShadowNativePeopleAdapter(
+    ShadowProviderObservations? observations = null
+) : IShadowCatalogAdapter
 {
     private static readonly string[] Domains = ["people", "credits"];
     private readonly ShadowProviderObservations observations = observations ?? new();
     private readonly RetainedRecordingCreditExtractor extractor = new();
 
     public string Version =>
-        "shadow-native-people-v1/"
+        "shadow-native-people-v2/"
         + ShadowProviderObservations.Version
         + "/"
         + RetainedRecordingCreditExtractor.Version
         + "/"
-        + PeopleActorProjection.Version;
+        + PeopleActorProjection.Version
+        + "/"
+        + RetainedSourceActorAliasExtractor.Version
+        + "/"
+        + PeopleActorProjection.SourceAliasVersion;
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind == "provider_input" ? Domains : [];
@@ -75,11 +80,14 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
         var people = new Dictionary<string, ShadowNativePerson>(StringComparer.Ordinal);
         var credits = new List<ShadowNativeRecordingCredit>();
         var unresolved = new List<ShadowNativeCreditIssue>();
+        var aliasPeople = new Dictionary<string, ShadowNativePerson>(StringComparer.Ordinal);
+        var aliases = new List<NormalizationRecordingSourceActorAliasScope>();
         foreach (var recording in decoded.Recordings)
         {
-            foreach (var scope in CreditScopes(decoded.Input, recording))
+            foreach (var scope in RecordingTextScopes(decoded.Input, recording))
             {
                 ExtractScope(input, recording, scope, people, credits, unresolved);
+                ExtractAliases(input, recording, scope, aliasPeople, aliases);
             }
         }
 
@@ -103,16 +111,7 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
         };
         var keys = people
             .Keys.Concat(credits.Select(credit => credit.EntityKey))
-            .Concat(
-                people
-                    .Values.SelectMany(person => person.Projection.Record.Names)
-                    .Select(name =>
-                        ShadowCatalogIdentity.Key(
-                            "person_name",
-                            NormalizedPeopleService.NameKey(name.Wording)
-                        )
-                    )
-            )
+            .Concat(NameKeys(people.Values))
             .Concat(
                 decoded.Recordings.SelectMany(recording =>
                     new[]
@@ -126,17 +125,22 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
             )
             .Distinct(StringComparer.Ordinal)
             .ToArray();
+        var allPeople = people.Values.Concat(aliasPeople.Values).ToArray();
+        var peopleKeys = keys.Concat(aliasPeople.Keys)
+            .Concat(NameKeys(aliasPeople.Values))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
         return
         [
             ShadowCatalogResult.For(
                 input,
                 "people",
-                outcome,
+                allPeople.Length > 0 ? "proposed" : outcome,
                 Version,
-                new ShadowNativePeopleProposal(people.Values.ToArray(), unresolved, decoded.Issues),
+                new ShadowNativePeopleProposal(allPeople, unresolved, decoded.Issues, aliases),
                 evidence,
-                reason,
-                keys
+                aliasPeople.Count > 0 ? decoded.Issues.FirstOrDefault()?.Code : reason,
+                peopleKeys
             ),
             ShadowCatalogResult.For(
                 input,
@@ -151,10 +155,20 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
         ];
     }
 
+    private static IEnumerable<string> NameKeys(IEnumerable<ShadowNativePerson> people) =>
+        people
+            .SelectMany(person => person.Projection.Record.Names)
+            .Select(name =>
+                ShadowCatalogIdentity.Key(
+                    "person_name",
+                    NormalizedPeopleService.NameKey(name.Wording)
+                )
+            );
+
     private void ExtractScope(
         ShadowCatalogInput input,
         ShadowProviderRecordingObservation recording,
-        CreditScope scope,
+        RecordingTextScope scope,
         Dictionary<string, ShadowNativePerson> people,
         List<ShadowNativeRecordingCredit> credits,
         List<ShadowNativeCreditIssue> unresolved
@@ -256,7 +270,7 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
         }
     }
 
-    private static IEnumerable<CreditScope> CreditScopes(
+    private static IEnumerable<RecordingTextScope> RecordingTextScopes(
         NormalizationInputRevision input,
         ShadowProviderRecordingObservation context
     )
@@ -282,7 +296,7 @@ public sealed class ShadowNativePeopleAdapter(ShadowProviderObservations? observ
         }
     }
 
-    private sealed record CreditScope(
+    private sealed record RecordingTextScope(
         NormalizationInputRevision Input,
         ProviderObservationOrigin RecordingOrigin,
         ProviderObservationOrigin? FileOrigin,
@@ -306,7 +320,8 @@ public sealed record ShadowNativePerson(
     IReadOnlyList<NormalizedEvidenceReference> Evidence,
     CreditedActorFacts<NormalizedEvidenceReference>? ActorFacts,
     PeopleActorProjectionResult Projection,
-    bool AutomaticAcceptanceAuthorized = false
+    bool AutomaticAcceptanceAuthorized = false,
+    SourceActorAliasAssertion<NormalizedEvidenceReference>? SourceActorAlias = null
 );
 
 /// <summary>Observed role wording; nullable catalog UUIDs never change the original recording/file scope.</summary>
@@ -339,7 +354,8 @@ public sealed record ShadowNativeCreditIssue(
 public sealed record ShadowNativePeopleProposal(
     IReadOnlyList<ShadowNativePerson> People,
     IReadOnlyList<ShadowNativeCreditIssue> Unresolved,
-    IReadOnlyList<ShadowProviderObservationIssue> InputIssues
+    IReadOnlyList<ShadowProviderObservationIssue> InputIssues,
+    IReadOnlyList<NormalizationRecordingSourceActorAliasScope> SourceActorAliases
 );
 
 public sealed record ShadowNativeCreditsProposal(

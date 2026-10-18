@@ -27,6 +27,27 @@ pointers and text spans still address the original payload, including array
 positions and Unicode text. Unknown credit wording remains a cited unresolved
 assertion.
 
+Role-free alias extraction runs over the same original recording, file, and
+selected Local root fields. The `people` proposal retains
+`SourceActorAliases`: each original scope contains its assertions, unresolved
+statements, and parser coverage. For example, this roster can supply a named actor
+and alias without creating a taper or transfer credit:
+
+```text
+Personnel:
+Zoë aka Lark - vocals
+```
+
+Roster wording supplies interpretation context; it does not establish attendance.
+
+These actors carry `SourceActorAlias` and the existing source-alias matching
+projection. Their kind and credited actor facts remain absent. Repeated fields
+retain separate local actor references, even when their text is identical. A
+heading in recording prose cannot supply context for an alias in a separate file.
+Coverage describes only the parser's handling of that original field; it does not
+describe every alias the person may use. Alias-only actors add name retrieval
+keys to `people` and leave role-bearing `credits` unchanged.
+
 Catalog source, show, and track UUIDs are optional historical associations. The
 shared `ShadowProviderObservations` reader exposes them only when the admitted
 binding agrees with its retained input and catalog context. Local additionally
