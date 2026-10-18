@@ -7,7 +7,7 @@ namespace Relisten.Normalization.Batch;
 /// Joins an authenticated source mention to facts extracted from its complete original field.
 /// It never uses another mention, a candidate pair or a label answer to attach context.
 /// </summary>
-public sealed class PeopleSourceContextProjection
+public sealed partial class PeopleSourceContextProjection
 {
     public const string Version = "people-source-context-v1";
     private readonly Dictionary<(string EvidenceId, string Field), SourceField> fields = [];

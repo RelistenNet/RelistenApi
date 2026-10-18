@@ -64,6 +64,13 @@ authenticates the same original fields, joins exact source-local actor reference
 and records missing or ambiguous attachment. The experiment accepts its explicitly
 versioned contract alongside the original name-only baseline.
 
+The [source-reference projection](people-source-reference.md) selects actors from
+exact contact/profile spans, retaining ambiguous and unattributed hypotheses.
+The [adjudicated training preparation](people-adjudicated-training/README.md)
+combines the original questions with separately reviewed pairs while keeping
+source selectors and identity targets in different files. Preparation does not
+produce matcher features or complete the grouping needed for fitting.
+
 The separate [cross-artist review packet tool](people-identity-packet/README.md)
 prepares 55 unanswered source-backed identity questions and validates complete
 contexts. The [control packet tool](people-identity-controls/README.md) adds six
