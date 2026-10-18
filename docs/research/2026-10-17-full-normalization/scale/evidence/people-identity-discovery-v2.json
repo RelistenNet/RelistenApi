@@ -1,0 +1,186 @@
+{
+  "artifacts": {
+    "discovery-receipt.json": {
+      "bytes": 10685,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/discovery-receipt.json",
+      "sha256": "1d3c302d98eb566c6edac6a22d6d131c7a6cc427de555c3570dfaf592408e802"
+    },
+    "eligible-original-sources.jsonl": {
+      "bytes": 6067613,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/eligible-original-sources.jsonl",
+      "sha256": "756376ea11012346eb745ced15bba5f97cbd6ba162cc0224c3a732975c3db08d"
+    },
+    "family-inventory.jsonl": {
+      "bytes": 430960,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/family-inventory.jsonl",
+      "sha256": "5b82cc8e70bf76700c3d6b12b1531c78a40eca1be4279b935e787f4f84f8ff4d"
+    },
+    "person-context-independent-review-receipt.json": {
+      "bytes": 2219,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/person-context-independent-review-receipt.json",
+      "sha256": "3d99139a787e3452f765a9930aab5bf1fabc3583254635f00784a77346308b51"
+    },
+    "person-context-independent-review.jsonl": {
+      "bytes": 14963,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/person-context-independent-review.jsonl",
+      "sha256": "2b57e586ca1e94d94fd9792abdd4b2df26bd1bc962c0b2eb65fc89f3f2ba34d9"
+    },
+    "primary-site-http-receipt.json": {
+      "bytes": 1738,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/primary-site-http-receipt.json",
+      "sha256": "651a647450e4cfa86d55afd8bab64de69e35c88237ffbd69bb5ebdeb815d0952"
+    },
+    "primary-sources.jsonl": {
+      "bytes": 712,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/primary-sources.jsonl",
+      "sha256": "e932136acc910e562f1a84cc360e543a6280135f8db12218be2495cc50bcfd7e"
+    },
+    "primary/sonicarchives-homepage.html": {
+      "bytes": 53030,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/primary/sonicarchives-homepage.html",
+      "sha256": "f810096bdcdd1c3f33fbd009e055ff3c1d6ffc1140ada1510531e19237a5d4d7"
+    },
+    "primary/sonicarchives-visible-text.txt": {
+      "bytes": 1020,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/primary/sonicarchives-visible-text.txt",
+      "sha256": "cd1f52cd6b4d0380fbb6e5742b406d74843213d94c0a82de30e413e42043df5a"
+    },
+    "summary.json": {
+      "bytes": 658,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/summary.json",
+      "sha256": "d8992605ad83f73e2be1477bff0a663bb299f3a2ac6ac697d784f63291dcc196"
+    },
+    "validate_discovery.py": {
+      "bytes": 6973,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/validate_discovery.py",
+      "sha256": "56f3898914947f095835b1b1fce43912daddeb9349a22930834c405ec4a7be3d"
+    }
+  },
+  "canonical_person_creation_authorized": false,
+  "discovery": {
+    "ambiguous_attachment_or_identity_hypotheses": 4,
+    "artists": 172,
+    "corroborating_claimed_credit_actor_hypotheses": 34,
+    "corroboration_scope": "Recurring contacts/profiles are directly attached to compatible source credit contexts. These are claimed-actor hypotheses, not authenticated people or accepted identities.",
+    "excluded_obfuscated_hypotheses": {
+      "existing_collection_service_contact": 1,
+      "ordinary_website_prose_false_contact_parse": 1
+    },
+    "family_hypotheses": 38,
+    "hypotheses_are_independent_people": false,
+    "retained_recording_family_groups": 205,
+    "selection_hints": {
+      "obfuscated_contact_hypotheses": 6,
+      "plain_contact_hypotheses": 29,
+      "raw_alias_signals": 60,
+      "repeated_url_hypotheses": 32
+    },
+    "source_records": 207,
+    "support_categories": {
+      "additional_personal_speaker_context": 7,
+      "attachment_or_identity_ambiguous": 4,
+      "contact_handle_with_actor_kind_unresolved": 10,
+      "named_actor_with_contact_and_role_context": 15,
+      "qualified_profile_with_actor_kind_unresolved": 2
+    }
+  },
+  "eligibility": {
+    "eligible_artists": 1765,
+    "eligible_sources": 2184,
+    "family_group_contract": "The legacy input_duplicate_family is the transitive union of known recording families and exact-input duplicates.",
+    "held_out_or_excluded_source_fields_used": false,
+    "partition_constraints": {
+      "artist_partition": "development",
+      "family_partition": "development"
+    },
+    "population": "Previously frozen retained source population after artist/family development intersection and complete reservation exclusions",
+    "prior_exposure": {
+      "current_handling": "The source and complete retained family are excluded from this discovery; replace or exclude the exposed family in future untouched evaluations.",
+      "identifier_namespace": "Those two references are track IDs; parent sources/families are excluded through metadata when present.",
+      "known_exposed_track_references": [
+        "track:33689437",
+        "track:7018353"
+      ],
+      "potentially_exposed_reference": "source:3717752",
+      "reason": "Initial v1 computational predicates may have processed this raw row before explicit seed reservations were known. No seed answer or rationale was opened."
+    },
+    "reservation_index": {
+      "bytes": 955704,
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v1/reserved-reference-index.json",
+      "sha256": "f4f1d8c43d886800d4d0e8ef2d14c438a8f1ab92904ed0be53ef6436ebf32331"
+    },
+    "reserved_seed_answers_or_rationales_read": false,
+    "selection_order": "Select physical eligible line numbers from the frozen metadata projection before JSON decoding; whole-file hashes read bytes only."
+  },
+  "independent_review": {
+    "accepted_people_or_merges": 0,
+    "authenticated_contact_or_account_owners": 0,
+    "cited_credit_context_occurrence_records_checked": 246,
+    "eligible_source_records_checked": 62,
+    "independent_human_adjudication": false,
+    "limitations": [
+      "One explicit named primary self-introduction; two stronger named compiler/poster associations; four contextual source-author associations.",
+      "Unsigned note authorship, shared accounts/projects, abbreviations, and role ownership remain subject to final label judgment.",
+      "The other 31 inventory hypotheses have not received this seven-family independent review."
+    ],
+    "packet_boundary": "Reviewer assessed only the seven selected inventory entries, their captured eligible originals, and retained primary excerpts. Inventory rationales were visible; this was not answer-blind review.",
+    "primary_excerpt_hashes_checked": 2,
+    "reserved_or_held_out_text_read": false,
+    "reviewed_family_hypotheses": 7,
+    "reviewer": "Codex /root/normalization_local_capture",
+    "speaker_linkage_strength": {
+      "contextual_source_author_association": 4,
+      "explicit_named_self_introduction": 1,
+      "named_source_author_association": 2
+    }
+  },
+  "limits": [
+    "No contact values or source quotations are published in this receipt; originals remain in ignored local artifacts.",
+    "Repeated recordings or contact templates are correlated evidence, not independent identity confirmations.",
+    "This development discovery cannot establish live-global identity completeness, verified identity counts, or launch accuracy.",
+    "Final labels and acceptance-policy decisions are required before these hypotheses can create canonical people or credits."
+  ],
+  "next_capability": [
+    "Extract source-scoped actor references: exact contact/profile attachment, named or handled actor, and local recording/transfer role.",
+    "Decode explicit obfuscated contacts with original spans; reject ordinary website prose and retain uncertain attachment.",
+    "Propose identity links from compatible credited actors plus supporting references; keep actor kind and account ownership separate from matching.",
+    "Keep studio/collective membership, alias co-reference, and per-recording role ownership distinct; do not create absent credits through family linkage."
+  ],
+  "normalization_runtime": {
+    "NormalizationEvidenceService_binding_implemented": false,
+    "NormalizationEvidenceService_capture_implemented": false,
+    "public_api_or_accepted_catalog_changed": false,
+    "research_capture_is_runtime_verification": false
+  },
+  "observed_at": "2026-10-18T01:48:25.643530+00:00",
+  "operations": {
+    "commits": 0,
+    "database_mutations": 0,
+    "dotnet_runs": 0,
+    "new_database_reads": 0,
+    "new_runtime_code_or_database_contracts": 0,
+    "outreach": 0,
+    "paid_model_api_calls": 0
+  },
+  "policy_activation_permitted": false,
+  "purpose": "Retain cross-artist credit-actor identity hypotheses beyond the existing Aadam project owner, with exact evidence provenance for subsequent development labels and reference extraction.",
+  "research_http_capture": {
+    "body_bytes": 53030,
+    "body_sha256": "f810096bdcdd1c3f33fbd009e055ff3c1d6ffc1140ada1510531e19237a5d4d7",
+    "exact_primary_excerpt_spans_authenticated": 2,
+    "http_status": 200,
+    "primary_pages_retained": 1,
+    "review_timing": "The initial independent review noted missing full primary-body capture. The later additive HTTP/body/text receipt authenticates the same excerpts; it does not rewrite the frozen review or inventory.",
+    "scope": "A public primary-site response and derived visible text were saved as ignored research evidence. This supports the retained quotations and the named-speaker claim only."
+  },
+  "schema_version": "people-identity-discovery-v2-receipt-v1",
+  "status": "frozen_research_discovery_pending_final_labels",
+  "verification": {
+    "command": "python3 -O local-dev/normalization-data/2026-10-17-cross-artist/training-development-people-v2-discovery/validate_discovery.py",
+    "eligible_original_rows_authenticated": 2184,
+    "exact_source_span_references_authenticated": 979,
+    "exit_code": 0,
+    "original_v1_labels_mentions_candidate_pool": "unchanged",
+    "primary_excerpt_spans_authenticated": 2
+  }
+}
