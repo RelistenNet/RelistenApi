@@ -59,9 +59,18 @@ class TestDomainMetadataFramePostgres(unittest.TestCase):
             ("setlist_songs_plays", {"played_setlist_song_id": 999, "played_setlist_show_id": 61}),
         ):
             self.insert(table, overrides)
+        # More than one transport fetch batch must preserve the full fixed query.
+        self.psql(self.database, """
+            INSERT INTO source_tracks(id,source_id,source_set_id,track_position,duration,title,slug,
+                mp3_url,created_at,updated_at,artist_id,uuid,is_orphaned)
+            SELECT 1000+n,10,40,n,NULL,'SYNTHETIC_PRIVATE_CURSOR_TITLE','synthetic-cursor',
+                'https://example.invalid/synthetic-cursor',now(),now(),1,
+                ('00000000-0000-0000-0000-' || lpad(to_hex(1000+n),12,'0'))::uuid,false
+            FROM generate_series(1,1001) AS expanded(n);
+        """)
 
     def command(self, database):
-        return ["psql", "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-h", "127.0.0.1",
+        return ["psql", *capture.PSQL_STREAM_OPTIONS, "-h", "127.0.0.1",
                 "-p", "15432", "-U", "relisten", "-d", database]
 
     def psql(self, database, sql):
@@ -95,14 +104,31 @@ class TestDomainMetadataFramePostgres(unittest.TestCase):
         self.assertTrue(self.database.startswith("relisten_domain_frame_test_"))
         self.psql("postgres", 'DROP DATABASE "' + self.database + '" WITH (FORCE);')
 
-    def test_actual_sql_preserves_complete_graph_profiles_and_unordered_multiset(self):
+    def test_cursor_export_preserves_one_snapshot_complete_graph_profiles_and_commit(self):
         query = self.directory / "executed.sql"
         query.write_bytes(capture.SQL_PATH.read_bytes())
         validator = DomainMetadataFrameValidator(self.directory / "validation.sqlite", require_replica=False)
+        export_name = "domain-frame-cursor-" + uuid4().hex
+        export_environment = {**self.environment, "PGAPPNAME": export_name}
+        original_accept = validator.accept
+        inserted_during_capture = False
+        def accept_and_change_catalog(line):
+            nonlocal inserted_during_capture
+            original_accept(line)
+            if json.loads(line)["kind"] == "metadata_counts":
+                active = self.psql(self.database, f"""
+                    SELECT count(*) FROM pg_stat_activity
+                    WHERE application_name='{export_name}' AND datname=current_database()
+                        AND pid<>pg_backend_pid() AND xact_start IS NOT NULL AND backend_xmin IS NOT NULL;
+                """).strip()
+                self.assertEqual(b"1", active, "The exporting backend must still hold its RR snapshot before the insert")
+                self.insert("source_tracks", {"id": 99999, "artist_id": 1, "source_id": 10, "source_set_id": 40})
+                inserted_during_capture = True
+        validator.accept = accept_and_change_catalog
         process = None
         try:
             process = subprocess.Popen(self.command(self.database) + ["-f", str(query)],
-                                       env=self.environment, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                                       env=export_environment, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             frame = self.directory / "frame.partial.jsonl"
             with frame.open("xb") as output:
                 stream_metadata = capture._consume_lines(process.stdout, output, validator)
@@ -120,14 +146,19 @@ class TestDomainMetadataFramePostgres(unittest.TestCase):
         for sentinel in (b"SYNTHETIC_PRIVATE", b"example.invalid", "e\u0301🐢".encode("utf-8")):
             self.assertNotIn(sentinel, raw)
         self.assertEqual({"artists": 2, "sources": 2, "shows": 1, "venues": 1, "source_sets": 2,
-                          "source_tracks": 3, "setlist_shows": 2, "setlist_songs": 2,
+                          "source_tracks": 1004, "setlist_shows": 2, "setlist_songs": 2,
                           "setlist_songs_plays": 4, "setlist_song_play_groups": 3}, summary["sameSnapshotCounts"])
         diagnostics = summary["joinDiagnostics"]
-        self.assertEqual(1, diagnostics["tracks_direct_and_set_source_disagree"])
+        self.assertEqual(1002, diagnostics["tracks_direct_and_set_source_disagree"])
         self.assertEqual(1, diagnostics["source_track_source_id_dangling"])
         self.assertEqual(1, diagnostics["source_track_source_set_id_dangling"])
         self.assertEqual(2, diagnostics["play_rows_song_and_show_artist_disagree"])
+        self.assertTrue(inserted_during_capture)
+        self.assertEqual(b"1005", self.psql(self.database, "SELECT count(*) FROM source_tracks;").strip())
         rows = [json.loads(line) for line in raw.splitlines()]
+        exported_tracks = [row for row in rows if row["kind"] == "source_track"]
+        self.assertEqual(1004, len(exported_tracks))
+        self.assertNotIn(99999, [row["id"] for row in exported_tracks])
         venue = next(row for row in rows if row["kind"] == "venue")
         self.assertEqual({"is_null": False, "characters": 3, "utf8_bytes": 7,
                           "md5_utf8": hashlib.md5("e\u0301🐢".encode("utf-8")).hexdigest()}, venue["text_profiles"]["location"])

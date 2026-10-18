@@ -31,6 +31,8 @@ PROCESS_DEADLINE_SECONDS = 5400
 MAXIMUM_SOURCE_BYTES = 1024**2
 MINIMUM_FREE_FILESYSTEM_BYTES = 4 * 1024**3
 STORAGE_CHECK_INTERVAL_ROWS = 1000
+PSQL_FETCH_COUNT = 1000
+PSQL_STREAM_OPTIONS = ("-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-v", f"FETCH_COUNT={PSQL_FETCH_COUNT}")
 HASH = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -86,8 +88,10 @@ def _start_query(query):
                PGCLIENTENCODING="UTF8",
                PGOPTIONS=f"-c default_transaction_read_only=on -c statement_timeout={QUERY_TIMEOUT_MS}")
     try:
+        # psql otherwise buffers an entire SELECT in libpq before stdout yields a
+        # row. Fetch bounded cursor batches inside the SQL's existing transaction.
         return subprocess.Popen(
-            ["psql", "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-h", ENDPOINT,
+            ["psql", *PSQL_STREAM_OPTIONS, "-h", ENDPOINT,
              "-p", "5432", "-U", "app", "-d", DATABASE, "-f", str(query)],
             env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
@@ -142,7 +146,8 @@ def _completion_report(directory, frame_uuid, sources, summary, frame):
                    "maximumOutputBytes": MAXIMUM_OUTPUT_BYTES, "maximumIndexBytes": MAXIMUM_INDEX_BYTES,
                    "queryTimeoutMs": QUERY_TIMEOUT_MS, "processDeadlineSeconds": PROCESS_DEADLINE_SECONDS,
                    "minimumFreeFilesystemBytes": MINIMUM_FREE_FILESYSTEM_BYTES,
-                   "storageCheckIntervalRows": STORAGE_CHECK_INTERVAL_ROWS},
+                   "storageCheckIntervalRows": STORAGE_CHECK_INTERVAL_ROWS,
+                   "psqlFetchRows": PSQL_FETCH_COUNT},
         "runtime": {"python": platform.python_version(), "implementation": platform.python_implementation()},
         "qualifications": {
             "rawTextExported": False, "semanticParsing": False,

@@ -1,14 +1,16 @@
 {
-  "state": "capture_tool_verified_full_capture_running",
+  "state": "complete_capture_and_offline_verification_passed_independent_audit_running",
   "scope": "Complete current venue, recording file/set and repertoire metadata, with same-snapshot artist/source/show parent rosters",
   "verification": {
     "synthetic_passed": 36,
     "real_disposable_postgres_passed": 1,
     "production_explain_plans": 10,
     "explain_analyze": false,
-    "complete_capture": "running",
-    "offline_full_capture_verification": "pending",
-    "independent_full_capture_audit": "pending"
+    "complete_capture": "terminal0_completed_metadata_only",
+    "offline_full_capture_verification": "terminal0_verified_metadata_only",
+    "independent_full_capture_audit": "running",
+    "cursor_synthetic_passed": 36,
+    "cursor_real_postgres_passed": 1
   },
   "logs": [
     {
@@ -70,5 +72,81 @@
   "raw_source_text_exported": false,
   "identity_accuracy_established": false,
   "automatic_matching_enabled": false,
-  "production_writes": false
+  "production_writes": false,
+  "complete_capture": {
+    "directory": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/full-domain-capture-v1",
+    "manifest_sha256": "c50a6b3a76c6ed685e568ca997dcf8eaa7fb0018d528fece4364aa9abf800e02",
+    "frame_rows": 6719411,
+    "frame_bytes": 6612549496,
+    "frame_sha256": "a3caa61a808feccc9087a839caac169d8685cda9ce30011e68afd8a760e21df6",
+    "files": 5064076,
+    "venues": 216331,
+    "provider_song_show_associations": 575103,
+    "source_code_precedes_cursor_fix": true
+  },
+  "cursor_transport": {
+    "fixed_fetch_rows": 1000,
+    "source_sql_and_snapshot_unchanged": true,
+    "real_postgres_tracks_before_concurrent_insert": 1004,
+    "real_postgres_tracks_after_insert_outside_snapshot": 1005,
+    "captured_snapshot_tracks": 1004,
+    "synthetic_memory_probe": {
+      "receipt": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/cursor-memory-probe-v1/receipt.json",
+      "sha256": "5814d01b33e7af74a94cfb11cee0871a701c0cbafe2e342415833fb4954055f1",
+      "rows": 100000,
+      "output_bytes_equal": true,
+      "output_bytes": 209188895,
+      "unlimited_sampled_max_rss_kib": 289328,
+      "cursor_sampled_max_rss_kib": 21120,
+      "sampled_maxima_are_lower_bounds": true,
+      "full_catalog_cursor_memory_or_throughput_established": false
+    }
+  },
+  "observed_first_capture_transport": {
+    "psql_rss_kib_single_observation": 6626112,
+    "python_rss_kib_single_observation": 26288,
+    "not_measured_peak": true,
+    "unlimited_result_buffering": true,
+    "valid_complete_capture_retained": true
+  },
+  "cursor_source_files": [
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/capture_domain_metadata_frame.py",
+      "bytes": 17532,
+      "sha256": "152d96d236c87ec81a372e4aa1082d0254ed51e67b4c330cea8fbc09033ba95f"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/scripts/test_capture_domain_metadata_frame_postgres.py",
+      "bytes": 10335,
+      "sha256": "eb9c2e40d60e5bca8d640a370c980a5c33d36e142be52d15b5e6b5aa54aff6c1"
+    },
+    {
+      "path": "docs/research/2026-10-17-full-normalization/scale/full-domain-metadata-frame.md",
+      "bytes": 13094,
+      "sha256": "433abddfab18f62d538783d575fdb01e05997797bd506f732d9af58fec819f9c"
+    }
+  ],
+  "cursor_verification_logs": [
+    {
+      "path": "/tmp/relisten-domain-metadata-cursor-synthetic-v1.log",
+      "bytes": 7085,
+      "sha256": "65e7ff75eaa0b57382b6484d637a9b3a5b6c8e48f46ca1de82b36be0492ac0f5"
+    },
+    {
+      "path": "/tmp/relisten-domain-metadata-cursor-postgres-v1.log",
+      "bytes": 336,
+      "sha256": "6f1e946a4fff929d666b76b38925ea2687b217882d27457be14875abb80012a1"
+    },
+    {
+      "path": "/tmp/relisten-domain-metadata-cursor-memory-probe-v1.log",
+      "bytes": 1210,
+      "sha256": "de3bb97cede1111281365d903c83be67a64e8a8a19044c2625dd41926d7305dd"
+    }
+  ],
+  "independent_audit_tool": {
+    "path": "local-dev/normalization-data/2026-10-18-domain-metadata-frame/independent-audit-tool-v2/manifest.json",
+    "sha256": "0f02c014cd5a1de9734cd08adc644cb8dd13c2f6e45b7f1d8d4aea3dccce4a03",
+    "synthetic_passed": 13,
+    "actual_audit": "running"
+  }
 }
