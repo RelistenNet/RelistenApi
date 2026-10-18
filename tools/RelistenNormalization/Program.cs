@@ -21,6 +21,11 @@ if (
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
+        || (
+            args.Length is 4 or 5
+            && args[0] == "shadow"
+            && (args.Length == 4 || args[4] == "--resume")
+        )
         || (args.Length == 5 && args[0] == "luna-credit-cohort")
         || (
             args.Length == 5
@@ -34,6 +39,7 @@ if (
 {
     Console.Error.WriteLine(
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
+            + "       RelistenNormalization shadow <snapshot.jsonl[.gz]> <extractions.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
             + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -60,6 +66,36 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "shadow")
+    {
+        await new ShadowCatalogBatch([
+            new ShadowPeopleAdapter(),
+            new ShadowVenueAdapter(),
+            new ShadowRepertoireAdapter(),
+            new ShadowCompositionAdapter(
+                Environment.GetEnvironmentVariable("RELISTEN_SHADOW_COMPOSITION_EVIDENCE")
+            ),
+            new ShadowPerformanceAdapter(),
+        ]).RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            resume: args.Length == 5,
+            providerInputsPath: Environment.GetEnvironmentVariable(
+                "RELISTEN_SHADOW_PROVIDER_INPUTS"
+            ),
+            ct: cancellation.Token
+        );
+        var manifestPath = Path.Combine(Path.GetFullPath(args[3]), "manifest.json");
+        using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new { manifestPath, state = manifest.RootElement.GetProperty("state").GetString() }
+            )
+        );
+        return manifest.RootElement.GetProperty("state").GetString() == "completed" ? 0 : 1;
+    }
+
     if (args[0] == "composition-evaluation")
     {
         var evaluation = await new CompositionEvaluationBatch().RunAsync(
