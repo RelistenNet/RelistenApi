@@ -17,6 +17,7 @@ if (
                 is "musicbrainz-acquire"
                     or "people-adjudicated-baseline"
                     or "people-view-baseline"
+                    or "composition-evaluation"
         )
         || (args.Length is 4 or 5 && args[0] == "musicbrainz-search")
         || (args.Length == 6 && args[0] == "luna-credit-fields")
@@ -35,6 +36,7 @@ if (
         "Usage: RelistenNormalization extract <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
             + "       RelistenNormalization venue-pair-baseline <bundle-directory> <new-output-directory>\n"
+            + "       RelistenNormalization composition-evaluation <package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
             + "       RelistenNormalization musicbrainz-acquire <request.json> <new-output-directory> <command-uuid>\n"
             + "       RelistenNormalization musicbrainz-search <plan-request.json> <new-output-directory> <plan-uuid> [<prior-plan-receipt.json>]\n"
             + "       RelistenNormalization people-view-baseline <prepared-package-directory> <new-output-directory> <frozen-manifest-sha256>\n"
@@ -58,6 +60,22 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "composition-evaluation")
+    {
+        var evaluation = await new CompositionEvaluationBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                evaluation,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )
+        );
+        return 0;
+    }
     if (args[0] == "people-view-baseline")
     {
         var views = await new PeopleViewBaselineBatch().RunAsync(
