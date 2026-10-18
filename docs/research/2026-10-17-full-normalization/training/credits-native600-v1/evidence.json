@@ -1,0 +1,1621 @@
+{
+  "schema_version": "native-credit600-comparison-evidence-v1",
+  "state": "completed_development_comparison",
+  "scope": "Named taper/transferrer extraction only. No canonical person matching, accepted credits or automatic acceptance policy is qualified.",
+  "selection": {
+    "fields": 600,
+    "sources": 600,
+    "artists": 302,
+    "provider_artist_concentration": {
+      "archive.org": {
+        "distinct_artists": 300,
+        "largest_artist_fields": 1,
+        "selected_fields": 300,
+        "source_count": 300,
+        "top5_artist_fields": 5
+      },
+      "local": {
+        "distinct_artists": 1,
+        "largest_artist_fields": 150,
+        "selected_fields": 150,
+        "source_count": 150,
+        "top5_artist_fields": 150
+      },
+      "phish.in": {
+        "distinct_artists": 1,
+        "largest_artist_fields": 150,
+        "selected_fields": 150,
+        "source_count": 150,
+        "top5_artist_fields": 150
+      }
+    },
+    "field_counts": {
+      "description": 50,
+      "lineage": 50,
+      "taper": 100,
+      "taper_notes": 350,
+      "transferrer": 50
+    }
+  },
+  "labels": {
+    "authority": "Source-reviewed and adjudicated Codex development judgments; not independent human truth or untouched evaluation.",
+    "frozen_before_this_comparison": true,
+    "complete_fields": 457,
+    "incomplete_fields": 143,
+    "incomplete_fields_supply_negative_labels": false,
+    "exposure": "development",
+    "new_labels_used_for_fitting": false
+  },
+  "scoring": {
+    "primary_contract": "Within each field, exact emitted display name and role versus literal labeled name and role, without normalization; duplicate equal name-role pairs count once. Source span anchoring is a separate diagnostic.",
+    "precision": "Correct assertions / emitted assertions",
+    "recall": "Recovered labeled assertions / labeled assertions",
+    "exact_field": "No missed or extra taper/transferrer name-role assertions.",
+    "shared": {
+      "fields": 343,
+      "complete_nonempty_fields_with_actual_luna_output": 338,
+      "empty_fields_without_model_call": 5,
+      "gold_assertions": 242,
+      "positive_fields": 203,
+      "zero_priority_assertion_fields": 140,
+      "positive_exact_fields": {
+        "local": 153,
+        "luna": 188
+      },
+      "methods": {
+        "local": {
+          "exact_fields": 293,
+          "fields": 343,
+          "fn": 64,
+          "fp": 12,
+          "gold": 242,
+          "precision": 0.9368421052631579,
+          "recall": 0.7355371900826446,
+          "tp": 178
+        },
+        "logistic": {
+          "exact_fields": 236,
+          "fields": 343,
+          "fn": 143,
+          "fp": 31,
+          "gold": 242,
+          "precision": 0.7615384615384615,
+          "recall": 0.4090909090909091,
+          "tp": 99
+        },
+        "luna": {
+          "exact_fields": 328,
+          "fields": 343,
+          "fn": 16,
+          "fp": 9,
+          "gold": 242,
+          "precision": 0.9617021276595744,
+          "recall": 0.9338842975206612,
+          "tp": 226
+        },
+        "perceptron": {
+          "exact_fields": 218,
+          "fields": 343,
+          "fn": 150,
+          "fp": 59,
+          "gold": 242,
+          "precision": 0.609271523178808,
+          "recall": 0.38016528925619836,
+          "tp": 92
+        }
+      },
+      "whole_field_transitions": {
+        "both_correct": 287,
+        "both_incorrect": 9,
+        "corrected": 41,
+        "new_error": 6
+      },
+      "assertion_changes": {
+        "lost_true_positives": 6,
+        "new_false_positives": 2,
+        "recovered_true_positives": 54,
+        "removed_false_positives": 5
+      }
+    },
+    "all_complete": {
+      "fields": 457,
+      "gold_assertions": 416,
+      "methods_on_their_available_fields": {
+        "local": {
+          "exact_fields": 345,
+          "fields": 457,
+          "fn": 153,
+          "fp": 25,
+          "gold": 416,
+          "precision": 0.9131944444444444,
+          "recall": 0.6322115384615384,
+          "tp": 263
+        },
+        "logistic": {
+          "exact_fields": 243,
+          "fields": 457,
+          "fn": 311,
+          "fp": 38,
+          "gold": 416,
+          "precision": 0.7342657342657343,
+          "recall": 0.25240384615384615,
+          "tp": 105
+        },
+        "luna": {
+          "exact_fields": 328,
+          "fields": 343,
+          "fn": 16,
+          "fp": 9,
+          "gold": 242,
+          "precision": 0.9617021276595744,
+          "recall": 0.9338842975206612,
+          "tp": 226
+        },
+        "perceptron": {
+          "exact_fields": 219,
+          "fields": 457,
+          "fn": 321,
+          "fp": 77,
+          "gold": 416,
+          "precision": 0.5523255813953488,
+          "recall": 0.2283653846153846,
+          "tp": 95
+        }
+      },
+      "comparison_limit": "Luna has output only for 343 complete fields, including 5 deterministic empty fields. Its recall must not be compared directly with rules across 457 as if coverage were equal."
+    },
+    "roles_shared": {
+      "Taper": {
+        "local": {
+          "exact_fields": 302,
+          "fields": 343,
+          "fn": 41,
+          "fp": 8,
+          "gold": 155,
+          "precision": 0.9344262295081968,
+          "recall": 0.7354838709677419,
+          "tp": 114
+        },
+        "logistic": {
+          "exact_fields": 269,
+          "fields": 343,
+          "fn": 77,
+          "fp": 16,
+          "gold": 155,
+          "precision": 0.8297872340425532,
+          "recall": 0.5032258064516129,
+          "tp": 78
+        },
+        "luna": {
+          "exact_fields": 331,
+          "fields": 343,
+          "fn": 12,
+          "fp": 8,
+          "gold": 155,
+          "precision": 0.9470198675496688,
+          "recall": 0.9225806451612903,
+          "tp": 143
+        },
+        "perceptron": {
+          "exact_fields": 266,
+          "fields": 343,
+          "fn": 70,
+          "fp": 23,
+          "gold": 155,
+          "precision": 0.7870370370370371,
+          "recall": 0.5483870967741935,
+          "tp": 85
+        }
+      },
+      "Transferrer": {
+        "local": {
+          "exact_fields": 321,
+          "fields": 343,
+          "fn": 23,
+          "fp": 4,
+          "gold": 87,
+          "precision": 0.9411764705882353,
+          "recall": 0.735632183908046,
+          "tp": 64
+        },
+        "logistic": {
+          "exact_fields": 279,
+          "fields": 343,
+          "fn": 66,
+          "fp": 15,
+          "gold": 87,
+          "precision": 0.5833333333333334,
+          "recall": 0.2413793103448276,
+          "tp": 21
+        },
+        "luna": {
+          "exact_fields": 340,
+          "fields": 343,
+          "fn": 4,
+          "fp": 1,
+          "gold": 87,
+          "precision": 0.9880952380952381,
+          "recall": 0.9540229885057471,
+          "tp": 83
+        },
+        "perceptron": {
+          "exact_fields": 262,
+          "fields": 343,
+          "fn": 80,
+          "fp": 36,
+          "gold": 87,
+          "precision": 0.16279069767441862,
+          "recall": 0.08045977011494253,
+          "tp": 7
+        }
+      }
+    },
+    "roles_all_available": {
+      "Taper": {
+        "local": {
+          "exact_fields": 379,
+          "fields": 457,
+          "fn": 82,
+          "fp": 16,
+          "gold": 254,
+          "precision": 0.9148936170212766,
+          "recall": 0.6771653543307087,
+          "tp": 172
+        },
+        "logistic": {
+          "exact_fields": 298,
+          "fields": 457,
+          "fn": 171,
+          "fp": 23,
+          "gold": 254,
+          "precision": 0.7830188679245284,
+          "recall": 0.32677165354330706,
+          "tp": 83
+        },
+        "luna": {
+          "exact_fields": 331,
+          "fields": 343,
+          "fn": 12,
+          "fp": 8,
+          "gold": 155,
+          "precision": 0.9470198675496688,
+          "recall": 0.9225806451612903,
+          "tp": 143
+        },
+        "perceptron": {
+          "exact_fields": 290,
+          "fields": 457,
+          "fn": 166,
+          "fp": 41,
+          "gold": 254,
+          "precision": 0.6821705426356589,
+          "recall": 0.3464566929133858,
+          "tp": 88
+        }
+      },
+      "Transferrer": {
+        "local": {
+          "exact_fields": 386,
+          "fields": 457,
+          "fn": 71,
+          "fp": 9,
+          "gold": 162,
+          "precision": 0.91,
+          "recall": 0.5617283950617284,
+          "tp": 91
+        },
+        "logistic": {
+          "exact_fields": 319,
+          "fields": 457,
+          "fn": 140,
+          "fp": 15,
+          "gold": 162,
+          "precision": 0.5945945945945946,
+          "recall": 0.13580246913580246,
+          "tp": 22
+        },
+        "luna": {
+          "exact_fields": 340,
+          "fields": 343,
+          "fn": 4,
+          "fp": 1,
+          "gold": 87,
+          "precision": 0.9880952380952381,
+          "recall": 0.9540229885057471,
+          "tp": 83
+        },
+        "perceptron": {
+          "exact_fields": 301,
+          "fields": 457,
+          "fn": 155,
+          "fp": 36,
+          "gold": 162,
+          "precision": 0.16279069767441862,
+          "recall": 0.043209876543209874,
+          "tp": 7
+        }
+      }
+    }
+  },
+  "provider_strata": {
+    "archive.org": {
+      "all_available": {
+        "local": {
+          "exact_fields": 249,
+          "fields": 270,
+          "fn": 24,
+          "fp": 9,
+          "gold": 166,
+          "precision": 0.9403973509933775,
+          "recall": 0.8554216867469879,
+          "tp": 142
+        },
+        "logistic": {
+          "exact_fields": 215,
+          "fields": 270,
+          "fn": 63,
+          "fp": 27,
+          "gold": 166,
+          "precision": 0.7923076923076923,
+          "recall": 0.6204819277108434,
+          "tp": 103
+        },
+        "luna": {
+          "exact_fields": 239,
+          "fields": 250,
+          "fn": 11,
+          "fp": 6,
+          "gold": 139,
+          "precision": 0.9552238805970149,
+          "recall": 0.920863309352518,
+          "tp": 128
+        },
+        "perceptron": {
+          "exact_fields": 192,
+          "fields": 270,
+          "fn": 74,
+          "fp": 66,
+          "gold": 166,
+          "precision": 0.5822784810126582,
+          "recall": 0.5542168674698795,
+          "tp": 92
+        }
+      },
+      "complete_fields": 270,
+      "outcomes": {
+        "extracted": 276,
+        "not_requested_contact_scope": 19,
+        "unresolved": 5
+      },
+      "selected_fields": 300,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 238,
+          "fields": 250,
+          "fn": 12,
+          "fp": 4,
+          "gold": 139,
+          "precision": 0.9694656488549618,
+          "recall": 0.9136690647482014,
+          "tp": 127
+        },
+        "logistic": {
+          "exact_fields": 209,
+          "fields": 250,
+          "fn": 42,
+          "fp": 23,
+          "gold": 139,
+          "precision": 0.8083333333333333,
+          "recall": 0.697841726618705,
+          "tp": 97
+        },
+        "luna": {
+          "exact_fields": 239,
+          "fields": 250,
+          "fn": 11,
+          "fp": 6,
+          "gold": 139,
+          "precision": 0.9552238805970149,
+          "recall": 0.920863309352518,
+          "tp": 128
+        },
+        "perceptron": {
+          "exact_fields": 192,
+          "fields": 250,
+          "fn": 50,
+          "fp": 52,
+          "gold": 139,
+          "precision": 0.6312056737588653,
+          "recall": 0.6402877697841727,
+          "tp": 89
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 276,
+      "actual_usable_luna_response_fields": 276
+    },
+    "local": {
+      "all_available": {
+        "local": {
+          "exact_fields": 69,
+          "fields": 126,
+          "fn": 86,
+          "fp": 11,
+          "gold": 162,
+          "precision": 0.8735632183908046,
+          "recall": 0.4691358024691358,
+          "tp": 76
+        },
+        "logistic": {
+          "exact_fields": 25,
+          "fields": 126,
+          "fn": 161,
+          "fp": 8,
+          "gold": 162,
+          "precision": 0.1111111111111111,
+          "recall": 0.006172839506172839,
+          "tp": 1
+        },
+        "luna": {
+          "exact_fields": 61,
+          "fields": 65,
+          "fn": 5,
+          "fp": 3,
+          "gold": 62,
+          "precision": 0.95,
+          "recall": 0.9193548387096774,
+          "tp": 57
+        },
+        "perceptron": {
+          "exact_fields": 23,
+          "fields": 126,
+          "fn": 161,
+          "fp": 8,
+          "gold": 162,
+          "precision": 0.1111111111111111,
+          "recall": 0.006172839506172839,
+          "tp": 1
+        }
+      },
+      "complete_fields": 126,
+      "outcomes": {
+        "extracted": 66,
+        "no_text": 5,
+        "not_requested_contact_scope": 48,
+        "unresolved": 31
+      },
+      "selected_fields": 150,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 40,
+          "fields": 65,
+          "fn": 35,
+          "fp": 8,
+          "gold": 62,
+          "precision": 0.7714285714285715,
+          "recall": 0.43548387096774194,
+          "tp": 27
+        },
+        "logistic": {
+          "exact_fields": 25,
+          "fields": 65,
+          "fn": 61,
+          "fp": 6,
+          "gold": 62,
+          "precision": 0.14285714285714285,
+          "recall": 0.016129032258064516,
+          "tp": 1
+        },
+        "luna": {
+          "exact_fields": 61,
+          "fields": 65,
+          "fn": 5,
+          "fp": 3,
+          "gold": 62,
+          "precision": 0.95,
+          "recall": 0.9193548387096774,
+          "tp": 57
+        },
+        "perceptron": {
+          "exact_fields": 23,
+          "fields": 65,
+          "fn": 61,
+          "fp": 6,
+          "gold": 62,
+          "precision": 0.14285714285714285,
+          "recall": 0.016129032258064516,
+          "tp": 1
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 71,
+      "actual_usable_luna_response_fields": 66
+    },
+    "phish.in": {
+      "all_available": {
+        "local": {
+          "exact_fields": 27,
+          "fields": 61,
+          "fn": 43,
+          "fp": 5,
+          "gold": 88,
+          "precision": 0.9,
+          "recall": 0.5113636363636364,
+          "tp": 45
+        },
+        "logistic": {
+          "exact_fields": 3,
+          "fields": 61,
+          "fn": 87,
+          "fp": 3,
+          "gold": 88,
+          "precision": 0.25,
+          "recall": 0.011363636363636364,
+          "tp": 1
+        },
+        "luna": {
+          "exact_fields": 28,
+          "fields": 28,
+          "fn": 0,
+          "fp": 0,
+          "gold": 41,
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 41
+        },
+        "perceptron": {
+          "exact_fields": 4,
+          "fields": 61,
+          "fn": 86,
+          "fp": 3,
+          "gold": 88,
+          "precision": 0.4,
+          "recall": 0.022727272727272728,
+          "tp": 2
+        }
+      },
+      "complete_fields": 61,
+      "outcomes": {
+        "extracted": 60,
+        "not_requested_contact_scope": 57,
+        "unresolved": 33
+      },
+      "selected_fields": 150,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 15,
+          "fields": 28,
+          "fn": 17,
+          "fp": 0,
+          "gold": 41,
+          "precision": 1.0,
+          "recall": 0.5853658536585366,
+          "tp": 24
+        },
+        "logistic": {
+          "exact_fields": 2,
+          "fields": 28,
+          "fn": 40,
+          "fp": 2,
+          "gold": 41,
+          "precision": 0.3333333333333333,
+          "recall": 0.024390243902439025,
+          "tp": 1
+        },
+        "luna": {
+          "exact_fields": 28,
+          "fields": 28,
+          "fn": 0,
+          "fp": 0,
+          "gold": 41,
+          "precision": 1.0,
+          "recall": 1.0,
+          "tp": 41
+        },
+        "perceptron": {
+          "exact_fields": 3,
+          "fields": 28,
+          "fn": 39,
+          "fp": 1,
+          "gold": 41,
+          "precision": 0.6666666666666666,
+          "recall": 0.04878048780487805,
+          "tp": 2
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 60,
+      "actual_usable_luna_response_fields": 60
+    }
+  },
+  "field_strata": {
+    "description": {
+      "all_available": {
+        "local": {
+          "exact_fields": 40,
+          "fields": 44,
+          "fn": 5,
+          "fp": 0,
+          "gold": 12,
+          "precision": 1.0,
+          "recall": 0.5833333333333334,
+          "tp": 7
+        },
+        "logistic": {
+          "exact_fields": 35,
+          "fields": 44,
+          "fn": 12,
+          "fp": 1,
+          "gold": 12,
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 39,
+          "fields": 40,
+          "fn": 1,
+          "fp": 2,
+          "gold": 5,
+          "precision": 0.6666666666666666,
+          "recall": 0.8,
+          "tp": 4
+        },
+        "perceptron": {
+          "exact_fields": 35,
+          "fields": 44,
+          "fn": 12,
+          "fp": 0,
+          "gold": 12,
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0
+        }
+      },
+      "complete_fields": 44,
+      "outcomes": {
+        "extracted": 44,
+        "not_requested_contact_scope": 4,
+        "unresolved": 2
+      },
+      "selected_fields": 50,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 38,
+          "fields": 40,
+          "fn": 2,
+          "fp": 0,
+          "gold": 5,
+          "precision": 1.0,
+          "recall": 0.6,
+          "tp": 3
+        },
+        "logistic": {
+          "exact_fields": 35,
+          "fields": 40,
+          "fn": 5,
+          "fp": 1,
+          "gold": 5,
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 39,
+          "fields": 40,
+          "fn": 1,
+          "fp": 2,
+          "gold": 5,
+          "precision": 0.6666666666666666,
+          "recall": 0.8,
+          "tp": 4
+        },
+        "perceptron": {
+          "exact_fields": 35,
+          "fields": 40,
+          "fn": 5,
+          "fp": 0,
+          "gold": 5,
+          "precision": null,
+          "recall": 0.0,
+          "tp": 0
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 44,
+      "actual_usable_luna_response_fields": 44
+    },
+    "lineage": {
+      "all_available": {
+        "local": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 46,
+          "fields": 49,
+          "fn": 0,
+          "fp": 3,
+          "gold": 0,
+          "precision": 0.0,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "complete_fields": 49,
+      "outcomes": {
+        "extracted": 50
+      },
+      "selected_fields": 50,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 49,
+          "fields": 49,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 46,
+          "fields": 49,
+          "fn": 0,
+          "fp": 3,
+          "gold": 0,
+          "precision": 0.0,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 50,
+      "actual_usable_luna_response_fields": 50
+    },
+    "taper": {
+      "all_available": {
+        "local": {
+          "exact_fields": 83,
+          "fields": 93,
+          "fn": 10,
+          "fp": 5,
+          "gold": 93,
+          "precision": 0.9431818181818182,
+          "recall": 0.8924731182795699,
+          "tp": 83
+        },
+        "logistic": {
+          "exact_fields": 81,
+          "fields": 93,
+          "fn": 12,
+          "fp": 13,
+          "gold": 93,
+          "precision": 0.8617021276595744,
+          "recall": 0.8709677419354839,
+          "tp": 81
+        },
+        "luna": {
+          "exact_fields": 77,
+          "fields": 85,
+          "fn": 8,
+          "fp": 4,
+          "gold": 85,
+          "precision": 0.9506172839506173,
+          "recall": 0.9058823529411765,
+          "tp": 77
+        },
+        "perceptron": {
+          "exact_fields": 78,
+          "fields": 93,
+          "fn": 9,
+          "fp": 25,
+          "gold": 93,
+          "precision": 0.7706422018348624,
+          "recall": 0.9032258064516129,
+          "tp": 84
+        }
+      },
+      "complete_fields": 93,
+      "outcomes": {
+        "extracted": 92,
+        "not_requested_contact_scope": 8
+      },
+      "selected_fields": 100,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 78,
+          "fields": 85,
+          "fn": 7,
+          "fp": 4,
+          "gold": 85,
+          "precision": 0.9512195121951219,
+          "recall": 0.9176470588235294,
+          "tp": 78
+        },
+        "logistic": {
+          "exact_fields": 76,
+          "fields": 85,
+          "fn": 9,
+          "fp": 9,
+          "gold": 85,
+          "precision": 0.8941176470588236,
+          "recall": 0.8941176470588236,
+          "tp": 76
+        },
+        "luna": {
+          "exact_fields": 77,
+          "fields": 85,
+          "fn": 8,
+          "fp": 4,
+          "gold": 85,
+          "precision": 0.9506172839506173,
+          "recall": 0.9058823529411765,
+          "tp": 77
+        },
+        "perceptron": {
+          "exact_fields": 78,
+          "fields": 85,
+          "fn": 4,
+          "fp": 11,
+          "gold": 85,
+          "precision": 0.8804347826086957,
+          "recall": 0.9529411764705882,
+          "tp": 81
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 92,
+      "actual_usable_luna_response_fields": 92
+    },
+    "taper_notes": {
+      "all_available": {
+        "local": {
+          "exact_fields": 127,
+          "fields": 223,
+          "fn": 136,
+          "fp": 20,
+          "gold": 263,
+          "precision": 0.8639455782312925,
+          "recall": 0.4828897338403042,
+          "tp": 127
+        },
+        "logistic": {
+          "exact_fields": 56,
+          "fields": 223,
+          "fn": 261,
+          "fp": 11,
+          "gold": 263,
+          "precision": 0.15384615384615385,
+          "recall": 0.0076045627376425855,
+          "tp": 2
+        },
+        "luna": {
+          "exact_fields": 119,
+          "fields": 124,
+          "fn": 6,
+          "fp": 3,
+          "gold": 107,
+          "precision": 0.9711538461538461,
+          "recall": 0.9439252336448598,
+          "tp": 101
+        },
+        "perceptron": {
+          "exact_fields": 53,
+          "fields": 223,
+          "fn": 259,
+          "fp": 14,
+          "gold": 263,
+          "precision": 0.2222222222222222,
+          "recall": 0.015209125475285171,
+          "tp": 4
+        }
+      },
+      "complete_fields": 223,
+      "outcomes": {
+        "extracted": 169,
+        "no_text": 5,
+        "not_requested_contact_scope": 109,
+        "unresolved": 67
+      },
+      "selected_fields": 350,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 84,
+          "fields": 124,
+          "fn": 54,
+          "fp": 8,
+          "gold": 107,
+          "precision": 0.8688524590163934,
+          "recall": 0.4953271028037383,
+          "tp": 53
+        },
+        "logistic": {
+          "exact_fields": 55,
+          "fields": 124,
+          "fn": 105,
+          "fp": 8,
+          "gold": 107,
+          "precision": 0.2,
+          "recall": 0.018691588785046728,
+          "tp": 2
+        },
+        "luna": {
+          "exact_fields": 119,
+          "fields": 124,
+          "fn": 6,
+          "fp": 3,
+          "gold": 107,
+          "precision": 0.9711538461538461,
+          "recall": 0.9439252336448598,
+          "tp": 101
+        },
+        "perceptron": {
+          "exact_fields": 52,
+          "fields": 124,
+          "fn": 103,
+          "fp": 10,
+          "gold": 107,
+          "precision": 0.2857142857142857,
+          "recall": 0.037383177570093455,
+          "tp": 4
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 174,
+      "actual_usable_luna_response_fields": 169
+    },
+    "transferrer": {
+      "all_available": {
+        "local": {
+          "exact_fields": 46,
+          "fields": 48,
+          "fn": 2,
+          "fp": 0,
+          "gold": 48,
+          "precision": 1.0,
+          "recall": 0.9583333333333334,
+          "tp": 46
+        },
+        "logistic": {
+          "exact_fields": 22,
+          "fields": 48,
+          "fn": 26,
+          "fp": 13,
+          "gold": 48,
+          "precision": 0.6285714285714286,
+          "recall": 0.4583333333333333,
+          "tp": 22
+        },
+        "luna": {
+          "exact_fields": 44,
+          "fields": 45,
+          "fn": 1,
+          "fp": 0,
+          "gold": 45,
+          "precision": 1.0,
+          "recall": 0.9777777777777777,
+          "tp": 44
+        },
+        "perceptron": {
+          "exact_fields": 7,
+          "fields": 48,
+          "fn": 41,
+          "fp": 35,
+          "gold": 48,
+          "precision": 0.16666666666666666,
+          "recall": 0.14583333333333334,
+          "tp": 7
+        }
+      },
+      "complete_fields": 48,
+      "outcomes": {
+        "extracted": 47,
+        "not_requested_contact_scope": 3
+      },
+      "selected_fields": 50,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 44,
+          "fields": 45,
+          "fn": 1,
+          "fp": 0,
+          "gold": 45,
+          "precision": 1.0,
+          "recall": 0.9777777777777777,
+          "tp": 44
+        },
+        "logistic": {
+          "exact_fields": 21,
+          "fields": 45,
+          "fn": 24,
+          "fp": 13,
+          "gold": 45,
+          "precision": 0.6176470588235294,
+          "recall": 0.4666666666666667,
+          "tp": 21
+        },
+        "luna": {
+          "exact_fields": 44,
+          "fields": 45,
+          "fn": 1,
+          "fp": 0,
+          "gold": 45,
+          "precision": 1.0,
+          "recall": 0.9777777777777777,
+          "tp": 44
+        },
+        "perceptron": {
+          "exact_fields": 7,
+          "fields": 45,
+          "fn": 38,
+          "fp": 35,
+          "gold": 45,
+          "precision": 0.16666666666666666,
+          "recall": 0.15555555555555556,
+          "tp": 7
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 47,
+      "actual_usable_luna_response_fields": 47
+    }
+  },
+  "run_state_strata": {
+    "extracted": {
+      "all_available": {
+        "local": {
+          "exact_fields": 288,
+          "fields": 338,
+          "fn": 64,
+          "fp": 12,
+          "gold": 242,
+          "precision": 0.9368421052631579,
+          "recall": 0.7355371900826446,
+          "tp": 178
+        },
+        "logistic": {
+          "exact_fields": 231,
+          "fields": 338,
+          "fn": 143,
+          "fp": 31,
+          "gold": 242,
+          "precision": 0.7615384615384615,
+          "recall": 0.4090909090909091,
+          "tp": 99
+        },
+        "luna": {
+          "exact_fields": 323,
+          "fields": 338,
+          "fn": 16,
+          "fp": 9,
+          "gold": 242,
+          "precision": 0.9617021276595744,
+          "recall": 0.9338842975206612,
+          "tp": 226
+        },
+        "perceptron": {
+          "exact_fields": 213,
+          "fields": 338,
+          "fn": 150,
+          "fp": 59,
+          "gold": 242,
+          "precision": 0.609271523178808,
+          "recall": 0.38016528925619836,
+          "tp": 92
+        }
+      },
+      "complete_fields": 338,
+      "outcomes": {
+        "extracted": 402
+      },
+      "selected_fields": 402,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 288,
+          "fields": 338,
+          "fn": 64,
+          "fp": 12,
+          "gold": 242,
+          "precision": 0.9368421052631579,
+          "recall": 0.7355371900826446,
+          "tp": 178
+        },
+        "logistic": {
+          "exact_fields": 231,
+          "fields": 338,
+          "fn": 143,
+          "fp": 31,
+          "gold": 242,
+          "precision": 0.7615384615384615,
+          "recall": 0.4090909090909091,
+          "tp": 99
+        },
+        "luna": {
+          "exact_fields": 323,
+          "fields": 338,
+          "fn": 16,
+          "fp": 9,
+          "gold": 242,
+          "precision": 0.9617021276595744,
+          "recall": 0.9338842975206612,
+          "tp": 226
+        },
+        "perceptron": {
+          "exact_fields": 213,
+          "fields": 338,
+          "fn": 150,
+          "fp": 59,
+          "gold": 242,
+          "precision": 0.609271523178808,
+          "recall": 0.38016528925619836,
+          "tp": 92
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 402,
+      "actual_usable_luna_response_fields": 402
+    },
+    "no_text": {
+      "all_available": {
+        "local": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "complete_fields": 5,
+      "outcomes": {
+        "no_text": 5
+      },
+      "selected_fields": 5,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 5,
+          "fields": 5,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 5,
+      "actual_usable_luna_response_fields": 0
+    },
+    "not_requested_contact_scope": {
+      "all_available": {
+        "local": {
+          "exact_fields": 35,
+          "fields": 77,
+          "fn": 58,
+          "fp": 9,
+          "gold": 118,
+          "precision": 0.8695652173913043,
+          "recall": 0.5084745762711864,
+          "tp": 60
+        },
+        "logistic": {
+          "exact_fields": 7,
+          "fields": 77,
+          "fn": 112,
+          "fp": 6,
+          "gold": 118,
+          "precision": 0.5,
+          "recall": 0.05084745762711865,
+          "tp": 6
+        },
+        "luna": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 1,
+          "fields": 77,
+          "fn": 115,
+          "fp": 16,
+          "gold": 118,
+          "precision": 0.15789473684210525,
+          "recall": 0.025423728813559324,
+          "tp": 3
+        }
+      },
+      "complete_fields": 77,
+      "outcomes": {
+        "not_requested_contact_scope": 124
+      },
+      "selected_fields": 124,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 0,
+      "actual_usable_luna_response_fields": 0
+    },
+    "unresolved": {
+      "all_available": {
+        "local": {
+          "exact_fields": 17,
+          "fields": 37,
+          "fn": 31,
+          "fp": 4,
+          "gold": 56,
+          "precision": 0.8620689655172413,
+          "recall": 0.44642857142857145,
+          "tp": 25
+        },
+        "logistic": {
+          "exact_fields": 0,
+          "fields": 37,
+          "fn": 56,
+          "fp": 1,
+          "gold": 56,
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 0,
+          "fields": 37,
+          "fn": 56,
+          "fp": 2,
+          "gold": 56,
+          "precision": 0.0,
+          "recall": 0.0,
+          "tp": 0
+        }
+      },
+      "complete_fields": 37,
+      "outcomes": {
+        "unresolved": 69
+      },
+      "selected_fields": 69,
+      "shared_complete": {
+        "local": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "logistic": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "luna": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        },
+        "perceptron": {
+          "exact_fields": 0,
+          "fields": 0,
+          "fn": 0,
+          "fp": 0,
+          "gold": 0,
+          "precision": null,
+          "recall": null,
+          "tp": 0
+        }
+      },
+      "luna_available_prediction_fields_including_empty": 0,
+      "actual_usable_luna_response_fields": 0
+    }
+  },
+  "whole_field_transition_strata": {
+    "field": {
+      "description": {
+        "both_correct": 38,
+        "both_incorrect": 1,
+        "corrected": 1
+      },
+      "lineage": {
+        "both_correct": 49
+      },
+      "taper": {
+        "both_correct": 74,
+        "both_incorrect": 4,
+        "corrected": 3,
+        "new_error": 4
+      },
+      "taper_notes": {
+        "both_correct": 83,
+        "both_incorrect": 4,
+        "corrected": 36,
+        "new_error": 1
+      },
+      "transferrer": {
+        "both_correct": 43,
+        "corrected": 1,
+        "new_error": 1
+      }
+    },
+    "provider": {
+      "archive.org": {
+        "both_correct": 232,
+        "both_incorrect": 5,
+        "corrected": 7,
+        "new_error": 6
+      },
+      "local": {
+        "both_correct": 40,
+        "both_incorrect": 4,
+        "corrected": 21
+      },
+      "phish.in": {
+        "both_correct": 15,
+        "corrected": 13
+      }
+    }
+  },
+  "coverage": {
+    "selected_fields": 600,
+    "luna_usable_response_fields": 402,
+    "luna_usable_response_fraction": 0.67,
+    "contact_excluded_not_sent_fields": 124,
+    "fields_with_no_usable_luna_result": 69,
+    "empty_no_call_fields": 5,
+    "eligible_nonempty_contact_free_fields": 471,
+    "fields_with_own_job_attempt_keys": 464,
+    "failed_result_cause_analysis": "Separate scoring-boundary investigation; no causes inferred here."
+  },
+  "models": {
+    "trained_reference_complete_fields": 84,
+    "reference_selected_fields": 100,
+    "fit_on_new600_labels": false,
+    "tuned_on_new600_labels": false,
+    "prior_models": "Logistic BIO tagger and perceptron BIO tagger trained on the prior 84 fields and fixed for this comparison.",
+    "training_label_ids_sha256": "edbebb20dadedbd7e531964687f841c3cda68b762c56d92f70873a3711a98091",
+    "tokenizer_limited_fields_retained": 2,
+    "tokenizer_limitations": {
+      "Taper": 1,
+      "Transferrer": 1
+    },
+    "limited_fields_complete": 0,
+    "gold_spans_moved_or_dropped": false
+  },
+  "cost_and_cache": {
+    "accounted_usd": "0.0518212",
+    "cross_job_cached_usable_fields": 7,
+    "cross_job_unique_success_keys": 5,
+    "fresh_usable_fields": 384,
+    "historic_cache_cost_included": false,
+    "own_attempt_states": {
+      "failed": 69,
+      "succeeded": 384
+    },
+    "own_attempts": 453,
+    "own_key_usable_fields": 395,
+    "same_job_cached_usable_fields": 11,
+    "configured_cap_usd": 30,
+    "configured_maximum_total_attempts": 1200,
+    "model": "gpt-6-luna",
+    "input_usd_per_million_tokens": 0.1,
+    "output_usd_per_million_tokens": 0.5,
+    "accounting_limit": "Configured token-usage accounting for this job, not invoice reconciliation or historic cross-job cache cost.",
+    "cache_hit_output_selections": 18
+  },
+  "retained_evidence": {
+    "outside_git": true,
+    "audit_manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-credit600-comparison-report-v1/manifest.json",
+      "sha256": "d3c93701eb1866bd04fbcd4a8a84450d221bf538f4187c1711b97e8b2992ca0e"
+    },
+    "audit_script": {
+      "path": "local-dev/normalization-data/2026-10-18-credit600-comparison-report-v1/audit.py",
+      "sha256": "fda2c9394a6b28ef2d0ea206318228acbe8c0064e1197cd0d6b7334a33f1ce90"
+    },
+    "audit_metrics": {
+      "path": "local-dev/normalization-data/2026-10-18-credit600-comparison-report-v1/comparison.json",
+      "sha256": "d55a83023feb66386d84261a22e2e66569079e8e98744dd26402e9ecfb75e68c"
+    },
+    "input_and_source_pins": {
+      "path": "local-dev/normalization-data/2026-10-18-credit600-comparison-report-v1/input-pins.json",
+      "sha256": "ffecbadf29835c0c2d0fd281118feedc6ae6f0ead4b7e66cec4c45b0fa5753fc"
+    },
+    "actual_luna_manifest": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-luna-run-v1/manifest.json",
+      "sha256": "fe4539569583d8a26a48439fe6c11718577c43cafa8b609b559e34eff8be807b"
+    },
+    "matched_report": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-matched-v2/report.json",
+      "sha256": "9133ec71f24d72226ab2292481b23fcf68e9a7d2820b872ed1daafc234a7d341"
+    },
+    "cohort_plan": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-paired-v2/plan.json",
+      "sha256": "7f1a64b1be7ee7a071b1b711ff490627f2528def288aa6be856230ec1343eedf"
+    },
+    "cohort_fields": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-paired-v2/fields.jsonl",
+      "sha256": "c113fc00df9e64b1e36152ef4a0636a92febc3afe542893928e37f6f309df194"
+    },
+    "cohort_labels": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-paired-v2/labels.jsonl",
+      "sha256": "2c37b3621de39f74725fbec25eafc5fac162a0d0f3d861deb71c4824aef2214c"
+    },
+    "frozen_models": {
+      "path": "local-dev/normalization-data/2026-10-18-credit-native600-matched-v2/models-frozen-development.json",
+      "sha256": "b84356ec80fa082909b6324a9aad3d4ec51b3a211a27ff839d6b20c73095cb84"
+    }
+  },
+  "limits": [
+    "Nine Luna false assertions are extraction errors, not nine false canonical-person merges.",
+    "34 of 41 whole-field corrections come from the two single-artist native cohorts; Archive gains are minimal.",
+    "49 shared lineage fields have zero labeled priority-role assertions; they do not demonstrate positive lineage-credit extraction.",
+    "Unknown labels, failed output and contact exclusions remain in coverage; they are not empty predictions or scored negatives.",
+    "No production routing, automatic policy, full-catalog accuracy, independent identity truth, throughput or release qualification is established."
+  ],
+  "production_authorized": false,
+  "policy_activation_permitted": false
+}

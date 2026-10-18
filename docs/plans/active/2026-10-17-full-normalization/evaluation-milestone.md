@@ -16,7 +16,7 @@ These results remain development evidence. Their common limitation is the breadt
 ## Current execution
 
 The [expanded comparison report](../../../research/2026-10-17-full-normalization/scale/matching-progress-20261018.md)
-records the first completed people and venue results. The people comparison now
+records the completed credit, people and venue results. The people comparison now
 covers 200 relationship questions from 156 artists: 86 have supported answers and
 114 remain insufficient. Both frozen trained models get 85 of the 86 supported
 answers right. The concentration of answers in a few identity groups and missing
@@ -29,13 +29,28 @@ retrieval experiment searches all 216,331 legacy venue records. Both methods fin
 measures counterpart-row retrieval, not physical-venue recall. Its 600 new queries
 across 600 artists still need identity labels.
 
-The credit capture now retains all 600 complete native fields: 300 Archive fields
-from 300 artists, 150 Phish fields and 150 Local/Trey fields. Archive and Phish
-answers and the independent final Local adjudication are frozen. The larger runner
-preserves the legacy experiment and authenticates current native fields separately
-from catalog snapshots. The new paired comparison is running with a $30 cap and
-1,200-attempt limit; 124 email-shaped fields are excluded from Luna requests but
-remain in local extraction and coverage. No completed new Luna score is claimed.
+The [600-field credit comparison](../../../research/2026-10-17-full-normalization/training/credits-native600-v1/README.md)
+is complete. It covers 302 artists with verified native Archive, Local and Phish.in
+inputs. On the 343 shared, completely labeled fields, Luna recovers 226 of 242
+name-and-role assertions with nine extras; rules recover 178 with 12 extras. The
+small models fitted on the earlier 84 fields perform worse than rules. Most Luna
+gains come from Local and Phish.in, which represent only two artists. The job
+accounts for 402 usable outputs, 124 whole-field contact exclusions, 69 unusable
+results and five empty fields, at $0.0518212 configured token cost. Only 457 fields
+have complete labels. Preserve unavailable outputs and incomplete labels in
+coverage; these results do not establish global person identity or release accuracy.
+
+The next people packet freezes 162 questions from 95 artists, with 151 cross-artist
+questions. Two independent source readings are in progress. It falls 38 short of
+the proposed 200-question expansion; repeated names are questions, not identity
+answers. The 600 venue queries now have an additive read-only catalog capture:
+1,954 dated association rows cover 594 queries. All first 60 review queries have
+associated rows, but catalog dates do not establish exact event dates or physical
+venue identity. Review the premises, rooms and historical names independently.
+Grouping exact venue name/location observations improves raw counterpart retrieval
+over a fixed 100-row budget, but gives no advantage over an equally sized expanded
+row budget on the 32 exposed directions. Keep this result as an experiment; it
+does not justify production grouping complexity.
 
 The composition and repertoire selection retains 120 composition claims from 40
 artists and 60 repertoire parents from 50 artists, with complete selected context
@@ -43,8 +58,11 @@ and song dictionaries. Preparing actual public-contract exports exposed dictiona
 recordings and unordered legacy setlist membership. Preserve these cases and their
 limits; they are acquisition and evaluation inputs, not completed music matching.
 
-The [current broad API regression](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
-passes. The [1,001-source scale case](../../../research/2026-10-17-full-normalization/scale/evidence/source-owner-thousand-one-terminal-v1.json)
+The [retained broad API regression](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
+passes on its pinned earlier revision. The decoder-v7 change passes 624 distinct
+affected checks, including genuine v6 and original-schema v1 history restores; its
+new broad regression is running. The [v7 receipt](../../../research/2026-10-17-full-normalization/scale/evidence/musicbrainz-v7-verification-v1.json)
+records the exact scope. The [1,001-source scale case](../../../research/2026-10-17-full-normalization/scale/evidence/source-owner-thousand-one-terminal-v1.json)
 reached its one-hour cancellation limit during initial publication, before its
 preservation assertions. Publication cost remains separate required work before
 backfill; it does not suspend offline matching evaluation.
@@ -76,16 +94,16 @@ Update each entry with the completed experiment receipt, independent decision de
 
 | Domain | Completed evidence or capability | Gap to close next |
 | --- | --- | --- |
-| Credited tapers and transferrers | Matched rules, two trained extractors and Luna comparison on retained fields; exact name/role spans and durable extraction run support. | Expand independent whole-field answers, unfamiliar prose/HTML and verified non-Archive sources. Measure role extraction separately from people matching. |
+| Credited tapers and transferrers | Completed native 600-field comparison across 302 artists; rules, two fixed earlier-fit extractors and Luna scored on shared complete labels. | Investigate 69 unusable responses, 124 whole-field contact exclusions and new Luna errors; broaden difficult prose across artists. Measure role extraction separately from people matching and reserve independent evaluation. |
 | Global people and aliases | Source-view rules/model comparison; public linear-scoring parity; supported alias/context features. | More independent identity families, cross-artist hard negatives, ambiguous aliases and unseen identities; actual full-pool retrieval and creation/kind/co-reference outcomes. |
-| Physical venues, locality and history | Independent answers for 34 questions, saved-model comparison and full-index candidate retrieval; reviewed storage and resolver lifecycle. | Label the 600 new queries; improve duplicate-observation grouping and historical alias retrieval; evaluate dated premises, rooms and relocations. A current address cannot determine an old performance's venue. |
+| Physical venues, locality and history | Independent answers for 34 questions, saved-model comparison and full-index candidate retrieval; reviewed storage and resolver lifecycle. | Label the 600 new queries; evaluate identity-equivalent retrieval and historical aliases; investigate dated premises, rooms and relocations. A current address cannot determine an old performance's venue. |
 | Artist repertoire | Qualified identifiers, dictionaries and visibly provisional title-derived identities; real-source publication through v3. | Independently evaluate title parsing, artist-scoped identity and dictionary-free artists; include equal titles, repeats, snippets and changed provider dictionaries. |
 | Cross-artist compositions | Retained external work/author data and correspondence/publication contracts. | Build independently supported local claim-to-work answers and supported writer-role assertions, keeping author-list completeness explicit; compare retrieval, rules, trained models and Luna on covers, same titles, arrangements, medleys and conflicting credits. |
 | Performances | Local Phish/Jerry/Aadam import and v3 proofs include stable UUIDs, a reviewed early/late split and playable unresolved assignments. | Evaluate automatic assignment across providers, date uncertainty, venue changes and separate performances. Sets within one concert stay within that performance; uncertain same-day recordings remain playable under the default show. |
 | Ordered setlists and occurrences | A real Jerry account publishes three sets and 18 occurrences through v3; repeated/source order and review contracts are implemented. | Independently label provider order, repeats, annotations and conflicting editions; evaluate correspondence, revised unkeyed accounts and removals. Unordered legacy memberships cannot supply missing order. |
 | Recording-file contents | Real-source rehearsal publishes 257 contents across 256 files with stable playback; supported segments and unresolved reasons are retained. | Evaluate compound titles, nonmusic, partial files and many-to-many song/file links across formats; retain unknown times and alignment when evidence supplies neither. |
 
-The credit comparison covers 78 Archive-configured artists, without per-recording provider ownership. Venue drafts cover 66 artists but do not report verified provider or geographic strata. The existing artist breadth therefore does not close those coverage gaps. Track these cohorts beside each domain result:
+The original credit comparison covered 78 Archive-configured artists without per-recording provider ownership. The new 600-field capture verifies native ownership for Archive, Local and Phish.in; its Local and Phish.in fields still represent only one artist each. Venue drafts cover 66 artists without verified provider or geographic strata. Track those limitations beside each domain result:
 
 - **Providers:** Archive/native/intake/collections, Phish.in, Local, Jerry mirror, Phish.net, Setlist.fm and Phantasy Tour where the domain applies. Record the actual input provider and representation; maintain a registry outcome for every configured provider. New provider formats enter the same capture, evaluation and acceptance contracts. An artist's configured mapping is not a recording's provenance. A missing applicable format requires capture and evaluation; a format with no relevant credit evidence remains an explicit no-evidence outcome.
 - **Artist size and influence:** Report artists with 1–10, 11–100, 101–1,000 and more than 1,000 recordings separately where available. Use artist caps in discovery and sampling weights for population estimates. Show identity-family counts so one prolific taper, GD or Phish cannot dominate a conclusion.
