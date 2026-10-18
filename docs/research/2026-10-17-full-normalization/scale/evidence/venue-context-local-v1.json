@@ -1,0 +1,136 @@
+{
+  "schema_version": "venue-context-capture-v1",
+  "state": "completed_read_only_capture",
+  "read_only": true,
+  "in_recovery": true,
+  "artifact_base": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1",
+  "preparation": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/context-preparation-v2/receipt.json",
+    "bytes": 7455,
+    "sha256": "01a9e2e12eeec799adf0c06dcf8dd8338933fee04bb37dd7454ab56ae04449bc"
+  },
+  "strict": {
+    "snapshot_utc": "2026-10-18T03:18:36.050568+00:00",
+    "migrations": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "read_only": "on",
+    "in_recovery": true,
+    "venues": {
+      "unchanged": 67
+    },
+    "source_contexts": {
+      "no_authenticated_selected_venue": 49,
+      "authenticated": 2
+    },
+    "source_dates": 2,
+    "show_dates": 2,
+    "sources_with_source_venue": 2,
+    "sources_with_show_venue": 2,
+    "snapshot_sha256": "b6444bdc361e6a5cc0562530079ce1d5ca25dadb9e50802c641a7de3b09cd115"
+  },
+  "discovery": {
+    "snapshot_utc": "2026-10-18T03:19:08.315231+00:00",
+    "read_only": "on",
+    "in_recovery": true,
+    "requested_venues": 67,
+    "authenticated_venues": 67,
+    "association_rows": 320,
+    "by_kind": {
+      "show_source": 110,
+      "show_venue": 93,
+      "source_venue": 117
+    },
+    "distinct_source_uuids": 122,
+    "distinct_show_uuids": 105,
+    "snapshot_sha256": "3535bc941280f8743a343ff2c325d175722caeed2d48052de16ab5972b72ad6e"
+  },
+  "classification": {
+    "association_rows": 320,
+    "by_classification": {
+      "not_in_authenticated_development_index": 223,
+      "show_only_requires_family_classification": 93,
+      "eligible_already_in_strict_capture": 4
+    },
+    "distinct_source_classifications": {
+      "eligible_already_in_strict_capture": 2,
+      "not_in_authenticated_development_index": 120,
+      "show_only_requires_family_classification": 0
+    },
+    "limits": [
+      "The eligible-source index is not the complete frozen sampling frame. Missing membership establishes no development eligibility; it does not prove absence from that broader frame.",
+      "No dates, names, credit prose or other raw metadata were read for the 120 sources absent from this authenticated development index.",
+      "No new resource partition was assigned and no expanded raw query is authorized by this classification."
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/strict-context-capture-v1/executed.sql",
+      "bytes": 54984,
+      "sha256": "e8789ad0555486b394a26a2cab2e85be8a53bce3a15b1dd5b91d684476b4472c"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/strict-context-capture-v1/query.json",
+      "bytes": 415,
+      "sha256": "92caa7fbca5a07faf0f3d71664d2b0246d64b87b4fa3f4e5e1f479377e1db10b"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/strict-context-capture-v1/snapshot.jsonl",
+      "bytes": 125229,
+      "sha256": "b6444bdc361e6a5cc0562530079ce1d5ca25dadb9e50802c641a7de3b09cd115"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-discovery-capture-v1/executed.sql",
+      "bytes": 17245,
+      "sha256": "19ba69f1ad04528731f49448ddc87a52c184f3453c52451f7697b2316352157f"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-discovery-capture-v1/query.json",
+      "bytes": 422,
+      "sha256": "28cdbb0587ea1fc60ba20533265a814c642e33e128b5f4778caf9e7ff0112b89"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-discovery-capture-v1/snapshot.jsonl",
+      "bytes": 128425,
+      "sha256": "3535bc941280f8743a343ff2c325d175722caeed2d48052de16ab5972b72ad6e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-classification-v1/classify.py",
+      "bytes": 4056,
+      "sha256": "b62f01002f6e3d4bf5555b8366f20fbc0f7f70a18f2a23f95e4f28cb504cb352"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-classification-v1/classifications.json",
+      "bytes": 163357,
+      "sha256": "9ea4b8c201b21bafccd4838119652f7499158e3144d40cf76620e92463fdc46d"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/training-development-venues-v1/association-classification-v1/summary.json",
+      "bytes": 4100,
+      "sha256": "d51c1540ac46a647c4991511e5e7e1c1dbae5c7b4f152402b845a63119b7af46"
+    }
+  ],
+  "verification": {
+    "preparation_fingerprints_authenticated": 26,
+    "optimized_python_tests_passed": 31,
+    "existing_labels_and_reviews_changed": false
+  },
+  "limits": [
+    "The two authenticated date contexts do not establish venue identity or historical venue lifetime.",
+    "All 67 current venue metadata objects equal their original frozen metadata; source and show venue references remain separate.",
+    "There is no new eligible source beyond the existing strict list in the authenticated development index. The 120 other discovered sources require metadata-frame classification before any expanded raw capture.",
+    "Missing membership in this development-only index does not prove a resource absent from the complete frozen sampling frame.",
+    "No matching policy or raw label answer changed; no production write or paid request occurred."
+  ]
+}

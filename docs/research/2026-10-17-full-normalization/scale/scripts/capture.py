@@ -13,9 +13,9 @@ from pathlib import Path
 import subprocess
 
 
-def capture(directory: Path) -> None:
+def capture(directory: Path, sql_path: Path | None = None) -> None:
     directory.mkdir(parents=True, exist_ok=False)
-    sql = Path(__file__).resolve().parents[1] / "sql/cross-artist-sample.sql"
+    sql = sql_path or Path(__file__).resolve().parents[1] / "sql/cross-artist-sample.sql"
     query = directory / "executed.sql"
     query.write_bytes(sql.read_bytes())
     receipt = {
@@ -24,7 +24,7 @@ def capture(directory: Path) -> None:
         "endpoint": "relisten-db-ro.tail09dbf.ts.net:5432",
         "database": "app",
         "read_only": True,
-        "statement_timeout_ms": 180000,
+        "connection_statement_timeout_ms": 180000,
     }
     (directory / "query.json").write_text(json.dumps(receipt, indent=2) + "\n")
     encoded = subprocess.run(
@@ -60,4 +60,6 @@ def capture(directory: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
-    capture(parser.parse_args().directory)
+    parser.add_argument("--sql", type=Path)
+    args = parser.parse_args()
+    capture(args.directory, args.sql)

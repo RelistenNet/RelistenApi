@@ -33,6 +33,44 @@ def rows(path):
             yield number, line.rstrip(b"\r\n"), json.loads(line)
 
 
+def physical_line_count(path):
+    with path.open("rb") as stream:
+        return sum(1 for _ in stream)
+
+
+def read_selected_rows(path, selected, line_key, hash_key):
+    """Authenticate frozen physical selectors before decoding their original rows.
+
+    Every selected row must belong to the development family partition; source
+    rows also carry an artist partition. Unselected bytes are never decoded,
+    including malformed UTF-8 or JSON in reserved and held-out records.
+    """
+    selectors = {}
+    for item in selected:
+        require(
+            item.get("family_partition") == "development"
+            and item.get("artist_partition", "development") == "development",
+            "Held-out selected metadata",
+        )
+        number, expected_hash = item[line_key], item[hash_key]
+        require(type(number) is int and number > 0, "Invalid selected physical line number")
+        require(number not in selectors, "Duplicate selected physical line number")
+        require(isinstance(expected_hash, str) and len(expected_hash) == 64,
+                "Invalid selected physical line hash")
+        selectors[number] = expected_hash
+
+    result = []
+    with path.open("rb") as stream:
+        for number, line in enumerate(stream, 1):
+            if number not in selectors:
+                continue
+            original = line.rstrip(b"\r\n")
+            require(digest(original) == selectors[number], "Selected physical line hash mismatch")
+            result.append((number, original))
+    require(len(result) == len(selectors), "Missing selected physical line")
+    return [(number, original, json.loads(original)) for number, original in result]
+
+
 def build_split_components(labels, links):
     """Group all tasks before selecting resolved labels for fitting.
 
@@ -116,30 +154,37 @@ def validate_bundle(bundle, raw, local):
         require(digest(data) == expected["sha256"], f"Changed bundle file: {name}")
         require(len(data) == expected["bytes"], name)
         if "rows" in expected:
-            require(sum(1 for _ in rows(bundle / name)) == expected["rows"], name)
+            require(physical_line_count(bundle / name) == expected["rows"], name)
 
     require(digest((raw / "manifest.json").read_bytes()) == manifest["source_annotation_manifest_sha256"])
     for name, expected in manifest["source_files"].items():
         require(digest((raw / name).read_bytes()) == expected["sha256"], f"Changed annotation file: {name}")
-        require(sum(1 for _ in rows(raw / name)) == expected["physical_lines"], name)
+        require(physical_line_count(raw / name) == expected["physical_lines"], name)
 
-    evidence = {item["evidence_id"]: item for _, _, item in rows(bundle / "evidence.jsonl")}
+    selected_evidence = [item for _, _, item in rows(bundle / "evidence.jsonl")]
+    evidence = {item["evidence_id"]: item for item in selected_evidence}
+    require(len(evidence) == len(selected_evidence), "Duplicate selected evidence identity")
     labels = [item for _, _, item in rows(bundle / "labels.jsonl")]
+    require(len({item["task_id"] for item in labels}) == len(labels), "Duplicate selected task identity")
     primary = {item["source_id"]: item for _, _, item in rows(bundle / "primary-sources.jsonl")}
-    original_evidence = {}
-    for number, line, item in rows(raw / "evidence.jsonl"):
-        if item.get("artist_partition") != "development" or item.get("family_partition") != "development":
-            continue
-        if item["evidence_id"] in evidence:
-            original_evidence[item["evidence_id"]] = (number, line, item)
-
-    selected_ids = {item["task_id"] for item in labels}
-    original_tasks = {}
-    for number, line, item in rows(raw / "tasks.jsonl"):
-        if item.get("family_partition") != "development":
-            continue
-        if item["task_id"] in selected_ids:
-            original_tasks[item["task_id"]] = (number, line, item)
+    # Check the entire frozen selection before decoding either original payload file.
+    for item in selected_evidence:
+        require(item.get("artist_partition") == item.get("family_partition") == "development",
+                f"Held-out evidence: {item['evidence_id']}")
+    for label in labels:
+        require(label.get("family_partition") == "development", "Held-out selected task")
+    original_evidence = {
+        item["evidence_id"]: (number, line, item)
+        for number, line, item in read_selected_rows(
+            raw / "evidence.jsonl", selected_evidence, "source_line_number", "source_line_sha256"
+        )
+    }
+    original_tasks = {
+        item["task_id"]: (number, line, item)
+        for number, line, item in read_selected_rows(
+            raw / "tasks.jsonl", labels, "task_source_line_number", "task_source_line_sha256"
+        )
+    }
 
     for source in primary.values():
         require(source["source_kind"] == "venue_operator_primary")
@@ -173,6 +218,8 @@ def validate_bundle(bundle, raw, local):
         require(item["source_line_number"] == number)
         require(item["source_line_sha256"] == digest(line))
         require(item["artist_partition"] == item["family_partition"] == "development", f"Held-out evidence: {evidence_id}")
+        require(original["artist_partition"] == original["family_partition"] == "development",
+                f"Held-out original evidence: {evidence_id}")
         require(item["artist"] == original["artist"])
         require(item["event_date"] is None)
         for field in item["fields"]:

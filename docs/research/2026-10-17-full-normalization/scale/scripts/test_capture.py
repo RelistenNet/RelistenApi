@@ -1,6 +1,7 @@
 """Verify exclusive output ownership and partial-query recovery without credentials."""
 import base64
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -50,6 +51,44 @@ class TestCapture(unittest.TestCase):
         self.assertFalse((self.directory / "snapshot.jsonl").exists())
         for name in ("query.json", "executed.sql", "snapshot.partial.jsonl"):
             self.assertNotIn("test-only", (self.directory / name).read_text())
+
+    def test_custom_query_is_copied_and_its_completed_response_is_retained(self):
+        query = Path(self.temporary.name) / "venue-context.sql"
+        query.write_text("BEGIN READ ONLY; SELECT 'a selected development venue'; COMMIT;\n")
+
+        def run(command, **kwargs):
+            if command[0] == "kubectl":
+                return subprocess.CompletedProcess(command, 0, stdout=base64.b64encode(b"test-only"))
+            executed = Path(command[command.index("-f") + 1])
+            self.assertEqual(query.read_bytes(), executed.read_bytes())
+            kwargs["stdout"].write('{"kind":"snapshot","read_only":"on"}\n')
+            kwargs["stdout"].write('{"kind":"snapshot_complete"}\n')
+            return subprocess.CompletedProcess(command, 0)
+
+        with patch.object(_module.subprocess, "run", side_effect=run):
+            _module.capture(self.directory, query)
+        self.assertTrue((self.directory / "snapshot.jsonl").exists())
+        receipt = json.loads((self.directory / "query.json").read_text())
+        self.assertEqual(receipt["sql_sha256"], _module.hashlib.sha256(query.read_bytes()).hexdigest())
+        for name in ("query.json", "executed.sql", "snapshot.jsonl"):
+            self.assertNotIn("test-only", (self.directory / name).read_text())
+
+    def test_custom_query_failure_keeps_only_its_partial_evidence(self):
+        query = Path(self.temporary.name) / "venue-context.sql"
+        query.write_text("BEGIN READ ONLY; SELECT 'bounded context'; COMMIT;\n")
+
+        def run(command, **kwargs):
+            if command[0] == "kubectl":
+                return subprocess.CompletedProcess(command, 0, stdout=base64.b64encode(b"test-only"))
+            kwargs["stdout"].write('{"kind":"snapshot"}\n')
+            raise subprocess.CalledProcessError(1, command)
+
+        with patch.object(_module.subprocess, "run", side_effect=run):
+            with self.assertRaises(subprocess.CalledProcessError):
+                _module.capture(self.directory, query)
+        self.assertEqual(query.read_bytes(), (self.directory / "executed.sql").read_bytes())
+        self.assertTrue((self.directory / "snapshot.partial.jsonl").exists())
+        self.assertFalse((self.directory / "snapshot.jsonl").exists())
 
 
 if __name__ == "__main__":
