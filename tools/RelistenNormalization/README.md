@@ -58,6 +58,12 @@ compares those rules with trained logistic and boosted-tree scorers on complete
 development questions. Unknown judgments stay outside fitting and error counts;
 all questions participate in split grouping.
 
+Use the separate [source-context exporter](people-source-context.md) to supply
+aliases, contacts and profiles attached by the current credit extractor. It
+authenticates the same original fields, joins exact source-local actor references
+and records missing or ambiguous attachment. The experiment accepts its explicitly
+versioned contract alongside the original name-only baseline.
+
 The separate [cross-artist review packet tool](people-identity-packet/README.md)
 prepares 55 unanswered source-backed identity questions and validates complete
 contexts. The [control packet tool](people-identity-controls/README.md) adds six

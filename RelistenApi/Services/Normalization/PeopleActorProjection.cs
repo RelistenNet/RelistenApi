@@ -21,10 +21,19 @@ public static class PeopleActorProjection
     public static PeopleActorProjectionResult Project(
         RetainedCreditMention mention,
         Guid artistUuid
+    ) => Project(mention.Name, mention.ActorFacts, artistUuid);
+
+    /// <summary>Projects the same source assertions before a provider-specific evidence remap.</summary>
+    public static PeopleActorProjectionResult Project(CreditMention mention, Guid artistUuid) =>
+        Project(mention.Name, mention.ActorFacts, artistUuid);
+
+    private static PeopleActorProjectionResult Project<TEvidence>(
+        string name,
+        CreditedActorFacts<TEvidence>? facts,
+        Guid artistUuid
     )
     {
-        var facts = mention.ActorFacts;
-        var terms = new[] { mention.Name }
+        var terms = new[] { name }
             .Concat(facts?.Aliases.Select(alias => alias.Wording) ?? [])
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -152,8 +161,8 @@ public static class PeopleActorProjection
         }
     }
 
-    private static PersonActorMatchContext? Context(
-        IEnumerable<CreditedActorFacts<NormalizedEvidenceReference>> source
+    private static PersonActorMatchContext? Context<TEvidence>(
+        IEnumerable<CreditedActorFacts<TEvidence>> source
     )
     {
         var facts = source.ToArray();

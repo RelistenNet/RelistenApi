@@ -173,7 +173,9 @@ public sealed class PeoplePairBaselineBatch
             new HashSet<Guid> { mention.ArtistUuid }
         );
 
-    private static IReadOnlyList<double> Features(IdentityCandidateComparison comparison)
+    // Both projection versions export the same runtime parameter order. Keep this conversion
+    // shared so a richer source projection cannot silently change the model's dimensions.
+    internal static IReadOnlyList<double> Features(IdentityCandidateComparison comparison)
     {
         double Agrees(string feature) =>
             comparison.Features.Any(value =>

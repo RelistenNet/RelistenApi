@@ -466,6 +466,124 @@ public sealed class TestPeoplePairBaselineBatch
         AssertNoCompletedOutput();
     }
 
+    [Test]
+    public async Task ContextBaselineUsesOriginalAttachedFactsAndRetainsTheWholeUnknownPool()
+    {
+        var manifestHash = await Bundle(sourceContext: true);
+        var report = await new PeopleSourceContextBaselineBatch().RunAsync(
+            repository,
+            bundle,
+            output,
+            manifestHash
+        );
+
+        report.Pairs.Should().Be(2);
+        report.ContextRows.Should().Be(3);
+        report.PolicyActivationPermitted.Should().BeFalse();
+        var rows = ReadRows(output);
+        rows[0]
+            .GetProperty("features")
+            .EnumerateArray()
+            .Select(value => value.GetDouble())
+            .Should()
+            .Equal(1, 1, 1, 1, 0);
+        rows[0]
+            .GetProperty("comparison")
+            .GetProperty("candidateUuid")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null);
+        rows[1].GetProperty("projectionSupported").GetBoolean().Should().BeFalse();
+        rows.Select(row => row.GetProperty("candidateMentionId").GetString())
+            .Should()
+            .Equal("mention-1", "mention-2");
+        var diagnostics = File.ReadAllLines(Path.Combine(output, report.ContextFile))
+            .Select(line => JsonDocument.Parse(line).RootElement.Clone())
+            .ToArray();
+        diagnostics
+            .Select(row => row.GetProperty("mentionId").GetString())
+            .Should()
+            .Equal("mention-0", "mention-1", "mention-2");
+        diagnostics[0].GetProperty("facts").GetProperty("aliases").GetArrayLength().Should().Be(1);
+        diagnostics[1].GetProperty("status").GetString().Should().Be("matched");
+        diagnostics[2]
+            .GetProperty("status")
+            .GetString()
+            .Should()
+            .Be("unsupported_mention_expression");
+        report
+            .ContextSha256.Should()
+            .Be(Hash(await File.ReadAllBytesAsync(Path.Combine(output, report.ContextFile))));
+
+        var legacyOutput = Path.Combine(directory, "legacy-output");
+        await new PeoplePairBaselineBatch().RunAsync(
+            repository,
+            bundle,
+            legacyOutput,
+            manifestHash
+        );
+        ReadRows(legacyOutput)[0]
+            .GetProperty("features")
+            .EnumerateArray()
+            .Select(value => value.GetDouble())
+            .Should()
+            .Equal(0, 0, 1, 0, 0);
+    }
+
+    [Test]
+    public async Task ContextBaselineCannotLearnActorAttachmentsFromLabelAnswersOrProposedFeatures()
+    {
+        var hash = await Bundle(sourceContext: true);
+        await new PeopleSourceContextBaselineBatch().RunAsync(repository, bundle, output, hash);
+        var first = ReadRows(output).Select(row => row.GetRawText()).ToArray();
+        hash = await Bundle(answer: "different_actors", sourceContext: true);
+        var other = Path.Combine(directory, "changed-answers");
+
+        await new PeopleSourceContextBaselineBatch().RunAsync(repository, bundle, other, hash);
+
+        ReadRows(other).Select(row => row.GetRawText()).Should().Equal(first);
+    }
+
+    [TestCase("reserved")]
+    [TestCase("utf16_span")]
+    public async Task ContextExtractionCannotRunAheadOfOriginalSelectionAndSpanAuthentication(
+        string fault
+    )
+    {
+        var hash = await Bundle(fault);
+        var run = () =>
+            new PeopleSourceContextBaselineBatch().RunAsync(repository, bundle, output, hash);
+
+        await run.Should().ThrowAsync<InvalidDataException>();
+        Directory.Exists(output).Should().BeFalse();
+    }
+
+    [Test]
+    public async Task ContextBaselinePreservesIncompleteOutputAndCanRetryIntoANewDirectory()
+    {
+        var hash = await Bundle(sourceContext: true);
+        Directory.CreateDirectory(output);
+        var partial = Path.Combine(output, "baseline.partial.jsonl");
+        await File.WriteAllTextAsync(partial, "retained incomplete bytes");
+        var run = () =>
+            new PeopleSourceContextBaselineBatch().RunAsync(repository, bundle, output, hash);
+
+        await run.Should().ThrowAsync<InvalidDataException>();
+        (await File.ReadAllTextAsync(partial)).Should().Be("retained incomplete bytes");
+        File.Exists(Path.Combine(output, "manifest.json")).Should().BeFalse();
+        var recovered = Path.Combine(directory, "recovered-export");
+
+        var report = await new PeopleSourceContextBaselineBatch().RunAsync(
+            repository,
+            bundle,
+            recovered,
+            hash
+        );
+
+        report.State.Should().Be("completed");
+        ReadRows(recovered).Should().HaveCount(2);
+        File.Exists(Path.Combine(recovered, "manifest.json")).Should().BeTrue();
+    }
+
     private Task<PeoplePairBaselineReport> Run(
         string manifestHash,
         CancellationToken ct = default
@@ -477,7 +595,11 @@ public sealed class TestPeoplePairBaselineBatch
         File.Exists(Path.Combine(output, "baseline.jsonl")).Should().BeFalse();
     }
 
-    private async Task<string> Bundle(string? fault = null, string answer = "same_actor")
+    private async Task<string> Bundle(
+        string? fault = null,
+        string answer = "same_actor",
+        bool sourceContext = false
+    )
     {
         var sourceIndex = new List<JsonObject>();
         var citations = new List<JsonObject>();
@@ -489,14 +611,21 @@ public sealed class TestPeoplePairBaselineBatch
             ["uuid"] = Guid.NewGuid().ToString(),
             ["name"] = "Synthetic Artist",
         };
-        var names = new[] { "😀 José Contributor", "😀 José Contributor", "unknown taper" };
+        var names = sourceContext
+            ? new[] { "Alice Vale", "Night Owl", "unknown taper" }
+            : new[] { "😀 José Contributor", "😀 José Contributor", "unknown taper" };
         for (var index = 0; index < names.Length; index++)
         {
             var id = "source-" + (index + 1);
             var sourceUuid = Guid.NewGuid();
             var sourceId = 100 + index;
             var family = "synthetic-family-" + index;
-            var text = "Taper: " + names[index] + "\n";
+            var text =
+                sourceContext && index < 2
+                    ? index == 0
+                        ? "Taper: Alice Vale aka Night Owl (shared@example.test)\n"
+                        : "Taper: Night Owl (shared@example.test)\n"
+                    : "Taper: " + names[index] + "\n";
             var knownFamily =
                 fault == "reserved_family" && index == 0 ? "reserved-recording" : null;
             var original = new JsonObject

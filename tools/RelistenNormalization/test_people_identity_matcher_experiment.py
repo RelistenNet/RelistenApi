@@ -81,7 +81,7 @@ def fitted_logistic():
             "classes": [0, 1], "intercept": -2.0, "coefficients": [3.0, 1.0, 0.5, 0.25, -0.5]}
 
 
-def input_packet(root):
+def input_packet(root, source_context=False):
     """Small authenticated source/export packet with no real catalog content."""
     root = root.resolve()
     bundle, exported = root / "bundle", root / "exported"
@@ -89,7 +89,12 @@ def input_packet(root):
     exported.mkdir()
     label = task("question", ["candidate"], ["insufficient_evidence"], ["group"])
     inventory = {"focus": mention("focus", "s1"), "candidate": mention("candidate", "s2")}
-    EXP.write_rows(bundle / "labels.jsonl", [label])
+    labels = [label]
+    if source_context:
+        # Diagnostics cover the whole inventory, including mentions outside identity edges.
+        inventory["observer"] = mention("observer", "s3", kind="credit_expression")
+        labels.append(task("actor", groups=["group"], kind="actor_kind", focus="observer"))
+    EXP.write_rows(bundle / "labels.jsonl", labels)
     EXP.write_rows(bundle / "mentions.jsonl", list(inventory.values()))
     EXP.write_json(bundle / "candidate-pool.json", {"nested": {"candidate": True}})
     (bundle / "validate_bundle.py").write_text("# Synthetic validator entrypoint\n")
@@ -105,7 +110,8 @@ def input_packet(root):
         else:
             manifest[name] = reference
     EXP.write_json(bundle / "manifest.json", manifest)
-    EXP.write_rows(exported / "baseline.jsonl", baseline(label, ["candidate"], inventory))
+    values = (1, 1, 0, 1, 1) if source_context else (1, 1, 0, 0, 0)
+    EXP.write_rows(exported / "baseline.jsonl", baseline(label, ["candidate"], inventory, values))
     assembly = root / "immutable-api.dll"
     assembly.write_bytes(b"synthetic assembly bytes")
     exported_manifest = {
@@ -114,7 +120,7 @@ def input_packet(root):
         "featureOrder": list(EXP.FEATURE_ORDER), "bundleManifestSha256": EXP.fingerprint(bundle / "manifest.json")["sha256"],
         "policyActivationPermitted": False, "baselineFile": "baseline.jsonl",
         "baselineSha256": EXP.fingerprint(exported / "baseline.jsonl")["sha256"],
-        "allTasks": 1, "questions": 1, "pairs": 1,
+        "allTasks": len(labels), "questions": 1, "pairs": 1,
         "inputFiles": {name: {**EXP.fingerprint(bundle / name), "rows": len(EXP.json_rows((bundle / name).read_bytes()))
                              if name.endswith(".jsonl") else None}
                        for name in manifest["files"]},
@@ -122,6 +128,14 @@ def input_packet(root):
         "matcherAssemblySha256": EXP.fingerprint(assembly)["sha256"],
         "runnerAssemblySha256": EXP.fingerprint(assembly)["sha256"],
     }
+    if source_context:
+        context = exported / "context-diagnostics.jsonl"
+        EXP.write_rows(context, [{"mentionId": key, "synthetic": True} for key in inventory])
+        exported_manifest.update(
+            version=EXP.CONTEXT_BASELINE_VERSION,
+            projectionVersion=EXP.CONTEXT_FEATURE_VERSION,
+            contextFile=context.name, contextSha256=EXP.fingerprint(context)["sha256"],
+            contextRows=len(inventory), **EXP.CONTEXT_VERSION_PINS)
     EXP.write_json(exported / "manifest.json", exported_manifest)
     args = (root, bundle, exported, EXP.fingerprint(bundle / "manifest.json")["sha256"],
             EXP.fingerprint(bundle / "validate_bundle.py")["sha256"],
@@ -129,6 +143,15 @@ def input_packet(root):
     validator = SimpleNamespace(validate_bundle=lambda *_: {"synthetic": True},
                                 build_split_components=VALIDATOR.build_split_components)
     return args, validator
+
+
+def rewrite_export_manifest(args, mutate):
+    """Repin an intentionally altered synthetic contract, rather than hiding digest failures."""
+    path = args[2] / "manifest.json"
+    manifest = json.loads(path.read_text())
+    mutate(manifest)
+    path.write_text(json.dumps(manifest))
+    return (*args[:-1], EXP.fingerprint(path)["sha256"])
 
 
 class TestPeopleIdentityMatcherExperiment(unittest.TestCase):
@@ -178,6 +201,163 @@ class TestPeopleIdentityMatcherExperiment(unittest.TestCase):
             self.assertEqual((len(edges), len(components), len(labels)), (1, 1, 1))
             self.assertIsNone(edges[0].target)
             self.assertTrue(any(Path(pin["path"]).name == "immutable-api.dll" for pin in pins))
+
+    def test_authenticated_source_context_keeps_actual_five_features_and_all_inventory_diagnostics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args, validator = input_packet(Path(directory), source_context=True)
+            with patch.object(EXP, "import_validator", return_value=validator):
+                edges, components, labels, pins, _, _, manifest = EXP.load_inputs(*args)
+            self.assertEqual(edges[0].values, (1, 1, 0, 1, 1))
+            self.assertIsNone(edges[0].target)
+            self.assertEqual(components, [["actor", "question"]])
+            self.assertEqual(len(labels), 2)
+            self.assertEqual(manifest["contextRows"], 3)
+            self.assertEqual(EXP.projection_receipt(manifest)["projectionVersion"], EXP.CONTEXT_FEATURE_VERSION)
+            self.assertTrue(any(Path(value["path"]).name == "context-diagnostics.jsonl" for value in pins))
+
+    def test_changed_or_missing_context_artifact_rejects_before_validator_execution(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as directory:
+                args, _ = input_packet(Path(directory), source_context=True)
+                context = args[2] / "context-diagnostics.jsonl"
+                if missing:
+                    context.unlink()
+                else:
+                    context.write_text('{"mentionId":"tampered"}\n')
+                with patch.object(EXP, "import_validator") as execute:
+                    with self.assertRaises((ValueError, OSError)):
+                        EXP.load_inputs(*args)
+                    execute.assert_not_called()
+
+    def test_context_contract_requires_artifact_metadata_and_exact_extractor_versions(self):
+        changes = {**{key: "unreviewed-version" for key in EXP.CONTEXT_VERSION_PINS},
+                   "projectionVersion": EXP.FEATURE_VERSION, "actorFeaturesVersion": "unknown",
+                   "contextFile": "../other-context.jsonl", "contextRows": True,
+                   "contextSha256": None}
+        for key, value in changes.items():
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                args, _ = input_packet(Path(directory), source_context=True)
+                args = rewrite_export_manifest(args, lambda manifest: manifest.update({key: value}))
+                with patch.object(EXP, "import_validator") as execute:
+                    with self.assertRaises(ValueError):
+                        EXP.load_inputs(*args)
+                    execute.assert_not_called()
+        for key in (*EXP.CONTEXT_VERSION_PINS, "contextFile", "contextRows", "contextSha256"):
+            with self.subTest(missing=key), tempfile.TemporaryDirectory() as directory:
+                args, _ = input_packet(Path(directory), source_context=True)
+                args = rewrite_export_manifest(args, lambda manifest: manifest.pop(key))
+                with self.assertRaises(ValueError):
+                    EXP.load_inputs(*args)
+
+    def test_legacy_contract_cannot_silently_claim_context_projection_or_diagnostics(self):
+        for key, value in (("projectionVersion", EXP.CONTEXT_FEATURE_VERSION),
+                           ("contextFile", "context-diagnostics.jsonl"),
+                           ("actorProjectionVersion", EXP.CONTEXT_VERSION_PINS["actorProjectionVersion"]),
+                           ("version", "people-pair-baseline-v99")):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+                args, _ = input_packet(Path(directory))
+                args = rewrite_export_manifest(args, lambda manifest: manifest.update({key: value}))
+                with self.assertRaises(ValueError):
+                    EXP.load_inputs(*args)
+
+    def test_rehashed_context_still_requires_complete_unique_mention_coverage(self):
+        for identities in (("focus", "candidate"), ("focus", "candidate", "candidate"),
+                           ("focus", "candidate", "foreign")):
+            with self.subTest(identities=identities), tempfile.TemporaryDirectory() as directory:
+                args, _ = input_packet(Path(directory), source_context=True)
+                context = args[2] / "context-diagnostics.jsonl"
+                context.write_text(''.join(json.dumps({"mentionId": key}) + '\n' for key in identities))
+                args = rewrite_export_manifest(args, lambda manifest: manifest.update(
+                    contextSha256=EXP.fingerprint(context)["sha256"], contextRows=len(identities)))
+                with self.assertRaisesRegex(ValueError, "inventory coverage"):
+                    EXP.load_inputs(*args)
+
+    def test_validator_time_context_change_is_rechecked_before_edges_are_returned(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args, validator = input_packet(Path(directory), source_context=True)
+            def mutate(*_):
+                (args[2] / "context-diagnostics.jsonl").write_text("changed during validation\n")
+                return {}
+            validator.validate_bundle = mutate
+            with patch.object(EXP, "import_validator", return_value=validator):
+                with self.assertRaisesRegex(ValueError, "Changed input"):
+                    EXP.load_inputs(*args)
+
+    def test_source_context_diagnostics_never_supply_feature_values_or_answers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args, validator = input_packet(Path(directory), source_context=True)
+            context = args[2] / "context-diagnostics.jsonl"
+            rows = EXP.json_rows(context.read_bytes())
+            for row in rows:
+                row.update(features=[0, 0, 0, 0, 0], answer="different_entities")
+            context.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            args = rewrite_export_manifest(args, lambda manifest: manifest.update(
+                contextSha256=EXP.fingerprint(context)["sha256"]))
+            with patch.object(EXP, "import_validator", return_value=validator):
+                edges, *_ = EXP.load_inputs(*args)
+            self.assertEqual(edges[0].values, (1, 1, 0, 1, 1))
+            self.assertIsNone(edges[0].target)
+
+    def test_source_context_report_features_predictions_and_replay_keep_consumed_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args, validator = input_packet(Path(directory), source_context=True)
+            with patch.object(EXP, "import_validator", return_value=validator):
+                edges, components, labels, pins, validation, data, manifest = EXP.load_inputs(*args)
+            output = Path(directory) / "result"
+            # This packet has only an unknown identity target: no estimator is fitted.
+            with patch.object(EXP, "new_estimators") as estimators:
+                report = EXP.run(edges, components, labels, output, pins, validation, data, manifest, {})
+                estimators.assert_not_called()
+            self.assertEqual(report["version"], EXP.CONTEXT_VERSION)
+            self.assertEqual(report["featureVersion"], EXP.CONTEXT_FEATURE_VERSION)
+            for key, expected in EXP.CONTEXT_VERSION_PINS.items():
+                self.assertEqual(report["baselineContract"][key], expected)
+            self.assertEqual(report["baselineContract"]["contextSha256"], manifest["contextSha256"])
+            self.assertEqual(EXP.json_rows((output / "features.jsonl").read_bytes())[0]["featureVersion"],
+                             EXP.CONTEXT_FEATURE_VERSION)
+            prediction = EXP.json_rows((output / "predictions.jsonl").read_bytes())[0]
+            self.assertEqual(prediction["projectionVersion"], EXP.CONTEXT_FEATURE_VERSION)
+            self.assertIsNone(prediction["target"])
+            inputs = json.loads((output / "inputs.json").read_text())["files"]
+            context = next(value for value in inputs if Path(value["path"]).name == "context-diagnostics.jsonl")
+            self.assertEqual(context["sha256"], manifest["contextSha256"])
+            self.assertEqual(EXP.fingerprint(output / context["retainedPath"])["sha256"], manifest["contextSha256"])
+
+    def test_model_export_names_training_projection_without_changing_portable_five_values(self):
+        fitted = SimpleNamespace(
+            classes_=SimpleNamespace(tolist=lambda: [0, 1]),
+            n_iter_=SimpleNamespace(max=lambda: 1), max_iter=1000, intercept_=[-2.0],
+            coef_=[SimpleNamespace(tolist=lambda: [3.0, 1.0, 0.5, 0.25, -0.5])])
+        legacy = EXP.export_model("logistic", fitted, [])
+        context = EXP.export_model("logistic", fitted, [], EXP.CONTEXT_FEATURE_VERSION)
+        self.assertEqual(legacy["projectionVersion"], EXP.FEATURE_VERSION)
+        self.assertEqual(context["projectionVersion"], EXP.CONTEXT_FEATURE_VERSION)
+        self.assertEqual(context["featureOrder"], list(EXP.FEATURE_ORDER))
+        self.assertEqual(context["runtimeScorerParameters"], legacy["runtimeScorerParameters"])
+        self.assertEqual(EXP.portable_logit(context, [1, 1, 0, 1, 1]),
+                         EXP.portable_logit(legacy, [1, 1, 0, 1, 1]))
+        context["projectionVersion"] = "unreviewed-projection"
+        with self.assertRaisesRegex(ValueError, "projection version"):
+            EXP.validate_portable(context)
+
+    def test_context_projection_reaches_final_and_held_component_models_for_both_methods(self):
+        def fixed_models(training, checked, projection_version=EXP.FEATURE_VERSION):
+            # Fixed scorer parameters isolate projection forwarding from estimator fitting.
+            return {name: {**fitted_logistic(), "projectionVersion": projection_version}
+                    for name in ("logistic", "boosted_tree")}
+
+        rows = fitting_edges()
+        with patch.object(EXP, "fit_models", side_effect=fixed_models) as fit:
+            models, _, predictions = EXP.compare(
+                rows, [[row.component] for row in rows], EXP.CONTEXT_FEATURE_VERSION)
+        self.assertEqual(fit.call_count, 1 + len(rows))
+        self.assertTrue(all(call.args[2] == EXP.CONTEXT_FEATURE_VERSION for call in fit.call_args_list))
+        for result in models.values():
+            self.assertEqual(result["final"]["projectionVersion"], EXP.CONTEXT_FEATURE_VERSION)
+            self.assertEqual(len(result["folds"]), len(rows))
+            self.assertTrue(all(model["projectionVersion"] == EXP.CONTEXT_FEATURE_VERSION
+                                for model in result["folds"].values()))
+        self.assertTrue(all(row["projectionVersion"] == EXP.CONTEXT_FEATURE_VERSION for row in predictions))
 
     def test_validation_time_source_change_or_changed_executable_rejects_export(self):
         with tempfile.TemporaryDirectory() as directory:

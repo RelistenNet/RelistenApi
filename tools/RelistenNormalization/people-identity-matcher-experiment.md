@@ -10,6 +10,13 @@ Run the actual comparison only from the main task after the C# exporter has
 produced an authenticated baseline. The author tests use invented rows; they do
 not establish results on the real people data.
 
+The trainer accepts the original name-only export and a separately versioned
+source-context export of this same bundle. Select the completed baseline and its
+reviewed manifest hash explicitly. Existing baselines, results and model files
+retain their original projection versions and hashes. The separate 55-question
+identity review and six control questions need their own target adapter; this
+trainer does not add those questions to the bundle.
+
 ## What the current data can answer
 
 The bundle contains 168 development questions: 79 actor-kind, 46 within-recording
@@ -30,7 +37,7 @@ references. They remain in pools and split grouping, with explicit unsupported
 projection status. They enter neither training nor loss and receive no trained
 score. Their original labels remain unchanged.
 
-## One feature contract
+## Two projections, one feature order
 
 Only the following five actual runtime values enter a model, in this order:
 
@@ -46,11 +53,24 @@ Python checks the exported vector against that comparison; it does not implement
 another name matcher. IDs, split hypotheses, draft rationale, primary-source
 answers, role labels and actor-kind judgments never enter the feature matrix.
 
-The current projection uses source mention wording and its catalog artist only.
-Person kind, contact/profile facts, authoritative identifiers and answer-derived
-aliases remain unknown. The final two features are therefore absent agreements,
-not independently extracted identity evidence. A shared artist is a ranking
-feature; different artists do not establish different people.
+The original `people-mentions-name-artist-five-v1` projection uses source mention
+wording and its catalog artist only. Person kind, contact/profile facts,
+authoritative identifiers and answer-derived aliases remain unknown. Its final
+two features are absent agreements.
+
+The new `people-mentions-source-context-five-v1` projection comes from the C#
+source extractor and actor projection. It may change projected names and add
+source-derived contact/profile evidence when local actor attachment supports
+it. Python still consumes only the actual C# comparison's five values. It never
+uses review answers or context diagnostics to compute a feature. A shared
+contact does not authenticate ownership; a shared artist is a ranking feature,
+and different artists do not establish different people.
+
+Both projections support a pair only when both inventoried expressions have
+`mention_kind=name`. Missing or ambiguous source context leaves a name pair
+scorable with the C# projection's available facts. It does not turn that pair
+into an unsupported expression. Undivided credit expressions retain the original
+unsupported status, complete pool membership and split grouping.
 
 ## Input exchange and provenance
 
@@ -68,11 +88,41 @@ IDs are inventory coordinates, not accepted person IDs. Python independently
 joins each row to the source bundle and rejects an omitted candidate, an extra
 edge, changed evidence ownership, a changed feature vector or policy authority.
 
-The C# `manifest.json` names `people-pair-baseline-v1`, projection version
-`people-mentions-name-artist-five-v1`, actor feature version, the exact ordered
-feature names, source bundle hash, each input file's bytes/hash, output hash and
-actual matcher/runner assembly artifacts. Python rehashes those executable paths;
-hash strings without matching bytes are insufficient.
+The original C# `manifest.json` names `people-pair-baseline-v1` and projection
+`people-mentions-name-artist-five-v1`. The new export names
+`people-pair-context-baseline-v1` and projection
+`people-mentions-source-context-five-v1`. Both pin actor feature version
+`people-actor-context-features-v1`, the exact ordered feature names, source bundle
+hash, each input file's bytes/hash, output hash and actual matcher/runner assembly
+artifacts. Python rehashes those executable paths; hash strings without matching
+bytes are insufficient. Unknown versions and mixed name-only/context contracts
+fail before fitting.
+
+The context manifest additionally requires these exact versions:
+
+```text
+contextProjectionVersion = people-source-context-v1
+creditExtractorVersion = recording-credits-v4/recording-actor-evidence-v1
+actorEvidenceVersion = recording-actor-evidence-v1
+actorProjectionVersion = people-actor-projection-v1
+```
+
+The C# exporter mode for that contract is `people-source-context-baseline`.
+
+It also pins `contextFile=context-diagnostics.jsonl`, `contextSha256` and
+`contextRows`. Python authenticates those bytes, counts physical JSONL records,
+and requires exactly one distinct `mentionId` for every inventoried mention.
+That includes mentions used only by actor-kind questions and mentions with no
+identity edge. Missing, changed, duplicated or incomplete diagnostics fail the
+load. Diagnostics do not supply targets or features.
+
+Each context row retains the source evidence/field pointer and hash, code-point
+anchor, extraction status, match method, reference UUID, issues, query completion
+flag and projected actor facts. Status is `matched`, `name_only` or
+`unsupported_mention_expression`; name-only issues explain missing fields,
+missing actors, mismatched anchors or ambiguous attachment. `queryComplete`
+describes retrieval-term bounds. It does not establish exhaustive source
+coverage, and facts retain nonexhaustive coverage.
 
 The existing bundle validator owns source/reservation/span validation. The script
 imports its pinned entrypoint and calls `validate_bundle`; it does not recreate
@@ -121,8 +171,11 @@ these selected draft answers.
 
 `models.json` holds a final model and supported component-held-out models for
 each method. Logistic JSON records an intercept and five raw, unscaled
-coefficients, with `scoreKind=raw_logit`. Its `runtimeScorerParameters` maps those
-values directly to the existing C# scorer names:
+coefficients, with `scoreKind=raw_logit`. Every exported final/fold model records
+the consumed `projectionVersion`; the portable model format version still names
+the five-feature scorer architecture. Previously exported models without that
+field retain their original name-only interpretation. The logistic model's
+`runtimeScorerParameters` maps its values directly to the existing C# scorer names:
 
 ```text
 intercept, nameSimilarityWeight, exactNameWeight,
@@ -177,6 +230,13 @@ local-dev/normalization-data/venue-matcher-environment-v1/bin/python \
 The output includes exact features, split membership/training edges, portable
 models, all predictions, unknown predictions, complete candidate-pool
 diagnostics, actual baseline/manifest, environment and retained input hashes.
+Feature rows, prediction rows and models name the consumed projection. The
+report retains the original comparison version for a name-only run; a context
+run uses `people-identity-source-context-development-comparison-v1`. Its
+`baselineContract` records all consumed baseline, actor-feature, extractor and
+projection versions plus the context artifact hash/count. Context diagnostics
+are authenticated and retained alongside the other inputs. This source change
+alone establishes no improvement in extraction coverage or model behavior.
 `report.json` is renamed into place last. A changed input, failed fit or failed
 write can leave partial files but no completed report. Preserve the partial
 directory, investigate and retry in a new one. Existing output is never

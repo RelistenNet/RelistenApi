@@ -20,6 +20,17 @@ import warnings
 
 VERSION = "people-identity-development-comparison-v1"
 FEATURE_VERSION = "people-mentions-name-artist-five-v1"
+CONTEXT_VERSION = "people-identity-source-context-development-comparison-v1"
+CONTEXT_FEATURE_VERSION = "people-mentions-source-context-five-v1"
+NAME_BASELINE_VERSION = "people-pair-baseline-v1"
+CONTEXT_BASELINE_VERSION = "people-pair-context-baseline-v1"
+CONTEXT_VERSION_PINS = {
+    "contextProjectionVersion": "people-source-context-v1",
+    "creditExtractorVersion": "recording-credits-v4/recording-actor-evidence-v1",
+    "actorEvidenceVersion": "recording-actor-evidence-v1",
+    "actorProjectionVersion": "people-actor-projection-v1",
+}
+CONTEXT_ARTIFACT_FIELDS = {"contextFile", "contextSha256", "contextRows"}
 FEATURE_ORDER = (
     "name_token_similarity", "exact_name", "artist_overlap",
     "contact_agreement", "profile_agreement",
@@ -109,6 +120,61 @@ def resolve_input(root, bundle, key):
     path = (bundle / key).resolve() if "/" not in key else (root / key).resolve()
     require(path.is_relative_to(root), "Baseline input escapes the repository")
     return path
+
+
+def validate_baseline_contract(manifest, bundle_hash):
+    """Keep the original name projection distinct from the source-context export."""
+    version = manifest.get("version")
+    projection = {
+        NAME_BASELINE_VERSION: FEATURE_VERSION,
+        CONTEXT_BASELINE_VERSION: CONTEXT_FEATURE_VERSION,
+    }.get(version)
+    require(projection is not None
+            and manifest["state"] == "completed"
+            and manifest["projectionVersion"] == projection
+            and manifest["actorFeaturesVersion"] == "people-actor-context-features-v1"
+            and manifest["featureOrder"] == list(FEATURE_ORDER)
+            and manifest["bundleManifestSha256"] == bundle_hash
+            and manifest["policyActivationPermitted"] is False
+            and manifest["baselineFile"] == "baseline.jsonl", "Unsupported baseline contract")
+    if version == NAME_BASELINE_VERSION:
+        require(not (set(CONTEXT_VERSION_PINS) | CONTEXT_ARTIFACT_FIELDS) & set(manifest),
+                "Name-only baseline cannot claim source-context metadata")
+        return
+
+    require(all(manifest.get(key) == value for key, value in CONTEXT_VERSION_PINS.items()),
+            "Unsupported source-context extractor/projection versions")
+    require(manifest.get("contextFile") == "context-diagnostics.jsonl"
+            and type(manifest.get("contextRows")) is int and manifest["contextRows"] >= 0
+            and type(manifest.get("contextSha256")) is str,
+            "Missing or unsupported source-context diagnostics contract")
+
+
+def load_context_diagnostics(directory, manifest, mention_rows):
+    """Authenticate complete inventory diagnostics; never derive model values here."""
+    if manifest["version"] == NAME_BASELINE_VERSION:
+        return []
+    path = directory / manifest["contextFile"]
+    context_pin = require_digest(path, manifest["contextSha256"])
+    data = read_bytes(path)
+    require(sha256(data) == context_pin["sha256"], "Source-context diagnostics changed while reading")
+    rows = json_rows(data)
+    require(len(rows) == manifest["contextRows"] == len(mention_rows),
+            "Source-context diagnostics inventory coverage changed")
+    require(all(type(row) is dict and type(row.get("mentionId")) is str for row in rows),
+            "Invalid source-context diagnostics mention identity")
+    identities = [row["mentionId"] for row in rows]
+    require(len(set(identities)) == len(identities)
+            and set(identities) == {row["mention_id"] for row in mention_rows},
+            "Source-context diagnostics inventory coverage changed")
+    return [context_pin]
+
+
+def projection_receipt(manifest):
+    keys = ("version", "projectionVersion", "actorFeaturesVersion")
+    if manifest.get("version") == CONTEXT_BASELINE_VERSION:
+        keys = (*keys, *CONTEXT_VERSION_PINS, *sorted(CONTEXT_ARTIFACT_FIELDS))
+    return {key: manifest[key] for key in keys if key in manifest}
 
 
 @dataclass(frozen=True)
@@ -226,14 +292,7 @@ def load_inputs(root, bundle, baseline_directory, manifest_hash, validator_hash,
 
     labels_bytes, mentions_bytes = read_bytes(bundle / "labels.jsonl"), read_bytes(bundle / "mentions.jsonl")
     baseline_manifest = json.loads(read_bytes(baseline_directory / "manifest.json"))
-    require(baseline_manifest["state"] == "completed"
-            and baseline_manifest["version"] == "people-pair-baseline-v1"
-            and baseline_manifest["projectionVersion"] == FEATURE_VERSION
-            and baseline_manifest["actorFeaturesVersion"] == "people-actor-context-features-v1"
-            and baseline_manifest["featureOrder"] == list(FEATURE_ORDER)
-            and baseline_manifest["bundleManifestSha256"] == manifest_hash
-            and baseline_manifest["policyActivationPermitted"] is False
-            and baseline_manifest["baselineFile"] == "baseline.jsonl", "Unsupported baseline contract")
+    validate_baseline_contract(baseline_manifest, manifest_hash)
     require(bool(baseline_manifest["inputFiles"]) and bool(baseline_manifest["artifacts"]),
             "Baseline lacks input or executable evidence")
     for name, value in baseline_manifest["inputFiles"].items():
@@ -252,11 +311,13 @@ def load_inputs(root, bundle, baseline_directory, manifest_hash, validator_hash,
     baseline_path = baseline_directory / "baseline.jsonl"
     pins.append(require_digest(baseline_path, baseline_manifest["baselineSha256"]))
     baseline_bytes = read_bytes(baseline_path)
+    mention_rows = json_rows(mentions_bytes)
+    pins.extend(load_context_diagnostics(baseline_directory, baseline_manifest, mention_rows))
 
     validator = import_validator(bundle / "validate_bundle.py", validator_hash)
     validation = validator.validate_bundle(bundle, root)
     recheck(pins)
-    labels, mention_rows = json_rows(labels_bytes), json_rows(mentions_bytes)
+    labels = json_rows(labels_bytes)
     mentions = {row["mention_id"]: row for row in mention_rows}
     require(len(mentions) == len(mention_rows), "Duplicate inventoried mention")
     components = validator.build_split_components(labels)
@@ -275,6 +336,8 @@ def sigmoid(value):
 def validate_portable(model):
     require(model["featureOrder"] == list(FEATURE_ORDER) and model["classes"] == [0, 1],
             "Unsupported portable feature/class contract")
+    require(model.get("projectionVersion", FEATURE_VERSION)
+            in (FEATURE_VERSION, CONTEXT_FEATURE_VERSION), "Unsupported portable projection version")
     if model["version"] == "people-five-feature-logistic-v1":
         require(len(model["coefficients"]) == len(FEATURE_ORDER)
                 and all(type(v) in (int, float) and math.isfinite(v)
@@ -336,9 +399,10 @@ def new_estimators():
     }
 
 
-def export_model(name, model, training):
+def export_model(name, model, training, projection_version=FEATURE_VERSION):
     result = {"featureOrder": list(FEATURE_ORDER), "classes": model.classes_.tolist(),
-              "trainingEdgeIds": [row.edge_id for row in training], "scoreKind": "raw_logit"}
+              "trainingEdgeIds": [row.edge_id for row in training], "scoreKind": "raw_logit",
+              "projectionVersion": projection_version}
     if name == "logistic":
         require(model.n_iter_.max() < model.max_iter, "Logistic fit did not converge")
         coefficients = model.coef_[0].tolist()
@@ -361,7 +425,7 @@ def export_model(name, model, training):
     return result
 
 
-def fit_models(training, checked):
+def fit_models(training, checked, projection_version=FEATURE_VERSION):
     if {row.target for row in training} != {0, 1}:
         return None
     import numpy as np
@@ -371,7 +435,7 @@ def fit_models(training, checked):
         with warnings.catch_warnings():
             warnings.simplefilter("error", ConvergenceWarning)
             estimator.fit(np.asarray([row.values for row in training]), [row.target for row in training])
-        model = export_model(name, estimator, training)
+        model = export_model(name, estimator, training, projection_version)
         # A JSON round trip is part of export verification, not estimator reuse.
         model = json.loads(json.dumps(model, allow_nan=False))
         values = np.asarray([row.values for row in checked])
@@ -386,9 +450,11 @@ def fit_models(training, checked):
     return models
 
 
-def compare(edges, components):
+def compare(edges, components, projection_version=FEATURE_VERSION):
+    require(projection_version in (FEATURE_VERSION, CONTEXT_FEATURE_VERSION),
+            "Unsupported training projection version")
     resolved = [row for row in edges if row.target is not None and row.projection_supported]
-    final = fit_models(resolved, edges)
+    final = fit_models(resolved, edges, projection_version)
     models = {name: {"final": final[name] if final else None, "folds": {}}
               for name in ("logistic", "boosted_tree")}
     folds, predictions = [], []
@@ -404,7 +470,7 @@ def compare(edges, components):
         elif not any(row.projection_supported for row in held):
             state, fitted = "unsupported_projection_only", None
         elif any(row.target is not None and row.projection_supported for row in held):
-            fitted = fit_models(training, held)
+            fitted = fit_models(training, held, projection_version)
             state = "held_component_fit" if fitted else "unscorable_one_class_training"
         else:
             fitted = final
@@ -422,6 +488,7 @@ def compare(edges, components):
                 raw = portable_logit(fitted[name], row.values) if fitted and row.projection_supported else None
                 scores[name] = {"rawLogit": raw, "uncalibratedSigmoid": sigmoid(raw) if raw is not None else None}
             predictions.append({"edgeId": row.edge_id, "taskId": row.task_id,
+                                "projectionVersion": projection_version,
                                 "candidateMentionId": row.candidate_id, "component": component,
                                 "taskKind": row.task_kind, "sameRecording": row.same_recording,
                                 "sameArtist": row.same_artist, "target": row.target,
@@ -533,9 +600,10 @@ def run(edges, components, labels, output, pins, validation, baseline_bytes, bas
     pins = [*pins, source_pin]
     recheck(pins)
     retained = retain_replay_inputs(output, pins)
-    models, folds, predictions = compare(edges, components)
+    projection_version = baseline_manifest.get("projectionVersion", FEATURE_VERSION)
+    models, folds, predictions = compare(edges, components, projection_version)
     features = [{"edgeId": row.edge_id, "taskId": row.task_id, "candidateMentionId": row.candidate_id,
-                 "featureVersion": FEATURE_VERSION, "values": list(row.values)} for row in edges]
+                 "featureVersion": projection_version, "values": list(row.values)} for row in edges]
     write_rows(output / "features.jsonl", features)
     write_json(output / "splits.json", {"allTaskCount": len(labels), "components": folds})
     write_json(output / "models.json", models)
@@ -549,8 +617,10 @@ def run(edges, components, labels, output, pins, validation, baseline_bytes, bas
     artifacts = {str(path.relative_to(output)): fingerprint(path)
                  for path in sorted(output.rglob("*")) if path.is_file()}
     report = {
-        "status": "completed_development_diagnostic", "version": VERSION, "featureOrder": list(FEATURE_ORDER),
-        "featureVersion": FEATURE_VERSION, "seed": SEED, "counts": cohort_counts(edges),
+        "status": "completed_development_diagnostic",
+        "version": CONTEXT_VERSION if projection_version == CONTEXT_FEATURE_VERSION else VERSION,
+        "featureOrder": list(FEATURE_ORDER), "featureVersion": projection_version,
+        "baselineContract": projection_receipt(baseline_manifest), "seed": SEED, "counts": cohort_counts(edges),
         "allTasks": len(labels), "actorKindTasksExcludedFromFitting": sum(task["task_kind"] == "actor_kind" for task in labels),
         "components": len(components), "identityQuestionPools": len({row.task_id for row in edges}),
         "trueCrossRecordingPositiveComponents": len({row.component for row in edges
@@ -565,7 +635,9 @@ def run(edges, components, labels, output, pins, validation, baseline_bytes, bas
         "limits": [
             "All labels remain development drafts with adjudication pending; correlated edges are not independent identities.",
             "The true cross-recording positives cover one Aadam project-owner family and contain no different-person negatives.",
-            "Names and artist context do not supply qualified identity, contact, profile or complete global retrieval evidence.",
+            ("Source-derived contacts and profiles preserve local attachment uncertainty and do not establish identity or account ownership."
+             if projection_version == CONTEXT_FEATURE_VERSION else
+             "Names and artist context do not supply qualified identity, contact, profile or complete global retrieval evidence."),
             "Unknown edges never enter fitting or binary losses; their complete pools and diagnostic scores remain visible.",
             "One-class training folds are unscorable, never replaced with a fit that includes their held-out component.",
             "The 0.5 sigmoid cutoff is a fixed development diagnostic, not an acceptance threshold or identity assertion.",

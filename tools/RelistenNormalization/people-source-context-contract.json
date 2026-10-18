@@ -1,0 +1,21 @@
+{
+  "version": "people-pair-context-baseline-v1",
+  "projectionVersion": "people-mentions-source-context-five-v1",
+  "contextProjectionVersion": "people-source-context-v1",
+  "actorFeaturesVersion": "people-actor-context-features-v1",
+  "creditExtractorVersion": "recording-credits-v4/recording-actor-evidence-v1",
+  "actorEvidenceVersion": "recording-actor-evidence-v1",
+  "actorProjectionVersion": "people-actor-projection-v1",
+  "featureOrder": ["name_token_similarity", "exact_name", "artist_overlap", "contact_agreement", "profile_agreement"],
+  "pairSchema": "people-pair-baseline-v1 unchanged",
+  "contextFile": "context-diagnostics.jsonl",
+  "contextRowFields": ["mentionId", "evidenceId", "sourceJsonPointer", "sourceFieldSha256", "anchor", "status", "matchedVia", "referenceUuid", "queryComplete", "issues", "facts"],
+  "contextStatuses": ["matched", "name_only", "unsupported_mention_expression"],
+  "contextMatchRoutes": ["actor_anchor", "explicit_alias", null],
+  "manifestAdditions": ["contextFile", "contextSha256", "contextRows", "contextProjectionVersion", "creditExtractorVersion", "actorEvidenceVersion", "actorProjectionVersion"],
+  "contextCoverage": "one row for every authenticated source mention, including mentions without identity edges",
+  "queryCompleteMeaning": "all extracted query terms fit supported retrieval bounds; source facts remain nonexhaustive",
+  "projectionSupportedMeaning": "both original mention expressions have kind name; missing context does not remove the pair",
+  "canonicalIdentitySupplied": false,
+  "policyActivationPermitted": false
+}

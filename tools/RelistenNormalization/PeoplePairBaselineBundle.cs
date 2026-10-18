@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Relisten.Api.Models.Normalization;
 
 namespace Relisten.Normalization.Batch;
 
@@ -17,6 +18,10 @@ internal sealed class PeoplePairBaselineBundle
     public required string ManifestHash { get; init; }
     public required IReadOnlyDictionary<string, Mention> Mentions { get; init; }
     public required IReadOnlyList<Question> Questions { get; init; }
+    public required IReadOnlyDictionary<
+        string,
+        IReadOnlyDictionary<string, string?>
+    > SourceFields { get; init; }
 
     public static async Task<PeoplePairBaselineBundle> ReadAsync(
         string root,
@@ -98,6 +103,7 @@ internal sealed class PeoplePairBaselineBundle
             ManifestHash = expectedHash,
             Mentions = mentions,
             Questions = questions,
+            SourceFields = ReadSourceFields(originals, mentions.Values),
         };
         foreach (var (name, bytes) in files)
         {
@@ -326,12 +332,52 @@ internal sealed class PeoplePairBaselineBundle
                     evidence,
                     Text(row, "name"),
                     row.GetProperty("artist").GetProperty("uuid").GetGuid(),
-                    kind
+                    kind,
+                    new NormalizationTextEvidence(
+                        Text(citation, "field_path").Split('/')[^1],
+                        "/"
+                            + Text(citation, "field_path")
+                                .Split('/')[^1]
+                                .Replace("~", "~0")
+                                .Replace("/", "~1"),
+                        Text(citation.GetProperty("span"), "quote"),
+                        citation.GetProperty("span").GetProperty("start").GetInt32(),
+                        citation.GetProperty("span").GetProperty("end").GetInt32()
+                    )
                 )
             );
         }
         return mentions;
     }
+
+    private static IReadOnlyDictionary<
+        string,
+        IReadOnlyDictionary<string, string?>
+    > ReadSourceFields(
+        IReadOnlyDictionary<string, JsonElement> originals,
+        IEnumerable<Mention> mentions
+    ) =>
+        mentions
+            .GroupBy(mention => mention.EvidenceId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                    (IReadOnlyDictionary<string, string?>)
+                        group
+                            .Select(mention => mention.Anchor.Field)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToDictionary(
+                                field => field,
+                                field =>
+                                    originals[group.Key]
+                                        .GetProperty("raw_record")
+                                        .GetProperty("row")
+                                        .GetProperty(field)
+                                        .GetString(),
+                                StringComparer.Ordinal
+                            ),
+                StringComparer.Ordinal
+            );
 
     private static void AuthenticatePool(
         byte[] bytes,
@@ -521,7 +567,8 @@ internal sealed class PeoplePairBaselineBundle
         string EvidenceId,
         string Name,
         Guid ArtistUuid,
-        string Kind
+        string Kind,
+        NormalizationTextEvidence Anchor
     );
 
     internal sealed record Question(
