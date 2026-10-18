@@ -1,0 +1,223 @@
+{
+  "kind": "source-stage-typed-json-v1",
+  "observedDate": "2026-10-18",
+  "status": "Focused application contracts and small lifecycles pass; complete codec outputs match and per-thread managed allocations decrease. Elapsed observations are mixed. Full-size verification remains open.",
+  "source": {
+    "baseCommit": "f3ae5e887288f0967941368bb813dd6ed543a614",
+    "formattedFilesSha256": {
+      "RelistenApi/Services/Normalization/SourceActorAliasApplicationCheckpointCodec.cs": "dbf47482d6c9bba8628ecd89aef6ee81ad15cac4c4d7d66e54720c81d205bd13",
+      "RelistenApiTests/Services/TestNormalizationSourceActorAliasApplications.TypedJsonCodec.cs": "0c510218d2ca36b3cf4d22e4f0aeb0a54e218f386a88e2e0e710c24e6bfa9c4c"
+    },
+    "apiAssemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+    "testAssemblySha256": "4b77e66ce79b39101e6239d8a3750e94105ba09db1c96652d052791b6e13b8cb",
+    "previousApiAssemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3"
+  },
+  "contract": {
+    "change": "Within one ReadStage call, compare the Value of the already bounded typed envelope against an independently re-encoded stage.",
+    "preserved": [
+      "Strict required-member and unmapped-member checks",
+      "Format and kind validation",
+      "Complete typed 32 MiB encoded-byte budget before decoding",
+      "All decoder reference and shape checks",
+      "Independent reconstruction and hidden/unused proof rejection",
+      "Supported optional nulls and JSONB whitespace",
+      "Stored DTOs, formats, producer versions, public interfaces and authority"
+    ],
+    "lifetime": "Local JsonDocument disposed before return; no cross-read cache or retained JSON element."
+  },
+  "verification": {
+    "build": {
+      "errors": 0,
+      "warnings": 49
+    },
+    "distinctCandidatePassingTests": 110,
+    "applicationCases": 108,
+    "smallLifecycleCases": 2,
+    "newCompatibilityCases": 3,
+    "newCasesIncludedInApplication108": true,
+    "previousApiSameThreeCasesPassed": true,
+    "compatibilityControlsAreNotAdditionalDistinctCases": true,
+    "formatterFilesChecked": 1115,
+    "formatterPassed": true,
+    "gitDiffCheck": "passed",
+    "freshReviews": [
+      "correctness",
+      "separate readability/code simplification"
+    ]
+  },
+  "comparison": {
+    "invocations": 12,
+    "totalSamples": 96,
+    "measuredSamples": 72,
+    "warmupSamples": 24,
+    "inputOrigin": "Retained complete service-generated synthetic stages 0, 999 and 1000 from the earlier pre-58 thousand-person fixture. That whole application timed out; these inputs establish no full-scale pass.",
+    "outputs": "Every sample matches the complete decoded DTO and independently re-encoded canonical envelope byte counts and SHA-256 for its input across both binaries and both run orders. Hashes and byte counts are retained; expanded decoded DTO bodies are not.",
+    "comparisons": [
+      {
+        "ordinal": 0,
+        "order": "old-new",
+        "inputBytes": 4037879,
+        "decodedBytes": 4038753,
+        "encodedBytes": 4037879,
+        "decodedSha256": "5b94c23e1d496cc8eac91c6021ad6a02e3dd8024e76835318ff51187b79eb1d5",
+        "encodedSha256": "e7cf9b96c66ffda8b696ad9c1944b566c071215539b016986504974086ff9412",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 77.3677,
+          "medianReadAllocatedBytes": 52706420.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 108.8414,
+          "medianReadAllocatedBytes": 45123648.0
+        },
+        "elapsedReductionPercent": -40.680671649797006,
+        "allocationReductionBytes": 7582772.0
+      },
+      {
+        "ordinal": 0,
+        "order": "new-old",
+        "inputBytes": 4037879,
+        "decodedBytes": 4038753,
+        "encodedBytes": 4037879,
+        "decodedSha256": "5b94c23e1d496cc8eac91c6021ad6a02e3dd8024e76835318ff51187b79eb1d5",
+        "encodedSha256": "e7cf9b96c66ffda8b696ad9c1944b566c071215539b016986504974086ff9412",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 124.16909999999999,
+          "medianReadAllocatedBytes": 52706168.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 111.59155,
+          "medianReadAllocatedBytes": 45123648.0
+        },
+        "elapsedReductionPercent": 10.129371961301148,
+        "allocationReductionBytes": 7582520.0
+      },
+      {
+        "ordinal": 999,
+        "order": "old-new",
+        "inputBytes": 4202451,
+        "decodedBytes": 4662167,
+        "encodedBytes": 4202451,
+        "decodedSha256": "0dda0e2466bab363abe261c0839de876497c5590b5876ffe54b9d26c9ce456fb",
+        "encodedSha256": "554f23480516301332a66ee06b1ac68fff49cdb0be4cb3a1eec68d4c2d99097a",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 105.37780000000001,
+          "medianReadAllocatedBytes": 53883568.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 60.6443,
+          "medianReadAllocatedBytes": 46759928.0
+        },
+        "elapsedReductionPercent": 42.450592060187255,
+        "allocationReductionBytes": 7123640.0
+      },
+      {
+        "ordinal": 999,
+        "order": "new-old",
+        "inputBytes": 4202451,
+        "decodedBytes": 4662167,
+        "encodedBytes": 4202451,
+        "decodedSha256": "0dda0e2466bab363abe261c0839de876497c5590b5876ffe54b9d26c9ce456fb",
+        "encodedSha256": "554f23480516301332a66ee06b1ac68fff49cdb0be4cb3a1eec68d4c2d99097a",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 101.71539999999999,
+          "medianReadAllocatedBytes": 53881612.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 92.62585,
+          "medianReadAllocatedBytes": 46759928.0
+        },
+        "elapsedReductionPercent": 8.93625743987635,
+        "allocationReductionBytes": 7121684.0
+      },
+      {
+        "ordinal": 1000,
+        "order": "old-new",
+        "inputBytes": 13908074,
+        "decodedBytes": 9843685,
+        "encodedBytes": 9384175,
+        "decodedSha256": "1ad2833b5ac420fadecfd3171726076ae5c624747795823f79d818c8eba5a078",
+        "encodedSha256": "4c0d5370a9f7f4aaa03833b15c46451b8de392912184c353b4b235fe553a0cf7",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 163.73305,
+          "medianReadAllocatedBytes": 108044128.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 108.41460000000001,
+          "medianReadAllocatedBytes": 94246912.0
+        },
+        "elapsedReductionPercent": 33.78575675466864,
+        "allocationReductionBytes": 13797216.0
+      },
+      {
+        "ordinal": 1000,
+        "order": "new-old",
+        "inputBytes": 13908074,
+        "decodedBytes": 9843685,
+        "encodedBytes": 9384175,
+        "decodedSha256": "1ad2833b5ac420fadecfd3171726076ae5c624747795823f79d818c8eba5a078",
+        "encodedSha256": "4c0d5370a9f7f4aaa03833b15c46451b8de392912184c353b4b235fe553a0cf7",
+        "old": {
+          "assemblySha256": "72c2cb163d6a1d7b9ac358709c663ae2f3d3c4eb157b34a4fbd9815f12e37ad3",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 141.96069999999997,
+          "medianReadAllocatedBytes": 108043848.0
+        },
+        "new": {
+          "assemblySha256": "4cbd9754dd11f290a3dd7d63e46ecfacedc911a9801f95bf6a1dafb041960e42",
+          "measured": 6,
+          "warmup": 2,
+          "medianReadMilliseconds": 127.1095,
+          "medianReadAllocatedBytes": 94247140.0
+        },
+        "elapsedReductionPercent": 10.461486876297442,
+        "allocationReductionBytes": 13796708.0
+      }
+    ],
+    "qualification": "Pure reflected ReadStage shared-host observation. Complete DTO and WriteStage canonical hashes and byte counts checked for every sample; retained hashes, not DTO bodies. No peak-memory, CPU, end-to-end publication or full-scale completion claim.",
+    "elapsedConclusion": "Elapsed medians are mixed, including a slower stage-0 pair. These shared-host observations do not establish a general latency improvement.",
+    "allocationConclusion": "All six pairs reduce synchronous managed per-thread allocations by approximately 7.1\u201313.8 million bytes. This is not surviving heap, RSS or peak memory."
+  },
+  "privateEvidence": {
+    "manifest": "local-dev/normalization-data/2026-10-17-cross-artist/source-stage-typed-json-v1/runtime-v1/manifest.json",
+    "sha256": "a1806a0efe145d54b4bb50eb238de153a09cb9ec428b8a804bbaef681cf8073c",
+    "files": 233
+  },
+  "remaining": [
+    "Finish final-code full-size lifecycles with 1,000 distinct people, 1,000 repeated claims and 1,001 sources.",
+    "Run final-code broad regression and catalog cost checks. The current broad and scale runs started before this codec change.",
+    "Complete independent automatic matching evaluation, backfill and rollout."
+  ],
+  "productionWrites": false,
+  "automaticPolicyActivated": false
+}

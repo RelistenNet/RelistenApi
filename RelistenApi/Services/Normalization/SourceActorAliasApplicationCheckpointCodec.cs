@@ -56,10 +56,19 @@ internal static class SourceActorAliasApplicationCheckpointCodec
 
     internal static SourceActorAliasPersonStage ReadStage(string json)
     {
-        var stored = Read<StoredStage>(json, "stage");
+        var stored = Read<StoredStage>(json, "stage", out var typedEnvelopeJson);
         var decoder = new Decoder(stored);
         var stage = decoder.Decode();
-        if (!Same(stored, new Encoder().Encode(stage)))
+
+        // Read already bounded this typed envelope. Raw transport JSON can differ through
+        // supported optional nulls or JSONB whitespace, so compare its typed Value instead.
+        using var document = JsonDocument.Parse(typedEnvelopeJson);
+        if (
+            !JsonElement.DeepEquals(
+                document.RootElement.GetProperty("Value"),
+                JsonSerializer.SerializeToElement(new Encoder().Encode(stage))
+            )
+        )
         {
             throw new JsonException(
                 "Source alias checkpoint has unused, hidden or noncanonical local proof blocks."
@@ -112,7 +121,9 @@ internal static class SourceActorAliasApplicationCheckpointCodec
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    private static T Read<T>(string json, string kind)
+    private static T Read<T>(string json, string kind) => Read<T>(json, kind, out _);
+
+    private static T Read<T>(string json, string kind, out string typedEnvelopeJson)
     {
         var envelope =
             JsonSerializer.Deserialize<Envelope<T>>(json, ReadOptions)
@@ -122,7 +133,7 @@ internal static class SourceActorAliasApplicationCheckpointCodec
             throw new JsonException("Unsupported source alias checkpoint version or kind.");
         }
         // JSONB transport whitespace is not part of the canonical encoded byte budget.
-        Write(kind, envelope.Value);
+        typedEnvelopeJson = Write(kind, envelope.Value);
         return envelope.Value;
     }
 

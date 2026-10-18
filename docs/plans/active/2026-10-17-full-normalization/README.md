@@ -81,6 +81,14 @@ now share component acquisition within each transaction, with 408 distinct
 public-contract and small-scale cases passing. Full-size lifecycles and final-code
 full-suite verification remain required; no publication-throughput claim is established.
 
+Saved source stages now reuse their bounded typed serialization during recovery,
+while retaining independent proof reconstruction and all validation. The
+[stage-read verification](../../../research/2026-10-17-full-normalization/scale/evidence/source-stage-typed-json-v1.json)
+records 110 distinct passing application and small-lifecycle cases. Complete
+outputs match the preceding codec on three retained synthetic stages in both run
+orders, with lower managed allocations per read. Elapsed observations are mixed;
+full-size and final-code broad regression verification remain open.
+
 Source matching now requires its own evaluated policy capability, tied to exact
 producer and comparison versions. It cannot reuse credit evaluation to accept
 aliases or create identities. All 106 focused policy and 160 people regression

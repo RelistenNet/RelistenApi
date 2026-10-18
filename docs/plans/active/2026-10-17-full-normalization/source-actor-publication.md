@@ -219,6 +219,21 @@ or observations. Overflow refuses rather than truncates; stage and conservative
 outcome sizes are checked before admission, with final receipt checks inside the
 publication transaction.
 
+Reading a saved stage reuses the complete typed serialization already produced
+for its byte-limit check. The reader compares that serialization's value against
+an independently reconstructed stage, preserving hidden and unused proof
+rejection. It does not compare raw transport JSON: supported optional nulls and
+JSONB whitespace can differ without changing the typed evidence. The local JSON
+document is disposed before return. Nothing is cached between reads.
+
+The [stage-read verification](../../../research/2026-10-17-full-normalization/scale/evidence/source-stage-typed-json-v1.json)
+records 110 distinct passing application and small-lifecycle cases. Three new
+compatibility cases also pass against the preceding codec. Complete decoded and
+re-encoded outputs match on three retained synthetic stages in both run orders.
+Managed allocations per read decrease by approximately 7–14 MB; elapsed timings
+are mixed. These measurements establish neither peak memory nor whole-application
+throughput. Full-size lifecycles and final-code broad regression remain required.
+
 Local verification covers the public lifecycle and nonempty upgrade. The
 [capacity evidence](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-publication-capacity-baseline-v1.json)
 retains the separate large-input baseline runs. The [checkpoint follow-up](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-checkpoint-v2.json)
