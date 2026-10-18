@@ -42,7 +42,8 @@ internal sealed class ShadowCatalogInputs
         IReadOnlyList<IShadowCatalogAdapter> adapters,
         string? extractionsPath,
         CancellationToken ct,
-        bool providerInputsOnly = false
+        ShadowCatalogProcessingScope processingScope =
+            ShadowCatalogProcessingScope.AllApplicableInputs
     )
     {
         await foreach (var record in ReadRecordsAsync(ct, retainFrames: true))
@@ -60,7 +61,7 @@ internal sealed class ShadowCatalogInputs
 
             foreach (var adapter in adapters)
             {
-                if (!providerInputsOnly || kind == "provider_input")
+                if (processingScope.Includes(kind))
                 {
                     foreach (var domain in adapter.DomainsFor(kind))
                     {

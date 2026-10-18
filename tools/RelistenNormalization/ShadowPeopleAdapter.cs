@@ -37,13 +37,22 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
     /// <summary>Load optional pinned extraction, ranking and accepted-person candidate inputs.</summary>
     /// <param name="identityModelPath">Optional &lt;models-path&gt;#sha256=&lt;digest&gt; of the trainer's portable model. Scores provide ranking, never acceptance authority.</param>
     /// <param name="acceptedCandidatesPath">Optional &lt;snapshots-path&gt;#sha256=&lt;digest&gt; of original public people candidate reads.</param>
+    /// <param name="sourceObservationsOnly">Project shared typed source facts without preparing or invoking matching. Optional identity inputs are rejected.</param>
     public ShadowPeopleAdapter(
         string? lunaOutputDirectory,
         string? expectedExtractionSha256,
         string? identityModelPath = null,
-        string? acceptedCandidatesPath = null
+        string? acceptedCandidatesPath = null,
+        bool sourceObservationsOnly = false
     )
     {
+        SourceObservationsOnly = sourceObservationsOnly;
+        if (sourceObservationsOnly && (identityModelPath != null || acceptedCandidatesPath != null))
+        {
+            throw new ArgumentException(
+                "Source observations do not consume identity model or candidate inputs."
+            );
+        }
         identityModel =
             identityModelPath == null ? null : new ShadowPeopleIdentityModel(identityModelPath);
         acceptedCandidates =
@@ -63,16 +72,23 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         luna = new(lunaOutputDirectory, expectedExtractionSha256);
     }
 
+    public bool SourceObservationsOnly { get; }
+
     public string Version =>
-        "shadow-people-v4/global-retrieval="
-        + PeopleActorProjection.Version
-        + "/"
-        + IdentityCandidateMatcher.PeopleActorFeaturesVersion
-        + (luna is null ? "" : "/luna:" + luna.Identity)
-        + "/model:"
-        + (identityModel?.Identity ?? "none")
-        + "/canonical:"
-        + (acceptedCandidates?.Identity ?? "none");
+        SourceObservationsOnly
+            ? "shadow-people-source-observations-v1/actor="
+                + PeopleActorProjection.Version
+                + (luna is null ? "" : "/luna:" + luna.Identity)
+                + "/matching:not_run"
+            : "shadow-people-v4/global-retrieval="
+                + PeopleActorProjection.Version
+                + "/"
+                + IdentityCandidateMatcher.PeopleActorFeaturesVersion
+                + (luna is null ? "" : "/luna:" + luna.Identity)
+                + "/model:"
+                + (identityModel?.Identity ?? "none")
+                + "/canonical:"
+                + (acceptedCandidates?.Identity ?? "none");
 
     public IReadOnlyList<string> DomainsFor(string inputKind) =>
         inputKind == "source_sample" ? Domains : [];
@@ -95,7 +111,9 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
             luna?.ObserveRaw(record);
             return;
         }
-        if (!record.TryGetProperty("resourceUuid", out _))
+        // Cached extraction authentication still observes raw rows above. This
+        // projection deliberately never builds the cross-source matching index.
+        if (SourceObservationsOnly || !record.TryGetProperty("resourceUuid", out _))
         {
             return;
         }
@@ -205,13 +223,7 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         var model = luna?.Resolve(extraction, input.Row);
         var modelActors = ModelActors(extraction, model).ToArray();
         var actors = LocalActors(extraction).Concat(modelActors).ToArray();
-        var extractionIdentity = ExtractionIdentity(extraction);
-        var comparisons = actors
-            .Select(actor => Relationships(actor, extractionIdentity))
-            .ToArray();
-        var relationships = comparisons.SelectMany(result => result.Links).ToArray();
         var people = actors.Select(actor => actor.Person).ToArray();
-        var canonicalDecisions = actors.Select(CanonicalDecision).ToArray();
         var credits = (extraction.CreditExtraction?.Credits ?? [])
             .Select(credit => new ShadowRecordingCredit(
                 ShadowCatalogIdentity.Key(
@@ -239,6 +251,25 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                 modelActors.Select(actor => actor.Person.EntityKey).ToArray(),
                 modelCredits.Select(credit => credit.EntityKey).ToArray()
             );
+        if (SourceObservationsOnly)
+        {
+            return SourceObservationResults(
+                input,
+                extraction,
+                actors,
+                people,
+                credits,
+                modelInterpretation,
+                model
+            );
+        }
+
+        var extractionIdentity = ExtractionIdentity(extraction);
+        var comparisons = actors
+            .Select(actor => Relationships(actor, extractionIdentity))
+            .ToArray();
+        var relationships = comparisons.SelectMany(result => result.Links).ToArray();
+        var canonicalDecisions = actors.Select(CanonicalDecision).ToArray();
         var personKeys = people
             .Select(person => person.EntityKey)
             .Concat(
@@ -270,8 +301,6 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
             .Distinct()
             .Order(StringComparer.Ordinal)
             .ToArray();
-        var creditIssues = extraction.CreditExtraction?.Unresolved ?? [];
-
         return
         [
             ShadowCatalogResult.For(
@@ -300,35 +329,92 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                     : null,
                 personKeys
             ),
+            CreditResult(input, extraction, credits, modelInterpretation, model, personKeys),
+        ];
+    }
+
+    private ShadowCatalogResult[] SourceObservationResults(
+        ShadowCatalogInput input,
+        NormalizationBatchExtraction extraction,
+        ActorAccount[] actors,
+        ShadowPerson[] people,
+        ShadowRecordingCredit[] credits,
+        ShadowLunaCreditInterpretation? modelInterpretation,
+        ShadowLunaCreditMatch? model
+    )
+    {
+        var keys = people
+            .Select(person => person.EntityKey)
+            .Concat(
+                actors
+                    .SelectMany(actor => actor.Match.Names)
+                    .Select(name =>
+                        ShadowCatalogIdentity.Key(
+                            "person_name",
+                            NormalizedPeopleService.NameKey(name.Wording)
+                        )
+                    )
+            )
+            .Distinct()
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        return
+        [
             ShadowCatalogResult.For(
                 input,
-                "credits",
-                credits.Length > 0 ? "proposed" : "unresolved",
+                "people",
+                people.Length > 0 ? "proposed" : "unresolved",
                 Version,
-                new ShadowCreditsProposal(
-                    credits,
-                    creditIssues,
-                    (extraction.CreditExtraction?.Credits ?? [])
-                        .Where(credit => !HasDisplayName(credit.Name))
-                        .ToArray(),
-                    modelInterpretation
-                ),
+                new ShadowSourcePeopleObservationProposal(people, modelInterpretation),
                 new
                 {
                     OriginalInputs = extraction.Inputs,
-                    extraction.CreditExtraction,
+                    extraction.SourceActorAliases,
+                    CreditActors = extraction.CreditExtraction?.Credits,
                     Model = ModelEvidence(model),
                 },
-                credits.Length == 0 ? "no_named_role_claims" : null,
-                credits
-                    .Select(credit => credit.EntityKey)
-                    .Concat(personKeys)
-                    .Distinct()
-                    .Order(StringComparer.Ordinal)
-                    .ToArray()
+                people.Length == 0 ? "no_named_actor_claims" : null,
+                keys
             ),
+            CreditResult(input, extraction, credits, modelInterpretation, model, keys),
         ];
     }
+
+    private ShadowCatalogResult CreditResult(
+        ShadowCatalogInput input,
+        NormalizationBatchExtraction extraction,
+        ShadowRecordingCredit[] credits,
+        ShadowLunaCreditInterpretation? modelInterpretation,
+        ShadowLunaCreditMatch? model,
+        IReadOnlyList<string> personKeys
+    ) =>
+        ShadowCatalogResult.For(
+            input,
+            "credits",
+            credits.Length > 0 ? "proposed" : "unresolved",
+            Version,
+            new ShadowCreditsProposal(
+                credits,
+                extraction.CreditExtraction?.Unresolved ?? [],
+                (extraction.CreditExtraction?.Credits ?? [])
+                    .Where(credit => !HasDisplayName(credit.Name))
+                    .ToArray(),
+                modelInterpretation
+            ),
+            new
+            {
+                OriginalInputs = extraction.Inputs,
+                extraction.CreditExtraction,
+                Model = ModelEvidence(model),
+            },
+            credits.Length == 0 ? "no_named_role_claims" : null,
+            credits
+                .Select(credit => credit.EntityKey)
+                .Concat(personKeys)
+                .Distinct()
+                .Order(StringComparer.Ordinal)
+                .ToArray()
+        );
 
     private static IEnumerable<ActorAccount> LocalActors(NormalizationBatchExtraction extraction)
     {
@@ -652,3 +738,19 @@ public sealed record ShadowCreditsProposal(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         ShadowLunaCreditInterpretation? ModelInterpretation = null
 );
+
+/// <summary>
+/// Source observations share actor and credit extraction with the full matcher.
+/// Matching was not run; absent comparison arrays never certify an empty pool.
+/// </summary>
+public sealed record ShadowSourcePeopleObservationProposal(
+    IReadOnlyList<ShadowPerson> People,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        ShadowLunaCreditInterpretation? ModelInterpretation = null
+)
+{
+    public string ProcessingScope => "source_actor_observations";
+    public string MatchingState => "not_run";
+    public string MatchingReason => "source_observation_projection";
+    public bool AutomaticAcceptanceAuthorized => false;
+}

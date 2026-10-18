@@ -103,3 +103,30 @@ public static class ShadowCatalogIdentity
         return domain + ":" + Convert.ToHexStringLower(hash.AsSpan(0, 16));
     }
 }
+
+/// <summary>Outcome scope is distinct from context observation and snapshot provenance.</summary>
+internal enum ShadowCatalogProcessingScope
+{
+    AllApplicableInputs,
+    ProviderInputsOnly,
+    SourceObservationsOnly,
+}
+
+internal static class ShadowCatalogProcessingScopes
+{
+    internal static bool Includes(this ShadowCatalogProcessingScope scope, string kind) =>
+        scope switch
+        {
+            ShadowCatalogProcessingScope.ProviderInputsOnly => kind == "provider_input",
+            ShadowCatalogProcessingScope.SourceObservationsOnly => kind == "source_sample",
+            _ => true,
+        };
+
+    internal static string ContractName(this ShadowCatalogProcessingScope scope) =>
+        scope switch
+        {
+            ShadowCatalogProcessingScope.ProviderInputsOnly => "provider_inputs_only",
+            ShadowCatalogProcessingScope.SourceObservationsOnly => "source_actor_observations",
+            _ => "all_applicable_inputs",
+        };
+}

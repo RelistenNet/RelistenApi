@@ -112,6 +112,115 @@ public sealed partial class TestShadowCatalogBatch
         playback.GetProperty("showUuid").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
+    [Test]
+    public async Task SourceObservationScopeKeepsSourceHomesAndCreditFactsWhileFullModeKeepsPlayback()
+    {
+        var fixture = await LocalRows();
+        var rows = await File.ReadAllLinesAsync(fixture.Snapshot);
+        await File.WriteAllLinesAsync(fixture.Snapshot, new[]
+            {
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        kind = "snapshot",
+                        read_only = "on",
+                        in_recovery = true,
+                        snapshot = "synthetic-source-scope",
+                    }
+                ),
+            }.Concat(rows).Append(JsonSerializer.Serialize(new { kind = "snapshot_complete", shard_rows = 2 })));
+        var observationAdapter = new ShadowPeopleAdapter(null, null, sourceObservationsOnly: true);
+        var scoped = new ShadowCatalogBatch([observationAdapter, new ShadowPerformanceAdapter()]);
+        await scoped.RunInlineAsync(fixture.Snapshot, fixture.Output, sourceObservationsOnly: true);
+        var observed = ReadResults(fixture.Output);
+        observed
+            .Should()
+            .HaveCount(3)
+            .And.OnlyContain(result => Text(result, "inputKind") == "source_sample");
+        observed
+            .Single(result => Text(result, "domain") == "people")
+            .GetProperty("proposal")
+            .GetProperty("matchingState")
+            .GetString()
+            .Should()
+            .Be("not_run");
+        var credits = observed
+            .Single(result => Text(result, "domain") == "credits")
+            .GetProperty("proposal")
+            .GetProperty("credits");
+        credits
+            .EnumerateArray()
+            .Single()
+            .GetProperty("sourceUuid")
+            .GetGuid()
+            .Should()
+            .Be(fixture.SourceUuid);
+        var fullOutput = Path.Combine(directory, "full-matching-output");
+        await new ShadowCatalogBatch([
+            new ShadowPeopleAdapter(),
+            new ShadowPerformanceAdapter(),
+        ]).RunInlineAsync(fixture.Snapshot, fullOutput);
+        var full = ReadResults(fullOutput);
+        var observedHome = observed
+            .Single(result => Text(result, "domain") == "performances")
+            .GetProperty("proposal");
+        var originalHome = full.Single(result =>
+                Text(result, "domain") == "performances"
+                && result.GetProperty("inputUuid").GetGuid() == fixture.SourceUuid
+            )
+            .GetProperty("proposal");
+        observedHome.GetRawText().Should().Be(originalHome.GetRawText());
+        var playback = full.Single(result => Text(result, "domain") == "file_contents")
+            .GetProperty("proposal")
+            .GetProperty("playback");
+        playback.GetProperty("mp3Url").GetString().Should().Be(fixture.Url);
+        playback.GetProperty("sourceUuid").GetGuid().Should().Be(fixture.SourceUuid);
+        playback.GetProperty("showUuid").GetGuid().Should().Be(fixture.ShowUuid);
+        using var manifest = JsonDocument.Parse(
+            await File.ReadAllTextAsync(Path.Combine(fixture.Output, "manifest.json"))
+        );
+        manifest
+            .RootElement.GetProperty("population")
+            .GetProperty("processingScope")
+            .GetString()
+            .Should()
+            .Be("source_actor_observations");
+        manifest
+            .RootElement.GetProperty("population")
+            .GetProperty("expectedOutcomes")
+            .EnumerateObject()
+            .Sum(value => value.Value.GetInt64())
+            .Should()
+            .Be(3);
+        await scoped.RunInlineAsync(
+            fixture.Snapshot,
+            fixture.Output,
+            resume: true,
+            sourceObservationsOnly: true
+        );
+        ReadResults(fixture.Output).Should().HaveCount(3);
+        var wrongScope = () =>
+            new ShadowCatalogBatch([
+                new ShadowPeopleAdapter(),
+                new ShadowPerformanceAdapter(),
+            ]).RunInlineAsync(fixture.Snapshot, fixture.Output, resume: true);
+        await wrongScope.Should().ThrowAsync<InvalidDataException>();
+    }
+
+    [Test]
+    public async Task SourceObservationScopeRejectsFullMatchingAdapterBeforeStartingARun()
+    {
+        var fixture = await LocalRows();
+        var run = () =>
+            new ShadowCatalogBatch([new ShadowPeopleAdapter()]).RunInlineAsync(
+                fixture.Snapshot,
+                fixture.Output,
+                sourceObservationsOnly: true
+            );
+        await run.Should().ThrowAsync<ArgumentException>();
+        Directory.Exists(fixture.Output).Should().BeFalse();
+    }
+
     private async Task<LocalRowFiles> LocalRows(bool conflictingFileSource = false)
     {
         var artistUuid = Guid.NewGuid();

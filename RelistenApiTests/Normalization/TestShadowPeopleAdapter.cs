@@ -497,6 +497,86 @@ public sealed class TestShadowPeopleAdapter
         }
     }
 
+    [Test]
+    public void SourceObservationsShareTypedActorsAndCreditsWithoutPreparingOrEmittingMatching()
+    {
+        var first = Input(
+            taper: "Alice Vale (alice@example.test)",
+            description: "The Band:\nAndy Moresi aka Hot Dog - Keyboard/Vocals"
+        );
+        var second = Input(taper: "Alice Vale (alice@example.test)");
+        var full = Observing(first, second);
+        var complete = full.Process(first).ToArray();
+        People(complete).Relationships.Should().NotBeEmpty();
+        var observations = new ShadowPeopleAdapter(null, null, sourceObservationsOnly: true);
+
+        // A global-index preparation attempt would deserialize and reject this
+        // sentinel. Observation mode does not prepare a candidate pool at all.
+        var unsupportedIndexRecord = JsonSerializer.SerializeToElement(
+            new { kind = "source_sample", resourceUuid = "not-an-extraction" }
+        );
+        var observe = () => observations.Observe(unsupportedIndexRecord);
+        observe.Should().NotThrow();
+        Observe(observations, first, second);
+        var results = observations.Process(first).ToArray();
+        var proposal = results
+            .Single(result => result.Domain == "people")
+            .Proposal.Should()
+            .BeOfType<ShadowSourcePeopleObservationProposal>()
+            .Which;
+        proposal.People.Should().BeEquivalentTo(People(complete).People);
+        proposal
+            .People.Should()
+            .Contain(person => person.Name == "Andy Moresi" && person.Aliases.Contains("Hot Dog"));
+        proposal.MatchingState.Should().Be("not_run");
+        proposal.AutomaticAcceptanceAuthorized.Should().BeFalse();
+        Credits(results).Should().BeEquivalentTo(Credits(complete));
+        var serialized = JsonSerializer.SerializeToElement(proposal, Json);
+        foreach (
+            var matchingField in new[]
+            {
+                "relationships",
+                "relationshipCoverage",
+                "identityDecisions",
+                "canonicalIdentityDecisions",
+                "globalIndexIncludesSource",
+            }
+        )
+        {
+            serialized.TryGetProperty(matchingField, out _).Should().BeFalse();
+        }
+        var fullEvidence = JsonSerializer.SerializeToElement(
+            complete.Single(result => result.Domain == "people").Evidence,
+            Json
+        );
+        var observedEvidence = JsonSerializer.SerializeToElement(
+            results.Single(result => result.Domain == "people").Evidence,
+            Json
+        );
+        observedEvidence.GetRawText().Should().Be(fullEvidence.GetRawText());
+        results.Should().OnlyContain(result => result.Method == observations.Version);
+        observations.Version.Should().NotBe(full.Version).And.Contain("source-observations");
+        results
+            .Single(result => result.Domain == "people")
+            .EntityKeys.Should()
+            .NotContain(People(full.Process(second)).People.Single().EntityKey);
+    }
+
+    [TestCase(true)]
+    [TestCase(false)]
+    public void SourceObservationsRejectUnusedMatchingInputsBeforeOpeningThem(bool model)
+    {
+        var construct = () =>
+            new ShadowPeopleAdapter(
+                null,
+                null,
+                identityModelPath: model ? "unavailable-model" : null,
+                acceptedCandidatesPath: model ? null : "unavailable-candidates",
+                sourceObservationsOnly: true
+            );
+        construct.Should().Throw<ArgumentException>().WithMessage("Source observations*");
+    }
+
     private static void Observe(ShadowPeopleAdapter adapter, params ShadowCatalogInput[] inputs)
     {
         foreach (var input in inputs)

@@ -63,7 +63,9 @@ Overlay credit evidence links open `/api/credit` on this directory. That endpoin
 
 ## Refresh source credits and aliases into a new generation
 
-Use `refresh-sources` after a complete source-only extraction with the revised grammar. Include the retained model-credit results in that extraction; a parser-only result would remove model credits absent from its complete proposal. Seal all context attachments before starting. The command takes a consistent SQLite backup of the previous directory and writes a separate database:
+Use `refresh-sources` after a complete source-only extraction with the revised grammar. Produce that extraction with the [source-observation command](source-observations.md). It shares actor, credit and alias extraction with full matching and explicitly records that identity comparison was not run. Include retained model-credit results; a parser-only result would remove model credits absent from its complete proposal.
+
+Seal all context attachments before starting. The command takes a consistent SQLite backup of the previous directory and writes a separate database:
 
 ```sh
 python3 tools/RelistenNormalization/people_directory.py refresh-sources \

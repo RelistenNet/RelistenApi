@@ -53,15 +53,38 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
     /// Extracts each row locally from one snapshot or a completed capture-shard selection.
     /// The run freezes that selection before indexing. Resume verifies its saved files;
     /// additional shards in a growing capture require a new output directory.
+    /// Source observation scope emits only source rows, retains the same extraction
+    /// policy, and requires the observation-only people adapter. Its input identity
+    /// cannot resume a full-matching run or silently change that run's scope.
     /// </summary>
     public async Task RunInlineAsync(
         string snapshotOrCaptureManifestPath,
         string outputDirectory,
         bool resume = false,
         string? providerInputsPath = null,
-        CancellationToken ct = default
+        CancellationToken ct = default,
+        bool sourceObservationsOnly = false
     )
     {
+        if (
+            sourceObservationsOnly
+            && (
+                !adapters.OfType<ShadowPeopleAdapter>().Any()
+                || adapters
+                    .OfType<ShadowPeopleAdapter>()
+                    .Any(adapter => !adapter.SourceObservationsOnly)
+            )
+        )
+        {
+            throw new ArgumentException(
+                "Source observation scope requires the observation-only people adapter."
+            );
+        }
+        if (sourceObservationsOnly && providerInputsPath != null)
+        {
+            throw new ArgumentException("Source observations do not consume provider inputs.");
+        }
+
         var capture = await ShadowCatalogCapture.OpenAsync(
             snapshotOrCaptureManifestPath,
             outputDirectory,
@@ -73,10 +96,13 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             new(capture),
             null,
             outputDirectory,
-            "inline/" + capture.Identity,
+            (sourceObservationsOnly ? "source-observations-inline/" : "inline/") + capture.Identity,
             resume,
             capture,
-            ct
+            ct,
+            sourceObservationsOnly
+                ? ShadowCatalogProcessingScope.SourceObservationsOnly
+                : ShadowCatalogProcessingScope.AllApplicableInputs
         );
     }
 
@@ -120,6 +146,8 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             null,
             ct,
             providerInputsOnly
+                ? ShadowCatalogProcessingScope.ProviderInputsOnly
+                : ShadowCatalogProcessingScope.AllApplicableInputs
         );
     }
 
@@ -131,7 +159,8 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         bool resume,
         ShadowCatalogCapture? capture,
         CancellationToken ct,
-        bool providerInputsOnly = false
+        ShadowCatalogProcessingScope processingScope =
+            ShadowCatalogProcessingScope.AllApplicableInputs
     )
     {
         var methods = adapters.ToDictionary(
@@ -168,10 +197,11 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
                 snapshotPaths = inputs.SnapshotPaths,
                 extractionsPath,
                 capture = capture?.Descriptor,
+                processingScope = processingScope.ContractName(),
             },
             CancellationToken.None
         );
-        await inputs.ObserveAsync(adapters, extractionsPath, ct, providerInputsOnly);
+        await inputs.ObserveAsync(adapters, extractionsPath, ct, processingScope);
         var population = new
         {
             snapshotPath = inputs.SnapshotPaths.Count == 1
@@ -182,7 +212,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             providerInputsPath = inputs.ProviderInputsPath,
             capture = capture?.Descriptor,
             extractionMode = extractionsPath == null ? "inline" : "external",
-            processingScope = providerInputsOnly ? "provider_inputs_only" : "all_applicable_inputs",
+            processingScope = processingScope.ContractName(),
             inputKinds = inputs.InputKinds,
             expectedOutcomes = inputs.ExpectedOutcomes,
             census = inputs.Population,
@@ -203,7 +233,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
             outputDirectory,
             population,
             ct,
-            providerInputsOnly
+            processingScope
         );
     }
 
@@ -214,7 +244,7 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
         string outputDirectory,
         object population,
         CancellationToken ct,
-        bool providerInputsOnly
+        ShadowCatalogProcessingScope processingScope
     )
     {
         long line = 0;
@@ -231,16 +261,13 @@ public sealed class ShadowCatalogBatch(IReadOnlyList<IShadowCatalogAdapter> adap
                     continue;
                 }
 
-                if (
-                    !providerInputsOnly
-                    || row.Record.GetProperty("kind").GetString() == "provider_input"
-                )
+                if (processingScope.Includes(row.Record.GetProperty("kind").GetString()!))
                 {
                     await run.WriteInputAsync(ProcessAdapters(inputs, row));
                 }
 
                 // Checkpoints address the original stream, including context rows. Skipping
-                // their output must not shift the provider boundaries used by a later resume.
+                // their output must not shift the input boundaries used by a later resume.
                 completedLine = line;
                 if (line % 2000 == 0)
                 {

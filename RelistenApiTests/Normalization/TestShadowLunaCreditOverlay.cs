@@ -359,6 +359,109 @@ public sealed class TestShadowLunaCreditOverlay
         unbound.Should().Throw<ArgumentException>();
     }
 
+    [Test]
+    public void Source_observations_keep_exact_cached_model_claims_and_basis_from_full_mode()
+    {
+        var input = Input(
+            "Alice Vale (alice@example.test)",
+            "The Band:\nPat Smith aka Night Owl - keyboards"
+        );
+        var packet = Packet(
+            new ModelCase(input, ValidatedCredit(input, "Alice Vale", "Alice Vale"))
+        );
+        var full = Observe(new ShadowPeopleAdapter(packet.Directory, packet.InputHash), input)
+            .Process(input)
+            .ToArray();
+        var observed = Observe(
+                new ShadowPeopleAdapter(
+                    packet.Directory,
+                    packet.InputHash,
+                    sourceObservationsOnly: true
+                ),
+                input
+            )
+            .Process(input)
+            .ToArray();
+        var people = observed
+            .Single(result => result.Domain == "people")
+            .Proposal.Should()
+            .BeOfType<ShadowSourcePeopleObservationProposal>()
+            .Which;
+        people.People.Should().BeEquivalentTo(People(full).People);
+        Credits(observed).Should().BeEquivalentTo(Credits(full));
+        people.ModelInterpretation.Should().BeEquivalentTo(People(full).ModelInterpretation);
+        people.MatchingState.Should().Be("not_run");
+        foreach (var domain in new[] { "people", "credits" })
+        {
+            JsonSerializer
+                .Serialize(observed.Single(result => result.Domain == domain).Evidence, Json)
+                .Should()
+                .Be(
+                    JsonSerializer.Serialize(
+                        full.Single(result => result.Domain == domain).Evidence,
+                        Json
+                    )
+                );
+        }
+        Credits(observed)
+            .Credits.Should()
+            .ContainSingle(credit => credit.InterpretationBasis == "retained_luna_extraction");
+    }
+
+    [TestCase("taper")]
+    [TestCase("transferrer")]
+    [TestCase("description")]
+    [TestCase("source")]
+    [TestCase("lineage")]
+    [TestCase("taper_notes")]
+    public void Source_observations_authenticate_each_original_field_before_reusing_cached_model(
+        string field
+    )
+    {
+        var selected = Input("Alice Vale");
+        var packet = Packet(
+            new ModelCase(selected, ValidatedCredit(selected, "Alice Vale", "Alice Vale"))
+        );
+        var fields = new Dictionary<string, string?>(Extraction(selected).Inputs)
+        {
+            [field] = "Changed raw field",
+        };
+        var record = JsonNode.Parse(selected.Record.GetRawText())!;
+        record["row"]![field] = fields[field];
+        var changed = selected with
+        {
+            Record = JsonSerializer.SerializeToElement(record, Json),
+            Extraction = JsonSerializer.SerializeToElement(
+                Extraction(selected) with
+                {
+                    Inputs = fields,
+                    CreditExtraction = new RecordingCreditExtractor().Extract(fields),
+                    SourceActorAliases = new SourceActorAliasExtractor().Extract(fields),
+                },
+                Json
+            ),
+        };
+        var result = Observe(
+                new ShadowPeopleAdapter(
+                    packet.Directory,
+                    packet.InputHash,
+                    sourceObservationsOnly: true
+                ),
+                changed
+            )
+            .Process(changed)
+            .ToArray();
+        Credits(result).ModelInterpretation!.State.Should().Be("input_mismatch");
+        Credits(result).ModelInterpretation!.CreditEntityKeys.Should().BeEmpty();
+        Credits(result).Credits.Should().OnlyContain(credit => credit.InterpretationBasis == null);
+        (
+            (ShadowSourcePeopleObservationProposal)
+                result.Single(row => row.Domain == "people").Proposal!
+        )
+            .People.Should()
+            .OnlyContain(person => person.InterpretationBasis == null);
+    }
+
     private static ShadowPeopleAdapter Observe(
         ShadowPeopleAdapter adapter,
         params ShadowCatalogInput[] inputs
