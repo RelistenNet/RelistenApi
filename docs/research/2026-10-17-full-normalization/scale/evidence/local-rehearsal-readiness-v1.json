@@ -1,0 +1,199 @@
+{
+  "version": "local-normalization-rehearsal-readiness-v1",
+  "sql": {
+    "path": "docs/research/2026-10-17-full-normalization/sql/local-rehearsal-readiness.sql",
+    "sha256": "d69d4c96551de2997375fa13318ac8c26d8ae470e7d2716391e3f2346aa9e5e8"
+  },
+  "host": "127.0.0.1:15432",
+  "read_only": true,
+  "production_access": false,
+  "database_mutations": 0,
+  "observations": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-local-rehearsal-readiness/jerry.json",
+      "bytes": 1746,
+      "sha256": "c36f140c08dd0c01dffdbae5643352c30399e4a6c21f8a7f1d7c923b60f1335e",
+      "summary": {
+        "shows": 607,
+        "artists": 268,
+        "sources": 701,
+        "database": "relisten_jerry_20261017",
+        "collections": [
+          {
+            "name": "Aadam Jacobs — local acceptance",
+            "slug": "aadam-selector-smoke",
+            "uuid": "59098706-c097-468d-b624-a9840e76da31",
+            "artists": 252,
+            "catalog_linked_recordings": 299
+          },
+          {
+            "name": "Jerry Garcia projects — local acceptance",
+            "slug": "jerry-projects-smoke",
+            "uuid": "b2fc4b22-b452-4da7-84a6-f8ef6db9096f",
+            "artists": 6,
+            "catalog_linked_recordings": 348
+          }
+        ],
+        "observed_at": "2026-10-18T02:04:46.305517+00:00",
+        "normalization_tables": [
+          "archive_artist_candidates",
+          "archive_artist_review",
+          "archive_item_intake",
+          "archive_item_observations",
+          "archive_item_resolutions",
+          "collection_artist_memberships",
+          "collection_recording_memberships",
+          "collection_selectors"
+        ],
+        "transaction_read_only": "on",
+        "largest_recording_artists": [
+          {
+            "name": "Jerry Garcia Band",
+            "slug": "jerry-garcia-band",
+            "uuid": "28fd1e4e-a52e-0a91-1d51-629ab04c2715",
+            "sources": 265
+          },
+          {
+            "name": "Legion of Mary",
+            "slug": "legion-of-mary",
+            "uuid": "a7cd1e0d-4a24-16ad-aa2c-00e7075929f1",
+            "sources": 39
+          },
+          {
+            "name": "Garcia/Saunders",
+            "slug": "garcia-saunders",
+            "uuid": "5018c6e6-333c-4a13-8d45-298ac56b2295",
+            "sources": 17
+          },
+          {
+            "name": "Grateful Dead",
+            "slug": "grateful-dead",
+            "uuid": "77a58ff9-2e01-c59c-b8eb-cff106049b72",
+            "sources": 16
+          },
+          {
+            "name": "Lotus",
+            "slug": "lotus",
+            "uuid": "7ae9efe1-e23b-714c-68fc-f7c3748b1f5d",
+            "sources": 14
+          },
+          {
+            "name": "Garcia/Kahn",
+            "slug": "garcia-kahn",
+            "uuid": "ffc6f61c-dd5d-83a2-a319-4a486ac0123c",
+            "sources": 11
+          },
+          {
+            "name": "Reconstruction",
+            "slug": "reconstruction",
+            "uuid": "9005bbe7-66fd-e468-ebf0-38185d1d2b7b",
+            "sources": 11
+          },
+          {
+            "name": "Guerilla Toss",
+            "slug": "guerilla-toss",
+            "uuid": "8a8eef5a-8438-4b27-8dad-f8ca896dba4f",
+            "sources": 8
+          }
+        ]
+      }
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-local-rehearsal-readiness/govt-mule.json",
+      "bytes": 1750,
+      "sha256": "d42256567defed922baddf9f150bbb6516f683d7a548f46e339efaecd6719423",
+      "summary": {
+        "shows": 325,
+        "artists": 6,
+        "sources": 413,
+        "database": "relisten_govt_mule_20261017",
+        "collections": [
+          {
+            "name": "HTTP smoke draft",
+            "slug": "zz-http-20261017-draft",
+            "uuid": "e7f32223-1fc6-520a-9776-29a1db57f8c4",
+            "artists": 1,
+            "catalog_linked_recordings": 1
+          },
+          {
+            "name": "HTTP smoke empty",
+            "slug": "zz-http-20261017-empty",
+            "uuid": "4113bf93-df7d-5ec2-a5e9-febe8b233e83",
+            "artists": 0,
+            "catalog_linked_recordings": 0
+          },
+          {
+            "name": "HTTP smoke selected",
+            "slug": "zz-http-20261017-selected",
+            "uuid": "b67c3dda-6ce1-5d22-b127-19255b6c4d9d",
+            "artists": 2,
+            "catalog_linked_recordings": 4
+          },
+          {
+            "name": "HTTP smoke wide",
+            "slug": "zz-http-20261017-wide",
+            "uuid": "12577533-6de0-5dd5-a5f3-e133fe067358",
+            "artists": 1,
+            "catalog_linked_recordings": 359
+          }
+        ],
+        "observed_at": "2026-10-18T02:04:46.369282+00:00",
+        "normalization_tables": [
+          "archive_artist_candidates",
+          "archive_artist_review",
+          "archive_item_intake",
+          "archive_item_observations",
+          "archive_item_resolutions",
+          "collection_artist_memberships",
+          "collection_recording_memberships",
+          "collection_selectors"
+        ],
+        "transaction_read_only": "on",
+        "largest_recording_artists": [
+          {
+            "name": "Gov't Mule",
+            "slug": "govt-mule",
+            "uuid": "2d1d7746-1e91-94e9-e86b-1cbb37a56a8a",
+            "sources": 359
+          },
+          {
+            "name": "Grateful Dead",
+            "slug": "grateful-dead",
+            "uuid": "77a58ff9-2e01-c59c-b8eb-cff106049b72",
+            "sources": 16
+          },
+          {
+            "name": "Lotus",
+            "slug": "lotus",
+            "uuid": "7ae9efe1-e23b-714c-68fc-f7c3748b1f5d",
+            "sources": 14
+          },
+          {
+            "name": "Guerilla Toss",
+            "slug": "guerilla-toss",
+            "uuid": "8a8eef5a-8438-4b27-8dad-f8ca896dba4f",
+            "sources": 8
+          },
+          {
+            "name": "Phish",
+            "slug": "phish",
+            "uuid": "ca53d281-0041-ae33-a050-c87702d93b0c",
+            "sources": 8
+          },
+          {
+            "name": "Trey Anastasio",
+            "slug": "trey",
+            "uuid": "eff4cb5f-9105-b909-7019-753f82e827e7",
+            "sources": 8
+          }
+        ]
+      }
+    }
+  ],
+  "limits": [
+    "These are existing local import/performance datasets, not a new production snapshot.",
+    "Collection counts come from catalog relationship and nonempty media-URL guards; no HTTP media or audio availability was tested.",
+    "The input/work/canonical normalization tables are absent. Clone the selected rehearsal before applying newer migrations and testing normalization.",
+    "No normalized identity, matching policy, provider request or API behavior is established by these counts."
+  ]
+}

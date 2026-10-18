@@ -242,5 +242,6 @@ The local focused run passes 145 public-service, evaluator, writer and
 reconciliation checks. It includes missing-show credit evidence, complete clearing,
 unknown-field preservation, interrupted creation and transactional rollback. The broader
 API/service run passes 2,007 tests with 24 existing tour-contract skips and zero
-failures. These fixtures use synthetic
+failures. The full merged API suite passes 2,247 tests with the same 24 existing
+skips and no failures. These fixtures use synthetic
 evaluated policies in disposable databases; no runtime policy is active.
