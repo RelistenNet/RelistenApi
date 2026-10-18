@@ -12,7 +12,10 @@ The [implementation plan](source-actor-aliases.md#progress-and-current-state)
 records executed grammar and cohort verification. Migration 53, typed canonical
 alias outcomes and current alias readers are integrated. The solution builds.
 All 81 focused storage, reader and candidate-selection checks pass, including
-a nonempty upgrade/backfill rehearsal. Broader post-fix verification is running.
+a nonempty upgrade/backfill rehearsal. The broader run passes 313 of 314
+checks; a historical-producer fixture correction is followed by 27 passing
+targeted checks. Migration 54 adds shared trusted-review read proofs, with all
+85 focused and 85 metadata regression checks passing.
 The resolver, source-review entrypoints, complete producer-scope map and accepted
 source publication lifecycle remain required.
 Existing credit/metadata processing, review and API reads supply the authority
@@ -205,13 +208,40 @@ protects a person's normalized-name claim across citations, sources and new
 UUIDs. Source assignment review cannot override that veto or retract an
 independently reviewed canonical alias.
 
+### Shared review proof (implemented in migration 54)
+
+`NormalizationReviewCommand.ReadSet` can retain the original input, dependency,
+artist, source-identifier, mapping-registry, imported-venue, candidate-universe,
+owner and source-UUID observations actually consumed by a trusted review. The
+[typed proof](../../../../RelistenApi/Models/Normalization/NormalizationReviewReadSet.cs)
+is optional. The domain service must authenticate its contents and completeness;
+Work checks the supplied observations atomically.
+
+Work freezes the command before its first wait. It locks the consumed catalog
+facts, candidate read/write scopes, input resources and one sorted union of
+owners before calling the domain writer. Observed targets and dependencies are
+read-only unless they are also actual command owners. Review does not create a
+Work configuration or enroll missing owners. A changed observation rejects the
+review before mutation. Callback failure or cancellation rolls back the decision
+and its proof together; an uncommitted operation can retry.
+
+A committed operation replays before taking fresh fact locks or calling the
+writer. The original proof remains immutable beside the command hash. An absent
+read set stays omitted from command serialization, preserving legacy hashes;
+existing receipt rows retain null proof. Apply migration 54 before this binary,
+including callers that still submit legacy reviews. On binary rollback, retain
+the column and receipts and stop callers that require fenced review behavior.
+This shared contract does not itself implement source-actor review.
+
 ## 4. Additive storage and canonical write outcomes
 
 Phase 2 source implements migration 53 (`AddSourceActorAliasAuthority`) and the
 internal `WriteAutomaticAliasAsync` canonical writer. The nonempty pre-53
-upgrade/backfill rehearsal and 81 focused checks pass. Broader post-fix service
-verification and query-cost measurements are running. There is no public managed
-support insertion or source-assignment service in this phase. Object-shaped
+upgrade/backfill rehearsal and 81 focused checks pass. The broader run passes
+313 of 314 checks; a historical-producer fixture correction is followed by 27
+passing targeted checks. Six warm synthetic SQL probes pass; full-service latency
+and production cost remain unmeasured. There is no public managed support
+insertion or source-assignment service in this phase. Object-shaped
 receipt JSON is not an evaluated-policy credential; the later accepted writer
 must authenticate the complete saved stage before using these records.
 

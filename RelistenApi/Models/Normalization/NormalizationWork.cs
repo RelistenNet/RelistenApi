@@ -97,6 +97,7 @@ public sealed record NormalizationPublicationResult(
 /// action semantics; this shared store owns idempotency, editorial revision and atomic commit.
 /// AdditionalSubjectUuids names pre-registered identity owners whose accepted meaning also changes.
 /// All named owners are locked before the domain callback and invalidated in the same transaction.
+/// ReadSet instead fences facts without mutating their owners or configuring Work dependencies.
 /// </summary>
 public sealed record NormalizationReviewCommand(
     Guid OperationUuid,
@@ -106,7 +107,9 @@ public sealed record NormalizationReviewCommand(
     JsonElement Payload,
     string Reason,
     string Operator,
-    IReadOnlyList<Guid>? AdditionalSubjectUuids = null
+    IReadOnlyList<Guid>? AdditionalSubjectUuids = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        NormalizationReviewReadSet? ReadSet = null
 );
 
 public sealed record NormalizationReviewResult(

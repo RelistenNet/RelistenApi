@@ -66,6 +66,10 @@ As of 2026-10-18:
   correcting that fixture to preserve absent alias data is followed by 27
   passing targeted checks. The broader and full suites have not been rerun
   after that correction.
+- [x] Add original read proofs to the shared trusted-review transaction. All 85
+  focused checks pass, including the nonempty 53-to-54 upgrade, stale reads,
+  read-only target owners, rollback and exact replay. All 85 metadata regression
+  checks also pass. Source-specific review remains the next phase.
 - [ ] Implement immutable source assignment decisions, qualified policy
   applicability and trusted source review.
 - [ ] Implement accepted support publication, complete source-scope replacement,

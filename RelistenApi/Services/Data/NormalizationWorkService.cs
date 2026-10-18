@@ -715,14 +715,29 @@ public sealed partial class NormalizationWorkService(DbService db)
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Reason);
         ArgumentException.ThrowIfNullOrWhiteSpace(command.Operator);
         var writeScopes = NormalizeCandidateKeys(candidateWriteScopes);
+        // Freeze all caller-owned collections before the first await and before hashing. A
+        // callback failure or cancellation rolls back domain writes and this audit proof together;
+        // the exact operation can retry. A committed replay returns before acquiring fact locks.
+        var readSet = NormalizeReviewReadSet(command.ReadSet);
+        var observations = ReviewOwnerObservations(readSet);
         var payload = command.Payload.Clone();
         var additionalSubjects = (command.AdditionalSubjectUuids ?? [])
             .Where(uuid => uuid != command.SubjectUuid)
             .Distinct()
             .Order()
             .ToArray();
-        command = command with { Payload = payload, AdditionalSubjectUuids = additionalSubjects };
+        command = command with
+        {
+            Payload = payload,
+            AdditionalSubjectUuids = additionalSubjects,
+            ReadSet = readSet,
+        };
         var affectedSubjects = additionalSubjects.Append(command.SubjectUuid).ToArray();
+        var lockedSubjects = affectedSubjects
+            .Concat(observations.Select(value => value.SubjectUuid))
+            .Distinct()
+            .ToArray();
+        var readSetJson = readSet == null ? null : JsonSerializer.Serialize(readSet);
         var hash = Hash(JsonSerializer.SerializeToElement(command));
         return InTransaction(
             async (connection, transaction) =>
@@ -759,21 +774,21 @@ public sealed partial class NormalizationWorkService(DbService db)
                         true
                     );
                 }
-                await LockCandidateUniverses(
+                await LockReviewFactReadSet(
                     connection,
                     transaction,
-                    [],
+                    readSet,
                     writeScopes,
-                    initializeConsumed: false,
                     cancellationToken
                 );
-                var affectedOwners = await LockSubjects(
+                var lockedOwners = await LockSubjects(
                     connection,
                     transaction,
-                    affectedSubjects,
+                    lockedSubjects,
                     cancellationToken
                 );
-                var owner = affectedOwners.Single(subject => subject.Uuid == command.SubjectUuid);
+                RequireReviewOwnerObservations(observations, lockedOwners);
+                var owner = lockedOwners.Single(subject => subject.Uuid == command.SubjectUuid);
                 if (owner.EditorialRevision != command.ExpectedEditorialRevision)
                 {
                     throw new NormalizationConflictException(
@@ -786,8 +801,8 @@ public sealed partial class NormalizationWorkService(DbService db)
                 await connection.ExecuteAsync(
                     new CommandDefinition(
                         """
-                        INSERT INTO normalization.review_operations(uuid,subject_uuid,command_hash,additional_subject_uuids,action,payload,reason,operator_name,editorial_revision)
-                        VALUES(@OperationUuid,@SubjectUuid,@hash,@additionalSubjects,@Action,@payload::jsonb,@Reason,@Operator,@revision);
+                        INSERT INTO normalization.review_operations(uuid,subject_uuid,command_hash,additional_subject_uuids,action,payload,reason,operator_name,editorial_revision,read_set)
+                        VALUES(@OperationUuid,@SubjectUuid,@hash,@additionalSubjects,@Action,@payload::jsonb,@Reason,@Operator,@revision,@readSetJson::jsonb);
                         UPDATE normalization.work_subjects SET editorial_revision=editorial_revision+1,desired_generation=desired_generation+1,
                             updated_at=clock_timestamp() WHERE uuid=ANY(@affectedSubjects)
                         """,
@@ -801,6 +816,7 @@ public sealed partial class NormalizationWorkService(DbService db)
                             command.Reason,
                             command.Operator,
                             additionalSubjects,
+                            readSetJson,
                             affectedSubjects,
                             revision,
                         },

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using Dapper;
 using FluentAssertions;
@@ -12,8 +13,9 @@ using Relisten.Data;
 namespace RelistenApiTests.Services;
 
 /// <summary>
-/// Applies real 53 DDL to a nonempty 52 schema. Legacy rows are SQL migration fixtures,
-/// not claims of service publication, operator adjudication, or identity truth.
+/// Applies real 53 DDL to a nonempty 52 schema and adds 54 only at its review boundary.
+/// Legacy rows are SQL migration fixtures, not claims of prior service publication,
+/// operator adjudication, or identity truth. Public replay is verified by the final binary.
 /// </summary>
 [TestFixture, NonParallelizable, Category("LocalIngestion")]
 public sealed class TestNormalizationSourceActorAliasUpgrade
@@ -113,6 +115,139 @@ public sealed class TestNormalizationSourceActorAliasUpgrade
         {
             // DbService uses process-wide connection settings. Restore them before cleanup
             // so later fixtures cannot accidentally target this exclusively owned database.
+            DbService.ConnStr = previousWrite;
+            DbService.ReadOnlyConnStr = previousRead;
+            if (created)
+            {
+                await DropOwnedDatabase(database);
+            }
+        }
+    }
+
+    [Test]
+    public async Task Nonempty53ReviewReceiptsUpgradeTo54AndReplayWithoutNewEffects()
+    {
+        if (Environment.GetEnvironmentVariable("RELISTEN_LOCAL_INGESTION_TESTS") != "1")
+        {
+            Assert.Ignore("Run ./test-local.sh to include disposable local database coverage.");
+        }
+
+        var database = "relisten_alias_upgrade_" + Guid.NewGuid().ToString("N");
+        var previousWrite = DbService.ConnStr;
+        var previousRead = DbService.ReadOnlyConnStr;
+        var created = false;
+        try
+        {
+            // Reuse the fixed, actual pre-53 schema sequence. Never remove new columns or
+            // disable history guards to pretend that the final binary is an older schema.
+            await CreateSchema52(database);
+            created = true;
+            var environment = Host.CreateApplicationBuilder(
+                new HostApplicationBuilderSettings { EnvironmentName = Environments.Production }
+            ).Environment;
+            var db = new DbService(
+                $"postgresql://relisten:local_dev_password@127.0.0.1:15432/{database}",
+                null,
+                null,
+                environment,
+                NullLogger<DbService>.Instance
+            );
+            var work = new NormalizationWorkService(db);
+            var evidence = new NormalizationEvidenceService(db);
+            var people = new NormalizedPeopleService(db, work);
+            var seed = await SeedHistoricalAliases(db, work, evidence);
+            await ApplyActual53(db);
+            await RequireReviewSchemaVersion(db, hasReadSet: false);
+
+            // This is a labeled SQL legacy migration fixture using the pinned old hash shape,
+            // not an assertion that this new binary ran a pre-54 public review implementation.
+            var legacy = await SeedLegacyReviewReceipt(db, work, seed);
+            var before = await ReadReviewUpgradeImage(db);
+            var legacyReceiptBefore = await ReadReceiptImage(db, legacy.Command.OperationUuid);
+            (await CountReviewReceipts(db)).Should().Be(1);
+
+            await ApplyActual54(db);
+
+            (await ReadReviewUpgradeImage(db))
+                .Should()
+                .BeEquivalentTo(
+                    before,
+                    "54 only adds nullable original proof; canonical history, owner clocks and old receipt hashes stay unchanged"
+                );
+            (await ReadReceiptProof(db, legacy.Command.OperationUuid)).Should().BeNull();
+            (await ReadReceiptHash(db, legacy.Command.OperationUuid))
+                .Should()
+                .Be(legacy.CommandHash);
+            await AssertLegacyPublicReplayWhileFactsAreLocked(
+                database,
+                db,
+                work,
+                people,
+                seed,
+                legacy
+            );
+            (await ReadReviewUpgradeImage(db)).Should().BeEquivalentTo(before);
+            (await ReadReceiptImage(db, legacy.Command.OperationUuid))
+                .Should()
+                .Be(legacyReceiptBefore);
+            (await CountReviewReceipts(db))
+                .Should()
+                .Be(
+                    1,
+                    "public replay must not append another decision or change its original audit proof"
+                );
+
+            var owner = (await work.GetSubjectAsync(seed.Owner))!;
+            var ticket = await Begin(work, seed);
+            var command = new NormalizationReviewCommand(
+                Guid.NewGuid(),
+                owner.SubjectUuid,
+                owner.EditorialRevision,
+                "accept",
+                JsonSerializer.SerializeToElement(new { fixture = "post54-proof" }),
+                "Migration fixture: retain a new one-off read proof",
+                "upgrade-fixture-operator",
+                ReadSet: new(
+                    Inputs: ticket.Inputs,
+                    OwnerObservations:
+                    [
+                        new(
+                            owner.SubjectUuid,
+                            owner.DesiredGeneration,
+                            owner.EditorialRevision,
+                            owner.PublishedWorkUuid
+                        ),
+                    ]
+                )
+            );
+            var calls = 0;
+            var applied = await work.ApplyReviewAsync(
+                command,
+                (_, _, _) =>
+                {
+                    calls++;
+                    return Task.CompletedTask;
+                }
+            );
+            applied.Replayed.Should().BeFalse();
+            calls.Should().Be(1);
+            (await CountReviewReceipts(db)).Should().Be(2);
+            var retained = JsonSerializer.Deserialize<NormalizationReviewReadSet>(
+                (await ReadReceiptProof(db, command.OperationUuid))!
+            )!;
+            retained.Should().BeEquivalentTo(command.ReadSet);
+            (await ReadLegacyImage(db))
+                .Should()
+                .Be(
+                    before.CanonicalImage,
+                    "a generic fenced review does not manufacture a new canonical alias mutation"
+                );
+            (await ReadReceiptImage(db, legacy.Command.OperationUuid))
+                .Should()
+                .Be(legacyReceiptBefore);
+        }
+        finally
+        {
             DbService.ConnStr = previousWrite;
             DbService.ReadOnlyConnStr = previousRead;
             if (created)
@@ -298,6 +433,250 @@ public sealed class TestNormalizationSourceActorAliasUpgrade
         });
     }
 
+    private static async Task ApplyActual54(DbService db)
+    {
+        await RequireReviewSchemaVersion(db, hasReadSet: false);
+        await db.WithWriteConnection(async connection =>
+        {
+            await using var transaction = await (
+                (NpgsqlConnection)connection
+            ).BeginTransactionAsync();
+            await connection.ExecuteAsync(
+                Migrations.AddNormalizationReviewReadSet.SchemaSql,
+                transaction: transaction,
+                commandTimeout: 120
+            );
+            await transaction.CommitAsync();
+        });
+        await RequireReviewSchemaVersion(db, hasReadSet: true);
+    }
+
+    private static async Task RequireReviewSchemaVersion(DbService db, bool hasReadSet)
+    {
+        var present = await db.WithWriteConnection(c =>
+            c.ExecuteScalarAsync<bool>(
+                """
+                SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='normalization'
+                    AND table_name='review_operations' AND column_name='read_set')
+                """
+            )
+        );
+        present.Should().Be(hasReadSet);
+    }
+
+    private static async Task<LegacyReview> SeedLegacyReviewReceipt(
+        DbService db,
+        NormalizationWorkService work,
+        LegacyAliases seed
+    )
+    {
+        var owner = (await work.GetSubjectAsync(seed.Owner))!;
+        var accepted = seed.Aliases[0];
+        var domain = new PersonMetadataDecision(
+            Guid.NewGuid(),
+            owner.SubjectUuid,
+            owner.EditorialRevision,
+            seed.PersonUuid,
+            await PersonRevision(db, seed.PersonUuid),
+            "retract",
+            "Legacy migration fixture: withdraw an accepted alias",
+            Alias: new(accepted.Uuid, seed.PersonUuid, accepted.Wording, accepted.Evidence),
+            ExpectedAssertionRevision: accepted.Revision
+        );
+        const string trustedOperator = "legacy-upgrade-fixture-operator";
+        var command = new NormalizationReviewCommand(
+            domain.OperationUuid,
+            domain.SubjectUuid,
+            domain.ExpectedEditorialRevision,
+            domain.Action,
+            JsonSerializer.SerializeToElement(domain),
+            domain.Reason,
+            trustedOperator,
+            AdditionalSubjectUuids: []
+        );
+        var legacyWire = new LegacyReviewWire(
+            command.OperationUuid,
+            command.SubjectUuid,
+            command.ExpectedEditorialRevision,
+            command.Action,
+            command.Payload,
+            command.Reason,
+            command.Operator,
+            []
+        );
+        var hash = LegacyCommandHash(legacyWire);
+        await db.WithWriteConnection(async connection =>
+        {
+            await using var transaction = await (
+                (NpgsqlConnection)connection
+            ).BeginTransactionAsync();
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO normalization.person_aliases_history SELECT *,@OperationUuid
+                    FROM normalization.person_aliases WHERE uuid=@alias;
+                UPDATE normalization.person_aliases SET state='superseded',basis='reviewed',revision=revision+1
+                    WHERE uuid=@alias;
+                UPDATE normalization.people SET revision=revision+1,updated_at=clock_timestamp() WHERE uuid=@person;
+                INSERT INTO normalization.review_operations(uuid,subject_uuid,command_hash,additional_subject_uuids,
+                    action,payload,reason,operator_name,editorial_revision)
+                VALUES(@OperationUuid,@SubjectUuid,@hash,ARRAY[]::uuid[],@Action,@payload::jsonb,@Reason,@Operator,@nextRevision);
+                UPDATE normalization.work_subjects SET editorial_revision=editorial_revision+1,
+                    desired_generation=desired_generation+1,updated_at=clock_timestamp() WHERE uuid=@SubjectUuid
+                """,
+                new
+                {
+                    domain.OperationUuid,
+                    domain.SubjectUuid,
+                    domain.Action,
+                    domain.Reason,
+                    command.Operator,
+                    alias = accepted.Uuid,
+                    person = seed.PersonUuid,
+                    hash,
+                    payload = command.Payload.GetRawText(),
+                    nextRevision = owner.EditorialRevision + 1,
+                },
+                transaction
+            );
+            await transaction.CommitAsync();
+        });
+        return new(domain, command, hash, trustedOperator);
+    }
+
+    private static async Task AssertLegacyPublicReplayWhileFactsAreLocked(
+        string database,
+        DbService db,
+        NormalizationWorkService work,
+        NormalizedPeopleService people,
+        LegacyAliases seed,
+        LegacyReview legacy
+    )
+    {
+        await using var blocker = CatalogConnection(database);
+        await blocker.OpenAsync();
+        await using var transaction = await blocker.BeginTransactionAsync();
+        await blocker.ExecuteAsync(
+            """
+            SELECT 1 FROM normalization.work_subjects WHERE uuid=@SubjectUuid FOR UPDATE;
+            SELECT 1 FROM normalization.input_resources
+                WHERE provider=@Provider AND resource_type=@ResourceType AND provider_key=@ProviderKey FOR UPDATE
+            """,
+            new
+            {
+                legacy.Command.SubjectUuid,
+                seed.Resource.Provider,
+                seed.Resource.ResourceType,
+                seed.Resource.ProviderKey,
+            },
+            transaction
+        );
+        var replay = await work.ApplyReviewAsync(
+                legacy.Command,
+                (_, _, _) =>
+                    throw new AssertionException(
+                        "A committed legacy operation must not invoke its callback."
+                    )
+            )
+            .WaitAsync(TimeSpan.FromSeconds(5));
+        replay.Replayed.Should().BeTrue();
+        replay.EditorialRevision.Should().Be(legacy.Command.ExpectedEditorialRevision + 1);
+        // Both CAS values now deliberately differ from the original command. This public
+        // metadata wrapper can only return success by honoring the immutable old receipt.
+        (
+            await people
+                .ApplyMetadataDecisionAsync(legacy.DomainCommand, legacy.TrustedOperator)
+                .WaitAsync(TimeSpan.FromSeconds(5))
+        )
+            .Replayed.Should()
+            .BeTrue();
+        (await ReadReceiptProof(db, legacy.Command.OperationUuid)).Should().BeNull();
+    }
+
+    private static async Task<ReviewUpgradeImage> ReadReviewUpgradeImage(DbService db) =>
+        new(
+            await ReadLegacyImage(db),
+            await db.WithWriteConnection(c =>
+                c.QuerySingleAsync<string>(
+                    """
+                    SELECT jsonb_build_object(
+                        'receipts',(SELECT jsonb_agg(to_jsonb(r)-'read_set' ORDER BY uuid)
+                            FROM normalization.review_operations r),
+                        'owners',(SELECT jsonb_agg(to_jsonb(s) ORDER BY uuid) FROM normalization.work_subjects s))::text
+                    """
+                )
+            )
+        );
+
+    private static Task<string> ReadReceiptImage(DbService db, Guid uuid) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                "SELECT (to_jsonb(r)-'read_set')::text FROM normalization.review_operations r WHERE uuid=@uuid",
+                new { uuid }
+            )
+        );
+
+    private static Task<string?> ReadReceiptProof(DbService db, Guid uuid) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleOrDefaultAsync<string>(
+                "SELECT read_set::text FROM normalization.review_operations WHERE uuid=@uuid",
+                new { uuid }
+            )
+        );
+
+    private static Task<string> ReadReceiptHash(DbService db, Guid uuid) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleAsync<string>(
+                "SELECT command_hash FROM normalization.review_operations WHERE uuid=@uuid",
+                new { uuid }
+            )
+        );
+
+    private static Task<int> CountReviewReceipts(DbService db) =>
+        db.WithWriteConnection(c =>
+            c.QuerySingleAsync<int>("SELECT count(*)::integer FROM normalization.review_operations")
+        );
+
+    // This is the pinned pre-54 canonical hashing contract, with a wire DTO that has no
+    // ReadSet member. Keeping it independent of the new command proves legacy hash replay.
+    private static string LegacyCommandHash(LegacyReviewWire command)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            WriteLegacyCanonical(writer, JsonSerializer.SerializeToElement(command));
+        }
+        return Convert.ToHexStringLower(SHA256.HashData(stream.ToArray()));
+    }
+
+    private static void WriteLegacyCanonical(Utf8JsonWriter writer, JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.Object)
+        {
+            writer.WriteStartObject();
+            foreach (
+                var property in value.EnumerateObject().OrderBy(p => p.Name, StringComparer.Ordinal)
+            )
+            {
+                writer.WritePropertyName(property.Name);
+                WriteLegacyCanonical(writer, property.Value);
+            }
+            writer.WriteEndObject();
+        }
+        else if (value.ValueKind == JsonValueKind.Array)
+        {
+            writer.WriteStartArray();
+            foreach (var item in value.EnumerateArray())
+            {
+                WriteLegacyCanonical(writer, item);
+            }
+            writer.WriteEndArray();
+        }
+        else
+        {
+            value.WriteTo(writer);
+        }
+    }
+
     private static Task<string> ReadLegacyImage(DbService db) =>
         db.WithWriteConnection(c =>
             c.QuerySingleAsync<string>(
@@ -468,6 +847,17 @@ public sealed class TestNormalizationSourceActorAliasUpgrade
             ).Should().BeFalse();
         }
 
+        // All 53 backfill/read/append/veto assertions above deliberately ran without 54.
+        // The final binary's shared review INSERT now includes read_set, even for null proof.
+        var before54 = await ReadLegacyImage(db);
+        await ApplyActual54(db);
+        (await ReadLegacyImage(db))
+            .Should()
+            .Be(
+                before54,
+                "the review-audit schema addition must not change any 53 alias authority"
+            );
+
         var owner = (await work.GetSubjectAsync(seed.Owner))!;
         var correction = new PersonMetadataDecision(
             Guid.NewGuid(),
@@ -586,6 +976,26 @@ public sealed class TestNormalizationSourceActorAliasUpgrade
         await admin.OpenAsync();
         await admin.ExecuteAsync($"DROP DATABASE {database} WITH (FORCE)");
     }
+
+    private sealed record LegacyReviewWire(
+        Guid OperationUuid,
+        Guid SubjectUuid,
+        long ExpectedEditorialRevision,
+        string Action,
+        JsonElement Payload,
+        string Reason,
+        string Operator,
+        IReadOnlyList<Guid> AdditionalSubjectUuids
+    );
+
+    private sealed record LegacyReview(
+        PersonMetadataDecision DomainCommand,
+        NormalizationReviewCommand Command,
+        string CommandHash,
+        string TrustedOperator
+    );
+
+    private sealed record ReviewUpgradeImage(string CanonicalImage, string ReceiptsAndOwnersImage);
 
     private sealed record LegacyAlias(
         Guid Uuid,

@@ -1,0 +1,122 @@
+{
+  "version": "shared-review-read-fences-v1",
+  "state": "local_service_and_upgrade_verified",
+  "migration": 54,
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-review-read-fences-v1/execution-verification-v1/manifest.json",
+    "bytes": 8073,
+    "sha256": "a0340392e738032334cf52ca2f8d47ab1cf43d296f92151da819fec028ecbc76"
+  },
+  "testRuns": [
+    {
+      "run": "focused-v1",
+      "counters": {
+        "total": "85",
+        "executed": "85",
+        "passed": "53",
+        "failed": "32",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "focused-v2",
+      "counters": {
+        "total": "85",
+        "executed": "85",
+        "passed": "84",
+        "failed": "1",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "focused-v3",
+      "counters": {
+        "total": "85",
+        "executed": "85",
+        "passed": "85",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "run": "metadata-v1",
+      "counters": {
+        "total": "85",
+        "executed": "85",
+        "passed": "85",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "behavior": [
+    "Original consumed facts compared atomically before domain mutation.",
+    "Read-only target/dependency owners remain unchanged.",
+    "Null proof preserves legacy command hashes and existing receipt rows.",
+    "Exact committed replay precedes new fact locks and skips the domain callback.",
+    "Failure/cancellation roll back proof and domain writes together.",
+    "Actual schema52-to53 and53-to54 upgrades preserve canonical and review history."
+  ],
+  "corrections": {
+    "focused-v1": "Root bootstrap mistakenly supplied migration54 SQL as Dapper parameters. Corrected to a separate ExecuteAsync before next run.",
+    "focused-v2": "Tamper fixture supplied a JsonElement-containing whole command to Dapper. Corrected parameters to operation UUID and asserted actual wrapped PostgreSQL RaiseException.",
+    "focused-v3": "85 passing checks including both actual nonempty upgrade cases.",
+    "metadata-v1": "85 existing public metadata regression checks pass."
+  },
+  "limits": [
+    "No source-specific review or resolver implemented by this increment.",
+    "No active matching policy, accepted managed support publisher, production write or deployment.",
+    "Full suite not rerun for this increment."
+  ],
+  "freshSourceReview": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/source-actor-review-read-fences-v1/fresh-review-v1/freeze.json",
+    "sha256": "17465113b05071194a0dc32b4cb8346d94e568af6579fe54c32e590d37769feb",
+    "findings": 0,
+    "separateReadabilityPass": true,
+    "qualification": "Source-only review, not independent runtime execution."
+  }
+}
