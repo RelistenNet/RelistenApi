@@ -104,64 +104,36 @@ public sealed partial class TestNormalizationPeopleAcceptance
         snapshot.Complete.Should().BeFalse();
     }
 
-    [TestCase("rows", "recording_actor_context")]
-    [TestCase("contacts", "recording_actor_contacts")]
-    [TestCase("evidence", "recording_actor_contacts")]
-    public async Task FullActorEvidenceBoundsAreIndependentAndPreventAutomaticAcceptance(
-        string bound,
-        string factKind
-    )
+    [Test]
+    public async Task DistinctActorMatchingOverflowRemainsBlocking()
     {
         await ActivatePolicy();
         var name = UniqueName();
         var person = await Person(name);
-        var contact = RandomWord() + "@example.test";
-        await PublishActorContext($"({contact})", person, name);
         await PublishActorContext($"({RandomWord()}@example.test)", person, name);
-        var limits = bound switch
-        {
-            "rows" => new CandidateFactsLimits { MaximumActorContexts = 1 },
-            "contacts" => new CandidateFactsLimits { MaximumAssertionsPerKind = 1 },
-            "evidence" => new CandidateFactsLimits { MaximumEvidencePerAssertion = 1 },
-            _ => throw new ArgumentOutOfRangeException(nameof(bound)),
-        };
+        await PublishActorContext($"({RandomWord()}@example.test)", person, name);
 
         var snapshot = await candidates.FindPeopleFactsAsync(
             new(IdentityMatchingDomain.People, [name], []),
-            limits
+            new() { MaximumAssertionsPerKind = 1 }
         );
 
         snapshot.Complete.Should().BeFalse();
+        snapshot.Facts.Single().ActorMatchingFacts!.Contacts.Should().ContainSingle();
         snapshot
             .Issues.Should()
             .Contain(issue =>
-                issue.FactKind == factKind
-                && issue.Kind
-                    == (
-                        bound == "evidence"
-                            ? CandidateFactsIssueKind.EvidenceLimit
-                            : CandidateFactsIssueKind.AssertionLimit
-                    )
+                issue.Kind == CandidateFactsIssueKind.AssertionLimit
+                && issue.FactKind == "recording_actor_matching_contacts"
             );
-        if (bound == "rows")
-        {
-            snapshot.Facts.Single().ActorEvidence.Should().ContainSingle();
-        }
-        else if (bound == "contacts")
-        {
-            snapshot
-                .Facts.Single()
-                .ActorEvidence!.SelectMany(actor => actor.Facts.Contacts)
-                .Should()
-                .ContainSingle();
-        }
     }
 
     [Test]
-    public async Task ActorEvidenceByteBudgetOmitsPayloadsButRetainsTheirOriginalOwnerObservations()
+    public async Task ActorWitnessByteOmissionKeepsCompleteMembershipAndOriginalOwnerObservation()
     {
         await ActivatePolicy();
-        var published = await PublishActorContext($"({RandomWord()}@example.test)");
+        var contact = RandomWord() + "@example.test";
+        var published = await PublishActorContext($"({contact})");
         var sourceOwner = await fixture.OwnerUuid(
             "people",
             "recording",
@@ -173,18 +145,15 @@ public sealed partial class TestNormalizationPeopleAcceptance
             new() { MaximumActorEvidenceBytes = 1, MaximumWitnessesPerArtist = 0 }
         );
 
-        snapshot.Complete.Should().BeFalse();
-        snapshot.Facts.Should().ContainSingle().Which.Hit.Uuid.Should().Be(published.PersonUuid);
-        snapshot.Facts.Single().ActorEvidence.Should().BeEmpty();
-        snapshot
-            .Issues.Should()
-            .Contain(issue =>
-                issue.Kind == CandidateFactsIssueKind.EvidenceLimit
-                && issue.FactKind == "recording_actor_bytes"
-            );
-        snapshot
-            .Issues.Should()
-            .NotContain(issue => issue.Kind == CandidateFactsIssueKind.InvalidStoredFact);
+        snapshot.Complete.Should().BeTrue();
+        var fact = snapshot.Facts.Single();
+        fact.ActorEvidence.Should().BeEmpty();
+        fact.ActorEvidenceTruncated.Should().BeTrue();
+        fact.ActorContextCount.Should().Be(1);
+        fact.ActorMatchingFacts!.Contacts.Should()
+            .ContainSingle()
+            .Which.LookupKey.Should()
+            .Be(contact);
         snapshot
             .ReadSet.OwnerObservations.Should()
             .Contain(owner => owner.SubjectUuid == sourceOwner);

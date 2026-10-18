@@ -16,6 +16,7 @@ public sealed partial class NormalizationCandidateService
 {
     /// <summary>Projection version included in lookup fingerprints and retained matching receipts.</summary>
     public const string FactsVersion = "candidate-facts-v3";
+    public const string PeopleFactsVersion = "people-candidate-facts-v4";
 
     /// <summary>
     /// Reads global person candidates, original-owner assertions and exact accepted-credit
@@ -116,6 +117,20 @@ public sealed partial class NormalizationCandidateService
         var frozen = FreezeFactsQuery(query);
         var names = ValidateQuery(frozen);
         var limits = ValidateFactsLimits(requestedLimits ?? new());
+        if (domain == IdentityMatchingDomain.People)
+        {
+            limits = limits with
+            {
+                MaximumActorMatchingBytes = limits.MaximumActorMatchingBytes ?? 4 * 1024 * 1024,
+            };
+        }
+        else if (limits.MaximumActorMatchingBytes != null)
+        {
+            throw new ArgumentException(
+                "Actor matching limits apply only to people facts.",
+                nameof(requestedLimits)
+            );
+        }
 
         await using var connection = db.CreateConnection(false, false);
         await connection.OpenAsync(ct);
@@ -159,7 +174,7 @@ public sealed partial class NormalizationCandidateService
         var universes = await ReadFactsUniversesAsync(connection, transaction, frozen, ct);
         var readSet = await context.ReadReadSetAsync(connection, transaction, universes, ct);
         var result = new NormalizationCandidateFactsSnapshot<T>(
-            FactsVersion,
+            query.Domain == IdentityMatchingDomain.People ? PeopleFactsVersion : FactsVersion,
             FactsQueryHash(frozen, limits),
             frozen,
             limits,
@@ -203,6 +218,7 @@ public sealed partial class NormalizationCandidateService
             || limits.MaximumParentClosure is < 1 or > 10000
             || limits.MaximumActorContexts is < 1 or > 10000
             || limits.MaximumActorEvidenceBytes is < 1 or > 32 * 1024 * 1024
+            || limits.MaximumActorMatchingBytes is < 256 or > 32 * 1024 * 1024
         )
         {
             throw new ArgumentOutOfRangeException(
@@ -223,7 +239,9 @@ public sealed partial class NormalizationCandidateService
                 JsonSerializer.SerializeToUtf8Bytes(
                     new
                     {
-                        version = FactsVersion,
+                        version = query.Domain == IdentityMatchingDomain.People
+                            ? PeopleFactsVersion
+                            : FactsVersion,
                         query,
                         limits,
                     }

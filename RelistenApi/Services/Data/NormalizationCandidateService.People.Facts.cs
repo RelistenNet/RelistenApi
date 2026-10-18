@@ -44,7 +44,7 @@ public sealed partial class NormalizationCandidateService
                 context,
                 ct
             );
-            var actorEvidence = await ReadPersonActorEvidence(
+            var actors = await ReadPersonActorEvidence(
                 c,
                 t,
                 hit.Uuid,
@@ -75,7 +75,10 @@ public sealed partial class NormalizationCandidateService
                     MissingArtistCreditCount = credits.MissingArtist,
                     MissingContextWitnesses = credits.MissingWitnesses,
                     MissingContextWitnessesTruncated = credits.MissingWitnessesTruncated,
-                    ActorEvidence = actorEvidence,
+                    ActorEvidence = actors.Witnesses,
+                    ActorMatchingFacts = actors.MatchingFacts,
+                    ActorContextCount = actors.ContextCount,
+                    ActorEvidenceTruncated = actors.WitnessesTruncated,
                 }
             );
         }

@@ -23,7 +23,7 @@ public sealed partial class NormalizationPeopleResolutionProcessor(
 {
     public const string Version =
         "people-resolution-proposals-v1/"
-        + NormalizationCandidateService.FactsVersion
+        + NormalizationCandidateService.PeopleFactsVersion
         + "/"
         + NormalizationPeopleResolutionDecisionService.Version
         + "/"

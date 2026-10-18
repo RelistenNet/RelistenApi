@@ -150,9 +150,10 @@ public sealed class TestPeoplePairLearnedScorerParity
         {
             Hit = hit,
             Header = new(hit.Uuid, name, 1, hit.OwnerSubjectUuid, "person"),
+            ActorMatchingFacts = new(false, [], [], [], [], [], false, false),
         };
         var snapshot = new NormalizationCandidateFactsSnapshot<PersonCandidateFacts>(
-            NormalizationCandidateService.FactsVersion,
+            NormalizationCandidateService.PeopleFactsVersion,
             "fixture-complete-pool",
             new(IdentityMatchingDomain.People, [name], []),
             new(),
@@ -185,7 +186,7 @@ public sealed class TestPeoplePairLearnedScorerParity
             "",
             PeopleResolutionPolicyEvaluator.ScorerVersion,
             PeopleResolutionPolicyEvaluator.RetrievalVersion,
-            NormalizationCandidateService.FactsVersion,
+            NormalizationCandidateService.PeopleFactsVersion,
             NormalizationRecordingExtractor.Version,
             NormalizedPeopleService.CreditContextVersion,
             ["retained_credit"],

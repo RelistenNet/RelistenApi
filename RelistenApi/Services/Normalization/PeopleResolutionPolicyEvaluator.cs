@@ -90,6 +90,7 @@ public sealed class PeopleResolutionPolicyEvaluator
             || snapshot.Selection.Domain != IdentityMatchingDomain.People
             || snapshot.Query.ArtistUuid != null
             || candidateIds.Count != snapshot.Facts.Count
+            || snapshot.Facts.Any(fact => fact.ActorMatchingFacts == null)
             || !candidateIds.SetEquals(snapshot.Selection.Items.Select(hit => hit.Uuid))
             || claim.Comparisons.Count != candidateIds.Count
             || claim.Comparisons.Any(pair =>
@@ -296,7 +297,7 @@ public sealed class PeopleResolutionPolicyEvaluator
     internal static bool Supports(PeopleAcceptancePolicyArtifact artifact, string inputForm) =>
         artifact.ScorerVersion == ScorerVersion
         && artifact.RetrievalVersion == RetrievalVersion
-        && artifact.CandidateFactsVersion == NormalizationCandidateService.FactsVersion
+        && artifact.CandidateFactsVersion == NormalizationCandidateService.PeopleFactsVersion
         && artifact.ExtractionVersion == NormalizationRecordingExtractor.Version
         && artifact.CreditContextVersion == NormalizedPeopleService.CreditContextVersion
         && artifact.InputForms.Contains(inputForm, StringComparer.Ordinal)

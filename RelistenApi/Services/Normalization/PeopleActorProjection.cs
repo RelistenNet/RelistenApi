@@ -89,18 +89,34 @@ public static class PeopleActorProjection
     public static PersonMatchRecord Candidate(PersonCandidateFacts candidate)
     {
         var actors = candidate.ActorEvidence ?? [];
+        var matching = candidate.ActorMatchingFacts;
+        var names =
+            matching == null
+                ? actors
+                    .Select(actor => actor.CreditedName)
+                    .Concat(
+                        actors
+                            .SelectMany(actor => actor.Facts.Aliases)
+                            .Select(alias => alias.Wording)
+                    )
+                : matching.CreditedNames.Concat(matching.Aliases);
+        var context =
+            matching == null ? Context(actors.Select(actor => actor.Facts))
+            : matching.HasActorContext
+                ? new PersonActorMatchContext(
+                    matching.Contacts,
+                    matching.Profiles,
+                    matching.HasAttachmentUncertainty,
+                    matching.HasConflictingKind
+                )
+            : null;
         return new(
             candidate.Hit.Uuid,
             candidate.Header.Kind,
             candidate
                 .IdentityClosure.Select(header => new IdentityMatchingName(header.DisplayText))
                 .Concat(candidate.Aliases.Select(alias => new IdentityMatchingName(alias.Wording)))
-                .Concat(actors.Select(actor => new IdentityMatchingName(actor.CreditedName)))
-                .Concat(
-                    actors
-                        .SelectMany(actor => actor.Facts.Aliases)
-                        .Select(alias => new IdentityMatchingName(alias.Wording))
-                )
+                .Concat(names.Select(name => new IdentityMatchingName(name)))
                 .ToArray(),
             candidate
                 .ExternalIdentities.Select(identity => new MatchingExternalIdentity(
@@ -110,7 +126,7 @@ public static class PeopleActorProjection
                 ))
                 .ToArray(),
             candidate.ArtistContexts.Select(context => context.ArtistUuid).ToHashSet(),
-            Context(actors.Select(actor => actor.Facts))
+            context
         );
     }
 
@@ -161,7 +177,7 @@ public static class PeopleActorProjection
         }
     }
 
-    private static PersonActorMatchContext? Context<TEvidence>(
+    internal static PersonActorMatchContext? Context<TEvidence>(
         IEnumerable<CreditedActorFacts<TEvidence>> source
     )
     {

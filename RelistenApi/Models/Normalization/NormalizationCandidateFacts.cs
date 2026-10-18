@@ -15,8 +15,15 @@ public sealed record CandidateFactsLimits
     public int MaximumCandidates { get; init; } = 256;
     public int MaximumIdentityClosure { get; init; } = 1024;
     public int MaximumAssertionsPerKind { get; init; } = 5000;
+
+    // People v4 bounds raw account witnesses independently of complete matching membership.
     public int MaximumActorContexts { get; init; } = 5000;
     public int MaximumActorEvidenceBytes { get; init; } = 4 * 1024 * 1024;
+
+    // Materialized as 4 MiB by the people v4 reader. Omitted on other domains so their
+    // existing limits serialization and candidate-facts-v3 query fingerprints stay exact.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MaximumActorMatchingBytes { get; init; }
     public int MaximumEvidencePerAssertion { get; init; } = 256;
     public int MaximumArtistContexts { get; init; } = 10000;
     public int MaximumRoleBasisGroupsPerArtist { get; init; } = 128;
@@ -189,6 +196,15 @@ public sealed record PersonCandidateFacts
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<CandidateActorEvidenceFact>? ActorEvidence { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PersonActorMatchingFacts? ActorMatchingFacts { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public long ActorContextCount { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ActorEvidenceTruncated { get; init; }
     public IReadOnlyList<PersonArtistContextFact> ArtistContexts { get; init; } = [];
     public long MissingSourceCreditCount { get; init; }
     public long MissingArtistCreditCount { get; init; }

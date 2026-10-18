@@ -1,11 +1,10 @@
 # Scale people matching by distinct facts
 
-The current candidate reader caps each person's raw actor evidence at 5,000
-contexts and 4 MiB. Any omission marks the whole candidate snapshot incomplete,
-so automatic matching stops. Retrying the same input at the same limits cannot
-resolve that condition. Repeated supporting accounts also spend assertion
-budgets before deduplication. These limits must change before automatic matching
-can cover prolific contributors.
+The people candidate reader now separates complete distinct matching facts from
+bounded raw evidence examples. Repeated supporting accounts no longer consume
+the distinct-fact budget. The previous v3 reader capped raw evidence at 5,000
+contexts and 4 MiB, making the whole snapshot incomplete when either limit was
+exceeded. Retrying unchanged input could not resolve that condition.
 
 The [read-only capacity probe](evidence/people-candidate-capacity-v1.json) confirms
 that the catalog contains credit metadata at this scale. One exact stored label
@@ -19,7 +18,7 @@ or a claim of production normalization failures.
 
 ## Revised contract
 
-People candidate facts must contain complete distinct matching facts: credited
+People candidate facts contain complete distinct matching facts: credited
 names and aliases, contact tuples, profile tuples including relationship, context
 presence, attachment uncertainty and kind-conflict information. Keep canonical
 kind, qualified identifiers and exact artist membership separately. Source kind
@@ -36,22 +35,28 @@ accepted-credit/support joins, redirects and correction/retraction behavior.
 Bounding raw witnesses cannot discard freshness checks. The global people epoch
 alone does not prove that owner-only editorial changes are covered.
 
-The intended people-only candidate-facts version is v4; other domains keep v3.
+The people-only candidate-facts version is v4; other domains keep v3.
 New people policies must identify the new contract. Old attestations cannot
 silently authorize it. No policy is active.
 
 ## Implementation and verification
 
-The first implementation will read active accounts sequentially, validate each
-original payload hash, and accumulate distinct facts, complete owner stamps and
+The implementation reads active accounts sequentially, validates each
+original payload hash, and accumulates distinct facts, complete owner stamps and
 bounded witnesses. This preserves existing integrity checks without adding a
 second SQL canonical-hashing protocol. Streaming avoids retaining every raw
 account at once; it does not establish bounded total database bytes, work or
 owner-stamp output. Measure those costs before rollout.
 
-Tests must cover repeated accounts beyond old count and byte bounds, a unique late
-alias/contact/conflict, changes to an owner outside the witness prefix, retraction,
-and genuine distinct-fact overflow. Compare a small complete aggregate with the
-existing raw projection. Implementation and those verification results remain
-pending; the [people actor contract](../../../plans/active/2026-10-17-full-normalization/people-actor-evidence.md)
-still describes the current reader below its existing limits.
+Focused verification passes 126 matching/policy cases and 152 database cases.
+The database fixture reads 5,002 supporting accounts beyond the old count and
+byte limits while preserving complete matching facts. Tests also cover unique
+unwitnessed aliases/contacts, owner-only changes with an unchanged people epoch,
+retraction and genuine semantic overflow. Small complete aggregates preserve
+the raw projection's comparisons. Nonpeople version and serialization contracts
+remain unchanged. These checks establish mechanics, not identity accuracy or
+production throughput.
+
+The [people actor contract](../../../plans/active/2026-10-17-full-normalization/people-actor-evidence.md)
+defines the current reader. The [implementation receipt](evidence/people-candidate-aggregation-v1.json) retains the executed
+source, binary and test-log hashes alongside the read-only volume probe.

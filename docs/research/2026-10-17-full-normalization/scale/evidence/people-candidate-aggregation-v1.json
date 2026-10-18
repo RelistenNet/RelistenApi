@@ -1,0 +1,48 @@
+{
+  "state": "people_candidate_facts_v4_focused_contracts_pass",
+  "people_facts_version": "people-candidate-facts-v4",
+  "nonpeople_facts_version": "candidate-facts-v3",
+  "fast_passed": 126,
+  "database_passed": 152,
+  "failed": 0,
+  "synthetic_support_accounts": 5002,
+  "old_raw_byte_bound_exceeded": 4194304,
+  "semantics": "Complete distinct matching facts and all owner observations; bounded intact raw witnesses. Semantic omission remains blocking.",
+  "source_base_commit": "262b5f2",
+  "source_artifacts": 18,
+  "nested_retained_artifacts": 29,
+  "build_errors": 0,
+  "existing_build_warnings": 25,
+  "catalog_wide_database_work_measured": false,
+  "owner_stamp_growth_measured": false,
+  "identity_accuracy_measured": false,
+  "policy_activation_permitted": false,
+  "production_writes": 0,
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/implementation-v1/receipt.json",
+      "bytes": 9684,
+      "sha256": "bc79f3a330c047c2c725d3fc94e734a2d9f904cc52d7f27549470848a5a4fc96"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/implementation-v1/logs/relisten-people-aggregation-build-v1.log",
+      "bytes": 13772,
+      "sha256": "12d8d21a69e80d3071319b626e1a2999b409efd0e3654506f68907c8a87b7bdc"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/implementation-v1/logs/relisten-people-aggregation-fast-v1.log",
+      "bytes": 388,
+      "sha256": "7e5bdeb757729f310b2ef73155ad90943a4b9b567572f0a844a68b2e43371752"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/implementation-v1/logs/relisten-people-aggregation-database-v1.log",
+      "bytes": 659,
+      "sha256": "eeea87c7ef1a856b9f224f8cab9880f2be58633ea0b6723bc14457c56b60fbd3"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-17-cross-artist/people-candidate-capacity-v1/implementation-v1/author/source-review.md",
+      "bytes": 1340,
+      "sha256": "254490d232fd2ec5139e62943faa5285b50211bd45090c2852a2f4430f2357a3"
+    }
+  ]
+}

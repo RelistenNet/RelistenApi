@@ -1,10 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Data;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Dapper;
 using Npgsql;
 using Relisten.Api.Models.Normalization;
 using Relisten.Normalization;
@@ -13,7 +12,12 @@ namespace Relisten.Data;
 
 public sealed partial class NormalizationCandidateService
 {
-    private static async Task<CandidateActorEvidenceFact[]> ReadPersonActorEvidence(
+    // The total read is intentionally not byte-capped: all active accounts must contribute
+    // matching membership and owner clocks. One authenticated record is materialized at a
+    // time. Total database work and owner-stamp growth still need workload measurement.
+    private const int MaximumActorRecordBytes = 32 * 1024 * 1024;
+
+    private static async Task<PersonActorAccounts> ReadPersonActorEvidence(
         NpgsqlConnection c,
         NpgsqlTransaction t,
         Guid candidate,
@@ -23,77 +27,47 @@ public sealed partial class NormalizationCandidateService
         CancellationToken ct
     )
     {
-        // Read source accounts independently of bounded artist witnesses. A context follows a
-        // reviewed merge through the reverse closure, but never an unrelated credit reassignment.
-        var rows = (
-            await c.QueryAsync<ActorContextRow>(
-                new CommandDefinition(
-                    """
-                    WITH bounded AS MATERIALIZED (
-                        SELECT a.*,owner.uuid AS current_owner_uuid,
-                            octet_length(a.facts::text)::bigint AS evidence_bytes,
-                            row_number() OVER(ORDER BY a.uuid) AS ordinal
-                        FROM normalization.recording_actor_contexts a
-                        JOIN normalization.recording_credit_contributor_support support ON support.uuid=a.support_uuid
-                        JOIN normalization.recording_credits credit ON credit.uuid=a.credit_uuid
-                        LEFT JOIN normalization.work_subjects owner ON owner.domain='people' AND owner.subject_kind='recording'
-                            AND owner.subject_uuid=a.source_uuid
-                        WHERE a.person_uuid=ANY(@members) AND credit.person_uuid=ANY(@members)
-                            AND a.retired_work_uuid IS NULL AND support.retired_work_uuid IS NULL
-                            AND support.credit_uuid=credit.uuid AND credit.state='accepted' AND credit.source_uuid=a.source_uuid
-                        ORDER BY a.uuid LIMIT @take
-                    ), sized AS (
-                        SELECT *,sum(evidence_bytes) OVER(ORDER BY uuid) AS consumed_bytes FROM bounded
-                    )
-                    SELECT a.uuid AS "ContextUuid",a.support_uuid AS "SupportUuid",a.credit_uuid AS "CreditUuid",
-                        a.credit_revision AS "CreditRevision",a.credit_basis AS "CreditBasis",a.person_uuid AS "StoredPersonUuid",
-                        a.source_uuid AS "SourceUuid",a.owner_subject_uuid AS "OwnerSubjectUuid",a.current_owner_uuid AS "CurrentOwnerUuid",
-                        a.contributor_provider AS "Provider",a.contributor_type AS "ResourceType",a.contributor_key AS "ProviderKey",
-                        a.extraction_attempt_uuid AS "ExtractionAttemptUuid",a.proposal_uuid AS "ProposalUuid",
-                        a.input_revision_uuid AS "InputRevisionUuid",a.application_attempt_uuid AS "ApplicationAttemptUuid",
-                        a.introduced_work_uuid AS "IntroducedWorkUuid",a.basis AS "Basis",a.credited_name AS "CreditedName",
-                        a.facts_hash AS "FactsHash",
-                        CASE WHEN a.ordinal<=@maximumContexts AND a.consumed_bytes<=@maximumBytes
-                            THEN a.facts::text ELSE NULL END AS "FactsJson",
-                        a.ordinal<=@maximumContexts AND a.consumed_bytes>@maximumBytes AS "EvidenceBytesOmitted"
-                    FROM sized a ORDER BY a.uuid
-                    """,
-                    new
-                    {
-                        members,
-                        take = limits.MaximumActorContexts + 1,
-                        maximumContexts = limits.MaximumActorContexts,
-                        maximumBytes = limits.MaximumActorEvidenceBytes,
-                    },
-                    t,
-                    cancellationToken: ct
-                )
-            )
-        ).ToArray();
-        if (rows.Length > limits.MaximumActorContexts)
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT a.uuid,a.support_uuid,a.credit_uuid,a.credit_revision,a.credit_basis,a.person_uuid,
+                a.source_uuid,a.owner_subject_uuid,owner.uuid AS current_owner_uuid,
+                a.contributor_provider,a.contributor_type,a.contributor_key,a.extraction_attempt_uuid,
+                a.proposal_uuid,a.input_revision_uuid,a.application_attempt_uuid,a.introduced_work_uuid,
+                a.basis,a.credited_name,a.facts_hash,octet_length(a.facts::text)::bigint AS evidence_bytes,
+                CASE WHEN octet_length(a.facts::text)<=@maximumRecordBytes THEN a.facts::text ELSE NULL END AS facts_json
+            FROM normalization.recording_actor_contexts a
+            JOIN normalization.recording_credit_contributor_support support ON support.uuid=a.support_uuid
+            JOIN normalization.recording_credits credit ON credit.uuid=a.credit_uuid
+            LEFT JOIN normalization.work_subjects owner ON owner.domain='people' AND owner.subject_kind='recording'
+                AND owner.subject_uuid=a.source_uuid
+            WHERE a.person_uuid=ANY(@members) AND credit.person_uuid=ANY(@members)
+                AND a.retired_work_uuid IS NULL AND support.retired_work_uuid IS NULL
+                AND support.credit_uuid=credit.uuid AND credit.state='accepted' AND credit.source_uuid=a.source_uuid
+            ORDER BY a.uuid
+            """,
+            c,
+            t
+        );
+        command.Parameters.AddWithValue("members", members);
+        command.Parameters.AddWithValue("maximumRecordBytes", MaximumActorRecordBytes);
+        await using var reader = await command.ExecuteReaderAsync(
+            CommandBehavior.SequentialAccess,
+            ct
+        );
+        var matching = new PeopleActorMatchingAccumulator(
+            limits.MaximumAssertionsPerKind,
+            limits.MaximumActorMatchingBytes!.Value
+        );
+        var witnesses = new List<CandidateActorEvidenceFact>();
+        long count = 0;
+        long witnessBytes = 0;
+        while (await reader.ReadAsync(ct))
         {
-            context.AddIssue(
-                CandidateFactsIssueKind.AssertionLimit,
-                candidate,
-                "recording_actor_context"
-            );
-        }
-        var budget = new ActorEvidenceBudget(candidate, limits, context);
-        var result = new List<CandidateActorEvidenceFact>();
-        foreach (var row in rows.Take(limits.MaximumActorContexts))
-        {
+            count++;
+            // Read metadata in column order before the potentially large sequential JSON
+            // value. It establishes every original owner even when no raw witness can fit.
+            var row = ActorContextRow.ReadMetadata(reader);
             context.AddOwner(row.OwnerSubjectUuid, candidate);
-            if (row.EvidenceBytesOmitted)
-            {
-                // The server returns only a bounded prefix of JSON. Counting bytes after
-                // deserialization would already have materialized the unbounded evidence.
-                context.AddIssue(
-                    CandidateFactsIssueKind.EvidenceLimit,
-                    candidate,
-                    "recording_actor_bytes"
-                );
-                continue;
-            }
             if (row.CurrentOwnerUuid != row.OwnerSubjectUuid)
             {
                 context.AddOwner(row.CurrentOwnerUuid, candidate);
@@ -104,34 +78,47 @@ public sealed partial class NormalizationCandidateService
                 );
                 continue;
             }
-            var facts = ReadActorFacts(row.FactsJson!, row.FactsHash, candidate, context);
+            if (reader.IsDBNull(21))
+            {
+                context.AddIssue(
+                    CandidateFactsIssueKind.EvidenceLimit,
+                    candidate,
+                    "recording_actor_record_bytes"
+                );
+                continue;
+            }
+            var json = reader.GetString(21);
+            var facts = ReadActorFacts(json, row.FactsHash, candidate, context);
             if (facts == null)
             {
                 continue;
             }
-            result.Add(
-                new(
-                    row.ContextUuid,
-                    row.SupportUuid,
-                    row.CreditUuid,
-                    row.CreditRevision,
-                    row.CreditBasis,
-                    row.StoredPersonUuid,
-                    row.SourceUuid,
-                    row.OwnerSubjectUuid,
-                    new(row.Provider, row.ResourceType, row.ProviderKey),
-                    row.ExtractionAttemptUuid,
-                    row.ProposalUuid,
-                    row.InputRevisionUuid,
-                    row.ApplicationAttemptUuid,
-                    row.IntroducedWorkUuid,
-                    row.Basis,
-                    row.CreditedName,
-                    budget.Project(facts)
-                )
+            matching.Add(row.CreditedName, facts);
+
+            // Witness omission never removes semantic membership. Keep each retained raw
+            // account intact, including citations, instead of clipping its original evidence.
+            if (
+                witnesses.Count >= limits.MaximumActorContexts
+                || row.EvidenceBytes > limits.MaximumActorEvidenceBytes - witnessBytes
+            )
+            {
+                continue;
+            }
+            witnesses.Add(row.ToFact(facts));
+            witnessBytes += row.EvidenceBytes;
+        }
+        var aggregate = matching.Build();
+        foreach (var kind in matching.OmittedKinds)
+        {
+            context.AddIssue(
+                kind == "bytes"
+                    ? CandidateFactsIssueKind.EvidenceLimit
+                    : CandidateFactsIssueKind.AssertionLimit,
+                candidate,
+                "recording_actor_matching_" + kind
             );
         }
-        return result.ToArray();
+        return new(aggregate, witnesses.ToArray(), count, witnesses.Count < count);
     }
 
     private static CreditedActorFacts<NormalizedEvidenceReference>? ReadActorFacts(
@@ -168,98 +155,12 @@ public sealed partial class NormalizationCandidateService
         return null;
     }
 
-    /// <summary>Per-candidate aggregate bounds, separate from the number of recording witnesses.</summary>
-    private sealed class ActorEvidenceBudget(
-        Guid candidate,
-        CandidateFactsLimits limits,
-        CandidateFactsContext context
-    )
-    {
-        private readonly Dictionary<string, int> used = [];
-
-        public CreditedActorFacts<NormalizedEvidenceReference> Project(
-            CreditedActorFacts<NormalizedEvidenceReference> facts
-        ) =>
-            facts with
-            {
-                Aliases = Bound(
-                    facts.Aliases,
-                    "aliases",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "aliases") }
-                ),
-                Profiles = Bound(
-                    facts.Profiles,
-                    "profiles",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "profiles") }
-                ),
-                Contacts = Bound(
-                    facts.Contacts,
-                    "contacts",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "contacts") }
-                ),
-                Context = Bound(
-                    facts.Context,
-                    "context",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "context") }
-                ),
-                Kind =
-                    facts.Kind == null
-                        ? null
-                        : Bound(
-                                [facts.Kind],
-                                "kind",
-                                fact => fact with { Evidence = Evidence(fact.Evidence, "kind") }
-                            )
-                            .SingleOrDefault(),
-                Relationships = Bound(
-                    facts.Relationships,
-                    "relationships",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "relationships") }
-                ),
-                Coverage = Bound(
-                    facts.Coverage,
-                    "coverage",
-                    fact => fact with { Fields = Evidence(fact.Fields, "coverage") }
-                ),
-                Unresolved = Bound(
-                    facts.Unresolved,
-                    "unresolved",
-                    fact => fact with { Evidence = Evidence(fact.Evidence, "unresolved") }
-                ),
-            };
-
-        private T[] Bound<T>(IReadOnlyList<T> facts, string kind, Func<T, T> project)
-        {
-            var remaining = limits.MaximumAssertionsPerKind - used.GetValueOrDefault(kind);
-            if (facts.Count > remaining)
-            {
-                context.AddIssue(
-                    CandidateFactsIssueKind.AssertionLimit,
-                    candidate,
-                    "recording_actor_" + kind
-                );
-            }
-            var retained = facts.Take(remaining).ToArray();
-            used[kind] = used.GetValueOrDefault(kind) + retained.Length;
-            return retained.Select(project).ToArray();
-        }
-
-        private NormalizedEvidenceReference[] Evidence(
-            IReadOnlyList<NormalizedEvidenceReference> evidence,
-            string kind
-        )
-        {
-            if (evidence.Count > limits.MaximumEvidencePerAssertion)
-            {
-                context.AddIssue(
-                    CandidateFactsIssueKind.EvidenceLimit,
-                    candidate,
-                    "recording_actor_" + kind
-                );
-            }
-            return evidence.Take(limits.MaximumEvidencePerAssertion).ToArray();
-        }
-    }
+    private sealed record PersonActorAccounts(
+        PersonActorMatchingFacts MatchingFacts,
+        CandidateActorEvidenceFact[] Witnesses,
+        long ContextCount,
+        bool WitnessesTruncated
+    );
 
     private sealed record ActorContextRow(
         Guid ContextUuid,
@@ -282,7 +183,55 @@ public sealed partial class NormalizationCandidateService
         string Basis,
         string CreditedName,
         string FactsHash,
-        string? FactsJson,
-        bool EvidenceBytesOmitted
-    );
+        long EvidenceBytes
+    )
+    {
+        public static ActorContextRow ReadMetadata(NpgsqlDataReader reader) =>
+            new(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                reader.GetGuid(2),
+                reader.GetInt64(3),
+                reader.GetString(4),
+                reader.GetGuid(5),
+                reader.GetGuid(6),
+                reader.GetGuid(7),
+                reader.IsDBNull(8) ? null : reader.GetGuid(8),
+                reader.GetString(9),
+                reader.GetString(10),
+                reader.GetString(11),
+                reader.GetGuid(12),
+                reader.GetGuid(13),
+                reader.GetGuid(14),
+                reader.GetGuid(15),
+                reader.GetGuid(16),
+                reader.GetString(17),
+                reader.GetString(18),
+                reader.GetString(19),
+                reader.GetInt64(20)
+            );
+
+        public CandidateActorEvidenceFact ToFact(
+            CreditedActorFacts<NormalizedEvidenceReference> facts
+        ) =>
+            new(
+                ContextUuid,
+                SupportUuid,
+                CreditUuid,
+                CreditRevision,
+                CreditBasis,
+                StoredPersonUuid,
+                SourceUuid,
+                OwnerSubjectUuid,
+                new(Provider, ResourceType, ProviderKey),
+                ExtractionAttemptUuid,
+                ProposalUuid,
+                InputRevisionUuid,
+                ApplicationAttemptUuid,
+                IntroducedWorkUuid,
+                Basis,
+                CreditedName,
+                facts
+            );
+    }
 }

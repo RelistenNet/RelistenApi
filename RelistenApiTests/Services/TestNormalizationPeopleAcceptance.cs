@@ -833,7 +833,7 @@ public sealed partial class TestNormalizationPeopleAcceptance
             "",
             PeopleResolutionPolicyEvaluator.ScorerVersion,
             PeopleResolutionPolicyEvaluator.RetrievalVersion,
-            NormalizationCandidateService.FactsVersion,
+            NormalizationCandidateService.PeopleFactsVersion,
             NormalizationRecordingExtractor.Version,
             NormalizedPeopleService.CreditContextVersion,
             [inputForm],

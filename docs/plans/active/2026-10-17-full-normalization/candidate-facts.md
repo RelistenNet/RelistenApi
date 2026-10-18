@@ -72,6 +72,15 @@ Original identity owners and returned witness owners supply observations; the
 global people generation fences omitted or newly arriving credit contributors.
 Do not infer disjoint artist histories from missing catalog context.
 
+People snapshots use `people-candidate-facts-v4`. `ActorMatchingFacts` retains
+distinct source names, aliases, contacts, profiles and uncertainty separately
+from bounded `ActorEvidence` examples. All eligible actor accounts contribute
+matching facts and original owner observations, including accounts omitted from
+the examples. Genuine semantic overflow blocks completeness; witness truncation
+does not. Other domains retain `candidate-facts-v3`, including their existing
+limits serialization and query fingerprints. See the [actor contract](people-actor-evidence.md)
+for bounds, payload validation and policy compatibility.
+
 **Venues.** Retain all accepted historical names, languages, validity intervals,
 location assertions and qualified identifiers within the declared bounds.
 Keep original locality, country/region/city/address wording, coordinates and

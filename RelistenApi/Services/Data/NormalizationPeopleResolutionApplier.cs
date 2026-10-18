@@ -32,7 +32,7 @@ public sealed partial class NormalizationPeopleResolutionApplier(
         "people-acceptance-v1/"
         + PeopleResolutionPolicyEvaluator.ScorerVersion
         + "/"
-        + NormalizationCandidateService.FactsVersion
+        + NormalizationCandidateService.PeopleFactsVersion
         + "/"
         + NormalizedPeopleService.CreditContextVersion
         + "/"

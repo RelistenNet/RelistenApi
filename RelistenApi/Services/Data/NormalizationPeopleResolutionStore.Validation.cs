@@ -179,7 +179,7 @@ public sealed partial class NormalizationPeopleResolutionStore
         }
         if (
             !querySupported
-            || snapshot.Version != NormalizationCandidateService.FactsVersion
+            || snapshot.Version != NormalizationCandidateService.PeopleFactsVersion
             || snapshot.Query.Domain != IdentityMatchingDomain.People
             || snapshot.Query.ArtistUuid != null
             || !Equal(snapshot.Query, projection.Query)
@@ -189,6 +189,7 @@ public sealed partial class NormalizationPeopleResolutionStore
             || snapshot.ReadSet.CandidateUniverses[0].Generation < 0
             || snapshot.Facts.Select(fact => fact.Hit.Uuid).Distinct().Count()
                 != snapshot.Facts.Count
+            || snapshot.Facts.Any(fact => fact.ActorMatchingFacts == null)
             || snapshot.Complete
                 && !snapshot
                     .Facts.Select(fact => fact.Hit.Uuid)

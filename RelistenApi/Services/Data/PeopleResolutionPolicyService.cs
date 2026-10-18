@@ -488,7 +488,7 @@ public sealed class PeopleResolutionPolicyService(
                 && (
                     a.ScorerVersion != PeopleResolutionPolicyEvaluator.ScorerVersion
                     || a.RetrievalVersion != PeopleResolutionPolicyEvaluator.RetrievalVersion
-                    || a.CandidateFactsVersion != NormalizationCandidateService.FactsVersion
+                    || a.CandidateFactsVersion != NormalizationCandidateService.PeopleFactsVersion
                     || a.ExtractionVersion != NormalizationRecordingExtractor.Version
                     || a.CreditContextVersion != NormalizedPeopleService.CreditContextVersion
                 )

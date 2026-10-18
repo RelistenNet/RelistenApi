@@ -146,27 +146,36 @@ share a crew address or account. Their route has its own limit-plus-one bound.
 `ContextCandidatesTruncated` is separate from `NameCandidatesTruncated`; either
 makes the candidate snapshot incomplete.
 
-`FindPeopleFactsAsync` reads selection, full actor context, candidate epochs,
+`FindPeopleFactsAsync` reads selection, distinct actor facts, candidate epochs,
 catalog clocks and owner observations in one primary repeatable-read transaction.
 `PersonCandidateFacts.ActorEvidence` preserves the original support owner and
-acceptance receipts alongside the typed facts. This projection is separate from
-bounded artist witnesses: a few examples cannot substitute for complete actor
-assertions. Reverse redirects retain original provenance.
+acceptance receipts alongside bounded original examples. `ActorMatchingFacts`
+contains the complete distinct credited names, aliases, contacts, profile tuples,
+source kinds and reduced uncertainty flags within the declared semantic bounds.
+Canonical kind still comes from the person header. Reverse redirects retain
+original provenance.
 
-Default actor bounds are 5,000 contexts and 4 MiB of rendered fact JSON per
-candidate, plus the existing per-kind assertion and per-assertion citation bounds.
-SQL omits payloads beyond the byte prefix before returning them to the client.
-Every omission blocks automatic acceptance. Owner observations and the people
-epoch still fence omitted facts. Context, lookup and support changes advance that
-epoch even when the accepted credit row itself does not change. A prior empty
-lookup therefore becomes stale when a new rival appears.
+People snapshots use `people-candidate-facts-v4`; other domains retain v3.
+`MaximumActorContexts` and `MaximumActorEvidenceBytes` now bound raw witnesses,
+defaulting to 5,000 accounts and 4 MiB. `ActorContextCount` counts all eligible
+accounts, and `ActorEvidenceTruncated` reports omitted examples. Such omission
+does not remove matching membership or block completeness. Distinct matching
+sets have per-kind bounds and a separate `MaximumActorMatchingBytes` bound,
+defaulting to 4 MiB. Losing a semantic value still blocks automatic acceptance.
+Old v3 people attestations cannot authorize this changed contract.
+
+The reader streams every eligible account and validates its original producer
+version and payload hash. Invalid accounts and accounts larger than 32 MiB block
+completeness. Every active account contributes its original owner observation,
+even outside the witness prefix. Owner-only editorial changes, corrections and
+retractions must invalidate the original snapshot. Context, lookup and support
+changes also advance the people epoch. A prior empty lookup becomes stale when a
+new rival appears; the epoch does not replace owner observations.
 
 The [capacity audit](../../../research/2026-10-17-full-normalization/scale/people-candidate-capacity.md)
-identifies why this raw-account bound must change before activation. The intended
-people v4 contract supplies complete distinct matching facts and bounded raw
-witnesses while retaining complete owner observations. That implementation and
-its capacity/freshness checks are pending; do not treat omitted witnesses as
-missing semantic facts or silently reuse a v3 policy attestation.
+explains the volume that motivated this contract. Sequential reading bounds
+retained raw-account memory, but total database work and owner-stamp output still
+grow with support. Measure those costs before rollout.
 
 Comparison exposes nonunique contact/profile agreement separately from name,
 artist and canonical-ID features. Unequal shared keys do not prove different

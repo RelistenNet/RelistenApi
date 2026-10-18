@@ -12,6 +12,47 @@ public sealed class TestPeopleResolutionPolicyEvaluator
     private readonly PeopleResolutionPolicyEvaluator evaluator = new();
 
     [Test]
+    public void PriorPeopleFactsAttestationCannotAuthorizeTheV4AggregateRecipe()
+    {
+        var policy = Policy();
+        policy = policy with
+        {
+            Artifact = policy.Artifact with
+            {
+                CandidateFactsVersion = NormalizationCandidateService.FactsVersion,
+            },
+        };
+
+        var result = Evaluate(
+            Claim("Dave Sorochty", Pair(1, exact: true, sharedArtist: true)),
+            policy
+        );
+
+        result.Action.Should().Be(PeopleResolutionAction.Unresolved);
+        result.Reason.Should().Be("unsupported_policy_applicability");
+    }
+
+    [Test]
+    public void V4CandidateCannotReplaceItsCompleteAggregateWithRawWitnesses()
+    {
+        var claim = Claim("Dave Sorochty", Pair(1, exact: true, sharedArtist: true));
+        claim = claim with
+        {
+            Candidates = claim.Candidates! with
+            {
+                Facts = claim
+                    .Candidates.Facts.Select(fact => fact with { ActorMatchingFacts = null })
+                    .ToArray(),
+            },
+        };
+
+        var result = Evaluate(claim);
+
+        result.Action.Should().Be(PeopleResolutionAction.Unresolved);
+        result.Reason.Should().Be("inconsistent_candidate_projection");
+    }
+
+    [Test]
     public void ClearWinnerCanMatchDespiteMultipleRetrievedCandidates()
     {
         var winner = Pair(1, exact: true, sharedArtist: true);
@@ -411,10 +452,11 @@ public sealed class TestPeopleResolutionPolicyEvaluator
             {
                 Hit = hit,
                 Header = new(hit.Uuid, name, 1, hit.OwnerSubjectUuid, "person"),
+                ActorMatchingFacts = new(false, [], [], [], [], [], false, false),
             })
             .ToArray();
         var snapshot = new NormalizationCandidateFactsSnapshot<PersonCandidateFacts>(
-            NormalizationCandidateService.FactsVersion,
+            NormalizationCandidateService.PeopleFactsVersion,
             "fixture-query-hash",
             new(IdentityMatchingDomain.People, [name], []),
             new(),
@@ -445,7 +487,7 @@ public sealed class TestPeopleResolutionPolicyEvaluator
             "",
             PeopleResolutionPolicyEvaluator.ScorerVersion,
             PeopleResolutionPolicyEvaluator.RetrievalVersion,
-            NormalizationCandidateService.FactsVersion,
+            NormalizationCandidateService.PeopleFactsVersion,
             NormalizationRecordingExtractor.Version,
             NormalizedPeopleService.CreditContextVersion,
             ["retained_credit"],
