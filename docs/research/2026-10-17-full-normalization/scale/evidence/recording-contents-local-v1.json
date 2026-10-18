@@ -1,0 +1,152 @@
+{
+  "state": "completed_real_recording_contents_and_v3_verification",
+  "implementation_commits": [
+    "4440f7b",
+    "f46d6bb",
+    "80e2a76"
+  ],
+  "input_receipt": "docs/research/2026-10-17-full-normalization/scale/evidence/recording-repertoire-local-v1.json",
+  "coverage_expectation_receipt": "docs/research/2026-10-17-full-normalization/scale/evidence/recording-content-expectations-v1.json",
+  "database": "relisten_normalization_materialization_20261018",
+  "migration": 52,
+  "outcomes": {
+    "recordings": 25,
+    "input_artists": 17,
+    "accepted_content_artists": 16,
+    "input_files": 281,
+    "claims": 284,
+    "accepted_contents": 257,
+    "accepted_song_contents": 250,
+    "accepted_nonmusic_contents": 7,
+    "supported_files": 256,
+    "unresolved_files": 25,
+    "accepted_setlists": 0,
+    "title_derived_song_targets": 250
+  },
+  "verification": {
+    "worker_invocations": 225,
+    "exact_process_replays": 25,
+    "fresh_retries": 25,
+    "exact_retry_replays": 25,
+    "worker_stdout_and_stderr_hashes_checked": 450,
+    "complete_claim_coverage_verified": true,
+    "stable_content_uuids_and_ownership": true,
+    "content_revisions": 257,
+    "all_content_revisions_one": true,
+    "http_requests": 2165,
+    "http_200_responses": 2165,
+    "legacy_json_responses_unchanged": 1409,
+    "http_scopes": {
+      "legacy_response_comparison": 1409,
+      "track_contents": 256,
+      "song_detail": 250,
+      "song_shows": 250
+    },
+    "http_body_bytes": 11077676,
+    "http_body_hashes_checked": 2165,
+    "legacy_relation_fingerprints_unchanged": 12,
+    "original_accepted_music_relation_fingerprints_unchanged": 4,
+    "accepted_and_legacy_rows_unchanged_during_gets": true,
+    "active_repertoire_policies": 0,
+    "active_correspondence_policies": 0,
+    "provider_requests": 0,
+    "model_requests": 0,
+    "media_requests": 0,
+    "production_writes": 0
+  },
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/migration52-v1/receipt.json",
+      "bytes": 5443,
+      "sha256": "c966728e40e6dea4da8f9e077697afedfec7e0d72d87f006796f3e2904230689"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/receipt.json",
+      "bytes": 189182,
+      "sha256": "62c6db3543398a6b7d8df8f7ca54d90b210110621e9240ae5a579eafc94abe13"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/run-plan.json",
+      "bytes": 23766,
+      "sha256": "21816b092f52aec086430ec5beb99970d1cb523c3045b0154ff9a0d5a48bbf90"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/commands.jsonl",
+      "bytes": 86700,
+      "sha256": "e0a0568b21c1c808694bae990dfc97a872a14e7bcd25682f847267b09cf8badb"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/rehearse-recording-contents.py",
+      "bytes": 9734,
+      "sha256": "74abc2064f27e5ba86feeb209dc4a1fb4afc211f5f63257b0adca582bddacfd0"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/preflight.json",
+      "bytes": 759,
+      "sha256": "7014f05f5674267d9bb69359810664c6bd78c5296eacf3fd44c150888c25d0c6"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/initial-content-identities.json",
+      "bytes": 98738,
+      "sha256": "d7f2838e7f9248958e5eb72a33655aaf47f960500e1d5c3f52501be449e2efd4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-v1/retry-content-identities.json",
+      "bytes": 98738,
+      "sha256": "d7f2838e7f9248958e5eb72a33655aaf47f960500e1d5c3f52501be449e2efd4"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-api-v1/receipt.json",
+      "bytes": 659832,
+      "sha256": "0c1980568e48154a37b40ca5ce86050914f511030505608c8165d4dc99c49da5"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-api-v1/verify-materialized-api.py",
+      "bytes": 11349,
+      "sha256": "e0382ef9b329f27e7e150516e838712f7e451630c6e417ec1f82d2cc284384fc"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-api-v1/preflight.json",
+      "bytes": 1042,
+      "sha256": "030793113632d4b98bb0c121f9af6f68bd1561b518b9d328258c3419aecba8ca"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-api-v1/contents-before.json",
+      "bytes": 139024,
+      "sha256": "64a0fc4af2cf8cbb90264097e80e87c0fa58384688ef8804632456a8fcbf0563"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-contents-api-v1/contents-after.json",
+      "bytes": 139024,
+      "sha256": "64a0fc4af2cf8cbb90264097e80e87c0fa58384688ef8804632456a8fcbf0563"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/recording-content-verification-v1/receipt.json",
+      "bytes": 2525,
+      "sha256": "13c9cdd3ab0c11976c17591e92edf0f87dd72cfc0db2206bb3ad0b65d2d385a6"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/root-source-v9.json",
+      "bytes": 26480,
+      "sha256": "1cc6e843ab8880615647e34d9db3de6c0a34deac3104bba7f369c4f7237876c5"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/root-binaries-v9.json",
+      "bytes": 1101,
+      "sha256": "93ab79a3d991ea31d39c4d1f829b46951dffe05e07a7066e04fade97e9bd1b56"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/executable-snapshots-v9.json",
+      "bytes": 6587,
+      "sha256": "29922e7b7a66eae33947e8791c1d53b8e007f8cacd3751835e252c0f93d4ff00"
+    }
+  ],
+  "limits": [
+    "This run verifies complete retained claim coverage, durable publication and public reads; it does not measure inferred identity-matching accuracy.",
+    "Song results retain title_derived basis. No inferred matching or correspondence policy was enabled.",
+    "The 25 unresolved files remain outside normalized contents without losing existing catalog playback.",
+    "HTTP checks cover metadata and playback references, not remote media delivery.",
+    "No real ordered-setlist source was retained in this copy, so real setlist publication is a separate rehearsal.",
+    "The full current regression and remaining large boundary results are recorded separately."
+  ]
+}

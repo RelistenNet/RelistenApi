@@ -1,0 +1,82 @@
+{
+  "state": "full_suite_completed_with_one_test_expectation_mismatch_corrected_by_targeted_rerun",
+  "implementation_commits": [
+    "4440f7b",
+    "f46d6bb",
+    "80e2a76"
+  ],
+  "full_suite": {
+    "build": "v9",
+    "total": 2859,
+    "passed": 2834,
+    "failed": 1,
+    "skipped": 24,
+    "minutes": 24.7837,
+    "failed_case": "CompleteImageCapacityFailureIsPermanentUntilItsSourceOrLimitContractChanges"
+  },
+  "correction": {
+    "production_code_changed": false,
+    "changed_source": {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/source-v10/RelistenApiTests/Services/TestNormalizationSetlistMaterialization.cs",
+      "bytes": 74956,
+      "sha256": "50586548a23090030364e7294de589947243d47f7595ce8cf97f2d796776f038"
+    },
+    "change": "Expect ArgumentException for unchanged retry of a permanent capacity failure; preserve all state and no-admission assertions.",
+    "targeted_rerun": {
+      "build": "v10",
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "seconds": 4.2663
+    },
+    "full_suite_rerun": false
+  },
+  "capacity_boundaries": {
+    "recording_complete_overflow": "passed in full v9 suite",
+    "setlist_complete_overflow_and_retry_refusal": "passed on corrected v10 targeted rerun",
+    "recording_5001_files_10002_correspondences_initial_and_retry": "passed in full v9 suite",
+    "cleanup_over_100000_bindings_repair_and_resume": "passed in full v9 suite"
+  },
+  "scope_limits": [
+    "No production writes, deployment or policy activation.",
+    "This verifies service contracts and capacity behavior, not automatic identity-matching accuracy.",
+    "Do not describe the original full run as zero failures."
+  ],
+  "artifacts": [
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/root-source-v9.json",
+      "bytes": 26480,
+      "sha256": "1cc6e843ab8880615647e34d9db3de6c0a34deac3104bba7f369c4f7237876c5"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/root-binaries-v9.json",
+      "bytes": 1101,
+      "sha256": "93ab79a3d991ea31d39c4d1f829b46951dffe05e07a7066e04fade97e9bd1b56"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/executable-snapshots-v9.json",
+      "bytes": 6587,
+      "sha256": "29922e7b7a66eae33947e8791c1d53b8e007f8cacd3751835e252c0f93d4ff00"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/full-suite-v9.log",
+      "bytes": 268655,
+      "sha256": "2d999248c9e3ccb80c8baf71c8db52129a865fa85ae75c730469672bb9814530"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/build-v10.log",
+      "bytes": 29056,
+      "sha256": "e4e1ca564236f5d81942452d3f8df63abb5f9c701719654b76525dbf2069f45e"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/capacity-retry-v10.log",
+      "bytes": 1798,
+      "sha256": "dcfff9c45a02a23143ffd7218347cc35bb1c222166e39e3dc19b84f15f885598"
+    },
+    {
+      "path": "local-dev/normalization-data/2026-10-18-repertoire-consumers-m2-verification-v1/root-binaries-v10.json",
+      "bytes": 2141,
+      "sha256": "c95579fb37e59f7b47ea9a94f214441afc6cbbc388b4a88b69e2219399398db2"
+    }
+  ]
+}

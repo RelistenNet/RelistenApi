@@ -1,67 +1,75 @@
-# Real recording inputs for setlist and file-content publication
+# Real recordings from extraction to v3 file lookup
 
-A dedicated local copy now has a published extraction page of 25 recordings
-across 17 artists. Its 281 file-title proposals include 276 extracted segments
-and three files with several segments. Exact terminal replay preserves the saved
-selection, attempt UUIDs and outcomes. These are prepared inputs for the
-[setlist and file-content consumers](../../../plans/active/2026-10-17-full-normalization/repertoire-consumers.md),
-which remain under implementation. No accepted file contents or setlists were
-published by this preparation.
+Twenty-five recordings from 17 artists have passed extraction, repertoire
+resolution, file-content publication, exact replay and fresh retries through the
+actual worker. The run published 257 contents across 256 files and 16 artists:
+250 song contents and seven nonmusic contents. Twenty-five files remain
+unresolved. Existing playback remains available for those files.
+The inputs include Jerry Garcia Band, Legion of Mary, Reconstruction, Grateful
+Dead and artists from the Aadam Jacobs collection.
 
-The [input receipt](evidence/materialization-local-inputs-v1.json) records the
-copy, operator output, read-only inventory and artifact hashes. The source is the
-verified migration-51 [repertoire rehearsal](repertoire-local-rehearsal.md).
-The new database, `relisten_normalization_materialization_20261018`, retains its
-268 artists, 701 recordings, 7,826 files and 209 accepted imported songs.
+The [publication and v3 receipt](evidence/recording-contents-local-v1.json) records
+225 worker invocations and 2,165 successful HTTP requests. All 1,409 retained
+legacy responses match. Normalized reads verify each accepted file image,
+250 title-derived song details and their show results against the current
+playback ownership exposed by legacy show responses. Fresh retries preserve
+content UUIDs and ownership; each of the 257 contents still has one accepted
+revision. These checks establish publication and read behavior, not inferred
+identity-matching accuracy.
 
-The copy uses a read-only logical dump and restores into a new local database.
-All 12 legacy relation fingerprints and four accepted-music relation fingerprints
-match before and after the copy and recording extraction. The original repertoire
-rehearsal remains unchanged. Both extraction and replay run the actual
-`--normalize-recordings` worker command in Production configuration. All 25 exact
-producer Work receipts are published and remain their owners' current publication.
-Consumers must still authenticate the original input and dependency read sets
-before accepting data. No provider, model, Redis or Temporal connection is needed.
+## Inputs and complete file coverage
 
-The ignored directory is
-`local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/`.
-It retains the copy procedure, dump, baseline fingerprints, saved page UUID and
-selectors, exact command outputs and inventory SQL. Reuse the saved page and
-processing-attempt coordinates for replay; allocate new attempt UUIDs for later
-repertoire and consumer processing. Preserve this input receipt when adding
-those separate results. This page establishes real-input preparation and replay,
-not inferred matching accuracy, accepted song coverage or a complete backfill.
-
-## Completed recording-title decisions
-
-The next [recording-title receipt](evidence/recording-repertoire-local-v1.json)
-records completed repertoire accounts for all 25 saved recording extractions.
-The resolver makes 284 claim decisions: 251 visibly `title_derived` provisional
-song identities and 33 unresolved decisions with `unsupported_claim_kind`.
-All accounts complete and replay through 294 actual worker invocations.
-No inferred matching policy is active, and this run merges no identities by title
-similarity.
-
-The new database now contains 460 accepted repertoire entries. All 209 original
-entries, their imported assignments, external identities and original revision
-rows retain their exact fingerprints. All 12 legacy relation fingerprints and the
-original rehearsal database also remain unchanged. There are still no accepted
-file contents or setlists. The completed accounts supply real inputs for consumer
-publication; this run does not yet verify their new song-to-file results over HTTP.
-
-## Expected file-content coverage
+The [input receipt](evidence/materialization-local-inputs-v1.json) retains the
+published extraction page: 281 file-title proposals, 276 extracted segments and
+three files with several segments. The [repertoire receipt](evidence/recording-repertoire-local-v1.json)
+accounts for 284 claims: 251 provisional song identities with `title_derived`
+basis and 33 unresolved decisions with `unsupported_claim_kind`. No inferred
+matching policy is active. Titles do not establish cross-artist identity.
 
 A separate read-only [coverage check](evidence/recording-content-expectations-v1.json)
-freezes the expected first publication before running the consumer. The complete
-284 claims cover 281 files: 251 song claims, eight nonmusic claims and 25 unknown
-claims. Each claim appears exactly once in the accepted or unresolved partition.
+froze every expected file, position, kind and song target before publication.
+All 284 claims appear exactly once in its accepted or unresolved partition.
+The first published image matches that expectation in full.
 
-The expected result is 257 contents across 256 files: 250 song contents and seven
-nonmusic contents. Twenty-five files remain unresolved. One otherwise-supported
-song claim and one nonmusic claim share files with unknown contents, so the whole
-file image stays unresolved. This preserves the complete-image contract while
-leaving existing playback available. These are expectations from retained claims
-and repertoire decisions, not observations of consumer publication or evidence of
-matching accuracy. The command rehearsal must compare its actual first image
-against these exact file, position, kind and song coordinates before checking
-retries and v3 reads.
+The 257 accepted contents cover 256 files. Twenty-five files contain unknown
+material. One otherwise-supported song claim and one nonmusic claim share such
+files, so their complete images stay unresolved too. The consumer preserves
+existing playback while retaining each unresolved reason. Title segment order
+supplies no audio times or setlist occurrence alignment; those fields remain
+null in the accepted contents and public responses.
+
+## Local copy and preservation
+
+The database `relisten_normalization_materialization_20261018` is a separate
+copy of the verified [repertoire rehearsal](repertoire-local-rehearsal.md).
+It retains 268 artists, 701 recordings, 7,826 files and 460 accepted repertoire
+entries, including all 209 original imported songs. Migration 52 was applied
+through the actual worker after saving a dump and baseline fingerprints.
+
+All 12 legacy relation fingerprints and four original accepted-music relation
+fingerprints match after publication and retries. The latter comparison excludes
+only the new `track_contents` revision kind, then compares complete original
+rows, including their UUIDs and payloads. API reads leave accepted and legacy
+rows unchanged. No acquisition, model processing, media download or production
+write occurred, and no repertoire or correspondence policy was enabled.
+
+The ignored directory
+`local-dev/normalization-data/2026-10-18-materialization-rehearsal-v1/`
+retains the inputs, migration backup, saved attempt UUIDs, command outputs,
+coverage expectations, SQL and HTTP bodies. The receipts authenticate their
+exact bytes. Immutable assembly and source snapshots identify the executed
+implementation. Resume saved coordinates rather than replacing a failed run
+with newly allocated attempts.
+
+## Remaining verification
+
+This copy contains no retained real ordered-setlist source and no accepted
+setlist. The [setlist and file-content consumers](../../../plans/active/2026-10-17-full-normalization/repertoire-consumers.md)
+have service-level publication and recovery coverage. A real setlist rehearsal
+must retain a supported provider account, freeze its order and annotations,
+then verify extraction, repertoire decisions, publication and v3 reads.
+Legacy song-membership joins cannot reconstruct missing source order.
+
+The [consumer verification record](evidence/repertoire-consumer-contracts-v1.json)
+retains the full regression result and corrected capacity-retry rerun. Independent identity evaluation, production policy
+activation and the all-artist backfill remain release requirements.
