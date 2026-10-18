@@ -49,14 +49,14 @@ mismatch. It also verified 36,319,601 catalog literal/span citation instances.
 The 157,656 files without captured source homes retain explicit null
 coordinates. These checks establish preservation, not identity accuracy.
 The [full-file reader](http://alecs-macbook-pro.tail09dbf.ts.net:18767/?domain=file_contents)
-is available. Background indexing is temporarily paused to reserve capacity for
-contextual people matching and the shared lookup features. Existing indexed
-results remain searchable; its coverage panel distinguishes visible results from
-the complete computed population and reports pending chunks. Restarting without
-`--pause-indexing` resumes the same cache. Known semantic issues remain visible;
-native-provider coverage and identity accuracy remain open.
-The current cache exposes 6,745,805 logical outcomes from 3,513 chunks, with
-7,113 chunks pending. A full-size restart exposed a coverage-query timeout.
+is available. Background indexing has resumed in the same cache after additional
+host capacity became available. Its coverage panel distinguishes visible results
+from the complete computed population and reports pending chunks. Restarting with
+`--pause-indexing` keeps the existing cache searchable without processing more
+chunks. Known semantic issues remain visible; provider coverage and identity
+accuracy remain open. The resume began at 6,745,805 logical outcomes from 3,513
+chunks, with 7,113 pending. Use live coverage for current progress.
+A full-size restart exposed a coverage-query timeout.
 Coverage now uses counts committed with each chunk; the existing-cache migration
 took 20 seconds and the actual HTTP stats request returned in 0.58 seconds.
 
@@ -119,10 +119,28 @@ unchanged. The configured token-cost estimate is $0.66; the conservative ledger
 accounts for $0.71 including reservations. Exact usage and continuation coordinates remain
 in the retained job. Neither amount is an invoice.
 
+A pending-only continuation is now running as a new bounded job. It preserves
+the original 246 recorded batches and submits only the remaining 254 batches
+(2,540 questions). Its limits are $10, 508 attempts, 30 minutes and a 5.5 GiB
+free-space floor. The four uncertain cancelled attempts keep their original
+reservations. Recovery and directory attachment retain the original 5,000-question
+denominator and report old and new job costs separately. The original 142 missing
+or rejected questions remain explicit. See the
+[continuation contract](../../../../tools/RelistenNormalization/people-directory.md#pending-only-continuation).
+
 Prose and extraction errors still fragment names before identity matching can
 help. Use the broader contextual results to improve those failure classes. Do
 not grow a list of exceptions for individual names. See the
 [directory interface and operations](../../../../tools/RelistenNormalization/people-directory.md).
+
+The same directory now includes 801 native actor observations, 867 role mentions
+and two role-free alias actors from the complete 670-input native run. Native
+observations may repeat catalog credits; these counts are separate and not
+additive. Original recording, file and selected-root scopes remain inspectable.
+Alias-only observations supply no credit role. The update preserves all 594,825
+catalog credit mentions, recording homes and contextual comparisons. Aadam
+Jacobs still has 470 catalog recordings across 96 artists. Searches for DATPAT
+and bazillion retrieve the native aliases and their exact retained evidence.
 
 ### Shared venue and music lookup
 
@@ -133,20 +151,32 @@ its result count is not a physical-place count. Each venue detail follows the
 selected legacy UUID into recordings and their original playable files. Related
 observations expose shared hypotheses without claiming that every recording
 belongs to the same physical premises. The current projection uses retained v1
-hypotheses; historical-name evidence remains absent. See the
+hypotheses; dated historical-name evidence remains absent. A separate 9,814,016-byte
+overlay adds all 670 native venue accounts and exact recording-origin links to
+34,139 native files. It stores each complete recording origin once and keeps the
+legacy database read-only. Native catalog anchors stay in the original native
+reader namespace, even when a Local UUID coincides with a production UUID.
+Raw venue-history prose and competing localities remain cited observations.
+See the [native integration contract](../../../research/2026-10-17-full-normalization/scale/venue-directory.md)
+and the
 [venue interface and operations](venue-directory.md).
 
 [Music discovery](http://alecs-macbook-pro.tail09dbf.ts.net:18769/) currently
-projects 19,407 repertoire keys, five supported work keys and 38,517 setlist
-accounts from the core and local readers. Its 4,626 artist entries keep catalog
-namespaces separate. Exact song/work keys also query the current full-file
+projects 24,242 repertoire keys, 31 supported work keys and 38,517 setlist
+accounts. Its catalog, local and native namespaces remain separate. Native
+file titles contribute the existing resolver's song interpretations and
+alternatives; the browser does not match titles again. Exact song keys can open
+individual native files, including authenticated Local playback for “I Am the
+Walrus” and a separately labeled Phish provider link for “Llama.” Exact song/work
+keys also query the current full-file
 reader: Bob Weir's “Poison Ivy” returned 38 playable files with their original
 recording homes. The ordered Grateful Dead account retains three sets and
 18 passages, alongside its source annotations and unresolved song alternatives.
 
 The measured full-file cache contains 963,476 repertoire keys and 32 qualified
-work keys. That broader title projection stopped at its storage reserve before
-publication; the previous completed music catalog remains available. Full-reader
+work keys. That broader title projection previously stopped at its storage
+reserve before publication. Its next complete build follows full-file indexing;
+the current completed music catalog remains available. Full-reader
 relationships are queryable, but their titles are explicitly marked unprojected.
 Supported global work correspondences are still sparse. A browse interface does
 not supply missing composition evidence. See the
@@ -209,9 +239,10 @@ times, ordered setlist occurrences or performance assignments.
 Native aliases now retain assertions, scope coverage and unresolved wording from
 recording/file prose and the selected Local root account. Native venues retain
 identifiers, coordinate kinds, locality alternatives and history prose. Adjacent
-Local accounts cannot contribute facts. These native proposals remain separate
-from the older people/venue directory and music-discovery projections. Connecting
-the new observations to those shared discovery features remains integration work.
+Local accounts cannot contribute facts. The shared people, venue and music pages
+now include these native observations while retaining separate namespaces,
+counts and evidence. Equal names do not create canonical identity merges, and
+native UUID anchors never route into a different captured catalog.
 
 The reader adds a compact child-file index while retaining full bodies in the
 original provider chunks. Its complete cache is 14,659,584 bytes, including the
@@ -258,12 +289,31 @@ an accepted catalog assignment. Later responses require a new replay selection.
 That follow-on closed at its original deadline with 3,073 retained inputs.
 A new bounded acquisition reuses completed captures and durable resource history
 before issuing new requests. Two subsequent attempts retained 20 more responses,
-for 3,093 total, then closed at the disk reserve. Acquisition remains incomplete
-and is stopped pending capacity. Its request retains a 2,000-invocation,
+for 3,093 total, then closed at the disk reserve. Acquisition remains incomplete;
+the deadline-limited attempts stay closed. Its request retains a 2,000-invocation,
 45-minute limit and a 128 MiB actual retained-payload limit. The separate 16,777,216,000-byte invocation
 allowance reserves a conservative 8 MiB per attempted call; it is not a disk
 allocation. The monitor stops at 4.6 GiB free space. New captures remain separate
 from the frozen provider wave until a new replay selection admits them.
+
+The newer cached-composition replay admits all 3,093 retained MusicBrainz inputs
+without another provider or model call. It preserves the original revisions,
+payload hashes and primary proof packet. All 575,103 embedded song memberships
+in the captured sets exactly match the complete 16,605-song dictionary, so the
+existing song-shard command supplies the same repertoire context without
+re-emitting setlists. The replay produced 54,861 outcomes and 32 linked song
+rows across 15 artists, naming 31 distinct works. These remain supported
+composition proposals, not accepted identities. There are 125 song results
+with artist-repertoire ambiguity.
+
+The [cached-composition reader](http://alecs-macbook-pro.tail09dbf.ts.net:18773/?domain=compositions)
+indexes the complete replay. Music discovery incorporates its supported links
+alongside the earlier source contributions: 31 works and 35 scoped work/song
+associations. “Crazy Fingers” links the separate Grateful Dead and Dark Star
+Orchestra repertoire identities through the same cited work. Source-specific
+relationships remain inspectable; a local Grateful Dead identity retains its
+own namespace. The larger external acquisition plan remains incomplete.
+
 The [provider-wave receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-provider-wave-v2.json)
 pins the exact frozen manifest and input bytes. The phone reader now includes
 this wave. The new replay changed 11 catalog composition results from unresolved
@@ -321,16 +371,28 @@ host measurements in the full-file producer receipt. A measured reader
 benchmark projects 4.00–4.12 GB for the file population and song/setlist context;
 that range is not a final capacity measurement. The full index uses
 a separate view that hard-links every immutable base chunk and the four
-corrected chunks. The experimental reader uses a 3.5 GiB reserve plus 128 MiB
-for a chunk write. This revises the earlier 4 GiB reader planning threshold so
-the file index and people directory can coexist. Indexing pauses at the reserve
-while existing results remain browsable; other job limits are unchanged.
+corrected chunks. Additional host capacity is now available: the full-file
+reader resumed with about 14 GiB free. It retains its existing cache and uses
+a 5 GiB reserve plus 128 MiB for a chunk write. The complete music-title build
+uses a separate 5.5 GiB reserve and a 384 MiB replacement cap. These limits leave
+room for the smaller context jobs. Indexing pauses at the reserve while existing
+results remain browsable. Measure current free space before each new job.
 
-Keep the current results available and resume the full-file index after the
-smaller lookup and contextual matching jobs finish. Continue distinct-person
+Keep the current results available while full-file indexing runs. Build the
+complete title projection after that cache is current, then continue distinct-person
 resolution, physical-location evidence, composition investigation and native
 provider coverage. Extend the bounded refresh rehearsal to full-catalog automatic
 change processing and recovery.
+
+Before another full source-credit pass, fix the shared byline and actor-attachment
+grammar. The existing directory already uses the current credit extractor;
+rerunning it unchanged would retain names polluted by action phrases, contacts
+and surrounding prose. Overlapping candidate scans identify 4,218 recordings
+across 658 artists for these classes; these are investigation counts, not an
+estimated error rate. Preserve original wording and spans, legitimate handles
+and ambiguous attachments. Refresh into a separate generation after behavioral
+verification, including role-free actor observations. Keep the current contextual
+cohort frozen; changed or split actors require new scoped comparisons.
 Automatic production acceptance, full backfill and API compatibility still
 require independent qualification. Earlier bounded checks remain in the
 [inline range receipt](../../../research/2026-10-17-full-normalization/scale/evidence/shadow-inline-first-range-v1.json)
@@ -451,11 +513,10 @@ Completed evaluation found format-specific credit gains, people features that ca
 
 The retained-sample pass, full raw capture, core recording/venue pass, local
 Jerry/Aadam rehearsal and full-file computation are complete. The full-file
-reader serves the verified correction from its existing index; indexing is
-temporarily paused to reserve capacity for the next domain jobs. The
+reader serves the verified correction and is indexing the remaining chunks. The
 people directory supports cross-artist credit lookup and contextual Luna
-hypotheses. Shared venue and music lookup are available. Next, integrate native
-observations into shared discovery and complete broader title discovery, then improve physical-venue
+hypotheses. Shared venue and music lookup now include native observations and
+the cached composition replay. Next, complete broader title discovery, then improve physical-venue
 and composition evidence using the visible results. Physical venue
 history, legacy setlist order, importer provenance and independent accuracy
 qualification remain open; production acceptance follows that work.

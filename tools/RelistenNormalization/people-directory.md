@@ -172,6 +172,8 @@ dotnet tools/RelistenNormalization/bin/Debug/net10.0/RelistenNormalization.dll \
 
 A cancelled run retains all prepared inputs and the hash of its completed result prefix. Recovery verifies the recorded number of completed batches, without treating unrecorded inputs as failed responses. Its projection preserves the stopped execution state even though recovery itself completed. Recovery retained 718 supported decisions without new calls or spend. Known token cost for the original job was $0.6608652 at configured rates; the ledger retained $0.7115587 including uncertain cost reservations. These values are not invoice totals.
 
+## Pending-only continuation
+
 The retained `continuation.json` lists completed and pending batch IDs against the original input hash, plus attempts whose results were not recorded. The stopped job stays closed. Prepare a new job containing only those pending batches:
 
 ```sh

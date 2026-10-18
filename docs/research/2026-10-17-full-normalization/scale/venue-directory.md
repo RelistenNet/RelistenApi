@@ -6,12 +6,14 @@ recording homes. Native observations have separate identifiers and coverage;
 they do not become canonical venues or join catalog records by matching names,
 provider numeric IDs or Local numeric IDs.
 
-This addition is implemented and tested against synthetic retained outcomes.
-The first actual 34,139-file projection reached the 32 MiB staging cap and
-published nothing. The interned retry completed with 670 observations, 670 input
-parents and 34,139 files in 0.773 seconds. Its 9,814,016-byte overlay fits the
-unchanged 32 MiB cap. Reader integration and cutover remain separate verification;
-this document does not claim that cutover has happened.
+The integration is live in the [venue directory](http://alecs-macbook-pro.tail09dbf.ts.net:18770/).
+The complete native overlay contains 670 observations, 670 input parents and
+34,139 files. Its 9,814,016 bytes fit the unchanged 32 MiB cap. Recording origins
+are stored once per account; repeating their full text for every file had exceeded
+that cap. The build completed in 0.773 seconds. Original native recording/file
+scope and catalog playback were verified through the reader's HTTP interfaces.
+All 216,332 legacy venue rows and 292,523 recording homes remain available from
+the read-only legacy database. The native detail also fits a 390-pixel viewport.
 
 ## Project and serve
 
