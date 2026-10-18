@@ -56,6 +56,15 @@ The six negatives concern performers or ensembles; confirmed same-full-name
 taper/transferrer collisions remain a gap. This tranche falls 38 short of the
 proposed 200-question expansion. Keep its results separate from the earlier 200.
 
+The source-view v2 comparison now uses the same 162 questions, frozen labels and
+model parameters after adding exact role-free byline aliases. Both models improve
+to 44 true positives, three false positives, three false negatives and three true
+negatives. One known relationship is repaired; six errors remain. All 109 unknown
+judgments remain unknown. This is a development-seen parser improvement, with no
+fitting or threshold selection. Independent arithmetic and source review are
+complete. The [expanded comparison receipts](../../../research/2026-10-17-full-normalization/training/expanded-matching-v1.json)
+pin the inputs, actual exports and separate reports.
+
 The committed v3 credit extractor now requires actor-specific prose attribution,
 supports named media transfers and credited handles, and preserves exact quotes,
 whole-response refusal and versioned caches. A compiled replay of all 458 distinct
@@ -69,7 +78,8 @@ fields available in both runs, v3 recovers 209 supported credits, adds five fals
 credits and misses nine; v2 recovers 207, adds six and misses 11. Three fields
 improve and one gains an error. Fifteen complete fields become available and
 fifteen become unavailable, so preserve those changes separately. Independent
-result review is in progress; these development results choose no fallback policy.
+result review is complete; the independently reproduced counts support these
+development conclusions and choose no fallback policy.
 
 The 600 venue queries now have an additive read-only catalog capture:
 1,954 dated association rows cover 594 queries. All first 60 review queries have
@@ -84,17 +94,35 @@ over a fixed 100-row budget, but gives no advantage over an equally sized expand
 row budget on the 32 exposed directions. Keep this result as an experiment; it
 does not justify production grouping complexity.
 
-The composition and repertoire selection retains 120 composition claims from 40
-artists and 60 repertoire parents from 50 artists, with complete selected context
-and song dictionaries. Preparing actual public-contract exports exposed dictionary-free
-recordings and unordered legacy setlist membership. Preserve these cases and their
-limits. Bounded MusicBrainz acquisition is now running 420 frozen first-page
-queries for 120 composition claims across 40 artists, with at most 600 dispatched
-attempts and 256 MiB of retained evidence, including candidate hydration. Search
-windows and the external universe remain incomplete. Next establish supported
-catalog-to-work bridges and evaluate matching; acquisition alone supplies no
-identity answer. Expand repertoire queries with dictionary-bearing artists and
-file-title claims; existing imported memberships remain a separate control.
+Native catalog capture now covers all 6,838 selected venue candidates, with their
+original index fields unchanged. It records counts for 20,453 associated show,
+source and setlist rows; the dated rows themselves still need capture. The next
+capture uses 45 bounded partitions within the original 14 logical batches. This
+keeps the existing output limits after checking that one original batch could
+not fit its 2 MiB guard. Source prose is materialized only after selecting explicit
+source IDs. This preparation establishes neither venue identity nor event dates.
+
+The composition selection retains 120 claims from 40 artists. MusicBrainz
+acquisition stopped at its 600-attempt bound: 416 of 420 searches completed and
+28 recording responses were captured. Four searches failed after retries and
+14 recording lookups remain undispatched. Seventeen literal recording-to-work
+assertions are retained. Search windows and the external universe remain
+incomplete. Independently adjudicated catalog-first readings preserve the claims
+without assigning specific works or writers. Next join that frozen source account
+to external evidence and primary credits; acquisition alone establishes no
+catalog-to-work identity. Any further acquisition requires its own bounded window.
+
+Repertoire evaluation now covers 200 file-title cases from 115 artists and 117
+source families. All are Archive-associated; 100 cases have empty captured artist
+dictionaries, and only 15 artists supply nonempty dictionaries. Independent
+adjudication retains 168 literal segments and 73 supported local title-derived
+links. The actual public comparison exports all 200 tasks and 35,953 pairs. It
+admits a candidate signal for 72 of those 73 segments, covering 71 of 72 distinct
+case/record pairs. The remaining 1,069 signals are unadjudicated, not false
+positives. This whole-title pair contract does not measure content classification,
+extracted component spans, final ambiguity handling or accepted-match precision.
+Measure those through the existing title extractor and resolver decision
+contracts next, preserving unknowns and complete candidate dictionaries.
 
 The [retained broad API regression](../../../research/2026-10-17-full-normalization/scale/evidence/full-suite-current-v1.json)
 passes on its pinned earlier revision. The decoder-v7 change passes 624 distinct

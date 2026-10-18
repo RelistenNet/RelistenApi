@@ -1,0 +1,73 @@
+{
+  "version": "expanded-matching-results-v1",
+  "state": "development_evaluation_matching_inactive",
+  "peopleAliasComparison": {
+    "path": "local-dev/normalization-data/2026-10-18-people-native600-alias-v3-comparison-v1/manifest.json",
+    "sha256": "cd1e25c4d316c183948db1267db869adc46ba764a7291d1b5b4f5c9c5127b1ab",
+    "questions": 162,
+    "artists": 95,
+    "knownSame": 47,
+    "knownDifferent": 6,
+    "unknown": 109,
+    "bothFrozenModels": {"truePositives": 44, "falsePositives": 3, "falseNegatives": 3, "trueNegatives": 3},
+    "knownRelationshipsRepaired": 1,
+    "priorErrorsRemaining": 6,
+    "qualification": "Same development questions, labels and model parameters; no fitting, threshold selection or release qualification. Unknowns remain unscored."
+  },
+  "repertoireAdjudication": {
+    "path": "local-dev/normalization-data/2026-10-18-repertoire200-adjudication-v1/manifest.json",
+    "sha256": "1b1739fd03f38ffe208694f98237b0dae33edae56c6d2a67d355ebf95a3c993b",
+    "cases": 200,
+    "artists": 115,
+    "sourceFamilies": 117,
+    "literalSegments": 168,
+    "supportedLocalTitleDerivedLinks": 73,
+    "qualification": "Metadata judgments, not audio or global composition identities. All playback sources Archive-associated; 100 cases have empty captured artist dictionaries."
+  },
+  "actualRepertoirePairComparison": {
+    "path": "local-dev/normalization-data/2026-10-18-repertoire200-public-baseline-evaluation-v1/manifest.json",
+    "sha256": "e370275366915bfe616ff95c8dc2330f34acc2e496d0c7ca6c1ac79579a2d01e",
+    "tasks": 200,
+    "pairs": 35953,
+    "candidateSignals": 1140,
+    "reviewedDistinctPairsAdmitted": 71,
+    "reviewedDistinctPairs": 72,
+    "unadjudicatedCandidateSignals": 1069,
+    "qualification": "Candidate coverage only. No accepted precision, ranking, content classification, component extraction or final ambiguity decision measured."
+  },
+  "catalogFirstCompositionAdjudication": {
+    "path": "local-dev/normalization-data/2026-10-18-composition120-source-adjudication-v1/manifest.json",
+    "sha256": "26211bdc9f3d823bb1e561a11a0dc78318f408a14d77adb698e94aff5d17100a",
+    "claims": 120,
+    "artists": 40,
+    "originals": 140,
+    "qualification": "Frozen before external evidence; specific global works and writers remain unresolved for the external-source and primary-credit join."
+  },
+  "musicAcquisition": {
+    "path": "local-dev/normalization-data/2026-10-18-music-real-acquisition-audit-v1/manifest.json",
+    "sha256": "bb963c356534c83ecbb99c808da6144da1549ea4e46a163637b6ba5bc97591bd",
+    "attemptBound": 600,
+    "completedSearches": 416,
+    "plannedSearches": 420,
+    "capturedRecordingResponses": 28,
+    "pendingUndispatchedRecordingLookups": 14,
+    "literalRecordingToWorkAssertions": 17,
+    "qualification": "Stopped at the original HTTP bound. Search pagination and the external universe remain incomplete; no catalog-to-work correspondence accepted."
+  },
+  "venueNativeCapture": {
+    "path": "local-dev/normalization-data/2026-10-18-venue600-native-capture-v2/manifest.json",
+    "sha256": "ccb4c475adfacb9934094da71f2cbf965671611c3f517927c60655ae7fb097e9",
+    "candidateRecords": 6838,
+    "associatedRowsCounted": 20453,
+    "qualification": "Native fields and counts captured; dated association rows and physical identity still require their separate evidence."
+  },
+  "venueExecutionPreparation": {
+    "path": "local-dev/normalization-data/2026-10-18-venue600-dated-source-execution-preparation-v1/manifest.json",
+    "sha256": "b3bcf12cb158ea16b91ca62b73d9e484563619205337629d877db7ab2bee9471",
+    "boundedPartitions": 45,
+    "originalLogicalBatches": 14,
+    "qualification": "Prepared and reviewed only. Same candidate scope, row fields and global/per-statement limits; no SQL executed by preparation."
+  },
+  "productionWrites": false,
+  "policyActivation": false
+}

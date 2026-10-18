@@ -29,6 +29,13 @@ advances.
 
 As of 2026-10-18:
 
+- [x] Add bounded recording-byline aliases and the separately typed v2 offline
+  source view. Preserve role-free evidence and current-only positive authority
+  while authenticating original v2 producers for trusted correction. The
+  [v3 receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-alias-v3.json)
+  records 253 pure and 293 current local checks, ten genuine historical control
+  invocations and 35 Python tests. The unchanged-model development comparison
+  repairs one missed relationship; six earlier errors remain.
 - [x] Add the shared pure extractor, retained-input mapper and role-free assertion
   types. Preserve source-local names, relationships, headings and qualifiers.
 - [x] Integrate optional source-actor scopes into recording/file/selected Local
@@ -166,13 +173,15 @@ authority and history tables; do not substitute raw alias-table reads or rewrite
 old assertions. Source-actor acceptance remains inactive while the later phases
 below are implemented and verified.
 
-The corrected producer is `source-actor-aliases-v2/recording-actor-evidence-v1`.
+The roster-continuation correction was evaluated under
+`source-actor-aliases-v2/recording-actor-evidence-v1`. The current v3 producer
+retains that grammar and adds bounded recording-operation bylines.
 An unfamiliar coordinated instrument row can retain roster context only under
 the bounded continuation rule. It emits no alias from that row and makes its
 field incomplete. Prose and unsupported section boundaries still end the roster.
-The development run retains two assertions, one with a conditional qualifier,
+The v2 development run retains two assertions, one with a conditional qualifier,
 and unresolved evidence on 37 sources. These are proposal counts, not people
-counts. Future policy evaluation must cover the v2 attachment rule and incomplete
+counts. Policy evaluation must cover the current attachment rules and incomplete
 fields before these proposals can authorize accepted aliases.
 
 The [verification receipt](../../../research/2026-10-17-full-normalization/scale/evidence/source-actor-proposals-v2.json)

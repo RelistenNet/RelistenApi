@@ -675,21 +675,22 @@ hashes do not change. Never reinterpret an old policy or terminal receipt.
 Drain or reject unfinished incompatible applications under processing-version
 rules; do not resume them with new facts.
 
-The current explicit offline proposal mode shares the parser and retains whole
-original `Inputs`; old modes retain their contracts. The later source-actor
-context/view route needs a separate version and nullable DTO field. Scope its
-keys by producer, resource, field and local reference; select exact primary or
-alias citations and retain ambiguous references separately. Keep old targets and
-source/view artifacts unchanged. Expanded coverage still requires independent
-identity evaluation and public C# numerical parity even if the five feature
-meanings remain unchanged.
+The explicit offline proposal mode shares the parser and retains whole original
+`Inputs`. Existing modes retain their protocols and pin their source projection
+versions. The v2 context/view route adds nullable `SourceAssertion` separately
+from credit facts. Scope its keys by producer, resource, field and local reference;
+select exact primary or alias citations and retain ambiguous references
+separately. Keep old targets and source/view artifacts unchanged. Expanded
+coverage still requires independent identity evaluation and public C# numerical
+parity even if the five feature meanings remain unchanged.
 
-Phase 2 changes no extraction or input producer version, credit/title identity,
-public v3 response shape or matching-policy activation. The current pure/retained
-source-alias producer remains `source-actor-aliases-v2/recording-actor-evidence-v1`.
-The new people facts version changes candidate/query and processing fingerprints;
-new policies need an evaluation for that contract. Exact terminal receipt replay
-remains separate from unfinished processing under a new version.
+Storage and read changes preserve credit/title identities and the public v3
+response shape. The current alias parser is
+`source-actor-aliases-v3/recording-actor-evidence-v1`; the retained producer and
+processing fingerprints include that version. New policies need evaluation for
+the current source contract. Historical correction readers authenticate exact
+old producers without promoting their positive authority. Exact terminal receipt
+replay remains separate from unfinished processing under a new version.
 
 Enable accepted publication only after the full support/review/read lifecycle,
 scale and checkpoint tests and a qualified evaluated policy are ready. Monitor
