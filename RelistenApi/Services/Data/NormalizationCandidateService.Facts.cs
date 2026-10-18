@@ -106,39 +106,7 @@ public sealed partial class NormalizationCandidateService
         CancellationToken ct
     )
     {
-        if (query.Domain != domain)
-        {
-            throw new ArgumentException(
-                "Use the facts method for the query's identity domain.",
-                nameof(query)
-            );
-        }
-
-        var frozen = FreezeFactsQuery(query);
-        var names = ValidateQuery(frozen);
-        var limits = ValidateFactsLimits(requestedLimits ?? new());
-        if (domain == IdentityMatchingDomain.People)
-        {
-            limits = limits with
-            {
-                MaximumActorMatchingBytes = limits.MaximumActorMatchingBytes ?? 4 * 1024 * 1024,
-                MaximumAliasMatchingNames = limits.MaximumAliasMatchingNames ?? 5000,
-                MaximumAliasMatchingBytes = limits.MaximumAliasMatchingBytes ?? 4 * 1024 * 1024,
-                MaximumAliasEvidenceBytes = limits.MaximumAliasEvidenceBytes ?? 4 * 1024 * 1024,
-            };
-        }
-        else if (
-            limits.MaximumActorMatchingBytes != null
-            || limits.MaximumAliasMatchingNames != null
-            || limits.MaximumAliasMatchingBytes != null
-            || limits.MaximumAliasEvidenceBytes != null
-        )
-        {
-            throw new ArgumentException(
-                "Actor and alias matching limits apply only to people facts.",
-                nameof(requestedLimits)
-            );
-        }
+        var prepared = PrepareFactsQuery(query, domain, requestedLimits);
 
         await using var connection = db.CreateConnection(false, false);
         await connection.OpenAsync(ct);
@@ -154,42 +122,14 @@ public sealed partial class NormalizationCandidateService
             )
         );
 
-        // Selection and every later assertion/clock read use this original primary snapshot.
-        // Calling FindAsync and then reading fresh clocks would not establish this contract.
-        var selection = await FindInSnapshotAsync(connection, transaction, frozen, names, ct);
-        var context = new CandidateFactsContext();
-        var selected = selection;
-        if (selection.Items.Count > limits.MaximumCandidates)
-        {
-            context.AddIssue(CandidateFactsIssueKind.CandidateLimit);
-            selected = selection with
-            {
-                Items = selection.Items.Take(limits.MaximumCandidates).ToArray(),
-            };
-        }
-
-        foreach (var candidate in selected.Items)
-        {
-            context.AddOwner(candidate.OwnerSubjectUuid, candidate.Uuid);
-        }
-
-        if (frozen.ArtistUuid is { } artistUuid)
-        {
-            context.AddArtist(artistUuid);
-        }
-
-        var facts = await readFacts(connection, transaction, selected, limits, context, ct);
-        var universes = await ReadFactsUniversesAsync(connection, transaction, frozen, ct);
-        var readSet = await context.ReadReadSetAsync(connection, transaction, universes, ct);
-        var result = new NormalizationCandidateFactsSnapshot<T>(
-            query.Domain == IdentityMatchingDomain.People ? PeopleFactsVersion : FactsVersion,
-            FactsQueryHash(frozen, limits),
-            frozen,
-            limits,
-            selection,
-            facts,
-            readSet,
-            context.Issues
+        var result = await ReadFactsInSnapshotAsync(
+            connection,
+            transaction,
+            prepared.Query,
+            prepared.Names,
+            prepared.Limits,
+            readFacts,
+            ct
         );
 
         await transaction.CommitAsync(ct);

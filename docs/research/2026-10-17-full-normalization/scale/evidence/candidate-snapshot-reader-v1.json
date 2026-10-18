@@ -1,0 +1,62 @@
+{
+  "version": "candidate-snapshot-reader-v1",
+  "state": "focused_and_cross_domain_contracts_verified",
+  "executionPacket": {
+    "path": "local-dev/normalization-data/2026-10-17-cross-artist/candidate-snapshot-reader-v1/manifest.json",
+    "sha256": "a973ff8ffafa17e86fa7c0ee06df49aca1cb6f819252e0e85807771387253c4b"
+  },
+  "testRuns": [
+    {
+      "file": "candidate-snapshot-reader-v1.trx",
+      "counters": {
+        "total": "11",
+        "executed": "11",
+        "passed": "11",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    },
+    {
+      "file": "candidate-snapshot-reader-regression-v1.trx",
+      "counters": {
+        "total": "131",
+        "executed": "131",
+        "passed": "131",
+        "failed": "0",
+        "error": "0",
+        "timeout": "0",
+        "aborted": "0",
+        "inconclusive": "0",
+        "passedButRunAborted": "0",
+        "notRunnable": "0",
+        "notExecuted": "0",
+        "disconnected": "0",
+        "warning": "0",
+        "completed": "0",
+        "inProgress": "0",
+        "pending": "0"
+      }
+    }
+  ],
+  "behavior": [
+    "Public readers retain validation order, domain defaults and matching-fact versions.",
+    "Caller-owned people reads share the original primary snapshot and never commit its transaction.",
+    "A real alias publication advances a new read while the open snapshot retains its original facts and owner/universe clocks."
+  ],
+  "review": "Fresh independent correctness and readability review clean.",
+  "remaining": [
+    "Source resolver/review integration and full-suite rerun.",
+    "No matching policy enabled or production writes."
+  ]
+}

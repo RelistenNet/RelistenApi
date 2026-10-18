@@ -12,6 +12,13 @@ clocks and candidate generations all come from that snapshot. Calling the older
 `FindAsync` and later loading newer facts or clocks does not meet this contract.
 The existing retrieval-only API remains available.
 
+Internal people consumers that also read source evidence or policy can use
+`FindPeopleFactsInSnapshotAsync(connection, transaction, query, limits, ct)`.
+The caller owns the primary repeatable-read transaction and its lifetime. This
+method uses the same selection, facts, limits and read-set pipeline as the public
+reader; it opens no connection, commits nothing and configures no Work. Read all
+other decision inputs through that same connection and transaction.
+
 ## The returned contract
 
 `NormalizationCandidateFactsSnapshot<T>` returns the reader version, query hash,
