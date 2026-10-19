@@ -482,14 +482,17 @@
         }
         const box = document.createElement("section");
         box.className = "section";
-        const suggested = selection.executionState === "proposed" && selection.outcome === "selected" && selection.selectedWorkKey;
+        const hasSupport = selection.support !== null && typeof selection.support === "object" && !Array.isArray(selection.support);
+        const suggested = selection.preferencePermitted === true && hasSupport && selection.preferredWorkKey;
+        const unsupported = selection.executionState === "proposed" && selection.outcome === "selected" && !suggested;
         const abstained = selection.executionState === "proposed" && selection.inferenceOutcome === "insufficient_evidence";
-        const label = suggested ? "Model suggestion · unconfirmed" : abstained ? "Model could not choose a composition" : "Model request did not produce a choice";
+        const label = suggested ? "Source-referenced model proposal · unconfirmed" : unsupported ? "No source-supported composition preference" : abstained ? "Model could not choose a composition" : "Model request did not produce a choice";
         box.innerHTML = `<h4>${label}</h4><p class="muted">${esc(selection.model || "Model not recorded")} · ${esc(selection.method || selection.executionState)}</p>`;
         if (suggested) {
-          const text = currentWork === selection.selectedWorkKey ? "The model suggested this composition" : currentWork ? "The model suggested a different composition" : "Open the suggested composition and its other artists";
-          box.insertAdjacentHTML("beforeend", `<p><a href="${link("possible-version", {key: selection.selectedWorkKey})}">${text} →</a></p>`);
+          const text = currentWork === selection.preferredWorkKey ? "The model proposed this composition" : currentWork ? "The model proposed a different composition" : "Open the proposed composition and its other artists";
+          box.insertAdjacentHTML("beforeend", `<p><a href="${link("possible-version", {key: selection.preferredWorkKey})}">${text} →</a></p>`);
         }
+        if (unsupported) box.insertAdjacentHTML("beforeend", '<p class="muted">The saved model choice remains in the evidence. It does not establish a source-supported preference among the compositions.</p>');
         const explanation = currentWork ? document.createElement("details") : box;
         if (currentWork) {
           explanation.innerHTML = '<summary>Model rationale and saved result</summary>';

@@ -6,6 +6,8 @@ from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
 import sqlite3
+import shutil
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -168,7 +170,7 @@ class TestCompositionCatalogue(unittest.TestCase):
         with urlopen(base + route + "?" + urlencode(query)) as response:
             return json.load(response)
 
-    def write_selections(self, states=("selected",), *, target_context=False):
+    def write_selections(self, states=("selected",), *, target_context=False, supports=None):
         output = self.root / "selections"
         output.mkdir(exist_ok=True)
         self.selection_database = self.root / "selections.sqlite3"
@@ -176,6 +178,8 @@ class TestCompositionCatalogue(unittest.TestCase):
         prepared, records = [], []
         artifact = json.loads(self.manifest.read_text())["chunks"][0]
         method = "luna-composition-hypothesis-v3" if target_context else "luna-composition-hypothesis-v2"
+        if supports is not None:
+            method = "luna-composition-hypothesis-v7"
         for index, state in enumerate(states):
             parent = parents[index]
             key = {"scope": "catalogue", "artistUuid": self.songs[index]["artistUuid"], "songEntityKey": self.songs[index]["entityKey"]}
@@ -194,6 +198,9 @@ class TestCompositionCatalogue(unittest.TestCase):
                     "state": inference_state, "method": request["method"], "rationale": "A model hypothesis, with literal <untrusted> prose.",
                     "cacheKey": request["cacheKey"], "reason": None if inference_state == "proposed" else "job_budget_exhausted",
                     "publicationPermitted": False, "externalUniverseComplete": False}}
+            if selection and supports is not None:
+                support, permitted = supports[index]
+                selection["inference"].update(support=support, preferencePermitted=permitted)
             records.append(self.result("composition_selections", json.dumps(list(key.values())), {"input": row, "selection": selection}))
         plan = {"version": "composition-selection-plan-v1", "jobUuid": SHOWS[0], "songs": [row["key"] for row in prepared],
                 "hypothesisManifest": {"path": str(self.manifest), **self.artifact(self.manifest, 1)}}
@@ -274,6 +281,8 @@ class TestCompositionCatalogue(unittest.TestCase):
         song = self.get(base, "/api/song-composition-hypotheses", **coordinates)
         self.assertEqual(len(song["candidates"]), 2)
         self.assertEqual(song["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertFalse(song["modelSelection"]["preferencePermitted"])
+        self.assertIsNone(song["modelSelection"]["preferredWorkKey"])
         self.assertFalse(song["modelSelection"]["acceptedIdentity"])
         work = self.get(base, "/api/composition-work", key=self.work_keys[1], generation=stats["generation"])
         self.assertEqual(work["songs"][0]["modelSelection"]["selectedWorkKey"], self.work_keys[0])
@@ -309,6 +318,115 @@ class TestCompositionCatalogue(unittest.TestCase):
                     self.assertEqual(result["outcome"], state)
                     self.assertEqual(result["executionState"], "proposed" if state in {"selected", "insufficient_evidence"} else state)
                     self.assertEqual(result["selectedWorkKey"], self.work_keys[0] if state == "selected" else None)
+
+    def test_source_permission_controls_preference_without_removing_cross_artist_versions_or_audio(self):
+        self.build()
+        support = dict(basis="target_attribution", targetReferences=[dict(witnessIndex=0, claimIndex=0, textIndex=None)],
+                       recordingWorkPathReferences=[])
+        background = dict(basis="background_only", targetReferences=[], recordingWorkPathReferences=[])
+        manifest = self.write_selections(("selected", "selected"), target_context=True,
+                                         supports=[(support, True), (background, False)])
+        self.build_selections(manifest)
+        base = self.serve(handler_for(self.discovery(composition_selections=self.selection_database)))
+        generation = self.get(base, "/api/stats")["generation"]
+        for index, expected_support in enumerate((support, background)):
+            coordinates = dict(scope="catalogue", artist=ARTISTS[index], key=self.songs[index]["entityKey"], generation=generation)
+            song = self.get(base, "/api/song-composition-hypotheses", **coordinates)
+            selection = song["modelSelection"]
+            self.assertEqual(selection["selectedWorkKey"], self.work_keys[0])
+            self.assertEqual(selection["support"], expected_support)
+            self.assertEqual(selection["preferencePermitted"], index == 0)
+            self.assertEqual(selection["preferredWorkKey"], self.work_keys[0] if index == 0 else None)
+            self.assertEqual({row["work_key"] for row in song["candidates"]}, set(self.work_keys[:2] if index == 0 else self.work_keys[:1]))
+            work = self.get(base, "/api/composition-work", key=self.work_keys[0], scope="catalogue", artist=ARTISTS[index], generation=generation)
+            self.assertEqual(work["songs_total"], 1)
+            self.assertEqual(work["songs"][0]["modelSelection"], selection)
+            listed = self.get(base, "/api/composition-works", artist=ARTISTS[index], generation=generation)
+            self.assertEqual({row["work_key"] for row in listed["items"]}, set(self.work_keys[:2] if index == 0 else self.work_keys[:1]))
+            proof = self.get(base, "/api/composition-selection-evidence", **coordinates)
+            self.assertEqual(proof["proposal"]["selection"]["inference"]["support"], expected_support)
+            performances = self.get(base, "/api/song-performances", **coordinates)
+            files = self.get(base, "/api/performance-files", **coordinates, homeKey=performances["items"][0]["homeKey"])
+            self.assertEqual(files["total"], 1)
+        self.assertEqual(self.get(base, "/api/works")["total"], 1)
+
+    def test_historical_projection_choice_cannot_gain_preference_when_its_permission_is_absent(self):
+        self.build()
+        self.build_selections(self.write_selections())
+        # Reproduce an already-built historical image, without rebuilding it under
+        # the new projection code. Its raw choice and evidence remain available.
+        with sqlite3.connect(self.selection_database) as db:
+            value = json.loads(db.execute("SELECT value FROM selections").fetchone()[0])
+            for field in ("support", "preferencePermitted", "preferredWorkKey"):
+                value.pop(field, None)
+            db.execute("UPDATE selections SET value=?", (json.dumps(value),))
+        base = self.serve(handler_for(self.discovery(composition_selections=self.selection_database)))
+        song = self.get(base, "/api/song-composition-hypotheses", scope="catalogue", artist=ARTISTS[0],
+                        key=self.songs[0]["entityKey"], generation=self.get(base, "/api/stats")["generation"])
+        self.assertEqual(song["modelSelection"]["selectedWorkKey"], self.work_keys[0])
+        self.assertFalse(song["modelSelection"]["preferencePermitted"])
+        self.assertIsNone(song["modelSelection"]["preferredWorkKey"])
+        self.assertIsNone(song["modelSelection"]["support"])
+
+    def test_permission_without_a_support_object_cannot_prefer_a_projected_choice(self):
+        self.build()
+        for support in (None, "not a support object", []):
+            with self.subTest(support=support):
+                manifest = self.write_selections(target_context=True, supports=[(support, True)])
+                self.build_selections(manifest)
+                discovery = self.discovery(composition_selections=self.selection_database)
+                selection = discovery.compositions.song("catalogue", ARTISTS[0], self.songs[0]["entityKey"])["modelSelection"]
+                self.assertEqual(selection["selectedWorkKey"], self.work_keys[0])
+                self.assertFalse(selection["preferencePermitted"])
+                self.assertIsNone(selection["preferredWorkKey"])
+                proof = discovery.compositions.selections.evidence("catalogue", ARTISTS[0], self.songs[0]["entityKey"])
+                self.assertTrue(proof["proposal"]["selection"]["inference"]["preferencePermitted"])
+                self.assertEqual(proof["proposal"]["selection"]["inference"]["support"], support)
+
+    def test_song_and_work_model_headings_require_explicit_permission_for_the_preferred_link(self):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("The UI behavior check requires Node.js")
+        html = Path(__file__).with_name("music-discovery.html").read_text()
+        source = html[html.index("function modelSelection("):html.index("async function songCompositions(")]
+        common = dict(executionState="proposed", outcome="selected", inferenceOutcome="selected",
+                      selectedWorkKey=self.work_keys[0], alternativeWorkKeys=[], rationale="Retained model rationale")
+        selections = [{**common, "support": {"basis": "target_attribution"}, "preferencePermitted": True, "preferredWorkKey": self.work_keys[0]},
+                      {**common, "preferencePermitted": False, "preferredWorkKey": None}, common,
+                      {**common, "preferencePermitted": False, "preferredWorkKey": self.work_keys[0]},
+                      *[{**common, "support": support, "preferencePermitted": True, "preferredWorkKey": self.work_keys[0]}
+                        for support in (None, "not a support object", [])]]
+        # Execute the real renderer with only the DOM operations this component
+        # needs. This checks both song and work contexts without a live reader.
+        script = r"""
+const input=JSON.parse(process.argv[1]);
+class Element {
+  constructor(){this.parts=[];}
+  set innerHTML(value){this.parts=[value];}
+  insertAdjacentHTML(position,value){this.parts.push(value);}
+  append(value){this.parts.push(value);}
+  render(){return this.parts.map(value=>typeof value==='string'?value:value.render()).join('');}
+}
+const render=new Function('document','stats','esc','link','evidenceButton',input.source+';return modelSelection;')(
+  {createElement:()=>new Element()},{composition_selection_queries:true},String,
+  (route,params)=>route+'?'+new URLSearchParams(params),()=>{});
+const results=[];
+for(const work of [null,input.work]) for(const selection of input.selections){
+  const target=new Element();render(target,selection,{},0,work);results.push(target.render());
+}
+process.stdout.write(JSON.stringify(results));
+"""
+        result = subprocess.run([node, "-e", script, json.dumps(dict(source=source, selections=selections, work=self.work_keys[0]))],
+                                text=True, capture_output=True, check=True)
+        rendered = json.loads(result.stdout)
+        preferred_link = "possible-version?" + urlencode(dict(key=self.work_keys[0]))
+        for index, body in enumerate(rendered):
+            if index % len(selections) == 0:
+                self.assertIn("Source-referenced model proposal", body)
+                self.assertIn(preferred_link, body)
+            else:
+                self.assertIn("No source-supported composition preference", body)
+                self.assertNotIn(preferred_link, body)
 
     def test_model_foreign_work_or_request_mismatch_preserves_prior_projection(self):
         self.build()

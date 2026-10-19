@@ -202,7 +202,11 @@ public sealed record CompositionHypothesisSelectionResult(
     string? ProviderRequestId = null,
     long? InputTokens = null,
     long? OutputTokens = null,
-    decimal? ActualUsd = null
+    decimal? ActualUsd = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        CompositionSelectionSupport? Support = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        bool? PreferencePermitted = null
 )
 {
     public bool PublicationPermitted => false;
@@ -219,3 +223,22 @@ public sealed record CompositionHypothesisRequestDescription(
     bool WithinRequestLimit,
     decimal MaximumReservedUsd
 );
+
+/// <summary>
+/// References the exact target views and supplied recording/work paths used by
+/// an inference. Validation establishes ownership and structure, not that the
+/// source attribution, target correspondence or model interpretation is true.
+/// </summary>
+public sealed record CompositionSelectionSupport(
+    string Basis,
+    IReadOnlyList<CompositionSelectionTargetReference> TargetReferences,
+    IReadOnlyList<CompositionSelectionWorkPathReference> RecordingWorkPathReferences
+);
+
+public sealed record CompositionSelectionTargetReference(
+    int WitnessIndex,
+    int? ClaimIndex,
+    int? TextIndex
+);
+
+public sealed record CompositionSelectionWorkPathReference(Guid WorkMbid, int PathIndex);

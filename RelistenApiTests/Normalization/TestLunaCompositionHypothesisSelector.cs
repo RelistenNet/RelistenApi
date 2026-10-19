@@ -48,6 +48,14 @@ public sealed class TestLunaCompositionHypothesisSelector
             .Serialize(input, new JsonSerializerOptions(JsonSerializerDefaults.Web))
             .Should()
             .NotContain("targetContext");
+        using var request = JsonDocument.Parse(actual);
+        request
+            .RootElement.GetProperty("reasoning")
+            .GetProperty("effort")
+            .GetString()
+            .Should()
+            .Be("low");
+        request.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(2048);
     }
 
     [TestCase(false)]
@@ -119,7 +127,7 @@ public sealed class TestLunaCompositionHypothesisSelector
         LunaCompositionHypothesisSelector
             .DescribeRequest(input)
             .Method.Should()
-            .Be("luna-composition-hypothesis-v4");
+            .Be("luna-composition-hypothesis-v8");
 
         var original = input.TargetContext.Witnesses[2];
         var text = original.Texts.Single() with { Value = "<i>Changed literal source 🌙</i>" };
@@ -398,6 +406,11 @@ public sealed class TestLunaCompositionHypothesisSelector
         result.Outcome.Should().Be("selected");
         result.PublicationPermitted.Should().BeFalse();
         result.ExternalUniverseComplete.Should().BeFalse();
+        result.Support.Should().BeNull();
+        result.PreferencePermitted.Should().BeNull();
+        var legacy = JsonSerializer.SerializeToElement(result, PromptJson());
+        legacy.TryGetProperty("support", out _).Should().BeFalse();
+        legacy.TryGetProperty("preferencePermitted", out _).Should().BeFalse();
     }
 
     [Test]
@@ -498,10 +511,411 @@ public sealed class TestLunaCompositionHypothesisSelector
         handler.Calls.Should().Be(0);
     }
 
+    [TestCase("missing_support")]
+    [TestCase("malformed_target")]
+    [TestCase("malformed_claim_index")]
+    [TestCase("malformed_text_index")]
+    [TestCase("malformed_path_index")]
+    [TestCase("malformed_work_id")]
+    [TestCase("missing_target")]
+    [TestCase("witness_out_of_range")]
+    [TestCase("claim_out_of_range")]
+    [TestCase("both_target_indices")]
+    [TestCase("path_out_of_range")]
+    [TestCase("wrong_selected_work")]
+    [TestCase("missing_path")]
+    [TestCase("artist_context")]
+    [TestCase("composer_claim")]
+    [TestCase("role_only_attribution")]
+    public void EnrichedPreferenceCannotUseMissingReferencesOrUnownedAttribution(string mutation)
+    {
+        var input = SupportedInput();
+        var row = System.Text.Json.Nodes.JsonNode.Parse(
+            EnrichedResponse(
+                "target_attribution",
+                [TargetClaimReference()],
+                [SelectedPathReference()]
+            )
+        )!;
+        var support = row["support"]!;
+        switch (mutation)
+        {
+            case "missing_support":
+                row.AsObject().Remove("support");
+                break;
+            case "malformed_target":
+                support["targetReferences"]![0]!["witnessIndex"] = "2";
+                break;
+            case "malformed_claim_index":
+                support["targetReferences"]![0]!["claimIndex"] = "0";
+                break;
+            case "malformed_text_index":
+                support["basis"] = "target_program_path";
+                support["targetReferences"]![0]!["claimIndex"] = null;
+                support["targetReferences"]![0]!["textIndex"] = "0";
+                break;
+            case "malformed_path_index":
+                support["recordingWorkPathReferences"]![0]!["pathIndex"] = "0";
+                break;
+            case "malformed_work_id":
+                support["recordingWorkPathReferences"]![0]!["workMbid"] = 1;
+                break;
+            case "missing_target":
+                support["targetReferences"]!.AsArray().Clear();
+                break;
+            case "witness_out_of_range":
+                support["targetReferences"]![0]!["witnessIndex"] = input
+                    .TargetContext!
+                    .Witnesses
+                    .Count;
+                break;
+            case "claim_out_of_range":
+                support["targetReferences"]![0]!["claimIndex"] = 1;
+                break;
+            case "both_target_indices":
+                support["targetReferences"]![0]!["textIndex"] = 0;
+                break;
+            case "path_out_of_range":
+                support["recordingWorkPathReferences"]![0]!["pathIndex"] = 2;
+                break;
+            case "wrong_selected_work":
+                row["selectedWorkMbid"] = SecondWork.ToString();
+                row["alternativeWorkMbids"]![0] = FirstWork.ToString();
+                break;
+            case "missing_path":
+                support["recordingWorkPathReferences"]!.AsArray().Clear();
+                break;
+            case "artist_context":
+                support["targetReferences"]![0]!["artistObservationIndex"] = 0;
+                break;
+            case "composer_claim":
+                support["targetReferences"]![0]!["witnessIndex"] = 3;
+                break;
+            case "role_only_attribution":
+                input = SupportedInput("composer");
+                var context = input.TargetContext!;
+                var witness = context.Witnesses[2];
+                input = input with
+                {
+                    TargetContext = context with
+                    {
+                        Witnesses = context
+                            .Witnesses.Select(
+                                (item, index) =>
+                                    index == 2
+                                        ? witness with
+                                        {
+                                            Claims =
+                                            [
+                                                witness.Claims[0] with
+                                                {
+                                                    Role = "cover_artist",
+                                                },
+                                            ],
+                                        }
+                                        : item
+                            )
+                            .ToArray(),
+                    },
+                };
+                break;
+        }
+        var read = () =>
+            LunaCompositionHypothesisSelector.ValidateResponse(input, row.ToJsonString());
+        read.Should()
+            .Throw<Exception>()
+            .Where(error => error is LunaCreditResponseException || error is JsonException);
+    }
+
+    [TestCase("provider")]
+    [TestCase("kind")]
+    [TestCase("recording_id")]
+    public void TargetRecordingSupportRequiresTheSameQualifiedIdentityAsTheSelectedPath(
+        string mutation
+    )
+    {
+        var input = SupportedInput(recordingIdentity: true);
+        var context = input.TargetContext!;
+        var claim = context.Witnesses[2].Claims[0];
+        var observation = System.Text.Json.Nodes.JsonNode.Parse(claim.Observation.GetRawText())!;
+        var identity = observation["identity"]!;
+        if (mutation == "provider")
+        {
+            identity["provider"] = "fixture.invalid";
+        }
+        else if (mutation == "kind")
+        {
+            identity["resourceType"] = "work";
+        }
+        else
+        {
+            identity["providerKey"] = FirstWork.ToString();
+        }
+        input = input with
+        {
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (witness, index) =>
+                            index == 2
+                                ? witness with
+                                {
+                                    Claims =
+                                    [
+                                        claim with
+                                        {
+                                            Observation = JsonSerializer.SerializeToElement(
+                                                observation
+                                            ),
+                                        },
+                                    ],
+                                }
+                                : witness
+                    )
+                    .ToArray(),
+            },
+        };
+        var response = EnrichedResponse(
+            "target_recording_path",
+            [TargetClaimReference()],
+            [SelectedPathReference()]
+        );
+        var read = () => LunaCompositionHypothesisSelector.ValidateResponse(input, response);
+        read.Should().Throw<LunaCreditResponseException>();
+    }
+
+    [Test]
+    public void EnrichedInsufficientEvidenceRetainsExplicitNoneSupportWithoutPreference()
+    {
+        var input = EnrichedInput();
+        var response = System.Text.Json.Nodes.JsonNode.Parse(EnrichedResponse("none"))!;
+        response["selectedWorkMbid"] = null;
+        response["alternativeWorkMbids"]!.AsArray().Clear();
+        response["outcome"] = "insufficient_evidence";
+
+        var result = LunaCompositionHypothesisSelector.ValidateResponse(
+            input,
+            response.ToJsonString()
+        );
+
+        result.SelectedWorkMbid.Should().BeNull();
+        result.Support!.Basis.Should().Be("none");
+        result.PreferencePermitted.Should().BeFalse();
+    }
+
+    [TestCase("unrelated")]
+    [TestCase("substring")]
+    [TestCase("diacritic")]
+    [TestCase("alias")]
+    public void AWorkWriterOrRecordingAliasCannotReplaceTheAnnotatedRecordingPerformer(
+        string mutation
+    )
+    {
+        var annotation = mutation == "diacritic" ? "René Quartet" : "Cover Quartet";
+        var credited = mutation switch
+        {
+            "substring" => "The Cover Quartet Orchestra",
+            "diacritic" => "Rene Quartet",
+            _ => "Unrelated Ensemble",
+        };
+        var input = AttributionInput(annotation, credited);
+        if (mutation == "alias")
+        {
+            var work = input.SuppliedCandidates[0];
+            var assertion = work.SearchAssertions.Single();
+            work = work with
+            {
+                SearchAssertions =
+                [
+                    assertion with
+                    {
+                        Hit = assertion.Hit with
+                        {
+                            Aliases =
+                            [
+                                new() { Evidence = Evidence(), Name = new(annotation, Evidence()) },
+                            ],
+                        },
+                    },
+                ],
+            };
+            input = input with { SuppliedCandidates = [work, .. input.SuppliedCandidates.Skip(1)] };
+        }
+        var response = EnrichedResponse(
+            "target_attribution",
+            [TargetClaimReference()],
+            [SelectedPathReference()]
+        );
+        var read = () => LunaCompositionHypothesisSelector.ValidateResponse(input, response);
+
+        read.Should().Throw<LunaCreditResponseException>();
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void QualifiedArtistIdentityControlsAttributionInsteadOfAMatchingLabel(bool sameArtist)
+    {
+        var artist = Guid.Parse("00000000-0000-0000-0000-000000000071");
+        var annotationArtist = sameArtist
+            ? artist
+            : Guid.Parse("00000000-0000-0000-0000-000000000072");
+        var input = AttributionInput(
+            "Cover Quartet",
+            sameArtist ? "Different retained label" : "Cover Quartet",
+            annotationArtist,
+            artist
+        );
+        var response = EnrichedResponse(
+            "target_attribution",
+            [TargetClaimReference()],
+            [SelectedPathReference()]
+        );
+        using var model = ModelInput(input);
+        var links = model.RootElement.GetProperty("attributionRecordingWorkLinks");
+
+        if (sameArtist)
+        {
+            LunaCompositionHypothesisSelector
+                .ValidateResponse(input, response)
+                .PreferencePermitted.Should()
+                .BeTrue();
+            links.GetArrayLength().Should().Be(2);
+            links[0]
+                .GetProperty("value")
+                .GetProperty("matchBasis")
+                .GetString()
+                .Should()
+                .Be("qualified_recording_performer_identity");
+        }
+        else
+        {
+            var read = () => LunaCompositionHypothesisSelector.ValidateResponse(input, response);
+            read.Should().Throw<LunaCreditResponseException>();
+            links.GetArrayLength().Should().Be(0);
+        }
+    }
+
+    [Test]
+    public void CompiledAttributionLinksUseTheRecordingPerformerWhileKeepingTheWorkWriterDistinct()
+    {
+        var input = AttributionInput();
+        using var model = ModelInput(input);
+        var links = model.RootElement.GetProperty("attributionRecordingWorkLinks");
+        links.GetArrayLength().Should().Be(2);
+        for (var index = 0; index < links.GetArrayLength(); index++)
+        {
+            var link = links[index].GetProperty("value");
+            link.GetProperty("witnessIndex").GetInt32().Should().Be(2);
+            link.GetProperty("claimIndex").GetInt32().Should().Be(0);
+            link.GetProperty("workMbid").GetGuid().Should().Be(FirstWork);
+            link.GetProperty("pathIndex").GetInt32().Should().Be(index);
+            link.GetProperty("matchBasis")
+                .GetString()
+                .Should()
+                .Be("exact_observed_recording_performer_label");
+            link.GetProperty("annotation")
+                .GetProperty("name")
+                .GetString()
+                .Should()
+                .Be("Cover Quartet");
+            link.GetProperty("recordingArtistCredit")
+                .GetProperty("name")
+                .GetString()
+                .Should()
+                .Be("Cover Quartet");
+        }
+        var work = input.SuppliedCandidates[0];
+        var writer = work.WriterRoles.Single().Artist!;
+        var performer = work.SearchAssertions.Single().Hit.ArtistCredits!.Single().Artist!;
+        writer.Name!.Value.Should().Be("Different work writer");
+        writer.Identity.Identity.Should().NotBe(performer.Identity.Identity);
+        model
+            .RootElement.GetProperty("suppliedCandidates")[0]
+            .GetProperty("facts")
+            .GetProperty("writerRoles")[0]
+            .GetProperty("value")
+            .GetProperty("artist")
+            .GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("Different work writer");
+        var response = EnrichedResponse(
+            "target_attribution",
+            [TargetClaimReference()],
+            [SelectedPathReference()]
+        );
+        LunaCompositionHypothesisSelector
+            .ValidateResponse(input, response)
+            .PreferencePermitted.Should()
+            .BeTrue();
+    }
+
+    [Test]
+    public void RenderedSupportIndicesStayLocalWhenEarlierWitnessesPopulateTheSharedTextPool()
+    {
+        var input = SupportedInput();
+        var context = input.TargetContext!;
+        var targetText = context.Witnesses[2].Texts.Single();
+        var earlier = targetText with
+        {
+            Value = "Unrelated earlier file text",
+            TextSha256 = TextHash("Unrelated earlier file text"),
+            Origin = context.Witnesses[0].Origin,
+        };
+        input = input with
+        {
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (witness, index) =>
+                            index == 0 ? witness with { Texts = [earlier] } : witness
+                    )
+                    .ToArray(),
+            },
+        };
+        using var model = ModelInput(input);
+        var rendered = model.RootElement.GetProperty("targetContext");
+        var witness = rendered.GetProperty("witnesses")[2];
+        witness.GetProperty("witnessIndex").GetInt32().Should().Be(2);
+        witness.GetProperty("claims")[0].GetProperty("claimIndex").GetInt32().Should().Be(0);
+        var text = witness.GetProperty("texts")[0];
+        text.GetProperty("textIndex").GetInt32().Should().Be(0);
+        text.GetProperty("textPoolId").GetInt32().Should().Be(1);
+        rendered
+            .GetProperty("textPool")[1]
+            .GetProperty("value")
+            .GetString()
+            .Should()
+            .Be(targetText.Value);
+        text.TryGetProperty("text", out _).Should().BeFalse();
+        var response = EnrichedResponse(
+            "target_program_path",
+            [TargetTextReference()],
+            [SelectedPathReference()]
+        );
+        LunaCompositionHypothesisSelector
+            .ValidateResponse(input, response)
+            .PreferencePermitted.Should()
+            .BeTrue();
+        var poolIdAsLocalIndex = System.Text.Json.Nodes.JsonNode.Parse(response)!;
+        poolIdAsLocalIndex["support"]!["targetReferences"]![0]!["textIndex"] = text.GetProperty(
+                "textPoolId"
+            )
+            .GetInt32();
+        var read = () =>
+            LunaCompositionHypothesisSelector.ValidateResponse(
+                input,
+                poolIdAsLocalIndex.ToJsonString()
+            );
+        read.Should().Throw<LunaCreditResponseException>();
+    }
+
     [Test]
     public async Task ContextBeyondTheLocalByteLimitIsNotClippedOrSent()
     {
-        var input = EnrichedInput(sourceDescription: new string('x', 1_200_000));
+        var input = EnrichedInput(sourceDescription: new string('x', 2_000_000));
         var handler = new Handler(Response());
         using var http = new HttpClient(handler);
         var result = await new LunaCompositionHypothesisSelector(
@@ -841,18 +1255,21 @@ public sealed class TestLunaCompositionHypothesisSelector
         foreach (var witness in hydrated["witnesses"]!.AsArray())
         {
             Origin(witness!);
+            witness!.AsObject().Remove("witnessIndex");
             foreach (var reference in witness!["texts"]!.AsArray())
             {
                 reference!.AsObject().ContainsKey("value").Should().BeFalse();
                 reference.AsObject().ContainsKey("textSha256").Should().BeFalse();
-                var text = texts[reference["text"]!.GetValue<int>()];
-                reference.AsObject().Remove("text");
+                var text = texts[reference["textPoolId"]!.GetValue<int>()];
+                reference.AsObject().Remove("textPoolId");
+                reference.AsObject().Remove("textIndex");
                 reference["textSha256"] = text.GetProperty("sha256").GetString();
                 reference["value"] = text.GetProperty("value").GetString();
                 Origin(reference);
             }
             foreach (var claim in witness["claims"]!.AsArray())
             {
+                claim!.AsObject().Remove("claimIndex");
                 Origin(claim!);
             }
         }
@@ -1137,8 +1554,359 @@ public sealed class TestLunaCompositionHypothesisSelector
                 .ToArray()
         );
 
+    internal static CompositionHypothesisSelectionInput RecordingProgramInput()
+    {
+        var payload = File.ReadAllBytes(
+            Path.Combine(
+                TestContext.CurrentContext.TestDirectory,
+                "Fixtures",
+                "normalization",
+                "musicbrainz",
+                "program-search-first-recording.json"
+            )
+        );
+        var source = new NormalizationInputRevision
+        {
+            Uuid = Guid.Parse("00000000-0000-0000-0000-000000000088"),
+            Resource = new("musicbrainz.org", "recording-search", new string('d', 64)),
+            Payload = payload,
+            Sha256 = Convert.ToHexStringLower(SHA256.HashData(payload)),
+            MediaType = "application/json",
+            CaptureVersion = "musicbrainz-recording-search-json-v1",
+            CapturedAt = new DateTime(2026, 10, 18, 12, 0, 0, DateTimeKind.Utc),
+        };
+        var page = new NormalizationProviderDecoder()
+            .Decode(source)
+            .MusicBrainzSearchPages!.Single();
+        var hit = page.Hits!.Single();
+        var input = EnrichedInput();
+        var first = input.SuppliedCandidates[0];
+        var second = input.SuppliedCandidates[1];
+        var thirdId = Guid.Parse("00000000-0000-0000-0000-000000000013");
+        var third = second with
+        {
+            WorkMbid = thirdId,
+            EntityKey = "composition:musicbrainz.org:work:" + thirdId,
+            Identity = second.Identity with
+            {
+                Identity = new("musicbrainz.org", "work", thirdId.ToString()),
+            },
+        };
+
+        // These supplied relationships are synthetic assertions. Only the hit's
+        // release/medium/track tree comes from the retained provider response.
+        CompositionSelectionRecordingRelationship Performance(CompositionSelectionWork work) =>
+            new(
+                hit.Entity.Identity,
+                work.Identity,
+                new()
+                {
+                    Evidence = Evidence(),
+                    Type = new("performance", Evidence()),
+                    Direction = new("forward", Evidence()),
+                    TargetType = new("work", Evidence()),
+                    Target = new() { Evidence = Evidence(), Identity = work.Identity },
+                }
+            );
+        var valid = Performance(first);
+        var rival = Performance(second);
+        CompositionSelectionRecordingRelationship Recording(NormalizationResourceKey identity) =>
+            rival with
+            {
+                Recording = rival.Recording with { Identity = identity },
+            };
+        CompositionSelectionRecordingRelationship Work(NormalizationResourceKey identity) =>
+            rival with
+            {
+                Work = rival.Work with { Identity = identity },
+            };
+        var recordingId = hit.Entity.Identity.Identity.ProviderKey;
+        var secondId = second.WorkMbid.ToString();
+        first = first with
+        {
+            SearchAssertions = [new(page.Origin, hit)],
+            RecordingWorkRelationships =
+            [
+                valid with
+                {
+                    Relationship = valid.Relationship with
+                    {
+                        Attributes = [new("live", Evidence())],
+                    },
+                },
+                valid with
+                {
+                    Relationship = valid.Relationship with
+                    {
+                        Attributes = [new("partial", Evidence())],
+                    },
+                },
+            ],
+        };
+        second = second with
+        {
+            SearchAssertions = [new(page.Origin, hit)],
+            RecordingWorkRelationships =
+            [
+                Recording(new("fixture.invalid", "recording", recordingId)),
+                Recording(new("musicbrainz.org", "work", recordingId)),
+                Recording(new("musicbrainz.org", "recording", thirdId.ToString())),
+                Work(new("fixture.invalid", "work", secondId)),
+                Work(new("musicbrainz.org", "recording", secondId)),
+                Work(first.Identity.Identity),
+                rival with
+                {
+                    Relationship = rival.Relationship with { Type = new("cover", Evidence()) },
+                },
+                rival with
+                {
+                    Relationship = rival.Relationship with
+                    {
+                        Direction = new("backward", Evidence()),
+                    },
+                },
+                rival with
+                {
+                    Relationship = rival.Relationship with
+                    {
+                        TargetType = new("recording", Evidence()),
+                    },
+                },
+                rival with
+                {
+                    Relationship = rival.Relationship with
+                    {
+                        Target = rival.Relationship.Target! with { Identity = first.Identity },
+                    },
+                },
+                rival with
+                {
+                    Relationship = rival.Relationship with { Target = null },
+                },
+            ],
+        };
+        third = third with
+        {
+            SearchAssertions = [new(page.Origin, hit)],
+            RecordingWorkRelationships = [],
+        };
+        return input with { SuppliedCandidates = [first, second, third] };
+    }
+
     private static NormalizedEvidenceReference Evidence() =>
         new(Guid.Parse("00000000-0000-0000-0000-000000000099"), "/title", Quote: "Song");
+
+    internal static CompositionHypothesisSelectionInput SupportedInput(
+        string annotationKind = "cover_artist",
+        bool recordingIdentity = false
+    )
+    {
+        var input = RecordingProgramInput();
+        var context = input.TargetContext!;
+        var witness = context.Witnesses[2];
+        var identity = input.SuppliedCandidates[0].SearchAssertions.Single().Hit.Entity.Identity;
+        var targetEvidence = new NormalizedEvidenceReference(
+            Guid.Parse("00000000-0000-0000-0000-000000000066"),
+            recordingIdentity ? "/recording/musicbrainz_id" : "/annotations/0/name"
+        );
+        // These are synthetic target assertions, independently cited from the
+        // candidate's retained recording search and its release memberships.
+        var observation = recordingIdentity
+            ? JsonSerializer.SerializeToElement(
+                identity with
+                {
+                    Evidence = targetEvidence,
+                },
+                PromptJson()
+            )
+            : JsonSerializer.SerializeToElement(
+                new ProviderPerformanceAnnotation(
+                    annotationKind,
+                    new("The Band", targetEvidence),
+                    []
+                ),
+                PromptJson()
+            );
+        var claim = new CompositionSelectionTargetClaim(
+            recordingIdentity ? "provider_recording_identity" : "performance_annotation",
+            recordingIdentity ? null : annotationKind,
+            recordingIdentity ? null : "The Band",
+            observation,
+            witness.Origin
+        );
+        return input with
+        {
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (item, index) => index == 2 ? item with { Claims = [claim] } : item
+                    )
+                    .ToArray(),
+            },
+        };
+    }
+
+    internal static CompositionHypothesisSelectionInput AttributionInput(
+        string annotationName = "Cover Quartet",
+        string creditedName = "Cover Quartet",
+        Guid? annotationArtist = null,
+        Guid? creditedArtist = null
+    )
+    {
+        var input = SupportedInput();
+        var context = input.TargetContext!;
+        var claim = context.Witnesses[2].Claims[0];
+        var annotation = claim.Observation.Deserialize<ProviderPerformanceAnnotation>(
+            PromptJson()
+        )!;
+        annotation = annotation with
+        {
+            Name = new(annotationName, annotation.Name!.Evidence),
+            Identities = annotationArtist is { } artist
+                ?
+                [
+                    new(
+                        new("musicbrainz.org", "artist", artist.ToString("D")),
+                        annotation.Name.Evidence
+                    ),
+                ]
+                : [],
+        };
+        var work = input.SuppliedCandidates[0];
+        var assertion = work.SearchAssertions.Single();
+        var credit = assertion.Hit.ArtistCredits![0];
+        var creditArtist = credit.Artist! with
+        {
+            Identity = credit.Artist!.Identity with
+            {
+                Identity = new(
+                    "musicbrainz.org",
+                    "artist",
+                    (creditedArtist ?? Guid.Parse("00000000-0000-0000-0000-000000000071")).ToString(
+                        "D"
+                    )
+                ),
+            },
+            Name = new(creditedName, credit.Artist.Name!.Evidence),
+        };
+        // Generic synthetic names exercise the shared name/ID rule, independent
+        // of the song title and the original fixture's familiar performers.
+        work = work with
+        {
+            SearchAssertions =
+            [
+                assertion with
+                {
+                    Hit = assertion.Hit with
+                    {
+                        ArtistCredits =
+                        [
+                            credit with
+                            {
+                                Name = new(creditedName, credit.Name!.Evidence),
+                                Artist = creditArtist,
+                            },
+                        ],
+                    },
+                },
+            ],
+            WriterRoles =
+            [
+                new(
+                    new("composer", Evidence()),
+                    new("backward", Evidence()),
+                    new("artist", Evidence()),
+                    creditArtist with
+                    {
+                        Identity = new(
+                            new(
+                                "musicbrainz.org",
+                                "artist",
+                                "00000000-0000-0000-0000-000000000073"
+                            ),
+                            Evidence()
+                        ),
+                        Name = new(
+                            annotationName == creditedName
+                                ? "Different work writer"
+                                : annotationName,
+                            Evidence()
+                        ),
+                    },
+                    Evidence(),
+                    "work_lookup"
+                ),
+            ],
+        };
+        return input with
+        {
+            SuppliedCandidates = [work, .. input.SuppliedCandidates.Skip(1)],
+            TargetContext = context with
+            {
+                Witnesses = context
+                    .Witnesses.Select(
+                        (witness, index) =>
+                            index == 2
+                                ? witness with
+                                {
+                                    Claims =
+                                    [
+                                        claim with
+                                        {
+                                            Value = annotationName,
+                                            Observation = JsonSerializer.SerializeToElement(
+                                                annotation,
+                                                PromptJson()
+                                            ),
+                                        },
+                                    ],
+                                }
+                                : witness
+                    )
+                    .ToArray(),
+            },
+        };
+    }
+
+    internal static string EnrichedResponse(
+        string basis = "background_only",
+        object[]? targetReferences = null,
+        object[]? pathReferences = null
+    ) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                selectedWorkMbid = FirstWork,
+                alternativeWorkMbids = new[] { SecondWork },
+                outcome = "selected",
+                rationale = "A supplied work remains a hypothesis; support is reported separately.",
+                support = new
+                {
+                    basis,
+                    targetReferences = targetReferences ?? [],
+                    recordingWorkPathReferences = pathReferences ?? [],
+                },
+            }
+        );
+
+    internal static object TargetClaimReference() =>
+        new
+        {
+            witnessIndex = 2,
+            claimIndex = (int?)0,
+            textIndex = (int?)null,
+        };
+
+    internal static object TargetTextReference() =>
+        new
+        {
+            witnessIndex = 2,
+            claimIndex = (int?)null,
+            textIndex = (int?)0,
+        };
+
+    internal static object SelectedPathReference() => new { workMbid = FirstWork, pathIndex = 0 };
 
     internal static string Response() =>
         JsonSerializer.Serialize(
@@ -1406,6 +2174,304 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
         (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(first.ActualUsd);
     }
 
+    [Test]
+    public async Task EnrichedHttpPromptExposesOnlyQualifiedRecordingReleaseWorkPathsAndReplaysItsOwnCache()
+    {
+        var input = TestLunaCompositionHypothesisSelector.RecordingProgramInput();
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, maximumTotalAttempts: 1);
+        var handler = new TestLunaCompositionHypothesisSelector.Handler(
+            TestLunaCompositionHypothesisSelector.EnrichedResponse(),
+            outputTokens: 4096
+        );
+        using var http = new HttpClient(handler);
+        var selector = new LunaCompositionHypothesisSelector(http, cache, () => "fixture-key");
+        var result = await selector.SelectAsync(job, input);
+        var replay = await new LunaCompositionHypothesisSelector(
+            http,
+            cache,
+            () => throw new AssertionException("Enriched replay requires no key")
+        ).SelectAsync(job, input);
+
+        using var sent = JsonDocument.Parse(handler.RequestBody!);
+        sent.RootElement.GetProperty("reasoning")
+            .GetProperty("effort")
+            .GetString()
+            .Should()
+            .Be("medium");
+        sent.RootElement.GetProperty("max_output_tokens").GetInt32().Should().Be(8192);
+        using var model = JsonDocument.Parse(
+            sent.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+        var supplied = model.RootElement.GetProperty("suppliedCandidates");
+        supplied
+            .EnumerateArray()
+            .Select(work => work.GetProperty("workMbid").GetGuid())
+            .Should()
+            .Equal(input.SuppliedCandidates.Select(work => work.WorkMbid));
+        var paths = model.RootElement.GetProperty("recordingReleaseWorkPaths");
+        paths
+            .EnumerateArray()
+            .Select(work => work.GetProperty("workMbid").GetGuid())
+            .Should()
+            .Equal(input.SuppliedCandidates.Select(work => work.WorkMbid));
+        var connected = paths[0].GetProperty("paths");
+        connected.GetArrayLength().Should().Be(2);
+        paths[1].GetProperty("paths").GetArrayLength().Should().Be(0);
+        paths[2].GetProperty("paths").GetArrayLength().Should().Be(0);
+        var sourceHit = supplied[0]
+            .GetProperty("facts")
+            .GetProperty("searchAssertions")[0]
+            .GetProperty("value")
+            .GetProperty("hit");
+        var relationships = supplied[0]
+            .GetProperty("facts")
+            .GetProperty("recordingWorkRelationships");
+        var citations = model.RootElement.GetProperty("citationPool");
+        for (var index = 0; index < connected.GetArrayLength(); index++)
+        {
+            var fact = connected[index];
+            var value = fact.GetProperty("value");
+            value
+                .GetProperty("recording")
+                .GetProperty("provider")
+                .GetString()
+                .Should()
+                .Be("musicbrainz.org");
+            value
+                .GetProperty("recording")
+                .GetProperty("resourceType")
+                .GetString()
+                .Should()
+                .Be("recording");
+            value
+                .GetProperty("recording")
+                .GetProperty("providerKey")
+                .GetString()
+                .Should()
+                .Be("b8cc2bc8-ac3d-4b9b-81c3-b973006cac70");
+            value
+                .GetProperty("work")
+                .GetProperty("providerKey")
+                .GetGuid()
+                .Should()
+                .Be(input.SuppliedCandidates[0].WorkMbid);
+            JsonElement
+                .DeepEquals(value.GetProperty("releases"), sourceHit.GetProperty("releases"))
+                .Should()
+                .BeTrue();
+            JsonElement
+                .DeepEquals(
+                    value.GetProperty("recordingArtistCredits"),
+                    sourceHit.GetProperty("artistCredits")
+                )
+                .Should()
+                .BeTrue();
+            JsonElement
+                .DeepEquals(
+                    value.GetProperty("performanceRelationship"),
+                    relationships[index].GetProperty("value").GetProperty("relationship")
+                )
+                .Should()
+                .BeTrue();
+            var membershipEvidence = value.GetProperty("membershipEvidence");
+            membershipEvidence
+                .GetProperty("inputRevisionUuid")
+                .GetGuid()
+                .Should()
+                .Be(
+                    input
+                        .SuppliedCandidates[0]
+                        .SearchAssertions.Single()
+                        .Hit.Evidence.InputRevisionUuid
+                );
+            membershipEvidence.GetProperty("jsonPointer").GetString().Should().Be("/recordings/0");
+            var relationshipEvidence = value.GetProperty("relationshipEvidence");
+            relationshipEvidence
+                .GetProperty("inputRevisionUuid")
+                .GetGuid()
+                .Should()
+                .Be(
+                    input
+                        .SuppliedCandidates[0]
+                        .RecordingWorkRelationships[index]
+                        .Relationship
+                        .Evidence
+                        .InputRevisionUuid
+                );
+            relationshipEvidence
+                .GetProperty("jsonPointer")
+                .GetString()
+                .Should()
+                .Be(
+                    input
+                        .SuppliedCandidates[0]
+                        .RecordingWorkRelationships[index]
+                        .Relationship
+                        .Evidence
+                        .JsonPointer
+                );
+            fact.GetProperty("retainedSourcePositions").GetInt32().Should().BeGreaterThan(0);
+            fact.GetProperty("representativeCitations")
+                .EnumerateArray()
+                .Select(citation =>
+                    citations[citation.GetInt32()]
+                        .GetProperty("evidence")
+                        .GetProperty("inputRevisionUuid")
+                        .GetGuid()
+                )
+                .Should()
+                .Contain(
+                    input
+                        .SuppliedCandidates[0]
+                        .SearchAssertions.Single()
+                        .Hit.Evidence.InputRevisionUuid
+                );
+        }
+        var releases = connected[0].GetProperty("value").GetProperty("releases");
+        releases.GetArrayLength().Should().Be(10);
+        var medium = releases[0].GetProperty("media")[0];
+        medium.GetProperty("trackCount").GetInt64().Should().Be(13);
+        medium.GetProperty("trackOffset").GetInt64().Should().Be(8);
+        medium.GetProperty("tracks")[0].GetProperty("number").GetString().Should().Be("9");
+        medium
+            .GetProperty("tracks")[0]
+            .GetProperty("position")
+            .ValueKind.Should()
+            .Be(JsonValueKind.Null);
+        supplied[1]
+            .GetProperty("facts")
+            .GetProperty("recordingWorkRelationships")
+            .GetArrayLength()
+            .Should()
+            .Be(input.SuppliedCandidates[1].RecordingWorkRelationships.Count);
+        supplied[2]
+            .GetProperty("facts")
+            .GetProperty("searchAssertions")
+            .GetArrayLength()
+            .Should()
+            .Be(1);
+        result.Method.Should().Be("luna-composition-hypothesis-v8");
+        result.PreferencePermitted.Should().BeFalse();
+        result.OutputTokens.Should().Be(4096);
+        result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
+        replay.FromCache.Should().BeTrue();
+        replay.CacheKey.Should().Be(result.CacheKey);
+        result
+            .CacheKey.Should()
+            .NotBe(
+                LunaCompositionHypothesisSelector
+                    .DescribeRequest(input with { TargetContext = null })
+                    .CacheKey
+            );
+        handler.Calls.Should().Be(1);
+    }
+
+    [TestCase("target_attribution", "cover_artist", true)]
+    [TestCase("target_attribution", "original_performer", true)]
+    [TestCase("target_program_path", "cover_artist", true)]
+    [TestCase("target_recording_path", "cover_artist", true)]
+    [TestCase("background_only", "cover_artist", false)]
+    public async Task EnrichedSourceSupportControlsPreferenceWithoutTurningSelectionIntoAuthority(
+        string basis,
+        string annotationKind,
+        bool preferred
+    )
+    {
+        var input = TestLunaCompositionHypothesisSelector.SupportedInput(
+            annotationKind,
+            recordingIdentity: basis == "target_recording_path"
+        );
+        object[] targets =
+            basis == "background_only"
+                ? []
+                :
+                [
+                    basis == "target_program_path"
+                        ? TestLunaCompositionHypothesisSelector.TargetTextReference()
+                        : TestLunaCompositionHypothesisSelector.TargetClaimReference(),
+                ];
+        object[] paths =
+            basis == "background_only"
+                ? []
+                : [TestLunaCompositionHypothesisSelector.SelectedPathReference()];
+        var response = TestLunaCompositionHypothesisSelector.EnrichedResponse(
+            basis,
+            targets,
+            paths
+        );
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, maximumTotalAttempts: 1);
+        var handler = new TestLunaCompositionHypothesisSelector.Handler(response);
+        using var http = new HttpClient(handler);
+        var selector = new LunaCompositionHypothesisSelector(http, cache, () => "fixture-key");
+        var result = await selector.SelectAsync(job, input);
+        var replay = await selector.SelectAsync(job, input);
+
+        result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
+        result
+            .AlternativeWorkMbids.Should()
+            .Equal(TestLunaCompositionHypothesisSelector.SecondWork);
+        result.PreferencePermitted.Should().Be(preferred);
+        result.Support.Should().NotBeNull();
+        result.Support!.Basis.Should().Be(basis);
+        result.PublicationPermitted.Should().BeFalse();
+        replay.FromCache.Should().BeTrue();
+        replay.PreferencePermitted.Should().Be(preferred);
+        replay.Support.Should().BeEquivalentTo(result.Support);
+        handler.Calls.Should().Be(1);
+        using var sent = JsonDocument.Parse(handler.RequestBody!);
+        var properties = sent
+            .RootElement.GetProperty("text")
+            .GetProperty("format")
+            .GetProperty("schema")
+            .GetProperty("properties");
+        properties.TryGetProperty("support", out _).Should().BeTrue();
+        using var model = JsonDocument.Parse(
+            sent.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+        model
+            .RootElement.GetProperty("recordingReleaseWorkPaths")[0]
+            .GetProperty("paths")[0]
+            .GetProperty("value")
+            .GetProperty("pathIndex")
+            .GetInt32()
+            .Should()
+            .Be(0);
+        model.RootElement.GetProperty("suppliedCandidates").GetArrayLength().Should().Be(3);
+    }
+
+    [Test]
+    public async Task InvalidEnrichedSupportRetainsUsageButCannotBePreferredOrCached()
+    {
+        var input = TestLunaCompositionHypothesisSelector.SupportedInput();
+        var response = TestLunaCompositionHypothesisSelector.EnrichedResponse(
+            "target_attribution",
+            [TestLunaCompositionHypothesisSelector.TargetClaimReference()],
+            [new { workMbid = TestLunaCompositionHypothesisSelector.FirstWork, pathIndex = 2 }]
+        );
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, maximumTotalAttempts: 1);
+        var handler = new TestLunaCompositionHypothesisSelector.Handler(response);
+        using var http = new HttpClient(handler);
+        var result = await new LunaCompositionHypothesisSelector(
+            http,
+            cache,
+            () => "fixture-key"
+        ).SelectAsync(job, input);
+
+        result.State.Should().Be("unresolved");
+        result.Reason.Should().Be("invalid_response");
+        result.SelectedWorkMbid.Should().BeNull();
+        result.PreferencePermitted.Should().NotBe(true);
+        result.ActualUsd.Should().Be(.00011m);
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.00011m);
+        (await cache.GetCachedResponseAsync(LunaCompositionHypothesisSelector.RenderRequest(input)))
+            .Should()
+            .BeNull();
+        handler.Calls.Should().Be(1);
+    }
+
     [TestCase(272_000L)]
     [TestCase(272_001L)]
     public async Task CompleteLargeContextReachesHttpAndBillsTheReportedInputTier(long inputTokens)
@@ -1423,7 +2489,7 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
             maximumTotalAttempts: 1
         );
         var handler = new TestLunaCompositionHypothesisSelector.Handler(
-            TestLunaCompositionHypothesisSelector.Response(),
+            TestLunaCompositionHypothesisSelector.EnrichedResponse(),
             inputTokens: inputTokens
         );
         using var http = new HttpClient(handler);

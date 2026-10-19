@@ -42,7 +42,9 @@ internal sealed class CompositionTargetContextPrompt(JsonSerializerOptions json)
                 })
                 .ToArray(),
         };
-        var witnesses = context.Witnesses.Select(Witness).ToArray();
+        var witnesses = context
+            .Witnesses.Select((witness, index) => Witness(witness, index))
+            .ToArray();
         return new
         {
             context.Key,
@@ -56,9 +58,10 @@ internal sealed class CompositionTargetContextPrompt(JsonSerializerOptions json)
         };
     }
 
-    private object Witness(CompositionSelectionTargetWitness witness) =>
+    private object Witness(CompositionSelectionTargetWitness witness, int witnessIndex) =>
         new
         {
+            witnessIndex,
             witness.Kind,
             origin = Position(witness.Origin),
             witness.FileUuid,
@@ -70,21 +73,26 @@ internal sealed class CompositionTargetContextPrompt(JsonSerializerOptions json)
             witness.Ordered,
             witness.MatchingRepertoireKeys,
             texts = witness
-                .Texts.Select(text => new
-                {
-                    text.Field,
-                    text = Text(text),
-                    origin = Position(text.Origin),
-                    text.Format,
-                })
+                .Texts.Select(
+                    (text, textIndex) =>
+                        new
+                        {
+                            textIndex,
+                            text.Field,
+                            textPoolId = Text(text),
+                            origin = Position(text.Origin),
+                            text.Format,
+                        }
+                )
                 .ToArray(),
-            claims = witness.Claims.Select(Claim).ToArray(),
+            claims = witness.Claims.Select((claim, index) => Claim(claim, index)).ToArray(),
             witness.MissingFields,
         };
 
-    private object Claim(CompositionSelectionTargetClaim claim) =>
+    private object Claim(CompositionSelectionTargetClaim claim, int claimIndex) =>
         new
         {
+            claimIndex,
             claim.Kind,
             claim.Role,
             claim.Value,

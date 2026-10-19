@@ -30,7 +30,7 @@ python3 tools/RelistenNormalization/composition_catalogue.py \
   --database <new-composition-projection>/compositions.sqlite3
 ```
 
-The private build checks the completion manifest, all chunk hashes and counts,
+The projection builder checks the completion manifest, all chunk hashes and counts,
 the exact music input/output generation, qualified work identities and referenced
 song groups. Exact checkpoint repeats are allowed; changed repeats fail. The
 producer’s complete proposed-song population is authoritative. The projection
@@ -38,12 +38,11 @@ reconciles that population and its outcomes while retaining only candidate-beari
 song rows, every work ID, searchable literal facts and original evidence pointers.
 It does not copy the music database or read file bodies.
 
-The initial sealed population contains 896,216 proposed song targets, 1,024 works
-and 120 retained search pages. It has 3,034 candidate-bearing targets and 893,182
-targets without a candidate in this retained pool. Later acquisition checkpoints
-are outside this image until another complete C# output is published. The first
-projection uses 15,642,624 bytes and retains 27,555 candidate relationships,
-including competing works with the same title.
+The live expanded local generation contains 896,216 proposed song targets,
+2,656 works, 8,389 candidate-bearing targets and 887,827 targets without retained
+candidates. The browser serves this generation, including competing same-title
+works. These counts describe the captured input and retained work pool; they do
+not establish complete composition coverage.
 
 The default projection cap is 256 MiB and the free-space floor is 5.5 GiB. Failure
 removes the private build and preserves the previous published projection. Keep
@@ -128,10 +127,12 @@ back model display. Its generation includes the selection manifest pin.
 Song hypothesis responses and work-page song rows add `modelSelection`, or null
 when no saved request covers that song. The fields include `executionState`,
 `outcome`, `inferenceOutcome`, `selectedWorkKey`, `alternativeWorkKeys`,
-`rationale`, `method`, `model` and the saved request keys. The original typed row
+`rationale`, `method`, `model`, `support`, `preferencePermitted`,
+`preferredWorkKey` and the saved request keys. `selectedWorkKey` preserves the raw
+model choice; only `preferredWorkKey` can drive a preferred link. The original typed row
 is available at `/api/composition-selection-evidence?scope=&artist=&key=&generation=`.
 
-The UI labels a selected work **Model suggestion · unconfirmed** and links to its
+The UI labels a source-referenced preferred work **Source-referenced model proposal · unconfirmed** and links to its
 other artists, existing performances and audio. A valid model abstention is
 separate from a skipped request or a transport, configuration or budget failure.
 A model choice never removes another title match, hides audio or changes a
@@ -141,17 +142,13 @@ confident explanation can be wrong. Every result keeps `acceptedIdentity` and
 
 ## Include original recording and setlist context
 
-The corrected first-100 context export passed keyless preflight: 90 requests fit
-the existing 512,000-byte limit and 10 were explicitly oversized. The v3 run then
-retained 71 selections and 19 abstentions, with those 10 inputs skipped. These
-counts measure execution, not matching accuracy. Additional context does not
-guarantee the right work: Such A Night still selected the Lincoln Chase candidate
-despite the retained Last Waltz program description. That choice remains under
-independent adjudication.
-
-The v4 prompt below shares repeated provenance and separates our repertoire
-derivation from source facts. Its exact rendered sizes still need a new keyless
-measurement; the request limit has not changed.
+Composition selection needs more than a title and artist name. Recording notes,
+program context and provider cover credits can distinguish unrelated works with
+the same title. Source audits of “Such a Night” found both a useful Last Waltz
+program connection and an unsupported namesake choice. The current selector
+requires target-owned source references before showing a preferred suggestion.
+The [development record](../../docs/research/2026-10-17-full-normalization/scale/composition-development-selection.md)
+retains trial results and their limits.
 
 An optional `composition-target-context-v1` export adds original catalogue files,
 recording text, legacy setlist memberships, native files, native recording
@@ -203,12 +200,12 @@ and no prompt measurement. Execution needs another new output directory.
 
 No-context requests preserve v2 prompt bytes and cache identity. New enriched
 runs report `composition-selection-batch-v2` and use
-`luna-composition-hypothesis-v4`; older v3 results retain their original method
-and request. Use a verified v4 runtime for the commands above. Requests bind only
+`luna-composition-hypothesis-v8`; older enriched results retain their original
+methods and requests. Use a verified v8 runtime for the commands above. Requests bind only
 their target facts and witnesses, so unrelated export targets do not invalidate
 cached requests.
 
-The v4 request uses named source-document, source-position, literal-text and
+The enriched request uses named source-document, source-position, literal-text and
 derived-fact pools. Every witness keeps its own owner, order and citation; no
 view is sampled. Shared facts are not independent confirmations. Only the known
 `retained_repertoire_interpretation` claim omits our repeated matcher diagnostics
@@ -219,6 +216,74 @@ audit and cache identity. Rationales must distinguish target evidence from
 background familiarity/counts; a candidate ISWC only matches when the target
 supplies it too.
 
+The prompt also presents `recordingReleaseWorkPaths`: actual release/media/track
+observations joined to forward performance-to-work relationships by exact
+qualified recording IDs. Both source legs keep their citations. No title,
+query score or program wording creates that join, and no path asserts that the
+target audio is the same external recording. All original candidate facts and
+rivals remain supplied. The model must reconcile target program/performer facts,
+those paths and writer roles before invoking background familiarity.
+
+V8 keeps medium reasoning and the 8,192-token output allowance; no-context v2
+keeps low reasoning, its 2,048-token allowance and exact request bytes/cache
+identity. V8 has a separate method/cache identity from earlier enriched runs. The current local
+limits are 2,000,000 UTF-8 request bytes with target context and 512,000 without;
+neither is a provider token-window guarantee. Preflight measures the complete
+request and reserves its full output allowance before any admission.
+
 These remain model hypotheses. Publish enriched results through a reader that
 validates their enriched plan and context pins. Neither preflight nor execution
 updates a reader.
+
+## Source references for a preferred suggestion
+
+V7 adds a typed `support` result with a closed basis and exact references to the
+current target's witness/claim/text positions and supplied work/path indexes.
+The bases are `target_attribution`, `target_program_path`,
+`target_recording_path`, `background_only` and `none`. An attribution basis must
+point to an actual `cover_artist` or `original_performer` passage annotation
+and a referenced recording performer on the selected work path. When the
+annotation supplies a qualified MusicBrainz artist identity, that identity must
+match; a conflicting identity cannot fall back to its label. Otherwise, only an
+exact normalized original performer label can link them. Work writers and
+recording aliases cannot substitute for that performer. A recording basis must identify an actual target-qualified recording matching
+the supplied path. A title, date, catalog-artist name or remembered association
+cannot supply a missing recording identity.
+
+V8 renders explicit `witnessIndex`, `claimIndex` and witness-local `textIndex`
+values. `textPoolId` only retrieves a shared literal; it is never a support
+index. Compiled `attributionRecordingWorkLinks` expose the exact target
+annotation, matching recording credit and supplied work/path positions. A
+performer need not be the work writer: the recording's observed performance-to-work
+relationship supplies that link. All original facts and rivals remain available.
+
+The v7 trial was interrupted after two observed contract failures: ambiguous
+local-versus-pool text addresses, and a cover attribution paired with an unrelated
+recording performer. Its outputs remain immutable. V8 fixes those boundaries;
+its runtime and listener outcomes still require verification. These observations
+are not an accuracy estimate.
+
+The core computes `preferencePermitted`. A selected, source-referenced proposal
+needs valid target evidence and a real path for that selected work. Background
+choices remain in the original model result and evidence with preference false;
+invalid or forged references produce an explicit invalid-response execution
+outcome. The reader retains `selectedWorkKey` as the raw model choice and all
+candidates, but only `preferredWorkKey` may drive preferred labels or links.
+Historical results without the new flag remain inspectable and unqualified.
+
+Validation establishes reference ownership and structure, not that a provider
+attribution or the model's interpretation is true. Cover/original-performer
+attribution is not a composer credit. A proposed correspondence from a primary
+setlist to this artist-scoped target must retain its own evidence and declared
+development basis, separately from the provider's original annotation. It does
+not establish identical audio, accepted identity or reviewed authority.
+
+New source supplements use the existing pinned target-context machinery: retain
+new provider bytes and citations, authenticate the provider artist/song/passage
+attachment, and export a new context. Do not edit old Archive notes or import
+an adjudicator's expected work ID as a source claim. Date/title searches retrieve
+candidates; they do not establish the attachment. Missing or conflicting facts
+remain explicit. [Go-Set acquisition and supplementation](go-set-composition-sources.md)
+retain new cover credits without changing the original recording notes or
+assigning provider occurrences to catalog recordings. The candidate-only browser
+remains available while a new model result is prepared.

@@ -413,12 +413,14 @@ class CompositionSelectionBuilder:
             if not prepared["skipReason"]:
                 raise ValueError("A missing selection needs its saved skip reason")
             inference, state, outcome = None, "skipped", "skipped"
-        return {"executionState": state, "outcome": outcome, "inferenceOutcome": inference["outcome"] if inference else None, "selectedWorkKey": selected,
+        return selection_preference({"executionState": state, "outcome": outcome, "inferenceOutcome": inference["outcome"] if inference else None, "selectedWorkKey": selected,
             "alternativeWorkKeys": alternatives, "rationale": selection["rationale"] if selection else None,
             "method": selection["method"] if selection else None, "model": request["model"] if request else None,
             "reason": inference.get("reason") if inference else prepared["skipReason"],
             "inputSha256": prepared["inputSha256"], "cacheKey": request["cacheKey"] if request else None,
-            "acceptedIdentity": False, "publicationPermitted": False, "externalUniverseComplete": False}
+            "support": inference.get("support") if inference else None,
+            "preferencePermitted": inference.get("preferencePermitted") is True if inference else False,
+            "acceptedIdentity": False, "publicationPermitted": False, "externalUniverseComplete": False})
 
     @staticmethod
     def _work_key(value):
@@ -427,6 +429,20 @@ class CompositionSelectionBuilder:
     def _space(self):
         if shutil.disk_usage(self.database.parent).free < self.minimum_free_bytes:
             raise CatalogueBuildPaused("Selection projection stopped to preserve free space")
+
+
+def selection_preference(value):
+    """A saved choice stays inspectable even when it cannot guide discovery.
+
+    Older results did not distinguish source references from model background
+    knowledge. Missing permission or support never becomes a preferred link.
+    The C# selector owns support validation; this reader preserves its decision.
+    """
+    value["support"] = value.get("support")
+    value["preferencePermitted"] = value.get("preferencePermitted") is True and isinstance(value["support"], dict)
+    value["preferredWorkKey"] = value.get("selectedWorkKey") if (
+        value["preferencePermitted"] and value["executionState"] == "proposed" and value["outcome"] == "selected") else None
+    return value
 
 
 class CompositionSelections:
@@ -464,7 +480,7 @@ class CompositionSelections:
     def song(self, scope, artist, key):
         with closing(self._connect()) as db:
             row = db.execute("SELECT value FROM selections WHERE scope=? AND artist_uuid=? AND song_key=?", (scope, artist, key)).fetchone()
-            return json.loads(row[0]) if row else None
+            return selection_preference(json.loads(row[0])) if row else None
 
     def evidence(self, scope, artist, key):
         with closing(self._connect()) as db:

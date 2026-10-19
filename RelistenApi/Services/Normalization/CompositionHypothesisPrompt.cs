@@ -16,8 +16,9 @@ namespace Relisten.Normalization;
 internal sealed class CompositionHypothesisPrompt
 {
     internal const string Version = "composition-semantic-facts-v1";
-    internal const string TargetContextVersion = "composition-semantic-target-context-v2";
+    internal const string TargetContextVersion = "composition-semantic-target-context-v5";
     private const int MaximumCitationExamples = 2;
+    private static readonly JsonSerializerOptions AttributionJson = new(JsonSerializerDefaults.Web);
     private readonly JsonSerializerOptions json;
     private readonly List<Citation> citations = [];
     private readonly Dictionary<string, int> citationIds = new(StringComparer.Ordinal);
@@ -42,6 +43,16 @@ internal sealed class CompositionHypothesisPrompt
                 originalInputSha256,
                 song = input.Song,
                 targetContext = CompositionTargetContextPrompt.Build(input.TargetContext, json),
+                attributionRecordingWorkLinks = projection.Facts(
+                    AttributionRecordingWorkLinks(input)
+                ),
+                recordingReleaseWorkPaths = input
+                    .SuppliedCandidates.Select(work => new
+                    {
+                        work.WorkMbid,
+                        paths = projection.Facts(RecordingReleaseWorkPaths(work)),
+                    })
+                    .ToArray(),
                 suppliedCandidates = works,
                 citationPool = projection.citations,
             };
@@ -78,6 +89,199 @@ internal sealed class CompositionHypothesisPrompt
                 recordingAssertions = Facts(work.RecordingAssertions),
             },
         };
+
+    internal static IReadOnlyList<RecordingReleaseWorkPath> RecordingReleaseWorkPaths(
+        CompositionSelectionWork work
+    )
+    {
+        // This joins supplied provider assertions, not the target rendition. Keeping
+        // the actual release→recording→work path together prevents separate fact
+        // arrays from looking like unrelated title or background-author evidence.
+        var relationships = work
+            .RecordingWorkRelationships.Where(relationship =>
+                IsMusicBrainzIdentity(relationship.Recording, "recording")
+                && relationship.Work.Identity == work.Identity.Identity
+                && relationship.Relationship.Type?.Value == "performance"
+                && relationship.Relationship.Direction?.Value == "forward"
+                && relationship.Relationship.TargetType?.Value == "work"
+                && relationship.Relationship.Target?.Identity.Identity == work.Identity.Identity
+            )
+            .ToLookup(relationship => relationship.Recording.Identity);
+        var paths = new List<RecordingReleaseWorkPath>();
+        foreach (var assertion in work.SearchAssertions)
+        {
+            var hit = assertion.Hit;
+            if (
+                !IsMusicBrainzIdentity(hit.Entity.Identity, "recording")
+                || hit.Releases is not { Count: > 0 } releases
+            )
+            {
+                continue;
+            }
+            foreach (var relationship in relationships[hit.Entity.Identity.Identity])
+            {
+                paths.Add(
+                    new(
+                        paths.Count,
+                        hit.Entity.Identity,
+                        hit.Entity.Name,
+                        hit.ArtistCredits,
+                        releases,
+                        relationship.Relationship,
+                        relationship.Work,
+                        assertion.Page,
+                        hit.Evidence,
+                        relationship.Relationship.Evidence
+                    )
+                );
+            }
+        }
+        return paths;
+    }
+
+    private static IReadOnlyList<AttributionRecordingWorkLink> AttributionRecordingWorkLinks(
+        CompositionHypothesisSelectionInput input
+    )
+    {
+        var paths = input
+            .SuppliedCandidates.SelectMany(work =>
+                RecordingReleaseWorkPaths(work).Select(path => (work.WorkMbid, Path: path))
+            )
+            .ToArray();
+        var links = new List<AttributionRecordingWorkLink>();
+        var witnesses = input.TargetContext!.Witnesses;
+        for (var witnessIndex = 0; witnessIndex < witnesses.Count; witnessIndex++)
+        {
+            var claims = witnesses[witnessIndex].Claims;
+            for (var claimIndex = 0; claimIndex < claims.Count; claimIndex++)
+            {
+                var attribution = ReadAttribution(claims[claimIndex]);
+                if (attribution is null)
+                {
+                    continue;
+                }
+                foreach (var path in paths)
+                {
+                    if (MatchAttribution(attribution, path.Path) is { } match)
+                    {
+                        links.Add(
+                            new(
+                                witnessIndex,
+                                claimIndex,
+                                path.WorkMbid,
+                                path.Path.PathIndex,
+                                match.Basis,
+                                match.Annotation,
+                                match.RecordingArtistCredit
+                            )
+                        );
+                    }
+                }
+            }
+        }
+        return links;
+    }
+
+    internal static AttributionPerformerMatch? MatchAttribution(
+        CompositionSelectionTargetClaim claim,
+        RecordingReleaseWorkPath path
+    )
+    {
+        var attribution = ReadAttribution(claim);
+        return attribution is null ? null : MatchAttribution(attribution, path);
+    }
+
+    private static AttributionPerformer? ReadAttribution(CompositionSelectionTargetClaim claim)
+    {
+        if (
+            claim.Kind != "performance_annotation"
+            || claim.Observation.ValueKind != JsonValueKind.Object
+        )
+        {
+            return null;
+        }
+        ProviderPerformanceAnnotation? annotation;
+        try
+        {
+            annotation = claim.Observation.Deserialize<ProviderPerformanceAnnotation>(
+                AttributionJson
+            );
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        if (annotation?.Kind is not ("cover_artist" or "original_performer"))
+        {
+            return null;
+        }
+
+        // A cover attribution names a performer, not a work writer. A shared
+        // recording performer is the missing link to the observed performance
+        // edge. Names are exact candidate labels, never canonical identities.
+        var identities = (annotation.Identities ?? [])
+            .Where(identity =>
+                identity?.Identity
+                    is { Provider: "musicbrainz.org", ResourceType: "artist" } resource
+                && Guid.TryParseExact(resource.ProviderKey, "D", out var uuid)
+                && uuid != Guid.Empty
+            )
+            .Select(identity => identity.Identity)
+            .ToArray();
+        var label = annotation.Name?.Value is { } name
+            ? IdentityCandidateMatcher.PeopleNameCandidateKey(name)
+            : "";
+        return new(annotation, identities, label);
+    }
+
+    private static AttributionPerformerMatch? MatchAttribution(
+        AttributionPerformer attribution,
+        RecordingReleaseWorkPath path
+    )
+    {
+        foreach (var credit in path.RecordingArtistCredits ?? [])
+        {
+            if (attribution.Identities.Length != 0)
+            {
+                if (
+                    credit.Artist?.Identity?.Identity is { } identity
+                    && attribution.Identities.Contains(identity)
+                )
+                {
+                    return new(
+                        "qualified_recording_performer_identity",
+                        attribution.Annotation,
+                        credit
+                    );
+                }
+            }
+            else if (
+                attribution.Label.Length != 0
+                && (
+                    credit.Name?.Value is { } name
+                        && IdentityCandidateMatcher.PeopleNameCandidateKey(name)
+                            == attribution.Label
+                    || credit.Artist?.Name?.Value is { } artistName
+                        && IdentityCandidateMatcher.PeopleNameCandidateKey(artistName)
+                            == attribution.Label
+                )
+            )
+            {
+                return new(
+                    "exact_observed_recording_performer_label",
+                    attribution.Annotation,
+                    credit
+                );
+            }
+        }
+        return null;
+    }
+
+    private static bool IsMusicBrainzIdentity(ObservedProviderIdentity identity, string kind) =>
+        identity.Identity.Provider == "musicbrainz.org"
+        && identity.Identity.ResourceType == kind
+        && Guid.TryParseExact(identity.Identity.ProviderKey, "D", out var uuid)
+        && uuid != Guid.Empty;
 
     private IReadOnlyList<object> Facts<T>(IReadOnlyList<T> observations)
     {
@@ -232,6 +436,41 @@ internal sealed class CompositionHypothesisPrompt
         }
         return id;
     }
+
+    private sealed record AttributionPerformer(
+        ProviderPerformanceAnnotation Annotation,
+        NormalizationResourceKey[] Identities,
+        string Label
+    );
+
+    private sealed record AttributionRecordingWorkLink(
+        int WitnessIndex,
+        int ClaimIndex,
+        Guid WorkMbid,
+        int PathIndex,
+        string MatchBasis,
+        ProviderPerformanceAnnotation Annotation,
+        MusicBrainzArtistCreditObservation RecordingArtistCredit
+    );
+
+    internal sealed record AttributionPerformerMatch(
+        string Basis,
+        ProviderPerformanceAnnotation Annotation,
+        MusicBrainzArtistCreditObservation RecordingArtistCredit
+    );
+
+    internal sealed record RecordingReleaseWorkPath(
+        int PathIndex,
+        ObservedProviderIdentity Recording,
+        ObservedValue<string>? RecordingName,
+        IReadOnlyList<MusicBrainzArtistCreditObservation>? RecordingArtistCredits,
+        IReadOnlyList<MusicBrainzSearchReleaseObservation> Releases,
+        MusicBrainzRelationshipObservation PerformanceRelationship,
+        ObservedProviderIdentity Work,
+        ProviderObservationOrigin Page,
+        NormalizedEvidenceReference MembershipEvidence,
+        NormalizedEvidenceReference RelationshipEvidence
+    );
 
     private sealed record Citation(
         NormalizedEvidenceReference Evidence,

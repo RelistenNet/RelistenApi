@@ -18,19 +18,19 @@ namespace Relisten.Normalization;
 /// The existing extraction cache owns admission, spend and uncertain receipts;
 /// this class owns only the composition prompt, validation and one HTTP attempt.
 /// </summary>
-public sealed class LunaCompositionHypothesisSelector(
+public sealed partial class LunaCompositionHypothesisSelector(
     HttpClient http,
     NormalizationExtractionCacheService cache,
     Func<string> apiKey
 )
 {
     public const string Version = "luna-composition-hypothesis-v2";
-    public const string TargetContextVersion = "luna-composition-hypothesis-v4";
+    public const string TargetContextVersion = "luna-composition-hypothesis-v8";
 
     // This is a local resource limit, not the provider context limit. The full
     // compact candidate universe is measured and conservatively reserved before admission.
     public const int MaxRenderedRequestBytes = 512_000;
-    private const int MaxTargetContextRequestBytes = 1_200_000;
+    private const int MaxTargetContextRequestBytes = 2_000_000;
     private const int LongContextInputTokens = 272_000;
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
@@ -77,7 +77,7 @@ public sealed class LunaCompositionHypothesisSelector(
                         ? MaxTargetContextRequestBytes
                         : MaxRenderedRequestBytes
                 ),
-            Cost(Encoding.UTF8.GetByteCount(request) + 16384L, Options.MaxOutputTokens, method)
+            Cost(Encoding.UTF8.GetByteCount(request) + 16384L, MaximumOutputTokens(method), method)
         );
 
     /// <summary>
@@ -209,7 +209,7 @@ public sealed class LunaCompositionHypothesisSelector(
             response = await client.ExtractAsync(request, cancellationToken, key);
             result = ValidateResponse(snapshot, response.Json);
             if (
-                response.OutputTokens > Options.MaxOutputTokens
+                response.OutputTokens > MaximumOutputTokens(Method(snapshot))
                 || response.InputTokens > Encoding.UTF8.GetByteCount(request) + 16384L
             )
             {
@@ -295,6 +295,9 @@ public sealed class LunaCompositionHypothesisSelector(
     private static string Method(CompositionHypothesisSelectionInput input) =>
         input.TargetContext is null ? Version : TargetContextVersion;
 
+    private static int MaximumOutputTokens(string method) =>
+        method == TargetContextVersion ? 8192 : Options.MaxOutputTokens;
+
     private static CompositionHypothesisSelectionResult WithReceipt(
         CompositionHypothesisSelectionResult result,
         LunaCreditResponse? response,
@@ -353,14 +356,18 @@ public sealed class LunaCompositionHypothesisSelector(
             "required":["selectedWorkMbid","alternativeWorkMbids","outcome","rationale"],"additionalProperties":false}
             """
         );
+        if (input.TargetContext is not null)
+        {
+            schema = SupportSchema(schema);
+        }
         return JsonSerializer.Serialize(
             new
             {
                 model = Options.Model,
                 service_tier = "default",
                 store = false,
-                max_output_tokens = Options.MaxOutputTokens,
-                reasoning = new { effort = "low" },
+                max_output_tokens = MaximumOutputTokens(Method(input)),
+                reasoning = new { effort = input.TargetContext is null ? "low" : "medium" },
                 input = new object[]
                 {
                     new
@@ -413,7 +420,16 @@ public sealed class LunaCompositionHypothesisSelector(
     {
         using var document = JsonDocument.Parse(response);
         var root = document.RootElement;
-        var expected = new[] { "alternativeWorkMbids", "outcome", "rationale", "selectedWorkMbid" };
+        var expected = input.TargetContext is null
+            ? new[] { "alternativeWorkMbids", "outcome", "rationale", "selectedWorkMbid" }
+            : new[]
+            {
+                "alternativeWorkMbids",
+                "outcome",
+                "rationale",
+                "selectedWorkMbid",
+                "support",
+            };
         if (
             root.ValueKind != JsonValueKind.Object
             || !root.EnumerateObject()
@@ -452,7 +468,27 @@ public sealed class LunaCompositionHypothesisSelector(
         {
             throw InvalidResponse();
         }
-        return new("proposed", selected, alternatives, outcome, rationale, Method(input));
+        var support = input.TargetContext is null
+            ? null
+            : ValidateSupport(input, selected, root.GetProperty("support"));
+        return new(
+            "proposed",
+            selected,
+            alternatives,
+            outcome,
+            rationale,
+            Method(input),
+            Support: support,
+            PreferencePermitted: support is null
+                ? null
+                : selected.HasValue
+                    && (
+                        support.Basis
+                        is "target_attribution"
+                            or "target_program_path"
+                            or "target_recording_path"
+                    )
+        );
     }
 
     private const string TargetContextInstructions =
@@ -463,6 +499,30 @@ public sealed class LunaCompositionHypothesisSelector(
         + " Coverage is complete only for the observed witness population; missing recording text, artist identifiers and other fields remain missing."
         + " A catalog artist may be a cover performer, house band or collection, not the actual singer or composer. Preserve original source roles and namespace."
         + " Artist MBIDs are observed performer/catalog context only, not composer ownership."
+        + " recordingReleaseWorkPaths join actual supplied release memberships to forward recording-to-work relationships by qualified recording ID."
+        + " Their membershipEvidence and relationshipEvidence locate the two source assertions; duplicate editions or views are not independent confirmations."
+        + " Each path has a pathIndex within its supplied work. Every rendered witness has an explicit witnessIndex; each claim/text has its witness-local claimIndex/textIndex."
+        + " Support must copy those explicit indices, with exactly one claimIndex or textIndex, plus supplied workMbid/pathIndex references."
+        + " A textPoolId only retrieves a shared literal string; it is never a textIndex or a witnessIndex. Do not renumber a filtered subset of witnesses."
+        + " attributionRecordingWorkLinks compile target annotations that actually match a supplied recording performer, using a qualified artist ID or an exact observed performer label."
+        + " For target_attribution, cite a compiled link's target and work/path indices; an unrelated performer path cannot support the attribution."
+        + " Use target_attribution for an explicit cover_artist/original_performer annotation linked to the SAME performer credited on the supplied recording, then follow that recording's work relationship."
+        + " That performer need not be the work's writer: cover-performer attribution plus a matching performer recording-to-work path supports the composition correspondence without asserting composer ownership."
+        + " Do not prefer a familiar namesake whose referenced recording credits a different performer, even if that work's writers seem familiar."
+        + " Use target_program_path for actual target program text and the supplied path, or target_recording_path only for an actual target-qualified recording identity matching that path."
+        + " A target-source correspondence proposal remains development inference, not an accepted binding or proof of identical audio."
+        + " If the choice rests only on background familiarity, use background_only with no invented references; it remains an unsupported hypothesis and cannot be preferred."
+        + " Use none for no distinguishing support. Reference ownership validates the source, not the semantic truth of your interpretation."
+        + " Before selecting, compare the plausible rivals against the target's explicit program, performer and annotation facts."
+        + " When a target names a program or release, trace that context through the supplied release/track→recording→work path and reconcile it with the work's writer roles."
+        + " A program reference supports a cover interpretation; it does not make the target audio the same recording or its catalog artist the composer."
+        + " Select the best-supported plausible composition correspondence, not proof of identical audio or of the catalog performer's authorship."
+        + " Distinct qualified namesake works can legitimately have different writers; those writer lists distinguish alternatives and are not contradictory claims about one work."
+        + " An explicit target program or tribute context, matching song title and a supplied cited release→recording→work path can distinguish a plausible cover from same-title rivals."
+        + " When those source facts distinguish the candidates, do not demand a target recording MBID, target writer credit or identical original audio."
+        + " Retain alternatives and explain the cover inference, citing the qualified work and recording IDs and source path supporting your choice."
+        + " A remembered association cannot override a contradictory supplied recording-to-work relationship."
+        + " Abstain when target-specific views actually support incompatible works or connections, or when no target-specific evidence distinguishes the supplied rivals; incomplete external coverage alone does not require abstention."
         + " State which target facts support the correspondence and which reasoning is background familiarity or inference."
         + " Candidate popularity, recording counts and familiar names do not by themselves connect a work to this target."
         + " An ISWC in a candidate identifies that work; call it a matching ISWC only if the target independently supplies that same code."
