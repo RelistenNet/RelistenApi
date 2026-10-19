@@ -454,10 +454,10 @@ public sealed class CatalogueLlm(DbService db, ICatalogueModel model)
             TrackMatcher.Evidence(updated, Threshold),
             KbWriteMode.FillOnly
         );
-        var tracks = TrackMatcher.Match(updated, extra);
-        await store.WriteTrackSongsAsync(tracks, KbWriteMode.FillOnly);
+        await store.WriteTrackSongsAsync(TrackMatcher.Match(updated, extra), KbWriteMode.FillOnly);
 
-        return (newSongs.Count, tracks.Select(t => t.TrackUuid).Distinct().Count());
+        // Tracks this run changed: an open medley re-matched to the same parts is not one.
+        return (newSongs.Count, await store.TracksChangedAsync());
     }
 }
 

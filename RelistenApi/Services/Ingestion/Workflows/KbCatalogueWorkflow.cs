@@ -75,7 +75,12 @@ public class KbCatalogueWorkflow
         // Review pass: the recurring titles still unresolved, asked again with the titles
         // around them as context.
         var review = new List<ReviewItem>();
-        total = await Pass(artist, review: true, null, total, curve, review, only);
+        // MaxChunks is the run's whole budget: the review pass gets what the first pass left.
+        var remaining = request.MaxChunks is { } cap ? Math.Max(0, cap - total.Chunks) : (int?)null;
+        if (remaining != 0)
+        {
+            total = await Pass(artist, review: true, remaining, total, curve, review, only);
+        }
 
         var matched = await Workflow.ExecuteActivityAsync(
             (KbActivities a) => a.MatchTracks(artist),

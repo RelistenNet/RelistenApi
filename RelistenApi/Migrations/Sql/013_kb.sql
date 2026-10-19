@@ -43,9 +43,10 @@ CREATE TABLE kb.songs (
     author_type     text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref      text NOT NULL,
     confidence      real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid        uuid REFERENCES kb.runs (uuid),
+    run_uuid        uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at      timestamptz NOT NULL DEFAULT now(),
     UNIQUE (artist_uuid, slug),
+    UNIQUE (artist_uuid, uuid),                 -- target of per-artist references (aliases)
     CHECK (merged_into IS DISTINCT FROM uuid)
 );
 CREATE INDEX ON kb.songs (artist_uuid);
@@ -56,13 +57,15 @@ CREATE TABLE kb.song_aliases (
     artist_uuid uuid NOT NULL,
     normalized  text NOT NULL,
     alias       text NOT NULL,                  -- as first seen
-    song_uuid   uuid NOT NULL REFERENCES kb.songs (uuid),
+    song_uuid   uuid NOT NULL,
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid    uuid REFERENCES kb.runs (uuid),
+    run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at  timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (artist_uuid, normalized)
+    PRIMARY KEY (artist_uuid, normalized),
+    -- an artist's spelling can only name that artist's song
+    FOREIGN KEY (artist_uuid, song_uuid) REFERENCES kb.songs (artist_uuid, uuid)
 );
 CREATE INDEX ON kb.song_aliases (song_uuid);
 
@@ -74,7 +77,7 @@ CREATE TABLE kb.song_evidence (
     author_type       text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref        text NOT NULL,
     confidence        real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid          uuid REFERENCES kb.runs (uuid),
+    run_uuid          uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON kb.song_evidence (song_uuid);
@@ -98,7 +101,7 @@ CREATE TABLE kb.track_songs (
     author_type text NOT NULL CHECK (author_type IN ('importer', 'algorithm', 'llm', 'user', 'moderator')),
     author_ref  text NOT NULL,
     confidence  real CHECK (confidence BETWEEN 0 AND 1),
-    run_uuid    uuid REFERENCES kb.runs (uuid),
+    run_uuid    uuid NOT NULL REFERENCES kb.runs (uuid),
     updated_at  timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (track_uuid, part)
 );
@@ -154,6 +157,11 @@ DECLARE
     actor text := coalesce(nullif(current_setting('kb.author_type', true), ''),
                            CASE WHEN TG_OP = 'UPDATE' THEN NEW.author_type END);
 BEGIN
+    -- Every delete needs a named actor, so the change log can attribute it and a revert of
+    -- its run can find it.
+    IF TG_OP = 'DELETE' AND actor IS NULL THEN
+        RAISE EXCEPTION 'deleting from % needs SET LOCAL kb.author_type (and kb.run_uuid)', TG_TABLE_NAME;
+    END IF;
     IF OLD.author_type IN ('user', 'moderator') AND actor IS DISTINCT FROM 'user'
        AND actor IS DISTINCT FROM 'moderator' THEN
         RAISE EXCEPTION 'a % row was set by a person; % may not change it', TG_TABLE_NAME, coalesce(actor, 'an unnamed writer');

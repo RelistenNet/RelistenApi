@@ -37,11 +37,7 @@ internal sealed class IngestionOperatorCommands(
                 await imports.RebuildArtistCatalogAsync(new RebuildArtistCatalog(artistId))
             ).WorkflowId,
             "kb-llm-catalogue" => await imports.BuildKbCatalogueAsync(
-                new BuildKbCatalogue(
-                    artistId,
-                    int.TryParse(configuration["max-chunks"], out var max) ? max : null,
-                    ReaskTitles()
-                )
+                new BuildKbCatalogue(artistId, MaxChunks(), ReaskTitles())
             ),
             "repair-jerry-venues" => (
                 await imports.RepairJerryVenuesAsync(new RepairJerryVenues(artistId))
@@ -49,6 +45,23 @@ internal sealed class IngestionOperatorCommands(
             "import" => await ImportArtistAsync(artistId),
             _ => throw new InvalidOperationException($"Unknown operator command: {operation}"),
         };
+    }
+
+    /// --max-chunks caps a run's model calls; a value that isn't a positive number is an error,
+    /// never an uncapped run.
+    private int? MaxChunks()
+    {
+        var value = configuration["max-chunks"];
+        if (value == null)
+        {
+            return null;
+        }
+
+        return int.TryParse(value, out var max) && max > 0
+            ? max
+            : throw new InvalidImportRequest(
+                $"--max-chunks must be a positive number, not '{value}'."
+            );
     }
 
     /// --reask="A|B" or --reask-file=path (one title per line): titles to ask about again.

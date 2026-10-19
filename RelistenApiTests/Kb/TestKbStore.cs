@@ -227,15 +227,15 @@ public class TestKbStore
         ]);
         await bad.WriteAliasesAsync([new AliasRecord(artist, "Sugaree", song)]);
 
-        var (reverted, skipped) = await (await As(AuthorTypes.Moderator, "m1")).RevertRunAsync(
-            bad.Run
-        );
+        var moderator = await As(AuthorTypes.Moderator, "m1");
+        var (reverted, skipped) = await moderator.RevertRunAsync(bad.Run);
 
         (reverted, skipped).Should().Be((3, 0));
         (await Snapshot()).Should().Be(before);
         (
             await db.QueryAsync<string>(
-                "SELECT DISTINCT author_ref FROM kb.changes WHERE run_uuid = (SELECT uuid FROM kb.runs WHERE author_ref = 'm1')",
+                "SELECT DISTINCT author_ref FROM kb.changes WHERE run_uuid = @Run",
+                new { moderator.Run },
                 transaction: tx
             )
         )

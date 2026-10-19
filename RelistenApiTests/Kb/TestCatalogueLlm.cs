@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Relisten;
 using Relisten.Ingestion;
 using Relisten.Ingestion.Workflows;
+using Relisten.Kb;
 using Relisten.Kb.Catalogue;
 using Temporalio.Activities;
 using Temporalio.Client;
@@ -314,6 +315,39 @@ public class TestCatalogueLlm
             .Should()
             .Equal("Me And My Uncle");
     }
+
+    [Test]
+    public async Task AnOpenMedleyIsCompletedOnceItsUnknownPartIsKnown()
+    {
+        await new CatalogueLlm(db, new ScriptedModel()).RunChunkAsync(
+            artist,
+            [],
+            CancellationToken.None
+        );
+
+        // A person names the unknown part; the next match completes the open medley.
+        await db.WithWriteConnection(async c =>
+        {
+            var connection = (Npgsql.NpgsqlConnection)c;
+            await using var tx = await connection.BeginTransactionAsync();
+            var store = await KbStore.BeginAsync(connection, tx, AuthorTypes.Moderator, "m1");
+            var song = Guid.CreateVersion7();
+            await store.WriteSongsAsync([new SongRecord(song, artist, "Unknown Thing")]);
+            await store.WriteAliasesAsync([new AliasRecord(artist, "Unknown Thing", song)]);
+            await tx.CommitAsync();
+        });
+        await new CatalogueMatch(db).RunAsync(artist, CancellationToken.None);
+
+        (
+            await Strings(
+                """
+                SELECT coalesce(s.name, '?') || ':' || ts.resolved FROM source_tracks t
+                JOIN kb.track_songs ts ON ts.track_uuid = t.uuid LEFT JOIN kb.songs s ON s.uuid = ts.song_uuid
+                WHERE t.artist_id = @artistId AND t.title = 'Sugaree > Unknown Thing' ORDER BY ts.part
+                """
+            )
+        ).Should().Equal("Sugaree:true", "Unknown Thing:true");
+    }
 }
 
 public class TestCatalogueAnswers
@@ -500,5 +534,33 @@ public class TestKbCatalogueWorkflow
 
         steps.Forgotten.Should().Equal("Let Me Lie", "Mellow Mood");
         steps.OnlySizes.Should().AllBeEquivalentTo(2);
+    }
+
+    [Test]
+    public async Task TheChunkCapCoversTheReviewPassToo()
+    {
+        var steps = new Steps();
+        using var workflows = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Workflows).AddWorkflow<KbCatalogueWorkflow>()
+        );
+        using var database = new TemporalWorker(
+            environment.Client,
+            new TemporalWorkerOptions(IngestionQueues.Database).AddAllActivities(steps)
+        );
+
+        var result = await workflows.ExecuteAsync(() =>
+            database.ExecuteAsync(() =>
+                environment.Client.ExecuteWorkflowAsync(
+                    (KbCatalogueWorkflow w) =>
+                        w.RunAsync(new BuildKbCatalogue(new ArtistId(Guid.NewGuid()), 2, null)),
+                    new WorkflowOptions("test/" + Guid.NewGuid(), IngestionQueues.Workflows)
+                )
+            )
+        );
+
+        // Two chunks spent the budget: no review pass call at all.
+        steps.SkipSizes.Should().Equal(0, 2);
+        result.Chunks.Should().Be(2);
     }
 }

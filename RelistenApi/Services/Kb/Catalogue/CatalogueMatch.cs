@@ -39,14 +39,12 @@ public sealed class CatalogueMatch(DbService db)
             TrackMatcher.Evidence(state),
             KbWriteMode.FillOnly
         );
-        var tracks = TrackMatcher.Match(state);
-        await store.WriteTrackSongsAsync(tracks, KbWriteMode.FillOnly);
+        await store.WriteTrackSongsAsync(TrackMatcher.Match(state), KbWriteMode.FillOnly);
+        // Tracks this run changed: an open medley re-matched to the same parts is not one.
+        var tracks = await store.TracksChangedAsync();
         await store.FinishAsync();
         await tx.CommitAsync(cancellationToken);
 
-        return new CatalogueMatchResult(
-            tracks.Select(t => t.TrackUuid).Distinct().Count(),
-            evidence
-        );
+        return new CatalogueMatchResult(tracks, evidence);
     }
 }

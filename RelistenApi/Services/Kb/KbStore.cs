@@ -283,6 +283,17 @@ public sealed class KbStore
         return (reverted, skipped);
     }
 
+    /// How many distinct tracks this run has changed so far, from its own change log.
+    public Task<int> TracksChangedAsync() =>
+        connection.ExecuteScalarAsync<int>(
+            """
+            SELECT count(DISTINCT row_key ->> 'track_uuid') FROM kb.changes
+            WHERE run_uuid = @Run AND table_name = 'track_songs'
+            """,
+            new { Run },
+            tx
+        );
+
     public Task FinishAsync() =>
         connection.ExecuteAsync(
             "UPDATE kb.runs SET finished_at = clock_timestamp() WHERE uuid = @Run",

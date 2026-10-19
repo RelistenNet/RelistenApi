@@ -62,7 +62,8 @@ public sealed class CatalogueState
             FROM source_tracks t JOIN sources s ON s.id = t.source_id
             WHERE t.artist_id = @Id AND NOT t.is_orphaned
               -- unresolved: no parts yet, or a part nobody has placed (an open medley)
-              AND NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid AND ts.resolved)
+              AND (NOT EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid)
+                   OR EXISTS (SELECT 1 FROM kb.track_songs ts WHERE ts.track_uuid = t.uuid AND NOT ts.resolved))
             """,
             new { artist.Id },
             tx
