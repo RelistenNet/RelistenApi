@@ -409,6 +409,143 @@ public sealed class TestNormalizationExtractionCache
             .BeNull();
     }
 
+    [Test]
+    public async Task ExplicitFailedRetryReservesOnceWithinTheSameJobAndStopsAtTwoAttempts()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 2m, maximumTotalAttempts: 2);
+        var request = "explicit-retry-" + job;
+        var first = await Claim(job, request);
+        await cache.FailAsync(first.AttemptUuid!.Value, "provider_error");
+
+        var retry = await cache.TryClaimAsync(
+            job,
+            request,
+            .5m,
+            2,
+            TimeSpan.FromMinutes(3),
+            retryFailedOnly: true
+        );
+        retry.State.Should().Be("claimed");
+        (await cache.GetJobAsync(job))
+            .AccountedUsd.Should()
+            .Be(1m, "the unknown first cost remains reserved when the same job retries");
+        await cache.FailAsync(retry.AttemptUuid!.Value, "provider_error");
+        (
+            await cache.TryClaimAsync(
+                job,
+                request,
+                .5m,
+                2,
+                TimeSpan.FromMinutes(3),
+                retryFailedOnly: true
+            )
+        )
+            .State.Should()
+            .Be("attempts_exhausted");
+    }
+
+    [Test]
+    public async Task ExplicitRetryRefusesAbsentRunningAndExpiredUncertainAttempts()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 2m);
+        var request = "retry-state-" + job;
+        (
+            await cache.TryClaimAsync(
+                job,
+                request,
+                .5m,
+                2,
+                TimeSpan.FromMinutes(3),
+                retryFailedOnly: true
+            )
+        )
+            .State.Should()
+            .Be("retry_requires_failed_attempt");
+        var first = await Claim(job, request);
+        (
+            await cache.TryClaimAsync(
+                job,
+                request,
+                .5m,
+                2,
+                TimeSpan.FromMinutes(3),
+                retryFailedOnly: true
+            )
+        )
+            .State.Should()
+            .Be("in_progress");
+        await db.WithWriteConnection(connection =>
+            connection.ExecuteAsync(
+                "UPDATE normalization.extraction_attempts SET lease_until=clock_timestamp()-interval '1 second' WHERE uuid=@Uuid",
+                new { Uuid = first.AttemptUuid }
+            )
+        );
+
+        (
+            await cache.TryClaimAsync(
+                job,
+                request,
+                .5m,
+                2,
+                TimeSpan.FromMinutes(3),
+                retryFailedOnly: true
+            )
+        )
+            .State.Should()
+            .Be("retry_requires_failed_attempt");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.5m);
+        var states = await db.WithWriteConnection(connection =>
+            connection.QueryAsync<string>(
+                "SELECT state FROM normalization.extraction_attempts WHERE job_uuid=@job",
+                new { job }
+            )
+        );
+        states.Should().Equal("uncertain");
+    }
+
+    [Test]
+    public async Task ConcurrentExplicitRetriesShareOneReservationAndCachedSuccessStaysFree()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, 2m);
+        var request = "concurrent-explicit-retry-" + job;
+        var first = await Claim(job, request);
+        await cache.FailAsync(first.AttemptUuid!.Value, "provider_error");
+        var retries = await Task.WhenAll(
+            Enumerable
+                .Range(0, 2)
+                .Select(_ =>
+                    cache.TryClaimAsync(
+                        job,
+                        request,
+                        .5m,
+                        2,
+                        TimeSpan.FromMinutes(3),
+                        retryFailedOnly: true
+                    )
+                )
+        );
+        retries.Select(result => result.State).Should().BeEquivalentTo("claimed", "in_progress");
+        var claimed = retries.Single(result => result.State == "claimed");
+        await cache.CompleteAsync(
+            claimed.AttemptUuid!.Value,
+            new LunaCreditResponse("{}", "known-response", 1, 1),
+            .1m
+        );
+        var cached = await cache.TryClaimAsync(
+            job,
+            request,
+            .5m,
+            2,
+            TimeSpan.FromMinutes(3),
+            retryFailedOnly: true
+        );
+        cached.State.Should().Be("cached");
+        (await cache.GetJobAsync(job)).AccountedUsd.Should().Be(.6m);
+    }
+
     private sealed class CreditHandler(string creditJson) : HttpMessageHandler
     {
         internal int Calls { get; private set; }

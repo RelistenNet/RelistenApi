@@ -128,6 +128,189 @@ public sealed class TestLunaCompositionHypothesisSelector
         handler.Calls.Should().Be(0);
     }
 
+    [Test]
+    public void RepeatedFactsKeepAllCandidatesAndBindEveryOriginalCitationDespiteBoundedExamples()
+    {
+        var input = Input();
+        var original = input.SuppliedCandidates[0];
+        var titles = Enumerable
+            .Range(0, 4)
+            .Select(index => new ObservedValue<string>(
+                "Song",
+                new(Guid.NewGuid(), "/title/" + index, Quote: "Song")
+            ))
+            .ToArray();
+        input = input with
+        {
+            SuppliedCandidates = [original with { Titles = titles }, input.SuppliedCandidates[1]],
+        };
+        using var request = JsonDocument.Parse(
+            LunaCompositionHypothesisSelector.RenderRequest(input)
+        );
+        using var model = JsonDocument.Parse(
+            request.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+        var works = model.RootElement.GetProperty("suppliedCandidates");
+        works.GetArrayLength().Should().Be(2);
+        var facts = works[0].GetProperty("facts").GetProperty("titles");
+        facts.GetArrayLength().Should().Be(1);
+        facts[0].GetProperty("value").GetString().Should().Be("Song");
+        facts[0].GetProperty("retainedSourcePositions").GetInt32().Should().Be(4);
+        facts[0].GetProperty("representativeCitations").GetArrayLength().Should().Be(2);
+        var changed = input with
+        {
+            SuppliedCandidates =
+            [
+                original with
+                {
+                    Titles = titles
+                        .Take(3)
+                        .Append(
+                            titles[3] with
+                            {
+                                Evidence = titles[3].Evidence with
+                                {
+                                    JsonPointer = "/changed-original-citation",
+                                },
+                            }
+                        )
+                        .ToArray(),
+                },
+                input.SuppliedCandidates[1],
+            ],
+        };
+        LunaCompositionHypothesisSelector
+            .DescribeRequest(changed)
+            .CacheKey.Should()
+            .NotBe(LunaCompositionHypothesisSelector.DescribeRequest(input).CacheKey);
+    }
+
+    [Test]
+    public void CompactionPreservesWriterKindsUnknownContainersAndOrderedPerformerCredits()
+    {
+        var input = Input();
+        MusicBrainzEntityReference Entity(string type, string name) =>
+            new()
+            {
+                Evidence = Evidence(),
+                Identity = new(
+                    new("musicbrainz.org", "artist", Guid.NewGuid().ToString()),
+                    Evidence()
+                ),
+                Name = new(name, Evidence()),
+                Type = new(type, Evidence()),
+            };
+        var person = Entity("Person", "Named writer");
+        var group = Entity("Group", "Performing group");
+        var origin = new ProviderObservationOrigin(
+            new("musicbrainz.org", "recording", Guid.NewGuid().ToString()),
+            Evidence(),
+            ProviderObservationScope.ResourceItem
+        );
+        var work = input.SuppliedCandidates[0] with
+        {
+            WriterRoles =
+            [
+                new(
+                    new("composer", Evidence()),
+                    new("backward", Evidence()),
+                    new("artist", Evidence()),
+                    person,
+                    Evidence(),
+                    "work_lookup"
+                ),
+                new(
+                    new("lyricist", Evidence()),
+                    new("forward", Evidence()),
+                    new("artist", Evidence()),
+                    group,
+                    Evidence(),
+                    "work_lookup"
+                ),
+            ],
+            RecordingAssertions =
+            [
+                new()
+                {
+                    Origin = origin,
+                    Recording = group,
+                    Relationships = null,
+                    ArtistCredits =
+                    [
+                        new()
+                        {
+                            Evidence = Evidence(),
+                            Artist = group,
+                            JoinPhrase = new(" & ", Evidence()),
+                        },
+                        new()
+                        {
+                            Evidence = Evidence(),
+                            Artist = person,
+                            JoinPhrase = new("", Evidence()),
+                        },
+                    ],
+                },
+                new()
+                {
+                    Origin = origin,
+                    Recording = group,
+                    Relationships = [],
+                    ArtistCredits = [],
+                },
+            ],
+        };
+        input = input with { SuppliedCandidates = [work, input.SuppliedCandidates[1]] };
+        using var request = JsonDocument.Parse(
+            LunaCompositionHypothesisSelector.RenderRequest(input)
+        );
+        using var model = JsonDocument.Parse(
+            request.RootElement.GetProperty("input")[1].GetProperty("content").GetString()!
+        );
+        var facts = model.RootElement.GetProperty("suppliedCandidates")[0].GetProperty("facts");
+        var writers = facts.GetProperty("writerRoles");
+        writers[0].GetProperty("value").GetProperty("role").GetString().Should().Be("composer");
+        writers[0]
+            .GetProperty("value")
+            .GetProperty("artist")
+            .GetProperty("type")
+            .GetString()
+            .Should()
+            .Be("Person");
+        writers[1].GetProperty("value").GetProperty("direction").GetString().Should().Be("forward");
+        writers[1]
+            .GetProperty("value")
+            .GetProperty("artist")
+            .GetProperty("type")
+            .GetString()
+            .Should()
+            .Be("Group");
+        var recordings = facts.GetProperty("recordingAssertions");
+        recordings.GetArrayLength().Should().Be(2);
+        var first = recordings[0].GetProperty("value");
+        first.GetProperty("relationships").ValueKind.Should().Be(JsonValueKind.Null);
+        recordings[1]
+            .GetProperty("value")
+            .GetProperty("relationships")
+            .GetArrayLength()
+            .Should()
+            .Be(0);
+        var credits = first.GetProperty("artistCredits");
+        credits[0]
+            .GetProperty("artist")
+            .GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("Performing group");
+        credits[0].GetProperty("joinPhrase").GetString().Should().Be(" & ");
+        credits[1]
+            .GetProperty("artist")
+            .GetProperty("name")
+            .GetString()
+            .Should()
+            .Be("Named writer");
+    }
+
     internal static CompositionHypothesisSelectionInput Input() =>
         new(
             new(
@@ -182,8 +365,11 @@ public sealed class TestLunaCompositionHypothesisSelector
             }
         );
 
-    internal sealed class Handler(string json, CancellationTokenSource? cancellation = null)
-        : HttpMessageHandler
+    internal sealed class Handler(
+        string json,
+        CancellationTokenSource? cancellation = null,
+        HttpStatusCode status = HttpStatusCode.OK
+    ) : HttpMessageHandler
     {
         public int Calls { get; private set; }
         public string? RequestBody { get; private set; }
@@ -215,7 +401,7 @@ public sealed class TestLunaCompositionHypothesisSelector
                     },
                 }
             );
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            var response = new HttpResponseMessage(status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
             };
@@ -329,16 +515,28 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
         selection.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
         var input = SentInput();
 
-        input.Song.ArtistName.Should().BeNull();
-        input.Song.SourceWitness.ValuePointer.Should().Be("/proposal/name");
-        input.Song.DictionaryNames.Single().RetainedWitness!.ChunkSha256.Should().Be("pinned-sha");
-        input.Song.OriginalMemberships.Should().Be(230);
-        input
-            .SuppliedCandidates.Single()
-            .WriterRoles.Single()
-            .Direction!.Value.Should()
+        var suppliedSong = input
+            .GetProperty("song")
+            .Deserialize<CompositionSelectionSong>(
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )!;
+        suppliedSong.ArtistName.Should().BeNull();
+        suppliedSong.SourceWitness.ValuePointer.Should().Be("/proposal/name");
+        suppliedSong
+            .DictionaryNames.Single()
+            .RetainedWitness!.ChunkSha256.Should()
+            .Be("pinned-sha");
+        suppliedSong.OriginalMemberships.Should().Be(230);
+        var suppliedWork = input.GetProperty("suppliedCandidates")[0];
+        suppliedWork
+            .GetProperty("facts")
+            .GetProperty("writerRoles")[0]
+            .GetProperty("value")
+            .GetProperty("direction")
+            .GetString()
+            .Should()
             .Be("backward");
-        input.SuppliedCandidates.Single().CompleteAuthorship.Should().BeNull();
+        suppliedWork.GetProperty("completeAuthorship").ValueKind.Should().Be(JsonValueKind.Null);
 
         var contextual = song with
         {
@@ -359,23 +557,26 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
             ),
         };
         await adapter.SelectAsync(contextual, [retained]);
-        var context = SentInput().Song.ArtistContext!;
+        var context = SentInput()
+            .GetProperty("song")
+            .GetProperty("artistContext")
+            .Deserialize<CompositionSelectionArtistContext>(
+                new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            )!;
         context.ManifestSha256.Should().Be("context-manifest-sha");
         context.CatalogueSha256.Should().Be("catalogue-sha");
         context.ArtistUuid.Should().Be(artist);
         context.MusicBrainzId.Should().BeNull();
 
-        CompositionHypothesisSelectionInput SentInput()
+        JsonElement SentInput()
         {
             using var request = JsonDocument.Parse(handler.RequestBody!);
             var supplied = request
                 .RootElement.GetProperty("input")[1]
                 .GetProperty("content")
                 .GetString()!;
-            return JsonSerializer.Deserialize<CompositionHypothesisSelectionInput>(
-                supplied,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web)
-            )!;
+            using var modelInput = JsonDocument.Parse(supplied);
+            return modelInput.RootElement.Clone();
         }
     }
 
@@ -481,6 +682,50 @@ public sealed class TestLunaCompositionHypothesisSelectorCache
             )
         );
         state.Should().Be("failed");
+    }
+
+    [Test]
+    public async Task ExplicitRetryRecoversATerminal503WithoutResumingAnotherPaidAttempt()
+    {
+        var job = Guid.NewGuid();
+        await cache.CreateJobAsync(job, maximumTotalAttempts: 2);
+        var input = TestLunaCompositionHypothesisSelector.Input();
+        var failedHandler = new TestLunaCompositionHypothesisSelector.Handler(
+            "{}",
+            status: HttpStatusCode.ServiceUnavailable
+        );
+        using var failedHttp = new HttpClient(failedHandler);
+        var firstSelector = new LunaCompositionHypothesisSelector(
+            failedHttp,
+            cache,
+            () => "fixture-key"
+        );
+        var first = await firstSelector.SelectAsync(job, input);
+        first.Reason.Should().Be("provider_error");
+        first.ActualUsd.Should().BeNull();
+        (await firstSelector.SelectAsync(job, input)).Reason.Should().Be("attempts_exhausted");
+        failedHandler.Calls.Should().Be(1);
+
+        var recoveryHandler = new TestLunaCompositionHypothesisSelector.Handler(
+            TestLunaCompositionHypothesisSelector.Response()
+        );
+        using var recoveryHttp = new HttpClient(recoveryHandler);
+        var recovery = new LunaCompositionHypothesisSelector(
+            recoveryHttp,
+            cache,
+            () => "fixture-key"
+        );
+        var result = await recovery.RetryFailedAsync(job, input);
+        result.SelectedWorkMbid.Should().Be(TestLunaCompositionHypothesisSelector.FirstWork);
+        recoveryHandler.Calls.Should().Be(1);
+        (await cache.GetJobAsync(job))
+            .AccountedUsd.Should()
+            .Be(
+                LunaCompositionHypothesisSelector.DescribeRequest(input).MaximumReservedUsd
+                    + .00011m
+            );
+        (await recovery.RetryFailedAsync(job, input)).FromCache.Should().BeTrue();
+        recoveryHandler.Calls.Should().Be(1);
     }
 
     [Test]

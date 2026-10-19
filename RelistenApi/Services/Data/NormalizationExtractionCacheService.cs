@@ -150,11 +150,17 @@ public sealed class NormalizationExtractionCacheService(DbService db)
         decimal reservationUsd,
         int maxAttempts,
         TimeSpan leaseDuration,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool retryFailedOnly = false
     )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(renderedRequest);
-        if (reservationUsd <= 0 || maxAttempts < 1 || leaseDuration <= TimeSpan.Zero)
+        if (
+            reservationUsd <= 0
+            || maxAttempts < 1
+            || leaseDuration <= TimeSpan.Zero
+            || retryFailedOnly && maxAttempts != 2
+        )
         {
             throw new ArgumentException(
                 "Positive reservation, attempt limit and lease are required."
@@ -240,6 +246,31 @@ public sealed class NormalizationExtractionCacheService(DbService db)
                     running ? "in_progress" : "attempts_exhausted",
                     cacheKey
                 );
+            }
+
+            if (retryFailedOnly)
+            {
+                // The request lock makes this decision atomic with the reservation.
+                // Explicit recovery may spend a second attempt only after a terminal
+                // failure. Expired leases were changed to uncertain above; they must
+                // not become retryable merely because a batch resumed. Any unknown
+                // prior cost stays reserved, including when the same capped job retries.
+                var previousState = await connection.QuerySingleOrDefaultAsync<string>(
+                    new CommandDefinition(
+                        "SELECT state FROM normalization.extraction_attempts WHERE request_sha256=@cacheKey ORDER BY created_at DESC,uuid DESC LIMIT 1",
+                        new { cacheKey },
+                        transaction,
+                        cancellationToken: cancellationToken
+                    )
+                );
+                if (previousState != "failed")
+                {
+                    transaction.Commit();
+                    return new NormalizationExtractionClaim(
+                        "retry_requires_failed_attempt",
+                        cacheKey
+                    );
+                }
             }
 
             var job = await connection.QuerySingleAsync<NormalizationExtractionJob>(

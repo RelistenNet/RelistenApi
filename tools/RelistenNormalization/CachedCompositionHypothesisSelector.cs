@@ -11,10 +11,12 @@ public sealed class CachedCompositionHypothesisSelector : ICompositionHypothesis
 {
     private readonly LunaCompositionHypothesisSelector selector;
     private readonly Guid jobUuid;
+    private readonly bool retryFailed;
 
     public CachedCompositionHypothesisSelector(
         LunaCompositionHypothesisSelector selector,
-        Guid jobUuid
+        Guid jobUuid,
+        bool retryFailed = false
     )
     {
         if (jobUuid == Guid.Empty)
@@ -23,6 +25,7 @@ public sealed class CachedCompositionHypothesisSelector : ICompositionHypothesis
         }
         this.selector = selector;
         this.jobUuid = jobUuid;
+        this.retryFailed = retryFailed;
     }
 
     public async Task<CompositionHypothesisSelection> SelectAsync(
@@ -31,7 +34,10 @@ public sealed class CachedCompositionHypothesisSelector : ICompositionHypothesis
         CancellationToken ct = default
     )
     {
-        var result = await selector.SelectAsync(jobUuid, ToInput(song, suppliedCandidates), ct);
+        var input = ToInput(song, suppliedCandidates);
+        var result = retryFailed
+            ? await selector.RetryFailedAsync(jobUuid, input, ct)
+            : await selector.SelectAsync(jobUuid, input, ct);
         return new(
             result.SelectedWorkMbid,
             result.AlternativeWorkMbids,

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,9 +24,17 @@ public sealed class LunaCompositionHypothesisSelector(
     Func<string> apiKey
 )
 {
-    public const string Version = "luna-composition-hypothesis-v1";
-    public const int MaxRenderedRequestBytes = 200_000;
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    public const string Version = "luna-composition-hypothesis-v2";
+
+    // This is a local resource limit, not the provider context limit. The full
+    // compact candidate universe is measured and conservatively reserved before admission.
+    public const int MaxRenderedRequestBytes = 512_000;
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        // This body is JSON sent to Responses, not embedded in HTML. Ordinary
+        // JSON escaping avoids expanding every quoted model-input key to \u0022.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     // A resumed batch can replay a completed cache entry, but a cache miss must
     // not silently repeat a previous failed or uncertain paid attempt.
@@ -63,10 +72,28 @@ public sealed class LunaCompositionHypothesisSelector(
     /// owns batch duration and storage. No candidate is clipped to fit a request.
     /// Cached responses require neither a key nor another admitted attempt.
     /// </summary>
-    public async Task<CompositionHypothesisSelectionResult> SelectAsync(
+    public Task<CompositionHypothesisSelectionResult> SelectAsync(
         Guid jobUuid,
         CompositionHypothesisSelectionInput input,
         CancellationToken cancellationToken = default
+    ) => SelectCoreAsync(jobUuid, input, false, cancellationToken);
+
+    /// <summary>
+    /// Explicit operator recovery, separate from resume. The shared ledger permits
+    /// a second request-wide attempt only after a terminal failure and within the
+    /// job's remaining caps. Running or uncertain attempts cannot be retried here.
+    /// </summary>
+    public Task<CompositionHypothesisSelectionResult> RetryFailedAsync(
+        Guid jobUuid,
+        CompositionHypothesisSelectionInput input,
+        CancellationToken cancellationToken = default
+    ) => SelectCoreAsync(jobUuid, input, true, cancellationToken);
+
+    private async Task<CompositionHypothesisSelectionResult> SelectCoreAsync(
+        Guid jobUuid,
+        CompositionHypothesisSelectionInput input,
+        bool retryFailedOnly,
+        CancellationToken cancellationToken
     )
     {
         if (jobUuid == Guid.Empty)
@@ -119,9 +146,10 @@ public sealed class LunaCompositionHypothesisSelector(
             jobUuid,
             request,
             reservation,
-            Options.MaxAttempts,
+            retryFailedOnly ? 2 : Options.MaxAttempts,
             Options.LeaseDuration,
-            cancellationToken
+            cancellationToken,
+            retryFailedOnly
         );
         if (claim.State == "cached")
         {
@@ -313,9 +341,20 @@ public sealed class LunaCompositionHypothesisSelector(
                             + " The performing artist need not be the composer or lyricist. Preserve every original writer role and direction;"
                             + " do not create authors, canonical people, new identifiers or claims of complete authorship."
                             + " Your rationale is model inference, not an observed source fact or accepted identity."
+                            + " Equivalent semantic facts are grouped. Every supplied work and distinct fact remains present."
+                            + " Each fact has at most two representative citation-pool references; retainedSourcePositions counts positions,"
+                            + " not independent confirmations or confidence. The original input hash binds all remaining raw citations"
+                            + " in the retained artifact. Null/invalid containers remain unknown and differ from explicit empty lists."
                             + " Alternatives must also be supplied MBIDs, unique, and exclude the selected ID. Return only schema JSON.",
                     },
-                    new { role = "user", content = JsonSerializer.Serialize(input, Json) },
+                    new
+                    {
+                        role = "user",
+                        content = JsonSerializer.Serialize(
+                            CompositionHypothesisPrompt.Build(input, Json),
+                            Json
+                        ),
+                    },
                 },
                 text = new
                 {
@@ -327,7 +366,8 @@ public sealed class LunaCompositionHypothesisSelector(
                         schema,
                     },
                 },
-            }
+            },
+            Json
         );
     }
 

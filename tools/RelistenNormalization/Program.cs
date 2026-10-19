@@ -38,6 +38,11 @@ if (
                     or "composition-work-searches"
             && (args.Length == 4 || args[4] == "--resume")
         )
+        || (
+            args.Length is 4 or 5
+            && args[0] == "composition-select"
+            && (args.Length == 4 || args[4] is "--resume" or "--preflight")
+        )
         || (args.Length == 6 && args[0] == "luna-credit-fields")
         || (
             args.Length is 4 or 5
@@ -74,6 +79,7 @@ if (
             + "       RelistenNormalization music-consolidate <input-manifest.json> <output-directory> <frozen-manifest-sha256> [--resume]\n"
             + "       RelistenNormalization composition-hypotheses <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
             + "       RelistenNormalization composition-work-searches <request.json> <output-directory> <frozen-request-sha256> [--resume]\n"
+            + "       RelistenNormalization composition-select <plan.json> <output-directory> <frozen-plan-sha256> [--resume|--preflight]\n"
             + "       RelistenNormalization people-shared <completed-source-observations-run> <new-output-directory>\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
@@ -109,6 +115,32 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "composition-select")
+    {
+        var result = await new CompositionSelectionBatch().RunAsync(
+            args[1],
+            args[2],
+            args[3],
+            resume: args.Length == 5 && args[4] == "--resume",
+            preflightOnly: args.Length == 5 && args[4] == "--preflight",
+            ct: cancellation.Token
+        );
+        Console.WriteLine(
+            JsonSerializer.Serialize(
+                new
+                {
+                    result.State,
+                    result.ProcessedInputs,
+                    result.Outcomes,
+                    result.CacheHits,
+                    result.JobAccountedUsd,
+                    result.PublicationPermitted,
+                }
+            )
+        );
+        return result.State is "completed" or "preflight_completed" ? 0 : 1;
+    }
+
     if (args[0] == "composition-hypotheses")
     {
         var result = await new CompositionHypothesisBatch().RunAsync(

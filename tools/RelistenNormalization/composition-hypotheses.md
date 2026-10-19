@@ -74,3 +74,46 @@ Feed newly retained input revisions into a new hypothesis request alongside the
 earlier evidence. The pure pass then proposes candidate works for all supplied
 artist-song targets. Acquisition expands the available evidence; it does not
 accept title matches or select a work for a song.
+
+## Select a likely work
+
+`composition-select` uses Luna to select among the retained candidates for an
+explicit list of scoped artist-song keys. A plan pins the completed hypothesis
+manifest, job UUID, mode, selected keys, spending and attempt caps, duration,
+output size and free-space reserve. Missing candidates and skipped inputs remain
+in the outcome census.
+
+```sh
+dotnet RelistenNormalization.dll composition-select \
+  <plan.json> <new-preflight-directory> <plan-sha256> --preflight
+
+dotnet RelistenNormalization.dll composition-select \
+  <plan.json> <new-execution-directory> <plan-sha256>
+```
+
+Preflight renders the actual requests without reading a key or database. It
+reports the complete candidate-bearing population, selected inputs, request
+sizes, skip reasons and conservative cost reservations. Execution uses
+`OPENAI_API_KEY` and the dedicated local normalization database. The shared cache
+reserves cost before a request and retains uncertain charges. Cached responses
+need no key or additional paid attempt.
+
+The compact v2 prompt retains every supplied work ID and every distinct work,
+writer and recording relationship fact. Equivalent observations share one fact;
+each fact includes up to two representative citations. Counts describe retained
+source positions, not independent confirmations. The complete typed input hash
+binds the omitted citations, which remain in the original evidence. The local
+admission cap is 512,000 rendered bytes; it is not a claim about the provider's
+context limit. Cost reservation still uses the complete rendered request.
+
+Add `--resume` to continue the same plan and verified output prefix. It replays
+cached successes and does not automatically retry failed or uncertain requests.
+An explicit new plan with mode `retry_failed` permits a second request only after
+a terminal failed attempt. It preserves prior charges and respects both job caps
+and the request-wide two-attempt limit. An expired or uncertain attempt does not
+become retryable through resume.
+
+Completion means the selected input census was processed. Inspect selection
+outcomes and skip reasons for actual matching coverage. Model selections and
+rationales remain hypotheses; they do not change provider assertions or accepted
+catalog identities. Updated source evidence or a new method requires a new plan.
