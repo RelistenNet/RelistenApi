@@ -8,7 +8,11 @@ if (
     !(
         (
             args.Length == 3
-            && args[0] is "extract" or "extract-source-actors" or "venue-pair-baseline"
+            && args[0]
+                is "extract"
+                    or "extract-source-actors"
+                    or "venue-pair-baseline"
+                    or "people-shared"
         )
         || (args.Length == 5 && args[0] == "luna-credits")
         || (
@@ -59,6 +63,7 @@ if (
             + "       RelistenNormalization shadow-inline <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-venues <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-source-observations <snapshot.jsonl[.gz] OR capture-manifest.json> <output-directory> [--resume]\n"
+            + "       RelistenNormalization people-shared <completed-source-observations-run> <new-output-directory>\n"
             + "       RelistenNormalization shadow-rows <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization shadow-native <catalog-rows.jsonl[.gz]> <output-directory> [--resume]\n"
             + "       RelistenNormalization extract-source-actors <snapshot.jsonl> <new-output-directory>\n"
@@ -93,6 +98,12 @@ Console.CancelKeyPress += (_, signal) =>
 
 try
 {
+    if (args[0] == "people-shared")
+    {
+        await new SharedPeopleExport().RunAsync(args[1], args[2], cancellation.Token);
+        return 0;
+    }
+
     if (args[0] == "admit-retained-local")
     {
         var result = await new RetainedLocalProviderInputs().PrepareAsync(

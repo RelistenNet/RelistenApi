@@ -101,6 +101,55 @@ public sealed class TestShadowLunaCreditOverlay
     }
 
     [Test]
+    public async Task Shared_people_export_preserves_exact_cached_model_occurrences_without_inventing_accounts()
+    {
+        var input = Input("Alice Vale (alice@example.test)");
+        input = input with
+        {
+            Extraction = new CatalogRowExtraction().ExtractJson(input.Record, input.Artist.Uuid),
+        };
+        var packet = Packet(
+            new ModelCase(input, ValidatedCredit(input, "Alice Vale", "Alice Vale"))
+        );
+        var adapter = Observe(
+            new ShadowPeopleAdapter(
+                packet.Directory,
+                packet.InputHash,
+                sourceObservationsOnly: true
+            ),
+            input
+        );
+        var run = await TestSharedPeopleExport.WriteSourceRun(directory, [input], adapter);
+        var output = Path.Combine(directory, "shared-model-export");
+        await new SharedPeopleExport(minimumFreeBytes: 0).RunAsync(run, output);
+
+        await using var file = File.OpenRead(Path.Combine(output, "occurrences.jsonl.gz"));
+        await using var compressed = new System.IO.Compression.GZipStream(
+            file,
+            System.IO.Compression.CompressionMode.Decompress
+        );
+        using var reader = new StreamReader(compressed);
+        var modelOccurrences = new List<JsonElement>();
+        while (await reader.ReadLineAsync() is { } line)
+        {
+            using var record = JsonDocument.Parse(line);
+            if (
+                record
+                    .RootElement.GetProperty("person")
+                    .TryGetProperty("interpretationBasis", out var basis)
+                && basis.GetString() == "retained_luna_extraction"
+            )
+            {
+                modelOccurrences.Add(record.RootElement.Clone());
+            }
+        }
+        var model = modelOccurrences.Should().ContainSingle().Which;
+        model.GetProperty("person").GetProperty("sourceUuid").GetGuid().Should().Be(input.Uuid);
+        model.GetProperty("creditKeys").GetArrayLength().Should().Be(1);
+        model.GetProperty("person").GetProperty("kind").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Test]
     public void Attached_profile_in_a_validated_literal_name_stays_quoted_without_identity_facts()
     {
         const string name = "Daniel Barrero (http://www.myspace.com/musickapes)";

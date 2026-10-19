@@ -244,7 +244,7 @@ internal sealed class ShadowLunaCreditEvidence
         left.OrderBy(pair => pair.Key, StringComparer.Ordinal)
             .SequenceEqual(right.OrderBy(pair => pair.Key, StringComparer.Ordinal));
 
-    private static void ValidateCredits(
+    internal static void ValidateCredits(
         IReadOnlyDictionary<string, string?> fields,
         LunaCreditExtractionResult result
     )

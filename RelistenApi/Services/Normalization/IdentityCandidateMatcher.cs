@@ -14,6 +14,12 @@ namespace Relisten.Normalization;
 /// </summary>
 public sealed class IdentityCandidateMatcher
 {
+    /// <summary>
+    /// Retrieves exact person-name or explicit-alias candidates with the same key
+    /// used by comparison. Equal keys alone establish no person identity.
+    /// </summary>
+    public static string PeopleNameCandidateKey(string wording) => NameKey(wording);
+
     /// <summary>Pin this feature contract in people projections and evaluated policies.</summary>
     public const string PeopleActorFeaturesVersion = "people-actor-context-features-v1";
 

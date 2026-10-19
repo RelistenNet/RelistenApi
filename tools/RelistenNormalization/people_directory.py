@@ -457,10 +457,11 @@ class CreditOverlay:
 
 
 class RetainedOutcomeCache:
-    """Keep at most three decoded chunks; locators always refer to original lines."""
+    """Bound decoded chunks (three by default); locators refer to original lines."""
 
-    def __init__(self, check_space):
+    def __init__(self, check_space, maximum_chunks=3):
         self.check_space = check_space
+        self.maximum_chunks = maximum_chunks
         self.chunks = OrderedDict()
         self.pins = {}
 
@@ -484,7 +485,7 @@ class RetainedOutcomeCache:
                 raise ValueError("Retained outcome chunk changed while reading")
             self.pins[path] = digest
             self.chunks[path] = records
-            if len(self.chunks) > 3:
+            if len(self.chunks) > self.maximum_chunks:
                 self.chunks.popitem(last=False)
         self.chunks.move_to_end(path)
         try:
@@ -695,8 +696,9 @@ class SourceDirectoryRefresh:
             facts["modelBasis"] = record.get("evidence", {}).get("model")
         return hashlib.sha256(json.dumps(facts, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 
-    def _old_witness(self, row, base_run):
-        record = self.cache.read(row["origin_run"] or base_run, row["chunk"], row["line"])
+    @classmethod
+    def _old_witness(cls, row, base_run, cache):
+        record = cache.read(row["origin_run"] or base_run, row["chunk"], row["line"])
         projected = (row["source_uuid"], row["artist_uuid"], row["name"], row["role"],
                      row["person_key"], json.loads(row["evidence"]), row["interpretation_basis"])
         matches = []
@@ -712,7 +714,7 @@ class SourceDirectoryRefresh:
             raise ValueError("Original credit witness is unavailable")
         if any(retained_actor_facts(record, credit).get("aliases", []) != json.loads(row["aliases"]) for credit in matches):
             raise ValueError("Original credit actor aliases differ from the projection")
-        witnesses = {self._witness(record, credit) for credit in matches}
+        witnesses = {cls._witness(record, credit) for credit in matches}
         if len(witnesses) != 1:
             raise ValueError("Original credit witness is ambiguous")
         # Repeated identical original occurrences share this fingerprint. The
@@ -751,7 +753,7 @@ class SourceDirectoryRefresh:
             if self._raw_fields(record) != self._raw_fields(credit_record):
                 raise ValueError("Source refresh changes original recording evidence")
         old_rows = db.execute("SELECT * FROM credits WHERE source_uuid=? ORDER BY id", (source,)).fetchall()
-        old = [(row, self._old_witness(row, base_run)) for row in old_rows]
+        old = [(row, self._old_witness(row, base_run, self.cache)) for row in old_rows]
         proposed = (credit_record.get("proposal") or {}).get("credits", [])
         if any(credit.get("sourceUuid") != source or (credit.get("artistUuid") or credit_record.get("artistUuid")) != credit_record.get("artistUuid") for credit in proposed):
             raise ValueError("Credit proposal changes source or artist ownership")
@@ -824,6 +826,268 @@ class SourceDirectoryRefresh:
             db.execute("DELETE FROM refresh_done")
             state["finalized"] = True
             self._save_progress(db, state)
+
+
+class CurrentOccurrenceExport:
+    """Bridge current typed occurrences to exact surviving directory witnesses.
+
+    This is a read-only join over a closed generation. Fresh keys select current
+    proposals, but only a unique full witness can select a retained integer ID.
+    Ambiguity is an exported result; changed evidence or ownership is an error.
+    The shared export and every consumed original chunk remain the evidence owners.
+    """
+
+    VERSION = "current-people-occurrence-credit-map-v1"
+    MAXIMUM_SOURCES = 350_000
+    MAXIMUM_OCCURRENCES = 1_000_000
+
+    def __init__(self, database, shared_run, output, minimum_free=5.5 * 1024**3,
+                 maximum_bytes=128 * 1024**2):
+        self.database = Path(database).resolve()
+        self.shared_run = Path(shared_run).resolve()
+        self.output = Path(output).resolve()
+        self.minimum_free = minimum_free
+        self.maximum_bytes = maximum_bytes
+        self.pins = {}
+        # Keep paired current chunks separate from historical base/model chunks.
+        # Otherwise a source using all four can repeatedly evict the next read.
+        self.current_cache = RetainedOutcomeCache(self._check_space, maximum_chunks=2)
+        self.cache = RetainedOutcomeCache(self._check_space)
+
+    def _check_space(self):
+        if shutil.disk_usage(self.output.parent).free < self.minimum_free:
+            raise RuntimeError("Occurrence export stopped to preserve the host disk reserve")
+        if self.output.exists() and sum(p.stat().st_size for p in self.output.iterdir() if p.is_file()) > self.maximum_bytes:
+            raise RuntimeError("Occurrence export exceeds its output byte bound")
+
+    def _pin(self, path, expected):
+        path = Path(path).resolve()
+        if not expected:
+            raise ValueError("Occurrence evidence lacks a durable pin")
+        if path not in self.pins:
+            if file_sha256(path) != expected:
+                raise ValueError("Occurrence evidence differs from its durable pin")
+            self.pins[path] = expected
+        elif self.pins[path] != expected:
+            raise ValueError("Occurrence evidence has conflicting pins")
+        return path
+
+    def _origin(self, run, chunk, line):
+        run = Path(run).resolve()
+        path = (run / chunk).resolve()
+        if not path.is_relative_to(run) or line < 1:
+            raise ValueError("Occurrence locator escapes its original run")
+        digest = self.expected_pins.get(str(path))
+        self._pin(path, digest)
+        return dict(run=str(run), chunk=chunk, line=line, sha256=digest)
+
+    def _read(self, origin):
+        verified = self._origin(origin["run"], origin["chunk"], origin["line"])
+        if origin != verified:
+            raise ValueError("Occurrence locator differs from its pinned original")
+        return self.current_cache.read(origin["run"], origin["chunk"], origin["line"])
+
+    def _records(self, path):
+        decoded = 0
+        with gzip.open(path, "rb") as stream:
+            for line, raw in enumerate(stream, 1):
+                decoded += len(raw)
+                if decoded > 128 * 1024**2:
+                    raise ValueError("Occurrence input chunk exceeds the 128 MiB decode bound")
+                yield line, json.loads(raw)
+
+    def _index_sources(self, manifest, db):
+        latest = {}
+        for domain in ("people", "credits"):
+            selected = {}
+            for path in sorted((self.run / domain).glob("*.jsonl.gz")):
+                self._check_space()
+                self._pin(path, self.expected_pins.get(str(path)))
+                chunk = str(path.relative_to(self.run))
+                for line, record in self._records(path):
+                    if (record.get("inputKind") != "source_sample" or record.get("domain") != domain
+                            or record.get("method") != manifest["methods"]["ShadowPeopleAdapter"]):
+                        raise ValueError("Occurrence source domain, scope or method differs")
+                    actors = len((record.get("proposal") or {}).get("people", [])) if domain == "people" else 0
+                    selected[record["inputUuid"]] = (chunk, line, record.get("provider"), record.get("outcome"), actors)
+                    if len(selected) > self.MAXIMUM_SOURCES:
+                        raise ValueError("Occurrence export exceeds its source population bound")
+            expected = {row["provider"]: row["processed"] for row in manifest["counts"] if row["domain"] == domain}
+            if not expected or Counter(value[2] for value in selected.values()) != expected:
+                raise ValueError("Occurrence source population differs from its manifest")
+            if any(value[3] == "failed" for value in selected.values()):
+                raise ValueError("Occurrence source has a latest failed outcome")
+            latest[domain] = selected
+        if latest["people"].keys() != latest["credits"].keys():
+            raise ValueError("Occurrence people and credit populations differ")
+        if db.execute("SELECT count(*) FROM processed_sources").fetchone()[0] != len(latest["people"]):
+            raise ValueError("Occurrence source census differs from the directory")
+        if any(row[0] not in latest["people"] for row in db.execute("SELECT uuid FROM processed_sources")):
+            raise ValueError("Occurrence source census changes directory ownership")
+        return latest
+
+    def _source_witnesses(self, db, source, people_origin, credit_origin):
+        people = self._read(people_origin)
+        credits = self._read(credit_origin)
+        if any(people.get(key) != credits.get(key) for key in ("inputUuid", "artistUuid", "provider", "inputKey")):
+            raise ValueError("Occurrence paired source ownership differs")
+        if people.get("inputUuid") != source or SourceDirectoryRefresh._raw_fields(people) != SourceDirectoryRefresh._raw_fields(credits):
+            raise ValueError("Occurrence paired original fields differ")
+        if (people.get("proposal") or {}).get("matchingState") != "not_run":
+            raise ValueError("Occurrence export requires explicit source observations")
+        retained = {}
+        for row in db.execute("SELECT * FROM credits WHERE source_uuid=? ORDER BY id", (source,)):
+            origin = self._origin(row["origin_run"] or self.base_run, row["chunk"], row["line"])
+            witness = SourceDirectoryRefresh._old_witness(row, self.base_run, self.cache)
+            retained.setdefault(witness, []).append((row, origin))
+        proposed = (credits.get("proposal") or {}).get("credits", [])
+        for credit in proposed:
+            if (credit.get("sourceUuid") != source
+                    or (credit.get("artistUuid") or credits.get("artistUuid")) != credits.get("artistUuid")):
+                raise ValueError("Occurrence credit changes source or artist ownership")
+        multiplicity = Counter(SourceDirectoryRefresh._witness(credits, credit) for credit in proposed if name_key(credit["name"]))
+        return people, credits, retained, multiplicity
+
+    def _map_occurrence(self, db, occurrence, source_data, credit_origin):
+        people, credits, retained, multiplicity = source_data
+        person = occurrence["person"]
+        actors = [actor for actor in (people.get("proposal") or {}).get("people", []) if actor.get("entityKey") == person["entityKey"]]
+        if len(actors) != 1 or actors[0] != person or person.get("sourceUuid") != people["inputUuid"] or person.get("artistUuid") != people["artistUuid"]:
+            raise ValueError("Shared occurrence changes its original typed actor")
+        proposed = [credit for credit in (credits.get("proposal") or {}).get("credits", []) if credit.get("personEntityKey") == person["entityKey"]]
+        if [credit["entityKey"] for credit in proposed] != occurrence["creditKeys"]:
+            raise ValueError("Shared occurrence credit keys differ from the paired typed proposals")
+        mappings = []
+        for credit in proposed:
+            witness = SourceDirectoryRefresh._witness(credits, credit)
+            matches = retained.get(witness, [])
+            result = dict(currentCreditKey=credit["entityKey"], witnessSha256=witness)
+            if len(matches) == multiplicity[witness] == 1:
+                row, origin = matches[0]
+                result.update(state="mapped", retainedCreditId=row["id"], retainedCreditKey=row["credit_key"],
+                              retainedPersonKey=row["person_key"], retainedOrigin=origin)
+            else:
+                result.update(state="ambiguous" if len(matches) > 1 or multiplicity[witness] > 1 else "unmapped",
+                              reason="non_unique_full_witness" if len(matches) > 1 or multiplicity[witness] > 1 else "no_surviving_full_witness")
+            mappings.append(result)
+        result = dict(occurrenceKey=occurrence["occurrenceKey"], sourceUuid=person["sourceUuid"], artistUuid=person["artistUuid"],
+                      personEntityKey=person["entityKey"], peopleOrigin=occurrence["origin"], creditOrigin=credit_origin,
+                      creditMappings=mappings, acceptedIdentity=False)
+        if not proposed:
+            result["scope"] = "role_free_actor_observation"
+            rows = db.execute("""SELECT id FROM source_actors WHERE source_uuid=? AND artist_uuid=? AND person_key=?
+                AND actor_reference=? AND origin_run=? AND chunk=? AND line=?""",
+                              (person["sourceUuid"], person["artistUuid"], person["entityKey"], person.get("sourceReferenceUuid"),
+                               occurrence["origin"]["run"], occurrence["origin"]["chunk"], occurrence["origin"]["line"])).fetchall()
+            result["sourceActorState"] = "mapped" if len(rows) == 1 else "ambiguous" if len(rows) > 1 else "unmapped"
+            if len(rows) == 1:
+                result["sourceActorObservationId"] = rows[0][0]
+        else:
+            result["scope"] = "credit_occurrence"
+        return result
+
+    def _load_generation(self, db, shared):
+        metadata = {row[0]: json.loads(row[1]) for row in db.execute("SELECT key,value FROM metadata")}
+        progress = metadata["sourceRefreshProgress"]
+        if not progress.get("finalized"):
+            raise ValueError("Occurrence export requires a completed source refresh")
+        self.run = Path(metadata["sourceRefreshRun"]).resolve()
+        self.base_run = metadata["sourceRun"]
+        if Path(shared["sourceRun"]).resolve() != self.run:
+            raise ValueError("Shared occurrence export belongs to a different source generation")
+        self.expected_pins = {**progress["pins"], **progress["retainedPins"]}
+        source_manifest = self.run / "manifest.json"
+        self._pin(source_manifest, self.expected_pins.get(str(source_manifest)))
+        if shared["manifestSha"] != self.pins[source_manifest]:
+            raise ValueError("Shared source manifest pin differs from the directory")
+        source = json.loads(source_manifest.read_text())
+        if source.get("state") != "completed":
+            raise ValueError("Occurrence source run is incomplete")
+        return self._index_sources(source, db)
+
+    def _write_mappings(self, db, latest, occurrence_path, shared, counts):
+        seen, seen_actors, last_source, source_data = set(), set(), None, None
+        with gzip.open(self.output / "mappings.jsonl.gz.writing", "wt", encoding="utf-8") as stream:
+            # Occurrence ledger may exceed one decoded chunk; read it as
+            # a stream. Original source chunks retain the 128 MiB bound.
+            with gzip.open(occurrence_path, "rt", encoding="utf-8") as occurrences:
+                for text in occurrences:
+                    occurrence = json.loads(text)
+                    key = occurrence["occurrenceKey"]
+                    if key in seen or len(seen) >= self.MAXIMUM_OCCURRENCES:
+                        raise ValueError("Shared occurrence keys duplicate or exceed the population bound")
+                    seen.add(key)
+                    source_uuid = occurrence["person"]["sourceUuid"]
+                    actor_key = (source_uuid, occurrence["person"]["entityKey"])
+                    if actor_key in seen_actors:
+                        raise ValueError("Shared ledger duplicates an original typed actor occurrence")
+                    seen_actors.add(actor_key)
+                    people_position = latest["people"][source_uuid]
+                    people_origin = self._origin(self.run, *people_position[:2])
+                    if occurrence["origin"] != people_origin:
+                        raise ValueError("Shared occurrence does not cite the latest pinned people outcome")
+                    credit_origin = self._origin(self.run, *latest["credits"][source_uuid][:2])
+                    if source_uuid != last_source:
+                        source_data = self._source_witnesses(db, source_uuid, people_origin, credit_origin)
+                        last_source = source_uuid
+                    result = self._map_occurrence(db, occurrence, source_data, credit_origin)
+                    counts["occurrences"] += 1
+                    counts[result["scope"]] += 1
+                    counts.update("credits_" + item["state"] for item in result["creditMappings"])
+                    stream.write(encoded(result) + "\n")
+                    if counts["occurrences"] % 1000 == 0:
+                        stream.flush()
+                        self._check_space()
+        original_actors = sum(position[4] for position in latest["people"].values())
+        if (counts["occurrences"] != shared["occurrences"] or counts["occurrences"] != original_actors
+                or len(latest["people"]) != shared["sourceCount"]):
+            raise ValueError("Occurrence export denominator differs from the shared manifest")
+
+    def export(self):
+        if self.output.exists():
+            raise FileExistsError(self.output)
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        self._check_space()
+        if Path(str(self.database) + "-wal").exists():
+            raise ValueError("Occurrence export requires a closed, sealed directory")
+        self._pin(self.database, file_sha256(self.database))
+        shared_path = self.shared_run / "manifest.json"
+        self._pin(shared_path, file_sha256(shared_path))
+        shared = json.loads(shared_path.read_text())
+        if shared.get("state") != "completed" or shared.get("version") != "shared-people-export-v1":
+            raise ValueError("Occurrence export requires a completed shared people export")
+        occurrence_info = next(item for item in shared["outputs"] if item["path"] == "occurrences.jsonl.gz")
+        occurrence_path = self.shared_run / "occurrences.jsonl.gz"
+        self._pin(occurrence_path, occurrence_info["sha256"])
+        counts = Counter()
+        self.output.mkdir()
+        manifest_path = self.output / "manifest.json"
+        manifest_path.write_text(encoded(dict(version=self.VERSION, state="building")))
+        try:
+            with closing(sqlite3.connect(self.database.as_uri() + "?mode=ro", uri=True)) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("BEGIN")
+                latest = self._load_generation(db, shared)
+                self._write_mappings(db, latest, occurrence_path, shared, counts)
+            self._check_space()
+            for path, digest in self.pins.items():
+                if file_sha256(path) != digest:
+                    raise ValueError("Occurrence evidence changed during export")
+            output_path = self.output / "mappings.jsonl.gz"
+            (self.output / "mappings.jsonl.gz.writing").rename(output_path)
+            result = dict(version=self.VERSION, state="completed", database=str(self.database), databaseSha256=self.pins[self.database],
+                          sharedRun=str(self.shared_run), sourceRun=str(self.run), counts=dict(counts),
+                          inputs=[dict(path=str(path), sha256=digest) for path, digest in self.pins.items()],
+                          output=dict(path=output_path.name, bytes=output_path.stat().st_size, sha256=file_sha256(output_path)),
+                          acceptedIdentity=False, matchingPerformed=False)
+            temporary = self.output / "manifest.json.writing"
+            temporary.write_text(encoded(result))
+            temporary.replace(manifest_path)
+            self._check_space()
+            return result
+        except BaseException:
+            manifest_path.write_text(encoded(dict(version=self.VERSION, state="interrupted", counts=dict(counts))))
+            raise
 
 
 class NativePeopleOverlay:
@@ -1739,6 +2003,12 @@ def main():
     refresh.add_argument("--context-sealed", action="store_true")
     refresh.add_argument("--minimum-free-bytes", type=int, default=int(5.5 * 1024**3))
     refresh.add_argument("--maximum-bytes", type=int, default=3 * 1024**3)
+    mapping = sub.add_parser("export-current-occurrences", help="Map current typed occurrences to exact retained credit witnesses, read-only")
+    mapping.add_argument("--database", required=True)
+    mapping.add_argument("--shared-run", required=True)
+    mapping.add_argument("--output", required=True)
+    mapping.add_argument("--minimum-free-bytes", type=int, default=int(5.5 * 1024**3))
+    mapping.add_argument("--maximum-bytes", type=int, default=128 * 1024**2)
     native = sub.add_parser("overlay-native")
     native.add_argument("--run", required=True)
     native.add_argument("--database", required=True)
@@ -1764,6 +2034,9 @@ def main():
     elif args.command == "refresh-sources":
         print(encoded(SourceDirectoryRefresh(args.run, args.source_database, args.database,
             args.context_sealed, args.minimum_free_bytes, args.maximum_bytes).apply()), flush=True)
+    elif args.command == "export-current-occurrences":
+        print(encoded(CurrentOccurrenceExport(args.database, args.shared_run, args.output,
+            args.minimum_free_bytes, args.maximum_bytes).export()), flush=True)
     elif args.command == "overlay-native":
         print(encoded(NativePeopleOverlay(args.run, args.database, args.native_url).apply()), flush=True)
     else:

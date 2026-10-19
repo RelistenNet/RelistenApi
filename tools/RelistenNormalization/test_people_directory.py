@@ -1,6 +1,7 @@
 """Public directory behavior: source ownership, inferred groups and evidence survive."""
 
 import gzip
+import hashlib
 from contextlib import closing
 import json
 import sqlite3
@@ -20,6 +21,7 @@ from http.server import ThreadingHTTPServer
 from people_directory import (
     CreditOverlay,
     SourceDirectoryRefresh,
+    CurrentOccurrenceExport,
     NativePeopleOverlay,
     DirectoryBuilder,
     PeopleDirectory,
@@ -1064,6 +1066,153 @@ class TestSourceDirectoryRefresh(unittest.TestCase):
         completed = subprocess.run(command + ['--context-sealed'], capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(json.loads(completed.stdout.splitlines()[-1])['sources'], 2)
+
+class TestCurrentOccurrenceExport(unittest.TestCase):
+    def setUp(self):
+        self.fixture = TestSourceDirectoryRefresh()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.shared = self.fixture.root / 'shared'
+        self.output = self.fixture.root / 'mapping'
+
+    def prepare(self):
+        fixture = self.fixture
+        fixture.write_run(fixture.run, fixture.new)
+        people = []
+        for credit_record in fixture.new:
+            record = fixture.people(credit_record)
+            record['proposal']['matchingState'] = 'not_run'
+            for credit in credit_record['proposal']['credits']:
+                if not any(actor['entityKey'] == credit['personEntityKey'] for actor in record['proposal']['people']):
+                    record['proposal']['people'].append(dict(entityKey=credit['personEntityKey'], name=credit['name'],
+                        sourceUuid=credit['sourceUuid'], artistUuid=credit['artistUuid'], sourceReferenceUuid='credit-ref:' + credit['entityKey']))
+            people.append(record)
+        path = fixture.run / 'people/000.jsonl.gz'
+        with gzip.open(path, 'wt') as stream:
+            for record in people:
+                stream.write(json.dumps(record) + '\n')
+        fixture.refresh()
+        self.shared.mkdir()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        occurrences = []
+        for line, (record, credits) in enumerate(zip(people, fixture.new), 1):
+            for actor in record['proposal']['people']:
+                occurrences.append(dict(occurrenceKey='occurrence:' + actor['sourceUuid'] + ':' + actor['entityKey'],
+                    bucketId='fixture-bucket', person=actor,
+                    creditKeys=[credit['entityKey'] for credit in credits['proposal']['credits'] if credit['personEntityKey'] == actor['entityKey']],
+                    origin=dict(run=str(fixture.run), chunk='people/000.jsonl.gz', line=line, sha256=digest)))
+        self.write_shared(occurrences)
+        return occurrences
+
+    def write_shared(self, occurrences):
+        path = self.shared / 'occurrences.jsonl.gz'
+        with gzip.open(path, 'wt') as stream:
+            for row in occurrences:
+                stream.write(json.dumps(row) + '\n')
+        (self.shared / 'manifest.json').write_text(json.dumps(dict(state='completed', version='shared-people-export-v1',
+            sourceRun=str(self.fixture.run), sourceCount=2, occurrences=len(occurrences),
+            manifestSha=hashlib.sha256((self.fixture.run / 'manifest.json').read_bytes()).hexdigest(),
+            outputs=[dict(path=path.name, sha256=hashlib.sha256(path.read_bytes()).hexdigest())])))
+
+    def export(self):
+        return CurrentOccurrenceExport(self.fixture.database, self.shared, self.output, minimum_free=0).export()
+
+    def rows(self):
+        with gzip.open(self.output / 'mappings.jsonl.gz', 'rt') as stream:
+            return [json.loads(text) for text in stream]
+
+    def test_cli_maps_kept_null_key_and_changed_actor_to_exact_ids_and_original_origins_read_only(self):
+        import subprocess
+        fixture = self.fixture
+        with closing(sqlite3.connect(fixture.old_database)) as db, db:
+            db.execute("UPDATE credits SET credit_key=NULL WHERE source_uuid='one'")
+        fixture.new[0]['proposal']['credits'][0].update(entityKey='current-credit', personEntityKey='current-person')
+        self.prepare()
+        before = fixture.database.read_bytes()
+        completed = subprocess.run([sys.executable, str(Path(__file__).with_name('people_directory.py')),
+            'export-current-occurrences', '--database', str(fixture.database), '--shared-run', str(self.shared),
+            '--output', str(self.output), '--minimum-free-bytes', '0'], capture_output=True, text=True)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)['counts'], dict(occurrences=4, role_free_actor_observation=2, credit_occurrence=2, credits_mapped=2))
+        self.assertEqual(fixture.database.read_bytes(), before)
+        credit_rows = [row for row in self.rows() if row['creditMappings']]
+        kept = next(row['creditMappings'][0] for row in credit_rows if row['sourceUuid'] == 'one')
+        self.assertEqual(kept['retainedCreditId'], fixture.old_ids['one'])
+        self.assertIsNone(kept['retainedCreditKey'])
+        self.assertEqual(kept['currentCreditKey'], 'current-credit')
+        self.assertEqual(kept['retainedPersonKey'], 'person:one')
+        self.assertEqual(kept['retainedOrigin']['run'], str(fixture.old_run))
+        self.assertEqual((kept['retainedOrigin']['chunk'], kept['retainedOrigin']['line']), ('credits/000.jsonl.gz', 1))
+        new = next(row['creditMappings'][0] for row in credit_rows if row['sourceUuid'] == 'two')
+        self.assertGreater(new['retainedCreditId'], max(fixture.old_ids.values()))
+        self.assertEqual(new['retainedOrigin']['run'], str(fixture.run))
+        aliases = [row for row in self.rows() if row['scope'] == 'role_free_actor_observation']
+        self.assertTrue(all(row['creditMappings'] == [] and row['sourceActorState'] == 'mapped' for row in aliases))
+        self.assertTrue(all('retainedCreditId' not in row for row in aliases))
+
+    def test_split_actors_with_distinct_witnesses_map_but_duplicate_witnesses_stay_ambiguous(self):
+        fixture = self.fixture
+        other = dict(fixture.new[0]['proposal']['credits'][0], entityKey='other-credit', personEntityKey='other-person', role='transfer')
+        fixture.new[0]['proposal']['credits'].append(other)
+        self.prepare()
+        self.assertEqual(self.export()['counts']['credits_mapped'], 3)
+        mapped = [row for row in self.rows() if row['sourceUuid'] == 'one' and row['creditMappings']]
+        self.assertEqual(len({row['creditMappings'][0]['retainedCreditId'] for row in mapped}), 2)
+
+        fixture.database = fixture.root / 'duplicate.sqlite3'
+        fixture.new[0]['proposal']['credits'][1]['role'] = 'taper'
+        fixture.write_run(fixture.run, fixture.new)
+        self.shared = fixture.root / 'duplicate-shared'
+        self.output = fixture.root / 'duplicate-map'
+        self.prepare()
+        result = self.export()
+        self.assertEqual(result['state'], 'completed')
+        self.assertEqual(result['counts']['credits_ambiguous'], 2)
+        ambiguous = [item for row in self.rows() for item in row['creditMappings'] if item['state'] == 'ambiguous']
+        self.assertTrue(all('retainedCreditId' not in item and item['reason'] == 'non_unique_full_witness' for item in ambiguous))
+
+    def test_missing_surviving_credit_emits_unmapped_without_hiding_the_occurrence(self):
+        self.prepare()
+        with closing(sqlite3.connect(self.fixture.database)) as db, db:
+            db.execute("DELETE FROM credits WHERE source_uuid='two'")
+        self.assertEqual(self.export()['counts']['credits_unmapped'], 1)
+        self.assertEqual(len(self.rows()), 4)
+
+    def test_changed_original_or_paired_chunk_pin_prevents_completion(self):
+        for original in (True, False):
+            with self.subTest(original=original):
+                self.setUp()
+                self.prepare()
+                path = (self.fixture.old_run if original else self.fixture.run) / 'credits/000.jsonl.gz'
+                with gzip.open(path, 'at') as stream:
+                    stream.write('{}\n')
+                with self.assertRaisesRegex(ValueError, 'durable pin'):
+                    self.export()
+                self.assertEqual(json.loads((self.output / 'manifest.json').read_text())['state'], 'interrupted')
+
+    def test_shared_actor_ownership_change_and_duplicate_occurrence_are_not_published(self):
+        occurrences = self.prepare()
+        occurrences[0]['person']['artistUuid'] = 'different-artist'
+        self.write_shared(occurrences)
+        with self.assertRaisesRegex(ValueError, 'original typed actor'):
+            self.export()
+        self.output = self.fixture.root / 'duplicate-output'
+        occurrences[0]['person']['artistUuid'] = 'artist-a'
+        self.write_shared(occurrences + [occurrences[0]])
+        with self.assertRaisesRegex(ValueError, 'keys duplicate'):
+            self.export()
+
+    def test_relabelled_duplicate_or_omitted_original_actor_does_not_publish_false_coverage(self):
+        occurrences = self.prepare()
+        replacement = dict(occurrences[0], occurrenceKey='different-opaque-key')
+        self.write_shared([replacement, *occurrences[:-1]])
+        with self.assertRaisesRegex(ValueError, 'duplicates an original typed actor'):
+            self.export()
+        self.output = self.fixture.root / 'omitted-actor'
+        self.write_shared(occurrences[:-1])
+        with self.assertRaisesRegex(ValueError, 'denominator differs'):
+            self.export()
+
 
 if __name__ == "__main__":
     unittest.main()

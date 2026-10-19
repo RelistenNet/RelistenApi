@@ -224,22 +224,7 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
         var modelActors = ModelActors(extraction, model).ToArray();
         var actors = LocalActors(extraction).Concat(modelActors).ToArray();
         var people = actors.Select(actor => actor.Person).ToArray();
-        var credits = (extraction.CreditExtraction?.Credits ?? [])
-            .Select(credit => new ShadowRecordingCredit(
-                ShadowCatalogIdentity.Key(
-                    "credit",
-                    input.Uuid + ":" + JsonSerializer.Serialize(credit, Json)
-                ),
-                PersonKey(input.Uuid, CreditReference(credit)),
-                input.Uuid,
-                input.Artist.Uuid,
-                credit.Name,
-                credit.Role,
-                credit.OriginalRole,
-                credit.Evidence
-            ))
-            .Where(credit => people.Any(person => person.EntityKey == credit.PersonEntityKey))
-            .ToArray();
+        var credits = LocalCredits(extraction, people).ToArray();
         var modelCredits = ModelCredits(extraction, model).ToArray();
         credits = credits.Concat(modelCredits).ToArray();
         var modelInterpretation = model is null
@@ -415,6 +400,26 @@ public sealed partial class ShadowPeopleAdapter : IShadowCatalogAdapter
                 .Order(StringComparer.Ordinal)
                 .ToArray()
         );
+
+    private static IEnumerable<ShadowRecordingCredit> LocalCredits(
+        NormalizationBatchExtraction extraction,
+        IReadOnlyList<ShadowPerson> people
+    ) =>
+        (extraction.CreditExtraction?.Credits ?? [])
+            .Select(credit => new ShadowRecordingCredit(
+                ShadowCatalogIdentity.Key(
+                    "credit",
+                    extraction.ResourceUuid + ":" + JsonSerializer.Serialize(credit, Json)
+                ),
+                PersonKey(extraction.ResourceUuid, CreditReference(credit)),
+                extraction.ResourceUuid,
+                extraction.ArtistUuid,
+                credit.Name,
+                credit.Role,
+                credit.OriginalRole,
+                credit.Evidence
+            ))
+            .Where(credit => people.Any(person => person.EntityKey == credit.PersonEntityKey));
 
     private static IEnumerable<ActorAccount> LocalActors(NormalizationBatchExtraction extraction)
     {
